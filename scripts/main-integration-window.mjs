@@ -142,6 +142,7 @@ export function readWindow(repo, query = gitResult) {
     !fullSha.test(value.head) ||
     !fullSha.test(value.tree) ||
     (value.skipTests !== undefined && typeof value.skipTests !== 'boolean') ||
+    (value.ciFirst !== undefined && typeof value.ciFirst !== 'boolean') ||
     !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value.remote) ||
     !['main', 'staged', 'promote'].includes(value.mode ?? 'main') ||
     ((value.mode ?? 'main') === 'staged'
@@ -233,6 +234,7 @@ async function acquire(repo, options) {
           tree: selected.tree,
           gateArgs: options.gateArgs,
           skipTests: options.skipTests,
+          ciFirst: options.ciFirst === true,
           identity: options.identity,
           assignment: options.assignment,
           assignments: options.assignments,
@@ -621,7 +623,40 @@ export function gateDiagnostics(list = () => spawnSync('ps', ['-axo', 'pid=,etim
 // ci-staged push keep their in-window gate, a promotion is gated by its green CI run, and the
 // explicit standalone override skips local verification.
 export function requiresPrecomputedReceipt(options) {
-  return options.mode === 'main' && !options.skipTests && !options.gateArgs.includes('--smoke');
+  return options.mode === 'main' && !options.skipTests && !options.ciFirst && !options.gateArgs.includes('--smoke');
+}
+
+/**
+ * HS2-ZGS7JP: the effective development strategy for this push, resolved exactly as the local
+ * gate resolves it (ticket over session over project). Unset projects never load the resolver.
+ */
+export async function effectiveStrategy(repo, options) {
+  const settingsPath = join(repo, '.hotsheet2/settings.json');
+  const configured =
+    existsSync(settingsPath) && JSON.parse(readFileSync(settingsPath, 'utf8')).development_strategy !== undefined;
+  if (!configured && !process.env.HOTSHEET_DEVELOPMENT_STRATEGY) return null;
+  const { readTicketProfile } = await import('./gate-ticket-profile.mjs');
+  const index = options.gateArgs.indexOf('--ticket');
+  const ticket = index < 0 ? undefined : options.gateArgs[index + 1];
+  return readTicketProfile(repo, { ticket }).developmentStrategy ?? null;
+}
+
+/**
+ * HS2-ZGS7JP: CI First pushes an ordinary main update without a full-gate receipt; the covering
+ * main CI run is the gate. Every other strategy, and a strategy that cannot be resolved, keeps
+ * the receipt requirement. Clean-checkout, fast-forward, main-writer and remote-confirmation
+ * checks are unchanged.
+ */
+export async function ciFirstPush(repo, options, resolveStrategy = effectiveStrategy) {
+  if (options.mode !== 'main' || options.skipTests || options.gateArgs.includes('--smoke')) return false;
+  let selection;
+  try {
+    selection = await resolveStrategy(repo, options);
+  } catch (error) {
+    console.warn(`Development strategy unavailable; a full-gate receipt is required: ${error.message}`);
+    return false;
+  }
+  return selection?.preset === 'ci-first' && selection.push_without_receipt === true;
 }
 
 const shellWord = (word) => (/^[A-Za-z0-9_./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`);
@@ -651,6 +686,11 @@ export async function pushMain(repo, args) {
   options.sourceStore = selectedSourceStore(repo, options.sourceStore);
   if (!acceptedHooksPath(repo, git(repo, ['config', '--get', 'core.hooksPath'])))
     throw new Error('Run scripts/install-git-hooks.sh before main push');
+  options.ciFirst = await ciFirstPush(repo, options);
+  if (options.ciFirst)
+    console.error(
+      'CI First (HS2-ZGS7JP): pushing main without a full-gate receipt; the covering main CI run is the gate.',
+    );
   const receiptOnly = requiresPrecomputedReceipt(options);
   // Fail at once, before reserving main, when the gate has not passed on this tree.
   if (receiptOnly) await verifyReceipt(repo, options);
@@ -692,7 +732,7 @@ export async function pushMain(repo, args) {
     check();
     // HS2-GT57BQ: a promotion's gate is the green CI run on the exact SHA, not a local receipt.
     if (options.mode === 'promote' && before === window.value.head) return window.value.head;
-    if (options.mode !== 'promote' && !options.skipTests) {
+    if (options.mode !== 'promote' && !options.skipTests && !options.ciFirst) {
       if (!receiptOnly) {
         await child(repo, 'bash', ['scripts/check.sh', ...options.gateArgs], { signal: control.signal });
         check();
@@ -751,6 +791,10 @@ export async function pushMain(repo, args) {
         `Remote main contains ${window.value.head}; set the ticket to final_testing manually: ${error.message}`,
       );
     }
+    if (options.ciFirst)
+      console.error(
+        `CI First: CI is the gate. Keep the ticket in final_testing until node scripts/ci-gate.mjs status --covers ${window.value.head} is green; attribute and report any red run.`,
+      );
     return window.value.head;
   } catch (error) {
     // HS2-RXYJ6G: a heartbeat failure aborts the gate, whose own exit (often a null code) would
@@ -789,7 +833,8 @@ async function main() {
     if (args.length !== 4) throw new Error('verify needs remote, target, local SHA and remote SHA');
     const value = verifyMainPush(project, process.env.HOTSHEET_MAIN_WINDOW_TOKEN, remote, target, localSha, remoteSha);
     // HS2-GT57BQ: a promotion was gated by its green CI run, which authority() re-read.
-    if (value.mode !== 'promote' && !value.skipTests)
+    // HS2-ZGS7JP: a CI First reservation recorded that its covering main CI run is the gate.
+    if (value.mode !== 'promote' && !value.skipTests && !value.ciFirst)
       await child(project, 'bash', ['scripts/check.sh', '--verify-receipt', ...value.gateArgs]);
     verifyMainPush(project, process.env.HOTSHEET_MAIN_WINDOW_TOKEN, remote, target, localSha, remoteSha);
   } else if (command === 'push') {

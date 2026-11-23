@@ -264,6 +264,9 @@ enum CoordinationCmd {
         /// Steady Main's green-main goal in minutes (default 360).
         #[arg(long)]
         green_main_goal_minutes: Option<u32>,
+        /// CI First's best-effort local budget in minutes (1-1440; default 10, HS2-ZGS7JP).
+        #[arg(long)]
+        best_effort_budget_minutes: Option<u32>,
     },
     /// Add or replace a named version-2 custom policy from a declarative JSON file.
     DevelopmentCustomSet {
@@ -1717,11 +1720,15 @@ fn strategy_policy(project: &std::path::Path, command: &CoordinationCmd) -> Resu
             CoordinationCmd::DevelopmentStrategySet {
                 preset,
                 green_main_goal_minutes,
+                best_effort_budget_minutes,
             } => {
                 policy.default = *preset;
                 policy.default_custom = None;
                 if let Some(minutes) = green_main_goal_minutes {
                     policy.green_main_goal_minutes = *minutes;
+                }
+                if let Some(minutes) = best_effort_budget_minutes {
+                    policy.best_effort_budget_minutes = Some(*minutes);
                 }
                 policy.write(&settings)?;
                 policy = DevelopmentPolicy::read(&settings)?;

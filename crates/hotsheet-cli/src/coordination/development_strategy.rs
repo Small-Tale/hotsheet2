@@ -15,6 +15,8 @@ use super::strategy::{IntegrationStrategy, StrategyPolicy, validate_staging_bran
 pub const DEVELOPMENT_POLICY_SETTING: &str = "development_strategy";
 pub const DEVELOPMENT_POLICY_VERSION: u32 = 2;
 pub const DEFAULT_GREEN_MAIN_GOAL_MINUTES: u32 = 360;
+/// CI First's best-effort local budget when the policy names none (HS2-ZGS7JP).
+pub const DEFAULT_BEST_EFFORT_BUDGET_MINUTES: u32 = 10;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
@@ -23,14 +25,22 @@ pub enum DevelopmentPreset {
     TicketAssured,
     SteadyMain,
     RiskGuided,
+    /// HS2-ZGS7JP: best-effort budgeted local checks, a direct push to main without a
+    /// full-gate receipt, and the covering main CI run as the gate.
+    CiFirst,
 }
 
 impl DevelopmentPreset {
-    pub const ALL: [Self; 3] = [Self::TicketAssured, Self::SteadyMain, Self::RiskGuided];
+    pub const ALL: [Self; 4] = [
+        Self::TicketAssured,
+        Self::SteadyMain,
+        Self::RiskGuided,
+        Self::CiFirst,
+    ];
 
     pub const fn integration(self) -> IntegrationStrategy {
         match self {
-            Self::TicketAssured => IntegrationStrategy::Serial,
+            Self::TicketAssured | Self::CiFirst => IntegrationStrategy::Serial,
             Self::SteadyMain | Self::RiskGuided => IntegrationStrategy::CiStaged,
         }
     }
@@ -40,6 +50,7 @@ impl DevelopmentPreset {
             Self::TicketAssured => LocalGate::FullLocal,
             Self::SteadyMain => LocalGate::Targeted,
             Self::RiskGuided => LocalGate::RiskSelected,
+            Self::CiFirst => LocalGate::BestEffort,
         }
     }
 
@@ -48,6 +59,7 @@ impl DevelopmentPreset {
             Self::TicketAssured => "ticket-assured",
             Self::SteadyMain => "steady-main",
             Self::RiskGuided => "risk-guided",
+            Self::CiFirst => "ci-first",
         }
     }
 }
@@ -58,6 +70,9 @@ pub enum LocalGate {
     FullLocal,
     Targeted,
     RiskSelected,
+    /// HS2-ZGS7JP: affected checks within a strict time budget for every tier; the rest is
+    /// deferred to CI. Only the CI First preset selects it.
+    BestEffort,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -111,6 +126,10 @@ pub struct CustomDevelopmentStrategy {
 
 impl CustomDevelopmentStrategy {
     fn validate(&self, integration_policy: &StrategyPolicy) -> Result<()> {
+        ensure!(
+            self.local_gate != LocalGate::BestEffort,
+            "the best-effort local gate belongs to the CI First preset; select --preset ci-first"
+        );
         ensure!(
             self.ci_gate == "CI",
             "custom development strategy requires the connected CI gate; this checkout supports only CI"
@@ -174,6 +193,9 @@ pub struct DevelopmentPolicy {
     pub default: DevelopmentPreset,
     #[serde(default = "default_green_main_goal")]
     pub green_main_goal_minutes: u32,
+    /// CI First's best-effort local budget in minutes (1-1440; default 10, HS2-ZGS7JP).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub best_effort_budget_minutes: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_custom: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -194,6 +216,7 @@ impl Default for DevelopmentPolicy {
             version: 1,
             default: DevelopmentPreset::TicketAssured,
             green_main_goal_minutes: DEFAULT_GREEN_MAIN_GOAL_MINUTES,
+            best_effort_budget_minutes: None,
             default_custom: None,
             custom: BTreeMap::new(),
             configured: false,
@@ -218,18 +241,24 @@ pub struct DevelopmentSelection {
     pub local_gate: LocalGate,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom: Option<CustomDevelopmentStrategy>,
-    /// Every preset retains the verified exact-SHA main promotion boundary.
+    /// Every preset except CI First retains the verified exact-SHA main promotion boundary;
+    /// under CI First the covering main CI run after the push is the gate (HS2-ZGS7JP).
     pub require_green_main_sha: bool,
     /// CI failure attribution is mandatory before completion for staged presets too.
     pub attribute_red_ci_before_completion: bool,
     pub green_main_goal_minutes: Option<u32>,
+    /// The best-effort local budget in minutes; present only for the best-effort gate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_budget_minutes: Option<u32>,
+    /// HS2-ZGS7JP: `scripts/push.sh` may push to main without a full-gate receipt.
+    pub push_without_receipt: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DevelopmentReport {
     pub policy: DevelopmentPolicy,
     pub effective: DevelopmentSelection,
-    pub presets: [DevelopmentPreset; 3],
+    pub presets: [DevelopmentPreset; 4],
 }
 
 impl DevelopmentPolicy {
@@ -243,6 +272,11 @@ impl DevelopmentPolicy {
         ensure!(
             (1..=10_080).contains(&self.green_main_goal_minutes),
             "green-main goal must be 1-10080 minutes"
+        );
+        ensure!(
+            self.best_effort_budget_minutes
+                .is_none_or(|minutes| (1..=1_440).contains(&minutes)),
+            "best-effort local budget must be 1-1440 minutes"
         );
         ensure!(
             self.version != 1 || (self.default_custom.is_none() && self.custom.is_empty()),
@@ -342,6 +376,8 @@ impl DevelopmentPolicy {
                     )
                 })?
         };
+        let ci_first = source != SelectionSource::UnconfiguredProject
+            && builtin == Some(DevelopmentPreset::CiFirst);
         Ok(DevelopmentSelection {
             preset: name.to_owned(),
             source,
@@ -354,7 +390,7 @@ impl DevelopmentPolicy {
                 builtin.expect("built-in selection").local_gate()
             },
             custom: custom.cloned(),
-            require_green_main_sha: true,
+            require_green_main_sha: !ci_first,
             attribute_red_ci_before_completion: true,
             green_main_goal_minutes: custom
                 .and_then(|custom| custom.green_main_goal_minutes)
@@ -362,6 +398,11 @@ impl DevelopmentPolicy {
                     (builtin == Some(DevelopmentPreset::SteadyMain))
                         .then_some(self.green_main_goal_minutes)
                 }),
+            local_budget_minutes: ci_first.then(|| {
+                self.best_effort_budget_minutes
+                    .unwrap_or(DEFAULT_BEST_EFFORT_BUDGET_MINUTES)
+            }),
+            push_without_receipt: ci_first,
         })
     }
 

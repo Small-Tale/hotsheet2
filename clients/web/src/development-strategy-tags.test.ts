@@ -12,6 +12,7 @@ const report = (custom: DevelopmentStrategyReport['policy']['custom']): Developm
     local_gate: 'targeted',
     require_green_main_sha: true,
     attribute_red_ci_before_completion: true,
+    push_without_receipt: false,
     green_main_goal_minutes: 360,
   },
   presets: ['ticket-assured', 'steady-main', 'risk-guided'],
@@ -23,6 +24,7 @@ describe('development strategy tag suggestions (HS2-PN74AH)', () => {
       'development-strategy:ticket-assured',
       'development-strategy:steady-main',
       'development-strategy:risk-guided',
+      'development-strategy:ci-first',
     ]);
   });
 

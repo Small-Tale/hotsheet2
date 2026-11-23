@@ -13,9 +13,10 @@ const report: DevelopmentStrategyReport = {
     local_gate: 'targeted',
     require_green_main_sha: true,
     attribute_red_ci_before_completion: true,
+    push_without_receipt: false,
     green_main_goal_minutes: 360,
   },
-  presets: ['ticket-assured', 'steady-main', 'risk-guided'],
+  presets: ['ticket-assured', 'steady-main', 'risk-guided', 'ci-first'],
 };
 
 describe('HS2-NBDXPW project strategy settings', () => {
@@ -48,11 +49,14 @@ describe('HS2-NBDXPW project strategy settings', () => {
     expect(markup).toContain('Ticket Assured');
     expect(markup).toContain('Steady Main');
     expect(markup).toContain('Risk Guided');
+    expect(markup).toContain('CI First');
     expect(markup).toContain('ticket');
     expect(markup).toContain('360 minutes');
     expect(markup).toContain('Current cadence');
     expect(markup).toContain('synthetic-git');
-    expect(markup).toContain('red CI never moves main');
+    expect(markup).toContain('red CI never');
+    expect(markup).toContain('promotes a staged SHA');
+    expect(markup).not.toContain('name="development-bestEffortBudget"');
   });
 
   it('shows the complete Custom form and preserves a visible server refusal', () => {
@@ -77,6 +81,38 @@ describe('HS2-NBDXPW project strategy settings', () => {
     expect(markup).toContain('CI is not configured');
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('save-development-strategy');
+  });
+
+  it('HS2-ZGS7JP selecting CI First explains it and offers the best-effort budget', () => {
+    const ciFirst: DevelopmentStrategyReport = {
+      policy: {
+        version: 1,
+        default: 'ci-first',
+        green_main_goal_minutes: 360,
+        best_effort_budget_minutes: 12,
+        custom: {},
+      },
+      effective: {
+        preset: 'ci-first',
+        source: 'project',
+        integration: 'serial',
+        local_gate: 'best-effort',
+        require_green_main_sha: false,
+        attribute_red_ci_before_completion: true,
+        push_without_receipt: true,
+        local_budget_minutes: 12,
+        green_main_goal_minutes: null,
+      },
+      presets: ['ticket-assured', 'steady-main', 'risk-guided', 'ci-first'],
+    };
+    const markup = String(DevelopmentStrategySettings({ report: ciFirst, draft: draftFromDevelopmentReport(ciFirst) }));
+    expect(markup).toContain('value="ci-first"');
+    expect(markup).toContain('CI is the gate; red runs are attributed and reported.');
+    expect(markup).toContain('name="development-bestEffortBudget"');
+    expect(markup).toContain('value="12"');
+    expect(markup).toContain('Local verification: best effort · integration: serial');
+    expect(markup).toContain('pushes to main; the covering CI run is the gate');
+    expect(markup).toContain('Best-effort local budget: 12 minutes');
   });
 
   it('shows a readable source and distinguishes an unscheduled target from no promotion', () => {

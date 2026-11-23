@@ -1,11 +1,30 @@
-import type { CustomDevelopmentStrategy, DevelopmentStrategyPolicy, DevelopmentStrategyReport } from '../api';
+import type {
+  CustomDevelopmentStrategy,
+  DevelopmentPreset,
+  DevelopmentStrategyPolicy,
+  DevelopmentStrategyReport,
+} from '../api';
 
 export const NEW_CUSTOM = '__new_custom__';
+
+/** The built-in presets, in the order the selector lists them (HS2-ZGS7JP adds CI First). */
+export const BUILT_IN_PRESETS: readonly DevelopmentPreset[] = [
+  'ticket-assured',
+  'steady-main',
+  'risk-guided',
+  'ci-first',
+];
+
+function isBuiltIn(name: string): name is DevelopmentPreset {
+  return (BUILT_IN_PRESETS as readonly string[]).includes(name);
+}
 
 export interface DevelopmentStrategyDraft {
   selection: string;
   name: string;
   greenGoal: string;
+  /** CI First's best-effort local budget in minutes; blank keeps the 10-minute default. */
+  bestEffortBudget: string;
   custom: {
     integration: CustomDevelopmentStrategy['integration'];
     local_gate: CustomDevelopmentStrategy['local_gate'];
@@ -49,6 +68,7 @@ export function draftFromDevelopmentReport(report: DevelopmentStrategyReport): D
     selection,
     name: report.policy.default_custom ?? '',
     greenGoal: String(report.policy.green_main_goal_minutes),
+    bestEffortBudget: report.policy.best_effort_budget_minutes?.toString() ?? '',
     custom: customDraft(report.policy.custom[selection]),
   };
 }
@@ -74,6 +94,7 @@ export function changeDevelopmentStrategyField(
   if (field === 'selection') return { ...draft, selection: String(value) };
   if (field === 'name') return { ...draft, name: String(value) };
   if (field === 'greenGoal') return { ...draft, greenGoal: String(value) };
+  if (field === 'bestEffortBudget') return { ...draft, bestEffortBudget: String(value) };
   if (!(field in draft.custom)) return draft;
   if (field === 'integration' && value !== 'ci-staged')
     return {
@@ -102,7 +123,10 @@ export function policyFromDevelopmentDraft(
     green_main_goal_minutes: greenMain,
     custom: { ...existing.custom },
   };
-  if (draft.selection === 'ticket-assured' || draft.selection === 'steady-main' || draft.selection === 'risk-guided') {
+  const bestEffortBudget = optionalMinutes(draft.bestEffortBudget, 'Best-effort local budget', 1_440);
+  if (bestEffortBudget === undefined) delete policy.best_effort_budget_minutes;
+  else policy.best_effort_budget_minutes = bestEffortBudget;
+  if (isBuiltIn(draft.selection)) {
     policy.default = draft.selection;
     delete policy.default_custom;
     return policy;
@@ -110,8 +134,7 @@ export function policyFromDevelopmentDraft(
   const name = (draft.selection === NEW_CUSTOM ? draft.name : draft.selection).trim();
   if (!/^[a-z](?:[a-z0-9]|-(?!-))*$/.test(name) || name.endsWith('-') || name.length > 40)
     throw new Error('Custom strategy name must be 1–40 characters of lowercase kebab-case.');
-  if (['ticket-assured', 'steady-main', 'risk-guided'].includes(name))
-    throw new Error('Choose a distinct custom strategy name.');
+  if (isBuiltIn(name)) throw new Error('Choose a distinct custom strategy name.');
   const profile: CustomDevelopmentStrategy = {
     integration: draft.custom.integration,
     local_gate: draft.custom.local_gate,

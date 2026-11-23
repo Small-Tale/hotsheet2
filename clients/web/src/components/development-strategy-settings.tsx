@@ -29,6 +29,8 @@ const PRESET_COPY = {
   'ticket-assured': 'Full local verification and serial integration. Each ticket waits for a green main CI run.',
   'steady-main': 'Targeted affected verification with staged CI and a six-hour green-main goal by default.',
   'risk-guided': 'Risk-selected local checks with staged CI and exact-SHA promotion.',
+  'ci-first':
+    'Best-effort affected checks within a time budget, then a direct push to main. CI is the gate; red runs are attributed and reported.',
 } as const;
 
 function time(seconds: number | null, empty: string): string {
@@ -53,8 +55,8 @@ export function DevelopmentStrategySettings({
       <List gap="l">
         <List gap="xs">
           <Text tone="quiet">
-            Choose how this project verifies work and moves an exact green SHA to main. A green-main deadline is a goal;
-            red CI never moves main.
+            Choose how this project verifies work before it reaches main. A green-main deadline is a goal; red CI never
+            promotes a staged SHA.
           </Text>
         </List>
         {loading && <Text role="status">Loading development strategy…</Text>}
@@ -68,6 +70,7 @@ export function DevelopmentStrategySettings({
                 { value: 'ticket-assured', label: 'Ticket Assured' },
                 { value: 'steady-main', label: 'Steady Main' },
                 { value: 'risk-guided', label: 'Risk Guided' },
+                { value: 'ci-first', label: 'CI First' },
                 ...Object.keys(report.policy.custom).map((name) => ({ value: name, label: `Custom · ${name}` })),
                 { value: NEW_CUSTOM, label: 'New Custom…' },
               ]}
@@ -86,6 +89,18 @@ export function DevelopmentStrategySettings({
               value={draft.greenGoal}
               hint="Steady Main defaults to 360 minutes (6 hours). This target never bypasses CI or promotion checks."
             />
+            {selection === 'ci-first' && (
+              <TextField
+                name="development-bestEffortBudget"
+                label="Local Budget (Minutes)"
+                type="number"
+                min={1}
+                max={1440}
+                value={draft.bestEffortBudget}
+                placeholder="10"
+                hint="Checks that do not start within this budget are deferred to CI. Leave blank for 10 minutes."
+              />
+            )}
             {editingCustom && custom && (
               <List gap="m" className="development-strategy-settings__custom">
                 <Text variant="h3">Custom strategy</Text>
@@ -208,7 +223,10 @@ export function DevelopmentStrategySettings({
             <Text variant="h3">Saved policy</Text>
             <Text>{`Selection: ${report.effective.preset} · ${report.effective.source.replaceAll('-', ' ')}`}</Text>
             <Text>{`Local verification: ${report.effective.local_gate.replaceAll('-', ' ')} · integration: ${report.effective.integration}`}</Text>
-            <Text>{`Connected CI: ${report.effective.custom?.ci_gate ?? 'CI'} · ${report.effective.require_green_main_sha ? 'exact green main SHA required' : 'main SHA requirement absent'}`}</Text>
+            <Text>{`Connected CI: ${report.effective.custom?.ci_gate ?? 'CI'} · ${report.effective.require_green_main_sha ? 'exact green main SHA required' : report.effective.push_without_receipt ? 'pushes to main; the covering CI run is the gate' : 'main SHA requirement absent'}`}</Text>
+            {report.effective.local_budget_minutes !== undefined && (
+              <Text>{`Best-effort local budget: ${report.effective.local_budget_minutes} minutes`}</Text>
+            )}
             <Text>{`${report.effective.attribute_red_ci_before_completion ? 'Red CI must be attributed before completion' : 'Red CI attribution requirement absent'}${report.effective.custom ? ` · ${report.effective.custom.red_ci_recovery.replaceAll('-', ' ')}` : ''}`}</Text>
             {report.effective.green_main_goal_minutes !== null && (
               <Text>{`Green main goal: ${report.effective.green_main_goal_minutes} minutes`}</Text>

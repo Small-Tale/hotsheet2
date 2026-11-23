@@ -188,3 +188,30 @@ test('HS2-GN06JT fallback stays full and unrelated stages remain omitted otherwi
   assert.equal(selected.selected.length, all.length);
   assert.equal(selected.floorOverBudget, false);
 });
+
+test('HS2-ZGS7JP best effort budgets T2 like T1, takes analyzed stages as requests, and names its deferrals', () => {
+  const docs = ['docs/06-clients.md'];
+  const result = choose({ changes: docs, tier: 'T2', budgetMs: 220, bestEffort: true });
+  assert.equal(result.bestEffort, true);
+  assert.equal(result.tier, 'T2', 'the ticket tier is still reported');
+  assert.equal(result.budgetMs, 220);
+  assert.ok(result.selected.some((item) => item.command === unit.command), 'relevance fills the budget');
+  const deferredBrowser = result.deferred.find((item) => item.command === browser.command);
+  assert.equal(deferredBrowser?.budgetReason, 'deferred to CI by best-effort budget');
+  const requested = choose({
+    changes: docs,
+    tier: 'T2',
+    budgetMs: 220,
+    bestEffort: true,
+    analyzed: [stageId(browser)],
+  });
+  assert.ok(requested.selected.some((item) => item.command === browser.command));
+  assert.equal(
+    requested.selected.find((item) => item.command === browser.command).budgetReason,
+    'AI-proposed additional check',
+  );
+  assert.throws(() => choose({ tier: 'T2', budgetMs: null, bestEffort: true }), /positive budget/);
+  assert.throws(() => choose({ tier: 'T1', budgetMs: 0, bestEffort: true }), /positive budget/);
+  const over = choose({ changes: ['clients/web/src/app.ts'], tier: 'T2', budgetMs: 1, bestEffort: true });
+  assert.equal(over.floorOverBudget, true, 'the floor is planned and the gate cuts it at run time');
+});

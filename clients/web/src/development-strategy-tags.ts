@@ -12,6 +12,7 @@ export const BUILT_IN_DEVELOPMENT_STRATEGIES: readonly DevelopmentPreset[] = [
   'ticket-assured',
   'steady-main',
   'risk-guided',
+  'ci-first',
 ];
 
 /**

@@ -88,7 +88,7 @@ fn hs2_bf79yx_cli_reads_validates_updates_and_resolves_shared_policy() {
     assert_eq!(migrated["effective"]["source"], "unconfigured-project");
     assert_eq!(migrated["effective"]["integration"], "batch");
     assert_eq!(migrated["effective"]["local_gate"], "risk-selected");
-    for preset in ["steady-main", "risk-guided", "ticket-assured"] {
+    for preset in ["ci-first", "steady-main", "risk-guided", "ticket-assured"] {
         let saved = run(
             project,
             &[
@@ -110,6 +110,18 @@ fn hs2_bf79yx_cli_reads_validates_updates_and_resolves_shared_policy() {
         if preset == "ticket-assured" {
             assert_eq!(value["effective"]["integration"], "serial");
             assert_eq!(value["effective"]["local_gate"], "full-local");
+        } else if preset == "ci-first" {
+            // HS2-ZGS7JP: serial, best-effort local checks, and CI as the gate.
+            assert_eq!(value["effective"]["integration"], "serial");
+            assert_eq!(value["effective"]["local_gate"], "best-effort");
+            assert_eq!(value["effective"]["local_budget_minutes"], 10);
+            assert_eq!(value["effective"]["push_without_receipt"], true);
+            assert_eq!(value["effective"]["require_green_main_sha"], false);
+            assert_eq!(
+                value["effective"]["attribute_red_ci_before_completion"],
+                true
+            );
+            assert_eq!(value["presets"].as_array().unwrap().len(), 4);
         } else if preset == "steady-main" {
             assert_eq!(value["effective"]["integration"], "ci-staged");
             assert_eq!(value["effective"]["local_gate"], "targeted");
@@ -153,6 +165,64 @@ fn hs2_bf79yx_cli_reads_validates_updates_and_resolves_shared_policy() {
     let project_only: serde_json::Value = serde_json::from_slice(&project_only.stdout).unwrap();
     assert_eq!(project_only["source"], "project");
     assert_eq!(project_only["preset"], "ticket-assured");
+    assert_eq!(project_only["push_without_receipt"], false);
+
+    // HS2-ZGS7JP: a configurable best-effort budget, then session and ticket precedence.
+    let ci_first = run(
+        project,
+        &[
+            "development-strategy-set",
+            "--preset",
+            "ci-first",
+            "--best-effort-budget-minutes",
+            "7",
+        ],
+    );
+    assert!(
+        ci_first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ci_first.stderr)
+    );
+    let ci_first: serde_json::Value = serde_json::from_slice(&ci_first.stdout).unwrap();
+    assert_eq!(ci_first["policy"]["best_effort_budget_minutes"], 7);
+    assert_eq!(ci_first["effective"]["local_budget_minutes"], 7);
+    let invalid = run(
+        project,
+        &[
+            "development-strategy-set",
+            "--preset",
+            "ci-first",
+            "--best-effort-budget-minutes",
+            "0",
+        ],
+    );
+    assert!(!invalid.status.success());
+    let session = run(
+        project,
+        &[
+            "development-strategy-resolve",
+            "--session",
+            "ticket-assured",
+        ],
+    );
+    let session: serde_json::Value = serde_json::from_slice(&session.stdout).unwrap();
+    assert_eq!(session["source"], "session");
+    assert_eq!(session["push_without_receipt"], false);
+    let ticket = run(
+        project,
+        &[
+            "development-strategy-resolve",
+            "--session",
+            "ticket-assured",
+            "--ticket",
+            "ci-first",
+        ],
+    );
+    let ticket: serde_json::Value = serde_json::from_slice(&ticket.stdout).unwrap();
+    assert_eq!(ticket["source"], "ticket");
+    assert_eq!(ticket["local_gate"], "best-effort");
+    assert_eq!(ticket["local_budget_minutes"], 7);
+    assert_eq!(ticket["push_without_receipt"], true);
 }
 
 #[test]

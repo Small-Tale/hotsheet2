@@ -1456,3 +1456,90 @@ test('HS2-QP2AM2 a stalled Git launch is transient and the heartbeat skips it wh
   const lost = new Error('Main integration reservation was lost or expired: another owner replaced the reservation');
   assert.equal(heartbeatTolerates(lost, now + 100_000, now, 20_000), false);
 });
+
+/** HS2-ZGS7JP: a configured project whose CLI resolver reports the given effective strategy. */
+function strategyFixture(selection) {
+  const f = fixture();
+  for (const path of [
+    'scripts/gate-ticket-profile.mjs',
+    'scripts/gate-budget.mjs',
+    'scripts/gate-timings.mjs',
+    'scripts/test-profile.mjs',
+  ])
+    copyFileSync(resolve(source, path), resolve(f.repo, path));
+  put(
+    resolve(f.repo, '.hotsheet2/settings.json'),
+    `${JSON.stringify({ development_strategy: { version: 1, default: selection?.preset ?? 'ticket-assured' } })}\n`,
+  );
+  run('git', ['add', '--all'], f.repo, f.env);
+  run('git', ['commit', '-m', 'Synthetic strategy'], f.repo, f.env);
+  const cli = resolve(f.root, 'bin/hotsheet-cli');
+  put(
+    cli,
+    '#!/bin/sh\ncase "$*" in *development-strategy-resolve*) ;; *) exit 1 ;; esac\nif [ -z "$HS2_TEST_SELECTION" ]; then echo "resolver unavailable" >&2; exit 2; fi\nprintf "%s\\n" "$HS2_TEST_SELECTION"\n',
+    true,
+  );
+  return { ...f, env: { ...f.env, HS2_TEST_SELECTION: selection ? JSON.stringify(selection) : '' } };
+}
+
+const selectionFor = (preset) => ({
+  preset,
+  source: 'project',
+  integration: preset === 'ticket-assured' || preset === 'ci-first' ? 'serial' : 'ci-staged',
+  local_gate: { 'ticket-assured': 'full-local', 'steady-main': 'targeted', 'risk-guided': 'risk-selected' }[preset] ??
+    'best-effort',
+  require_green_main_sha: preset !== 'ci-first',
+  attribute_red_ci_before_completion: true,
+  green_main_goal_minutes: null,
+  ...(preset === 'ci-first' ? { local_budget_minutes: 10 } : {}),
+  push_without_receipt: preset === 'ci-first',
+});
+
+test('HS2-ZGS7JP CI First pushes main without a full-gate receipt, keeping the reservation and remote checks', () => {
+  const f = strategyFixture(selectionFor('ci-first'));
+  try {
+    put(f.env.HS2_TEST_FAIL, 'fail gate if it runs\n');
+    const head = run('git', ['rev-parse', 'HEAD'], f.repo);
+    const pushed = spawnSync('bash', ['scripts/push.sh'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+    assert.equal(pushed.status, 0, pushed.stderr);
+    assert.match(pushed.stderr, /CI First \(HS2-ZGS7JP\): pushing main without a full-gate receipt/);
+    assert.match(pushed.stderr, /ci-gate\.mjs status --covers [0-9a-f]{40}/);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), head);
+    assert.equal(existsSync(f.env.HS2_TEST_GATE_LOG), false, 'no gate ran');
+    assert.equal(existsSync(f.env.HS2_TEST_VERIFY_LOG), false, 'neither the push nor its hook required a receipt');
+    assert.equal(readWindow(f.repo), null, 'the main-writer reservation was released');
+
+    // Clean-checkout and fast-forward protections still hold.
+    put(resolve(f.repo, 'seed'), 'dirty\n');
+    assert.notEqual(spawnSync('bash', ['scripts/push.sh'], { cwd: f.repo, env: f.env, encoding: 'utf8' }).status, 0);
+    run('git', ['checkout', '--', 'seed'], f.repo, f.env);
+    run('git', ['reset', '--hard', 'HEAD~1'], f.repo, f.env);
+    commit(f.repo, 'diverged', f.env);
+    assert.notEqual(spawnSync('bash', ['scripts/push.sh'], { cwd: f.repo, env: f.env, encoding: 'utf8' }).status, 0);
+    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), head, 'a non-fast-forward never lands');
+  } finally {
+    f.dispose();
+  }
+});
+
+for (const preset of ['ticket-assured', 'steady-main', 'risk-guided', null])
+  test(`HS2-ZGS7JP ${preset ?? 'an unresolvable strategy'} still refuses a main push without a receipt`, () => {
+    const f = strategyFixture(preset && selectionFor(preset));
+    try {
+      const refused = spawnSync('bash', ['scripts/push.sh'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+      assert.notEqual(refused.status, 0);
+      assert.match(refused.stderr, /No exact-tree gate receipt/);
+      assert.doesNotMatch(refused.stderr, /CI First \(HS2-ZGS7JP\)/);
+      assert.equal(readWindow(f.repo), null);
+      assert.equal(
+        spawnSync('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], {
+          cwd: f.remote,
+          env: withoutGitRepositoryEnv(process.env),
+          encoding: 'utf8',
+        }).stdout.trim(),
+        '',
+      );
+    } finally {
+      f.dispose();
+    }
+  });

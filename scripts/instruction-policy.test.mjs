@@ -40,13 +40,24 @@ test('HS2-EJ8JTG pins authoritative tier tags and analyzed T2 testing', () => {
     assert.match(source, /T2 has no time cap:/);
     // HS2-6PZCD9: the configured development strategy makes the gate require a reviewed test plan.
     assert.match(source, /`scripts\/check\.sh` refuses to run without `--test-plan <reviewed\.json>`/);
-    assert.match(source, /A T2 ticket also runs `--full` or an explicit analyzed selection with `--t2-stage`/);
+    // HS2-ZGS7JP: CI First is the one strategy whose best-effort run needs neither.
+    assert.match(source, /Outside CI First, a T2 ticket also runs `--full` or an explicit analyzed selection with\s+`--t2-stage`/);
+    assert.match(source, /except under CI First, whose best-effort run is its own budgeted plan/);
     assert.match(source, /completion note names deferred-to-CI checks and the successful\s+covering main CI run/);
   }
   assert.match(worker, /set the ticket's tier\s+tag when declaring risk/);
   assert.match(worker, /normal gate without profile flags/);
   assert.match(integrator, /verify\s+the worker's analyzed selection for uncapped high-risk work/);
   assert.match(integrator, /Record deferred\s+checks and the covering main CI run in the completion note/);
+});
+
+test('HS2-ZGS7JP the CI First deviation keeps the push protections and attributes red CI', () => {
+  for (const source of [read('.rulesync/rules/project-local.md'), read('AGENTS.md')]) {
+    assert.match(source, /CI First deviation \(HS2-ZGS7JP\): only while the effective development strategy\s+resolves to `ci-first`/);
+    assert.match(source, /without a full-gate receipt, keeping the clean-checkout, fast-forward,\s+main-writer and remote-confirmation checks/);
+    assert.match(source, /A red run is attributed to the tickets pushed since\s+the last green run/);
+    assert.match(source, /Under every other strategy\s+this deviation does not apply and `scripts\/push\.sh` still refuses without a receipt/);
+  }
 });
 
 test('HS2-39D5YS requires an explicit integration record before worker cleanup', () => {

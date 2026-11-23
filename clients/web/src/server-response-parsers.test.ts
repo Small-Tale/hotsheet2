@@ -68,6 +68,7 @@ describe('HS2-NBDXPW development policy response boundary', () => {
         local_gate: 'full-local',
         require_green_main_sha: true,
         attribute_red_ci_before_completion: true,
+        push_without_receipt: false,
         green_main_goal_minutes: null,
       },
       presets: ['ticket-assured', 'steady-main', 'risk-guided'],
@@ -78,6 +79,55 @@ describe('HS2-NBDXPW development policy response boundary', () => {
     ).toThrow();
     expect(() =>
       parseDevelopmentStrategyReport({ ...report, effective: { ...report.effective, require_green_main_sha: 'yes' } }),
+    ).toThrow();
+  });
+
+  it('HS2-ZGS7JP accepts CI First best effort and refuses a malformed push or budget field', () => {
+    const ciFirst = {
+      policy: { version: 1, default: 'ci-first', green_main_goal_minutes: 360, best_effort_budget_minutes: 12 },
+      effective: {
+        preset: 'ci-first',
+        source: 'project',
+        integration: 'serial',
+        local_gate: 'best-effort',
+        require_green_main_sha: false,
+        attribute_red_ci_before_completion: true,
+        green_main_goal_minutes: null,
+        local_budget_minutes: 12,
+        push_without_receipt: true,
+      },
+      presets: ['ticket-assured', 'steady-main', 'risk-guided', 'ci-first'],
+    };
+    const parsed = parseDevelopmentStrategyReport(ciFirst);
+    expect(parsed.effective.local_gate).toBe('best-effort');
+    expect(parsed.effective.push_without_receipt).toBe(true);
+    expect(parsed.policy.best_effort_budget_minutes).toBe(12);
+    const withoutPush: Record<string, unknown> = { ...ciFirst.effective };
+    delete withoutPush.push_without_receipt;
+    expect(() => parseDevelopmentStrategyReport({ ...ciFirst, effective: withoutPush })).toThrow();
+    expect(() =>
+      parseDevelopmentStrategyReport({ ...ciFirst, effective: { ...ciFirst.effective, local_budget_minutes: '12' } }),
+    ).toThrow();
+    expect(() =>
+      parseDevelopmentStrategyReport({ ...ciFirst, policy: { ...ciFirst.policy, best_effort_budget_minutes: 1.5 } }),
+    ).toThrow();
+    // A custom strategy cannot carry CI First's best-effort gate.
+    const custom = {
+      integration: 'serial',
+      local_gate: 'best-effort',
+      minimum_tier: 'T1',
+      browser: false,
+      platform: false,
+      perf: false,
+      test_plan_timing: 'before-work',
+      ci_gate: 'CI',
+      red_ci_recovery: 'attribute-and-retry',
+    };
+    expect(() =>
+      parseDevelopmentStrategyReport({
+        ...ciFirst,
+        policy: { ...ciFirst.policy, version: 2, custom: { quick: custom } },
+      }),
     ).toThrow();
   });
 });

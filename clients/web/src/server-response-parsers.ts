@@ -171,14 +171,17 @@ export const parseDevelopmentStrategyReport: ResponseParser<DevelopmentStrategyR
     policy = record(body.policy, what),
     effective = record(body.effective, what),
     presets = list(body.presets, what, (entry) => entry);
-  const presetNames = ['ticket-assured', 'steady-main', 'risk-guided'],
+  const presetNames = ['ticket-assured', 'steady-main', 'risk-guided', 'ci-first'],
     integrationNames = ['serial', 'batch', 'ci-staged'],
-    localGateNames = ['full-local', 'targeted', 'risk-selected'];
+    customLocalGateNames = ['full-local', 'targeted', 'risk-selected'],
+    // HS2-ZGS7JP: only CI First resolves to the best-effort gate.
+    localGateNames = [...customLocalGateNames, 'best-effort'];
   if (
     !Number.isInteger(policy.version) ||
     !presetNames.includes(String(policy.default)) ||
     !Number.isInteger(policy.green_main_goal_minutes) ||
     (policy.default_custom !== undefined && typeof policy.default_custom !== 'string') ||
+    (policy.best_effort_budget_minutes !== undefined && !Number.isInteger(policy.best_effort_budget_minutes)) ||
     !presets.every((entry) => presetNames.includes(String(entry))) ||
     !isRecord(policy.custom ?? {}) ||
     typeof effective.preset !== 'string' ||
@@ -187,6 +190,8 @@ export const parseDevelopmentStrategyReport: ResponseParser<DevelopmentStrategyR
     !localGateNames.includes(String(effective.local_gate)) ||
     typeof effective.require_green_main_sha !== 'boolean' ||
     typeof effective.attribute_red_ci_before_completion !== 'boolean' ||
+    typeof effective.push_without_receipt !== 'boolean' ||
+    (effective.local_budget_minutes !== undefined && !Number.isInteger(effective.local_budget_minutes)) ||
     (effective.green_main_goal_minutes !== null &&
       effective.green_main_goal_minutes !== undefined &&
       !Number.isInteger(effective.green_main_goal_minutes))
@@ -196,7 +201,7 @@ export const parseDevelopmentStrategyReport: ResponseParser<DevelopmentStrategyR
     const item = record(entry, what);
     if (
       !integrationNames.includes(String(item.integration)) ||
-      !localGateNames.includes(String(item.local_gate)) ||
+      !customLocalGateNames.includes(String(item.local_gate)) ||
       !['T0', 'T1', 'T2'].includes(String(item.minimum_tier)) ||
       (item.budget_minutes !== undefined && !Number.isInteger(item.budget_minutes)) ||
       typeof item.browser !== 'boolean' ||

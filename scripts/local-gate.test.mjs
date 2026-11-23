@@ -31,7 +31,7 @@ import {
   specimenInventoryTitles,
   withSpecimenInventory,
 } from './gate-browser-exercise.mjs';
-import { profileFromTags } from './gate-ticket-profile.mjs';
+import { bestEffortProfile, profileFromTags } from './gate-ticket-profile.mjs';
 import {
   changedLines,
   parentModuleFiles,
@@ -1855,4 +1855,75 @@ test('HS2-RS0SYH runs every nextest stage without fail-fast so its report lists 
     "npm run test:unit -- --reporter=default --reporter=json --outputFile.json='/r/v.json'",
   );
   assert.equal(instrumentedCommand('cargo fmt --all --check', null), 'cargo fmt --all --check');
+});
+
+/** HS2-ZGS7JP: a CI First profile for a T2 ticket, with the smallest configurable budget. */
+function ciFirstProfile(minutes = 1, tags = ['tier:T2']) {
+  return bestEffortProfile(profileFromTags({ qualified_id: 'git:HS2-ZGS7JP', tags }), {
+    preset: 'ci-first',
+    source: 'project',
+    integration: 'serial',
+    local_gate: 'best-effort',
+    local_budget_minutes: minutes,
+    push_without_receipt: true,
+  });
+}
+
+test('HS2-ZGS7JP best effort budgets a T2 ticket, needs no analyzed selection or plan, and lists deferrals', (t) => {
+  const f = fixture(t);
+  const profile = ciFirstProfile();
+  assert.equal(profile.budgetMs, 60_000);
+  assert.equal(profile.tier, 'T2');
+  const plan = prepare(f.repo, undefined, false, f.options.versions, { profile });
+  assert.equal(plan.bestEffort, true);
+  assert.equal(plan.budgetMs, 60_000, 'T2 keeps the best-effort budget instead of an unbounded selection');
+  assert.ok(plan.checks.length > 2, 'the mandatory floor is planned');
+  assert.ok(plan.deferred.length > 0, 'unknown-cost affected checks are deferred to CI');
+  assert.ok(plan.deferred.every((stage) => /deferred to CI/.test(stage.budgetReason)));
+  // A requested T2 stage is an additive request, never a required selection.
+  const build = 'clients/web::npm run build';
+  const requested = prepare(f.repo, undefined, false, f.options.versions, { profile, analyzed: [build] });
+  assert.ok(requested.checks.some((stage) => `${stage.cwd}::${stage.command}` === build));
+  // A ticket's own test-budget tag can only shorten the strategy budget.
+  assert.equal(ciFirstProfile(10, ['tier:T1', 'test-budget:2m']).budgetMs, 120_000);
+  assert.equal(ciFirstProfile(1, ['tier:T1', 'test-budget:2m']).budgetMs, 60_000);
+
+  // A fake clock: each stage takes 25 s, so the third stage starts past the one-minute budget.
+  let now = 0;
+  const ran = [];
+  const runner = (stage) => {
+    ran.push(stage.command);
+    now += 25_000;
+    return { status: 0 };
+  };
+  const lines = [];
+  assert.equal(runGate({ ...f.options, profile, runner, clock: () => now, log: (line) => lines.push(line) }), 0);
+  assert.equal(ran.length, 3, 'stages start until the budget has elapsed, then stop');
+  const receipt = JSON.parse(readFileSync(join(plan.cache, `${plan.key}.json`), 'utf8'));
+  const ids = plan.checks.map((stage) => `${stage.cwd}::${stage.command}`);
+  assert.deepEqual(receipt.bestEffort.ran, ids.slice(0, 3));
+  assert.deepEqual(receipt.bestEffort.runtimeDeferred, ids.slice(3));
+  assert.equal(receipt.bestEffort.budgetMs, 60_000);
+  assert.equal(receipt.bestEffort.strategy, 'ci-first');
+  for (const stage of plan.checks.slice(3)) assert.ok(receipt.deferred.includes(stage.command));
+  for (const stage of plan.deferred) assert.ok(receipt.deferred.includes(stage.command));
+  assert.match(lines.join('\n'), /Best-effort gate \(HS2-ZGS7JP\): 3 check\(s\) ran/);
+  assert.match(lines.join('\n'), /deferred to CI: \n/);
+
+  // Verification accepts the best-effort receipt; a new run spends a fresh budget on the
+  // runtime-deferred stages and reuses the stages that already passed.
+  assert.equal(runGate({ ...f.options, profile, verify: true }), 0);
+  ran.length = 0;
+  now = 0;
+  assert.equal(runGate({ ...f.options, profile, runner, clock: () => now }), 0);
+  assert.deepEqual(ran, plan.checks.slice(3, 6).map((stage) => stage.command));
+});
+
+test('HS2-ZGS7JP a failing best-effort stage still fails the gate and records no receipt', (t) => {
+  const f = fixture(t);
+  const profile = ciFirstProfile(10);
+  const plan = prepare(f.repo, undefined, false, f.options.versions, { profile });
+  assert.equal(runGate({ ...f.options, profile, runner: () => ({ status: 1 }) }), 1);
+  assert.equal(existsSync(join(plan.cache, `${plan.key}.json`)), false);
+  assert.throws(() => runGate({ ...f.options, profile, verify: true }), /No valid/);
 });

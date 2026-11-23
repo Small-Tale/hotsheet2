@@ -1379,12 +1379,15 @@ shared by `coordination strategies`/`strategy-*` and `GET`/`PUT
 only under the schema-eight fence (HS2-NEY1QH); `strategy_tests.rs` and
 `tests/coordination_strategy.rs` pin its transitions.
 `development_strategy.rs` owns the versioned shared project policy (Ticket Assured,
-Steady Main, Risk Guided, and named custom policies), preset/override resolution,
+Steady Main, Risk Guided, CI First (HS2-ZGS7JP), and named custom policies), preset/override resolution,
 capability validation, and the CLI/REST report shared by
 `coordination development-strategy` and the authenticated checkout route (HS2-BF79YX,
 HS2-ARJNJV). The unset setting preserves the existing integration and risk-tier
 gate defaults; `scripts/gate-ticket-profile.mjs` reads an explicit setting for
-local gate selection and enforces custom minimums.
+local gate selection and enforces custom minimums. Under CI First,
+`scripts/gate-budget.mjs` and `scripts/local-gate.mjs` run a best-effort budgeted gate
+that defers unstarted stages to CI, and `scripts/main-integration-window.mjs`
+(`ciFirstPush`) lets `scripts/push.sh` push main without a receipt.
 HS2-NBDXPW exposes that route in Project Settings through
 `clients/web/src/components/development-strategy-settings.tsx` and its interaction
 module. `clients/web/src/app/runtime.tsx` keeps project-scoped drafts, previews and

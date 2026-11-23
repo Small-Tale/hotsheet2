@@ -269,6 +269,7 @@ fn hs2_bf79yx_every_preset_round_trips_in_shared_settings() {
             version: DEVELOPMENT_POLICY_VERSION,
             default: preset,
             green_main_goal_minutes: 420,
+            best_effort_budget_minutes: None,
             configured: true,
             custom: Default::default(),
             default_custom: None,
@@ -286,13 +287,27 @@ fn hs2_bf79yx_every_preset_round_trips_in_shared_settings() {
         assert_eq!(effective.integration, preset.integration());
         assert_eq!(effective.local_gate, preset.local_gate());
         assert_eq!(effective.source, SelectionSource::Project);
-        assert!(effective.require_green_main_sha);
+        // HS2-ZGS7JP: only CI First pushes before CI; every preset attributes red CI.
+        let ci_first = preset == DevelopmentPreset::CiFirst;
+        assert_eq!(effective.require_green_main_sha, !ci_first);
+        assert_eq!(effective.push_without_receipt, ci_first);
+        assert_eq!(
+            effective.local_budget_minutes,
+            ci_first.then_some(DEFAULT_BEST_EFFORT_BUDGET_MINUTES)
+        );
         assert!(effective.attribute_red_ci_before_completion);
         assert_eq!(
             effective.green_main_goal_minutes,
             (preset == DevelopmentPreset::SteadyMain).then_some(420)
         );
     }
+    // A staged preset is the stored default for the refusal below; CI First is serial.
+    DevelopmentPolicy {
+        default: DevelopmentPreset::RiskGuided,
+        ..DevelopmentPolicy::default()
+    }
+    .write(&settings)
+    .unwrap();
     let refused = StrategyPolicy::default()
         .write(&settings)
         .unwrap_err()
@@ -388,4 +403,134 @@ fn hs2_bf79yx_rejects_invalid_policy_and_unauthorized_staging() {
         )
         .unwrap();
     assert!(DevelopmentPolicy::read(&settings).is_err());
+}
+
+/// HS2-ZGS7JP: CI First is a serial, best-effort preset whose budget is configurable and
+/// bounded, which a custom strategy cannot imitate, and which session and ticket instructions
+/// override in the usual order.
+#[test]
+fn hs2_zgs7jp_ci_first_validation_budget_and_precedence() {
+    let root = tempfile::tempdir().unwrap();
+    let settings = Settings::for_project(root.path());
+    // Serial is always allowed: no integration permission is needed to select CI First.
+    let mut policy = DevelopmentPolicy {
+        default: DevelopmentPreset::CiFirst,
+        ..DevelopmentPolicy::default()
+    };
+    policy.write(&settings).unwrap();
+    let read = DevelopmentPolicy::read(&settings).unwrap();
+    assert_eq!(read.default, DevelopmentPreset::CiFirst);
+    let project = read
+        .resolve(&StrategyPolicy::default(), None, None)
+        .unwrap();
+    assert_eq!(project.preset, "ci-first");
+    assert_eq!(project.source, SelectionSource::Project);
+    assert_eq!(project.integration, IntegrationStrategy::Serial);
+    assert_eq!(project.local_gate, LocalGate::BestEffort);
+    assert_eq!(project.local_budget_minutes, Some(10));
+    assert!(project.push_without_receipt);
+    assert!(!project.require_green_main_sha);
+    assert!(project.attribute_red_ci_before_completion);
+    assert_eq!(project.green_main_goal_minutes, None);
+    let json = serde_json::to_value(&project).unwrap();
+    assert_eq!(json["local_gate"], "best-effort");
+    assert_eq!(json["local_budget_minutes"], 10);
+
+    policy.best_effort_budget_minutes = Some(3);
+    policy.write(&settings).unwrap();
+    let read = DevelopmentPolicy::read(&settings).unwrap();
+    assert_eq!(
+        read.resolve(&StrategyPolicy::default(), None, None)
+            .unwrap()
+            .local_budget_minutes,
+        Some(3)
+    );
+    for invalid in [0, 1_441] {
+        policy.best_effort_budget_minutes = Some(invalid);
+        assert!(policy.validate().is_err(), "{invalid}");
+        assert!(policy.write(&settings).is_err(), "{invalid}");
+    }
+    assert_eq!(
+        DevelopmentPolicy::read(&settings)
+            .unwrap()
+            .best_effort_budget_minutes,
+        Some(3),
+        "a refused write keeps the stored policy"
+    );
+
+    // Session overrides the project, and a ticket overrides both, in either direction.
+    let session = read
+        .resolve(
+            &StrategyPolicy::default(),
+            Some(DevelopmentPreset::TicketAssured),
+            None,
+        )
+        .unwrap();
+    assert_eq!(session.source, SelectionSource::Session);
+    assert!(!session.push_without_receipt);
+    assert_eq!(session.local_budget_minutes, None);
+    let ticket = read
+        .resolve(
+            &StrategyPolicy::default(),
+            Some(DevelopmentPreset::TicketAssured),
+            Some(DevelopmentPreset::CiFirst),
+        )
+        .unwrap();
+    assert_eq!(ticket.source, SelectionSource::Ticket);
+    assert!(ticket.push_without_receipt);
+    let assured = DevelopmentPolicy {
+        configured: true,
+        ..DevelopmentPolicy::default()
+    };
+    let session_ci_first = assured
+        .resolve_named(&StrategyPolicy::default(), Some("ci-first"), None)
+        .unwrap();
+    assert_eq!(session_ci_first.source, SelectionSource::Session);
+    assert_eq!(session_ci_first.local_gate, LocalGate::BestEffort);
+    let ticket_wins = assured
+        .resolve_named(
+            &StrategyPolicy::default(),
+            Some("ci-first"),
+            Some("ticket-assured"),
+        )
+        .unwrap();
+    assert_eq!(ticket_wins.local_gate, LocalGate::FullLocal);
+    assert!(!ticket_wins.push_without_receipt);
+
+    // A custom strategy cannot borrow the best-effort gate or the CI First name.
+    let mut borrowed = custom(
+        IntegrationStrategy::Serial,
+        LocalGate::BestEffort,
+        RiskTier::T1,
+    );
+    borrowed.budget_minutes = Some(10);
+    let named = DevelopmentPolicy {
+        version: 2,
+        configured: true,
+        custom: [("quick".to_owned(), borrowed)].into(),
+        default_custom: Some("quick".to_owned()),
+        ..DevelopmentPolicy::default()
+    };
+    assert!(
+        named
+            .validate_against(&StrategyPolicy::default())
+            .unwrap_err()
+            .to_string()
+            .contains("CI First")
+    );
+    let reserved = DevelopmentPolicy {
+        version: 2,
+        configured: true,
+        custom: [(
+            "ci-first".to_owned(),
+            custom(
+                IntegrationStrategy::Serial,
+                LocalGate::Targeted,
+                RiskTier::T1,
+            ),
+        )]
+        .into(),
+        ..DevelopmentPolicy::default()
+    };
+    assert!(reserved.validate().is_err());
 }

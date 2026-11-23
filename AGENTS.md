@@ -69,7 +69,8 @@ Push policy: `push-per-ticket`. The maintainer has authorized routine
 fast-forward pushes of verified ticket commits to `origin/main`; do not ask again.
 After pushing, check the covering `main` CI run with `node scripts/ci-gate.mjs
 status --covers <full-sha>`. A remote run never replaces a failing ticket or
-integration gate except for the explicit standalone override below.
+integration gate except for the explicit standalone override and the CI First
+strategy below.
 
 Fast-push deviation (HS2-Q390N2, HS2-CV0JC8): ticket and integration checks run
 before push and record an exact-tree receipt. An ordinary `scripts/push.sh` only
@@ -102,6 +103,22 @@ re-staged. The integration branch is integrator-owned scratch, not shared histor
 rebuilt tip may replace only an old tip that `main` does not contain, by
 `--force-with-lease`. `main` is never merged, rewritten or force-pushed.
 
+CI First deviation (HS2-ZGS7JP): only while the effective development strategy
+resolves to `ci-first` (`development-strategy-resolve` reports
+`push_without_receipt: true`) is local verification best effort and CI the gate.
+Run `scripts/check.sh` once per ticket: it runs the affected checks for every tier,
+T2 included, within the strategy budget (10 minutes unless configured), needs no
+`--test-plan` or `--t2-stage`, and defers what does not start in time to CI, listed
+in its output and receipt. Fix any check that ran and failed. Then
+`scripts/push.sh` (with `--standalone` beside a coordination pool) pushes to `main`
+without a full-gate receipt, keeping the clean-checkout, fast-forward,
+main-writer and remote-confirmation checks. Keep the ticket in `final_testing`
+until the covering `main` CI run is green, watched through the CI watch rather
+than short-interval polling. A red run is attributed to the tickets pushed since
+the last green run, fixed forward, and reported to the maintainer in a ticket note
+and the session before any of those tickets complete. Under every other strategy
+this deviation does not apply and `scripts/push.sh` still refuses without a receipt.
+
 Per-commit `CI` runs Linux x86_64 only (HS2-WSE3FJ). Linux arm64, Windows x86_64
 and arm64, macOS Apple Silicon, and the Tauri desktop targets run in the
 `Platforms` workflow (`.github/workflows/platforms.yml`, HS2-31RGRK) daily, by
@@ -131,8 +148,9 @@ the default T1 profile. T0/T1 use the checked-in five-minute planning budget;
 `test-budget:<duration>` select documented deeper checks. T2 has no time cap:
 analyze the actual risks, record the chosen checks and reasons in the ticket,
 then run that selection. Because this project configures a `development_strategy`,
-`scripts/check.sh` refuses to run without `--test-plan <reviewed.json>` (HS2-RRNZYN).
-A T2 ticket also runs `--full` or an explicit analyzed selection with `--t2-stage`
+`scripts/check.sh` refuses to run without `--test-plan <reviewed.json>` (HS2-RRNZYN),
+except under CI First, whose best-effort run is its own budgeted plan.
+Outside CI First, a T2 ticket also runs `--full` or an explicit analyzed selection with `--t2-stage`
 whenever other affected checks exist (HS2-BNAYKG); see
 `docs/29-affected-local-verification.md`. Do not add profile flags otherwise;
 inspect `--plan` for the selected and deferred checks. CI covers checks not run
@@ -150,7 +168,8 @@ start and safe ticket or integration boundaries. The command's `--session` and
 An explicit user instruction takes precedence over a ticket strategy, then a
 session strategy, then the project default, except that ticket and integration
 gates, exact-tree verification, and green-main promotion remain mandatory unless
-the maintainer explicitly selects the standalone fast-push deviation above.
+the maintainer explicitly selects the standalone fast-push deviation above or the
+project selects the CI First strategy, whose covering `main` CI run is the gate.
 Report and refuse a conflict with those requirements. Supply a user-selected
 strategy as the highest-priority `--ticket` override and record its user
 provenance separately. A ticket strategy takes precedence over a session

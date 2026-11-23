@@ -228,7 +228,10 @@ notification, and the client implementations remain follow-ups.
 **Development strategies:** [34-development-strategies.md](34-development-strategies.md)
 defines the versioned shared project policy and the Ticket Assured, Steady Main,
 and Risk Guided presets (HS2-BF79YX), plus validated named custom policies
-(HS2-ARJNJV). Headless CLI, authenticated REST and the Project Settings editor
+(HS2-ARJNJV). CI First (HS2-ZGS7JP, shipped) runs best-effort budgeted local checks,
+pushes to main without a full-gate receipt and makes the covering CI run the gate;
+its red-CI manifest builder (HS2-H21PJS) and stricter-gate fallback (HS2-KW2R9T) are
+deferred. Headless CLI, authenticated REST and the Project Settings editor
 use one policy workflow (HS2-NBDXPW); the editor previews session and ticket
 overrides without changing the saved project policy. HS2-0BJ1A3 ships the Steady
 Main green-main cadence in headless batch status and the live Workers view,

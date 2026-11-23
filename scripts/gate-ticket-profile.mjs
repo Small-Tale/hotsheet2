@@ -50,7 +50,10 @@ export function profileFromTags(ticket) {
 
 // HS2-BF79YX: the shared settings file is the policy source for the local gate.
 // An absent setting intentionally leaves the installed risk-tier behavior intact.
-const presets = new Set(['ticket-assured', 'steady-main', 'risk-guided']);
+const presets = new Set(['ticket-assured', 'steady-main', 'risk-guided', 'ci-first']);
+// HS2-ZGS7JP: CI First's best-effort local budget when the policy names none.
+export const DEFAULT_BEST_EFFORT_BUDGET_MINUTES = 10;
+const validBudgetMinutes = (minutes) => Number.isInteger(minutes) && minutes >= 1 && minutes <= 1440;
 const customKeys = new Set([
   'integration',
   'local_gate',
@@ -131,7 +134,15 @@ export function developmentStrategyFromSettings(settings, { session, ticket } = 
       typeof policy !== 'object' ||
       Array.isArray(policy) ||
       Object.keys(policy).some(
-        (key) => !['version', 'default', 'green_main_goal_minutes', 'default_custom', 'custom'].includes(key),
+        (key) =>
+          ![
+            'version',
+            'default',
+            'green_main_goal_minutes',
+            'best_effort_budget_minutes',
+            'default_custom',
+            'custom',
+          ].includes(key),
       ) ||
       ![1, 2].includes(policy.version) ||
       !presets.has(policy.default ?? 'ticket-assured')
@@ -140,6 +151,8 @@ export function developmentStrategyFromSettings(settings, { session, ticket } = 
     const goal = policy.green_main_goal_minutes ?? 360;
     if (!Number.isInteger(goal) || goal < 1 || goal > 10080)
       throw new Error('Invalid development_strategy green-main goal');
+    if (policy.best_effort_budget_minutes !== undefined && !validBudgetMinutes(policy.best_effort_budget_minutes))
+      throw new Error('Invalid development_strategy best-effort budget');
     if (policy.version === 1 && (policy.default_custom !== undefined || policy.custom !== undefined))
       throw new Error('Version 1 development_strategy cannot contain custom strategies');
     const definitions = policy.custom ?? {};
@@ -161,7 +174,8 @@ export function developmentStrategyFromSettings(settings, { session, ticket } = 
   const choice = ticket ?? session ?? policy?.default_custom ?? policy?.default ?? 'ticket-assured';
   const custom = policy?.custom?.[choice];
   if (!presets.has(choice) && !custom) throw new Error(`Unknown development strategy ${choice}`);
-  const integration = custom?.integration ?? (choice === 'ticket-assured' ? 'serial' : 'ci-staged');
+  const integration =
+    custom?.integration ?? (choice === 'ticket-assured' || choice === 'ci-first' ? 'serial' : 'ci-staged');
   if (
     integration === 'ci-staged' &&
     !settings.integration_strategies?.allowed?.some((entry) => entry.strategy === integration)
@@ -172,6 +186,30 @@ export function developmentStrategyFromSettings(settings, { session, ticket } = 
     source: ticket ? 'ticket' : session ? 'session' : 'project',
     integration,
     ...(custom ? { custom } : {}),
+    ...(choice === 'ci-first'
+      ? {
+          local_gate: 'best-effort',
+          local_budget_minutes: policy?.best_effort_budget_minutes ?? DEFAULT_BEST_EFFORT_BUDGET_MINUTES,
+          push_without_receipt: true,
+        }
+      : {}),
+  };
+}
+
+/**
+ * HS2-ZGS7JP: CI First runs affected checks within one strict budget for every tier, T2
+ * included. The gate defers to CI whatever does not fit, and never needs an analyzed T2
+ * selection or a reviewed test plan. A ticket's own test-budget tag can only shorten it.
+ */
+export function bestEffortProfile(profile, selection) {
+  const minutes = selection.local_budget_minutes ?? DEFAULT_BEST_EFFORT_BUDGET_MINUTES;
+  if (!validBudgetMinutes(minutes)) throw new Error('HS2-ZGS7JP: invalid best-effort local budget.');
+  const strategyMs = minutes * 60_000;
+  return {
+    ...profile,
+    developmentStrategy: selection,
+    bestEffort: true,
+    budgetMs: Math.min(profile.budgetMs ?? strategyMs, strategyMs),
   };
 }
 
@@ -182,6 +220,7 @@ export function withDevelopmentStrategy(profile, settings, session = process.env
   const ticket = ticketTags[0]?.slice('development-strategy:'.length);
   const chosen = developmentStrategyFromSettings(settings, { session, ticket });
   if (!chosen) return profile;
+  if (chosen.local_gate === 'best-effort') return bestEffortProfile(profile, chosen);
   const custom = chosen.custom;
   const tiers = ['T0', 'T1', 'T2'];
   const tier =
@@ -212,6 +251,7 @@ export function withResolvedDevelopmentStrategy(profile, selection) {
     !['project', 'session', 'ticket'].includes(selection.source)
   )
     throw new Error('HS2-RRNZYN: development-strategy-resolve returned an invalid selection.');
+  if (selection.local_gate === 'best-effort') return bestEffortProfile(profile, selection);
   const custom = selection.custom;
   const tiers = ['T0', 'T1', 'T2'];
   const tier =

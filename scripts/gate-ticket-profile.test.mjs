@@ -6,6 +6,7 @@ import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 import {
+  bestEffortProfile,
   chooseTicket,
   developmentStrategyFromSettings,
   profileFromTags,
@@ -355,4 +356,71 @@ test('HS2-E5EX0M a machine-wide provider the gate cannot list does not hide the 
     else process.env.HOTSHEET_WORKER_ID = savedWorker;
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('HS2-ZGS7JP CI First maps to serial best effort with a bounded, configurable budget', () => {
+  const settings = { development_strategy: { version: 1, default: 'ci-first' } };
+  assert.deepEqual(developmentStrategyFromSettings(settings), {
+    preset: 'ci-first',
+    source: 'project',
+    integration: 'serial',
+    local_gate: 'best-effort',
+    local_budget_minutes: 10,
+    push_without_receipt: true,
+  });
+  const configured = { development_strategy: { version: 1, default: 'ci-first', best_effort_budget_minutes: 4 } };
+  assert.equal(developmentStrategyFromSettings(configured).local_budget_minutes, 4);
+  for (const invalid of [0, 1441, 2.5, '10'])
+    assert.throws(
+      () =>
+        developmentStrategyFromSettings({
+          development_strategy: { version: 1, default: 'ci-first', best_effort_budget_minutes: invalid },
+        }),
+      /best-effort budget/,
+    );
+  // Ticket over session over project, in both directions.
+  const t2 = profileFromTags(ticket('HS2-ZGS7JP', ['tier:T2']));
+  const project = withDevelopmentStrategy(t2, configured, undefined);
+  assert.equal(project.bestEffort, true);
+  assert.equal(project.budgetMs, 4 * 60_000, 'T2 is budgeted under CI First');
+  assert.equal(project.deep, false);
+  const session = withDevelopmentStrategy(t2, configured, 'ticket-assured');
+  assert.equal(session.bestEffort, undefined);
+  assert.equal(session.developmentStrategy.source, 'session');
+  assert.equal(session.deep, true);
+  const ticketTag = withDevelopmentStrategy(
+    profileFromTags(ticket('HS2-ZGS7JP', ['tier:T2', 'development-strategy:ci-first'])),
+    { development_strategy: { version: 1, default: 'ticket-assured' } },
+    'ticket-assured',
+  );
+  assert.equal(ticketTag.developmentStrategy.source, 'ticket');
+  assert.equal(ticketTag.bestEffort, true);
+  assert.equal(ticketTag.budgetMs, 10 * 60_000);
+  // The CLI resolver's selection takes the same path.
+  const resolved = resolveConfiguredDevelopmentStrategy('/synthetic/project', t2, settings, () =>
+    JSON.stringify({
+      preset: 'ci-first',
+      source: 'project',
+      integration: 'serial',
+      local_gate: 'best-effort',
+      local_budget_minutes: 3,
+      push_without_receipt: true,
+    }),
+  );
+  assert.equal(resolved.bestEffort, true);
+  assert.equal(resolved.budgetMs, 3 * 60_000);
+  assert.throws(
+    () => bestEffortProfile(t2, { preset: 'ci-first', source: 'project', local_budget_minutes: 0 }),
+    /invalid best-effort/,
+  );
+  // A custom strategy can neither take the preset's name nor its best-effort gate.
+  const withCustom = (name, local_gate) => ({
+    development_strategy: {
+      version: 2,
+      default: 'ticket-assured',
+      custom: { [name]: { ...strictCustom, minimum_tier: 'T1', local_gate } },
+    },
+  });
+  assert.throws(() => developmentStrategyFromSettings(withCustom('ci-first', 'targeted')), /reserved/);
+  assert.throws(() => developmentStrategyFromSettings(withCustom('quick', 'best-effort')), /local gate/);
 });

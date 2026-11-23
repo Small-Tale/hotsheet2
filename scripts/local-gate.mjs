@@ -539,7 +539,9 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
   if (options.tier && profile.ticket && options.tier !== profile.tier)
     throw new Error(`--tier ${options.tier} conflicts with ${profile.ticket} tag tier:${profile.tier}.`);
   const tier = options.tier ?? profile?.tier ?? 'T1';
-  if (tier === 'T2' && (options.budgetMs !== undefined || profile?.budgetMs !== undefined))
+  // HS2-ZGS7JP: CI First budgets every tier, T2 included, and defers the rest to CI.
+  const bestEffort = profile?.bestEffort === true;
+  if (!bestEffort && tier === 'T2' && (options.budgetMs !== undefined || profile?.budgetMs !== undefined))
     throw new Error('T2 analyzed selection has no time budget; omit --budget.');
   const stages = parseCheckScript(readFileSync(join(repo, 'scripts/check-full.sh'), 'utf8'));
   const selected = plan({
@@ -627,8 +629,11 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     affected.push(...performance);
   }
   const config = budgetConfig(repo);
-  const budgetMs =
-    tier === 'T2' || profile?.deep ? null : (options.budgetMs ?? profile?.budgetMs ?? config.defaultBudgetMs);
+  const budgetMs = bestEffort
+    ? (options.budgetMs ?? profile.budgetMs)
+    : tier === 'T2' || profile?.deep
+      ? null
+      : (options.budgetMs ?? profile?.budgetMs ?? config.defaultBudgetMs);
   const budgeted = selectBudget({
     stages: [...selected.stages.filter((stage) => !stage.selected), ...affected],
     changes: state.changes,
@@ -639,6 +644,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     proposed: options.proposed ?? [],
     full: selected.mode === 'full' || profile?.deep === true,
     fullReason: profile?.deep ? 'deep-testing tag' : 'full fallback',
+    bestEffort,
   });
   const chosen = budgeted.selected;
   // HS2-PNBH4X: refuse a stale or missing install in any selected Node package, and bind the exact
@@ -750,6 +756,8 @@ export function runGate(options = {}) {
     smoke = false,
     log = console.log,
     env = withoutGitRepositoryEnv(process.env),
+    // Test seam: the clock the best-effort budget is measured on (HS2-ZGS7JP).
+    clock = Date.now,
   } = options;
   if (smoke && testPlan) throw new Error('--smoke cannot be combined with --test-plan.');
   let selection = { budgetMs, tier, analyzed, proposed, ticket, profile, smoke };
@@ -779,7 +787,8 @@ export function runGate(options = {}) {
       };
     } else if (testPlan) {
       throw new Error('HS2-RRNZYN: reviewed test plan unavailable.');
-    } else if (!inspect && resolved.developmentStrategy) {
+    } else if (!inspect && resolved.developmentStrategy && !resolved.bestEffort) {
+      // HS2-ZGS7JP: a CI First run is its own budgeted plan; a reviewed plan stays optional.
       throw new Error('HS2-RRNZYN: configured projects require --test-plan <reviewed.json> for this tree.');
     }
   }
@@ -796,6 +805,7 @@ export function runGate(options = {}) {
   }
   if (selection.testPlan) verifyTestPlanSelection(selection.testPlan, before);
   const gateStarted = Date.now();
+  const budgetStarted = clock();
   const budgetLabel = before.budgetMs === null ? 'none' : `${before.budgetMs}ms`;
   const receiptPath = join(before.cache, `${before.key}.json`);
   const compatibility = resolve(repo, git(repo, ['rev-parse', '--git-path', 'hotsheet-root-gate']));
@@ -842,7 +852,10 @@ export function runGate(options = {}) {
       console.warn(`Gate observation history unavailable: ${error.message}`);
     }
   };
-  if (existing?.key === before.key && existing.tree === before.tree) {
+  // HS2-ZGS7JP: a best-effort receipt that deferred stages at run time is reused only to verify;
+  // a new run on the same inputs spends a fresh budget on what it deferred, reusing passed stages.
+  const runtimeDeferredBefore = existing?.bestEffort?.runtimeDeferred ?? [];
+  if (existing?.key === before.key && existing.tree === before.tree && (verify || !runtimeDeferredBefore.length)) {
     attempt.endedAt = Date.now();
     attempt.checks = selectedChecks.map((id) => ({ id, outcome: 'reused' }));
     remember();
@@ -857,9 +870,16 @@ export function runGate(options = {}) {
   const results = [];
   const observations = [];
   const flaky = [];
+  const runtimeDeferred = [];
   for (const stage of before.checks) {
     const stagePath = join(before.cache, `stage-${stage.key}.json`);
     const recorded = read(stagePath);
+    if (recorded?.key !== stage.key && before.bestEffort && clock() - budgetStarted >= before.budgetMs) {
+      // HS2-ZGS7JP: the best-effort budget is spent; an unstarted stage is deferred to CI, not failed.
+      runtimeDeferred.push(stage);
+      attempt.checks.push({ id: observationStageKey(stage), outcome: 'skip', category: 'best-effort-deferred' });
+      continue;
+    }
     if (recorded?.key === stage.key) {
       results.push({ command: stage.command, reused: true });
       flaky.push(...(recorded.flaky ?? []));
@@ -1002,7 +1022,21 @@ export function runGate(options = {}) {
           }
         : null,
       selected: before.checks.map((stage) => stage.command),
-      deferred: omittedStages.map((stage) => stage.command),
+      deferred: [...omittedStages, ...runtimeDeferred].map((stage) => stage.command),
+      ...(before.bestEffort
+        ? {
+            bestEffort: {
+              strategy: before.profile?.developmentStrategy?.preset ?? null,
+              budgetMs: before.budgetMs,
+              actualMs: clock() - budgetStarted,
+              ran: before.checks
+                .filter((stage) => !runtimeDeferred.includes(stage))
+                .map((stage) => `${stage.cwd}::${stage.command}`),
+              plannedDeferred: omittedStages.map((stage) => `${stage.cwd}::${stage.command}`),
+              runtimeDeferred: runtimeDeferred.map((stage) => `${stage.cwd}::${stage.command}`),
+            },
+          }
+        : {}),
       browserCoverage: before.browserCoverage,
       platformCfg: before.platformCfg,
       results,
@@ -1021,6 +1055,15 @@ export function runGate(options = {}) {
   log(
     `Local ${before.mode} gate passed for tree ${before.tree}; actual ${Date.now() - gateStarted}ms, budget ${budgetLabel}${before.floorOverBudget ? ' (mandatory floor exceeded budget)' : ''}`,
   );
+  if (before.bestEffort) {
+    // HS2-ZGS7JP: list what this run left to the covering main CI run.
+    const left = [...before.deferred, ...runtimeDeferred];
+    log(
+      `Best-effort gate (HS2-ZGS7JP): ${before.checks.length - runtimeDeferred.length} check(s) ran within ${budgetLabel}; deferred to CI: ${
+        left.length ? `\n${left.map((stage) => `  ${stage.cwd}: ${stage.command}`).join('\n')}` : 'none'
+      }`,
+    );
+  }
   // HS2-HW6VED: the engine facts a handoff quotes; the full CI matrix is in the receipt and --plan.
   if (before.browserCoverage) {
     log(`Browser engines run locally: ${before.browserCoverage.local.summary}`);

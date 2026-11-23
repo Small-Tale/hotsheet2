@@ -1310,6 +1310,16 @@ migration, built-in rollback, bounded AI test suggestions, and CLI/server contra
 parity in `crates/hotsheet-cli/tests/development_strategy.rs`,
 `crates/hotsheet-server/tests/development_strategy.rs`,
 `scripts/gate-ticket-profile.test.mjs`, and `clients/web/tests/contracts.spec.ts`.
+HS2-ZGS7JP covers the CI First preset: Rust validation, budget bounds and
+project/session/ticket precedence (`development_strategy_tests.rs`, both
+`tests/development_strategy.rs`), the JS gate mapping and custom-name/gate refusal
+(`scripts/gate-ticket-profile.test.mjs`), best-effort budget selection for T2
+(`scripts/gate-budget.test.mjs`), run-time deferral on a fake clock with the receipt's
+`bestEffort` record and rerun (`scripts/local-gate.test.mjs`), a fake-remote push that
+lands without a receipt under `ci-first` and is refused under every other preset or an
+unresolvable strategy (`scripts/main-integration-window.test.mjs`), and the response
+parser, selector and draft (`server-response-parsers.test.ts`,
+`development-strategy-settings*.test.ts`, `development-strategy-tags.test.ts`).
 HS2-0BJ1A3 adds durable staged-main cadence transitions, rolling throughput,
 policy-only cursor replay, a real server/OpenAPI contract, and a rebuilt Workers
 browser flow across wide, medium, phone and returned-wide sizes. The source

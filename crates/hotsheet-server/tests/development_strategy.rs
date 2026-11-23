@@ -128,6 +128,48 @@ async fn hs2_bf79yx_authenticated_rest_and_headless_policy_share_one_setting() {
     assert_eq!(saved["effective"]["green_main_goal_minutes"], 420);
     let headless = hotsheet_cli::coordination::DevelopmentPolicy::read(&settings).unwrap();
     assert_eq!(headless.green_main_goal_minutes, 420);
+    // HS2-ZGS7JP: CI First is selectable over REST with a bounded best-effort budget.
+    let ci_first = server
+        .clone()
+        .oneshot(request(
+            "PUT",
+            &route,
+            Some(r#"{"version":1,"default":"ci-first","green_main_goal_minutes":420,"best_effort_budget_minutes":12}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ci_first.status(), StatusCode::OK);
+    let ci_first = json(ci_first).await;
+    assert_eq!(ci_first["effective"]["preset"], "ci-first");
+    assert_eq!(ci_first["effective"]["integration"], "serial");
+    assert_eq!(ci_first["effective"]["local_gate"], "best-effort");
+    assert_eq!(ci_first["effective"]["local_budget_minutes"], 12);
+    assert_eq!(ci_first["effective"]["push_without_receipt"], true);
+    assert_eq!(ci_first["effective"]["require_green_main_sha"], false);
+    assert_eq!(ci_first["presets"].as_array().unwrap().len(), 4);
+    let over_budget = server
+        .clone()
+        .oneshot(request(
+            "PUT",
+            &route,
+            Some(r#"{"version":1,"default":"ci-first","best_effort_budget_minutes":1441}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(over_budget.status(), StatusCode::BAD_REQUEST);
+    let restored = server
+        .clone()
+        .oneshot(request(
+            "PUT",
+            &route,
+            Some(r#"{"version":1,"default":"steady-main","green_main_goal_minutes":420}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(restored.status(), StatusCode::OK);
+    let restored = json(restored).await;
+    assert_eq!(restored["effective"]["push_without_receipt"], false);
+    assert!(restored["effective"].get("local_budget_minutes").is_none());
     assert_eq!(
         headless.default,
         hotsheet_cli::coordination::DevelopmentPreset::SteadyMain

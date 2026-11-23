@@ -293,6 +293,21 @@ non-floor stages exist; conflicting tier tags fail the plan. `--tier` remains a
 headless override for an explicit analyzed or diagnostic run. HS2-EJ8JTG owns
 the corresponding worker and policy wording.
 
+### Best-effort gate under CI First (HS2-ZGS7JP)
+
+When the effective development strategy is CI First (`docs/34-development-strategies.md`),
+the gate is best effort for every tier, T2 included. It plans the floor and affected
+checks within the strategy's budget (10 minutes unless the policy sets
+`best_effort_budget_minutes`; a shorter `test-budget:` tag lowers it and `--budget` overrides it for one run),
+without an analyzed T2 selection or a reviewed test plan. Unlike the T0/T1 planning
+target, this budget is also enforced while the gate runs: once it has elapsed, no further
+stage starts, and each unstarted stage is deferred to CI rather than failed. The output
+lists every deferred check, and the receipt's `bestEffort` block records what ran, what
+the plan deferred and what the clock deferred. A failing stage still fails the gate. A
+rerun on the same inputs reuses passed stage receipts and spends a fresh budget on the
+deferred stages. Under CI First `scripts/push.sh` does not require the receipt at all;
+the covering main CI run is the gate.
+
 ### Verified ticket worktree cleanup (HS2-HR3ZX4)
 
 After a direct ticket or reviewed code handoff is completed, its claim is released,

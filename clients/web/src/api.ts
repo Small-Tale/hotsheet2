@@ -142,12 +142,14 @@ import type { TicketCloseReason } from './ticket-close';
 import { completionDayStarts } from './ticket-completion-trend';
 import { parseWorkerView } from './worker-view-model';
 
-export type DevelopmentPreset = 'ticket-assured' | 'steady-main' | 'risk-guided';
+export type DevelopmentPreset = 'ticket-assured' | 'steady-main' | 'risk-guided' | 'ci-first';
 export type IntegrationStrategy = 'serial' | 'batch' | 'ci-staged';
-export type LocalGate = 'full-local' | 'targeted' | 'risk-selected';
+export type LocalGate = 'full-local' | 'targeted' | 'risk-selected' | 'best-effort';
+/** A custom strategy cannot select CI First's best-effort gate (HS2-ZGS7JP). */
+export type CustomLocalGate = Exclude<LocalGate, 'best-effort'>;
 export interface CustomDevelopmentStrategy {
   integration: IntegrationStrategy;
-  local_gate: LocalGate;
+  local_gate: CustomLocalGate;
   minimum_tier: 'T0' | 'T1' | 'T2';
   budget_minutes?: number;
   browser: boolean;
@@ -163,6 +165,8 @@ export interface DevelopmentStrategyPolicy {
   version: number;
   default: DevelopmentPreset;
   green_main_goal_minutes: number;
+  /** CI First's best-effort local budget; absent means 10 minutes (HS2-ZGS7JP). */
+  best_effort_budget_minutes?: number;
   default_custom?: string;
   custom: Partial<Record<string, CustomDevelopmentStrategy>>;
 }
@@ -177,6 +181,10 @@ export interface DevelopmentStrategyReport {
     require_green_main_sha: boolean;
     attribute_red_ci_before_completion: boolean;
     green_main_goal_minutes: number | null;
+    /** Present only for CI First's best-effort local gate. */
+    local_budget_minutes?: number;
+    /** HS2-ZGS7JP: true only for CI First, whose covering main CI run is the gate. */
+    push_without_receipt: boolean;
   };
   presets: DevelopmentPreset[];
 }

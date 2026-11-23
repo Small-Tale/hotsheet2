@@ -48,7 +48,13 @@ function rank(stage) {
   return 3;
 }
 
-/** Preserve the required floor; spend remaining known time on affected stages in relevance order. */
+/**
+ * Preserve the required floor; spend remaining known time on affected stages in relevance order.
+ *
+ * HS2-ZGS7JP: `bestEffort` (CI First) budgets every tier, T2 included, the same way. Analyzed
+ * stages are then additive requests, not a required selection, and what does not fit is deferred
+ * to CI. The gate also stops starting stages once the budget has elapsed.
+ */
 export function selectBudget({
   stages,
   changes,
@@ -59,12 +65,22 @@ export function selectBudget({
   proposed = [],
   full = false,
   fullReason = 'full fallback',
+  bestEffort = false,
 }) {
   if (!['T0', 'T1', 'T2', 'unresolved'].includes(tier)) throw new Error(`Unknown risk tier: ${tier}`);
   if (tier === 'unresolved' && !full) throw new Error('Unresolved tier must preserve the full affected selection.');
+  if (bestEffort) {
+    if (!Number.isSafeInteger(budgetMs) || budgetMs <= 0) throw new Error('A best-effort gate needs a positive budget.');
+    // Analyzed stages become additive requests, validated like proposals.
+    proposed = [...new Set([...proposed, ...analyzed])];
+    analyzed = [];
+  }
+  // A T2 ticket under a best-effort strategy is budgeted like T0/T1.
+  const analyzedT2 = tier === 'T2' && !bestEffort;
+  const budgeted = ['T0', 'T1'].includes(tier) || (bestEffort && tier === 'T2');
   if (tier !== 'T2' && analyzed.length) throw new Error('Analyzed stage selection requires T2.');
-  if (tier === 'T2' && budgetMs !== null) throw new Error('T2 analyzed selection has no time budget.');
-  if (['T0', 'T1'].includes(tier) && !full && (!Number.isSafeInteger(budgetMs) || budgetMs <= 0))
+  if (analyzedT2 && budgetMs !== null) throw new Error('T2 analyzed selection has no time budget.');
+  if (budgeted && !full && (!Number.isSafeInteger(budgetMs) || budgetMs <= 0))
     throw new Error('T0/T1 need a positive budget.');
   const candidates = stages.filter((stage) => stage.selected);
   const candidateIds = new Set(candidates.map(stageId));
@@ -92,7 +108,7 @@ export function selectBudget({
     };
   });
   if (
-    tier === 'T2' &&
+    analyzedT2 &&
     !full &&
     !analyzed.length &&
     !proposed.length &&
@@ -122,7 +138,7 @@ export function selectBudget({
     }
   }
   if (full) for (const stage of estimated) selectedIds.add(stageId(stage));
-  else if (tier === 'T2') {
+  else if (analyzedT2) {
     for (const stage of estimated.filter((stage) => analyzed.includes(stageId(stage))))
       for (const needed of withFixture(stage)) selectedIds.add(stageId(needed));
   } else if (!floorUnknown) {
@@ -157,18 +173,20 @@ export function selectBudget({
             : item.floor
               ? 'mandatory floor'
               : selected
-                ? tier === 'T2'
+                ? analyzedT2
                   ? proposed.includes(stageId(item))
                     ? 'AI-proposed additional check'
                     : 'T2 analyzed selection'
                   : proposed.includes(stageId(item))
                     ? 'AI-proposed additional check'
                     : 'relevance within budget'
-                : tier === 'T2'
+                : analyzedT2
                   ? 'deferred to CI by T2 analyzed selection'
                   : item.estimateMs === null || floorUnknown
                     ? 'unknown cost deferred to CI'
-                    : 'deferred to CI for budget',
+                    : bestEffort
+                      ? 'deferred to CI by best-effort budget'
+                      : 'deferred to CI for budget',
     };
   });
   return {
@@ -180,7 +198,8 @@ export function selectBudget({
     plannedEstimateMs: floorUnknown
       ? null
       : output.filter((stage) => stage.selected).reduce((sum, stage) => sum + (stage.estimateMs ?? 0), 0),
-    floorOverBudget: ['T0', 'T1'].includes(tier) && !full && !floorUnknown && floorEstimateMs > budgetMs,
+    floorOverBudget: budgeted && !full && !floorUnknown && floorEstimateMs > budgetMs,
     tier,
+    bestEffort,
   };
 }

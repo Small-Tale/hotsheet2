@@ -14,9 +14,10 @@ export const DEMO_DEVELOPMENT_REPORT: DevelopmentStrategyReport = {
     local_gate: 'targeted',
     require_green_main_sha: true,
     attribute_red_ci_before_completion: true,
+    push_without_receipt: false,
     green_main_goal_minutes: 360,
   },
-  presets: ['ticket-assured', 'steady-main', 'risk-guided'],
+  presets: ['ticket-assured', 'steady-main', 'risk-guided', 'ci-first'],
 };
 
 export function DevelopmentStrategySettingsDemo() {

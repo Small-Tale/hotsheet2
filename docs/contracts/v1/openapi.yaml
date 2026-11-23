@@ -29655,6 +29655,7 @@ components:
         - ticket-assured
         - steady-main
         - risk-guided
+        - ci-first
     CustomDevelopmentStrategy:
       type: object
       required:
@@ -29729,6 +29730,11 @@ components:
           minimum: 1
           maximum: 10080
           default: 360
+        best_effort_budget_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          description: CI First best-effort local budget in minutes; absent means 10 (HS2-ZGS7JP).
         default_custom:
           type: string
         custom:
@@ -29747,6 +29753,7 @@ components:
         - require_green_main_sha
         - attribute_red_ci_before_completion
         - green_main_goal_minutes
+        - push_without_receipt
       properties:
         preset:
           type: string
@@ -29766,11 +29773,12 @@ components:
             - full-local
             - targeted
             - risk-selected
+            - best-effort
         custom:
           $ref: '#/components/schemas/CustomDevelopmentStrategy'
         require_green_main_sha:
           type: boolean
-          const: true
+          description: False only for CI First, whose covering main CI run after the push is the gate (HS2-ZGS7JP).
         attribute_red_ci_before_completion:
           type: boolean
           const: true
@@ -29778,6 +29786,14 @@ components:
           anyOf:
             - type: integer
             - type: 'null'
+        local_budget_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          description: Best-effort local budget; present only for the CI First best-effort gate.
+        push_without_receipt:
+          type: boolean
+          description: True only for CI First; scripts/push.sh may push main without a full-gate receipt.
       additionalProperties: false
     DevelopmentStrategyReport:
       type: object

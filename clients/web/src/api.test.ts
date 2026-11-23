@@ -47,6 +47,7 @@ describe('HS2-NBDXPW development strategy API', () => {
         local_gate: 'risk-selected',
         require_green_main_sha: true,
         attribute_red_ci_before_completion: true,
+        push_without_receipt: false,
         green_main_goal_minutes: null,
       },
       presets: ['ticket-assured', 'steady-main', 'risk-guided'],

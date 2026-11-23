@@ -18,9 +18,10 @@ const report: DevelopmentStrategyReport = {
     local_gate: 'full-local',
     require_green_main_sha: true,
     attribute_red_ci_before_completion: true,
+    push_without_receipt: false,
     green_main_goal_minutes: null,
   },
-  presets: ['ticket-assured', 'steady-main', 'risk-guided'],
+  presets: ['ticket-assured', 'steady-main', 'risk-guided', 'ci-first'],
 };
 
 describe('HS2-NBDXPW development strategy draft', () => {
@@ -57,6 +58,34 @@ describe('HS2-NBDXPW development strategy draft', () => {
     expect(() => policyFromDevelopmentDraft(report.policy, { ...draft, name: 'Ticket Assured' })).toThrow(
       'Custom strategy name',
     );
+  });
+
+  it('HS2-ZGS7JP selects CI First, sets or clears its budget, and refuses an out-of-range budget', () => {
+    let draft = selectDevelopmentStrategy(draftFromDevelopmentReport(report), 'ci-first', report.policy);
+    expect(draft.bestEffortBudget).toBe('');
+    expect(policyFromDevelopmentDraft(report.policy, draft)).toEqual({
+      ...report.policy,
+      version: 2,
+      default: 'ci-first',
+      custom: {},
+    });
+    draft = changeDevelopmentStrategyField(draft, 'bestEffortBudget', '15');
+    const saved = policyFromDevelopmentDraft(report.policy, draft);
+    expect(saved.default).toBe('ci-first');
+    expect(saved.best_effort_budget_minutes).toBe(15);
+    expect(saved.default_custom).toBeUndefined();
+    // Reloading the saved policy restores the field; clearing it returns to the default.
+    const reloaded = draftFromDevelopmentReport({ ...report, policy: saved });
+    expect(reloaded.bestEffortBudget).toBe('15');
+    const cleared = policyFromDevelopmentDraft(saved, changeDevelopmentStrategyField(reloaded, 'bestEffortBudget', ''));
+    expect(cleared.best_effort_budget_minutes).toBeUndefined();
+    for (const invalid of ['0', '1441', '2.5'])
+      expect(() =>
+        policyFromDevelopmentDraft(report.policy, changeDevelopmentStrategyField(draft, 'bestEffortBudget', invalid)),
+      ).toThrow('Best-effort local budget');
+    expect(() =>
+      policyFromDevelopmentDraft(report.policy, { ...draft, selection: NEW_CUSTOM, name: 'ci-first' }),
+    ).toThrow('distinct custom strategy name');
   });
 
   it('loads an existing custom profile and allows returning to a built-in', () => {
