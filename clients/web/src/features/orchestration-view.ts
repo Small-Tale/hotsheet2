@@ -35,6 +35,12 @@ import {
 import { collapsedTicketGroupKeys, toggleTicketGroupCollapsed } from '../ticket-group-state';
 import type { TicketLinkMatch } from '../ticket-link-resolution';
 import { startVersionedLongPoll } from '../versioned-long-poll';
+import {
+  isOrchestrationProjectViewMode,
+  type OrchestrationProjectViewMode,
+  projectArrivalView,
+  rememberOrchestrationProjectView,
+} from '../workspace-view-memory';
 
 /** The collapse scope of the Orchestration view's project groups (HS2-WZ3JGZ storage). */
 export const ORCHESTRATION_GROUP_SCOPE = 'orchestration';
@@ -217,6 +223,11 @@ export interface OrchestrationViewDependencies {
   readonly viewMode: Signal<WorkspaceViewMode>;
   /** The ticket view the workspace returns to when this project has no Orchestration view. */
   readonly fallbackViewMode: () => WorkspaceViewMode;
+  /**
+   * HS2-BRRSYM: the view orchestration projects last showed (Orchestration by default). Switching to
+   * an orchestration project restores it; choosing a view in one remembers it.
+   */
+  readonly orchestrationViewMode: Signal<OrchestrationProjectViewMode>;
   readonly mobile: () => boolean;
   readonly confirm: (options: ConfirmationOptions) => Promise<boolean>;
   readonly showToast: (message: string) => void;
@@ -412,6 +423,51 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         dependencies.viewMode.value = dependencies.fallbackViewMode();
         dependencies.persistWorkspacePreferences();
       }
+    }),
+  );
+
+  // HS2-BRRSYM: arriving at a project shows the view its type last showed: an orchestration project
+  // the one orchestration projects remember, a software project its ticket view. The project's type
+  // may be read after the switch, so the arrival waits for it, unless the person chose a view meanwhile.
+  let arrivedAt: string | undefined, arrival: { projectId: string; view: WorkspaceViewMode } | undefined;
+  disposers.push(
+    effect(() => {
+      const current = dependencies.project(),
+        mode = dependencies.viewMode.value;
+      if (current?.id !== arrivedAt) {
+        arrivedAt = current?.id;
+        arrival = current ? { projectId: current.id, view: mode } : undefined;
+      }
+      if (!current || arrival?.projectId !== current.id) return;
+      const known = dependencies.orchestrationProject?.(current.id) ?? declared.value[current.id];
+      if (known === undefined) return;
+      const before = arrival.view;
+      arrival = undefined;
+      if (mode !== before) return;
+      const remembered = known ? dependencies.orchestrationViewMode.peek() : dependencies.fallbackViewMode();
+      if (!isOrchestrationProjectViewMode(remembered)) return;
+      const next = projectArrivalView(mode, remembered);
+      if (next === undefined) return;
+      dependencies.viewMode.value = next;
+      dependencies.persistWorkspacePreferences();
+    }),
+  );
+
+  // HS2-BRRSYM: a view chosen in an orchestration project is the one orchestration projects remember.
+  // Only a change of view counts, not a project switch that leaves the previous project's view showing.
+  let seenMode: WorkspaceViewMode | undefined;
+  disposers.push(
+    effect(() => {
+      const mode = dependencies.viewMode.value,
+        current = dependencies.project();
+      if (mode === seenMode) return;
+      seenMode = mode;
+      if (!current || !isOrchestrationProject(current.id)) return;
+      const remembered = dependencies.orchestrationViewMode.peek(),
+        next = rememberOrchestrationProjectView(mode, remembered);
+      if (next === remembered) return;
+      dependencies.orchestrationViewMode.value = next;
+      dependencies.persistWorkspacePreferences();
     }),
   );
 
@@ -1125,6 +1181,14 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     details,
     busy,
     isOrchestrationProject,
+    /**
+     * HS2-BRRSYM: the project view the open project's type last showed, where re-selecting its tab
+     * returns from Notifications or Settings.
+     */
+    homeViewMode: (): WorkspaceViewMode =>
+      isOrchestrationProject(dependencies.project()?.id)
+        ? dependencies.orchestrationViewMode.value
+        : dependencies.fallbackViewMode(),
     selected,
     select,
     toggleGroup,

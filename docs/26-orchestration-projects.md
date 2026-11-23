@@ -5443,6 +5443,20 @@ from the newest work on the left to the oldest on the right, as the maintainer a
 ("oldest (like done) should be rightmost and newest should be leftmost"). The design
 was signed off on HS2-HSMH2Q (Design v3).
 
+The workspace remembers its view per project type (HS2-BRRSYM). Orchestration projects
+share one remembered view, Orchestration until the person picks another (List, Columns
+or Workers) in one of them; software projects keep their own remembered ticket view.
+Switching to an orchestration project shows the orchestration projects' view, and
+switching to a software project shows its ticket view, so going from an orchestration
+project's Orchestration view to a software project and back returns to Orchestration.
+Notifications and Settings stay open across a switch, and re-selecting the current
+project's tab from them returns to its type's view. When a project's type is read only
+after the switch, the view changes once it is known, unless the person has already
+picked one. The memory is per type rather than per project: orchestration projects
+play one role, so their main view is the same choice, and per-project records would
+accumulate for projects that are closed. It persists with the other workspace
+preferences in `localStorage` (`orchestrationViewMode`).
+
 ### The timeline read
 
 `OrchestrationRuntime::orchestration_timeline(owner, after, wait_ms, tx)`

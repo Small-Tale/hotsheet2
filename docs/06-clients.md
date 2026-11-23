@@ -560,7 +560,8 @@ same explanation (HS2-CGXGWY).
   trailing edge of ProjectTabBar. Selecting the already-current project tab while the
   Notifications or Settings view is open returns to the ticket view the user last had open,
   list or columns, remembered in the workspace preferences across reloads; on a ticket view
-  that click is a no-op (HS2-42T028). Project names ellipsize as tabs shrink at medium widths,
+  that click is a no-op (HS2-42T028). Orchestration projects remember their own view apart
+  from the software projects' ticket view, Orchestration by default (HS2-BRRSYM, §26.26). Project names ellipsize as tabs shrink at medium widths,
   including with the terminal drawer open, before the strip scrolls (HS2-A7QPW4).
   Add project stays immediately after the last project tab;
   only when the tabs overflow and the strip shrinks and scrolls does it end up beside the

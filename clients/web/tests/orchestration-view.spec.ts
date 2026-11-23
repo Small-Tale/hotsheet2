@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { expect, type Page, test } from '@playwright/test';
 
-import { openMockedProject } from './open-mocked-project';
+import { openMockedProject, projectTab } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 /**
@@ -163,6 +163,80 @@ test('HS2-J89JC7 a project that is not an orchestration project has no Orchestra
     await expect(page.locator('[data-segment-value="orchestration"]')).toHaveCount(0);
   } finally {
     await server.stop(page);
+  }
+});
+
+test('HS2-BRRSYM switching back to an orchestration project shows its Orchestration view again', async ({ page }) => {
+  test.setTimeout(120_000);
+  const orchestration = await realTicketServer(),
+    software = await realTicketServer();
+  try {
+    await send(orchestration, 'PUT', `/checkouts/${orchestration.checkoutId}/orchestration/targets`, {
+      expected_revision: null,
+      targets: [],
+    });
+    await asOrchestrationProject(orchestration);
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    const servers = [
+      { server: orchestration, name: 'Launch' },
+      { server: software, name: 'Plain Project' },
+    ];
+    let opened = 0;
+    await page.route(/\/__hotsheet\/folders\/choose$/, (route) => route.fulfill({ json: { path: software.root } }));
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
+      const { server, name } = servers[Math.min(opened++, 1)];
+      const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
+      return route.fulfill({
+        status: 201,
+        json: { id: server.checkoutId, root: server.root, name, stores: [server.store], apiPath },
+      });
+    });
+    for (const { server } of servers) {
+      const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
+      await page.route(`**${apiPath}/**`, async (route) => {
+        const incoming = new URL(route.request().url());
+        try {
+          const response = await proxyFetch(route, {
+            url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          await route.fulfill({ response });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    const selected = (mode: string) => page.locator(`[data-segment-value="${mode}"][aria-pressed="true"]`).first();
+    // A first visit to an orchestration project opens its Orchestration view.
+    await expect(selected('orchestration')).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: 'Add Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await expect(projectTab(page, 'Plain Project')).toBeVisible({ timeout: 30_000 });
+    // The software project shows its ticket view; the person picks Columns there.
+    await expect(selected('list')).toBeVisible({ timeout: 30_000 });
+    await page.locator('[data-segment-value="board"]').first().click();
+    await expect(selected('board')).toBeVisible();
+    await projectTab(page, 'Launch').click();
+    await expect(selected('orchestration')).toBeVisible({ timeout: 30_000 });
+    await projectTab(page, 'Plain Project').click();
+    await expect(selected('board')).toBeVisible({ timeout: 30_000 });
+    // A ticket view chosen in the orchestration project is what it shows next time, apart from Columns.
+    await projectTab(page, 'Launch').click();
+    await expect(selected('orchestration')).toBeVisible({ timeout: 30_000 });
+    await page.locator('[data-segment-value="list"]').first().click();
+    await projectTab(page, 'Plain Project').click();
+    await expect(selected('board')).toBeVisible({ timeout: 30_000 });
+    await projectTab(page, 'Launch').click();
+    await expect(selected('list')).toBeVisible({ timeout: 30_000 });
+  } finally {
+    await orchestration.stop(page);
+    await software.stop(page);
   }
 });
 

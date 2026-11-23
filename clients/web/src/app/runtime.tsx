@@ -372,6 +372,7 @@ import {
 } from '../workspace-session';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import { wireTicketRailToolbarVisibility, wireWorkspaceToolbarVisibility } from '../workspace-toolbar-visibility';
+import type { OrchestrationProjectViewMode } from '../workspace-view-memory';
 import { installDevelopmentDiagnostics } from './development-bootstrap';
 import { createHotSheetInteractionBindings, type InteractionBindingsPort } from './interaction-bindings';
 import { wireHotSheetInteractions } from './wire-interactions';
@@ -878,6 +879,8 @@ export async function startHotSheetWebClient() {
     viewMode = signal<WorkspaceViewMode>(storedWorkspacePreferences.viewMode),
     // The list/columns view the user last had open, so Notifications or Settings can hand back to it (HS2-42T028).
     ticketViewMode = signal<TicketWorkspaceViewMode>(storedWorkspacePreferences.ticketViewMode),
+    // HS2-BRRSYM: the view orchestration projects last showed, kept apart from the ticket view.
+    orchestrationViewMode = signal<OrchestrationProjectViewMode>(storedWorkspacePreferences.orchestrationViewMode),
     selectedView = signal<TicketView>('all'),
     ticketCollectionState = signal<{ projectId: string; view: TicketView; status: 'loading' | 'error' } | undefined>(
       undefined,
@@ -3109,13 +3112,14 @@ export async function startHotSheetWebClient() {
     selectedProjectRestoreRoot.value = '';
     if (next === selectedProjectId.value) {
       if (projectStatsActive) {
-        switchWorkspaceView(ticketViewMode.value);
+        switchWorkspaceView(orchestrationView.homeViewMode());
         return;
       }
       // Re-selecting the current project from Notifications or Settings returns to the ticket view the user
-      // last had open (list or columns), like a home affordance (HS2-42T028).
+      // last had open (list or columns), like a home affordance (HS2-42T028); in an orchestration project,
+      // the view orchestration projects last showed (HS2-BRRSYM).
       if (viewMode.value === 'settings' || viewMode.value === 'notifications')
-        switchWorkspaceView(ticketViewMode.value);
+        switchWorkspaceView(orchestrationView.homeViewMode());
       return;
     }
     const activated = activateOpenProject(next);
@@ -3155,14 +3159,23 @@ export async function startHotSheetWebClient() {
   function activeWorkspaceSort() {
     return workspaceSorts.value[sortableWorkspaceView(viewMode.value)];
   }
+  // HS2-BRRSYM: a ticket view chosen in an orchestration project is remembered for orchestration projects
+  // (by the Orchestration view controller), not as the software projects' ticket view. Only a change of
+  // view counts, not a project switch that leaves the previous project's view showing.
+  let viewingOrchestrationProject = () => false,
+    seenViewMode: WorkspaceViewMode | undefined;
   effect(() => {
     const mode = viewMode.value;
-    if (mode === 'list' || mode === 'board' || mode === 'workers') ticketViewMode.value = mode;
+    if (mode === seenViewMode) return;
+    seenViewMode = mode;
+    if ((mode === 'list' || mode === 'board' || mode === 'workers') && !viewingOrchestrationProject())
+      ticketViewMode.value = mode;
   });
   function persistWorkspacePreferences() {
     saveWorkspacePreferences(localStorage, {
       viewMode: viewMode.value,
       ticketViewMode: ticketViewMode.value,
+      orchestrationViewMode: orchestrationViewMode.value,
       sorts: workspaceSorts.value,
       sidebarVisible: sidebarVisible.value,
       inspectorVisible: inspectorVisible.value,
@@ -3700,6 +3713,7 @@ export async function startHotSheetWebClient() {
     project,
     viewMode,
     fallbackViewMode: () => ticketViewMode.value,
+    orchestrationViewMode,
     mobile: () => viewportMobile.value,
     confirm: confirmation.request,
     showToast,
@@ -3728,6 +3742,7 @@ export async function startHotSheetWebClient() {
       personId: () => orchestrationPersonId(localStorage),
     }),
   });
+  viewingOrchestrationProject = () => orchestrationView.isOrchestrationProject(selectedProjectId.peek());
   // HS2-S3FKJ7: a target project's List and Columns show the orchestration line of the tickets an
   // orchestration project on this machine plans, also when the project is a remote tab (HS2-3D8D6V).
   const orchestrationTargetLines = createOrchestrationTargetLines({

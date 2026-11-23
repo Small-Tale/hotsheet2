@@ -1,11 +1,15 @@
+import { signal } from 'kerfjs';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiHttpError } from '../api';
+import { type Api, ApiHttpError } from '../api';
+import type { WorkspaceViewMode } from '../components/workspace-controls';
 import type { Project } from '../interactions/types';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { demoTimeline } from '../ux-demo/orchestration-fixtures';
+import type { OrchestrationProjectViewMode } from '../workspace-view-memory';
 import {
   coalescedPlacement,
+  createOrchestrationViewController,
   createServerPlanner,
   orchestrationPersonId,
   parseOrchestrationDetails,
@@ -322,5 +326,104 @@ describe('the selected run’s details (HS2-XM692S)', () => {
       expect(
         parseOrchestrationDetails({ gates: [gate('review', state)] }, undefined, undefined, 'api').gates?.[0].state,
       ).toBe(words);
+  });
+});
+
+describe('switching between orchestration and software projects (HS2-BRRSYM)', () => {
+  const project = (id: string) => ({ id, name: id, root: `/synthetic/${id}`, apiPath: `/api/${id}` }) as Project;
+  function setup(initialView: WorkspaceViewMode, types: Record<string, boolean | undefined>) {
+    const current = signal<Project | undefined>(undefined),
+      viewMode = signal<WorkspaceViewMode>(initialView),
+      ticketViewMode = signal<WorkspaceViewMode>(initialView === 'board' ? 'board' : 'list'),
+      orchestrationViewMode = signal<OrchestrationProjectViewMode>('orchestration'),
+      known = signal(types),
+      persisted = vi.fn();
+    const pending = () => new Promise<never>(() => undefined);
+    const client = new Proxy({}, { get: () => pending }) as unknown as Api;
+    const controller = createOrchestrationViewController({
+      project: () => current.value,
+      viewMode,
+      fallbackViewMode: () => ticketViewMode.value,
+      orchestrationViewMode,
+      mobile: () => false,
+      confirm: () => Promise.resolve(false),
+      showToast: () => undefined,
+      openTicket: () => Promise.resolve(),
+      showPermissionRequest: () => Promise.resolve(),
+      openOrchestrationSettings: () => undefined,
+      persistWorkspacePreferences: persisted,
+      planner: { propose: () => Promise.resolve({ ok: false, reason: 'synthetic' }) } as never,
+      personId: () => 'person-1',
+      createClient: () => client,
+      orchestrationProject: (id) => known.value[id],
+    });
+    // The workspace remembers the ticket view the person last chose in a software project, as the runtime does.
+    const choose = (mode: WorkspaceViewMode) => {
+      viewMode.value = mode;
+      const inOrchestration = controller.isOrchestrationProject(current.value?.id);
+      if ((mode === 'list' || mode === 'board' || mode === 'workers') && !inOrchestration) ticketViewMode.value = mode;
+    };
+    return { current, viewMode, orchestrationViewMode, known, persisted, controller, choose };
+  }
+
+  it('returns to the Orchestration view after visiting a software project', () => {
+    const t = setup('list', { orch: true, soft: false });
+    t.current.value = project('orch');
+    expect(t.viewMode.value).toBe('orchestration'); // first visit
+    t.current.value = project('soft');
+    expect(t.viewMode.value).toBe('list'); // the software project's last ticket view
+    t.choose('board');
+    t.current.value = project('orch');
+    expect(t.viewMode.value).toBe('orchestration');
+    t.current.value = project('soft');
+    expect(t.viewMode.value).toBe('board');
+    expect(t.persisted).toHaveBeenCalled();
+    t.controller.dispose();
+  });
+
+  it('remembers a ticket view chosen in an orchestration project apart from the software one', () => {
+    const t = setup('board', { orch: true, soft: false });
+    t.current.value = project('soft');
+    t.current.value = project('orch');
+    expect(t.viewMode.value).toBe('orchestration');
+    t.choose('list');
+    expect(t.orchestrationViewMode.value).toBe('list');
+    expect(t.controller.homeViewMode()).toBe('list');
+    // The software project keeps its own Columns, not the List chosen in the orchestration project.
+    t.current.value = project('soft');
+    expect(t.viewMode.value).toBe('board');
+    expect(t.controller.homeViewMode()).toBe('board');
+    t.choose('workers');
+    t.choose('board');
+    expect(t.orchestrationViewMode.value).toBe('list');
+    t.current.value = project('orch');
+    expect(t.viewMode.value).toBe('list');
+    t.choose('orchestration');
+    t.current.value = project('soft');
+    expect(t.viewMode.value).toBe('board');
+    t.controller.dispose();
+  });
+
+  it('waits for an unread project type, unless the person chose a view meanwhile', () => {
+    const t = setup('list', { soft: false });
+    t.current.value = project('orch');
+    expect(t.viewMode.value).toBe('list');
+    t.known.value = { soft: false, orch: true };
+    expect(t.viewMode.value).toBe('orchestration');
+    t.current.value = project('soft');
+    t.current.value = project('late');
+    t.choose('board');
+    t.known.value = { soft: false, orch: true, late: true };
+    expect(t.viewMode.value).toBe('board');
+    t.controller.dispose();
+  });
+
+  it('keeps Notifications or Settings open across a switch to an orchestration project', () => {
+    const t = setup('settings', { orch: true, soft: false });
+    t.current.value = project('soft');
+    t.current.value = project('orch');
+    expect(t.viewMode.value).toBe('settings');
+    expect(t.orchestrationViewMode.value).toBe('orchestration');
+    t.controller.dispose();
   });
 });

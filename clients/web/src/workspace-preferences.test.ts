@@ -24,6 +24,7 @@ describe('workspace preferences', () => {
     expect(loadWorkspacePreferences({ getItem: () => stored })).toEqual({
       viewMode: 'board',
       ticketViewMode: 'board',
+      orchestrationViewMode: 'orchestration',
       sorts: {
         list: { sort: 'priority', sortDirection: 'ascending' },
         board: { sort: 'priority', sortDirection: 'ascending' },
@@ -50,6 +51,7 @@ describe('workspace preferences', () => {
       {
         viewMode: 'settings',
         ticketViewMode: 'board',
+        orchestrationViewMode: 'list',
         sorts: {
           list: { sort: 'title', sortDirection: 'descending' },
           board: { sort: 'priority', sortDirection: 'ascending' },
@@ -64,6 +66,7 @@ describe('workspace preferences', () => {
     expect(loadWorkspacePreferences({ getItem: (key) => values.get(key) ?? null })).toEqual({
       viewMode: 'settings',
       ticketViewMode: 'board',
+      orchestrationViewMode: 'list',
       sorts: {
         list: { sort: 'title', sortDirection: 'descending' },
         board: { sort: 'priority', sortDirection: 'ascending' },
@@ -95,6 +98,17 @@ describe('workspace preferences', () => {
     expect(load({ viewMode: 'board' })).toBe('board');
     expect(load({ viewMode: 'settings' })).toBe('list');
     expect(load({ viewMode: 'list', ticketViewMode: 'settings' })).toBe('list');
+  });
+
+  it('remembers the orchestration projects’ view apart from the ticket view, Orchestration by default (HS2-BRRSYM)', () => {
+    const load = (record: Record<string, unknown>) =>
+      loadWorkspacePreferences({ getItem: () => JSON.stringify(record) }).orchestrationViewMode;
+    expect(load({})).toBe('orchestration');
+    expect(load({ ticketViewMode: 'board' })).toBe('orchestration');
+    expect(load({ orchestrationViewMode: 'board', ticketViewMode: 'list' })).toBe('board');
+    expect(load({ orchestrationViewMode: 'workers' })).toBe('workers');
+    expect(load({ orchestrationViewMode: 'settings' })).toBe('orchestration');
+    expect(load({ orchestrationViewMode: 7 })).toBe('orchestration');
   });
 
   it('validates and independently toggles remembered named command groups per project', () => {

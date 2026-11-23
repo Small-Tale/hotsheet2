@@ -1,9 +1,16 @@
 import type { WorkspaceSort, WorkspaceSortDirection, WorkspaceViewMode } from './components/workspace-header';
+import {
+  DEFAULT_ORCHESTRATION_PROJECT_VIEW,
+  isOrchestrationProjectViewMode,
+  type OrchestrationProjectViewMode,
+} from './workspace-view-memory';
 
 export interface WorkspacePreferences {
   viewMode: WorkspaceViewMode;
   /** The list or columns view the user last had open; Notifications and Settings never replace it. */
   ticketViewMode: TicketWorkspaceViewMode;
+  /** HS2-BRRSYM: the view orchestration projects last showed, restored on switching to one. */
+  orchestrationViewMode: OrchestrationProjectViewMode;
   sorts: WorkspaceSortPreferences;
   sidebarVisible: boolean;
   inspectorVisible: boolean;
@@ -24,6 +31,7 @@ export type WorkspaceSortPreferences = Record<SortableWorkspaceViewMode, Workspa
 export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
   viewMode: 'list',
   ticketViewMode: 'list',
+  orchestrationViewMode: DEFAULT_ORCHESTRATION_PROJECT_VIEW,
   sorts: {
     list: { sort: 'updated', sortDirection: 'descending' },
     board: { sort: 'updated', sortDirection: 'descending' },
@@ -124,6 +132,9 @@ export function loadWorkspacePreferences(storage: Pick<Storage, 'getItem'>): Wor
         : viewMode === 'board' || viewMode === 'workers'
           ? viewMode
           : DEFAULT_WORKSPACE_PREFERENCES.ticketViewMode,
+    orchestrationViewMode: isOrchestrationProjectViewMode(record.orchestrationViewMode)
+      ? record.orchestrationViewMode
+      : DEFAULT_WORKSPACE_PREFERENCES.orchestrationViewMode,
     sorts: {
       list: validatedSortPreference(storedSorts?.list, legacy),
       board: validatedSortPreference(
