@@ -293,6 +293,17 @@ non-floor stages exist; conflicting tier tags fail the plan. `--tier` remains a
 headless override for an explicit analyzed or diagnostic run. HS2-EJ8JTG owns
 the corresponding worker and policy wording.
 
+The slug and claim lookups list only the local Git stores this checkout links
+(`.hotsheet2/store`, a directory or a locator file), falling back to other local
+Git connections but never to a GitHub, GitLab, or Jira connection, even though
+provider configuration is machine-wide. Every `hotsheet-cli` call the gate and
+`scripts/push.sh` make for this runs with `HOTSHEET_NATIVE_SECRETS=deny` and a
+30-second timeout, so finding a ticket never reads the OS keychain or waits on a
+network provider (HS2-EBZ0CS). A configured development strategy is resolved by
+the newest of the installed and `target/debug` CLIs that can resolve it; when
+none can, the error says to rebuild `hotsheet-cli` and names the strategy, and a
+push that then lacks a receipt repeats that reason (HS2-Y183ZJ).
+
 ### Best-effort gate under CI First (HS2-ZGS7JP)
 
 When the effective development strategy is CI First (`docs/34-development-strategies.md`),

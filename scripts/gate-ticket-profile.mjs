@@ -13,8 +13,8 @@ const slugPattern = /\bHS2-[A-Z0-9]+\b/g;
  * macOS keychain prompt would block an unattended push) or wait on a network provider.
  */
 export const CLI_TIMEOUT_MS = 30_000;
-export function cliEnv(env = process.env) {
-  return { ...withoutGitRepositoryEnv(env), HOTSHEET_NATIVE_SECRETS: 'deny' };
+export function cliEnv(inherited = process.env) {
+  return { ...withoutGitRepositoryEnv(inherited), HOTSHEET_NATIVE_SECRETS: 'deny' };
 }
 const defaultProfile = (reason) => ({
   tier: 'T1',
@@ -295,12 +295,12 @@ function realOrUndefined(path) {
  * checkout's `target/debug` build and the first `hotsheet-cli` on PATH (the installed one). A
  * newer file may still be built from older code, so callers try each in turn.
  */
-export function strategyCliCandidates(repo, env = process.env) {
+export function strategyCliCandidates(repo, inherited = process.env) {
   const name = process.platform === 'win32' ? 'hotsheet-cli.exe' : 'hotsheet-cli';
   const found = [];
   const debug = join(repo, 'target/debug', name);
   if (existsSync(debug)) found.push(debug);
-  for (const dir of (env.PATH ?? '').split(delimiter).filter(Boolean)) {
+  for (const dir of (inherited.PATH ?? '').split(delimiter).filter(Boolean)) {
     const candidate = join(dir, name);
     if (existsSync(candidate)) {
       found.push(candidate);
