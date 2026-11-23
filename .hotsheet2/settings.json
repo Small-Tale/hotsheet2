@@ -42,7 +42,7 @@
   "development_strategy": {
     "default": "ci-first",
     "green_main_goal_minutes": 360,
-    "version": 1
+    "version": 2
   },
   "integration_strategies": {
     "allowed": [
