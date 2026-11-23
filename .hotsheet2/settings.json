@@ -40,7 +40,7 @@
     }
   ],
   "development_strategy": {
-    "default": "risk-guided",
+    "default": "ci-first",
     "green_main_goal_minutes": 360,
     "version": 1
   },
