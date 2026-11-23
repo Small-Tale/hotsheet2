@@ -1,11 +1,21 @@
 // HS2-VQ5ND5: resolve local-gate profiles from normalized provider tickets.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { delimiter, isAbsolute, join, resolve } from 'node:path';
 import { parseBudget } from './gate-budget.mjs';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const slugPattern = /\bHS2-[A-Z0-9]+\b/g;
+
+/**
+ * HS2-EBZ0CS: every hotsheet-cli call the gate and push scripts make runs with native secrets
+ * denied and a bounded timeout. Finding the commit's ticket must never read the OS keychain (a
+ * macOS keychain prompt would block an unattended push) or wait on a network provider.
+ */
+export const CLI_TIMEOUT_MS = 30_000;
+export function cliEnv(env = process.env) {
+  return { ...withoutGitRepositoryEnv(env), HOTSHEET_NATIVE_SECRETS: 'deny' };
+}
 const defaultProfile = (reason) => ({
   tier: 'T1',
   tags: [],
@@ -272,31 +282,85 @@ export function withResolvedDevelopmentStrategy(profile, selection) {
   };
 }
 
-export function resolveConfiguredDevelopmentStrategy(repo, profile, settings, run = execFileSync) {
+function realOrUndefined(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * HS2-Y183ZJ: the hotsheet-cli builds that may resolve a configured strategy, newest first: the
+ * checkout's `target/debug` build and the first `hotsheet-cli` on PATH (the installed one). A
+ * newer file may still be built from older code, so callers try each in turn.
+ */
+export function strategyCliCandidates(repo, env = process.env) {
+  const name = process.platform === 'win32' ? 'hotsheet-cli.exe' : 'hotsheet-cli';
+  const found = [];
+  const debug = join(repo, 'target/debug', name);
+  if (existsSync(debug)) found.push(debug);
+  for (const dir of (env.PATH ?? '').split(delimiter).filter(Boolean)) {
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) {
+      found.push(candidate);
+      break;
+    }
+  }
+  const unique = [...new Map(found.map((path) => [realOrUndefined(path) ?? path, path])).values()];
+  const mtime = (path) => {
+    try {
+      return statSync(path).mtimeMs;
+    } catch {
+      return 0;
+    }
+  };
+  unique.sort((a, b) => mtime(b) - mtime(a));
+  return unique.length ? unique : ['hotsheet-cli'];
+}
+
+export function resolveConfiguredDevelopmentStrategy(
+  repo,
+  profile,
+  settings,
+  run = execFileSync,
+  candidates = strategyCliCandidates(repo),
+) {
   if (settings.development_strategy === undefined) return withDevelopmentStrategy(profile, settings);
   const tags = profile.tags ?? [];
   const overrides = tags.filter((tag) => tag.startsWith('development-strategy:'));
   if (overrides.length > 1) throw new Error(`Conflicting development strategy ticket tags: ${overrides.join(', ')}`);
-  const binary = join(repo, 'target/debug', process.platform === 'win32' ? 'hotsheet-cli.exe' : 'hotsheet-cli');
   // The CLI resolves either a locator file or a directory link from its cwd.
   // Passing the locator itself as -C would mistake it for a store directory.
   const args = ['coordination', '--project', repo, 'development-strategy-resolve'];
   const session = process.env.HOTSHEET_DEVELOPMENT_STRATEGY;
   if (session) args.push('--session', session);
-  if (overrides.length) args.push('--ticket', overrides[0].slice('development-strategy:'.length));
-  try {
-    const stdout = run(existsSync(binary) ? binary : 'hotsheet-cli', args, {
-      cwd: repo,
-      env: withoutGitRepositoryEnv(process.env),
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024,
-    });
+  const ticket = overrides[0]?.slice('development-strategy:'.length);
+  if (ticket) args.push('--ticket', ticket);
+  const failures = [];
+  for (const binary of candidates) {
+    let stdout;
+    try {
+      stdout = run(binary, args, {
+        cwd: repo,
+        env: cliEnv(),
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024,
+        timeout: CLI_TIMEOUT_MS,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      failures.push(`${binary}: ${error.stderr?.toString().trim() || error.message}`);
+      continue;
+    }
     return withResolvedDevelopmentStrategy(profile, JSON.parse(stdout));
-  } catch (error) {
-    throw new Error(
-      `HS2-RRNZYN: configured project strategy requires a current hotsheet-cli development-strategy-resolve; build the CLI in this checkout. ${error.stderr?.toString().trim() || error.message}`,
-    );
   }
+  const requested = ticket ?? session ?? settings.development_strategy?.default ?? 'the project default';
+  throw new Error(
+    `HS2-RRNZYN: configured project strategy requires a current hotsheet-cli development-strategy-resolve. ` +
+      `Rebuild hotsheet-cli: no candidate could resolve development strategy "${requested}" (HS2-Y183ZJ). ` +
+      failures.join('; '),
+  );
 }
 
 function projectSettings(repo) {
@@ -342,6 +406,41 @@ export function projectTicketRoot(repo) {
   return paths.find((path) => existsSync(join(path, '.hotsheet2/store'))) ?? paths[0] ?? repo;
 }
 
+/**
+ * HS2-EBZ0CS, HS2-J58Z4Y: the store directories this checkout links. `.hotsheet2/store` is either
+ * the in-tree store directory or a locator file naming an external one.
+ */
+export function linkedStores(project) {
+  const link = join(project, '.hotsheet2/store');
+  let target = link;
+  try {
+    if (statSync(link).isFile()) {
+      const named = readFileSync(link, 'utf8').trim();
+      target = isAbsolute(named) ? named : resolve(project, named);
+    }
+  } catch {
+    return [];
+  }
+  const real = realOrUndefined(target);
+  return real ? [real] : [];
+}
+
+/**
+ * HS2-EBZ0CS: the connections that can hold this checkout's ticket. Only local Git stores this
+ * checkout links qualify, so the gate and push never call a credentialed or network provider (such
+ * as another project's GitHub connection, HS2-7QPJ05) just to find the commit's ticket. When no
+ * Git connection names a linked store, every local Git connection is a candidate; never a remote
+ * one.
+ */
+export function linkedGitConnections(connections, stores) {
+  const git = connections.filter((connection) => connection.provider === 'git');
+  const linked = git.filter((connection) => {
+    const real = typeof connection.locator === 'string' ? realOrUndefined(connection.locator) : undefined;
+    return real !== undefined && stores.includes(real);
+  });
+  return (linked.length ? linked : git).map((connection) => connection.connection_id);
+}
+
 export function readTicketProfile(
   repo,
   { ticket: explicit, workerId = process.env.HOTSHEET_WORKER_ID, dirty = false } = {},
@@ -356,22 +455,23 @@ export function readTicketProfile(
     return selected(defaultProfile('ticket source unavailable; default T1 budget'));
   }
   const run = (...args) =>
-    execFileSync('hotsheet-cli', args, { cwd: project, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    execFileSync('hotsheet-cli', args, {
+      cwd: project,
+      env: cliEnv(),
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      timeout: CLI_TIMEOUT_MS,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
   if (explicit?.includes(':')) {
     const split = explicit.indexOf(':');
     const ticket = JSON.parse(run('provider-get', explicit.slice(0, split), explicit.slice(split + 1)));
     const profile = profileFromTags(ticket);
     return selected({ ...profile, reason: `explicit --ticket; ${profile.reason}` });
   }
-  const providers = run('providers')
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => line.trim().split(/\s+/)[0]);
-  // Provider configuration is machine-wide (HS2-7QPJ05), so this list can name other projects'
-  // connections, some of which need credentials a gate never unlocks (HS2-XTQHPK). A connection
-  // that cannot be listed cannot hold this checkout's ticket; skip it (HS2-E5EX0M).
-  const tickets = providers.flatMap((connection) => {
+  const connections = linkedGitConnections(JSON.parse(run('providers', '--json')), linkedStores(project));
+  // A Git store that cannot be listed cannot hold this checkout's ticket; skip it (HS2-E5EX0M).
+  const tickets = connections.flatMap((connection) => {
     try {
       return JSON.parse(run('provider-ls', connection));
     } catch {

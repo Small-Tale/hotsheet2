@@ -546,7 +546,8 @@ async function editPhase(repo, options, ticket, phase, signal) {
       '--actor-id',
       process.env.HOTSHEET_WORKER_ID ?? options.identity?.id ?? 'hotsheet-main-window',
     ],
-    { signal, timeoutMs: 30_000 },
+    // HS2-EBZ0CS: a phase edit never reads the OS keychain and never waits unbounded.
+    { signal, timeoutMs: 30_000, env: { ...withoutGitRepositoryEnv(process.env), HOTSHEET_NATIVE_SECRETS: 'deny' } },
   );
 }
 
@@ -653,6 +654,8 @@ export async function ciFirstPush(repo, options, resolveStrategy = effectiveStra
   try {
     selection = await resolveStrategy(repo, options);
   } catch (error) {
+    // HS2-Y183ZJ: say why, here and in any missing-receipt refusal, instead of falling back silently.
+    options.strategyError = error.message;
     console.warn(`Development strategy unavailable; a full-gate receipt is required: ${error.message}`);
     return false;
   }
@@ -661,7 +664,7 @@ export async function ciFirstPush(repo, options, resolveStrategy = effectiveStra
 
 const shellWord = (word) => (/^[A-Za-z0-9_./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`);
 
-export function missingReceiptMessage(gateArgs) {
+export function missingReceiptMessage(gateArgs, strategyError) {
   const command = ['scripts/check.sh', ...gateArgs, '--test-plan', '<reviewed.json>'].map((word, index, all) =>
     index === all.length - 1 ? word : shellWord(word),
   );
@@ -669,6 +672,7 @@ export function missingReceiptMessage(gateArgs) {
     'No exact-tree gate receipt for this commit. Push verifies a receipt and never runs the gate (HS2-CV0JC8).',
     `Run the gate on this committed tree first, then push again: ${command.join(' ')}`,
     'A reviewed test plan already recorded for this exact tree lets you omit --test-plan.',
+    ...(strategyError ? [`The configured development strategy could not be resolved: ${strategyError}`] : []),
   ].join('\n');
 }
 
@@ -677,7 +681,7 @@ async function verifyReceipt(repo, options, signal) {
     await child(repo, 'bash', ['scripts/check.sh', '--verify-receipt', ...options.gateArgs], { signal });
   } catch (error) {
     if (error?.exitSignal || signal?.aborted || !requiresPrecomputedReceipt(options)) throw error;
-    throw new Error(missingReceiptMessage(options.gateArgs), { cause: error });
+    throw new Error(missingReceiptMessage(options.gateArgs, options.strategyError), { cause: error });
   }
 }
 

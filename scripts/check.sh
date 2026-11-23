@@ -6,4 +6,6 @@ cd "$(dirname "$0")/.."
 # terminal and actor identity to the tests and binaries it starts.
 unset HOTSHEET_SERVER HOTSHEET_SECRET HOTSHEET_TERMINAL_ID HOTSHEET_PROJECT \
   HOTSHEET_PERMISSION_PROJECT HOTSHEET_WORKER_ID HOTSHEET_ACTOR_ROLE HOTSHEET_ACTOR_ID HOTSHEET_AGENT
+# HS2-EBZ0CS: nothing this script starts may read the OS keychain or show a keychain prompt.
+export HOTSHEET_NATIVE_SECRETS=deny
 exec zsh -ic 'node scripts/local-gate.mjs "$@"' hotsheet-local-gate "$@"

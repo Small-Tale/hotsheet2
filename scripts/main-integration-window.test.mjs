@@ -1530,6 +1530,8 @@ for (const preset of ['ticket-assured', 'steady-main', 'risk-guided', null])
       assert.notEqual(refused.status, 0);
       assert.match(refused.stderr, /No exact-tree gate receipt/);
       assert.doesNotMatch(refused.stderr, /CI First \(HS2-ZGS7JP\)/);
+      // HS2-Y183ZJ: an unresolvable strategy names the cause instead of refusing silently.
+      if (!preset) assert.match(refused.stderr, /could not be resolved: .*Rebuild hotsheet-cli/);
       assert.equal(readWindow(f.repo), null);
       assert.equal(
         spawnSync('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], {

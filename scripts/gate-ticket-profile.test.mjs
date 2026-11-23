@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -9,9 +9,11 @@ import {
   bestEffortProfile,
   chooseTicket,
   developmentStrategyFromSettings,
+  linkedGitConnections,
   profileFromTags,
   readTicketProfile,
   resolveConfiguredDevelopmentStrategy,
+  strategyCliCandidates,
   withDevelopmentStrategy,
 } from './gate-ticket-profile.mjs';
 
@@ -329,12 +331,16 @@ test('HS2-E5EX0M a machine-wide provider the gate cannot list does not hide the 
       { slug: 'HS2-AAAAAA', connection_id: 'git', native_id: 'A', qualified_id: 'git:A', claimed_by: null, tags: [] },
     ]);
     const detail = JSON.stringify({ slug: 'HS2-AAAAAA', tags: ['tier:T0'] });
+    const providers = JSON.stringify([
+      { connection_id: 'other-credentialed', provider: 'git', locator: join(dir, 'unavailable.hs2') },
+      { connection_id: 'git', provider: 'git', locator: join(dir, 'other.hs2') },
+    ]);
     writeFileSync(
       fake,
       [
         '#!/bin/sh',
         'case "$1" in',
-        '  providers) printf "other-credentialed\\ngit\\n" ;;',
+        "  providers) printf %s '" + providers + "' ;;",
         '  provider-ls) if [ "$2" = git ]; then printf %s \'' +
           listed +
           '\'; else echo "credential store unavailable" >&2; exit 1; fi ;;',
@@ -356,6 +362,172 @@ test('HS2-E5EX0M a machine-wide provider the gate cannot list does not hide the 
     else process.env.HOTSHEET_WORKER_ID = savedWorker;
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/** HS2-EBZ0CS: a fake hotsheet-cli on PATH that records each call and the secrets mode it ran with. */
+function recordingCli(dir, connections, listed) {
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const log = join(dir, 'calls.log');
+  const fake = join(bin, 'hotsheet-cli');
+  writeFileSync(
+    fake,
+    [
+      '#!/bin/sh',
+      `printf '%s|%s\\n' "\${HOTSHEET_NATIVE_SECRETS:-unset}" "$*" >> '${log}'`,
+      'case "$1" in',
+      `  providers) printf %s '${JSON.stringify(connections)}' ;;`,
+      `  provider-ls) printf %s '${JSON.stringify(listed)}' ;;`,
+      `  provider-get) printf %s '${JSON.stringify({ slug: 'HS2-AAAAAA', tags: ['tier:T0'] })}' ;;`,
+      '  *) exit 2 ;;',
+      'esac',
+      '',
+    ].join('\n'),
+  );
+  chmodSync(fake, 0o755);
+  return { bin, calls: () => readFileSync(log, 'utf8').trim().split('\n') };
+}
+
+function syntheticCheckout(dir, link) {
+  const repo = join(dir, 'repo');
+  mkdirSync(join(repo, '.hotsheet2'), { recursive: true });
+  link(repo);
+  const git = (...args) => execFileSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), stdio: 'pipe' });
+  git('init', '-q');
+  git(
+    '-c',
+    'user.name=Synthetic',
+    '-c',
+    'user.email=synthetic@example.invalid',
+    'commit',
+    '-q',
+    '--allow-empty',
+    '-m',
+    'HS2-AAAAAA Synthetic change',
+  );
+  return repo;
+}
+
+for (const layout of ['in-tree store', 'external store locator'])
+  test(`HS2-EBZ0CS ticket lookup lists only the checkout's linked Git store, with secrets denied (${layout})`, () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hs2-ebz0cs-'));
+    const savedPath = process.env.PATH;
+    const savedWorker = process.env.HOTSHEET_WORKER_ID;
+    const savedSecrets = process.env.HOTSHEET_NATIVE_SECRETS;
+    try {
+      const external = join(dir, 'project.hs2');
+      mkdirSync(external);
+      const repo = syntheticCheckout(dir, (root) => {
+        if (layout === 'in-tree store') mkdirSync(join(root, '.hotsheet2/store'));
+        else writeFileSync(join(root, '.hotsheet2/store'), `${external}\n`);
+      });
+      const store = layout === 'in-tree store' ? join(repo, '.hotsheet2/store') : external;
+      // Machine-wide configuration (HS2-7QPJ05): another project's credentialed GitHub connection,
+      // another project's Git store, and this checkout's Git store.
+      const fake = recordingCli(
+        dir,
+        [
+          { connection_id: 'github-other-project', provider: 'github', locator: 'synthetic-org/other' },
+          { connection_id: 'other-git', provider: 'git', locator: join(dir, 'other.hs2') },
+          { connection_id: 'linked-git', provider: 'git', locator: store },
+        ],
+        [
+          {
+            slug: 'HS2-AAAAAA',
+            connection_id: 'linked-git',
+            native_id: 'A',
+            qualified_id: 'linked-git:A',
+            claimed_by: null,
+            tags: [],
+          },
+        ],
+      );
+      process.env.PATH = `${fake.bin}:${savedPath}`;
+      delete process.env.HOTSHEET_WORKER_ID;
+      delete process.env.HOTSHEET_NATIVE_SECRETS;
+      const profile = readTicketProfile(repo);
+      assert.match(profile.reason, /HEAD commit subject/);
+      assert.deepEqual(profile.tags, ['tier:T0']);
+      const calls = fake.calls();
+      for (const call of calls) assert.match(call, /^deny\|/, `hotsheet-cli ran without NATIVE_SECRETS=deny: ${call}`);
+      const listed = calls.filter((call) => call.startsWith('deny|provider-ls '));
+      assert.deepEqual(listed, ['deny|provider-ls linked-git'], 'provider-ls ran only for the linked Git store');
+      assert.ok(!calls.some((call) => call.includes('github-other-project')), 'no credentialed provider was called');
+    } finally {
+      process.env.PATH = savedPath;
+      if (savedWorker === undefined) delete process.env.HOTSHEET_WORKER_ID;
+      else process.env.HOTSHEET_WORKER_ID = savedWorker;
+      if (savedSecrets === undefined) delete process.env.HOTSHEET_NATIVE_SECRETS;
+      else process.env.HOTSHEET_NATIVE_SECRETS = savedSecrets;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+test('HS2-EBZ0CS never lists a non-Git connection, even when no Git connection names the linked store', () => {
+  const connections = [
+    { connection_id: 'github-a', provider: 'github', locator: 'synthetic-org/a' },
+    { connection_id: 'jira-b', provider: 'jira', locator: 'https://jira.example.invalid' },
+    { connection_id: 'git-c', provider: 'git', locator: '/nonexistent/synthetic.hs2' },
+  ];
+  assert.deepEqual(linkedGitConnections(connections, ['/synthetic/linked']), ['git-c']);
+  assert.deepEqual(linkedGitConnections(connections.slice(0, 2), ['/synthetic/linked']), []);
+});
+
+test('HS2-Y183ZJ strategy resolution tries the newest CLI first and fails plainly when none can resolve it', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'hs2-y183zj-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const older = join(dir, 'older-hotsheet-cli');
+  const newer = join(dir, 'newer-hotsheet-cli');
+  writeFileSync(older, '');
+  writeFileSync(newer, '');
+  utimesSync(older, new Date('2026-01-01T00:00:00Z'), new Date('2026-01-01T00:00:00Z'));
+  const repo = join(dir, 'repo');
+  mkdirSync(join(repo, 'target/debug'), { recursive: true });
+  const debug = join(repo, 'target/debug/hotsheet-cli');
+  writeFileSync(debug, '');
+  utimesSync(debug, new Date('2025-01-01T00:00:00Z'), new Date('2025-01-01T00:00:00Z'));
+  const bin = join(dir, 'bin');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'hotsheet-cli'), '');
+  // The installed (PATH) build is newer than target/debug, so it is tried first.
+  assert.deepEqual(strategyCliCandidates(repo, { PATH: bin }), [join(bin, 'hotsheet-cli'), debug]);
+  assert.deepEqual(strategyCliCandidates(join(dir, 'none'), { PATH: join(dir, 'missing') }), ['hotsheet-cli']);
+
+  const settings = { development_strategy: { version: 1, default: 'ci-first' } };
+  const profile = profileFromTags(ticket('HS2-Y183ZJ', ['tier:T1']));
+  const tried = [];
+  const resolved = resolveConfiguredDevelopmentStrategy(
+    repo,
+    profile,
+    settings,
+    (binary, _args, options) => {
+      tried.push(binary);
+      assert.equal(options.env.HOTSHEET_NATIVE_SECRETS, 'deny');
+      assert.ok(options.timeout > 0);
+      if (binary === newer) throw Object.assign(new Error('failed'), { stderr: 'unknown strategy ci-first' });
+      return JSON.stringify({ preset: 'ci-first', source: 'project', local_gate: 'best-effort', local_budget_minutes: 10 });
+    },
+    [newer, older],
+  );
+  assert.deepEqual(tried, [newer, older], 'a newer build from older code falls through to the next');
+  assert.equal(resolved.bestEffort, true);
+  assert.throws(
+    () =>
+      resolveConfiguredDevelopmentStrategy(
+        repo,
+        profile,
+        settings,
+        () => {
+          throw Object.assign(new Error('failed'), { stderr: 'unknown strategy ci-first' });
+        },
+        [newer, older],
+      ),
+    (error) =>
+      /Rebuild hotsheet-cli/.test(error.message) &&
+      /"ci-first"/.test(error.message) &&
+      error.message.includes(newer) &&
+      error.message.includes(older),
+  );
 });
 
 test('HS2-ZGS7JP CI First maps to serial best effort with a bounded, configurable budget', () => {
