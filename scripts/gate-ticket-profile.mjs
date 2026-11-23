@@ -469,7 +469,18 @@ export function readTicketProfile(
     const profile = profileFromTags(ticket);
     return selected({ ...profile, reason: `explicit --ticket; ${profile.reason}` });
   }
-  const connections = linkedGitConnections(JSON.parse(run('providers', '--json')), linkedStores(project));
+  let descriptors;
+  try {
+    descriptors = JSON.parse(run('providers', '--linked', '--json'));
+  } catch (error) {
+    // Older installed CLIs and legacy projects with only a store link still use the Git-only scope below.
+    if (
+      !/unexpected argument '--linked'|no registered checkout contains the current directory/u.test(error.stderr ?? '')
+    )
+      throw error;
+    descriptors = JSON.parse(run('providers', '--json'));
+  }
+  const connections = linkedGitConnections(descriptors, linkedStores(project));
   // A Git store that cannot be listed cannot hold this checkout's ticket; skip it (HS2-E5EX0M).
   const tickets = connections.flatMap((connection) => {
     try {

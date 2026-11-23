@@ -4,6 +4,11 @@ HS2-RJRRSF: `clients/web/tests/terminal-clipboard.spec.ts` selects text with a m
 remote project tab, copies via the keyboard and the right-click menu, checks the viewing
 browser's clipboard with the async API unavailable, and verifies shell Ctrl-C with no selection.
 
+HS2-J58Z4Y: `crates/hotsheet-cli/tests/cli.rs # hs2_j58z4y_linked_providers_use_the_nearest_checkout_and_its_default`
+checks a two-project machine registry, one mixed Git and external checkout and one
+external-only checkout. It verifies per-checkout defaults, a nested working directory,
+and explicit refusal when no registered checkout contains the working directory.
+
 HS2-N1QDZW: `hotsheet-jobs/src/watch.rs` unit tests run the shared file watcher
 against the real platform backend: four paths registered with one start, repeated
 and interleaved writes reported for each path, a path added later, a shallow and

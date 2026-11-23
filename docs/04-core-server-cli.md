@@ -1101,6 +1101,7 @@ hotsheet key set openai                    # hidden terminal prompt
 printf '%s' "$PROVIDER_KEY" | hotsheet key set openai  # automation via stdin; never argv/settings
 hotsheet key list                         # provider names only, never values
 hotsheet providers --json                 # git + configured external connections/capabilities
+hotsheet providers --linked --json        # only sources linked to the current registered checkout (HS2-J58Z4Y)
 hotsheet github-sign-in                    # print GitHub device URL/code, then save a keychain reference
 hotsheet github-connect acme/repo --credential github-app-<id> --checkout <checkout-id> --default
 hotsheet github-connect acme/repo --credential github-app-<id> --attachment-repo acme/assets  # enable attachments

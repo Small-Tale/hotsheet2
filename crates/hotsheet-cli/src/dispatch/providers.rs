@@ -11,10 +11,11 @@ use hotsheet_ticketing::advisory_claim::{
     AdvisoryClaimEvent, AdvisoryClaimEventKind, valid_write_event,
 };
 use hotsheet_ticketing::advisory_claim_ledger::{AdvisoryClaimLedger, ClaimReplayState, now_epoch};
+use hotsheet_ticketing::checkouts::CheckoutRegistry;
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, OsKeychain, ProviderConfigRegistry,
-    ProviderDraft, ProviderPatch, ProviderRegistry, TicketProvider, TicketQuery, TicketRef,
-    copy_between, git_connection_id, move_between, ops,
+    ProviderDescriptor, ProviderDraft, ProviderPatch, ProviderRegistry, TicketProvider,
+    TicketQuery, TicketRef, copy_between, git_connection_id, move_between, ops,
 };
 use time::OffsetDateTime;
 
@@ -29,7 +30,13 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;
     let actor = ctx.actor.as_ref();
     match cmd {
-        Cmd::Providers { json } => cmd_providers(path, json),
+        Cmd::Providers { json, linked } => {
+            if linked {
+                cmd_linked_providers(&ctx.cwd, json)
+            } else {
+                cmd_providers(path, json)
+            }
+        }
         Cmd::GithubSignIn { web_base } => cmd_github_sign_in(&web_base),
         Cmd::GithubConnect(args) => cmd_github_connect(path, args),
         Cmd::GithubRecover(args) => cmd_github_recover(path, args),
@@ -244,36 +251,86 @@ pub(crate) fn cmd_providers(path: &Path, json: bool) -> Result<()> {
     let config = ProviderConfigRegistry::for_store(store.root())?;
     let connections = config.load()?;
     let external_default = connections.iter().any(|connection| connection.default);
-    let disabled: Vec<String> = connections
-        .iter()
-        .filter(|connection| connection.disabled)
-        .map(|connection| connection.id.clone())
-        .collect();
     let descriptor = GitProvider::new(git_connection_id(&store), store.clone())
         .with_default(!external_default)
         .descriptor();
-    let mut descriptors = vec![descriptor];
+    let mut descriptors = vec![(descriptor, false)];
     for connection in connections {
         if connection.provider != "git" {
-            descriptors.push(hotsheet_extsync::descriptor(&connection)?);
+            descriptors.push((
+                hotsheet_extsync::descriptor(&connection)?,
+                connection.disabled,
+            ));
         }
     }
-    descriptors.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
+    print_provider_descriptors(descriptors, &config, json)
+}
+
+fn cmd_linked_providers(cwd: &Path, json: bool) -> Result<()> {
+    let home = hotsheet_plugins::hotsheet_home();
+    let registry = CheckoutRegistry::new(home.join("checkouts.json"));
+    let cwd = hotsheet_sync::paths::canonicalize(cwd)?;
+    let checkout = registry
+        .list()?
+        .into_iter()
+        .filter(|checkout| cwd.starts_with(&checkout.root))
+        .max_by_key(|checkout| Path::new(&checkout.root).components().count())
+        .context("no registered checkout contains the current directory")?;
+    let checkout = registry.resolve(&checkout.id)?;
+    let config = ProviderConfigRegistry::for_machine(&home);
+    let connections = config.load()?;
+    let mut descriptors = Vec::with_capacity(checkout.sources.len());
+    for source in &checkout.sources {
+        let is_default = checkout.default_source.as_deref() == Some(source.connection_id.as_str());
+        if source.provider == "git" {
+            let store = FsStore::open_without_maintenance(&source.locator)?;
+            let descriptor = GitProvider::new(source.connection_id.clone(), store)
+                .with_default(is_default)
+                .descriptor();
+            descriptors.push((descriptor, false));
+        } else {
+            let connection = connections
+                .iter()
+                .find(|connection| {
+                    connection.id == source.connection_id
+                        && connection.provider == source.provider
+                        && connection.locator == source.locator
+                })
+                .with_context(|| {
+                    format!(
+                        "linked provider '{}' has no matching configuration",
+                        source.connection_id
+                    )
+                })?;
+            let mut descriptor = hotsheet_extsync::descriptor(connection)?;
+            descriptor.default = is_default;
+            descriptors.push((descriptor, connection.disabled));
+        }
+    }
+    print_provider_descriptors(descriptors, &config, json)
+}
+
+fn print_provider_descriptors(
+    mut descriptors: Vec<(ProviderDescriptor, bool)>,
+    config: &ProviderConfigRegistry,
+    json: bool,
+) -> Result<()> {
+    descriptors.sort_by(|(a, _), (b, _)| a.connection_id.cmp(&b.connection_id));
     if json {
+        let descriptors: Vec<_> = descriptors
+            .into_iter()
+            .map(|(descriptor, _)| descriptor)
+            .collect();
         println!("{}", serde_json::to_string_pretty(&descriptors)?);
     } else {
-        for descriptor in descriptors {
+        for (descriptor, disabled) in descriptors {
             println!(
                 "{}  {}  {}  {}{}",
                 descriptor.connection_id,
                 descriptor.provider,
                 if descriptor.default { "default" } else { "" },
                 descriptor.locator,
-                if disabled.contains(&descriptor.connection_id) {
-                    "  (disabled)"
-                } else {
-                    ""
-                }
+                if disabled { "  (disabled)" } else { "" }
             );
         }
         // HS2-7QPJ05: the machine's one provider configuration, which the desktop app shares.

@@ -5166,6 +5166,91 @@ fn providers_reports_default_git_connection_and_capabilities() {
 }
 
 #[test]
+fn hs2_j58z4y_linked_providers_use_the_nearest_checkout_and_its_default() {
+    use hotsheet_ticketing::checkouts::{CheckoutRegistry, TicketSource};
+    use hotsheet_ticketing::{ProviderConfigRegistry, ProviderConnection};
+
+    let fixture = tempfile::tempdir().unwrap();
+    let home = fixture.path().join("home");
+    let first = fixture.path().join("first");
+    let second = fixture.path().join("second");
+    let store = fixture.path().join("store");
+    let nested = first.join("nested");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    std::fs::create_dir(&store).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .arg("init")
+        .assert()
+        .success();
+    let config = ProviderConfigRegistry::for_machine(&home);
+    let registry = CheckoutRegistry::new(home.join("checkouts.json"));
+    let connections = ["first-source", "second-source"].map(|id| ProviderConnection {
+        id: id.into(),
+        provider: "github".into(),
+        locator: format!("synthetic/{id}"),
+        name: None,
+        default: false,
+        settings: serde_json::Value::Null,
+        disabled: false,
+    });
+    config.save(&connections).unwrap();
+    for (project, connection) in [&first, &second].into_iter().zip(&connections) {
+        let mut sources = vec![TicketSource {
+            connection_id: connection.id.clone(),
+            provider: connection.provider.clone(),
+            locator: connection.locator.clone(),
+        }];
+        if project == &first {
+            sources.push(TicketSource::git(&store));
+        }
+        registry
+            .register_registered_sources(
+                &config,
+                project,
+                None,
+                None,
+                sources,
+                Some(connection.id.clone()),
+            )
+            .unwrap();
+    }
+    for (cwd, expected, git_count) in [(&nested, "first-source", 1), (&second, "second-source", 0)]
+    {
+        let output = hs(fixture.path())
+            .env("HOTSHEET_HOME", &home)
+            .current_dir(cwd)
+            .args(["providers", "--linked", "--json"])
+            .assert()
+            .success();
+        let descriptors: Vec<hotsheet_ticketing::ProviderDescriptor> =
+            serde_json::from_slice(&output.get_output().stdout).unwrap();
+        assert_eq!(descriptors.len(), 1 + git_count);
+        let external = descriptors
+            .iter()
+            .find(|descriptor| descriptor.provider == "github")
+            .unwrap();
+        assert_eq!(external.connection_id, expected);
+        assert!(external.default);
+        assert_eq!(
+            descriptors
+                .iter()
+                .filter(|descriptor| descriptor.default)
+                .count(),
+            1
+        );
+    }
+    hs(fixture.path())
+        .env("HOTSHEET_HOME", &home)
+        .current_dir(fixture.path())
+        .args(["providers", "--linked", "--json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no registered checkout"));
+}
+
+#[test]
 fn format_activation_requires_an_explicit_pre_release_acknowledgement() {
     let dir = tempfile::tempdir().unwrap();
     hs(dir.path())

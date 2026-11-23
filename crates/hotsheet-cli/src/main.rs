@@ -158,8 +158,11 @@ enum Cmd {
         #[command(flatten)]
         filters: LsFilters,
     },
-    /// Show the current ticket-provider connection and its capabilities.
+    /// List ticket-provider connections and their capabilities.
     Providers {
+        /// List only sources linked to the registered checkout containing the current directory.
+        #[arg(long)]
+        linked: bool,
         /// Emit the full provider descriptor as JSON.
         #[arg(long)]
         json: bool,

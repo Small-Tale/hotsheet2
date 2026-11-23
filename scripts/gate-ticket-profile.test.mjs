@@ -365,18 +365,21 @@ test('HS2-E5EX0M a machine-wide provider the gate cannot list does not hide the 
 });
 
 /** HS2-EBZ0CS: a fake hotsheet-cli on PATH that records each call and the secrets mode it ran with. */
-function recordingCli(dir, connections, listed) {
+function recordingCli(dir, connections, listed, legacyCli) {
   const bin = join(dir, 'bin');
   mkdirSync(bin, { recursive: true });
   const log = join(dir, 'calls.log');
   const fake = join(bin, 'hotsheet-cli');
+  const legacyProviderGuard = legacyCli
+    ? `if [ "$2" = --linked ]; then echo "unexpected argument '--linked'" >&2; exit 2; fi; `
+    : '';
   writeFileSync(
     fake,
     [
       '#!/bin/sh',
       `printf '%s|%s\\n' "\${HOTSHEET_NATIVE_SECRETS:-unset}" "$*" >> '${log}'`,
       'case "$1" in',
-      `  providers) printf %s '${JSON.stringify(connections)}' ;;`,
+      `  providers) ${legacyProviderGuard}printf %s '${JSON.stringify(connections)}' ;;`,
       `  provider-ls) printf %s '${JSON.stringify(listed)}' ;;`,
       `  provider-get) printf %s '${JSON.stringify({ slug: 'HS2-AAAAAA', tags: ['tier:T0'] })}' ;;`,
       '  *) exit 2 ;;',
@@ -392,7 +395,8 @@ function syntheticCheckout(dir, link) {
   const repo = join(dir, 'repo');
   mkdirSync(join(repo, '.hotsheet2'), { recursive: true });
   link(repo);
-  const git = (...args) => execFileSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), stdio: 'pipe' });
+  const git = (...args) =>
+    execFileSync('git', args, { cwd: repo, env: withoutGitRepositoryEnv(process.env), stdio: 'pipe' });
   git('init', '-q');
   git(
     '-c',
@@ -422,6 +426,7 @@ for (const layout of ['in-tree store', 'external store locator'])
         else writeFileSync(join(root, '.hotsheet2/store'), `${external}\n`);
       });
       const store = layout === 'in-tree store' ? join(repo, '.hotsheet2/store') : external;
+      const legacyCli = layout === 'in-tree store';
       // Machine-wide configuration (HS2-7QPJ05): another project's credentialed GitHub connection,
       // another project's Git store, and this checkout's Git store.
       const fake = recordingCli(
@@ -441,6 +446,7 @@ for (const layout of ['in-tree store', 'external store locator'])
             tags: [],
           },
         ],
+        legacyCli,
       );
       process.env.PATH = `${fake.bin}:${savedPath}`;
       delete process.env.HOTSHEET_WORKER_ID;
@@ -449,6 +455,10 @@ for (const layout of ['in-tree store', 'external store locator'])
       assert.match(profile.reason, /HEAD commit subject/);
       assert.deepEqual(profile.tags, ['tier:T0']);
       const calls = fake.calls();
+      assert.deepEqual(
+        calls.filter((call) => call.startsWith('deny|providers ')),
+        legacyCli ? ['deny|providers --linked --json', 'deny|providers --json'] : ['deny|providers --linked --json'],
+      );
       for (const call of calls) assert.match(call, /^deny\|/, `hotsheet-cli ran without NATIVE_SECRETS=deny: ${call}`);
       const listed = calls.filter((call) => call.startsWith('deny|provider-ls '));
       assert.deepEqual(listed, ['deny|provider-ls linked-git'], 'provider-ls ran only for the linked Git store');
@@ -505,7 +515,12 @@ test('HS2-Y183ZJ strategy resolution tries the newest CLI first and fails plainl
       assert.equal(options.env.HOTSHEET_NATIVE_SECRETS, 'deny');
       assert.ok(options.timeout > 0);
       if (binary === newer) throw Object.assign(new Error('failed'), { stderr: 'unknown strategy ci-first' });
-      return JSON.stringify({ preset: 'ci-first', source: 'project', local_gate: 'best-effort', local_budget_minutes: 10 });
+      return JSON.stringify({
+        preset: 'ci-first',
+        source: 'project',
+        local_gate: 'best-effort',
+        local_budget_minutes: 10,
+      });
     },
     [newer, older],
   );
