@@ -269,7 +269,7 @@ pub fn planner_prompt_text(
         |goal| format!("the goal ticket `{goal}`"),
     );
     let mut text = format!(
-        "Hot Sheet orchestration started this session as the planner of this orchestration project (`{owner_checkout_id}`). Run the `{}` skill and follow its workflow to propose the dry-run plan for {goals}, as the worker `{worker_id}`, for the proposal `{proposal_id}`. Do not dispatch runs, start sessions or change the policy.",
+        "Hot Sheet orchestration started this session as the planner of this orchestration project (`{owner_checkout_id}`). Run the `{}` skill and follow its workflow to propose the dry-run plan for {goals}, as the worker `{worker_id}`, for the proposal `{proposal_id}`. Do not dispatch runs, start sessions or change the policy. Choose for any setting left unset; when a choice is truly ambiguous or something you need is missing, ask the person with a FEEDBACK NEEDED note on the goal ticket instead of stopping, and continue when the answer is pushed to you.",
         SessionRole::Planner.skill()
     );
     // HS2-190RDX: an Update Plan drafts beside the live plan, which keeps running.

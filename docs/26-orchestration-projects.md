@@ -5268,6 +5268,29 @@ hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestra
 view's header reads `Planner waiting in its terminal`, and Propose Plan
 says the planning session waits for an answer in its terminal tab (HS2-5RYXNN).
 
+### A planner asks instead of stalling (HS2-N5BDE4)
+
+The maintainer's words: "the ai can also explicitly ask me, during planning, instead of
+just not working". A planner never ends a proposal having silently planned nothing.
+Settings left unset mean Auto, and it chooses. When a choice is truly ambiguous or
+something it needs is missing, it asks on the goal ticket through the ordinary feedback
+path, and the question is visible until the person answers:
+
+- **Asking.** The planner claims the goal ticket (so it is Started), adds a
+  `FEEDBACK NEEDED` note with `CHOICE` options as the AI actor under its worker id,
+  releases the claim and ends its turn. Its launch prompt and the `hotsheet-planner`
+  skill (version 5) say so.
+- **Visible.** `plan show` lists each open goal whose `FEEDBACK NEEDED` request is
+  unanswered under `questions` (its connection, canonical id, slug and the note id as
+  `question`); every goal in `goals` carries `question` too. The Orchestration view's
+  header then reads `· Planner asked a question` (while a planner runs or after it
+  ended) and offers **Answer Question**, which opens that goal ticket.
+- **Resuming.** A person's note on a Started ticket is pushed into a live AI session
+  (HS2-25TP3N). With no live claim on the ticket, it now goes to the AI that asked:
+  the author of the feedback request the note answers, or of the newest unanswered one
+  (`asker` in `crates/hotsheet-server/src/routes/feedback_session.rs`). The planner
+  reads the answer, plans by it and finishes as usual. Nothing polls.
+
 ### What the planner does
 
 The `hotsheet-planner` role skill (`plugins/shared/role-skills/hotsheet-planner.md`,

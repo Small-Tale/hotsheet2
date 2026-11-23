@@ -10,6 +10,7 @@ import {
   orchestrationPersonId,
   parseOrchestrationDetails,
   planningPhase,
+  planningQuestion,
   startOrchestrationTimelineStream,
 } from './orchestration-view';
 
@@ -185,6 +186,28 @@ describe('where planning stands (HS2-5RYXNN)', () => {
     );
     expect(planningPhase({ state: 'planning', update: { state: 'applied' } })).toBe('planning');
     expect(planningPhase({ state: 'ended', update: { state: 'drafting' } })).toBe('ended');
+    // HS2-N5BDE4: a planner that asked the person shows it, live or ended; a waiting tool comes first.
+    const questions = [{ connection_id: 'tickets', native_id: 'G1', slug: 'LCH-1', question: 'N1' }];
+    expect(planningPhase({ state: 'planning', questions })).toBe('asked');
+    expect(planningPhase({ state: 'ended', questions })).toBe('asked');
+    expect(planningPhase({ state: 'planning', questions, update: { state: 'drafting' } })).toBe('asked');
+    expect(planningPhase({ state: 'planning', questions, session: { tool_ready: false } })).toBe('waiting');
+    expect(planningPhase({ state: 'idle', questions })).toBe('idle');
+    expect(planningPhase({ state: 'planning', questions: [] })).toBe('planning');
+    expect(planningQuestion({ questions })).toEqual({
+      connection_id: 'tickets',
+      native_id: 'G1',
+      slug: 'LCH-1',
+      note_id: 'N1',
+    });
+    expect(planningQuestion({ questions: [{ native_id: 7 }] })).toBeUndefined();
+    expect(planningQuestion({ questions: [{ connection_id: 'c', native_id: 'G2' }] })).toEqual({
+      connection_id: 'c',
+      native_id: 'G2',
+      slug: 'G2',
+      note_id: undefined,
+    });
+    expect(planningQuestion(undefined)).toBeUndefined();
     expect(planningPhase({ state: 'ended', replannable: true })).toBe('ended');
   });
 });

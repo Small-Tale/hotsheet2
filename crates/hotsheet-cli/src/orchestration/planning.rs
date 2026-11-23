@@ -59,6 +59,10 @@ pub struct GoalTicket {
     pub slug: String,
     /// Plan steps this machine holds for the goal.
     pub steps: u32,
+    /// HS2-N5BDE4: the unanswered `FEEDBACK NEEDED` note on the goal, by note id: the
+    /// planner (or anyone) asked the person a question there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -113,6 +117,11 @@ pub struct PlanningView {
     /// last one ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update: Option<super::PlanUpdateView>,
+    /// HS2-N5BDE4: the open goal tickets whose question waits for the person, so a
+    /// planner that asked is visible instead of silently idle. Each names the goal and
+    /// the note to answer; an answer is pushed into the session that asked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub questions: Vec<GoalTicket>,
 }
 
 fn count(value: usize) -> u32 {
@@ -152,7 +161,10 @@ impl OrchestrationRuntime {
                 .into_iter()
                 .map(|ticket| {
                     let native_id = ticket.id.to_string();
+                    let question = super::timeline::pending_decision(&ticket)
+                        .map(|wait| wait.note_id.unwrap_or_default());
                     GoalTicket {
+                        question,
                         steps: steps
                             .get(&(connection_id.to_owned(), native_id.clone()))
                             .copied()
@@ -467,6 +479,11 @@ impl OrchestrationRuntime {
         let replannable = current.is_some_and(PlannerFacts::replannable);
         let current = current.map(|current| current.latest_proposal().to_owned());
         let (goals, goal_count) = self.plan_goals(&owner, None)?;
+        let questions = goals
+            .iter()
+            .filter(|goal| goal.question.is_some())
+            .cloned()
+            .collect();
         let placement_automatic = self
             .policy(owner_id)?
             .policy
@@ -481,6 +498,7 @@ impl OrchestrationRuntime {
             placement_automatic,
             replannable,
             update: self.plan_update_status(&owner, tx)?,
+            questions,
         })
     }
 

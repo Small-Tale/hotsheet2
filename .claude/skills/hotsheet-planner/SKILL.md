@@ -4,7 +4,7 @@ description: Propose a Hot Sheet orchestration project's dry-run plan from its o
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 4 -->
+<!-- hotsheet-skill-version: 5 -->
 
 You are the planner of a Hot Sheet orchestration project (HS2-HCW7MD). The project's own
 tickets are its **goal tickets**. The projects it orchestrates are its declared
@@ -138,6 +138,21 @@ CHOICE: <the question>
 
 Plan everything that does not depend on the answer. Never add the same question twice:
 read the goal's notes first, and if a person already answered, plan by their answer.
+
+**Ask instead of stalling (HS2-N5BDE4).** Never end a proposal having silently planned
+nothing. Settings the person left unset mean Auto: choose for them (a tool, a model, a
+target), and say what you chose in your note. Ask only when a choice is truly
+ambiguous or something you need is missing (no target fits the goal, a target cannot
+be read, the goal does not say what done means). Then:
+
+1. Claim that goal ticket with your worker id (`hotsheet_claim`, `hotsheet-cli claim
+   <goal> --worker <worker id>`), which moves it to Started.
+2. Add the `FEEDBACK NEEDED` note above as the AI actor with your worker id, then
+   release the claim and end your turn. The Orchestration view and `plan show` list it
+   as the planner's question (`questions`), linked to that goal ticket.
+3. Hot Sheet pushes the person's answer into this session. Read the goal again, plan
+   by the answer, and finish as below (and finish the plan update, when the proposal
+   is one). Never poll for the answer.
 
 ## Finish
 

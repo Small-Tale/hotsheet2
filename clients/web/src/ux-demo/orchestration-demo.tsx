@@ -44,6 +44,8 @@ const PLANNING = [
   { value: 'waiting', label: 'Waiting in Its Terminal' },
   // HS2-190RDX: a plan update drafts while the current plan runs.
   { value: 'updating', label: 'Updating the Plan' },
+  // HS2-N5BDE4: the planner asked the person a question on a goal ticket.
+  { value: 'asked', label: 'Asked a Question' },
 ];
 
 const SELECTIONS = [
@@ -156,6 +158,7 @@ export function OrchestrationToolbarDemo() {
             timeline={demoTimeline(value)}
             propose={propose()}
             update={propose()}
+            question={orchestrationDemoSettings.planning.value === 'asked' ? 'LCH-1' : undefined}
             busy={orchestrationDemoSettings.busy.value}
             planning={orchestrationDemoSettings.planning.value || undefined}
             clock={demoClock}
@@ -338,6 +341,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       cancelPlanUpdate: () => {
         settings.planning.value = '';
       },
+      answerQuestion: () => undefined,
       chooseProjects: () => undefined,
       runControl: () => undefined,
       showRequest: () => undefined,

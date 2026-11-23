@@ -137,6 +137,8 @@ fn hs2_hcw7md_a_press_starts_one_planner_in_the_orchestration_project() {
         first.proposal_id.as_str(),
         "every open goal ticket",
         "Do not dispatch runs, start sessions or change the policy.",
+        // HS2-N5BDE4: it asks instead of stopping.
+        "ask the person with a FEEDBACK NEEDED note on the goal ticket instead of stopping",
     ] {
         assert!(launch.role_prompt.contains(part), "prompt lacks {part}");
     }
@@ -842,4 +844,76 @@ fn hs2_190rdx_one_update_at_a_time_cancel_and_a_planner_that_ends_first() {
         ),
         Err(OrchestrationError::Invalid(_))
     ));
+}
+
+/// HS2-N5BDE4: a planner that cannot settle a choice asks the person instead of doing
+/// nothing. Its `FEEDBACK NEEDED` note on a goal ticket shows in `plan show` as a
+/// question naming the goal and the note, while the planner is still listed; the
+/// person's answer settles it, and the planner's turn can continue.
+#[test]
+fn hs2_n5bde4_a_planner_question_is_visible_until_it_is_answered() {
+    use hotsheet_model::{AttachmentActorRole, NoteActor, NoteKind};
+    let mut rng = Rng(800);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    let goal = f.goal("Ship the release");
+    let other = f.goal("Write the notes");
+    let proposal = f.propose(json!({}), &mut tx).unwrap();
+    let planner = proposal.session.worker_id.clone();
+    assert!(f.status(&mut tx).questions.is_empty(), "nothing asked yet");
+
+    // The planner asks on one goal, as its skill says, under its own worker id.
+    let question = ulid::Ulid::new();
+    ops::add_note_with_metadata(
+        &f.m.owner_store,
+        &goal.id,
+        question,
+        NOW.into(),
+        NoteKind::FeedbackNeeded,
+        ops::NoteMetadataInput {
+            kind_explicit: true,
+            actor: Some(NoteActor {
+                role: AttachmentActorRole::Ai,
+                id: Some(planner.clone()),
+            }),
+            ..Default::default()
+        },
+        "FEEDBACK NEEDED: Which project owns the sign-on change?\n\nCHOICE: Owner\n- **API.** It plans the endpoint first.\n- **Web.** It plans the page first.".into(),
+    )
+    .unwrap();
+    let asked = f.status(&mut tx);
+    assert_eq!(asked.state, PlanningState::Planning);
+    assert_eq!(asked.questions.len(), 1, "{:?}", asked.questions);
+    assert_eq!(asked.questions[0].slug, goal.slug);
+    assert_eq!(asked.questions[0].native_id, goal.id.to_string());
+    assert_eq!(asked.questions[0].question, Some(question.to_string()));
+    let listed = asked
+        .goals
+        .iter()
+        .find(|listed| listed.native_id == other.id.to_string())
+        .unwrap();
+    assert_eq!(listed.question, None, "the other goal asked nothing");
+
+    // The person answers it: the question is settled.
+    ops::add_note_with_metadata(
+        &f.m.owner_store,
+        &goal.id,
+        ulid::Ulid::new(),
+        NOW.into(),
+        NoteKind::Regular,
+        ops::NoteMetadataInput {
+            actor: Some(NoteActor {
+                role: AttachmentActorRole::Human,
+                id: Some("maintainer".into()),
+            }),
+            response_to: Some(question.to_string()),
+            ..Default::default()
+        },
+        "API.".into(),
+    )
+    .unwrap();
+    assert!(f.status(&mut tx).questions.is_empty());
 }

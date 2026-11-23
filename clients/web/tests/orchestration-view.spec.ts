@@ -971,3 +971,66 @@ test('HS2-190RDX Update Plan re-plans while the plan runs, shows the update and 
     await server.stop(page);
   }
 });
+
+test('HS2-N5BDE4 a planner that asked a question says so and opens the goal ticket to answer it', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await declareSelf(server);
+    await asOrchestrationProject(server);
+    const plan = await planAndDispatch(server);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, 'Launch');
+    // `plan show` as the server answers it while the goal holds the planner's unanswered question.
+    let asked = true;
+    await page.route(/\/orchestration\/planning\/show$/, (route) =>
+      route.fulfill({
+        json: {
+          state: 'planning',
+          goals: [],
+          goal_count: 1,
+          steps: 2,
+          placement_automatic: false,
+          ...(asked
+            ? {
+                questions: [
+                  {
+                    connection_id: plan.first.connection_id,
+                    native_id: plan.goal.id,
+                    slug: plan.goal.slug,
+                    steps: 2,
+                    question: '01M83N3G2NMF22HWJS0R203RH9',
+                  },
+                ],
+              }
+            : {}),
+        },
+      }),
+    );
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const toolbar = page.locator('[data-orchestration-toolbar="proposed"]');
+    await expect(toolbar).toContainText('· Planner asked a question');
+    const answer = toolbar.getByRole('button', { name: 'Answer Question' });
+    await expect(answer).toHaveAttribute(
+      'title',
+      `Open ${plan.goal.slug}, where the planning session asked you a question`,
+    );
+    await capture(page, 'asked-1440', 'hs2-n5bde4');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(answer).toBeVisible();
+    await capture(page, 'asked-390', 'hs2-n5bde4');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await answer.click();
+    await expect(page.getByText('Ship the synthetic sign-on').first()).toBeVisible();
+    await capture(page, 'asked-opened-1440', 'hs2-n5bde4');
+    // Answered: the header no longer says so once planning is read again.
+    asked = false;
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.locator('[data-segment-value="list"]').first().click();
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    await expect(toolbar).not.toContainText('asked a question');
+  } finally {
+    await server.stop(page);
+  }
+});

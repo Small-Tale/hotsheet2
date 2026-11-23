@@ -3907,6 +3907,21 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   `updating`, the planner adapter's update, cancel and refusals) and
   `tests/orchestration-view.spec.ts # HS2-190RDX` in the real shell.
 
+### A planner asks instead of stalling (HS2-N5BDE4)
+
+- `tests/planning.rs # hs2_n5bde4` shows a planner's `FEEDBACK NEEDED` note on a goal
+  listed under `plan show` `questions` (goal and note), only on that goal, and gone
+  once the person answers; `hs2_hcw7md` pins the prompt's ask-instead-of-stopping line.
+- `feedback_session.rs # hs2_n5bde4` routes the person's answer to the AI that asked
+  (the replied-to request, else the newest unanswered one), never for a person's own
+  question or an answered one, and over the project's primary terminal.
+- Web: the toolbar's `Planner asked a question` and Answer Question
+  (`orchestration-components.test.ts`), `planningPhase` `asked` and `planningQuestion`
+  (`orchestration-view.test.ts`), and `tests/orchestration-view.spec.ts # HS2-N5BDE4`
+  opening the goal ticket in the real shell.
+- Not automated: a real AI tool asking and resuming end to end; the routed answer is
+  covered at the routing layer and the prompt and skill text.
+
 ### Dispatching the steps the scheduler places (HS2-YC2P7K)
 
 - `session_tests.rs # hs2_yc2p7k` links a session to a run without a state change,

@@ -13,6 +13,8 @@ export const ORCHESTRATION_ACTIONS = {
   /** HS2-190RDX: re-plan while the current plan keeps running, and cancel that update. */
   updateOrchestrationPlan: action('update-orchestration-plan'),
   cancelOrchestrationPlanUpdate: action('cancel-orchestration-plan-update'),
+  /** HS2-N5BDE4: open the goal ticket where the planner asked the person a question. */
+  answerOrchestrationQuestion: action('answer-orchestration-question'),
   chooseOrchestrationProjects: action('choose-orchestration-projects'),
   orchestrationRunControl: action('orchestration-run-control'),
   showOrchestrationRequest: action('show-orchestration-request'),

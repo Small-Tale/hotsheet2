@@ -80,15 +80,41 @@ export function orchestrationPersonId(storage: Pick<Storage, 'getItem' | 'setIte
  * an MCP or hook approval, an update notice) that only a person answers in its terminal tab.
  * HS2-FDS95D: `replannable` is a planner that finished its turn, so Propose Plan gives it a new proposal.
  * HS2-190RDX: `updating` while a plan update drafts beside the running plan.
+ * HS2-N5BDE4: `asked` while a goal ticket holds the planner's unanswered question.
  */
 export function planningPhase(view: Record<string, unknown> | undefined): string | undefined {
   const state = typeof view?.state === 'string' ? view.state : undefined;
-  if (state !== 'planning') return state;
   const session = view?.session as Record<string, unknown> | undefined;
+  const asked = planningQuestion(view) !== undefined;
+  if (state === 'ended' && asked) return 'asked';
+  if (state !== 'planning') return state;
   if (session?.tool_ready === false) return 'waiting';
+  if (asked) return 'asked';
   const update = view?.update as Record<string, unknown> | undefined;
   if (update?.state === 'drafting') return 'updating';
   return view?.replannable === true ? 'replannable' : state;
+}
+
+/** HS2-N5BDE4: the goal ticket whose question the planner asked the person, from `plan show`. */
+export interface PlanningQuestion {
+  connection_id: string;
+  native_id: string;
+  slug: string;
+  note_id?: string;
+}
+
+export function planningQuestion(view: Record<string, unknown> | undefined): PlanningQuestion | undefined {
+  const questions = Array.isArray(view?.questions) ? (view.questions as Record<string, unknown>[]) : [];
+  const first = questions.find(
+    (question) => typeof question.native_id === 'string' && typeof question.connection_id === 'string',
+  );
+  if (!first) return undefined;
+  return {
+    connection_id: first.connection_id as string,
+    native_id: first.native_id as string,
+    slug: typeof first.slug === 'string' ? first.slug : (first.native_id as string),
+    note_id: typeof first.question === 'string' ? first.question : undefined,
+  };
 }
 
 const PLANNING_REFUSALS: Record<string, string> = {
@@ -342,6 +368,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
    * HS2-HCW7MD: where planning stands (`idle`, `planning`, `ended`, or HS2-5RYXNN `waiting`), read when the
    * timeline changes or a session an orchestrator started here changes.
    */
+  /** HS2-N5BDE4: the goal ticket holding the planner's unanswered question. */
+  const question = signal<PlanningQuestion | undefined>(undefined);
   const planning = signal<string | undefined>(undefined);
   const disposers: Array<() => void> = [];
   let streamKey = '',
@@ -548,7 +576,11 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   async function refreshPlanning(current: Project, run: number) {
     try {
       const view = await clientFor(current).orchestrationPlanning(current.id);
-      if (run === generation) planning.value = planningPhase(view);
+      if (run === generation)
+        batch(() => {
+          planning.value = planningPhase(view);
+          question.value = planningQuestion(view);
+        });
     } catch {
       if (run === generation) planning.value = undefined;
     }
@@ -1050,6 +1082,23 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     if (id) await dependencies.showPermissionRequest(id);
   }
 
+  /** HS2-N5BDE4: open the goal ticket where the planner asked its question, to answer it there. */
+  async function answerQuestion() {
+    const current = dependencies.project(),
+      asked = question.value;
+    if (!current || !asked) return;
+    const qualified = `${asked.connection_id}:${asked.native_id}`;
+    await dependencies.openTicket({
+      projectId: current.id,
+      projectName: current.name,
+      ticketId: qualified,
+      qualifiedId: qualified,
+      connectionId: asked.connection_id,
+      slug: asked.slug,
+      title: '',
+    });
+  }
+
   async function openGoal() {
     const current = dependencies.project(),
       item = selected();
@@ -1081,6 +1130,9 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     toggleGroup,
     collapsedGroups,
     planning,
+    /** HS2-N5BDE4: the planner's open question, when it asked one. */
+    question,
+    answerQuestion,
     /** HS2-5RYXNN: a session an orchestrator started changed; the open project's planner is read again. */
     sessionsChanged: (projectId: string) => {
       const current = dependencies.project();

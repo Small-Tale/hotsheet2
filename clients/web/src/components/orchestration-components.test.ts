@@ -173,6 +173,25 @@ describe('Update Plan in the Orchestration toolbar (HS2-190RDX)', () => {
   });
 });
 
+describe('A planner question in the Orchestration toolbar (HS2-N5BDE4)', () => {
+  const toolbar = (phase: Parameters<typeof demoTimeline>[0], extra = {}) =>
+    String(OrchestrationToolbar({ timeline: demoTimeline(phase), clock: demoClock, ...extra }));
+
+  it('says the planner asked and links to the goal ticket that holds the question', () => {
+    for (const phase of ['no_plan', 'proposed', 'running'] as const) {
+      const markup = toolbar(phase, { planning: 'asked', question: 'LCH-1', update: { available: true } });
+      expect(markup).toContain('· Planner asked a question');
+      expect(markup).toContain('data-action="answer-orchestration-question"');
+      expect(markup).toContain('Open LCH-1, where the planning session asked you a question');
+    }
+    // Without a question, or once answered, there is nothing to open.
+    expect(toolbar('running', { planning: 'asked' })).not.toContain('answer-orchestration-question');
+    expect(toolbar('running', { planning: 'planning', question: 'LCH-1' })).not.toContain(
+      'answer-orchestration-question',
+    );
+  });
+});
+
 describe('OrchestrationInspector (HS2-J89JC7)', () => {
   const inspector = (step: string, extra = {}) =>
     String(OrchestrationInspector({ item: item(step), timeline: demoTimeline('running'), clock: demoClock, ...extra }));
@@ -492,6 +511,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       propose: () => calls.push('propose'),
       updatePlan: () => calls.push('update plan'),
       cancelPlanUpdate: () => calls.push('cancel update'),
+      answerQuestion: () => calls.push('answer'),
       chooseProjects: () => calls.push('choose'),
       runControl: (control: string, state?: string) => calls.push(`run ${control} ${state ?? ''}`),
       showRequest: (id: string) => calls.push(`request ${id}`),
@@ -525,6 +545,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'propose-orchestration-plan', target({}));
     run('click', 'update-orchestration-plan', target({}));
     run('click', 'cancel-orchestration-plan-update', target({}));
+    run('click', 'answer-orchestration-question', target({}));
     run('click', 'choose-orchestration-projects', target({}));
     run('click', 'orchestration-run-control', target({ control: 'correct', runState: 'failed' }));
     run('click', 'show-orchestration-request', target({ requestId: 'request-6' }));
@@ -551,6 +572,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'propose',
       'update plan',
       'cancel update',
+      'answer',
       'choose',
       'run correct failed',
       'request request-6',
@@ -619,6 +641,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       propose: noop,
       updatePlan: noop,
       cancelPlanUpdate: noop,
+      answerQuestion: noop,
       chooseProjects: noop,
       runControl: noop,
       showRequest: noop,

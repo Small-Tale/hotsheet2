@@ -4,7 +4,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { Pause, Play, RefreshCw, Sparkles, X } from 'lucide';
+import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Sparkles, X } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
@@ -14,6 +14,8 @@ import type { OrchestrationProposeAvailability } from './orchestration-timeline-
 export interface OrchestrationToolbarProps {
   timeline: OrchestrationTimeline;
   propose?: OrchestrationProposeAvailability;
+  /** HS2-N5BDE4: the slug of the goal ticket holding the planner's question, while it waits. */
+  question?: string;
   /** HS2-190RDX: whether Update Plan can be pressed, and why not. */
   update?: OrchestrationProposeAvailability;
   /** A kick-off change is on its way to the server. */
@@ -35,6 +37,8 @@ const PLANNING_STATUS: Record<string, string> = {
   waiting: ' · Planner waiting in its terminal',
   // HS2-190RDX: the current plan keeps running while the new one is drafted.
   updating: ' · Updating Plan',
+  // HS2-N5BDE4: the planner asked instead of stalling; the person answers on the goal ticket.
+  asked: ' · Planner asked a question',
 };
 
 /**
@@ -48,6 +52,7 @@ export function OrchestrationToolbar({
   timeline,
   propose = { available: false },
   update = { available: false },
+  question,
   busy = false,
   planning,
   clock = clockTime,
@@ -55,6 +60,18 @@ export function OrchestrationToolbar({
   const status = `${timelineStatus(timeline, clock)}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
   const blocked = startBlockedReason(timeline);
   const updating = planning === 'updating';
+  const answer =
+    planning === 'asked' && question ? (
+      <Button
+        emphasis="secondary"
+        shape="pill"
+        action={ORCHESTRATION_ACTIONS.answerOrchestrationQuestion.value}
+        title={`Open ${question}, where the planning session asked you a question`}
+        icon={<LucideIcon size="s" icon={MessageCircleQuestionMark} name="message-circle-question-mark" />}
+      >
+        Answer Question
+      </Button>
+    ) : undefined;
   const replan =
     timeline.phase === 'proposed' || timeline.phase === 'running' || timeline.phase === 'paused' ? (
       updating ? (
@@ -152,6 +169,7 @@ export function OrchestrationToolbar({
         leading={<ToolbarText text={status} size="default" headingLevel={2} />}
         trailing={
           <>
+            {answer}
             {replan}
             {action}
           </>

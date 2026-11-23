@@ -48,7 +48,7 @@ fn label(ticket: &Ticket) -> TicketLabel {
 }
 
 /// The goal ticket's unanswered feedback request, when it has one.
-fn pending_decision(ticket: &Ticket) -> Option<DecisionWait> {
+pub(super) fn pending_decision(ticket: &Ticket) -> Option<DecisionWait> {
     if !ticket.feedback_needed() {
         return None;
     }

@@ -846,6 +846,10 @@ fn hs2_hcw7md_planner_skill_proposes_a_dry_run_plan_only() {
         "Pass the update id as `plan_update` to every",
         "`plan_update_finish`",
         "Never finish an update you did not draft.",
+        // HS2-N5BDE4: ask instead of stalling, and resume on the pushed answer.
+        "Never end a proposal having silently planned nothing.",
+        "Settings the person left unset mean Auto",
+        "Hot Sheet pushes the person's answer into this session.",
     ] {
         assert!(planner.contains(phrase), "planner missing {phrase}");
     }

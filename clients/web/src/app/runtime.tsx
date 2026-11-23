@@ -6499,6 +6499,7 @@ export async function startHotSheetWebClient() {
             timeline={timeline}
             propose={orchestrationView.proposeAvailability()}
             update={orchestrationView.updateAvailability()}
+            question={orchestrationView.question.value?.slug}
             busy={orchestrationView.busy.value}
             planning={orchestrationView.planning.value}
           />
@@ -6986,6 +6987,7 @@ export async function startHotSheetWebClient() {
       propose: () => void orchestrationView.propose(),
       updatePlan: () => void orchestrationView.updatePlan(),
       cancelPlanUpdate: () => void orchestrationView.cancelPlanUpdate(),
+      answerQuestion: () => void orchestrationView.answerQuestion(),
       chooseProjects: () => {
         orchestrationView.chooseProjects();
       },

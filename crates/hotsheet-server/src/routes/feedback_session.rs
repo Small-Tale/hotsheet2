@@ -537,7 +537,10 @@ pub(crate) async fn after_human_note(
     let all = candidates(state, checkout, source).await;
     let claim = (!ops::claim_available(ticket, &now()))
         .then_some(ticket.claimed_by.as_deref())
-        .flatten();
+        .flatten()
+        // HS2-N5BDE4: without a live claim, the answer goes back to the AI that asked,
+        // such as an orchestration planner waiting on a goal ticket's question.
+        .or_else(|| asker(ticket, note));
     match route(&checkout.root, source, claim, all.clone()) {
         Route::Direct(candidate) => {
             let text = message(&ticket.slug, response);
@@ -742,6 +745,35 @@ pub(crate) async fn choose_feedback_session(
     ))
 }
 
+/// HS2-N5BDE4: the worker id of the AI that asked the question a human note answers:
+/// the feedback request the note replies to, else the newest unanswered one. Only an AI
+/// author with an id counts; a person's own request names nobody.
+pub(crate) fn asker<'a>(ticket: &'a Ticket, note: &hotsheet_model::Note) -> Option<&'a str> {
+    let answered = |request: &hotsheet_model::Note| {
+        ticket
+            .notes
+            .iter()
+            .any(|reply| reply.id != note.id && reply.response_to == Some(request.id))
+    };
+    let request = match note.response_to {
+        Some(id) => ticket.notes.iter().find(|request| request.id == id),
+        None => ticket
+            .notes
+            .iter()
+            .filter(|request| {
+                request.id != note.id
+                    && request.kind == NoteKind::FeedbackNeeded
+                    && !answered(request)
+            })
+            .max_by_key(|request| request.id),
+    }?;
+    request
+        .actor
+        .as_ref()
+        .filter(|actor| actor.role == AttachmentActorRole::Ai)
+        .and_then(|actor| actor.id.as_deref())
+}
+
 /// Select only connections that can see this exact checkout and source. A live claim wins;
 /// without it, one reachable session is safe to use and ambiguity stays with the human.
 pub(crate) fn route(
@@ -787,6 +819,91 @@ pub(crate) fn route(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// HS2-N5BDE4: an answer names the AI that asked: the request it replies to, else
+    /// the newest unanswered one; a person's request or an answered one names nobody.
+    #[test]
+    fn hs2_n5bde4_an_answer_goes_back_to_the_ai_that_asked() {
+        use hotsheet_model::{Note, NoteActor};
+        let note = |id: u128, kind: NoteKind, actor: Option<(AttachmentActorRole, &str)>| Note {
+            id: Ulid::from(id),
+            kind,
+            actor: actor.map(|(role, id)| NoteActor {
+                role,
+                id: Some(id.into()),
+            }),
+            kind_explicit: true,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            edited_at: "2026-01-01T00:00:00Z".into(),
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            feedback_request: false,
+            response_to: None,
+            ai_feedback: None,
+            human_edited: false,
+            text: String::new(),
+        };
+        let asked = note(
+            1,
+            NoteKind::FeedbackNeeded,
+            Some((AttachmentActorRole::Ai, "claude-planner")),
+        );
+        let mut ticket = Ticket {
+            notes: vec![asked.clone()],
+            ..Ticket::default()
+        };
+        let mut answer = note(
+            2,
+            NoteKind::Regular,
+            Some((AttachmentActorRole::Human, "maintainer")),
+        );
+        ticket.notes.push(answer.clone());
+        assert_eq!(asker(&ticket, &answer), Some("claude-planner"));
+        answer.response_to = Some(asked.id);
+        ticket.notes[1] = answer.clone();
+        assert_eq!(asker(&ticket, &answer), Some("claude-planner"));
+        // Already answered by an earlier reply: a later plain note names nobody.
+        let later = note(
+            3,
+            NoteKind::Regular,
+            Some((AttachmentActorRole::Human, "maintainer")),
+        );
+        ticket.notes.push(later.clone());
+        assert_eq!(asker(&ticket, &later), None);
+        // A person's own question names nobody.
+        let own = Ticket {
+            notes: vec![
+                note(
+                    1,
+                    NoteKind::FeedbackNeeded,
+                    Some((AttachmentActorRole::Human, "maintainer")),
+                ),
+                note(2, NoteKind::Regular, None),
+            ],
+            ..Ticket::default()
+        };
+        assert_eq!(asker(&own, &own.notes[1]), None);
+        // With no live claim, the asker's terminal is chosen over the primary.
+        let planner = Candidate {
+            worker: "claude-planner".into(),
+            started_at_ms: 20,
+            ..candidate("planner", "/project", None)
+        };
+        let primary = Candidate {
+            started_at_ms: 10,
+            ..candidate("primary", "/project", None)
+        };
+        assert_eq!(
+            route(
+                "/project",
+                "source",
+                asker(&ticket, &answer),
+                [primary, planner.clone()]
+            ),
+            Route::Direct(planner)
+        );
+    }
 
     fn candidate(id: &str, project: &str, source: Option<&str>) -> Candidate {
         Candidate {
