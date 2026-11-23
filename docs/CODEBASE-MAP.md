@@ -1261,7 +1261,7 @@ its application wiring `features/orchestration-settings-surface.tsx`, the pure h
 `ux-demo/orchestration-settings-fixtures.ts`. HS2-7WF6JD added the project detail's Limits
 section (`targetLimitsDraftFrom`, `changeTargetLimits`, `policyWithTargetLimits`) and tool
 accounts with daily budgets in the policy form (`addPolicyAccount`, `removePolicyAccount`,
-`parseDollars`, `formatCents`). HS2-YSY7AR added a project's models and required resources to Limits (`parseModels`, `parseResources`).
+`parseDollars`, `formatCents`). HS2-YSY7AR added a project's models and required resources to Limits (`parseModels`, `parseResources`). HS2-Y737GM added the Limits help (`components/orchestration-limits-help.tsx`, opened from the Limits header); HS2-25KT42 moved the Auto limits under an Advanced disclosure (`advancedLimitsChanged`); HS2-1X1TXC and HS2-NPAZQW made Models and Required Resources chosen-value fields (`components/orchestration-pattern-field.tsx`, routed by `components/app-combobox-wiring.ts`; `addTargetLimitsValue`, `removeTargetLimitsValue`, `modelSuggestions`, `resourceSuggestions`), with server pattern matching in `hotsheet-ticketing` (`wildcard_match`, `ToolScope::allows`, `ResourceNeed::satisfied_by`, the scheduler's `declared_matches`).
 
 ## Where do I look for X?
 

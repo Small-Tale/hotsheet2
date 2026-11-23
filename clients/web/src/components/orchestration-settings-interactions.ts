@@ -1,3 +1,4 @@
+import { openAnchoredSurface } from '@kerfjs/ui/anchored-surface';
 import { openPopupMenu } from '@kerfjs/ui/popup-menu';
 import { delegate } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -5,6 +6,8 @@ import { createScope } from 'kerfjs/scope';
 import type { ProjectType } from '../api';
 import type { OrchestrationSettings } from '../features/orchestration-settings';
 import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
+import { ORCHESTRATION_PATTERN_COMMIT } from './app-combobox-wiring';
+import { OrchestrationLimitsHelp } from './orchestration-limits-help';
 
 const PROJECT_ROW = '[data-orchestration-project]';
 const SESSION_ROW = '[data-orchestration-session]';
@@ -14,6 +17,9 @@ const POPUP_MENU_SELECT = 'kui-menu-select';
 const PROJECT_TYPE = '[data-component="project-general-settings"] [name="project-type"]';
 const POLICY_FIELD = '[data-component="orchestration-policy-settings"] [name]';
 const LIMITS_FIELD = '[data-component="orchestration-project-limits"] [name]';
+/** HS2-1X1TXC, HS2-NPAZQW: a Limits field of chosen models or resources. */
+const PATTERN_FIELD = '[data-component="orchestration-pattern-field"]';
+const PATTERN_INPUT = `${PATTERN_FIELD} input`;
 
 export interface OrchestrationSettingsWiring {
   /** The project whose settings show: the orchestration project. */
@@ -191,6 +197,51 @@ export function wireOrchestrationSettings(
           settings.changeLimits(projectId, control.name, control.value, control.checked);
         else
           settings.changeLimits(projectId, control.name, control.type === 'checkbox' ? control.checked : control.value);
+      });
+    }),
+  );
+  // HS2-1X1TXC, HS2-NPAZQW: a model or resource chosen in, typed into, or removed from its field.
+  const fieldOf = (target: Element) => target.closest<HTMLElement>(PATTERN_FIELD)?.dataset.limitsField;
+  lifetime.add(
+    delegate(root, ORCHESTRATION_PATTERN_COMMIT, PATTERN_INPUT, (event, target) => {
+      const field = fieldOf(target);
+      if (field)
+        withProject((projectId) => {
+          settings.editLimitsValue(projectId, field, (event as CustomEvent<string>).detail, true);
+        });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'focusout', PATTERN_INPUT, (_event, target) => {
+      const input = target as HTMLInputElement,
+        field = fieldOf(input),
+        typed = input.value.trim();
+      if (!field || !typed) return;
+      input.value = '';
+      withProject((projectId) => {
+        settings.editLimitsValue(projectId, field, typed, true);
+      });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.removeLimitsValue.selector, (_event, target) => {
+      const field = fieldOf(target),
+        value = target.closest<HTMLElement>('[data-component="chip"]')?.dataset.itemId;
+      if (field && value)
+        withProject((projectId) => {
+          settings.editLimitsValue(projectId, field, value, false);
+        });
+    }),
+  );
+  // HS2-Y737GM: what each limit means, beside the Limits header.
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.showLimitsHelp.selector, (_event, target) => {
+      openAnchoredSurface(target, OrchestrationLimitsHelp(), {
+        label: 'About Limits',
+        placement: 'bottom',
+        align: 'end',
+        dismiss: ['escape', 'outside'],
+        initialFocus: false,
       });
     }),
   );

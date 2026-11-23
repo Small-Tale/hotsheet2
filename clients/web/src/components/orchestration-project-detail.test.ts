@@ -161,3 +161,76 @@ describe('OrchestrationProjectDetail Binding names every site (HS2-NGP2AK)', () 
     expect(binding).not.toContain('sites');
   });
 });
+
+describe('OrchestrationProjectDetail Limits (HS2-Y737GM, HS2-25KT42, HS2-1X1TXC, HS2-NPAZQW)', () => {
+  const limitsDetail = (overrides: Record<string, unknown> = {}) => ({
+    targetId: 'W1',
+    admissions: [],
+    loading: false,
+    limits: {
+      targetId: 'W1',
+      listed: true,
+      enabled: true,
+      tools: ['claude'],
+      max_sessions: '',
+      machineOverride: false,
+      machine: { max_sessions: '2', min_free_ram_mb: '2048', max_cpu_percent: '90', min_free_disk_mb: '5120' },
+      buildAhead: 'default' as const,
+      models: { claude: 'opus-*' },
+      resources: '',
+      roleSessions: [],
+      ...overrides,
+    },
+  });
+  const limits = (props: Partial<Parameters<typeof OrchestrationProjectDetail>[0]> = {}) =>
+    sectionOf(render({ toolLabel, policyTools: ['claude', 'codex'], detail: limitsDetail(), ...props }), 'Limits');
+
+  it('offers the Limits help from its header', () => {
+    const markup = limits();
+    expect(markup).toContain('data-action="show-orchestration-limits-help"');
+    expect(markup).toContain('About Limits');
+    expect(markup).toContain('aria-haspopup="dialog"');
+  });
+
+  it('keeps the Auto limits closed under Advanced, with a summary of what changed', () => {
+    const markup = limits();
+    const advanced = /<details[^>]*data-orchestration-advanced-limits[\s\S]*<\/details>/.exec(markup)?.[0] ?? '';
+    expect(advanced).not.toBe('');
+    expect(advanced).not.toMatch(/<details[^>]*\sopen/u);
+    expect(textOf(advanced)).toContain('All Auto');
+    for (const name of ['limits.role_sessions', 'limits.max_sessions', 'limits.build_ahead', 'limits.machine_override'])
+      expect(advanced).toContain(`name="${name}"`);
+    expect(advanced).toContain('data-limits-field="limits.resources"');
+    // The default view keeps only the switch, the tools and their models outside.
+    const outside = markup.replace(advanced, '');
+    expect(outside).toContain('name="limits.enabled"');
+    expect(outside).toContain('name="limits.tools"');
+    expect(outside).toContain('data-limits-field="limits.models.claude"');
+    for (const name of ['limits.max_sessions', 'limits.build_ahead']) expect(outside).not.toContain(`name="${name}"`);
+    // The hints say what each Auto means.
+    expect(textOf(advanced)).toContain('The most AI sessions the orchestrator runs in this project at once');
+    expect(textOf(advanced)).toContain('before a ticket it depends on has passed CI');
+    const changed = limits({ detail: limitsDetail({ max_sessions: '1', resources: 'vm/*' }) });
+    expect(textOf(changed)).toContain('2 Changed');
+  });
+
+  it('shows chosen models and resources as removable chips with known names and patterns to choose', () => {
+    const markup = limits({
+      toolModels: { claude: ['claude-opus-4-1', 'claude-sonnet-4-5'] },
+      resourceChoices: ['vm/*', 'vm/mac-1'],
+      detail: limitsDetail({ resources: 'vm/mac-1, ports/*' }),
+    });
+    const models =
+      /data-limits-field="limits\.models\.claude"[\s\S]*?(?=data-component="orchestration-pattern-field"|$)/.exec(
+        markup,
+      )?.[0];
+    expect(models).toContain('data-item-id="opus-*"');
+    expect(models).toContain('Remove opus-*');
+    const resources = markup.slice(markup.indexOf('data-limits-field="limits.resources"'));
+    expect(resources).toContain('data-item-id="vm/mac-1"');
+    expect(resources).toContain('data-item-id="ports/*"');
+    expect(resources).toContain('data-action="remove-orchestration-limits-value"');
+    // A chosen value is not offered again.
+    expect(markup).toContain('data-combobox-id="orchestration-limits-limits-resources"');
+  });
+});

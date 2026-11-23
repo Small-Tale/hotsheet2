@@ -4,6 +4,8 @@ import type { OrchestrationBinding, OrchestrationManifest, OrchestrationPolicyVi
 import {
   addChoices,
   addPolicyAccount,
+  addTargetLimitsValue,
+  advancedLimitsChanged,
   changePolicyDraft,
   changeTargetLimits,
   connectionStatus,
@@ -11,6 +13,8 @@ import {
   duplicateProject,
   formatCents,
   formatMegabytes,
+  modelFamily,
+  modelSuggestions,
   newUlid,
   parseDollars,
   parseModels,
@@ -21,6 +25,8 @@ import {
   projectRows,
   projectStores,
   removePolicyAccount,
+  removeTargetLimitsValue,
+  resourceSuggestions,
   roleSessionsHint,
   roleSessionsLocked,
   sessionDescription,
@@ -739,7 +745,8 @@ describe("a project's models and required resources (HS2-YSY7AR)", () => {
     expect(parseResources('vm.mac_os-1/Mac.OS_1-x')).toEqual([{ namespace: 'vm.mac_os-1', resource: 'Mac.OS_1-x' }]);
     const draft = changeTargetLimits(targetLimitsDraftFrom(stored, 'T1'), 'limits.resources', 'vm');
     expect(policyWithTargetLimits(stored, draft)).toEqual({
-      error: '"vm" is not <namespace>/<resource>, such as vm/macos-vm: a lowercase namespace and a resource name.',
+      error:
+        '"vm" is not <namespace>/<resource>, such as vm/macos-vm or vm/*: a lowercase namespace and a resource name or pattern.',
     });
   });
 });
@@ -842,7 +849,7 @@ describe("a project's coordination sessions (HS2-TK9ADC)", () => {
 describe("a site's coordination sessions (HS2-SYZB33)", () => {
   it('point at the home and allow only clearing roles that have no effect', () => {
     // The home, or a one-site project: the ordinary hint, never locked.
-    expect(roleSessionsHint(undefined, [])).toMatch(/^The orchestrator starts these here/u);
+    expect(roleSessionsHint(undefined, [])).toMatch(/^None checked is Auto/u);
     expect(roleSessionsLocked(undefined, [])).toBe(false);
     expect(roleSessionsLocked(undefined, ['dispatcher'])).toBe(false);
     // Another site with nothing checked: locked, pointing at the home.
@@ -956,5 +963,130 @@ describe("a project's Auto limits (HS2-N5BDE4)", () => {
     draft = changeTargetLimits(changeTargetLimits(draft, 'limits.max_sessions', ''), 'limits.tools', 'codex', false);
     const auto = policyWithTargetLimits(stored, draft);
     expect('policy' in auto && auto.policy.targets?.[0]).toEqual({ target_id: 'T1', enabled: true });
+  });
+});
+
+describe('Advanced limits are Auto until changed (HS2-25KT42)', () => {
+  const stored: OrchestrationPolicyView = { enabled: true, revision: 'p1', policy: {} };
+  it('counts each Advanced limit that differs from Auto, and back to none', () => {
+    let draft = targetLimitsDraftFrom(stored, 'T1');
+    expect(advancedLimitsChanged(undefined)).toBe(0);
+    expect(advancedLimitsChanged(draft)).toBe(0);
+    draft = changeTargetLimits(draft, 'limits.max_sessions', '2');
+    draft = changeTargetLimits(draft, 'limits.build_ahead', 'off');
+    draft = changeTargetLimits(draft, 'limits.role_sessions', 'dispatcher', true);
+    draft = addTargetLimitsValue(draft, 'limits.resources', 'vm/*');
+    draft = changeTargetLimits(draft, 'limits.machine_override', true);
+    expect(advancedLimitsChanged(draft)).toBe(5);
+    // Whitespace alone is still Auto; clearing each returns to none.
+    draft = changeTargetLimits(draft, 'limits.max_sessions', '  ');
+    draft = changeTargetLimits(draft, 'limits.build_ahead', 'default');
+    draft = changeTargetLimits(draft, 'limits.role_sessions', 'dispatcher', false);
+    draft = removeTargetLimitsValue(draft, 'limits.resources', 'vm/*');
+    draft = changeTargetLimits(draft, 'limits.machine_override', false);
+    expect(advancedLimitsChanged(draft)).toBe(0);
+    // An all-Auto draft stores no entry members beyond the project and its switch.
+    expect(policyWithTargetLimits(stored, draft)).toEqual({
+      policy: { targets: [{ target_id: 'T1', enabled: true }] },
+    });
+  });
+});
+
+describe('models and resources as chosen values with patterns (HS2-1X1TXC, HS2-NPAZQW)', () => {
+  const stored: OrchestrationPolicyView = {
+    enabled: true,
+    revision: 'p1',
+    policy: {
+      targets: [{ target_id: 'T1', tools: [{ tool: 'claude', models: ['model-a'] }] }],
+      placement: {
+        resources: [
+          { target_id: 'T1', resources: [{ namespace: 'vm', resource: 'mac-1' }] },
+          {
+            target_id: 'T2',
+            resources: [
+              { namespace: 'ports', resource: '8080' },
+              { namespace: 'vm', resource: 'mac-*' },
+            ],
+          },
+        ],
+      },
+    },
+  };
+
+  it('adds, dedupes and removes values, in order, through every transition', () => {
+    let draft = targetLimitsDraftFrom(stored, 'T1');
+    expect(draft.models.claude).toBe('model-a');
+    draft = addTargetLimitsValue(draft, 'limits.models.claude', 'opus-*');
+    expect(draft.models.claude).toBe('model-a, opus-*');
+    // A repeat, a blank, and an unknown field change nothing (the same draft).
+    expect(addTargetLimitsValue(draft, 'limits.models.claude', 'opus-*')).toBe(draft);
+    expect(addTargetLimitsValue(draft, 'limits.models.claude', '  ')).toBe(draft);
+    expect(addTargetLimitsValue(draft, 'limits.models.codex', 'x')).toBe(draft);
+    expect(addTargetLimitsValue(draft, 'limits.other', 'x')).toBe(draft);
+    expect(removeTargetLimitsValue(draft, 'limits.models.claude', 'absent')).toBe(draft);
+    // Typed text with commas adds each once.
+    draft = addTargetLimitsValue(draft, 'limits.models.claude', 'b, c, b');
+    expect(draft.models.claude).toBe('model-a, opus-*, b, c');
+    draft = removeTargetLimitsValue(draft, 'limits.models.claude', 'model-a');
+    draft = removeTargetLimitsValue(draft, 'limits.models.claude', 'b');
+    draft = removeTargetLimitsValue(draft, 'limits.models.claude', 'c');
+    expect(draft.models.claude).toBe('opus-*');
+    // Emptied, then refilled.
+    draft = removeTargetLimitsValue(draft, 'limits.models.claude', 'opus-*');
+    expect(draft.models.claude).toBe('');
+    draft = addTargetLimitsValue(draft, 'limits.models.claude', 'sonnet-*');
+    expect(policyWithTargetLimits(stored, draft)).toMatchObject({
+      policy: { targets: [{ target_id: 'T1', tools: [{ tool: 'claude', models: ['sonnet-*'] }] }] },
+    });
+
+    draft = addTargetLimitsValue(draft, 'limits.resources', 'vm/*');
+    expect(draft.resources).toBe('vm/mac-1, vm/*');
+    draft = removeTargetLimitsValue(draft, 'limits.resources', 'vm/mac-1');
+    const built = policyWithTargetLimits(stored, draft);
+    expect(built).toMatchObject({
+      policy: {
+        placement: {
+          resources: [{ target_id: 'T1', resources: [{ namespace: 'vm', resource: '*' }] }, { target_id: 'T2' }],
+        },
+      },
+    });
+  });
+
+  it('accepts patterns where the server does and refuses a pattern namespace', () => {
+    expect(parseModels('opus-*, *-mini', 'claude models')).toEqual(['opus-*', '*-mini']);
+    expect(parseResources('vm/*, vm/mac-*')).toEqual([
+      { namespace: 'vm', resource: '*' },
+      { namespace: 'vm', resource: 'mac-*' },
+    ]);
+    expect(parseResources('v*/a')).toMatch(/is not <namespace>\/<resource>/u);
+  });
+
+  it('offers model families before the models a tool reports', () => {
+    expect(modelFamily('claude-opus-4-1')).toBe('claude-opus-*');
+    expect(modelFamily('gpt-5.1-codex')).toBe('gpt-*');
+    expect(modelFamily('opus')).toBeUndefined();
+    expect(modelFamily('4o')).toBeUndefined();
+    expect(modelSuggestions(['claude-opus-4-1', 'claude-opus-4-2', 'opus', 'claude-sonnet-4-5'], ['opus'])).toEqual([
+      'claude-opus-*',
+      'claude-sonnet-*',
+      'claude-opus-4-1',
+      'claude-opus-4-2',
+      'claude-sonnet-4-5',
+    ]);
+    expect(modelSuggestions([], [])).toEqual([]);
+  });
+
+  it('offers declared resources and a pattern per namespace, never a pattern as declared', () => {
+    expect(
+      resourceSuggestions(
+        stored.policy,
+        [
+          { namespace: 'vm', resource: 'win-1' },
+          { namespace: 'vm', resource: 'mac-1' },
+        ],
+        ['ports/8080'],
+      ),
+    ).toEqual(['ports/*', 'vm/*', 'vm/mac-1', 'vm/win-1']);
+    expect(resourceSuggestions(undefined, [], [])).toEqual([]);
   });
 });

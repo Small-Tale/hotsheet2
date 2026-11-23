@@ -5814,16 +5814,37 @@ the type changes to Software while it shows.
   the project's own first), and the detail's Binding lists one row per site, the home
   site marked _(Home)_, under _Where: N sites_.
 - **A project's limits (HS2-7WF6JD).** The detail's **Limits** section, between Binding
-  and Capacity and Admission, edits that project's entry in the policy (`targets[]`):
-  Orchestrate in This Project (`enabled`), AI Tools Here (the tools the policy does not
-  turn off; none checked is Auto, HS2-N5BDE4),
-  **<Tool> Models** for each checked tool (HS2-YSY7AR: `tools[].models`, separated by
-  commas, empty for any model; unchecking a tool drops its models), Sessions Here
-  (`max_sessions`, at most the machine's limit; empty shows _Auto_, 0 starts none), Build Ahead (as the policy says, on or
-  never: `speculation`), **Required Resources** (HS2-YSY7AR: this project's
-  `placement.resources` entry of §26.20, `<namespace>/<resource>` names separated by
-  commas, at most four; empty removes the entry) and Use Different Machine Limits
-  (`machine`, the four machine fields). Models and resources are checked as the server
+  and Capacity and Admission, edits that project's entry in the policy (`targets[]`).
+  Its header's **About Limits** help button (HS2-Y737GM, Kerf's ListHeader action and
+  AnchoredSurface) explains every limit and what its Auto value does; each field's hint
+  says the same. The names Sessions Here and Build Ahead are kept: no clearly better
+  name was found, so the help and hints carry the meaning. The default view needs no
+  input (HS2-25KT42): Orchestrate in This Project (`enabled`), AI Tools Here (the tools
+  the policy does not turn off; none checked is Auto, HS2-N5BDE4) and
+  **<Tool> Models** for each checked tool (HS2-YSY7AR: `tools[].models`; unchecking a
+  tool drops its models) show first; everything else is under a closed **Advanced**
+  disclosure whose summary reads _All Auto_ or _N Changed_. Under Advanced, each limit's
+  Auto value is what "fully automatic" means:
+
+  | Limit                        | Auto (fully automatic)                                                          |
+  | ---------------------------- | ------------------------------------------------------------------------------- |
+  | Coordination Sessions        | None checked: no dispatcher or integrator starts here (HS2-TK9ADC stays opt-in) |
+  | Sessions Here                | Empty: up to the machine's Sessions per Machine (`max_sessions` left out)       |
+  | Build Ahead                  | As the Policy Says (`speculation` left out)                                     |
+  | Required Resources           | None (no `placement.resources` entry)                                           |
+  | Use Different Machine Limits | Off: the policy's machine defaults (`machine` left out)                         |
+
+  Models and Required Resources are lists of chosen values (HS2-1X1TXC, HS2-NPAZQW): a
+  Kerf Combobox offers the known names and `*` patterns, and a typed name is used as
+  typed (Enter, a comma, or leaving the field); each chosen value is a removable chip.
+  A tool's Models offers each model the tool reports (`/ai-tools`) and its family
+  pattern (`claude-opus-4-1` → `claude-opus-*`); empty allows any model. Required
+  Resources offers the declared resources (every exact resource the policy requires of
+  any project and every claim held on this project's machine) and a `<namespace>/*`
+  pattern per namespace; at most four, and empty removes the entry. Sessions Here is
+  `max_sessions`, at most the machine's limit, 0 starts none; Build Ahead is
+  `speculation` (as the policy says, on or never) and Use Different Machine Limits is
+  `machine`, the four machine fields. Models and resources are checked as the server
   checks them before anything is sent. A project the policy does not list is Auto in
   everything (HS2-N5BDE4). **Apply Limits** stores the policy at the stored
   revision with only that project's entry and resources entry replaced in place, or

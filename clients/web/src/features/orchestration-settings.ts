@@ -20,6 +20,7 @@ import type { Choose, Confirm } from '../confirmation';
 import {
   type AddDestination,
   addPolicyAccount,
+  addTargetLimitsValue,
   changePolicyDraft,
   changeTargetLimits,
   destinationOf,
@@ -30,6 +31,7 @@ import {
   policyFromDraft,
   policyWithTargetLimits,
   removePolicyAccount,
+  removeTargetLimitsValue,
   tabProjectIdOf,
   type TargetLimitsDraft,
   targetLimitsDraftFrom,
@@ -811,6 +813,16 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     });
   }
 
+  /** HS2-1X1TXC, HS2-NPAZQW: add or remove one chosen model or resource of the Limits form. */
+  function editLimitsValue(projectId: string, field: string, value: string, add: boolean) {
+    const target = selected.value[projectId],
+      limits = target ? details.value[detailKey(projectId, target)]?.limits : undefined;
+    if (!target || !limits) return;
+    const next = add ? addTargetLimitsValue(limits, field, value) : removeTargetLimitsValue(limits, field, value);
+    if (next === limits) return;
+    putDetail(projectId, target, { limits: next, limitsDirty: true, limitsMessage: undefined });
+  }
+
   /** Apply Limits: store the policy with only this project's entry replaced, at the stored revision. */
   async function applyLimits(projectId: string) {
     const api = dependencies.api(projectId),
@@ -917,6 +929,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     addAccount,
     removeAccount,
     changeLimits,
+    editLimitsValue,
     applyLimits,
     changed,
   };

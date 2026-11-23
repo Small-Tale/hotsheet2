@@ -230,6 +230,8 @@ describe('UX demo catalog', () => {
       'orchestration-settings',
       'orchestration-policy-settings',
       'orchestration-project-detail',
+      'orchestration-pattern-field',
+      'orchestration-limits-help',
       'registered-projects-settings',
       'permission-rules-settings',
     ]);

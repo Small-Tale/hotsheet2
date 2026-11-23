@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { TICKET_TAG_COMBOBOX_COMMIT, wireAppComboboxes } from './app-combobox-wiring';
+import { ORCHESTRATION_PATTERN_COMMIT, TICKET_TAG_COMBOBOX_COMMIT, wireAppComboboxes } from './app-combobox-wiring';
 
 const wiring = vi.hoisted(() => ({
   options: undefined as
@@ -37,5 +37,17 @@ describe('application Combobox routing (HS2-C32ERK)', () => {
     dispose();
     expect(wiring.dispose).toHaveBeenCalledOnce();
     expect(removeEventListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears an orchestration Limits commit and dispatches it for the chosen-values field (HS2-1X1TXC)', () => {
+    const root = { addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as HTMLElement;
+    const dispose = wireAppComboboxes(root);
+    const dispatchEvent = vi.fn(),
+      input = { value: 'opus-*', dispatchEvent } as unknown as HTMLInputElement;
+    wiring.options!.onCommit({ id: 'orchestration-limits-limits-models-claude', value: 'opus-*', input });
+    expect(input.value).toBe('');
+    const event = dispatchEvent.mock.calls[0][0] as CustomEvent<string>;
+    expect([event.type, event.bubbles, event.detail]).toEqual([ORCHESTRATION_PATTERN_COMMIT, true, 'opus-*']);
+    dispose();
   });
 });

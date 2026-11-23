@@ -23,5 +23,9 @@ export const ORCHESTRATION_SETTINGS_ACTIONS = {
   addPolicyAccount: action('add-orchestration-policy-account'),
   removePolicyAccount: action('remove-orchestration-policy-account'),
   applyProjectLimits: action('apply-orchestration-project-limits'),
+  /** HS2-Y737GM: the Limits header's help popup. */
+  showLimitsHelp: action('show-orchestration-limits-help'),
+  /** HS2-1X1TXC, HS2-NPAZQW: a chosen model or resource's remove button. */
+  removeLimitsValue: action('remove-orchestration-limits-value'),
   closeProjectDetail: action('close-orchestration-project'),
 } as const;

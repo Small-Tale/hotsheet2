@@ -4832,6 +4832,137 @@
       }
     },
     {
+      "key": "hotsheet-web:orchestration-limits-help",
+      "package": "hotsheet-web",
+      "id": "orchestration-limits-help",
+      "name": "OrchestrationLimitsHelp",
+      "kind": "component",
+      "purpose": "The Limits header's help popup content: what each of an orchestrated project's limits means and what its Auto value does (HS2-Y737GM).",
+      "publicExports": [
+        {
+          "name": "OrchestrationLimitsHelp"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/orchestration-limits-help.tsx",
+        "src/components/orchestration-settings-interactions.ts"
+      ],
+      "source": "src/components/orchestration-limits-help.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "content"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/orchestration-limits-help.tsx",
+        "composition": "src/components/orchestration-limits-help.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:orchestration-pattern-field",
+      "package": "hotsheet-web",
+      "id": "orchestration-pattern-field",
+      "name": "OrchestrationPatternField",
+      "kind": "component",
+      "purpose": "A Limits field of chosen names as removable chips, picked from a Kerf Combobox of known names and * patterns or typed: a tool's Models (HS2-1X1TXC) and Required Resources (HS2-NPAZQW).",
+      "publicExports": [
+        {
+          "name": "OrchestrationPatternField"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/orchestration-pattern-field.tsx",
+        "src/components/app-combobox-wiring.ts",
+        "src/components/orchestration-settings-interactions.ts"
+      ],
+      "source": "src/components/orchestration-pattern-field.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/orchestration-pattern-field.tsx",
+        "composition": "src/components/orchestration-pattern-field.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:orchestration-policy-settings",
       "package": "hotsheet-web",
       "id": "orchestration-policy-settings",
@@ -4902,7 +5033,7 @@
       "id": "orchestration-project-detail",
       "name": "OrchestrationProjectDetail",
       "kind": "component",
-      "purpose": "One orchestrated project's detail in the inspector: binding and connection, the project's own limits with Apply Limits (HS2-7WF6JD), capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over… and Stop, and Stop Orchestrating…; a section whose read fails says so in place (HS2-W27N1D).",
+      "purpose": "One orchestrated project's detail in the inspector: binding with every site's location (HS2-NGP2AK) and connection, the project's own limits with a help popup (HS2-Y737GM), the Auto limits under Advanced (HS2-25KT42) and Apply Limits (HS2-7WF6JD), capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over… and Stop, and Stop Orchestrating…; a section whose read fails says so in place (HS2-W27N1D).",
       "publicExports": [
         {
           "name": "OrchestrationProjectDetail"

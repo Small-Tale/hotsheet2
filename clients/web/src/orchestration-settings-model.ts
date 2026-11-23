@@ -685,7 +685,34 @@ export interface TargetLimitsDraft {
 }
 
 const ROLE_SESSIONS_HINT =
-  'The orchestrator starts these here when needed: a dispatcher for ready work, an integrator for handed-off work. Each counts toward Sessions Here.';
+  'None checked is Auto: no coordination sessions start here. Checked, the orchestrator starts a dispatcher for ready work or an integrator for handed-off work when needed. Each counts toward Sessions Here.';
+
+/**
+ * HS2-Y737GM: what Sessions Here and Build Ahead mean, under the fields and in the Limits help.
+ * HS2-25KT42: each says what its Auto (empty or default) value does.
+ */
+export const SESSIONS_HERE_HINT =
+  'The most AI sessions the orchestrator runs in this project at once. Empty is Auto: up to its machine’s Sessions per Machine. 0 starts none here.';
+export const BUILD_AHEAD_HINT =
+  'Whether work may start before a ticket it depends on has passed CI, on that ticket’s pending result. As the Policy Says follows the policy’s Build Ahead switch.';
+export const REQUIRED_RESOURCES_HINT =
+  'Empty is Auto: no resource is required. Choose a resource or a pattern such as vm/*: every session here must hold one match, and claims it itself.';
+export const MODELS_HINT = 'Empty allows any model. Choose a model or a family such as opus-*.';
+
+/**
+ * HS2-25KT42: how many of the Advanced limits differ from Auto, for the Advanced disclosure's
+ * summary: coordination sessions, Sessions Here, Build Ahead, required resources and machine limits.
+ */
+export function advancedLimitsChanged(draft: TargetLimitsDraft | undefined): number {
+  if (!draft) return 0;
+  return [
+    draft.roleSessions.length > 0,
+    draft.max_sessions.trim() !== '',
+    draft.buildAhead !== 'default',
+    listOf(draft.resources).length > 0,
+    draft.machineOverride,
+  ].filter(Boolean).length;
+}
 
 /**
  * HS2-SYZB33: coordination sessions start only on a project's home site (HS2-5P112Z). On another site
@@ -749,10 +776,11 @@ export function targetLimitsDraftFrom(view: OrchestrationPolicyView | undefined,
 const MAX_TOOL_MODELS = 32;
 const MAX_PROJECT_RESOURCES = 4;
 const NAMESPACE = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
-const RESOURCE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+/** HS2-NPAZQW: a required resource may be a pattern: `*` in the resource part matches any run. */
+const RESOURCE = /^[A-Za-z0-9*][A-Za-z0-9._*-]{0,127}$/u;
 
 /** A comma-separated list as typed: trimmed, empty entries dropped. */
-const listOf = (text: string) =>
+export const listOf = (text: string) =>
   text
     .split(',')
     .map((item) => item.trim())
@@ -780,7 +808,7 @@ export function parseResources(text: string): { namespace: string; resource: str
     const parts = name.split('/'),
       [namespace = '', resource = ''] = parts;
     if (parts.length !== 2 || !NAMESPACE.test(namespace) || namespace.includes('..') || !RESOURCE.test(resource))
-      return `"${name}" is not <namespace>/<resource>, such as vm/macos-vm: a lowercase namespace and a resource name.`;
+      return `"${name}" is not <namespace>/<resource>, such as vm/macos-vm or vm/*: a lowercase namespace and a resource name or pattern.`;
     if (needs.some((need) => need.namespace === namespace && need.resource === resource))
       return `Required Resources lists ${name} twice.`;
     needs.push({ namespace, resource });
@@ -917,4 +945,77 @@ export function policyWithTargetLimits(
     else delete body.placement.role_sessions;
   }
   return { policy: body };
+}
+
+/* ---- Models and resources as chosen values (HS2-1X1TXC, HS2-NPAZQW) ---------------------- */
+
+/** The draft field a chosen-values control edits: `limits.resources` or `limits.models.<tool>`. */
+function listField(
+  draft: TargetLimitsDraft,
+  field: string,
+): { read: string; write: (text: string) => TargetLimitsDraft } | undefined {
+  if (field === 'limits.resources') return { read: draft.resources, write: (resources) => ({ ...draft, resources }) };
+  const tool = /^limits\.models\.(.+)$/u.exec(field)?.[1];
+  if (tool && draft.tools.includes(tool))
+    return {
+      read: draft.models[tool] ?? '',
+      write: (text) => ({ ...draft, models: { ...draft.models, [tool]: text } }),
+    };
+  return undefined;
+}
+
+/** Add one chosen model or resource (or pattern); a blank or repeated value changes nothing. */
+export function addTargetLimitsValue(draft: TargetLimitsDraft, field: string, value: string): TargetLimitsDraft {
+  const list = listField(draft, field),
+    added = listOf(value);
+  if (!list || !added.length) return draft;
+  const values = listOf(list.read);
+  const next = [...values, ...added.filter((item, index) => !values.includes(item) && added.indexOf(item) === index)];
+  return next.length === values.length ? draft : list.write(next.join(', '));
+}
+
+/** Remove one chosen model or resource. */
+export function removeTargetLimitsValue(draft: TargetLimitsDraft, field: string, value: string): TargetLimitsDraft {
+  const list = listField(draft, field);
+  if (!list) return draft;
+  const values = listOf(list.read);
+  return values.includes(value) ? list.write(values.filter((item) => item !== value).join(', ')) : draft;
+}
+
+/**
+ * HS2-1X1TXC: a model family as a pattern: the name up to its first part that starts with a digit,
+ * then `*` (`claude-opus-4-1` → `claude-opus-*`, `gpt-5-codex` → `gpt-*`). A name without a version
+ * part (an alias such as `opus`) has no family.
+ */
+export function modelFamily(model: string): string | undefined {
+  const parts = model.split('-'),
+    at = parts.findIndex((part, index) => index > 0 && /^\d/u.test(part));
+  return at > 0 ? `${parts.slice(0, at).join('-')}-*` : undefined;
+}
+
+/**
+ * HS2-1X1TXC: what a tool's Models control offers: each family pattern of the models the tool
+ * reports, then the models themselves, less those already chosen.
+ */
+export function modelSuggestions(known: readonly string[], chosen: readonly string[]): string[] {
+  const families = [...new Set(known.map(modelFamily).filter((family): family is string => Boolean(family)))].sort();
+  return [...new Set([...families, ...known])].filter((model) => !chosen.includes(model));
+}
+
+/**
+ * HS2-NPAZQW: what Required Resources offers: the declared resources (every exact resource the policy
+ * requires of any project and every resource someone holds on this project's machine), a `<namespace>/*`
+ * pattern for each of their namespaces, less those already chosen.
+ */
+export function resourceSuggestions(
+  body: OrchestrationPolicyBody | null | undefined,
+  held: readonly { namespace: string; resource: string }[],
+  chosen: readonly string[],
+): string[] {
+  const declared = [...(body?.placement?.resources ?? []).flatMap((entry) => entry.resources), ...held]
+      .map((need) => `${need.namespace}/${need.resource}`)
+      .filter((name) => !name.includes('*')),
+    exact = [...new Set(declared)].sort(),
+    patterns = [...new Set(exact.map((name) => `${name.split('/')[0] ?? ''}/*`))].sort();
+  return [...patterns, ...exact].filter((name) => !chosen.includes(name));
 }

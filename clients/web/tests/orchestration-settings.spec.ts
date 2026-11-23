@@ -111,6 +111,21 @@ const orchestrationNav = (page: Page) =>
  * buttons after it; a click aimed at Settings View before that lands on Notifications View
  * (HS2-NDN2NT). Wait for the settled group before any toolbar click.
  */
+/** HS2-25KT42: the Limits form's Advanced disclosure, opened when it is closed. */
+async function openAdvancedLimits(page: Page) {
+  const advanced = page.locator('[data-component="orchestration-project-limits"] [data-orchestration-advanced-limits]');
+  if (!(await advanced.evaluate((element) => (element as HTMLDetailsElement).open)))
+    await advanced.locator('summary').first().click();
+  await expect(advanced).toHaveJSProperty('open', true);
+}
+
+/** HS2-1X1TXC, HS2-NPAZQW: the chosen names of one Limits field of chosen values, in order. */
+async function chosenValues(page: Page, field: string) {
+  return page
+    .locator(`[data-component="orchestration-pattern-field"][data-limits-field="${field}"] [data-item-id]`)
+    .evaluateAll((chips) => chips.map((chip) => (chip as HTMLElement).dataset.itemId));
+}
+
 async function openOrchestrationProject(page: Page) {
   await page.goto('/');
   await page.getByRole('tab', { name: /Launch/ }).click();
@@ -509,12 +524,15 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     // HS2-N5BDE4: an unlisted project is Auto: no tool checked, Sessions Here shows Auto, and admission
     // is asked for every usable tool.
     await expect(limits).toContainText('None checked is Auto');
+    // HS2-25KT42: Sessions Here is one of the Auto limits under Advanced.
+    await openAdvancedLimits(page);
     await expect(limits.getByRole('spinbutton', { name: 'Sessions Here' })).toHaveValue('');
     await expect(limits.getByRole('spinbutton', { name: 'Sessions Here' })).toHaveAttribute('placeholder', 'Auto');
     const capacity = page.getByRole('region', { name: 'Capacity and Admission' });
     await expect(capacity.getByText('Codex Admission')).toBeVisible();
     // Allow Codex here with its own machine limits, and apply.
     await limits.getByRole('checkbox', { name: 'Codex' }).check();
+    await openAdvancedLimits(page);
     await limits.getByRole('checkbox', { name: 'Use Different Machine Limits' }).check();
     const machineSessions = limits.getByLabel('Sessions per Machine');
     await machineSessions.fill('3');
@@ -540,12 +558,15 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     await expect(limits).not.toContainText('does not list this project');
 
     // HS2-YSY7AR: the models Codex may use here and the resources work here must hold.
-    const models = limits.getByLabel('Codex Models');
+    // HS2-1X1TXC, HS2-NPAZQW: each is chosen or typed in its combobox and shows as a chip.
+    const models = limits.getByRole('combobox', { name: 'Codex Models' });
     await models.fill('gpt-5-codex, gpt-5');
     await models.blur();
-    const resources = limits.getByLabel('Required Resources');
+    await expect.poll(() => chosenValues(page, 'limits.models.codex')).toEqual(['gpt-5-codex', 'gpt-5']);
+    const resources = limits.getByRole('combobox', { name: 'Required Resources' });
     await resources.fill('vm/macos-vm');
-    await resources.blur();
+    await resources.press('Enter');
+    await expect.poll(() => chosenValues(page, 'limits.resources')).toEqual(['vm/macos-vm']);
     const ysy = join('target', 'visual-captures', 'hs2-ysy7ar');
     await mkdir(ysy, { recursive: true });
     const captureModels = async (name: string) => {
@@ -569,7 +590,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     await expect(page.getByRole('region', { name: 'Held Resources' })).not.toContainText(
       'The policy requires no resources here.',
     );
-    await expect(models).toHaveValue('gpt-5-codex, gpt-5');
+    expect(await chosenValues(page, 'limits.models.codex')).toEqual(['gpt-5-codex', 'gpt-5']);
     for (const [index, size] of [{ width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
       await page.setViewportSize(size);
       if (size.width === 390) {
@@ -578,6 +599,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
         const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
         if (await show.isVisible()) await show.click();
       }
+      await openAdvancedLimits(page);
       await expect(resources).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await captureModels(`limits-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
@@ -768,6 +790,7 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
       .first()
       .click();
     const limits = page.locator('[data-component="orchestration-project-limits"]');
+    await openAdvancedLimits(page);
     const dispatcher = limits.getByRole('checkbox', { name: 'Dispatcher' }),
       integrator = limits.getByRole('checkbox', { name: 'Integrator' });
     await expect(dispatcher).not.toBeChecked();
@@ -1161,6 +1184,7 @@ test('HS2-SYZB33 a site Limits point Coordination Sessions at the project home',
         .click();
     await open('Widgets second clone');
     const limits = page.locator('[data-component="orchestration-project-limits"]');
+    await openAdvancedLimits(page);
     const dispatcher = limits.getByRole('checkbox', { name: 'Dispatcher' }),
       integrator = limits.getByRole('checkbox', { name: 'Integrator' });
     await expect(limits).toContainText("Coordination sessions start only on Widgets, this project's home site.");
@@ -1201,7 +1225,7 @@ test('HS2-SYZB33 a site Limits point Coordination Sessions at the project home',
 
     // The home's choice is as before.
     await open('Widgets');
-    await expect(limits).toContainText('The orchestrator starts these here when needed');
+    await expect(limits).toContainText('None checked is Auto: no coordination sessions start here.');
     await expect(dispatcher).toBeEnabled();
     await dispatcher.check();
     await limits.getByRole('button', { name: 'Apply Limits' }).click();
@@ -1578,4 +1602,186 @@ test('HS2-W27N1D catalog demos render the production components and run their co
   await expect(interactive.locator('[data-orchestration-project]').filter({ hasText: 'Site of API' })).toHaveCount(1);
   await page.screenshot({ path: test.info().outputPath('orchestration-settings-demo.png'), fullPage: true });
   expect(errors).toEqual([]);
+});
+
+/**
+ * HS2-Y737GM, HS2-25KT42, HS2-NGP2AK, HS2-1X1TXC, HS2-NPAZQW: a project detail of a project with two
+ * sites, through the real shell and policy route: Binding names every site, the Limits help explains
+ * each limit, the Auto limits stay closed under Advanced, a model family and a resource pattern are
+ * chosen in their comboboxes, and the server stores both. Captured wide and narrow, light and dark.
+ */
+test('HS2-Y737GM HS2-25KT42 HS2-NGP2AK HS2-1X1TXC HS2-NPAZQW the project detail limits read Auto and take patterns', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(300_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner, web, docs] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const targets: Record<string, string> = {};
+    for (const [project, label] of [
+      [web, 'Widgets'],
+      [docs, 'Widgets second clone'],
+    ] as const)
+      targets[label] = (
+        await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+          destination: { kind: 'local', checkout_id: project.id },
+          label,
+          actor: { role: 'human' },
+        })
+      ).target_id;
+    const { revision } = await server.request<{ revision: string }>(`${base}/targets`);
+    await server.request(`${base}/targets/${targets['Widgets second clone']}`, 'PATCH', {
+      expected_revision: revision,
+      label: 'Widgets second clone',
+      site_of: targets.Widgets,
+      actor: { role: 'human' },
+    });
+    // The second site requires an exact VM, which declares it for the Required Resources choices.
+    await server.request(`${base}/policy`, 'PUT', {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: 'codex', max_sessions: 2 }],
+        targets: [{ target_id: targets['Widgets second clone'], tools: [{ tool: 'codex' }] }],
+        placement: {
+          resources: [
+            { target_id: targets['Widgets second clone'], resources: [{ namespace: 'vm', resource: 'macos-vm' }] },
+          ],
+        },
+      },
+      actor: { role: 'human' },
+    });
+
+    const wide = { width: 1440, height: 900 },
+      narrow = { width: 390, height: 844 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'Orchestration');
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    await settings
+      .locator('[data-orchestration-project]')
+      .filter({ hasText: '2 sites' })
+      .getByRole('button', { name: /Widgets/ })
+      .first()
+      .click();
+    const detail = page.locator('[data-component="orchestration-project-detail"]');
+    const binding = detail.getByRole('region', { name: 'Binding' });
+    // HS2-NGP2AK: one row per site, the home site marked.
+    await expect(binding).toContainText('2 sites');
+    await expect(binding).toContainText('Widgets (Home)');
+    await expect(binding).toContainText('Widgets second clone');
+
+    const limits = page.locator('[data-component="orchestration-project-limits"]');
+    const advanced = limits.locator('[data-orchestration-advanced-limits]');
+    // HS2-25KT42: the default view needs no input: every Advanced limit is Auto and closed.
+    await expect(advanced).toHaveJSProperty('open', false);
+    await expect(advanced.locator('summary')).toContainText('All Auto');
+    await expect(limits.getByRole('spinbutton', { name: 'Sessions Here' })).toBeHidden();
+
+    const directory = join('target', 'visual-captures', 'hs2-orchpanel');
+    await mkdir(directory, { recursive: true });
+    const capture = (name: string) =>
+      page.screenshot({ path: join(directory, `${name}-${browserName}.png`), animations: 'disabled' });
+    const showDetail = async (size: { width: number; height: number }) => {
+      await page.setViewportSize(size);
+      if (size.width === narrow.width) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
+        if (await show.isVisible()) await show.click();
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    };
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const size of [wide, narrow, wide]) {
+        await showDetail(size);
+        await binding.scrollIntoViewIfNeeded();
+        await capture(`hs2-ngp2ak-binding-${String(size.width)}-${scheme}`);
+        await limits.scrollIntoViewIfNeeded();
+        await capture(`hs2-25kt42-limits-auto-${String(size.width)}-${scheme}`);
+      }
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+
+    // HS2-Y737GM: the help explains Sessions Here and Build Ahead beside the Limits header.
+    for (const [size, scheme] of [
+      [wide, 'light'],
+      [narrow, 'dark'],
+    ] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await showDetail(size);
+      await limits.getByRole('button', { name: 'About Limits' }).click();
+      const help = page.getByRole('dialog', { name: 'About Limits' });
+      await expect(help).toContainText('Sessions Here');
+      await expect(help).toContainText('The most AI sessions the orchestrator runs in this project at once');
+      await expect(help).toContainText('Build Ahead');
+      await capture(`hs2-y737gm-help-${String(size.width)}-${scheme}`);
+      await page.keyboard.press('Escape');
+      await expect(help).toBeHidden();
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+    await showDetail(wide);
+
+    // HS2-1X1TXC: a model family typed as a pattern becomes a chip.
+    await limits.getByRole('checkbox', { name: 'Codex' }).check();
+    const models = limits.getByRole('combobox', { name: 'Codex Models' });
+    await models.fill('gpt-*');
+    await models.press('Enter');
+    await expect.poll(() => chosenValues(page, 'limits.models.codex')).toEqual(['gpt-*']);
+    await models.fill('gpt-5-codex');
+    await capture('hs2-1x1txc-models-typing-1440-light');
+    await models.press('Enter');
+    await expect.poll(() => chosenValues(page, 'limits.models.codex')).toEqual(['gpt-*', 'gpt-5-codex']);
+    // A chip's remove button removes just that one.
+    await limits.getByRole('button', { name: 'Remove gpt-5-codex' }).click();
+    await expect.poll(() => chosenValues(page, 'limits.models.codex')).toEqual(['gpt-*']);
+
+    // HS2-NPAZQW: Required Resources offers the declared VM and its namespace pattern.
+    await openAdvancedLimits(page);
+    await expect(advanced).toContainText('Whether work may start before a ticket it depends on has passed CI');
+    const resources = limits.getByRole('combobox', { name: 'Required Resources' });
+    await resources.click();
+    await resources.fill('vm');
+    const option = page.getByRole('option', { name: 'vm/*', exact: true });
+    await expect(option).toBeVisible();
+    await expect(page.getByRole('option', { name: 'vm/macos-vm', exact: true })).toBeVisible();
+    await capture('hs2-npazqw-resources-choices-1440-light');
+    await option.click();
+    await expect.poll(() => chosenValues(page, 'limits.resources')).toEqual(['vm/*']);
+    await expect(advanced.locator('summary')).toContainText('1 Changed');
+    await limits.getByRole('button', { name: 'Apply Limits' }).click();
+    type Stored = {
+      policy: {
+        targets: { target_id: string; tools?: { tool: string; models?: string[] }[] }[];
+        placement?: { resources?: { target_id: string; resources: { namespace: string; resource: string }[] }[] };
+      };
+    };
+    await expect
+      .poll(async () =>
+        (await server.request<Stored>(`${base}/policy`)).policy.placement?.resources?.find(
+          (entry) => entry.target_id === targets.Widgets,
+        ),
+      )
+      .toEqual({ target_id: targets.Widgets, resources: [{ namespace: 'vm', resource: '*' }] });
+    const stored = await server.request<Stored>(`${base}/policy`);
+    expect(stored.policy.targets.find((entry) => entry.target_id === targets.Widgets)?.tools).toEqual([
+      { tool: 'codex', models: ['gpt-*'] },
+    ]);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const size of [wide, narrow, wide]) {
+        await showDetail(size);
+        await openAdvancedLimits(page);
+        await models.scrollIntoViewIfNeeded();
+        await capture(`hs2-1x1txc-models-${String(size.width)}-${scheme}`);
+        await resources.scrollIntoViewIfNeeded();
+        await capture(`hs2-npazqw-y737gm-advanced-${String(size.width)}-${scheme}`);
+      }
+    }
+  } finally {
+    await server.stop(page);
+  }
 });

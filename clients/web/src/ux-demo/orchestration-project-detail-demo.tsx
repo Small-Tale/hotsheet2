@@ -25,7 +25,7 @@ const listedLimits: TargetLimitsDraft = {
   machineOverride: true,
   machine: { ...machine, min_free_ram_mb: '4096' },
   buildAhead: 'off',
-  models: { codex: 'gpt-5-codex', claude: '' },
+  models: { codex: 'gpt-5-codex', claude: 'claude-opus-*' },
   resources: 'vm/macos-vm',
   roleSessions: ['dispatcher'],
 };
@@ -43,6 +43,11 @@ const unlistedLimits: TargetLimitsDraft = {
   roleSessions: [],
 };
 const policyTools = ['codex', 'claude'];
+/** HS2-1X1TXC: the models each tool reports, which its Models control offers with their families. */
+const toolModels = {
+  claude: ['claude-opus-4-1', 'claude-sonnet-4-5'],
+  codex: ['gpt-5-codex', 'gpt-5.1-codex-mini'],
+};
 /** HS2-TK9ADC: the dispatcher the orchestrator started for the project's ready work. */
 const sessions: OrchestrationSession[] = [
   ...demoSessions,
@@ -86,6 +91,8 @@ export function OrchestrationProjectDetailDemo() {
           sessions={sessions.map((session, index) => ({ session, showable: index === 0, busy: false }))}
           claimNamespaces={['vm']}
           policyTools={policyTools}
+          toolModels={toolModels}
+          resourceChoices={['vm/*', 'vm/macos-vm', 'vm/windows-vm']}
           toolLabel={demoToolLabel}
           formatTime={demoTime}
         />

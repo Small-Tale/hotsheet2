@@ -1594,6 +1594,48 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "orchestration-limits-help",
+      "name": "OrchestrationLimitsHelp",
+      "kind": "component",
+      "purpose": "The Limits header's help popup content: what each of an orchestrated project's limits means and what its Auto value does (HS2-Y737GM).",
+      "useWhen": [
+        "An orchestrated project's Limits header opens its About Limits help."
+      ],
+      "avoidWhen": [
+        "The help is not about an orchestrated project's limits."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/orchestration-limits-help.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "orchestration-pattern-field",
+      "name": "OrchestrationPatternField",
+      "kind": "component",
+      "purpose": "A Limits field of chosen names as removable chips, picked from a Kerf Combobox of known names and * patterns or typed: a tool's Models (HS2-1X1TXC) and Required Resources (HS2-NPAZQW).",
+      "useWhen": [
+        "An orchestrated project's Limits form chooses models or required resources, exact or as patterns."
+      ],
+      "avoidWhen": [
+        "The list is not part of an orchestrated project's Limits form."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/orchestration-pattern-field.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "orchestration-policy-settings",
       "name": "OrchestrationPolicySettings",
       "kind": "component",
@@ -1618,7 +1660,7 @@
       "id": "orchestration-project-detail",
       "name": "OrchestrationProjectDetail",
       "kind": "component",
-      "purpose": "One orchestrated project's detail in the inspector: binding and connection, the project's own limits with Apply Limits (HS2-7WF6JD), capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over… and Stop, and Stop Orchestrating…; a section whose read fails says so in place (HS2-W27N1D).",
+      "purpose": "One orchestrated project's detail in the inspector: binding with every site's location (HS2-NGP2AK) and connection, the project's own limits with a help popup (HS2-Y737GM), the Auto limits under Advanced (HS2-25KT42) and Apply Limits (HS2-7WF6JD), capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over… and Stop, and Stop Orchestrating…; a section whose read fails says so in place (HS2-W27N1D).",
       "useWhen": [
         "Hot Sheet needs to show one orchestrated project's binding, capacity and sessions."
       ],

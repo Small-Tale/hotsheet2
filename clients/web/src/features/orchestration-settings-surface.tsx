@@ -11,6 +11,7 @@ import type { Project } from '../interactions/types';
 import {
   addChoices,
   projectRows,
+  resourceSuggestions,
   siteChoicesByProject,
   siteReadFailure,
   usablePolicyTools,
@@ -36,7 +37,8 @@ export interface OrchestrationSettingsSurfaceDependencies {
   /** Show an open project's terminal in its drawer. */
   openTerminalInProject: (key: string) => void;
   hasTerminal: (key: string) => boolean;
-  aiTools: () => readonly { id: string }[];
+  /** HS2-1X1TXC: each tool's reported models feed its Models control. */
+  aiTools: () => readonly { id: string; models?: readonly { id: string }[] }[];
   toolLabel: (tool: string) => string;
   showInspector: () => void;
   /** Reviewed remote server names by registration id. */
@@ -244,6 +246,12 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
         capabilities: site.capabilities,
         error: site.capabilities_error ? siteReadFailure(site.capabilities_error) : undefined,
       })),
+      // HS2-1X1TXC: the models each tool reports here, for its Models control.
+      toolModels: Object.fromEntries(
+        dependencies.aiTools().map((tool) => [tool.id, (tool.models ?? []).map((model) => model.id)]),
+      ),
+      // HS2-NPAZQW: the declared resources (the policy's and those held here) and their patterns.
+      resourceChoices: resourceSuggestions(policy, detail?.capacity?.claims ?? [], []),
       toolLabel: dependencies.toolLabel,
     });
   }

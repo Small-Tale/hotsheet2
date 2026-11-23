@@ -38,6 +38,8 @@ import { demoModule as notWorkingDialog } from './not-working-dialog-demo';
 import { demoModule as notificationCard } from './notification-card-demo';
 import { demoModule as notificationSettings } from './notification-settings-demo';
 import { demoModule as orchestration } from './orchestration-demo';
+import { demoModule as orchestrationLimitsHelp } from './orchestration-limits-help-demo';
+import { demoModule as orchestrationPatternField } from './orchestration-pattern-field-demo';
 import { demoModule as orchestrationPolicySettings } from './orchestration-policy-settings-demo';
 import { demoModule as orchestrationProjectDetail } from './orchestration-project-detail-demo';
 import { demoModule as orchestrationSettings } from './orchestration-settings-demo';
@@ -114,6 +116,8 @@ export const demoModules: readonly DemoModule[] = [
   projectGeneralSettings,
   orchestrationSettings,
   orchestrationPolicySettings,
+  orchestrationLimitsHelp,
+  orchestrationPatternField,
   orchestrationProjectDetail,
   registeredProjectsSettings,
   tagChip,
