@@ -1968,7 +1968,10 @@ test('HS2-2FG91X real resource requirement and contention responses match the Op
             max_sessions: 2,
           },
         ],
+        // HS2-R2N33M: unset placement is Auto and applies once a plan exists; this
+        // contract reads a dry-run tick, so placement is explicitly off.
         placement: {
+          automatic: false,
           actor: 'scheduler-1',
           resources: [{ target_id: target, resources: [{ namespace: 'sim', resource: 'ios-17' }] }],
         },

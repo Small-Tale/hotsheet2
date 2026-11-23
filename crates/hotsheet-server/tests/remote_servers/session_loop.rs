@@ -149,6 +149,12 @@ async fn decided(
     }
 }
 
+/// HS2-R2N33M: an unlisted project is Auto and may get a dispatcher and an
+/// integrator. These loops test a pool with neither, so they choose none.
+fn no_role_sessions() -> Value {
+    json!([{"target_id":TARGET,"roles":[]}])
+}
+
 const LOOP_ACTIONS: [&str; 4] = [
     "tickets_read",
     "gates_observe",
@@ -191,7 +197,7 @@ async fn hs2_t16sk0_the_loop_reports_a_run_nobody_assigns_and_claims_it_for_its_
             &LOOP_ACTIONS,
             json!({"wind_down":{"idle_minutes":60,"keep_warm":0},
                 "placement":{"automatic":true,"actor":"scheduler-1","cooldown_minutes":0,
-                    "dispatcher_wait_minutes":1}}),
+                    "dispatcher_wait_minutes":1,"role_sessions":no_role_sessions()}}),
         )
         .await;
     let minute = std::time::Duration::from_secs(60);
@@ -288,7 +294,8 @@ async fn hs2_nptks8_the_loop_replaces_a_session_that_never_joins_and_keeps_one_t
             &LOOP_ACTIONS,
             json!({"wind_down":{"idle_minutes":60,"keep_warm":0},
                 "placement":{"automatic":true,"actor":"scheduler-1","cooldown_minutes":5,
-                    "join_minutes":1,"dispatcher_wait_minutes":60}}),
+                    "join_minutes":1,"dispatcher_wait_minutes":60,
+                    "role_sessions":no_role_sessions()}}),
         )
         .await;
     let minute = std::time::Duration::from_secs(60);
@@ -382,7 +389,8 @@ async fn hs2_r7qh35_a_refilled_session_receives_the_exact_ticket_of_its_new_run(
             &LOOP_ACTIONS,
             json!({"wind_down":{"idle_minutes":60,"keep_warm":0},
                 "placement":{"automatic":true,"actor":"scheduler-1","cooldown_minutes":0,
-                    "dispatcher_wait_minutes":60,"join_minutes":60}}),
+                    "dispatcher_wait_minutes":60,"join_minutes":60,
+                    "role_sessions":no_role_sessions()}}),
         )
         .await;
     let minute = std::time::Duration::from_secs(60);

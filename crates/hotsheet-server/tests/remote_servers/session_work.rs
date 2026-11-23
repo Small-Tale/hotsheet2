@@ -675,12 +675,14 @@ async fn hs2_yc2p7k_an_orchestrator_started_session_works_its_step_end_to_end() 
     let step = defined.1["step"]["step_id"].as_str().unwrap().to_owned();
 
     // A person enables automatic placement; the project's orchestration files are
-    // committed like any other project file.
+    // committed like any other project file. HS2-R2N33M: the person chooses no role
+    // sessions, so the fake agent is the one session and works as the worker.
     world
         .allow(
             &actions,
             json!({"wind_down":{"idle_minutes":1,"keep_warm":0},
-                "placement":{"automatic":true,"actor":"scheduler-1","cooldown_minutes":0}}),
+                "placement":{"automatic":true,"actor":"scheduler-1","cooldown_minutes":0,
+                    "role_sessions":[{"target_id":TARGET,"roles":[]}]}}),
         )
         .await;
     commit_all(&world.project);

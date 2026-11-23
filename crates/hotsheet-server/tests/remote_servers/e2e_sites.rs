@@ -878,13 +878,15 @@ async fn hs2_rcr4a6_a_peer_outage_takes_no_second_claim() {
             "target_id":TARGET_A,"connection_id":connection,
             "native_id":ticket.slug,"prerequisites":[],"requirements":requirements})
     };
-    // One session on each machine.
+    // One worker session on each machine. HS2-R2N33M: the project chooses no role
+    // sessions, which Auto would otherwise start in the home's one slot.
     fleet
         .policy(json!({
             "targets":[
                 {"target_id":TARGET_A,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1},
                 {"target_id":TARGET_B,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1}],
-            "placement":{"automatic":true,"actor":ACTOR,"cooldown_minutes":0}
+            "placement":{"automatic":true,"actor":ACTOR,"cooldown_minutes":0,
+                "role_sessions":[{"target_id":TARGET_A,"roles":[]}]}
         }))
         .await;
     let defined = fleet
