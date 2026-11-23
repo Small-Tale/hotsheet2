@@ -225,11 +225,12 @@ test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens
       action: 'provisional_dispatch',
       actor: human,
     });
-    // The orchestration policy allows provisional work.
+    // HS2-78HGC8: dispatch both runs explicitly. Automatic placement can raise a session permission
+    // prompt that covers the Reopen confirmation when the host has a supported AI tool installed.
     await send(server, 'PUT', `${base}/policy`, {
       expected_revision: null,
       actor: human,
-      policy: { speculation: { allowed: true } },
+      policy: { speculation: { allowed: true }, placement: { automatic: false } },
     });
     const goal = await server.request<Ticket>('/tickets', 'POST', { title: 'Ship the synthetic sign-on' });
     const prerequisite = await server.request<Ticket>('/tickets', 'POST', {
