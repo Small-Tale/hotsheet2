@@ -107,7 +107,10 @@ fn row(
     account: Option<&str>,
     now_ms: u64,
 ) -> Option<ToolCapacityRow> {
-    let configured = policy.tools.iter().find(|entry| entry.tool == tool)?;
+    let configured = policy.tool_policy(tool);
+    if configured.is_off() {
+        return None;
+    }
     let account_policy = match account {
         Some(account) => Some(
             configured
@@ -130,8 +133,8 @@ fn row(
         verified: status.verified(),
         signals: support,
         max_sessions: account_policy
-            .map_or(configured.max_sessions, |account| account.max_sessions),
-        weight: configured.weight,
+            .map_or(configured.session_cap(), |account| account.max_sessions),
+        weight: configured.effective_weight(),
         budget_cents_per_day: budget,
         spent_cents_today: known_spend_cents(entry, support, now_ms),
         consecutive_limits: entry.map_or(0, |entry| entry.consecutive_limits),
@@ -200,7 +203,14 @@ impl OrchestrationRuntime {
         let entries = ToolCapacityRegistry::new(&self.home).entries()?;
         let supports = supports(&self.home);
         let mut tools = Vec::new();
-        for tool in &policy.tools {
+        // HS2-N3HWP9: the listed tools, then each Auto tool this machine has observed.
+        let mut listed: Vec<hotsheet_ticketing::orchestration::ToolPolicy> = policy.tools.clone();
+        for entry in &entries {
+            if !listed.iter().any(|tool| tool.tool == entry.tool) {
+                listed.push(policy.tool_policy(&entry.tool));
+            }
+        }
+        for tool in &listed {
             let accounts: Vec<Option<&str>> = if tool.accounts.is_empty() {
                 vec![None]
             } else {
@@ -245,13 +255,21 @@ impl OrchestrationRuntime {
             .ok_or(OrchestrationError::Invalid(
                 "tool capacity needs a throughput policy",
             ))?;
-        let configured = policy
-            .tools
-            .iter()
-            .find(|tool| tool.tool == signal.tool)
-            .ok_or(OrchestrationError::Invalid(
-                "tool is not configured in the policy",
-            ))?;
+        // HS2-N3HWP9: an unlisted tool is Auto and takes signals when it is a loaded
+        // plugin, which keeps the registry to real tools; an off tool takes none.
+        let configured = policy.tool_policy(&signal.tool);
+        if configured.is_off() {
+            return Err(OrchestrationError::Invalid(
+                "tool is turned off in the policy",
+            ));
+        }
+        if !policy.tools.iter().any(|tool| tool.tool == signal.tool)
+            && !supports(&self.home).contains_key(&signal.tool)
+        {
+            return Err(OrchestrationError::Invalid(
+                "tool is not configured in the policy or a loaded plugin",
+            ));
+        }
         if signal.account.as_ref().is_some_and(|account| {
             !configured
                 .accounts
@@ -347,6 +365,11 @@ impl OrchestrationRuntime {
                 entries: &entries,
                 load: &request.load,
                 now_ms,
+                // HS2-N5BDE4: an Auto target's tools here: those this machine has observed.
+                auto_tools: &entries
+                    .iter()
+                    .map(|entry| entry.tool.clone())
+                    .collect::<Vec<_>>(),
             },
             &|tool| supports.get(tool).copied().unwrap_or_default(),
         );

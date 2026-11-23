@@ -93,8 +93,8 @@ fn policy(automatic: bool) -> PolicyBody {
         tools: [("codex", 60), ("claude", 50)]
             .map(|(tool, weight)| ToolPolicy {
                 tool: tool.into(),
-                max_sessions: 4,
-                weight,
+                max_sessions: Some(4),
+                weight: Some(weight),
                 accounts: Vec::new(),
             })
             .into(),
@@ -103,7 +103,7 @@ fn policy(automatic: bool) -> PolicyBody {
             enabled: true,
             actions: None,
             tools: vec![scope("codex"), scope("claude")],
-            max_sessions: 2,
+            max_sessions: Some(2),
             machine: None,
             speculation: None,
         }],
@@ -1112,7 +1112,7 @@ fn hs2_xhq1eh_a_wind_down_never_asks_and_is_never_denied_by_the_policy() {
     let s = setup(true, &mut tx);
     let owner = s.owner();
     let mut body = policy(true);
-    body.targets[0].max_sessions = 1;
+    body.targets[0].max_sessions = Some(1);
     set_policy(&s.m, body, &mut tx);
     *s.sessions.sessions.lock().unwrap() = vec![
         owned("a", &owner, SessionActivity::Idle),
@@ -1146,7 +1146,7 @@ fn hs2_ecwg50_a_session_whose_run_waits_on_ci_is_free_capacity() {
     s.m.runtime = s.m.runtime.clone().with_gate_provider(ci);
     let owner = s.owner();
     let mut body = policy(false);
-    body.targets[0].max_sessions = 1;
+    body.targets[0].max_sessions = Some(1);
     set_policy(&s.m, body, &mut tx);
     // A run on one ticket, integrated at a commit whose CI gate is pending.
     let (working, _) = s.ready("Working", &mut tx);
@@ -2254,7 +2254,7 @@ fn hs2_tk9adc_the_scheduler_starts_a_dispatcher_then_an_integrator_through_the_e
     s.ready("First", &mut tx);
     target_pool(&s.m, |_| {});
     let mut body = policy(true);
-    body.targets[0].max_sessions = 3;
+    body.targets[0].max_sessions = Some(3);
     set_policy(&s.m, body.clone(), &mut tx);
     // Not opted in: the worker only.
     let tick = s.tick(&mut tx);

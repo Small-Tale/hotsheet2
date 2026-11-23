@@ -286,16 +286,13 @@ fn hs2_9fktb3_a_site_removed_between_passes_is_no_longer_tried() {
     assert_eq!(blocked(&schedule, 1), ("target_cap", None));
     assert!(passes(&schedule, 1).is_empty());
 
-    // Still listed but out of the policy: tried, and denied by it.
+    // HS2-N5BDE4: still listed but out of the policy: Auto, so tried; with its
+    // capacity no longer read, it waits for the read rather than being refused.
     world.work[0].sites = vec![target(2)];
     let schedule = world.now();
     assert_eq!(
         passes(&schedule, 1),
-        expect(&[pass(
-            2,
-            "policy_denied",
-            Some("policy_target_not_permitted")
-        )])
+        expect(&[pass(2, "target_unavailable", Some("capacity_not_read"))])
     );
 
     // Added back.

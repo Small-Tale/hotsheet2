@@ -282,7 +282,12 @@ impl OrchestrationRuntime {
         let tool_caps: BTreeMap<String, u32> = policy
             .iter()
             .flat_map(|policy| policy.tools.iter())
-            .map(|tool| (tool.tool.clone(), tool.max_sessions))
+            // HS2-N3HWP9: an Auto tool has no cap of its own; an off tool runs nothing.
+            .filter_map(|tool| {
+                tool.max_sessions
+                    .filter(|cap| *cap > 0)
+                    .map(|cap| (tool.tool.clone(), cap))
+            })
             .collect();
         // A machine's cap is the strictest of the targets the sessions ran for there.
         let mut machine_caps: BTreeMap<String, u32> = BTreeMap::new();

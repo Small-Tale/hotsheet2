@@ -842,9 +842,9 @@ fn hs2_2fg91x_a_namespace_one_read_has_no_room_for_is_unknown_not_free() {
     let mut body = policy(false);
     body.machine.max_sessions = 12;
     for tool in &mut body.tools {
-        tool.max_sessions = 12;
+        tool.max_sessions = Some(12);
     }
-    body.targets[0].max_sessions = 12;
+    body.targets[0].max_sessions = Some(12);
     set_policy(&s.m, body, &mut tx);
     // Thirty-three namespaces across nine steps; one pass reads thirty-two.
     let names: Vec<String> = (0..33).map(|n| format!("ns{n:02}/r")).collect();
@@ -886,7 +886,7 @@ fn hs2_kcehvr_a_claim_on_a_later_page_is_read_and_defers_its_work() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let mut body = policy(false);
-    body.targets[0].max_sessions = 4;
+    body.targets[0].max_sessions = Some(4);
     set_policy(&s.m, body, &mut tx);
     let names: Vec<String> = (0..9).map(|n| format!("ns{n}/r")).collect();
     let refs: Vec<&str> = names.iter().map(String::as_str).collect();
@@ -931,7 +931,7 @@ fn hs2_kcehvr_each_unreadable_namespace_reports_its_configured_policy() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let mut body = policy(false);
-    body.targets[0].max_sessions = 4;
+    body.targets[0].max_sessions = Some(4);
     set_policy(&s.m, body, &mut tx);
     let configuration = |id: &str, offline| {
         let mut c = BackendConfiguration::new(id, BackendKind::GitRef).unwrap();

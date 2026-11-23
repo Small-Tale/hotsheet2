@@ -8,7 +8,13 @@ import type { SettingsCategory } from '../components/settings-navigation';
 import type { SidebarPanelParts } from '../components/sidebar-panel';
 import type { Choose, Confirm } from '../confirmation';
 import type { Project } from '../interactions/types';
-import { addChoices, projectRows, siteChoicesByProject, siteReadFailure } from '../orchestration-settings-model';
+import {
+  addChoices,
+  projectRows,
+  siteChoicesByProject,
+  siteReadFailure,
+  usablePolicyTools,
+} from '../orchestration-settings-model';
 import { isRemoteProjectId } from '../remote-projects/identity';
 import { createOrchestrationSettings } from './orchestration-settings';
 
@@ -224,7 +230,10 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
         ),
       ],
       removing: Boolean(state?.busy.includes(target)),
-      policyTools: (policy?.tools ?? []).map((tool) => tool.tool),
+      policyTools: usablePolicyTools(
+        policy,
+        dependencies.aiTools().map((tool) => tool.id),
+      ),
       // HS2-SYZB33: another site's coordination sessions start on its project's home.
       homeLabel: row.siteOf ? rows.find((item) => item.targetId === row.siteOf)?.label : undefined,
       sites: (siteProject?.sites ?? []).map((site) => ({

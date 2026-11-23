@@ -100,10 +100,10 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_the_limits_only_policy_and_its_dry_ru
     let good = root.path().join("policy.json");
     std::fs::write(&good, serde_json::to_vec(&body).unwrap()).unwrap();
     // A conflicting policy: the account cap exceeds its tool cap and the target names
-    // a tool that is not configured.
+    // a tool without a bounded identifier. An unlisted tool is Auto (HS2-N3HWP9).
     let mut conflicting = body.clone();
     conflicting["tools"][0]["accounts"][0]["max_sessions"] = json!(5);
-    conflicting["targets"][0]["tools"] = json!([{"tool":"codex"},{"tool":"claude"}]);
+    conflicting["targets"][0]["tools"] = json!([{"tool":"codex"},{"tool":"has space"}]);
     let bad = root.path().join("conflicting.json");
     std::fs::write(&bad, serde_json::to_vec(&conflicting).unwrap()).unwrap();
     let malformed = root.path().join("malformed.json");
@@ -127,7 +127,7 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_the_limits_only_policy_and_its_dry_ru
         .iter()
         .map(|problem| problem["code"].as_str().unwrap().to_owned())
         .collect();
-    assert_eq!(codes, ["account_cap_exceeds_tool", "unconfigured_tool"]);
+    assert_eq!(codes, ["account_cap_exceeds_tool", "invalid_tool"]);
     // HS2-XHQ1EH: the retired fields are read, ignored and reported.
     let ignored: Vec<_> = report["ignored"]
         .as_array()

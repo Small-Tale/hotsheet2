@@ -406,10 +406,11 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
     // Nobody was asked: no permission request was filed for these reads.
     const permissions = await server.request<{ requests: unknown[] }>(`${base}/permissions`);
     expect(permissions.requests).toEqual([]);
-    // A project the policy lists no tool for says so in place instead of a refusal.
+    // HS2-N5BDE4: a project the policy does not list is Auto, so admission is asked for every usable tool.
     await open('Docs');
     await expect(capacity.getByText('Free Memory')).toBeVisible();
-    await expect(capacity).toContainText('No AI tool is allowed here yet');
+    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+    await expect(capacity).not.toContainText('No AI tool is allowed here yet');
     await expect(detail).not.toContainText('is not available');
     await open('Web');
     await expect(capacity.getByText('Codex Admission')).toBeVisible();
@@ -505,9 +506,13 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
       .first()
       .click();
     const limits = page.locator('[data-component="orchestration-project-limits"]');
-    await expect(limits).toContainText('The policy does not list this project yet');
+    // HS2-N5BDE4: an unlisted project is Auto: no tool checked, Sessions Here shows Auto, and admission
+    // is asked for every usable tool.
+    await expect(limits).toContainText('None checked is Auto');
+    await expect(limits.getByRole('spinbutton', { name: 'Sessions Here' })).toHaveValue('');
+    await expect(limits.getByRole('spinbutton', { name: 'Sessions Here' })).toHaveAttribute('placeholder', 'Auto');
     const capacity = page.getByRole('region', { name: 'Capacity and Admission' });
-    await expect(capacity).toContainText('No AI tool is allowed here yet');
+    await expect(capacity.getByText('Codex Admission')).toBeVisible();
     // Allow Codex here with its own machine limits, and apply.
     await limits.getByRole('checkbox', { name: 'Codex' }).check();
     await limits.getByRole('checkbox', { name: 'Use Different Machine Limits' }).check();
@@ -526,9 +531,10 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     expect(stored.policy.targets.map((entry) => entry.target_id)).toEqual([targets.Docs, targets.Web]);
     expect(stored.policy.targets[1]).toMatchObject({
       tools: [{ tool: 'codex' }],
-      max_sessions: 1,
       machine: { max_sessions: 3 },
     });
+    // Sessions Here left empty is Auto, stored by leaving it out.
+    expect(stored.policy.targets[1]).not.toHaveProperty('max_sessions');
     // Admission is now asked for Codex here.
     await expect(capacity.getByText('Codex Admission')).toBeVisible();
     await expect(limits).not.toContainText('does not list this project');
@@ -634,6 +640,88 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     await capture('policy-account-1440-dark');
     await limits.scrollIntoViewIfNeeded();
     await capture('limits-1440-dark');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
+ * HS2-N3HWP9: each tool's Sessions and Weight are Auto when empty, and 0 turns the tool off. Checked in
+ * the real shell against the real policy route, with captures of the Tools section wide and narrow.
+ */
+test('HS2-N3HWP9 tool Sessions and Weight show Auto when empty and store 0 to turn a tool off', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(180_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    // Codex listed with nothing set: Auto in both fields.
+    await server.request(`${base}/policy`, 'PUT', {
+      expected_revision: null,
+      policy: { tools: [{ tool: 'codex' }] },
+      actor: { role: 'human' },
+    });
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'Orchestration');
+    const policy = page.locator('[data-component="orchestration-policy-settings"]');
+    await expect(policy).toContainText('Empty is Auto');
+    await expect(policy).not.toContainText('Leave Sessions empty');
+    const sessions = policy.getByRole('spinbutton', { name: 'Sessions', exact: true });
+    const weights = policy.getByRole('spinbutton', { name: 'Weight', exact: true });
+    expect(await sessions.count()).toBeGreaterThan(0);
+    // Every tool reads Auto: an empty value with Auto as its placeholder.
+    for (const field of [...(await sessions.all()), ...(await weights.all())]) {
+      await expect(field).toHaveValue('');
+      await expect(field).toHaveAttribute('placeholder', 'Auto');
+    }
+    const directory = join('target', 'visual-captures', 'hs2-n3hwp9');
+    await mkdir(directory, { recursive: true });
+    const capture = (name: string) =>
+      page.screenshot({ path: join(directory, `hs2-n3hwp9-${name}-${browserName}.png`), animations: 'disabled' });
+    await sessions.first().scrollIntoViewIfNeeded();
+    await capture('tools-auto-1440');
+
+    // 0 turns the first tool off; a number on the second is a cap. Weight stays Auto.
+    await sessions.nth(0).fill('0');
+    await sessions.nth(0).blur();
+    const two = (await sessions.count()) > 1;
+    if (two) {
+      await sessions.nth(1).fill('3');
+      await sessions.nth(1).blur();
+    }
+    await policy.getByRole('button', { name: 'Apply Policy' }).click();
+    // With no project added the empty state is a status too; find the save message by its words.
+    await expect(
+      page
+        .locator('[data-component="orchestration-settings"]')
+        .getByRole('status')
+        .filter({ hasText: 'Policy saved.' }),
+    ).toBeVisible();
+    const stored = await server.request<{ policy: { tools: Record<string, unknown>[] } }>(`${base}/policy`);
+    expect(stored.policy.tools[0]).toMatchObject({ max_sessions: 0 });
+    expect(stored.policy.tools.every((tool) => !('weight' in tool))).toBe(true);
+    if (two) expect(stored.policy.tools[1]).toMatchObject({ max_sessions: 3 });
+    expect(stored.policy.tools).toHaveLength(two ? 2 : 1);
+    await expect(sessions.nth(0)).toHaveValue('0');
+    await expect(weights.nth(0)).toHaveValue('');
+    for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+      }
+      await sessions.first().scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await capture(`tools-${String(size.width)}${index === 3 ? '-after-390' : ''}`);
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('tools-1440-dark');
   } finally {
     await server.stop(page);
   }

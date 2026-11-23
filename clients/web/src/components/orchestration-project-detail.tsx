@@ -400,11 +400,6 @@ function limitsSection({ detail, policyTools, toolLabel, homeLabel }: LimitsSect
     <section aria-label="Limits" data-component="orchestration-project-limits">
       <ListHeader label="Limits" />
       <List gap="m" textInsets="rl">
-        {limits && !limits.listed ? (
-          <Text tone="quiet" size="compact" flush>
-            The policy does not list this project yet, so no session starts here. Apply Limits to add it.
-          </Text>
-        ) : null}
         <Checkbox
           name="limits.enabled"
           label="Orchestrate in This Project"
@@ -416,14 +411,14 @@ function limitsSection({ detail, policyTools, toolLabel, homeLabel }: LimitsSect
           <CheckboxGroup
             name="limits.tools"
             label="AI Tools Here"
-            hint="Sessions here may use these tools."
+            hint="None checked is Auto: sessions here use any of these tools installed and signed in where this project runs."
             choices={policyTools.map((tool) => ({ value: tool, label: toolLabel(tool) }))}
             value={(limits?.tools ?? []).filter((tool) => policyTools.includes(tool))}
             disabled={disabled}
           />
         ) : (
           <Text tone="quiet" size="compact" flush>
-            Set up AI tools in the policy first; then choose which ones may run here.
+            Auto: sessions here use any AI tool installed and signed in where this project runs.
           </Text>
         )}
         {policyTools
@@ -453,6 +448,10 @@ function limitsSection({ detail, policyTools, toolLabel, homeLabel }: LimitsSect
           label="Sessions Here"
           type="number"
           inputMode="numeric"
+          placeholder="Auto"
+          min={0}
+          max={64}
+          hint="Empty is Auto: up to the computer's Sessions per Machine. 0 starts none here."
           value={limits?.max_sessions ?? ''}
           disabled={disabled}
         />

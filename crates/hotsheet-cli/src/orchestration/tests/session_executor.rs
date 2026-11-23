@@ -47,8 +47,8 @@ fn policy() -> PolicyBody {
         },
         tools: vec![ToolPolicy {
             tool: "codex".into(),
-            max_sessions: 4,
-            weight: 50,
+            max_sessions: Some(4),
+            weight: Some(50),
             accounts: Vec::new(),
         }],
         targets: vec![TargetPolicy {
@@ -56,7 +56,7 @@ fn policy() -> PolicyBody {
             enabled: true,
             actions: None,
             tools: vec![scope("codex")],
-            max_sessions: 2,
+            max_sessions: Some(2),
             machine: None,
             speculation: None,
         }],
@@ -1891,7 +1891,7 @@ fn hs2_nptks8_a_persons_session_is_left_and_a_dry_run_only_shows_it() {
         .unwrap();
     let mut manual_policy = policy();
     manual_policy.placement.automatic = false;
-    manual_policy.targets[0].max_sessions = 3;
+    manual_policy.targets[0].max_sessions = Some(3);
     f.set_policy(manual_policy, &mut tx);
     let manual =
         f.m.runtime

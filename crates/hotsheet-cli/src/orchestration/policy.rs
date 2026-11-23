@@ -205,7 +205,15 @@ impl OrchestrationRuntime {
                 target_id: declaration.target_id.clone(),
             };
             let binding = Self::binding_at(&self.home, &target)?;
-            let entry = policy.target(&declaration.target_id);
+            let entry = policy.listed_target(&declaration.target_id);
+            // HS2-N5BDE4: an unlisted project, or one listing no tools, is Auto: the dry
+            // run asks about each tool the policy lists and does not turn off.
+            let auto_tools: Vec<&str> = policy
+                .tools
+                .iter()
+                .filter(|tool| !tool.is_off())
+                .map(|tool| tool.tool.as_str())
+                .collect();
             let mut actions = Vec::new();
             for action in TargetAction::ALL {
                 let tools: Vec<Option<&str>> = match (action, entry) {
@@ -214,6 +222,9 @@ impl OrchestrationRuntime {
                         .iter()
                         .map(|tool| Some(tool.tool.as_str()))
                         .collect(),
+                    (TargetAction::SessionsManage, _) if !auto_tools.is_empty() => {
+                        auto_tools.iter().map(|tool| Some(*tool)).collect()
+                    }
                     _ => vec![None],
                 };
                 for tool in tools {
@@ -301,7 +312,7 @@ impl OrchestrationRuntime {
                     Some(_) => "disabled",
                     None => "not_listed",
                 },
-                max_sessions: entry.map(|entry| entry.max_sessions),
+                max_sessions: Some(policy.target_cap(&policy.target(&declaration.target_id))),
                 machine: policy.machine_limits(&declaration.target_id),
                 speculation: policy.speculation_allowed(&declaration.target_id),
                 actions,

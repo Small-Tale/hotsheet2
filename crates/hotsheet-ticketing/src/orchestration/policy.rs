@@ -8,6 +8,7 @@
 //! read, ignored and reported by `validate`. Integer units only (megabytes, percent,
 //! cents).
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -82,19 +83,84 @@ pub struct AccountPolicy {
     pub budget_cents_per_day: Option<u64>,
 }
 
+/// HS2-N3HWP9: one AI tool's limits. `max_sessions` and `weight` are each Auto when
+/// absent (or `"auto"`), 0 to turn the tool off, or an explicit number. A tool the
+/// policy does not list is Auto in both. Auto sessions give the tool no cap of its own:
+/// each machine's sessions limit and live admission (free memory, CPU, disk; the tool
+/// installed and signed in there) bound it, and among tools of equal weight the one
+/// with the fewest running sessions is tried first, so tools share a machine evenly.
+/// Auto weight is [`AUTO_TOOL_WEIGHT`], an equal share.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ToolPolicy {
     pub tool: String,
-    pub max_sessions: u32,
-    /// Relative preference from 1 to 100 when several tools could take the same work.
-    #[serde(default = "default_weight")]
-    pub weight: u32,
+    /// Concurrent sessions of the tool: `None` is Auto, 0 is off, else 1 to 64.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "auto_or_number"
+    )]
+    pub max_sessions: Option<u32>,
+    /// Relative preference when several tools could take the same work: `None` is
+    /// Auto, 0 is off, else 1 to 100.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "auto_or_number"
+    )]
+    pub weight: Option<u32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub accounts: Vec<AccountPolicy>,
 }
-fn default_weight() -> u32 {
-    50
+
+/// HS2-N3HWP9: the weight of a tool whose weight is Auto, an equal share.
+pub const AUTO_TOOL_WEIGHT: u32 = 50;
+
+/// A tool limit field: a number, `null`, or the string `"auto"` (any case).
+fn auto_or_number<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<u32>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Field {
+        Number(u32),
+        Text(String),
+    }
+    match Option::<Field>::deserialize(deserializer)? {
+        None => Ok(None),
+        Some(Field::Number(value)) => Ok(Some(value)),
+        Some(Field::Text(text)) if text.eq_ignore_ascii_case("auto") => Ok(None),
+        Some(Field::Text(_)) => Err(serde::de::Error::custom(
+            "a tool limit is a number or \"auto\"",
+        )),
+    }
+}
+
+impl ToolPolicy {
+    /// HS2-N3HWP9: an unlisted tool, Auto in sessions and weight.
+    pub fn auto(tool: &str) -> Self {
+        Self {
+            tool: tool.into(),
+            max_sessions: None,
+            weight: None,
+            accounts: Vec::new(),
+        }
+    }
+
+    /// Sessions 0 or weight 0: the orchestrator does not use the tool.
+    pub fn is_off(&self) -> bool {
+        self.max_sessions == Some(0) || self.weight == Some(0)
+    }
+
+    /// The tool's own concurrency cap. Auto has none, so it is the most a policy
+    /// allows anywhere; the machine and target limits bind first.
+    pub fn session_cap(&self) -> u32 {
+        self.max_sessions.unwrap_or(MAX_POLICY_SESSIONS)
+    }
+
+    pub fn effective_weight(&self) -> u32 {
+        self.weight.unwrap_or(AUTO_TOOL_WEIGHT)
+    }
 }
 
 /// One AI tool sessions on a target may use. No models means any model of the tool.
@@ -118,11 +184,19 @@ pub struct TargetPolicy {
     /// `validate` reports them, and they are never written again.
     #[serde(default, skip_serializing)]
     pub actions: Option<serde_json::Value>,
-    /// Tools (and optionally models) sessions on this target may use.
+    /// Tools (and optionally models) sessions on this target may use. HS2-N5BDE4:
+    /// empty is Auto, any tool the policy does not turn off that is installed and
+    /// signed in on the target's machine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<ToolScope>,
-    #[serde(default = "default_target_sessions")]
-    pub max_sessions: u32,
+    /// HS2-N5BDE4: sessions on this target: `None` (absent or `"auto"`) is Auto, the
+    /// target machine's sessions limit; 0 starts none; else 1 to 64.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "auto_or_number"
+    )]
+    pub max_sessions: Option<u32>,
     /// Overrides the policy's default machine limits for this target's machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machine: Option<MachineLimits>,
@@ -133,8 +207,35 @@ pub struct TargetPolicy {
 fn enabled() -> bool {
     true
 }
-fn default_target_sessions() -> u32 {
-    1
+
+impl TargetPolicy {
+    /// HS2-N5BDE4: a project the policy does not list, Auto in everything.
+    pub fn auto(target_id: &str) -> Self {
+        Self {
+            target_id: target_id.into(),
+            enabled: true,
+            actions: None,
+            tools: Vec::new(),
+            max_sessions: None,
+            machine: None,
+            speculation: None,
+        }
+    }
+
+    /// The tool's scope here: the listed one, or any model of any tool when the
+    /// target lists none (Auto). Whether the policy turns the tool off is separate.
+    pub fn scope(&self, tool: &str) -> Option<Cow<'_, ToolScope>> {
+        if self.tools.is_empty() {
+            return Some(Cow::Owned(ToolScope {
+                tool: tool.into(),
+                models: Vec::new(),
+            }));
+        }
+        self.tools
+            .iter()
+            .find(|scope| scope.tool == tool)
+            .map(Cow::Borrowed)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -498,10 +599,35 @@ pub struct IgnoredField {
 }
 
 impl PolicyBody {
-    pub fn target(&self, target_id: &str) -> Option<&TargetPolicy> {
+    /// HS2-N3HWP9: a tool's limits, Auto in both when the policy does not list it.
+    pub fn tool_policy(&self, tool: &str) -> ToolPolicy {
+        self.tools
+            .iter()
+            .find(|configured| configured.tool == tool)
+            .cloned()
+            .unwrap_or_else(|| ToolPolicy::auto(tool))
+    }
+
+    /// HS2-N5BDE4: a target's limits; a project the policy does not list is Auto in
+    /// everything. Callers ask only about targets the manifest declares.
+    pub fn target(&self, target_id: &str) -> Cow<'_, TargetPolicy> {
+        self.listed_target(target_id)
+            .map_or_else(|| Cow::Owned(TargetPolicy::auto(target_id)), Cow::Borrowed)
+    }
+
+    /// The target's own entry, when the policy lists it.
+    pub fn listed_target(&self, target_id: &str) -> Option<&TargetPolicy> {
         self.targets
             .iter()
             .find(|target| target.target_id == target_id)
+    }
+
+    /// HS2-N5BDE4: the sessions a target may hold: its own number, or Auto's, its
+    /// machine's sessions limit.
+    pub fn target_cap(&self, target: &TargetPolicy) -> u32 {
+        target
+            .max_sessions
+            .unwrap_or_else(|| self.machine_limits(&target.target_id).max_sessions)
     }
 
     /// The limits the target's machine must satisfy before a session starts there.
@@ -524,7 +650,7 @@ impl PolicyBody {
     }
 
     pub fn machine_limits(&self, target_id: &str) -> MachineLimits {
-        self.target(target_id)
+        self.listed_target(target_id)
             .and_then(|target| target.machine)
             .unwrap_or(self.machine)
     }
@@ -541,7 +667,7 @@ impl PolicyBody {
     }
 
     pub fn speculation_allowed(&self, target_id: &str) -> bool {
-        self.target(target_id)
+        self.listed_target(target_id)
             .and_then(|target| target.speculation)
             .unwrap_or(self.speculation.allowed)
     }
@@ -570,11 +696,22 @@ impl PolicyBody {
             if !tools.insert(tool.tool.as_str()) {
                 report("duplicate_tool", "tool is configured twice", name);
             }
-            if !(1..=MAX_POLICY_SESSIONS).contains(&tool.max_sessions) {
-                report("invalid_tool_cap", "tool sessions must be 1 to 64", name);
+            if tool
+                .max_sessions
+                .is_some_and(|cap| cap > MAX_POLICY_SESSIONS)
+            {
+                report(
+                    "invalid_tool_cap",
+                    "tool sessions must be Auto, 0 (off) or 1 to 64",
+                    name,
+                );
             }
-            if !(1..=100).contains(&tool.weight) {
-                report("invalid_tool_weight", "tool weight must be 1 to 100", name);
+            if tool.weight.is_some_and(|weight| weight > 100) {
+                report(
+                    "invalid_tool_weight",
+                    "tool weight must be Auto, 0 (off) or 1 to 100",
+                    name,
+                );
             }
             if tool.accounts.len() > MAX_POLICY_ACCOUNTS {
                 report("too_many_accounts", "at most 16 accounts per tool", name);
@@ -599,7 +736,10 @@ impl PolicyBody {
                         subject,
                     );
                 }
-                if account.max_sessions > tool.max_sessions {
+                if tool
+                    .max_sessions
+                    .is_some_and(|cap| cap > 0 && account.max_sessions > cap)
+                {
                     report(
                         "account_cap_exceeds_tool",
                         "an account cap cannot exceed its tool cap",
@@ -635,10 +775,12 @@ impl PolicyBody {
                 if !scoped.insert(scope.tool.as_str()) {
                     report("duplicate_tool", "tool is listed twice for a target", id);
                 }
-                if !tools.contains(scope.tool.as_str()) {
+                // HS2-N3HWP9: a tool not listed under `tools` is Auto, so a target may
+                // name it; it still needs a bounded identifier.
+                if valid_identifier(&scope.tool).is_err() {
                     report(
-                        "unconfigured_tool",
-                        "a target tool must be configured under tools",
+                        "invalid_tool",
+                        "tool needs a bounded identifier",
                         Some(&scope.tool),
                     );
                 }
@@ -653,13 +795,23 @@ impl PolicyBody {
                     report("invalid_models", "models must be unique bounded names", id);
                 }
             }
-            if !(1..=MAX_POLICY_SESSIONS).contains(&target.max_sessions) {
-                report("invalid_target_cap", "target sessions must be 1 to 64", id);
+            if target
+                .max_sessions
+                .is_some_and(|cap| cap > MAX_POLICY_SESSIONS)
+            {
+                report(
+                    "invalid_target_cap",
+                    "target sessions must be Auto, 0 (off) or 1 to 64",
+                    id,
+                );
             }
             if let Some(machine) = &target.machine {
                 check_machine(machine, id, &mut report);
             }
-            if target.max_sessions > self.machine_limits(&target.target_id).max_sessions {
+            if target
+                .max_sessions
+                .is_some_and(|cap| cap > self.machine_limits(&target.target_id).max_sessions)
+            {
                 report(
                     "target_cap_exceeds_machine",
                     "a target cap cannot exceed its machine cap",
@@ -850,7 +1002,7 @@ impl PolicyBody {
     pub fn evaluate(&self, question: &PolicyQuestion<'_>) -> PolicyVerdict {
         use PolicyDenial as D;
         let target = self.target(question.target_id);
-        if target.is_some_and(|target| !target.enabled) {
+        if !target.enabled {
             return PolicyVerdict::Denied(D::TargetDisabled);
         }
         if question.provisional && !self.speculation_allowed(question.target_id) {
@@ -859,13 +1011,10 @@ impl PolicyBody {
         if question.action != TargetAction::SessionsManage {
             return PolicyVerdict::Allowed;
         }
-        let Some(target) = target else {
-            return PolicyVerdict::Denied(D::TargetNotPermitted);
-        };
         let Some(session) = question.session else {
             return PolicyVerdict::Denied(D::ToolNotPermitted);
         };
-        let Some(scope) = target.tools.iter().find(|tool| tool.tool == session.tool) else {
+        let Some(scope) = target.scope(&session.tool) else {
             return PolicyVerdict::Denied(D::ToolNotPermitted);
         };
         if !scope.models.is_empty()
@@ -877,7 +1026,7 @@ impl PolicyBody {
             return PolicyVerdict::Denied(D::ModelNotPermitted);
         }
         if session.starting {
-            if let Err(denial) = self.check_caps(target, &session.tool, question.load) {
+            if let Err(denial) = self.check_caps(&target, &session.tool, question.load) {
                 return PolicyVerdict::Denied(denial);
             }
         }
@@ -892,18 +1041,17 @@ impl PolicyBody {
     ) -> Result<(), PolicyDenial> {
         use PolicyDenial as D;
         let load = load.ok_or(D::LoadUnknown)?;
-        let tool = self
-            .tools
-            .iter()
-            .find(|configured| configured.tool == tool)
-            .ok_or(D::ToolNotPermitted)?;
-        if load.target_sessions >= target.max_sessions {
+        let tool = self.tool_policy(tool);
+        if tool.is_off() {
+            return Err(D::ToolNotPermitted);
+        }
+        if load.target_sessions >= self.target_cap(target) {
             return Err(D::TargetCap);
         }
         if load.machine_sessions >= self.machine_limits(&target.target_id).max_sessions {
             return Err(D::MachineCap);
         }
-        if load.tool_sessions >= tool.max_sessions {
+        if load.tool_sessions >= tool.session_cap() {
             return Err(D::ToolCap);
         }
         // A tool with configured accounts only runs under one of them.

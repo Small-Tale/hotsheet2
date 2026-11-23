@@ -283,7 +283,7 @@ fn policy() -> PolicyBody {
         enabled: true,
         actions: None,
         tools: vec![scope(tool)],
-        max_sessions: 2,
+        max_sessions: Some(2),
         machine: None,
         speculation: None,
     };
@@ -295,8 +295,8 @@ fn policy() -> PolicyBody {
         tools: ["codex", "claude"]
             .map(|tool| ToolPolicy {
                 tool: tool.into(),
-                max_sessions: 4,
-                weight: 50,
+                max_sessions: Some(4),
+                weight: Some(50),
                 accounts: Vec::new(),
             })
             .into(),
@@ -3031,7 +3031,7 @@ fn hs2_trp2mj_each_session_is_held_only_by_its_own_worktrees() {
     ]);
     // Room for two workers and both role sessions on the target.
     let mut roomy = policy();
-    roomy.targets[0].max_sessions = 4;
+    roomy.targets[0].max_sessions = Some(4);
     f.set_policy(roomy, &mut tx);
     let a = f.started("op-a", 1, "codex", &mut tx);
     let b = f.started("op-b", 1, "codex", &mut tx);

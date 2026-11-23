@@ -30,8 +30,8 @@ pub(super) fn target(n: u128) -> String {
 fn tool(name: &str, max_sessions: u32, weight: u32) -> ToolPolicy {
     ToolPolicy {
         tool: name.into(),
-        max_sessions,
-        weight,
+        max_sessions: Some(max_sessions),
+        weight: Some(weight),
         accounts: Vec::new(),
     }
 }
@@ -48,7 +48,7 @@ fn target_policy(n: u128, max_sessions: u32, tools: &[&str]) -> TargetPolicy {
                 models: Vec::new(),
             })
             .collect(),
-        max_sessions,
+        max_sessions: Some(max_sessions),
         machine: None,
         speculation: None,
     }
@@ -944,13 +944,18 @@ fn hs2_ecwg50_a_policy_change_mid_run_stops_starts_and_winds_sessions_down_safel
     // Each other way a session can fall outside the policy.
     let cases: Vec<(&str, Edit<PolicyBody>)> = vec![
         (
-            "policy_target_not_permitted",
-            Box::new(|policy| policy.targets.clear()),
-        ),
-        (
             "policy_tool_not_permitted",
             Box::new(|policy| {
                 policy.targets[0].tools.remove(0);
+            }),
+        ),
+        // HS2-N3HWP9: a tool the policy turns off (Weight 0) is not permitted either.
+        (
+            "policy_tool_not_permitted",
+            Box::new(|policy| {
+                for tool in &mut policy.tools {
+                    tool.weight = Some(0);
+                }
             }),
         ),
         (
@@ -1008,12 +1013,12 @@ fn hs2_ecwg50_a_lowered_cap_winds_down_the_freest_sessions_first() {
             .collect()
     };
     assert!(leaving(&world).is_empty());
-    world.policy.targets[0].max_sessions = 3;
+    world.policy.targets[0].max_sessions = Some(3);
     assert_eq!(leaving(&world), ["idle-long"]);
-    world.policy.targets[0].max_sessions = 2;
+    world.policy.targets[0].max_sessions = Some(2);
     assert_eq!(leaving(&world), ["idle-long", "idle-new"]);
     // Below what is busy: the waiting session goes, the busy one is never touched.
-    world.policy.targets[0].max_sessions = 1;
+    world.policy.targets[0].max_sessions = Some(1);
     assert_eq!(leaving(&world), ["gate", "idle-long", "idle-new"]);
     assert_eq!(fate(&world.now(), "busy"), ("keep", "busy"));
     // A session already leaving is not counted twice, and nothing new starts.
@@ -1063,7 +1068,7 @@ fn hs2_ecwg50_a_session_waiting_on_ci_is_refilled_with_independent_work() {
     world
         .sessions
         .push(session("idle", 1, SessionActivity::Idle));
-    world.policy.targets[0].max_sessions = 2;
+    world.policy.targets[0].max_sessions = Some(2);
     world.work = vec![work(1, 1)];
     let schedule = world.now();
     assert_eq!(fate(&schedule, "idle"), ("keep", "refill"));
@@ -1071,7 +1076,7 @@ fn hs2_ecwg50_a_session_waiting_on_ci_is_refilled_with_independent_work() {
 
     // Work that asks for another tool does not fit the free session.
     world.work[0].tool = Some("beta".into());
-    world.policy.targets[0].max_sessions = 3;
+    world.policy.targets[0].max_sessions = Some(3);
     let schedule = world.now();
     assert_eq!(starts(&schedule), vec![(id(1), "beta".into())]);
     assert_eq!(fate(&schedule, "idle"), ("keep", "idle_grace"));
@@ -1097,8 +1102,9 @@ fn hs2_ecwg50_sessions_the_scheduler_does_not_own_are_load_and_nothing_else() {
     assert_eq!(fate(&schedule, "taken"), ("keep", "human_takeover"));
     // They fill the target's cap, are not refilled and are never wound down.
     assert_eq!(blocked(&schedule, 1).0, "target_cap");
-    // Even when the policy forbids the target.
-    world.policy.targets.clear();
+    // Even when the policy disables the target. HS2-N5BDE4: an unlisted target is
+    // Auto, so disabling is how a policy forbids one.
+    world.policy.targets[0].enabled = false;
     let schedule = world.now();
     assert!(
         schedule
@@ -1977,13 +1983,13 @@ fn hs2_th53nn_a_preferred_tool_and_model_are_tried_first_and_never_required() {
     let started_beta = world.now();
     assert_eq!(starts(&started_beta), vec![(id(1), "beta".into())]);
     // At the target's cap, the free session of another tool takes it instead.
-    world.policy.targets[0].max_sessions = 1;
+    world.policy.targets[0].max_sessions = Some(1);
     let refilled = world.now();
     assert_eq!(fate(&refilled, "s-alpha"), ("keep", "refill"));
     assert!(starts(&refilled).is_empty());
     // The preferred tool limited, no other candidate left after the fallback: the
     // free session takes it rather than a second start.
-    world.policy.targets[0].max_sessions = 2;
+    world.policy.targets[0].max_sessions = Some(2);
     world.tools = vec![healthy().remove(0), limited("beta", T0 + HOUR)];
     let limited_beta = world.now();
     assert_eq!(fate(&limited_beta, "s-alpha"), ("keep", "refill"));
@@ -2113,4 +2119,42 @@ fn hs2_zy4z4g_an_unreported_machine_takes_no_work_with_requirements() {
         blocked(&world.now(), 1),
         ("requirement_unmet", Some("os:linux".into()))
     );
+}
+
+/// HS2-N3HWP9 and HS2-N5BDE4: with nothing set, the orchestrator chooses. An unlisted
+/// project uses the tools installed and signed in on its machine, up to the machine's
+/// sessions limit, sharing them between tools; 0 turns a project or a tool off.
+#[test]
+fn hs2_n5bde4_an_unlisted_project_and_tools_are_auto_and_zero_is_off() {
+    let mut world = World::new(&[(1, 2)]);
+    world.policy.tools.clear();
+    world.policy.targets.clear();
+    world.work = (1..=6).map(|n| work(n, 1)).collect();
+    let auto = starts(&world.now());
+    // The machine's sessions limit (4) bounds an Auto project.
+    assert_eq!(auto.len(), 4);
+    let mut tools: Vec<&str> = auto.iter().map(|(_, tool)| tool.as_str()).collect();
+    tools.sort_unstable();
+    tools.dedup();
+    assert_eq!(tools, ["alpha", "beta"], "Auto tools share the machine");
+
+    // Sessions 0 on the project starts nothing there.
+    world.policy.targets = vec![TargetPolicy {
+        max_sessions: Some(0),
+        ..TargetPolicy::auto(&target(1))
+    }];
+    assert!(starts(&world.now()).is_empty());
+    assert_eq!(blocked(&world.now(), 1).0, "target_cap");
+
+    // A number is a cap; tools 0 (Sessions or Weight) are off.
+    world.policy.targets[0].max_sessions = Some(1);
+    assert_eq!(starts(&world.now()).len(), 1);
+    world.policy.targets.clear();
+    world.policy.tools = vec![ToolPolicy {
+        weight: Some(0),
+        ..ToolPolicy::auto("alpha")
+    }];
+    let without_alpha = starts(&world.now());
+    assert_eq!(without_alpha.len(), 4);
+    assert!(without_alpha.iter().all(|(_, tool)| tool == "beta"));
 }

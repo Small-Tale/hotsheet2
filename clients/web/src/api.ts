@@ -1281,8 +1281,10 @@ export interface OrchestrationSession {
 export interface OrchestrationTargetPolicy {
   target_id: string;
   enabled?: boolean;
+  /** HS2-N5BDE4: absent or empty is Auto, any tool the policy does not turn off. */
   tools?: { tool: string; models?: string[] }[];
-  max_sessions?: number;
+  /** HS2-N5BDE4: absent (or `"auto"`) is Auto, the machine's sessions limit; 0 starts none. */
+  max_sessions?: number | 'auto' | null;
   machine?: { max_sessions?: number; min_free_ram_mb?: number; max_cpu_percent?: number; min_free_disk_mb?: number };
   speculation?: boolean;
   [key: string]: unknown;
@@ -1291,7 +1293,13 @@ export interface OrchestrationTargetPolicy {
 export type OrchestrationRoleSession = 'dispatcher' | 'integrator';
 export interface OrchestrationPolicyBody {
   machine?: { max_sessions?: number; min_free_ram_mb?: number; max_cpu_percent?: number; min_free_disk_mb?: number };
-  tools?: { tool: string; max_sessions: number; weight?: number; accounts?: unknown[] }[];
+  /** HS2-N3HWP9: an absent (or `"auto"`) `max_sessions` or `weight` is Auto; 0 turns the tool off. */
+  tools?: {
+    tool: string;
+    max_sessions?: number | 'auto' | null;
+    weight?: number | 'auto' | null;
+    accounts?: unknown[];
+  }[];
   targets?: OrchestrationTargetPolicy[];
   wind_down?: { idle_minutes?: number; keep_warm?: number };
   speculation?: {

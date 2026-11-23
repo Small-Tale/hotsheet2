@@ -563,11 +563,8 @@ impl OrchestrationRuntime {
                     .map(|entry| entry.target_id.as_str())
                     .filter(|target_id| sites.home_of(target_id) == *target_id),
             )
-            .filter(|target_id| {
-                policy
-                    .target(target_id)
-                    .is_some_and(|target| target.enabled && !target.tools.is_empty())
-            })
+            // HS2-N5BDE4: an unlisted target, or one listing no tools, is Auto.
+            .filter(|target_id| policy.target(target_id).enabled)
             .collect();
         let mut targets = Vec::new();
         let mut held = Vec::new();

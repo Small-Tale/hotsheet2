@@ -1051,7 +1051,7 @@ fn hs2_xhq1eh_a_cancel_never_asks_and_is_never_denied_by_the_policy() {
                         enabled: false,
                         actions: None,
                         tools: Vec::new(),
-                        max_sessions: 1,
+                        max_sessions: Some(1),
                         machine: None,
                         speculation: None,
                     }],

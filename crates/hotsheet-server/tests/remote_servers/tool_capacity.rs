@@ -224,7 +224,8 @@ async fn hs2_ahg7hw_cli_http_and_mcp_share_tool_capacity_signals_and_selection()
     ]);
     assert!(refuse(&ai, recovered.clone()).contains("forbidden"));
     for arguments in [
-        signal(&["--tool", "antigravity", "--kind", "usage"]),
+        // HS2-N3HWP9: an unlisted tool is Auto, but only a loaded plugin takes signals.
+        signal(&["--tool", "not-a-plugin", "--kind", "usage"]),
         signal(&["--tool", "claude", "--account", "team-z", "--kind", "usage"]),
         signal(&["--tool", "codex", "--kind", "paused"]),
         signal(&[

@@ -835,8 +835,8 @@ rather than evaluated. All quantities are integers: megabytes, percent and cents
 | Section       | Fields and defaults                                                                                                                                                                                                |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                                                                |
-| `tools[]`     | `tool`, `max_sessions` (1 to 64), `weight` 50 (1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`.                                                |
-| `targets[]`   | `target_id`, `enabled` true, `tools[]` with optional `models`, `max_sessions` 1, and optional `machine` and `speculation` overrides.                                                                               |
+| `tools[]`     | `tool`, `max_sessions` Auto (0 off, else 1 to 64), `weight` Auto (0 off, else 1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`. See Auto below. |
+| `targets[]`   | `target_id`, `enabled` true, `tools[]` Auto (empty) with optional `models`, `max_sessions` Auto (0 starts none, else 1 to 64), and optional `machine` and `speculation` overrides. See Auto below.                 |
 | `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                                                                    |
 | `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`, `redo_reopened` false (HS2-NCMATS, §26.22). |
 | `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5, and `resources[]` (§26.20). Left out of the file while it holds only defaults.                                           |
@@ -847,12 +847,36 @@ under `ignored`, and `set` stores the policy without them. Permission to act com
 from §26.7; a judgment call is a decision note on the goal ticket.
 
 A target a policy lists as disabled is refused every acting action. A session start
-needs the target listed with that tool; a tool listed for a target must be configured
-under `tools`, and a tool configured with accounts runs only under one of them.
+needs a tool the target allows; a tool configured with accounts runs only under one of
+them.
+
+**Auto (HS2-N3HWP9, HS2-N5BDE4).** Anything a person leaves unset is Auto: the
+orchestrator chooses, and a person sets a value only to override it. Throughout, an
+absent member, `null` or the string `"auto"` is Auto, `0` turns the thing off, and any
+other number is used as given. Auto is written by leaving the member out.
+
+| Setting                   | Auto                                                                                                                                                                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A tool's `max_sessions`   | No cap of its own. Each machine's `max_sessions` and live admission (free memory, CPU, disk, and the tool installed and signed in there) bound it. Among tools of equal weight the one with the fewest running sessions is tried first, so tools share a machine evenly. |
+| A tool's `weight`         | 50, an equal share with every other Auto tool.                                                                                                                                                                                                                           |
+| A tool the policy omits   | Auto in both. `0` in either field turns the tool off: no session starts on it and running ones wind down at a safe point.                                                                                                                                                |
+| A target's `tools`        | Empty: any tool not turned off that is installed and signed in on the target's machine (from its capacity read), then any tool the policy lists. Models are any, as before.                                                                                              |
+| A target's `max_sessions` | The target machine's `max_sessions` (its `machine` override, else the policy's). `0` starts no session there.                                                                                                                                                            |
+| A target the policy omits | Auto in everything: enabled, Auto tools, Auto sessions, the policy's machine limits and build-ahead. A target is only ever asked about once the manifest declares it.                                                                                                    |
+
+Files written before Auto read unchanged: every stored number keeps its meaning. What
+changes is the unset case. A tool or project the policy did not list used to start
+nothing; it is now Auto, so a policy with `"tools": []` and no `targets` lets the
+orchestrator use every installed, signed-in tool on every declared project, within the
+machine limits, once **Place sessions automatically** is on. No earlier file could hold an
+explicit "off" (the old forms dropped the entry), so there is nothing to convert; turn a
+tool or project off with `0`, or a project with `enabled: false`. Placement itself stays
+off until a person turns it on (`placement.automatic`), and coordination sessions stay a
+person's choice (`placement.role_sessions`, HS2-TK9ADC).
 
 `validate` reports every problem at once with a stable code and the tool, account or
 target it concerns. Conflicts are errors: a target cap above its machine cap, an
-account cap above its tool cap, a target tool that is not configured, duplicates, and
+account cap above an explicit tool cap, duplicates, and
 a target the manifest does not actively declare. `set` refuses an invalid policy,
 replaces the file at the expected revision, and is a no-op for identical content. It
 is a person's act: an `ai` actor is refused, because the governed session must not
@@ -5622,7 +5646,8 @@ the type changes to Software while it shows.
   gives that tab the peer's terminals launched in its checkout (HS2-JJKVJJ), and the
   session's `hosted.session_id` is the peer's terminal id (HS2-6E32N4).
 - **Policy, limits only.** Place sessions automatically, machine defaults, per-tool session
-  caps and weights (an empty Sessions field leaves the tool out), each tool's
+  caps and weights (HS2-N3HWP9: an empty field shows _Auto_ and leaves the member out, 0
+  turns the tool off; the help text says so), each tool's
   **accounts** with their sessions and daily budget (HS2-7WF6JD: + Add Account and a
   remove button per row; a row without a name is dropped; the budget is typed in dollars
   and stored as whole cents, and more than two decimals is refused, never rounded),
@@ -5632,16 +5657,17 @@ the type changes to Software while it shows.
   written back unchanged.
 - **A project's limits (HS2-7WF6JD).** The detail's **Limits** section, between Binding
   and Capacity and Admission, edits that project's entry in the policy (`targets[]`):
-  Orchestrate in This Project (`enabled`), AI Tools Here (the policy's configured tools),
+  Orchestrate in This Project (`enabled`), AI Tools Here (the tools the policy does not
+  turn off; none checked is Auto, HS2-N5BDE4),
   **<Tool> Models** for each checked tool (HS2-YSY7AR: `tools[].models`, separated by
   commas, empty for any model; unchecking a tool drops its models), Sessions Here
-  (`max_sessions`, at most the machine's limit), Build Ahead (as the policy says, on or
+  (`max_sessions`, at most the machine's limit; empty shows _Auto_, 0 starts none), Build Ahead (as the policy says, on or
   never: `speculation`), **Required Resources** (HS2-YSY7AR: this project's
   `placement.resources` entry of §26.20, `<namespace>/<resource>` names separated by
   commas, at most four; empty removes the entry) and Use Different Machine Limits
   (`machine`, the four machine fields). Models and resources are checked as the server
-  checks them before anything is sent. A project the policy does not list yet says so,
-  since no session may start there. **Apply Limits** stores the policy at the stored
+  checks them before anything is sent. A project the policy does not list is Auto in
+  everything (HS2-N5BDE4). **Apply Limits** stores the policy at the stored
   revision with only that project's entry and resources entry replaced in place, or
   appended; every other project, resources entry and member is unchanged. An edit in
   progress survives a reload from `orchestration_changed`; a saved one follows the

@@ -98,8 +98,9 @@ export function OrchestrationPolicySettings({
               Tools
             </Text>
             <Text tone="quiet" size="compact" flush>
-              Leave Sessions empty for a tool the orchestrator should not start. With accounts, sessions run only under
-              one of them, within its sessions and daily budget.
+              Empty is Auto: the orchestrator shares each computer's sessions evenly among the tools installed and
+              signed in there, within its limits above. 0 turns a tool off. With accounts, sessions run only under one
+              of them, within its sessions and daily budget.
             </Text>
           </List>
           {draft && draft.tools.length > 0 ? (
@@ -117,6 +118,9 @@ export function OrchestrationPolicySettings({
                         type="number"
                         inputMode="numeric"
                         value={tool.max_sessions}
+                        placeholder="Auto"
+                        min={0}
+                        max={64}
                         size="compact"
                         disabled={disabled}
                       />
@@ -126,6 +130,9 @@ export function OrchestrationPolicySettings({
                         type="number"
                         inputMode="numeric"
                         value={tool.weight}
+                        placeholder="Auto"
+                        min={0}
+                        max={100}
                         size="compact"
                         disabled={disabled}
                       />

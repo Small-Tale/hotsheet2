@@ -159,7 +159,7 @@ fn target_policy(n: u128, speculation: Option<bool>) -> TargetPolicy {
         enabled: true,
         actions: None,
         tools: Vec::new(),
-        max_sessions: 1,
+        max_sessions: Some(1),
         machine: None,
         speculation,
     }
@@ -567,7 +567,7 @@ fn hs2_jsf985_allowed_provisional_work_is_placed_below_confirmed_work() {
     assert_eq!(blocked(&schedule, 1), ("target_cap", None));
 
     // With room for both, the provisional start is marked and counted like any other.
-    world.policy.targets[0].max_sessions = 2;
+    world.policy.targets[0].max_sessions = Some(2);
     let schedule = world.now();
     let placed: Vec<_> = schedule
         .placements
@@ -609,7 +609,7 @@ fn hs2_jsf985_allowed_provisional_work_is_placed_below_confirmed_work() {
     assert_eq!(ranking, vec![work_id(2), work_id(1), work_id(3)]);
     // At 100 it ranks last and is still placed when there is room.
     world.policy.speculation.risk_weight = 100;
-    world.policy.targets[0].max_sessions = 3;
+    world.policy.targets[0].max_sessions = Some(3);
     let schedule = world.now();
     assert_eq!(schedule.ranking.last().unwrap().step_id, work_id(1));
     assert_eq!(starts(&schedule).len(), 3);

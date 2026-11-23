@@ -540,6 +540,9 @@ pub struct SelectionRequest<'a> {
     pub entries: &'a [CapacityEntry],
     pub load: &'a [SessionCount],
     pub now_ms: u64,
+    /// HS2-N5BDE4: the tools a target that lists none (Auto) may use, as the caller
+    /// knows them: those installed and signed in on the target's machine.
+    pub auto_tools: &'a [String],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -547,7 +550,8 @@ pub struct SelectionRequest<'a> {
 pub enum ExclusionReason {
     /// The requested tool is not on the target's tool list.
     ToolNotPermitted,
-    /// The target lists a tool the policy does not configure.
+    /// HS2-N3HWP9: the policy turns the tool off (Sessions or Weight 0). An unlisted
+    /// tool is Auto, not excluded.
     ToolNotConfigured,
     ModelNotPermitted,
     Limited,
@@ -604,16 +608,39 @@ pub fn select(
         candidates: Vec::new(),
         excluded: Vec::new(),
     };
-    let Some(target) = request.policy.target(request.target_id) else {
-        return denied(PolicyDenial::TargetNotPermitted);
-    };
+    // HS2-N5BDE4: an unlisted target is Auto in everything.
+    let target = request.policy.target(request.target_id);
     if !target.enabled {
         return denied(PolicyDenial::TargetDisabled);
     }
+    // A target that lists no tools is Auto: the tools the caller knows are installed
+    // and signed in on its machine, then any the policy lists.
+    let scopes: Vec<ToolScope> = if target.tools.is_empty() {
+        let mut names: Vec<&str> = Vec::new();
+        for name in request
+            .auto_tools
+            .iter()
+            .map(String::as_str)
+            .chain(request.policy.tools.iter().map(|tool| tool.tool.as_str()))
+        {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        names
+            .into_iter()
+            .map(|tool| ToolScope {
+                tool: tool.into(),
+                models: Vec::new(),
+            })
+            .collect()
+    } else {
+        target.tools.clone()
+    };
     let mut candidates = Vec::new();
     let mut excluded = Vec::new();
     if let Some(tool) = request.tool {
-        if !target.tools.iter().any(|scope| scope.tool == tool) {
+        if !scopes.iter().any(|scope| scope.tool == tool) {
             excluded.push(Excluded {
                 tool: tool.into(),
                 account: None,
@@ -622,7 +649,7 @@ pub fn select(
             });
         }
     }
-    for scope in &target.tools {
+    for scope in &scopes {
         let mut exclude = |account: Option<&str>, reason, status| {
             excluded.push(Excluded {
                 tool: scope.tool.clone(),
@@ -631,15 +658,12 @@ pub fn select(
                 status,
             });
         };
-        let Some(tool) = request
-            .policy
-            .tools
-            .iter()
-            .find(|tool| tool.tool == scope.tool)
-        else {
+        // HS2-N3HWP9: an unlisted tool is Auto; Sessions or Weight 0 turns it off.
+        let tool = request.policy.tool_policy(&scope.tool);
+        if tool.is_off() {
             exclude(None, ExclusionReason::ToolNotConfigured, None);
             continue;
-        };
+        }
         if !scope.models.is_empty()
             && request
                 .model
@@ -658,7 +682,7 @@ pub fn select(
                 })
                 .fold(0u32, |sum, count| sum.saturating_add(count.sessions))
         };
-        let tool_free = tool.max_sessions.saturating_sub(sessions(None));
+        let tool_free = tool.session_cap().saturating_sub(sessions(None));
         // A tool without configured accounts runs as one unnamed account.
         let accounts: Vec<(Option<&str>, u32, Option<u64>)> = if tool.accounts.is_empty() {
             vec![(None, tool_free, None)]
@@ -698,7 +722,7 @@ pub fn select(
                     status,
                     verified: status.verified(),
                     requested: request.tool == Some(tool.tool.as_str()),
-                    weight: tool.weight,
+                    weight: tool.effective_weight(),
                     free_sessions: tool_free.min(account_free),
                 });
             }

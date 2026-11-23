@@ -108,8 +108,8 @@ impl Opt {
             },
             tools: vec![ToolPolicy {
                 tool: "codex".into(),
-                max_sessions: 4,
-                weight: 60,
+                max_sessions: Some(4),
+                weight: Some(60),
                 accounts: Vec::new(),
             }],
             targets: [1, 2]
@@ -118,7 +118,11 @@ impl Opt {
                     enabled: true,
                     actions: None,
                     tools: vec![scope()],
-                    max_sessions: if n == 2 { self.cap.max(1) } else { 2 },
+                    max_sessions: if n == 2 {
+                        Some(self.cap.max(1))
+                    } else {
+                        Some(2)
+                    },
                     machine: None,
                     speculation: self.overrides[usize::try_from(n - 1).unwrap()],
                 })

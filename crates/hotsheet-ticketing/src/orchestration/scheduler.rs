@@ -822,17 +822,35 @@ fn is_worker(session: &ScheduledSession) -> bool {
     session.role.is_none_or(|role| role == SessionRole::Worker)
 }
 
+/// HS2-N5BDE4: the tools installed and signed in on a machine, which a target that
+/// lists no tools (Auto) may use. Unknown reads as none: nothing starts on a guess.
+fn machine_tools(snapshot: Option<&CapacitySnapshot>) -> Vec<String> {
+    snapshot
+        .and_then(|snapshot| snapshot.tools.as_ref())
+        .map(|tools| {
+            tools
+                .iter()
+                .filter(|tool| tool.installed && tool.configured)
+                .map(|tool| tool.tool.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The policy rule a running session breaks, if any.
 fn session_denial(policy: &PolicyBody, session: &ScheduledSession) -> Option<PolicyDenial> {
-    let Some(target) = policy.target(&session.target_id) else {
-        return Some(PolicyDenial::TargetNotPermitted);
-    };
+    // HS2-N5BDE4: an unlisted target is Auto, and so is one that lists no tools.
+    let target = policy.target(&session.target_id);
     if !target.enabled {
         return Some(PolicyDenial::TargetDisabled);
     }
-    let Some(scope) = target.tools.iter().find(|scope| scope.tool == session.tool) else {
+    let Some(scope) = target.scope(&session.tool) else {
         return Some(PolicyDenial::ToolNotPermitted);
     };
+    // HS2-N3HWP9: Sessions or Weight 0 turns the tool off.
+    if policy.tool_policy(&session.tool).is_off() {
+        return Some(PolicyDenial::ToolNotPermitted);
+    }
     if !scope.models.is_empty()
         && !session
             .model
@@ -1236,6 +1254,7 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
             }
         }};
     }
+    let auto_tools = machine_tools(snapshot);
     let selection_for = |tool: Option<&str>, model: Option<&str>| {
         select(
             &SelectionRequest {
@@ -1246,6 +1265,7 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
                 entries: input.tool_entries,
                 load: cx.load,
                 now_ms: now,
+                auto_tools: &auto_tools,
             },
             cx.support,
         )
@@ -1268,16 +1288,11 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
     if let Some(denied) = selection.denied {
         fallback!(Blocker::PolicyDenied, Some(denied.into()), None);
     }
-    let Some(target) = policy.target(site) else {
-        fallback!(
-            Blocker::PolicyDenied,
-            Some(PolicyDenial::TargetNotPermitted.code().into()),
-            None,
-        );
-    };
+    let target = policy.target(site);
+    let target_cap = policy.target_cap(&target);
     let target_sessions = cx.on_target.get(site).copied().unwrap_or(0)
         + cx.planned_target.get(site).copied().unwrap_or(0);
-    if target_sessions >= target.max_sessions {
+    if target_sessions >= target_cap {
         fallback!(Blocker::TargetCap, None, None);
     }
     // What the policy and the site's cap say stands until a person changes it; a
@@ -1343,13 +1358,12 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
                 item.tool
                     .as_ref()
                     .is_none_or(|tool| tool == &candidate.tool)
-                    && target.tools.iter().any(|scope| {
-                        scope.tool == candidate.tool
-                            && (scope.models.is_empty()
-                                || item
-                                    .model
-                                    .as_ref()
-                                    .is_some_and(|m| scope.models.contains(m)))
+                    && target.scope(&candidate.tool).is_some_and(|scope| {
+                        scope.models.is_empty()
+                            || item
+                                .model
+                                .as_ref()
+                                .is_some_and(|m| scope.models.contains(m))
                     })
             })
             .or_else(|| {
@@ -1456,7 +1470,7 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
             retry_at_ms: None,
             inputs: PlacementInputs {
                 target_sessions: target_sessions + 1,
-                target_cap: Some(target.max_sessions),
+                target_cap: Some(target_cap),
                 machine_sessions,
                 machine_cap: Some(admission.limits.max_sessions),
                 free_ram_mb: snapshot.memory.free_mb,
@@ -1545,7 +1559,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 })
                 .count()
         };
-        while staying(&fates) > target.max_sessions as usize {
+        while staying(&fates) > policy.target_cap(target) as usize {
             let pick = sessions
                 .iter()
                 .enumerate()
@@ -1655,9 +1669,11 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         if input.sites.home_of(target_id) != target_id {
             continue;
         }
-        let Some(target) = policy.target(target_id).filter(|target| target.enabled) else {
+        let target = policy.target(target_id);
+        if !target.enabled {
             continue;
-        };
+        }
+        let target_cap = policy.target_cap(&target);
         // Unknown is not empty: nothing starts on a guess.
         let Some(pool) = pool_of(target_id) else {
             continue;
@@ -1679,15 +1695,13 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             // HS2-5P112Z: another enabled site of the project with a free slot can take
             // the worker the dispatcher assigns to.
             let other_site_room = project.iter().any(|site| {
-                site != target_id
-                    && policy
-                        .target(site)
-                        .filter(|other| other.enabled)
-                        .is_some_and(|other| {
-                            on_target.get(site.as_str()).copied().unwrap_or(0)
-                                + planned_target.get(site.as_str()).copied().unwrap_or(0)
-                                < other.max_sessions
-                        })
+                site != target_id && {
+                    let other = policy.target(site);
+                    other.enabled
+                        && on_target.get(site.as_str()).copied().unwrap_or(0)
+                            + planned_target.get(site.as_str()).copied().unwrap_or(0)
+                            < policy.target_cap(&other)
+                }
             });
             let (live, wanted, room_for) = match kind {
                 // Room for the dispatcher and a worker, unless a worker already runs:
@@ -1711,7 +1725,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             }
             let target_sessions = on_target.get(target_id).copied().unwrap_or(0)
                 + planned_target.get(target_id).copied().unwrap_or(0);
-            if target_sessions + room_for > target.max_sessions {
+            if target_sessions + room_for > target_cap {
                 continue;
             }
             let remembered = memory(target_id);
@@ -1753,6 +1767,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                     entries: input.tool_entries,
                     load: &load,
                     now_ms: now,
+                    auto_tools: &machine_tools(Some(snapshot)),
                 },
                 support,
             );
@@ -1808,7 +1823,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 retry_at_ms: None,
                 inputs: PlacementInputs {
                     target_sessions: target_sessions + 1,
-                    target_cap: Some(target.max_sessions),
+                    target_cap: Some(target_cap),
                     machine_sessions: snapshot.sessions.as_ref().map(|running| {
                         u32::try_from(running.len())
                             .unwrap_or(u32::MAX)
@@ -2075,9 +2090,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                         .get(session.target_id.as_str())
                         .copied()
                         .unwrap_or(0),
-                    target_cap: policy
-                        .target(&session.target_id)
-                        .map(|target| target.max_sessions),
+                    target_cap: Some(policy.target_cap(&policy.target(&session.target_id))),
                     ..PlacementInputs::default()
                 },
                 role: session.role.filter(|role| *role != SessionRole::Worker),

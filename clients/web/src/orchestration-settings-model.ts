@@ -380,6 +380,7 @@ export function formatMegabytes(value: number | null | undefined): string {
 /** The defaults the server applies to an absent member (docs/26 §26.8). */
 export const POLICY_DEFAULTS = {
   machine: { max_sessions: 2, min_free_ram_mb: 2048, max_cpu_percent: 90, min_free_disk_mb: 5120 },
+  /** HS2-N3HWP9: Auto weight, an equal share. */
   tool: { weight: 50 },
   wind_down: { idle_minutes: 15, keep_warm: 0 },
 } as const;
@@ -394,8 +395,9 @@ export interface PolicyAccountDraft {
 
 export interface PolicyToolDraft {
   tool: string;
-  /** Empty: the orchestrator does not start this tool. */
+  /** HS2-N3HWP9: empty is Auto (no cap of its own), 0 turns the tool off. */
   max_sessions: string;
+  /** HS2-N3HWP9: empty is Auto (an equal share), 0 turns the tool off. */
   weight: string;
   accounts: PolicyAccountDraft[];
 }
@@ -435,8 +437,8 @@ export function policyDraftFrom(view: OrchestrationPolicyView | undefined, known
       const tool = configured.find((item) => item.tool === name);
       return {
         tool: name,
-        max_sessions: tool ? String(tool.max_sessions) : '',
-        weight: String(tool?.weight ?? POLICY_DEFAULTS.tool.weight),
+        max_sessions: autoOrNumber(tool?.max_sessions),
+        weight: autoOrNumber(tool?.weight),
         accounts: accountsOf(tool?.accounts).map((account) => ({
           account: account.account,
           max_sessions: String(account.max_sessions),
@@ -449,6 +451,25 @@ export function policyDraftFrom(view: OrchestrationPolicyView | undefined, known
     build_ahead: body.speculation?.allowed ?? false,
     redo_reopened: body.speculation?.redo_reopened ?? false,
   };
+}
+
+/** HS2-N3HWP9: whether a stored tool entry turns the tool off (Sessions or Weight 0). */
+function toolOff(tool: { max_sessions?: unknown; weight?: unknown } | undefined): boolean {
+  return tool?.max_sessions === 0 || tool?.weight === 0;
+}
+
+/**
+ * HS2-N3HWP9: the tools sessions may use: the policy's listed tools and every AI tool the app knows
+ * (an unlisted tool is Auto), less those the policy turns off.
+ */
+export function usablePolicyTools(
+  body: OrchestrationPolicyBody | null | undefined,
+  knownTools: readonly string[],
+): string[] {
+  const listed = body?.tools ?? [];
+  return [...new Set([...listed.map((tool) => tool.tool), ...knownTools])].filter(
+    (name) => !toolOff(listed.find((tool) => tool.tool === name)),
+  );
 }
 
 /** One form control's change. Field names are the controls' `name` attributes. */
@@ -548,6 +569,11 @@ const LABELS: Readonly<Record<string, string>> = {
   keep_warm: 'Idle Sessions Kept per Project',
 };
 
+/** HS2-N3HWP9: a stored tool limit as typed; Auto (absent, null or `"auto"`) is an empty field. */
+function autoOrNumber(value: unknown): string {
+  return typeof value === 'number' ? String(value) : '';
+}
+
 function whole(value: string, label: string, minimum: number, maximum?: number): number | string {
   const trimmed = value.trim();
   if (!/^\d+$/u.test(trimmed)) return `${label} must be a whole number.`;
@@ -588,9 +614,9 @@ export function policyFromDraft(
   const stored = body.tools ?? [],
     tools: NonNullable<OrchestrationPolicyBody['tools']> = [];
   for (const row of draft.tools) {
-    if (!row.max_sessions.trim()) continue;
-    const sessions = whole(row.max_sessions, `${row.tool} sessions`, 1, 64),
-      weight = whole(row.weight, `${row.tool} weight`, 1, 100);
+    // HS2-N3HWP9: an empty field is Auto and is stored by leaving the member out; 0 turns the tool off.
+    const sessions = row.max_sessions.trim() ? whole(row.max_sessions, `${row.tool} sessions`, 0, 64) : undefined,
+      weight = row.weight.trim() ? whole(row.weight, `${row.tool} weight`, 0, 100) : undefined;
     if (typeof sessions === 'string') return { error: sessions };
     if (typeof weight === 'string') return { error: weight };
     const previous = stored.find((tool) => tool.tool === row.tool);
@@ -599,7 +625,7 @@ export function policyFromDraft(
       const name = entry.account.trim();
       if (!name) continue;
       const label = `${row.tool} account ${name}`,
-        cap = whole(entry.max_sessions, `${label} sessions`, 1, sessions);
+        cap = whole(entry.max_sessions, `${label} sessions`, 1, sessions ? sessions : 64);
       if (typeof cap === 'string') return { error: cap };
       if (accounts.some((item) => item.account === name)) return { error: `${label} is listed twice.` };
       const budget = entry.budget.trim() ? parseDollars(entry.budget, `${label} daily budget`) : undefined;
@@ -610,15 +636,15 @@ export function policyFromDraft(
           : { account: name, max_sessions: cap, budget_cents_per_day: budget },
       );
     }
-    const next: NonNullable<OrchestrationPolicyBody['tools']>[number] = {
-      ...previous,
-      tool: row.tool,
-      max_sessions: sessions,
-      weight,
-    };
+    const next: NonNullable<OrchestrationPolicyBody['tools']>[number] = { ...previous, tool: row.tool };
+    if (sessions === undefined) delete next.max_sessions;
+    else next.max_sessions = sessions;
+    if (weight === undefined) delete next.weight;
+    else next.weight = weight;
     if (accounts.length) next.accounts = accounts;
     else delete next.accounts;
-    tools.push(next);
+    // A tool that is Auto in everything needs no entry: an unlisted tool is Auto.
+    if (Object.keys(next).length > 1) tools.push(next);
   }
   body.machine = { ...body.machine, ...machine };
   body.tools = tools;
@@ -635,11 +661,12 @@ export type BuildAheadChoice = 'default' | 'on' | 'off';
 /** A project's entry in the policy as the detail's Limits form edits it. */
 export interface TargetLimitsDraft {
   targetId: string;
-  /** The policy lists this project; until then no session may start there. */
+  /** The policy lists this project. HS2-N5BDE4: an unlisted project is Auto in everything. */
   listed: boolean;
   enabled: boolean;
-  /** The tools sessions here may use, in the policy's tool order. */
+  /** The tools sessions here may use, in the policy's tool order. HS2-N5BDE4: none is Auto, any usable tool. */
   tools: string[];
+  /** HS2-N5BDE4: empty is Auto (the machine's sessions limit), 0 starts none here. */
   max_sessions: string;
   machineOverride: boolean;
   machine: { max_sessions: string; min_free_ram_mb: string; max_cpu_percent: string; min_free_disk_mb: string };
@@ -694,7 +721,7 @@ export function targetLimitsDraftFrom(view: OrchestrationPolicyView | undefined,
     listed: Boolean(entry),
     enabled: entry?.enabled ?? true,
     tools: (entry?.tools ?? []).map((scope) => scope.tool),
-    max_sessions: String(entry?.max_sessions ?? 1),
+    max_sessions: autoOrNumber(entry?.max_sessions),
     machineOverride: Boolean(entry?.machine),
     machine: {
       max_sessions: String(machine.max_sessions),
@@ -802,21 +829,21 @@ export function changeTargetLimits(
 
 /**
  * The policy to store with one project's entry and its required resources replaced: every other
- * project, resource entry and member round-trips unchanged. The project's tools must be configured
- * under the policy's tools, their models and the resources must be what the server accepts, and its
- * session cap may not exceed its machine's.
+ * project, resource entry and member round-trips unchanged. The project's tools may not be ones the
+ * policy turns off (HS2-N3HWP9; an unlisted tool is Auto), their models and the resources must be what
+ * the server accepts, and its session cap may not exceed its machine's.
  */
 export function policyWithTargetLimits(
   view: OrchestrationPolicyView | undefined,
   draft: TargetLimitsDraft,
 ): { policy: OrchestrationPolicyBody } | { error: string } {
   const body: OrchestrationPolicyBody = structuredClone(view?.policy ?? {}),
-    previous = targetOf(body, draft.targetId),
-    configured = new Set((body.tools ?? []).map((tool) => tool.tool));
-  const sessions = whole(draft.max_sessions, 'Sessions Here', 1, 64);
+    previous = targetOf(body, draft.targetId);
+  // HS2-N5BDE4: an empty Sessions Here is Auto, stored by leaving the member out; 0 starts none here.
+  const sessions = draft.max_sessions.trim() ? whole(draft.max_sessions, 'Sessions Here', 0, 64) : undefined;
   if (typeof sessions === 'string') return { error: sessions };
-  const unknown = draft.tools.find((tool) => !configured.has(tool));
-  if (unknown) return { error: `${unknown} is not set up in the policy's tools.` };
+  const off = draft.tools.find((name) => toolOff(body.tools?.find((tool) => tool.tool === name)));
+  if (off) return { error: `${off} is turned off in the policy's tools.` };
   const scopes: NonNullable<OrchestrationTargetPolicy['tools']> = [];
   for (const tool of draft.tools) {
     const models = parseModels(draft.models[tool] ?? '', `${tool} models`);
@@ -841,15 +868,17 @@ export function policyWithTargetLimits(
     machine = limits;
   }
   const machineCap = machine?.max_sessions ?? body.machine?.max_sessions ?? POLICY_DEFAULTS.machine.max_sessions;
-  if (sessions > machineCap)
+  if (sessions !== undefined && sessions > machineCap)
     return { error: `Sessions Here must be at most ${String(machineCap)}, the machine's session limit.` };
   const entry: OrchestrationTargetPolicy = {
     ...previous,
     target_id: draft.targetId,
     enabled: draft.enabled,
     tools: scopes,
-    max_sessions: sessions,
   };
+  if (sessions === undefined) delete entry.max_sessions;
+  else entry.max_sessions = sessions;
+  if (!scopes.length) delete entry.tools;
   if (machine) entry.machine = machine;
   else delete entry.machine;
   if (draft.buildAhead === 'default') delete entry.speculation;

@@ -604,8 +604,8 @@ fn tool(
 ) -> ToolPolicy {
     ToolPolicy {
         tool: name.into(),
-        max_sessions,
-        weight,
+        max_sessions: Some(max_sessions),
+        weight: Some(weight),
         accounts: accounts
             .iter()
             .map(|(account, max_sessions, budget)| AccountPolicy {
@@ -637,7 +637,7 @@ fn policy(tools: Vec<ToolPolicy>, scopes: &[(&str, &[&str])]) -> PolicyBody {
                     models: models.iter().map(|model| (*model).into()).collect(),
                 })
                 .collect(),
-            max_sessions: 4,
+            max_sessions: Some(4),
             machine: None,
             speculation: None,
         }],
@@ -683,6 +683,7 @@ fn choose(
             entries,
             load,
             now_ms: T0 + HOUR,
+            auto_tools: &[],
         },
         &support,
     )
@@ -939,28 +940,101 @@ fn hs2_ahg7hw_selection_respects_caps_accounts_models_and_the_target() {
                 entries: &entries,
                 load: &[],
                 now_ms: T0,
+                auto_tools: &[],
             },
             &support,
         )
     };
+    // HS2-N5BDE4: a target the policy does not list is Auto: every listed tool.
     let other = ulid::Ulid::from(8u128).to_string();
-    assert_eq!(
-        ask(&body, &other).denied,
-        Some("policy_target_not_permitted")
-    );
+    let auto = ask(&body, &other);
+    assert_eq!(auto.denied, None);
+    assert!(!auto.candidates.is_empty());
     let mut disabled = body.clone();
     disabled.targets[0].enabled = false;
     assert_eq!(
         ask(&disabled, &target_id()).denied,
         Some("policy_target_disabled")
     );
-    // A target tool the policy never configured is excluded, not guessed at.
-    let mut dangling = body.clone();
-    dangling.tools.remove(1);
+    // HS2-N3HWP9: a target tool the policy does not list is Auto, not excluded; one
+    // the policy turns off (Sessions 0) is excluded.
+    let mut auto = body.clone();
+    auto.tools.remove(1);
+    let selection = ask(&auto, &target_id());
+    assert!(selection.excluded.is_empty());
+    assert!(selection.candidates.iter().any(|c| c.tool == "beta"));
+    let mut off = body.clone();
+    off.tools[1].max_sessions = Some(0);
     assert_eq!(
-        excluded(&ask(&dangling, &target_id())),
+        excluded(&ask(&off, &target_id())),
         [("beta", None, ExclusionReason::ToolNotConfigured)]
     );
+}
+
+#[test]
+fn hs2_n3hwp9_auto_tools_share_evenly_and_zero_turns_a_tool_off() {
+    let auto = |name: &str| ToolPolicy::auto(name);
+    let body = policy(
+        vec![auto("alpha"), auto("beta")],
+        &[("alpha", &[]), ("beta", &[])],
+    );
+    assert!(body.problems(None).is_empty());
+    let working = [usage(T0, Some(1))];
+    let healthy = vec![
+        observed("alpha", None, &working),
+        observed("beta", None, &working),
+    ];
+    // Equal Auto weights: the tool with fewer running sessions is tried first, so
+    // starts alternate between the tools.
+    let selection = choose(&body, None, None, &healthy, &[count("alpha", None, 1)]);
+    assert_eq!(selection.candidates[0].tool, "beta");
+    assert_eq!(selection.candidates[0].weight, AUTO_TOOL_WEIGHT);
+    assert_eq!(selection.candidates[0].free_sessions, MAX_POLICY_SESSIONS);
+    assert_eq!(
+        selection.candidates[1].free_sessions,
+        MAX_POLICY_SESSIONS - 1
+    );
+    let selection = choose(
+        &body,
+        None,
+        None,
+        &healthy,
+        &[count("alpha", None, 1), count("beta", None, 2)],
+    );
+    assert_eq!(selection.candidates[0].tool, "alpha");
+    // An unlisted tool is Auto too.
+    let unlisted = policy(Vec::new(), &[("alpha", &[]), ("beta", &[])]);
+    assert_eq!(
+        choose(&unlisted, None, None, &healthy, &[])
+            .candidates
+            .len(),
+        2
+    );
+    // An explicit weight still ranks above Auto's equal share.
+    let mut weighted = body.clone();
+    weighted.tools[0].weight = Some(90);
+    let selection = choose(&weighted, None, None, &healthy, &[count("alpha", None, 3)]);
+    assert_eq!(selection.candidates[0].tool, "alpha");
+    // Sessions 0 or Weight 0: the tool is off and the other one takes the work.
+    for off in [
+        ToolPolicy {
+            max_sessions: Some(0),
+            ..auto("alpha")
+        },
+        ToolPolicy {
+            weight: Some(0),
+            ..auto("alpha")
+        },
+    ] {
+        let mut body = body.clone();
+        body.tools[0] = off;
+        let selection = choose(&body, Some("alpha"), None, &healthy, &[]);
+        assert_eq!(names(&selection), [("beta", None, "available")]);
+        assert_eq!(
+            excluded(&selection),
+            [("alpha", None, ExclusionReason::ToolNotConfigured)]
+        );
+    }
 }
 
 fn file(home: &std::path::Path) -> std::path::PathBuf {

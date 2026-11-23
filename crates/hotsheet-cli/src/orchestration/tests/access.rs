@@ -77,8 +77,8 @@ fn codex_policy() -> PolicyBody {
     PolicyBody {
         tools: vec![ToolPolicy {
             tool: "codex".into(),
-            max_sessions: 2,
-            weight: 50,
+            max_sessions: Some(2),
+            weight: Some(50),
             accounts: Vec::new(),
         }],
         targets: vec![TargetPolicy {
@@ -89,7 +89,7 @@ fn codex_policy() -> PolicyBody {
                 tool: "codex".into(),
                 models: Vec::new(),
             }],
-            max_sessions: 2,
+            max_sessions: Some(2),
             machine: None,
             speculation: None,
         }],

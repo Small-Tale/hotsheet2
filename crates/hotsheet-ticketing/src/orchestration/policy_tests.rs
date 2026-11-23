@@ -23,8 +23,8 @@ fn id(value: u128) -> String {
 fn tool(name: &str, max_sessions: u32) -> ToolPolicy {
     ToolPolicy {
         tool: name.into(),
-        max_sessions,
-        weight: 50,
+        max_sessions: Some(max_sessions),
+        weight: Some(50),
         accounts: Vec::new(),
     }
 }
@@ -40,7 +40,7 @@ fn target(value: u128, tools: Vec<ToolScope>) -> TargetPolicy {
         enabled: true,
         actions: None,
         tools,
-        max_sessions: 2,
+        max_sessions: Some(2),
         machine: None,
         speculation: None,
     }
@@ -321,10 +321,12 @@ fn hs2_ycjdeb_malformed_and_conflicting_policies_report_every_problem() {
         ),
         (
             "invalid_tool_cap",
-            Box::new(|p| p.tools[1].max_sessions = 0),
+            Box::new(|p| p.tools[1].max_sessions = Some(65)),
         ),
-        ("invalid_tool_weight", Box::new(|p| p.tools[1].weight = 0)),
-        ("invalid_tool_weight", Box::new(|p| p.tools[1].weight = 101)),
+        (
+            "invalid_tool_weight",
+            Box::new(|p| p.tools[1].weight = Some(101)),
+        ),
         (
             "account_cap_exceeds_tool",
             Box::new(|p| {
@@ -356,8 +358,8 @@ fn hs2_ycjdeb_malformed_and_conflicting_policies_report_every_problem() {
             Box::new(|p| p.targets.push(target(1, Vec::new()))),
         ),
         (
-            "unconfigured_tool",
-            Box::new(|p| p.targets[0].tools.push(scope("opencode", &[]))),
+            "invalid_tool",
+            Box::new(|p| p.targets[0].tools.push(scope("has space", &[]))),
         ),
         (
             "invalid_models",
@@ -365,11 +367,11 @@ fn hs2_ycjdeb_malformed_and_conflicting_policies_report_every_problem() {
         ),
         (
             "invalid_target_cap",
-            Box::new(|p| p.targets[0].max_sessions = 0),
+            Box::new(|p| p.targets[0].max_sessions = Some(65)),
         ),
         (
             "target_cap_exceeds_machine",
-            Box::new(|p| p.targets[0].max_sessions = 4),
+            Box::new(|p| p.targets[0].max_sessions = Some(4)),
         ),
         (
             "target_cap_exceeds_machine",
@@ -412,7 +414,7 @@ fn hs2_ycjdeb_malformed_and_conflicting_policies_report_every_problem() {
     }
     // A target override that raises the machine cap makes a larger target cap legal.
     let mut raised = policy();
-    raised.targets[0].max_sessions = 6;
+    raised.targets[0].max_sessions = Some(6);
     raised.targets[0].machine = Some(MachineLimits {
         max_sessions: 8,
         ..MachineLimits::default()
@@ -421,20 +423,16 @@ fn hs2_ycjdeb_malformed_and_conflicting_policies_report_every_problem() {
     // Several problems are all reported, each naming its subject.
     let mut broken = policy();
     broken.machine.max_cpu_percent = 0;
-    broken.tools[0].max_sessions = 0;
-    broken.targets[0].tools.push(scope("opencode", &[]));
+    broken.tools[0].max_sessions = Some(65);
+    broken.targets[0].tools.push(scope("has space", &[]));
     let problems = broken.problems(None);
     assert_eq!(
         problems.iter().map(|p| p.code).collect::<Vec<_>>(),
-        [
-            "invalid_cpu_percent",
-            "invalid_tool_cap",
-            "unconfigured_tool"
-        ]
+        ["invalid_cpu_percent", "invalid_tool_cap", "invalid_tool"]
     );
     assert_eq!(problems[0].subject, None);
     assert_eq!(problems[1].subject.as_deref(), Some("claude"));
-    assert_eq!(problems[2].subject.as_deref(), Some("opencode"));
+    assert_eq!(problems[2].subject.as_deref(), Some("has space"));
     // Against the manifest, a target that is not actively declared is a conflict.
     let declared: BTreeSet<String> = [id(1)].into();
     assert!(codes(&policy(), Some(&declared)).is_empty());
@@ -488,13 +486,34 @@ fn hs2_xhq1eh_limits_only_sessions_need_a_listed_target_and_tool() {
         };
         assert_eq!(body.evaluate(&unlisted), V::Allowed);
     }
-    // A session start needs the target listed: its tools and caps are the limits.
+    // HS2-N5BDE4: an unlisted target is Auto: any tool the policy does not turn off,
+    // any model, up to the machine's sessions limit.
     let codex = start("codex", None);
     let unlisted = PolicyQuestion {
         target_id: "00000000000000000000000002",
         ..ask(TargetAction::SessionsManage, Some(&codex), Some(&load))
     };
-    assert_eq!(body.evaluate(&unlisted), V::Denied(D::TargetNotPermitted));
+    assert_eq!(body.evaluate(&unlisted), V::Allowed);
+    let any_model = start("opencode", Some("any"));
+    assert_eq!(
+        body.evaluate(&PolicyQuestion {
+            session: Some(&any_model),
+            ..unlisted
+        }),
+        V::Allowed
+    );
+    let full = SessionLoad {
+        target_sessions: 3,
+        machine_sessions: 0,
+        ..SessionLoad::default()
+    };
+    assert_eq!(
+        body.evaluate(&PolicyQuestion {
+            load: Some(&full),
+            ..unlisted
+        }),
+        V::Denied(D::TargetCap)
+    );
     // A disabled target limits every acting action.
     let mut disabled = policy();
     disabled.targets[0].enabled = false;
@@ -751,4 +770,163 @@ fn hs2_ycjdeb_speculation_settings() {
         provisional(&body),
         V::Denied(PolicyDenial::SpeculationNotAllowed)
     );
+}
+
+#[test]
+fn hs2_n3hwp9_tool_sessions_and_weight_read_auto_zero_or_a_number() {
+    let parse = |json: &str| serde_json::from_str::<ToolPolicy>(json);
+    // Absent, null and "auto" (any case) are Auto; numbers are kept, 0 included.
+    for json in [
+        r#"{"tool":"codex"}"#,
+        r#"{"tool":"codex","max_sessions":null,"weight":null}"#,
+        r#"{"tool":"codex","max_sessions":"auto","weight":"Auto"}"#,
+    ] {
+        let tool = parse(json).unwrap();
+        assert_eq!((tool.max_sessions, tool.weight), (None, None), "{json}");
+        assert!(!tool.is_off());
+        assert_eq!(tool.session_cap(), MAX_POLICY_SESSIONS);
+        assert_eq!(tool.effective_weight(), AUTO_TOOL_WEIGHT);
+        // Auto is written by leaving the field out.
+        assert_eq!(serde_json::to_string(&tool).unwrap(), r#"{"tool":"codex"}"#);
+    }
+    let explicit = parse(r#"{"tool":"codex","max_sessions":3,"weight":70}"#).unwrap();
+    assert_eq!(
+        (explicit.max_sessions, explicit.weight),
+        (Some(3), Some(70))
+    );
+    assert_eq!(
+        (explicit.session_cap(), explicit.effective_weight()),
+        (3, 70)
+    );
+    assert!(!explicit.is_off());
+    for off in [
+        r#"{"tool":"codex","max_sessions":0}"#,
+        r#"{"tool":"codex","weight":0}"#,
+        r#"{"tool":"codex","max_sessions":4,"weight":0}"#,
+    ] {
+        assert!(parse(off).unwrap().is_off(), "{off}");
+    }
+    for bad in [
+        r#"{"tool":"codex","max_sessions":"many"}"#,
+        r#"{"tool":"codex","weight":-1}"#,
+        r#"{"tool":"codex","weight":1.5}"#,
+    ] {
+        assert!(parse(bad).is_err(), "{bad}");
+    }
+    // 0 is a valid value now; only the upper bounds are problems.
+    let mut body = policy();
+    body.tools[0].max_sessions = Some(0);
+    body.tools[1].weight = Some(0);
+    assert!(codes(&body, None).is_empty());
+    body.tools[0].max_sessions = Some(64);
+    body.tools[1].weight = Some(100);
+    assert!(codes(&body, None).is_empty());
+    // An account under an Auto or off tool is bounded only by itself.
+    body.tools[1].max_sessions = None;
+    body.tools[1].accounts.push(AccountPolicy {
+        account: "team".into(),
+        max_sessions: 9,
+        budget_cents_per_day: None,
+    });
+    assert!(codes(&body, None).is_empty());
+    body.tools[1].max_sessions = Some(0);
+    assert!(codes(&body, None).is_empty());
+}
+
+#[test]
+fn hs2_n3hwp9_existing_policy_files_read_unchanged_and_unlisted_tools_are_auto() {
+    let root = tempfile::tempdir().unwrap();
+    let store = PolicyStore::new(root.path());
+    let directory = root.path().join(".hotsheet2");
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("orchestration-policy.json");
+    // A file written before Auto: explicit numbers and an empty-handed `tools: []` era
+    // tool left out. Existing caps and weights keep their meaning.
+    std::fs::write(
+        &path,
+        format!(
+            r#"{{"schema_version":1,"revision":"{}","policy":{{"tools":[{{"tool":"claude","max_sessions":2,"weight":50}}],"targets":[{{"target_id":"{}","tools":[{{"tool":"claude"}},{{"tool":"codex"}}]}}]}}}}"#,
+            id(9),
+            id(1)
+        ),
+    )
+    .unwrap();
+    let body = store.read().unwrap().policy.unwrap();
+    assert!(body.problems(None).is_empty());
+    let claude = body.tool_policy("claude");
+    assert_eq!((claude.max_sessions, claude.weight), (Some(2), Some(50)));
+    // The unlisted tool is Auto, not "do not start".
+    let codex = body.tool_policy("codex");
+    assert_eq!(codex, ToolPolicy::auto("codex"));
+    // `"tools": []` makes every tool Auto.
+    std::fs::write(
+        &path,
+        format!(
+            r#"{{"schema_version":1,"revision":"{}","policy":{{"tools":[]}}}}"#,
+            id(9)
+        ),
+    )
+    .unwrap();
+    let empty = store.read().unwrap().policy.unwrap();
+    assert!(empty.tools.is_empty());
+    assert!(!empty.tool_policy("claude").is_off());
+}
+
+#[test]
+fn hs2_n3hwp9_admission_treats_auto_as_machine_bounded_and_zero_as_off() {
+    use PolicyDenial as D;
+    use PolicyVerdict as V;
+    let load = |tool| SessionLoad {
+        target_sessions: 0,
+        machine_sessions: 0,
+        tool_sessions: tool,
+        account: None,
+        account_sessions: 0,
+    };
+    let mut body = policy();
+    body.tools.clear();
+    body.targets[0].max_sessions = Some(64);
+    body.machine.max_sessions = 64;
+    let codex = start("codex", None);
+    let run = |body: &PolicyBody, load: SessionLoad| {
+        body.evaluate(&ask(
+            TargetAction::SessionsManage,
+            Some(&codex),
+            Some(&load),
+        ))
+    };
+    // Auto: an unlisted tool starts; only the policy-wide bound caps it.
+    assert_eq!(run(&body, load(10)), V::Allowed);
+    assert_eq!(run(&body, load(63)), V::Allowed);
+    assert_eq!(run(&body, load(64)), V::Denied(D::ToolCap));
+    // The machine limit binds an Auto tool.
+    body.machine.max_sessions = 3;
+    assert_eq!(
+        run(
+            &body,
+            SessionLoad {
+                machine_sessions: 3,
+                ..load(0)
+            }
+        ),
+        V::Denied(D::MachineCap)
+    );
+    // Sessions 0 or weight 0 turn the tool off.
+    for off in [
+        ToolPolicy {
+            max_sessions: Some(0),
+            ..ToolPolicy::auto("codex")
+        },
+        ToolPolicy {
+            weight: Some(0),
+            ..ToolPolicy::auto("codex")
+        },
+    ] {
+        body.tools = vec![off];
+        assert_eq!(run(&body, load(0)), V::Denied(D::ToolNotPermitted));
+    }
+    // An explicit number is still a cap.
+    body.tools = vec![tool("codex", 2)];
+    assert_eq!(run(&body, load(1)), V::Allowed);
+    assert_eq!(run(&body, load(2)), V::Denied(D::ToolCap));
 }

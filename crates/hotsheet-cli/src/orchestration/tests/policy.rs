@@ -30,8 +30,8 @@ fn policy(sessions: bool) -> PolicyBody {
         },
         tools: vec![ToolPolicy {
             tool: "codex".into(),
-            max_sessions: 2,
-            weight: 50,
+            max_sessions: Some(2),
+            weight: Some(50),
             accounts: Vec::new(),
         }],
         targets: vec![TargetPolicy {
@@ -39,7 +39,7 @@ fn policy(sessions: bool) -> PolicyBody {
             enabled: true,
             actions: None,
             tools: if sessions { vec![codex()] } else { Vec::new() },
-            max_sessions: 1,
+            max_sessions: Some(1),
             machine: None,
             speculation: None,
         }],
@@ -403,13 +403,12 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
     assert_eq!(second["bound"], false);
     assert_eq!(second["policy"], "not_listed");
     // An unlisted target is not limited for ticket actions; it is unbound, so
-    // nothing there is automatic, and a session start needs it listed.
+    // nothing there is automatic. HS2-N5BDE4: it is Auto, so a session start on a
+    // tool the policy lists is within its limits too.
     assert_eq!(row(second, "tickets_read")["policy"], "allowed");
     assert_eq!(row(second, "tickets_read")["automatic"], false);
-    assert_eq!(
-        row(second, "sessions_manage")["policy_detail"],
-        "policy_target_not_permitted"
-    );
+    assert_eq!(row(second, "sessions_manage")["policy"], "allowed");
+    assert_eq!(row(second, "sessions_manage")["automatic"], false);
     // Nothing was written, requested or contacted by any of the above.
     assert!(
         f.runtime

@@ -108,11 +108,12 @@ pub use planning::{
     decide_propose, planning_state,
 };
 pub use policy::{
-    AccountPolicy, IgnoredField, MAX_POLICY_ACCOUNTS, MAX_POLICY_MODELS, MAX_POLICY_SESSIONS,
-    MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, ORCHESTRATOR_ACTOR_PREFIX,
-    PlacementPolicy, PolicyBody, PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore,
-    PolicyVerdict, PolicyView, PolicyWarning, ROLE_SESSIONS_NOT_HOME, RoleSessionKind, SessionLoad,
-    SetPolicy, Speculation, TargetPolicy, TargetRoleSessions, ToolPolicy, ToolScope, WindDown,
+    AUTO_TOOL_WEIGHT, AccountPolicy, IgnoredField, MAX_POLICY_ACCOUNTS, MAX_POLICY_MODELS,
+    MAX_POLICY_SESSIONS, MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits,
+    ORCHESTRATOR_ACTOR_PREFIX, PlacementPolicy, PolicyBody, PolicyDenial, PolicyProblem,
+    PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, PolicyWarning, ROLE_SESSIONS_NOT_HOME,
+    RoleSessionKind, SessionLoad, SetPolicy, Speculation, TargetPolicy, TargetRoleSessions,
+    ToolPolicy, ToolScope, WindDown,
 };
 pub use project_type::{
     PROJECT_TYPE_SETTING, PROJECTS_RETAINED, ProjectType, ProjectTypeView, SetProjectType,

@@ -94,8 +94,8 @@ fn policy() -> PolicyBody {
         tools: ["codex", "claude"]
             .map(|tool| ToolPolicy {
                 tool: tool.into(),
-                max_sessions: 4,
-                weight: 50,
+                max_sessions: Some(4),
+                weight: Some(50),
                 accounts: Vec::new(),
             })
             .into(),
@@ -104,7 +104,7 @@ fn policy() -> PolicyBody {
             enabled: true,
             actions: None,
             tools: vec![scope("codex"), scope("claude")],
-            max_sessions: 2,
+            max_sessions: Some(2),
             machine: Some(MachineLimits {
                 max_sessions: 3,
                 min_free_ram_mb: 3000,

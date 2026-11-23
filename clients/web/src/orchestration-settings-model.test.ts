@@ -30,6 +30,7 @@ import {
   siteReadFailure,
   tabProjectIdOf,
   targetLimitsDraftFrom,
+  usablePolicyTools,
 } from './orchestration-settings-model';
 
 const REMOTE = '01JSYNTHREMTE0000000000001';
@@ -296,7 +297,8 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
         weight: '70',
         accounts: [{ account: 'team', max_sessions: '1', budget: '' }],
       },
-      { tool: 'claude', max_sessions: '', weight: '50', accounts: [] },
+      // HS2-N3HWP9: an unlisted tool is Auto in both fields.
+      { tool: 'claude', max_sessions: '', weight: '', accounts: [] },
     ]);
     expect(policyDraftFrom(undefined, [])).toMatchObject({ automatic: false, idle_minutes: '15', keep_warm: '0' });
   });
@@ -328,7 +330,7 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
     expect(built.policy.approval).toEqual(stored.policy!.approval);
     expect(built.policy.tools).toEqual([
       { tool: 'codex', max_sessions: 2, weight: 70, accounts: [{ account: 'team', max_sessions: 1 }] },
-      { tool: 'claude', max_sessions: 1, weight: 50 },
+      { tool: 'claude', max_sessions: 1 },
     ]);
     expect(built.policy.placement).toEqual({ automatic: true, actor: 'person', aging_minutes: 30 });
     expect(built.policy.speculation).toEqual({ allowed: false, max_depth: 2, redo_reopened: false });
@@ -339,9 +341,14 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
       policyDraftFrom({ ...stored, policy: { ...stored.policy, speculation: { redo_reopened: true } } }, [])
         .redo_reopened,
     ).toBe(true);
-    // An emptied tool leaves the policy; the stored view itself is untouched.
-    const removed = policyFromDraft(stored, changePolicyDraft(draft, 'tool.codex.max_sessions', ''));
-    expect('policy' in removed && removed.policy.tools?.map((tool) => tool.tool)).toEqual(['claude']);
+    // HS2-N3HWP9: an emptied Sessions field is Auto, stored by leaving the member out; the stored view
+    // itself is untouched.
+    const auto = policyFromDraft(stored, changePolicyDraft(draft, 'tool.codex.max_sessions', ''));
+    expect('policy' in auto && auto.policy.tools?.[0]).toEqual({
+      tool: 'codex',
+      weight: 70,
+      accounts: [{ account: 'team', max_sessions: 1 }],
+    });
     expect(stored.policy!.tools).toHaveLength(1);
   });
 
@@ -353,15 +360,63 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
       ['machine.min_free_ram_mb', '1.5', 'Free Memory Floor must be a whole number.'],
       ['idle_minutes', '0', 'Wind Down After Idle must be 1 to 1440.'],
       ['keep_warm', '65', 'Idle Sessions Kept per Project must be 0 to 64.'],
-      ['tool.claude.max_sessions', '65', 'claude sessions must be 1 to 64.'],
+      ['tool.claude.max_sessions', '65', 'claude sessions must be 0 to 64.'],
+      ['tool.claude.max_sessions', 'auto', 'claude sessions must be a whole number.'],
+      ['tool.claude.weight', '101', 'claude weight must be 0 to 100.'],
     ] as const)
       expect(policyFromDraft(undefined, changePolicyDraft(draft, field, value))).toEqual({ error: message });
-    const weight = changePolicyDraft(
-      changePolicyDraft(draft, 'tool.claude.max_sessions', '1'),
-      'tool.claude.weight',
-      '0',
+  });
+
+  it('reads and stores Auto, 0 (off) and numbers for each tool (HS2-N3HWP9)', () => {
+    const view: OrchestrationPolicyView = {
+      enabled: true,
+      revision: 'p2',
+      policy: {
+        tools: [
+          { tool: 'codex', max_sessions: 0 },
+          { tool: 'claude', max_sessions: 'auto', weight: 0 },
+          { tool: 'gemini', max_sessions: null, weight: 30 },
+        ],
+      },
+    };
+    const draft = policyDraftFrom(view, ['claude', 'codex', 'opencode']);
+    expect(draft.tools.map(({ tool, max_sessions, weight }) => [tool, max_sessions, weight])).toEqual([
+      ['codex', '0', ''],
+      ['claude', '', '0'],
+      ['gemini', '', '30'],
+      ['opencode', '', ''],
+    ]);
+    // Unchanged: 0 stays 0, Auto is left out, and an all-Auto tool needs no entry.
+    const same = policyFromDraft(view, draft);
+    expect('policy' in same && same.policy.tools).toEqual([
+      { tool: 'codex', max_sessions: 0 },
+      { tool: 'claude', weight: 0 },
+      { tool: 'gemini', weight: 30 },
+    ]);
+    // Clearing both fields returns a tool to Auto; typing numbers stores them.
+    let edited = changePolicyDraft(draft, 'tool.gemini.weight', '');
+    edited = changePolicyDraft(edited, 'tool.opencode.max_sessions', '3');
+    edited = changePolicyDraft(edited, 'tool.opencode.weight', '80');
+    const built = policyFromDraft(view, edited);
+    expect('policy' in built && built.policy.tools).toEqual([
+      { tool: 'codex', max_sessions: 0 },
+      { tool: 'claude', weight: 0 },
+      { tool: 'opencode', max_sessions: 3, weight: 80 },
+    ]);
+    // An account under an Auto or off tool is bounded by 64 only.
+    const account = changePolicyDraft(
+      changePolicyDraft(addPolicyAccount(draft, 'opencode'), 'account.opencode.0.account', 'team'),
+      'account.opencode.0.max_sessions',
+      '9',
     );
-    expect(policyFromDraft(undefined, weight)).toEqual({ error: 'claude weight must be 1 to 100.' });
+    const withAccount = policyFromDraft(view, account);
+    expect('policy' in withAccount && withAccount.policy.tools?.at(-1)).toEqual({
+      tool: 'opencode',
+      accounts: [{ account: 'team', max_sessions: 9 }],
+    });
+    // The tools sessions may use: listed and known tools, less those turned off.
+    expect(usablePolicyTools(view.policy, ['claude', 'codex', 'opencode'])).toEqual(['gemini', 'opencode']);
+    expect(usablePolicyTools(null, ['claude'])).toEqual(['claude']);
   });
 });
 
@@ -474,7 +529,7 @@ describe("one project's limits (HS2-7WF6JD)", () => {
       listed: false,
       enabled: true,
       tools: [],
-      max_sessions: '1',
+      max_sessions: '', // HS2-N5BDE4: Auto
       buildAhead: 'default',
     });
   });
@@ -555,14 +610,22 @@ describe("one project's limits (HS2-7WF6JD)", () => {
 
   it('refuses limits the server would refuse', () => {
     const draft = targetLimitsDraftFrom(stored, 'T1');
-    expect(policyWithTargetLimits(stored, changeTargetLimits(draft, 'limits.max_sessions', '0'))).toEqual({
-      error: 'Sessions Here must be 1 to 64.',
+    expect(policyWithTargetLimits(stored, changeTargetLimits(draft, 'limits.max_sessions', '65'))).toEqual({
+      error: 'Sessions Here must be 0 to 64.',
     });
     expect(policyWithTargetLimits(stored, changeTargetLimits(draft, 'limits.max_sessions', '4'))).toEqual({
       error: "Sessions Here must be at most 3, the machine's session limit.",
     });
-    expect(policyWithTargetLimits(stored, changeTargetLimits(draft, 'limits.tools', 'gemini', true))).toEqual({
-      error: "gemini is not set up in the policy's tools.",
+    // HS2-N3HWP9: an unlisted tool is Auto and may run here; one the policy turns off may not.
+    expect('policy' in policyWithTargetLimits(stored, changeTargetLimits(draft, 'limits.tools', 'gemini', true))).toBe(
+      true,
+    );
+    const off: OrchestrationPolicyView = {
+      ...stored,
+      policy: { ...stored.policy, tools: [...(stored.policy?.tools ?? []), { tool: 'gemini', weight: 0 }] },
+    };
+    expect(policyWithTargetLimits(off, changeTargetLimits(draft, 'limits.tools', 'gemini', true))).toEqual({
+      error: "gemini is turned off in the policy's tools.",
     });
     const override = changeTargetLimits(
       changeTargetLimits(draft, 'limits.machine_override', true),
@@ -856,5 +919,41 @@ describe('Add a Site and the duplicate check (HS2-E9VVQF)', () => {
     expect(duplicateProject('x', grouped, bindings)).toBeUndefined();
     expect(duplicateProject(null, grouped, bindings)).toBeUndefined();
     expect(duplicateProject(undefined, grouped, bindings)).toBeUndefined();
+  });
+});
+
+describe("a project's Auto limits (HS2-N5BDE4)", () => {
+  const stored: OrchestrationPolicyView = {
+    enabled: true,
+    revision: 'p1',
+    policy: {
+      machine: { max_sessions: 3 },
+      targets: [{ target_id: 'T1', max_sessions: 2, tools: [{ tool: 'codex' }] }],
+    },
+  };
+
+  it('reads an unlisted project as Auto and stores Auto by leaving members out', () => {
+    const draft = targetLimitsDraftFrom(stored, 'T9');
+    expect(draft).toMatchObject({ listed: false, enabled: true, tools: [], max_sessions: '' });
+    // Applying an untouched draft lists the project with nothing set: Auto in everything.
+    const built = policyWithTargetLimits(stored, draft);
+    expect('policy' in built && built.policy.targets?.at(-1)).toEqual({ target_id: 'T9', enabled: true });
+    // "auto" and null read as Auto too.
+    for (const max_sessions of ['auto', null] as const)
+      expect(
+        targetLimitsDraftFrom({ ...stored, policy: { targets: [{ target_id: 'T1', max_sessions }] } }, 'T1')
+          .max_sessions,
+      ).toBe('');
+  });
+
+  it('stores 0 to start nothing, a number as a cap, and clears back to Auto', () => {
+    let draft = targetLimitsDraftFrom(stored, 'T1');
+    expect(draft.max_sessions).toBe('2');
+    draft = changeTargetLimits(draft, 'limits.max_sessions', '0');
+    const off = policyWithTargetLimits(stored, draft);
+    expect('policy' in off && off.policy.targets?.[0].max_sessions).toBe(0);
+    draft = changeTargetLimits(changeTargetLimits(draft, 'limits.max_sessions', ''), 'limits.tools', 'codex', false);
+    const auto = policyWithTargetLimits(stored, draft);
+    expect('policy' in auto && auto.policy.targets?.[0]).toEqual({ target_id: 'T1', enabled: true });
   });
 });

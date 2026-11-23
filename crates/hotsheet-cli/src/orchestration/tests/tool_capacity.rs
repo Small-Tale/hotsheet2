@@ -28,8 +28,8 @@ fn human() -> MutationActor {
 fn tool(name: &str, weight: u32, accounts: &[(&str, Option<u64>)]) -> ToolPolicy {
     ToolPolicy {
         tool: name.into(),
-        max_sessions: 2,
-        weight,
+        max_sessions: Some(2),
+        weight: Some(weight),
         accounts: accounts
             .iter()
             .map(|(account, budget)| AccountPolicy {
@@ -64,7 +64,7 @@ fn policy() -> PolicyBody {
                     models: Vec::new(),
                 })
                 .collect(),
-            max_sessions: 2,
+            max_sessions: Some(2),
             machine: None,
             speculation: None,
         }],
@@ -477,8 +477,8 @@ fn hs2_ahg7hw_selection_fails_over_and_keeps_accounts_and_budgets_apart() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(denied["denied"], "policy_target_not_permitted");
-    assert_eq!(denied["candidates"], json!([]));
+    // HS2-N5BDE4: a project the policy does not list is Auto, not refused.
+    assert!(denied["denied"].is_null());
 }
 
 #[test]
@@ -551,7 +551,8 @@ fn hs2_ahg7hw_signals_are_refused_closed_and_routed_like_every_other_adapter() {
         ),
         (
             "signals",
-            json!({"tool":"opencode","kind":"usage","at_ms":T0}),
+            // HS2-N3HWP9: an unlisted tool is Auto and takes signals; a malformed one does not.
+            json!({"tool":"has space","kind":"usage","at_ms":T0}),
             "invalid_request",
         ),
         (

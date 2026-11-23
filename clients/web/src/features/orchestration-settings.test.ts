@@ -293,8 +293,9 @@ describe('a project detail (HS2-W27N1D)', () => {
     await vi.waitFor(() => {
       expect(t.settings.detailOf(DEMO_OWNER)?.loading).toBe(false);
     });
-    expect(t.api.orchestrationAdmission).not.toHaveBeenCalled();
-    expect(t.settings.detailOf(DEMO_OWNER)).toMatchObject({ admissions: [], admissionTools: [] });
+    // HS2-N5BDE4: API is not listed, so it is Auto: admission is asked for every usable tool.
+    expect(t.settings.detailOf(DEMO_OWNER)?.admissionTools).toEqual(['codex', 'claude']);
+    expect(t.api.orchestrationAdmission).toHaveBeenCalled();
     // A refusal names its cause; an added project is never "not allowed yet".
     const refusals: [string, RegExp][] = [
       ['policy_denied', /policy does not allow it/],

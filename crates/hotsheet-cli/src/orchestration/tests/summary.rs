@@ -413,14 +413,14 @@ fn hs2_xk7tjs_utilization_reads_sessions_journal_and_policy_caps() {
                             tool: "claude".into(),
                             models: Vec::new(),
                         }],
-                        max_sessions: 2,
+                        max_sessions: Some(2),
                         machine: None,
                         speculation: None,
                     }],
                     tools: vec![ToolPolicy {
                         tool: "claude".into(),
-                        max_sessions: 2,
-                        weight: 80,
+                        max_sessions: Some(2),
+                        weight: Some(80),
                         accounts: Vec::new(),
                     }],
                     ..PolicyBody::default()
