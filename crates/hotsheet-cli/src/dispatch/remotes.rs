@@ -82,6 +82,13 @@ enum RemoteCmd {
     },
     /// Perform fresh authenticated discovery; stale observations are never live checkout authority.
     Checkouts { id: String },
+    /// Show this machine's paired session on a remote server: when its approval was renewed,
+    /// when it expires, and the reminder day reached, or why it no longer works (HS2-4B0KSD).
+    Session { id: String },
+    /// Ask a remote server's host to renew this machine's approval in place. The binding,
+    /// credential and selected projects stay; the host approves with `remote sessions renew`
+    /// or Settings → Devices (HS2-4B0KSD).
+    Renew { id: String },
 }
 
 #[derive(Subcommand)]
@@ -113,6 +120,9 @@ enum SessionCmd {
         #[arg(long)]
         local: Option<bool>,
     },
+    /// Renew one device's approval in place, before or after it expired: its 90-day lifetime
+    /// restarts and it keeps its id, credential, role and grants (HS2-4B0KSD).
+    Renew { id: String },
     /// Revoke one device immediately, including its live browser streams.
     Revoke { id: String },
     /// Revoke every browser session on this host.
@@ -161,6 +171,12 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 "PATCH",
                 &format!("remote-auth/owner/devices/{id}"),
                 Some(&device_change(role, admin, local)?),
+            )?,
+            SessionCmd::Renew { id } => super::server::host_json_with_body(
+                &context.path,
+                "POST",
+                &format!("remote-auth/owner/devices/{id}/renew"),
+                None,
             )?,
             SessionCmd::Revoke { id } => super::server::host_json_with_body(
                 &context.path,
@@ -249,6 +265,8 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             expected_revision,
         } => serde_json::to_value(runtime.revoke(&id, expected_revision)?)?,
         RemoteCmd::Checkouts { id } => serde_json::to_value(runtime.discover(&id)?)?,
+        RemoteCmd::Session { id } => serde_json::to_value(runtime.peer_session(&id, false)?)?,
+        RemoteCmd::Renew { id } => serde_json::to_value(runtime.peer_session(&id, true)?)?,
     };
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())

@@ -29,10 +29,47 @@ export interface BrowserSessionGrants {
  * grant changed elsewhere without a reload (HS2-A3TDNH). */
 const sessionGrants = signal<BrowserSessionGrants | undefined>(undefined);
 
+/** The lifetime of this browser's paired session, as `/remote-auth/me` last reported it (HS2-4B0KSD). */
+export interface BrowserSessionLifetime {
+  renewed_at: number;
+  expires_at: number;
+  idle_expires_at: number;
+  renewal_requested_at: number | null;
+}
+
+const sessionLifetime = signal<BrowserSessionLifetime | undefined>(undefined);
+
+/** This page's session lifetime; undefined before it is known or on a local-mode host. */
+export function browserSessionLifetime(): BrowserSessionLifetime | undefined {
+  return sessionLifetime.value;
+}
+
+function recordLifetime(record: Record<string, unknown>) {
+  const { renewed_at, expires_at, idle_expires_at, renewal_requested_at } = record;
+  if (typeof renewed_at !== 'number' || typeof expires_at !== 'number' || typeof idle_expires_at !== 'number') return;
+  const next = {
+      renewed_at,
+      expires_at,
+      idle_expires_at,
+      renewal_requested_at: typeof renewal_requested_at === 'number' ? renewal_requested_at : null,
+    },
+    current = sessionLifetime.peek();
+  if (
+    current?.renewed_at === next.renewed_at &&
+    current.expires_at === next.expires_at &&
+    current.idle_expires_at === next.idle_expires_at &&
+    current.renewal_requested_at === next.renewal_requested_at
+  )
+    return;
+  sessionLifetime.value = next;
+}
+
 /** Record the grants `/remote-auth/me` (or a redeem) reported for this page's session. Unchanged grants
- * leave the signal alone, so a re-read that finds nothing new re-renders nothing. */
+ * leave the signal alone, so a re-read that finds nothing new re-renders nothing. The answer's lifetime
+ * is recorded too (HS2-4B0KSD). */
 export function setBrowserSessionGrants(device: unknown): BrowserSessionGrants {
   const record = typeof device === 'object' && device !== null ? (device as Record<string, unknown>) : {};
+  recordLifetime(record);
   const next = { local: record.local === true, admin: record.admin === true },
     current = sessionGrants.peek();
   if (current?.local === next.local && current.admin === next.admin) return current;
@@ -49,6 +86,7 @@ export function browserSessionGrants(): BrowserSessionGrants | undefined {
 /** Forget the session grants (tests and a signed-out page). */
 export function resetBrowserSessionGrants(): void {
   sessionGrants.value = undefined;
+  sessionLifetime.value = undefined;
 }
 
 /** Whether the web client is running on a different device than the server. A `?device=remote` /

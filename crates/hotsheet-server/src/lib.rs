@@ -889,6 +889,19 @@ impl AppState {
         Ok(self)
     }
 
+    /// Drive the remote session catalog from `clock` instead of the wall clock (HS2-4B0KSD
+    /// transition tests). Call after [`Self::with_remote_auth`].
+    #[must_use]
+    pub fn with_remote_auth_clock(mut self, clock: remote_auth::Clock) -> Self {
+        self.remote_auth = self.remote_auth.take().map(|auth| auth.with_clock(clock));
+        self
+    }
+
+    /// The remote session catalog, when remote authentication is configured.
+    pub fn remote_auth(&self) -> Option<&remote_auth::RemoteAuth> {
+        self.remote_auth.as_ref()
+    }
+
     /// Change the failure budget of the renewal-token route (tests shorten the window).
     pub fn with_token_failure_budget(mut self, budget: u32, window: std::time::Duration) -> Self {
         self.token_failures = Arc::new(token_throttle::FailureBudget::new(budget, window));
@@ -2780,6 +2793,10 @@ pub fn app(state: AppState) -> Router {
         .route("/remote-auth/redeem", post(routes::remote_auth::redeem))
         .route("/remote-auth/me", get(routes::remote_auth::me))
         .route("/remote-auth/rotate", post(routes::remote_auth::rotate))
+        .route(
+            "/remote-auth/renewal",
+            post(routes::remote_auth::request_renewal),
+        )
         .route("/remote-auth/logout", post(routes::remote_auth::logout))
         // Device management authorizes itself: the machine secret from the trusted host, or an
         // admin browser session whatever its read role (HS2-DXM0YN).
@@ -2799,6 +2816,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/remote-auth/owner/devices/{id}",
             patch(routes::remote_auth::change).delete(routes::remote_auth::revoke),
+        )
+        .route(
+            "/remote-auth/owner/devices/{id}/renew",
+            post(routes::remote_auth::renew),
         )
         .route(
             "/remote-auth/owner/revoke-all",

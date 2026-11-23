@@ -258,5 +258,12 @@ describe('HS2-DXM0YN remote devices controller', () => {
     revoke.answer(new Response('', { status: 500 }));
     expect(await revoking).toBe(false);
     expect(devices.message.value).toBe('The host refused the change.');
+
+    // HS2-4B0KSD: Renew restarts the device's lifetime in place.
+    const renewing = devices.renew('D 1');
+    const renew = await host.next();
+    expect([renew.method, renew.path]).toEqual(['POST', `${REMOTE_DEVICES_PATH}/devices/D%201/renew`]);
+    renew.answer(Response.json({ id: 'D 1' }));
+    expect(await renewing).toBe(true);
   });
 });

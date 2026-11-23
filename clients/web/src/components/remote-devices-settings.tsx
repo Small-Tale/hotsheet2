@@ -6,11 +6,30 @@ import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Text } from '@kerfjs/ui/text';
-import { Ban, Check, Clock, Eye, House, MonitorSmartphone, MoreHorizontal, Pencil, ShieldCheck, X } from 'lucide';
+import {
+  Ban,
+  Check,
+  Clock,
+  Eye,
+  House,
+  MonitorSmartphone,
+  MoreHorizontal,
+  Pencil,
+  RefreshCw,
+  ShieldCheck,
+  X,
+} from 'lucide';
 
 import type { RemoteDevicesState } from '../features/remote-devices';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
-import { deviceTime, pendingDeviceSummary, type RemoteDeviceList, remoteDeviceSummary } from '../remote-devices-model';
+import {
+  deviceTime,
+  pendingDeviceSummary,
+  type RemoteDevice,
+  remoteDeviceLifetimeState,
+  type RemoteDeviceList,
+  remoteDeviceSummary,
+} from '../remote-devices-model';
 
 export interface RemoteDevicesSettingsProps {
   state?: RemoteDevicesState;
@@ -27,6 +46,34 @@ export interface RemoteDevicesSettingsProps {
 const ACTIONS = NOTIFICATIONS_AND_LINKS_ACTIONS;
 
 const menuIcon = <LucideIcon icon={MoreHorizontal} name="more-horizontal" />;
+
+/** A paired device row's status (HS2-4B0KSD): this device, then its lifetime state. */
+function deviceStatus(device: RemoteDevice, self: boolean) {
+  const state = remoteDeviceLifetimeState(device);
+  if (state === 'expired')
+    return (
+      <Badge tone="danger" appearance="quiet" size="compact">
+        Expired
+      </Badge>
+    );
+  if (state === 'renewal_requested')
+    return (
+      <Badge tone="warning" appearance="quiet" size="compact">
+        Renewal Requested
+      </Badge>
+    );
+  if (state === 'reminder')
+    return (
+      <Badge tone="warning" appearance="quiet" size="compact">
+        Renew Soon
+      </Badge>
+    );
+  return self ? (
+    <Badge tone="neutral" appearance="quiet" size="compact">
+      This Device
+    </Badge>
+  ) : undefined;
+}
 
 /**
  * App Settings → Devices (HS2-DXM0YN, docs/08 §8.2.2): pairing requests and paired browsers for the
@@ -51,7 +98,7 @@ export function RemoteDevicesSettings({
       <List gap="l">
         <List gap="xs">
           <Text variant="h2">Devices</Text>
-          <Text tone="quiet">{`Browsers paired with Hot Sheet on this computer. A pairing request expires after ${String(minutes)} minutes.`}</Text>
+          <Text tone="quiet">{`Browsers and computers paired with Hot Sheet on this computer. A pairing request expires after ${String(minutes)} minutes. An approval lasts 90 days, or 30 days without use; Renew restarts it without pairing again.`}</Text>
           {message ? (
             <Text tone="danger" size="compact" role="alert">
               {message}
@@ -150,13 +197,7 @@ export function RemoteDevicesSettings({
                       <ListActionRow
                         label={device.label}
                         description={remoteDeviceSummary(device, formatTime)}
-                        status={
-                          self ? (
-                            <Badge tone="neutral" appearance="quiet" size="compact">
-                              This Device
-                            </Badge>
-                          ) : undefined
-                        }
+                        status={deviceStatus(device, self)}
                         icon={<LucideIcon icon={MonitorSmartphone} name="monitor-smartphone" />}
                         iconTile="neutral"
                         action={ACTIONS.openRemoteDeviceActions.value}
@@ -167,6 +208,13 @@ export function RemoteDevicesSettings({
                           label: `Actions for ${device.label}`,
                           icon: menuIcon,
                           items: [
+                            {
+                              label: 'Renew',
+                              action: ACTIONS.renewRemoteDevice.value,
+                              icon: <LucideIcon icon={RefreshCw} name="refresh-cw" />,
+                              attributes,
+                            },
+                            { kind: 'divider' as const },
                             {
                               label: writable ? 'Make Read-Only' : 'Allow Changes',
                               action: ACTIONS.setRemoteDeviceRole.value,

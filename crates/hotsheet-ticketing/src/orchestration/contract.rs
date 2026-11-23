@@ -573,7 +573,9 @@ impl From<crate::remote_servers::RemoteFailure> for TargetFailure {
         use crate::remote_servers::RemoteFailure as Remote;
         match failure {
             Remote::Unreachable => Self::Unreachable,
-            Remote::Unauthorized => Self::Unauthorized,
+            Remote::Unauthorized | Remote::SessionExpired | Remote::SessionRevoked => {
+                Self::Unauthorized
+            }
             Remote::MissingCredentials => Self::MissingCredentials,
             Remote::Unsupported => Self::UnsupportedMetadata,
             Remote::IdentityChanged => Self::IdentityChanged,

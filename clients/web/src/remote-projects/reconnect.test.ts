@@ -383,3 +383,58 @@ describe('HS2-WNK73S remote reconnect state machine', () => {
     expect(reconnect.placeholders.value.map((item) => item.checkoutId)).toEqual(['alpha', 'beta']);
   });
 });
+
+describe('HS2-4B0KSD expired and revoked approvals', () => {
+  /** A host whose probe answers with a classified failure. */
+  function classified(failure: string | undefined) {
+    const result = setup({ [HOST_A]: false });
+    result.hosts.probe.mockImplementation(async (bindingId: string) => {
+      result.hosts.calls.push(`probe ${bindingId.slice(-1)}`);
+      await Promise.resolve();
+      return failure === undefined ? false : ({ reachable: false, failure } as unknown as boolean);
+    });
+    return result;
+  }
+
+  for (const [failure, phase] of [
+    ['session_expired', 'expired'],
+    ['session_revoked', 'revoked'],
+  ] as const) {
+    it(`stops retrying once the host reports ${failure}`, async () => {
+      const { clock, hosts, reconnect } = classified(failure);
+      await reconnect.restore(seeds([[HOST_A, 'alpha']]));
+      // The first open failed; the first retry probes and learns the approval is gone.
+      await clock.advance(2_000);
+      expect(reconnect.placeholders.value[0]).toMatchObject({ phase, connecting: false });
+      expect(reconnect.placeholders.value[0]?.error).not.toBe('The server did not answer.');
+      expect(reconnect.scheduled(HOST_A)).toBe(false);
+      const calls = hosts.calls.length;
+      // No timer, focus or network wake retries an expired credential.
+      await clock.advance(60 * 60_000);
+      reconnect.wake();
+      await settle();
+      expect(hosts.calls.length).toBe(calls);
+      // An explicit Check Again probes once, and a renewed approval opens the tab.
+      reconnect.renewalRequested(HOST_A);
+      expect(reconnect.placeholders.value[0]?.renewalRequested).toBe(true);
+      hosts.up[HOST_A] = true;
+      hosts.probe.mockImplementation(async () => true);
+      await reconnect.retryNow(reconnect.placeholders.value[0]?.id ?? '');
+      expect(reconnect.placeholders.value).toEqual([]);
+    });
+  }
+
+  it('keeps the backoff for an unreachable host and for other failures, with their own text', async () => {
+    for (const [failure, text] of [
+      [undefined, 'The server did not answer.'],
+      ['trust_failed', 'The remote server’s certificate is not trusted.'],
+    ] as const) {
+      const { clock, reconnect } = classified(failure);
+      await reconnect.restore(seeds([[HOST_A, 'alpha']]));
+      await clock.advance(2_000);
+      expect(reconnect.placeholders.value[0]).toMatchObject({ phase: 'reconnecting', error: text });
+      expect(reconnect.scheduled(HOST_A)).toBe(true);
+      reconnect.dispose();
+    }
+  });
+});

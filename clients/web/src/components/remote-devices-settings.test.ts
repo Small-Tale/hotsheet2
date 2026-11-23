@@ -23,6 +23,11 @@ const fixture = (manager: RemoteDeviceList['manager']): RemoteDeviceList => ({
       created_at: 1,
       last_used_at: 5,
       expires_at: 9,
+      renewed_at: 1,
+      idle_expires_at: 30,
+      renewal_requested_at: null,
+      reminder_day: null,
+      expired: false,
     },
     {
       id: 'D2',
@@ -34,10 +39,33 @@ const fixture = (manager: RemoteDeviceList['manager']): RemoteDeviceList => ({
       created_at: 1,
       last_used_at: 6,
       expires_at: 9,
+      renewed_at: 1,
+      idle_expires_at: 30,
+      renewal_requested_at: null,
+      reminder_day: null,
+      expired: false,
     },
   ],
 });
 const render = (props: Parameters<typeof RemoteDevicesSettings>[0]) => String(RemoteDevicesSettings(props));
+
+describe('HS2-4B0KSD device lifetime in App Settings → Devices', () => {
+  it('marks expired, renewal-requested and reminder devices and offers Renew on every row', () => {
+    const list = fixture({ local: true });
+    list.devices = [
+      { ...list.devices[0], expired: true },
+      { ...list.devices[1], renewal_requested_at: 8 },
+      { ...list.devices[1], id: 'D3', reminder_day: 70 },
+    ];
+    const markup = render({ state: 'ready', list, formatTime: at });
+    expect(markup).toContain('Expired');
+    expect(markup).toContain('Renewal Requested');
+    expect(markup).toContain('Renew Soon');
+    expect(markup.match(/data-action="renew-remote-device"/g)).toHaveLength(3);
+    expect(markup).toContain('approval expired t9; renew to restore it');
+    expect(markup).toContain('An approval lasts 90 days, or 30 days without use');
+  });
+});
 
 describe('HS2-DXM0YN App Settings → Devices', () => {
   it('lists requests and devices with every command in each row menu', () => {

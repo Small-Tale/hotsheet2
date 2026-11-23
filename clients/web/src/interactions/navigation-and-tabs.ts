@@ -38,6 +38,12 @@ export interface NavigationAndTabInteractionsDependencies {
   readonly retryProjectRestore: (root: string) => Promise<void>;
   /** Retry a remote placeholder tab's host now (HS2-WNK73S). */
   readonly retryRemoteProject: (projectId: string) => void;
+  /** Ask the approving host to renew one remote approval in place (HS2-4B0KSD). */
+  readonly renewRemoteApproval: (scope: string) => void;
+  /** Hide one approval reminder until its next reminder day (HS2-4B0KSD). */
+  readonly dismissRemoteApprovalReminder: (scope: string) => void;
+  /** Pair a remote server again after its host revoked this computer (HS2-4B0KSD). */
+  readonly reviewRemoteServer: (bindingId: string) => void;
   /** Kerf's public TabBar fit reports, which size the project strip's launcher (HS2-A2CSNB). */
   readonly onTabBarFit: (fit: TabBarFit) => void;
 }
@@ -67,6 +73,9 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     selectProjectTab,
     retryProjectRestore,
     retryRemoteProject,
+    renewRemoteApproval,
+    dismissRemoteApprovalReminder,
+    reviewRemoteServer,
     onTabBarFit,
   } = dependencies;
   lifetime.add(
@@ -208,6 +217,30 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.retryRemoteProject.selector, (_event, target) => {
       const id = data(target).projectId;
       if (id) retryRemoteProject(id);
+    }),
+  );
+  const scopeOf = (target: Element) => target.getAttribute('data-remote-scope') ?? '';
+  lifetime.add(
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.renewRemoteApproval.selector, (_event, target) => {
+      const scope = scopeOf(target);
+      if (scope) renewRemoteApproval(scope);
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NAVIGATION_AND_TABS_ACTIONS.dismissRemoteApprovalReminder.selector,
+      (_event, target) => {
+        const scope = scopeOf(target);
+        if (scope) dismissRemoteApprovalReminder(scope);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.reviewRemoteServer.selector, (_event, target) => {
+      const scope = scopeOf(target);
+      if (scope) reviewRemoteServer(scope);
     }),
   );
   return () => {

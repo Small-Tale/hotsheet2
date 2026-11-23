@@ -207,6 +207,26 @@ fn hs2_1y45mz_transport_bounds_responses_and_discards_private_peer_errors() {
             "synthetic-private-detail".into(),
             RemoteFailure::Unauthorized,
         ),
+        // HS2-4B0KSD: the peer's code tells an expired or revoked approval from any other
+        // refusal; an unknown code stays plainly unauthorized.
+        (
+            401,
+            "",
+            r#"{"error":"synthetic","code":"session_expired"}"#.into(),
+            RemoteFailure::SessionExpired,
+        ),
+        (
+            401,
+            "",
+            r#"{"error":"synthetic","code":"session_revoked"}"#.into(),
+            RemoteFailure::SessionRevoked,
+        ),
+        (
+            401,
+            "",
+            r#"{"error":"synthetic","code":"session_invalid"}"#.into(),
+            RemoteFailure::Unauthorized,
+        ),
         (
             404,
             "",
@@ -492,4 +512,66 @@ fn hs2_fzxxtg_a_pairing_bundle_supplies_identity_and_origin_for_the_same_reader(
         );
     }
     assert!(pairing_bundle(&device, SERVER.into(), Some("ftp://site.example.test")).is_err());
+}
+
+fn paired_session() -> RemoteCredentials {
+    RemoteCredentials {
+        bearer_secret: format!("session:{}", "s".repeat(43)),
+        session_origin: Some("http://localhost:4175".into()),
+        session_csrf: Some("c".repeat(43)),
+        ..credentials()
+    }
+}
+
+#[test]
+fn hs2_4b0ksd_peer_session_reads_the_lifetime_and_names_each_failure() {
+    let device = r#"{"id":"D1","renewed_at":10,"expires_at":20,"reminder_day":45}"#;
+    let (origin, worker) = peer_expected(
+        vec![response(200, "", device)],
+        &format!("hs2_remote_session={}", "s".repeat(43)),
+    );
+    let read = peer_session_request(&origin, &paired_session(), false).unwrap();
+    assert_eq!(read["reminder_day"], json!(45));
+    worker.join().unwrap();
+    // Renewal carries the paired Origin and CSRF proof.
+    let (origin, worker) = peer_expected(vec![response(202, "", device)], "X-Hotsheet-Csrf: ccc");
+    assert!(peer_session_request(&origin, &paired_session(), true).is_ok());
+    worker.join().unwrap();
+    for (body, expected) in [
+        (
+            r#"{"code":"session_expired"}"#,
+            RemoteFailure::SessionExpired,
+        ),
+        (
+            r#"{"code":"session_revoked"}"#,
+            RemoteFailure::SessionRevoked,
+        ),
+        (r#"{"code":"session_invalid"}"#, RemoteFailure::Unauthorized),
+    ] {
+        let (origin, worker) = peer_expected(vec![response(401, "", body)], "hs2_remote_session=");
+        assert_eq!(
+            peer_session_request(&origin, &paired_session(), false).unwrap_err(),
+            expected
+        );
+        worker.join().unwrap();
+    }
+    let (origin, worker) = peer_expected(vec![response(500, "", "{}")], "hs2_remote_session=");
+    assert_eq!(
+        peer_session_request(&origin, &paired_session(), false).unwrap_err(),
+        RemoteFailure::InvalidResponse
+    );
+    worker.join().unwrap();
+    // A certificate binding has no paired session; nothing is sent.
+    assert_eq!(
+        peer_session_request("http://127.0.0.1:9", &credentials(), true).unwrap_err(),
+        RemoteFailure::Unsupported
+    );
+    // A closed port is unreachable, not expired.
+    let closed = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", closed.local_addr().unwrap());
+    drop(closed);
+    assert_eq!(
+        peer_session_request(&origin, &paired_session(), false).unwrap_err(),
+        RemoteFailure::Unreachable
+    );
 }

@@ -77,6 +77,8 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   toggleRemoteDeviceAdmin: action('toggle-remote-device-admin'),
   toggleRemoteDeviceHostAccess: action('toggle-remote-device-host-access'),
   revokeRemoteDevice: action('revoke-remote-device'),
+  /** Renew a paired device's approval in place (HS2-4B0KSD). */
+  renewRemoteDevice: action('renew-remote-device'),
   openRegisteredProjectActions: action('open-registered-project-actions'),
   removeRegisteredProject: action('remove-registered-project'),
 } as const;

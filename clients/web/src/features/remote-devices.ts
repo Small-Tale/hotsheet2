@@ -174,6 +174,8 @@ export function createRemoteDevices(
     update: (id: string, update: RemoteDeviceChange) =>
       change(id, 'PATCH', `${REMOTE_DEVICES_PATH}/devices/${encodeURIComponent(id)}`, update),
     revoke: (id: string) => change(id, 'DELETE', `${REMOTE_DEVICES_PATH}/devices/${encodeURIComponent(id)}`),
+    /** Renew a device in place, before or after it expired (HS2-4B0KSD). */
+    renew: (id: string) => change(id, 'POST', `${REMOTE_DEVICES_PATH}/devices/${encodeURIComponent(id)}/renew`),
   };
 }
 

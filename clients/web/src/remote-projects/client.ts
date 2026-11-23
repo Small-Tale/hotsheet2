@@ -24,6 +24,21 @@ export interface DesktopRemoteCheckout {
 export interface DesktopRemoteDiscovery {
   remote: DesktopRemoteServer;
   checkouts: DesktopRemoteCheckout[] | null;
+  /** This discovery's own failure, telling an expired or revoked approval apart (HS2-4B0KSD). */
+  failure?: string | null;
+}
+
+/** This computer's paired session on one remote server (HS2-4B0KSD): its lifetime, or why it stopped. */
+export interface DesktopRemoteSession {
+  binding_id: string;
+  device?: {
+    renewed_at: number;
+    expires_at: number;
+    idle_expires_at: number;
+    reminder_day: number | null;
+    renewal_requested_at: number | null;
+  };
+  failure?: string;
 }
 
 export interface DesktopRemotePairing {
@@ -84,6 +99,10 @@ export const desktopRemoteBeginPair = (
   request<DesktopRemotePairing>('/pair', { method: 'POST', body: JSON.stringify({ address, label, tls, reviewId }) });
 export const desktopRemoteFinishPair = (handle: string) =>
   request<DesktopRemoteDiscovery>(`/pair/${encodeURIComponent(handle)}/redeem`, { method: 'POST' });
+export const desktopRemoteSession = (id: string) => request<DesktopRemoteSession>(`/${encodeURIComponent(id)}/session`);
+/** Ask the remote host to renew this computer's approval in place; the binding and its projects stay. */
+export const desktopRemoteRenew = (id: string) =>
+  request<DesktopRemoteSession>(`/${encodeURIComponent(id)}/renew`, { method: 'POST' });
 export const desktopRemoteOpen = (id: string, checkout: string) =>
   request<Project>(`/${encodeURIComponent(id)}/projects/${encodeURIComponent(checkout)}/open`, { method: 'POST' });
 export const desktopRemoteForget = (id: string, checkout: string) =>

@@ -568,7 +568,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/ticket-group{,-dialog,-context-menu,-interactions}.ts(x) # Shared group container (SunkenPanel + ListHeader), New/Rename dialog, header menu, `wireTicketGroups`
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
     src/project-bridge.ts    #   Vite-only singleton bootstrap-server discovery/detached start (stderr appended to `$HOTSHEET_HOME/logs/server.log`, rotated past 8 MiB, HS2-DSYPTN) + multi-store project attach and credential-hiding HTTP/terminal-WS target resolution; HS2-BT4KN6 adds composite remote-project sessions and host-specific REST/change-WS routing; exact HS1 source/database/version discovery and backup-gated legacy registration cleanup (`HOTSHEET_LEGACY_HOME` overrides the old app's global directory); authenticated corrupt-path validation, shell-free platform reveal, and shared CLI-bootstrap/Git remote/first-push setup
-    src/remote-projects/ # HS2-BT4KN6 desktop remote identity, trusted Node pairing/registry adapter and TLS transport, browser metadata client and source-choice/remote dialogs, remote terminal launch-directory and ownership mapping (`terminals.ts`, HS2-PPHJMZ/HS2-JJKVJJ), remembered remote tab placeholders with per-host backoff reconnect (`reconnect.ts`, HS2-EJ5K09/HS2-WNK73S); never exports private credentials to browser code
+    src/remote-projects/ # HS2-BT4KN6 desktop remote identity, trusted Node pairing/registry adapter and TLS transport, browser metadata client and source-choice/remote dialogs, remote terminal launch-directory and ownership mapping (`terminals.ts`, HS2-PPHJMZ/HS2-JJKVJJ), remembered remote tab placeholders with per-host backoff reconnect (`reconnect.ts`, HS2-EJ5K09/HS2-WNK73S) that stops at an expired or revoked approval (HS2-4B0KSD); never exports private credentials to browser code
     src/migration-progress.ts # Versioned phase counters, job/attempt snapshots, phase-local labels and stale revision guards
     src/migration-jobs.ts    # Atomic background job checkpoints, native project/store locks, child ownership and blocking revision watches
     src/child-process.ts     # The ONE node:child_process boundary in src/: spawn/spawnSync/execFileAsync strip inherited repo-locating GIT_* vars (parity with hotsheet_ticketing::git + scripts/repository-env.mjs); ESLint no-restricted-imports forbids child_process elsewhere (HS2-T1H6NP)
@@ -1211,7 +1211,16 @@ machine's existing `server-identity.json`. `routes/remote_auth.rs` exposes
 pairing, redemption and trusted-owner endpoints; `routes/auth.rs`,
 `routes/store_scoped.rs` and `routes/terminals/attach.rs` enforce REST, polling
 and WebSocket authorization. `crates/hotsheet-cli/src/dispatch/remotes.rs`
-exposes `remote sessions status|approve|reject|update|revoke|revoke-all`. Sessions
+exposes `remote sessions status|approve|reject|update|renew|revoke|revoke-all`, plus a
+desktop's `remote session|renew <binding-id>` over `remote_servers.rs` `peer_session_request`.
+HS2-4B0KSD: sessions expire after 30 days idle or 90 days from approval or renewal; open
+streams refresh the idle clock through their per-second recheck; `RemoteAuth::renew`
+renews in place and `request_renewal` records a device's request; revoked sessions keep a
+tombstone so 401 answers carry `session_expired`, `session_revoked` or `session_invalid`.
+`RemoteAuth::with_clock`/`ManualClock` and the `writes()` watch let
+`tests/remote_session_lifetime.rs` drive time through the real router. Clients:
+`clients/web/src/remote-session-lifetime.ts` (reminder days and failure kinds),
+`features/remote-approval-reminders.ts` and `components/remote-approval-reminder-banner.tsx`. Sessions
 carry `admin` and `local` grants (HS2-85W6BE, HS2-DXM0YN); `routes/remote_auth.rs`
 `manager()` authorizes device management for the machine secret or an admin session,
 and the catalog's in-memory revision drives the `/remote-auth/owner/changes` long poll

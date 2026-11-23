@@ -261,7 +261,10 @@ impl RemoteRegistry {
             .iter()
             .find(|current| current.id == id)
             .ok_or(RemoteError::Corrupt)?;
-        Ok(discovery(current, &file, outcome.ok()))
+        let failure = outcome.as_ref().err().copied();
+        let mut found = discovery(current, &file, outcome.ok());
+        found.failure = failure;
+        Ok(found)
     }
 
     fn commit_credentials(
@@ -404,7 +407,7 @@ fn update_observation(
             binding.confirmed_at_ms = Some(now_ms);
             binding.checkouts = snapshot.checkouts.clone();
         }
-        Err(failure) => binding.last_failure = Some(failure),
+        Err(failure) => binding.last_failure = Some(failure.persisted()),
     }
 }
 
@@ -429,5 +432,6 @@ fn discovery(
         remote,
         checkouts,
         host_name,
+        failure: None,
     }
 }

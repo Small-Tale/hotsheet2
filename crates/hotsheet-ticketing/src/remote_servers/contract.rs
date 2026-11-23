@@ -318,6 +318,21 @@ pub enum RemoteFailure {
     Redirect,
     ResponseLimit,
     InvalidResponse,
+    /// The peer's approval of this device expired (HS2-4B0KSD): renew it, do not retry.
+    SessionExpired,
+    /// The peer revoked this device: only a new pairing restores access.
+    SessionRevoked,
+}
+
+impl RemoteFailure {
+    /// The failure the registry stores. The expired and revoked distinctions are live results
+    /// only ([`RemoteDiscovery::failure`]), so a registry stays readable by an older client.
+    pub fn persisted(self) -> Self {
+        match self {
+            Self::SessionExpired | Self::SessionRevoked => Self::Unauthorized,
+            other => other,
+        }
+    }
 }
 
 impl std::fmt::Display for RemoteFailure {
@@ -332,6 +347,8 @@ impl std::fmt::Display for RemoteFailure {
             Self::Redirect => "redirect_refused",
             Self::ResponseLimit => "response_limit",
             Self::InvalidResponse => "invalid_response",
+            Self::SessionExpired => "session_expired",
+            Self::SessionRevoked => "session_revoked",
         })
     }
 }
@@ -393,6 +410,10 @@ pub struct RemoteDiscovery {
     /// the probe failed or the peer predates the field; it is display metadata, not identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_name: Option<String>,
+    /// This live discovery's failure, with the expired and revoked distinctions the stored
+    /// `remote.last_failure` folds into `unauthorized` (HS2-4B0KSD).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<RemoteFailure>,
 }
 
 /// A desktop project selection. The registry persists only these non-secret identifiers.

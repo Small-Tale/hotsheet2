@@ -2152,8 +2152,14 @@ cookie is exposed to observers of that transport. The server stores only SHA-256
 digests of the random tokens in a private atomic catalog under
 `${HOTSHEET_HOME}/remote-auth/<store-id>.json`. The catalog is bound to the
 durable machine server id and fails startup if it belongs to another identity.
-Sessions expire after 30 days absolute or 24 hours idle; active-use timestamps
-persist at most once per minute. The browser host checks same-origin writes,
+Sessions expire after 30 days without use or 90 days after approval or the last
+renewal (HS2-4B0KSD, [08](08-distributed-and-remote.md) §8.2.2); active-use timestamps,
+open streams included, persist at most once per minute. `remote sessions renew
+<device-id>` renews one device in place, before or after it expired, keeping its
+credential, role and grants. A desktop asks a remote host to renew its own binding with
+`remote renew <binding-id>` and reads its lifetime with `remote session <binding-id>`.
+A refused session answers 401 with `code` `session_expired`, `session_revoked` or
+`session_invalid`. The browser host checks same-origin writes,
 and the server requires the matching Origin and CSRF token; WebSocket upgrades
 require the approved Origin, with terminal input requiring write role and CSRF.
 Every terminal attach, including a desktop bridge's attach to a remote project's

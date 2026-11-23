@@ -359,6 +359,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('codex-hooks-notice-banner', ['shell-banner']),
       cataloged('shell-banner', ['list', 'state-banner']),
       cataloged('project-setup-warning-banner', ['shell-banner']),
+      cataloged('remote-approval-reminder-banner', ['shell-banner']),
       cataloged('remote-reconnecting-banner', ['shell-banner']),
       cataloged('server-build-notice-banner', ['shell-banner']),
       cataloged('source-stale-notice-banner', ['shell-banner']),

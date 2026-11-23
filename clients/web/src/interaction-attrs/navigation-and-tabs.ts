@@ -16,6 +16,12 @@ export const NAVIGATION_AND_TABS_ACTIONS = {
   retryProjectRestore: action('retry-project-restore'),
   /** Retry a remembered remote project's placeholder tab now (HS2-WNK73S). */
   retryRemoteProject: action('retry-remote-project'),
+  /** Ask the approving host to renew a remote approval in place (HS2-4B0KSD). Carries `data-remote-scope`. */
+  renewRemoteApproval: action('renew-remote-approval'),
+  /** Hide a remote approval reminder until its next reminder day (HS2-4B0KSD). */
+  dismissRemoteApprovalReminder: action('dismiss-remote-approval-reminder'),
+  /** Review a remote server whose host revoked this computer: pair it again (HS2-4B0KSD). */
+  reviewRemoteServer: action('review-remote-server'),
 } as const;
 
 /**

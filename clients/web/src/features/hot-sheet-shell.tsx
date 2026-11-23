@@ -39,6 +39,7 @@ import { ProjectSetupWarningBanner } from '../components/project-setup-warning-b
 import type { ProjectStripMode } from '../components/project-strip-actions';
 import { type ProjectTabProps } from '../components/project-tab';
 import { CompatibilityBannerSurface } from '../components/reader-overlay-surfaces';
+import { RemoteApprovalReminderBanner } from '../components/remote-approval-reminder-banner';
 import { RemoteProjectPlaceholder } from '../components/remote-project-placeholder';
 import { RemoteReconnectingBanner } from '../components/remote-reconnecting-banner';
 import { RepositorySizeBanner } from '../components/repository-size-banner';
@@ -113,6 +114,7 @@ import {
 } from '../ticket-views';
 import { hs1CleanupPromptDismissed } from '../workspace-session';
 import type { AnnouncerPlacements } from './announcer-controller';
+import type { ApprovalReminder } from './remote-approval-reminders';
 
 /** Tab id prefix of a remembered project that is still opening (HS2-2BEJXD, HS2-XGSSK1). */
 export const PENDING_PROJECT_TAB_PREFIX = 'pending:';
@@ -166,6 +168,8 @@ export interface HotSheetShellDependencies {
   desktopRemoteServers: Signal<DesktopRemoteServer[]>;
   /** Remembered remote tabs that are not open yet: loading or reconnecting (HS2-EJ5K09, HS2-WNK73S). */
   remotePlaceholders?: Signal<readonly RemoteTabPlaceholder[]>;
+  /** The remote approval reminder for the current workspace, if one is due (HS2-4B0KSD). */
+  remoteApprovalReminder?: (projectId: string | undefined) => ApprovalReminder | undefined;
   /** Open remote projects whose server stopped answering (HS2-WNK73S). */
   remoteStreamsDown?: Signal<ReadonlySet<string>>;
   projectTabClaimClock: Signal<number>;
@@ -279,6 +283,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     projects,
     desktopRemoteServers,
     remotePlaceholders = signal<readonly RemoteTabPlaceholder[]>([]),
+    remoteApprovalReminder = () => undefined,
     remoteStreamsDown = signal<ReadonlySet<string>>(new Set()),
     projectTabClaimClock,
     projectTerminalDrawerProps,
@@ -532,6 +537,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               name={remotePlaceholder.name}
               phase={remotePlaceholder.phase}
               connecting={remotePlaceholder.connecting}
+              bindingId={remotePlaceholder.bindingId}
+              {...(remotePlaceholder.error ? { error: remotePlaceholder.error } : {})}
+              renewalRequested={remotePlaceholder.renewalRequested ?? false}
             />
           }
           inspectorVisible={false}
@@ -772,6 +780,10 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
             {showsStaleSourceNotice(current.compatibility) && <SourceStaleNoticeBanner />}
             {showsClientUpdateNotice() && <ClientUpdateNoticeBanner />}
+            {(() => {
+              const reminder = remoteApprovalReminder(current.id);
+              return reminder && <RemoteApprovalReminderBanner reminder={reminder} />;
+            })()}
             {RepositorySizeBanner({
               report: repositorySizeReport(current.id),
               dismissed: current.repositorySizeWarningDismissed,

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseRemoteDeviceList, pendingDeviceSummary, remoteDeviceSummary } from './remote-devices-model';
+import {
+  parseRemoteDeviceList,
+  pendingDeviceSummary,
+  remoteDeviceLifetime,
+  remoteDeviceLifetimeState,
+  remoteDeviceSummary,
+} from './remote-devices-model';
 
 /** The server's `/remote-auth/owner` shape (crates/hotsheet-server/src/routes/remote_auth.rs `DeviceList`). */
 const SERVER_DEVICE_LIST = {
@@ -27,6 +33,48 @@ const SERVER_DEVICE_LIST = {
   ],
 };
 
+describe('HS2-4B0KSD device lifetime in the list', () => {
+  const lifetime = {
+    renewed_at: 100,
+    idle_expires_at: 250,
+    renewal_requested_at: null,
+    reminder_day: null,
+    expired: false,
+  };
+  const device = (overrides: Record<string, unknown> = {}) =>
+    parseRemoteDeviceList({
+      ...SERVER_DEVICE_LIST,
+      devices: [{ ...SERVER_DEVICE_LIST.devices[0], ...lifetime, ...overrides }],
+    }).devices[0];
+  const at = (seconds: number) => `t${String(seconds)}`;
+
+  it('reads the lifetime and names each state, ending at the earlier clock', () => {
+    expect(device()).toMatchObject(lifetime);
+    expect(remoteDeviceLifetimeState(device())).toBe('active');
+    expect(remoteDeviceLifetime(device(), at)).toBe('expires t250');
+    expect(remoteDeviceLifetimeState(device({ reminder_day: 70 }))).toBe('reminder');
+    expect(remoteDeviceLifetimeState(device({ renewal_requested_at: 240, reminder_day: 70 }))).toBe(
+      'renewal_requested',
+    );
+    expect(remoteDeviceLifetime(device({ renewal_requested_at: 240 }), at)).toBe('asks to be renewed · expires t250');
+    const expired = device({ expired: true, renewal_requested_at: 240 });
+    expect(remoteDeviceLifetimeState(expired)).toBe('expired');
+    expect(remoteDeviceLifetime(expired, at)).toBe('approval expired t250; renew to restore it');
+  });
+
+  it('reads a host from before the lifetime fields as counted from approval', () => {
+    expect(parseRemoteDeviceList(SERVER_DEVICE_LIST).devices[0]).toMatchObject({
+      renewed_at: 100,
+      idle_expires_at: 300,
+      renewal_requested_at: null,
+      reminder_day: null,
+      expired: false,
+    });
+    expect(() => device({ expired: 'yes' })).toThrow(/invalid device list/);
+    expect(() => device({ reminder_day: 'soon' })).toThrow(/invalid device list/);
+  });
+});
+
 describe('HS2-DXM0YN remote device list contract', () => {
   it('parses the server answer and keeps an absent manager device for the trusted host', () => {
     const parsed = parseRemoteDeviceList(SERVER_DEVICE_LIST);
@@ -52,9 +100,9 @@ describe('HS2-DXM0YN remote device list contract', () => {
   it('describes access in words, not color alone', () => {
     const device = parseRemoteDeviceList(SERVER_DEVICE_LIST).devices[0];
     const at = (seconds: number) => `t${String(seconds)}`;
-    expect(remoteDeviceSummary(device, at)).toBe('Read-write, administrator · last used t200');
+    expect(remoteDeviceSummary(device, at)).toBe('Read-write, administrator · last used t200 · expires t300');
     expect(remoteDeviceSummary({ ...device, role: 'read_only', admin: false, local: true }, at)).toBe(
-      'Read-only, host access · last used t200',
+      'Read-only, host access · last used t200 · expires t300',
     );
     const pending = parseRemoteDeviceList(SERVER_DEVICE_LIST).pending[0];
     expect(pendingDeviceSummary(pending, at)).toBe('Request P1 · expires t2 · https://h.example');

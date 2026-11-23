@@ -67,7 +67,12 @@ import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import { claimHolderName } from '../claim-holder';
 import { createClientNotifications } from '../client-notifications';
-import { canManageRemoteDevices, isRemoteClient } from '../client-origin';
+import {
+  browserSessionLifetime,
+  canManageRemoteDevices,
+  isRemoteClient,
+  stampedBrowserAuthMode,
+} from '../client-origin';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
@@ -164,7 +169,7 @@ import {
   createServerPlanner,
   orchestrationPersonId,
 } from '../features/orchestration-view';
-import { createPairingRequests, pairingRequestNotice } from '../features/pairing-requests';
+import { createPairingRequests, pairingRequestNotice, renewalRequestNotice } from '../features/pairing-requests';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
 import { createProjectCloseController } from '../features/project-close';
@@ -178,6 +183,11 @@ import {
 import { createProjectTeardown } from '../features/project-teardown';
 import { createReaderLayersSurface } from '../features/reader-layers-surface';
 import { createRegisteredProjects } from '../features/registered-projects';
+import {
+  BROWSER_APPROVAL_SCOPE,
+  createRemoteApprovalReminders,
+  sessionLifetimeOf,
+} from '../features/remote-approval-reminders';
 import { createRemoteDevices } from '../features/remote-devices';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
@@ -257,8 +267,10 @@ import {
   desktopRemoteDiscover,
   desktopRemoteForget,
   desktopRemoteOpen,
+  desktopRemoteRenew,
   desktopRemoteSelected,
   desktopRemoteServers as listDesktopRemoteServers,
+  desktopRemoteSession,
 } from '../remote-projects/client';
 import { isRemoteProjectId, parseRemoteProjectId } from '../remote-projects/identity';
 import {
@@ -269,6 +281,7 @@ import {
   remoteTabPlaceholders,
   wireRemoteReconnectWakeups,
 } from '../remote-projects/reconnect';
+import { remoteFailureKind, remoteFailureText } from '../remote-session-lifetime';
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { parseGuidanceSourceUpdates } from '../server-response-parsers';
@@ -1577,6 +1590,7 @@ export async function startHotSheetWebClient() {
     removeDesktopRemoteServer,
     openRemoteProjectDialog,
     openRemoteCheckout,
+    reviewDesktopRemoteServer,
   } = projectLifecycleController;
   // Remembered remote project tabs show at once and stay while their host is unreachable
   // (HS2-EJ5K09, HS2-WNK73S). Remote-browser clients have no machine registry and never seed it.
@@ -1584,7 +1598,11 @@ export async function startHotSheetWebClient() {
   let localProjectRestoreSettled = false;
   const remoteReconnect = createRemoteReconnect({
     open: (bindingId, checkoutId) => desktopRemoteOpen(bindingId, checkoutId),
-    probe: async (bindingId) => (await desktopRemoteDiscover(bindingId)).checkouts !== null,
+    // HS2-4B0KSD: the live discovery names an expired or revoked approval apart from an unreachable host.
+    probe: async (bindingId) => {
+      const discovery = await desktopRemoteDiscover(bindingId);
+      return { reachable: discovery.checkouts !== null, failure: discovery.failure ?? discovery.remote.last_failure };
+    },
     isOpen: (id) => projects.value.some((item) => item.id === id),
     opened: async (placeholder, remote) => {
       await wireOpenedProject(
@@ -1822,7 +1840,55 @@ export async function startHotSheetWebClient() {
   // shows, and stops when it hides.
   // A grant changed elsewhere reaches this page over the change channel (HS2-A3TDNH); a refused list
   // read also re-checks it. `start` reads the grant signal, so this effect follows it either way.
-  const browserGrants = createBrowserGrants();
+  // HS2-4B0KSD: an ended session shows the renewal or pairing screen on reload, never a silently
+  // failing page. A host that does not answer is a 503 from the bridge and ends nothing.
+  const browserGrants = createBrowserGrants({
+    onSessionEnded: () => {
+      window.location.reload();
+    },
+  });
+  // HS2-4B0KSD: renewal reminders for this browser's session and for each remote server an open tab
+  // uses. Lifetimes come from answers the page already receives; a local timer re-renders on each
+  // reminder day and issues no request.
+  const approvalReminders = createRemoteApprovalReminders({
+    requestRenewal: async (scope) => {
+      if (scope === BROWSER_APPROVAL_SCOPE) {
+        const response = await fetch('/__hotsheet/remote-auth/renewal', { method: 'POST', credentials: 'same-origin' });
+        const body: unknown = await response.json().catch(() => undefined);
+        if (!response.ok) throw new Error('The host did not accept the renewal request. Try again.');
+        return sessionLifetimeOf(body);
+      }
+      const answer = await desktopRemoteRenew(scope);
+      if (answer.failure) throw new Error(remoteFailureText(answer.failure));
+      return sessionLifetimeOf(answer.device);
+    },
+  });
+  effect(() => {
+    const lifetime = browserSessionLifetime();
+    if (lifetime && stampedBrowserAuthMode() === 'remote')
+      approvalReminders.set(BROWSER_APPROVAL_SCOPE, 'this browser', lifetime);
+    else approvalReminders.remove(BROWSER_APPROVAL_SCOPE);
+  });
+  /** Remote servers whose session lifetime this page already read; one read per open, never a poll. */
+  const approvalsRead = new Set<string>();
+  effect(() => {
+    for (const item of projects.value) {
+      const bindingId = parseRemoteProjectId(item.id)?.bindingId;
+      if (!bindingId || approvalsRead.has(bindingId)) continue;
+      approvalsRead.add(bindingId);
+      const label =
+        desktopRemoteServers.peek().find((server) => server.id === bindingId)?.label ?? item.remoteHost ?? item.name;
+      void desktopRemoteSession(bindingId)
+        .then((answer) => {
+          const lifetime = sessionLifetimeOf(answer.device);
+          if (lifetime) approvalReminders.set(bindingId, label, lifetime);
+          else if (remoteFailureKind(answer.failure) === 'unreachable') approvalsRead.delete(bindingId);
+        })
+        .catch(() => {
+          approvalsRead.delete(bindingId);
+        });
+    }
+  });
   const remoteDevices = createRemoteDevices({ onForbidden: () => void browserGrants.refresh() });
   effect(() => {
     if (selectedSettingsCategory.value === 'devices' && Boolean(project())) remoteDevices.start();
@@ -1836,6 +1902,10 @@ export async function startHotSheetWebClient() {
       if (viewMode.peek() === 'settings' && selectedSettingsCategory.peek() === 'devices') return;
       showToast(pairingRequestNotice(request));
     },
+    onRenewalRequest: (device) => {
+      if (viewMode.peek() === 'settings' && selectedSettingsCategory.peek() === 'devices') return;
+      showToast(renewalRequestNotice(device));
+    },
   });
   // The open Devices list already follows the host; its updates feed the badges without another read.
   effect(() => {
@@ -1843,7 +1913,7 @@ export async function startHotSheetWebClient() {
     // Outside the effect, so a notice it raises subscribes this effect to nothing else.
     if (list)
       queueMicrotask(() => {
-        pairingRequests.observe(list.pending);
+        pairingRequests.observe(list.pending, list.devices);
       });
   });
   // A grant gained or lost elsewhere starts or drops the requests (HS2-A3TDNH); the first read comes from
@@ -5526,7 +5596,7 @@ export async function startHotSheetWebClient() {
     projectConversationUnread,
     project: () => project(),
     settingsCategory: () => settingsCategory(),
-    pairingRequestCount: () => pairingRequests.waiting.value.length,
+    pairingRequestCount: () => pairingRequests.waiting.value.length + pairingRequests.renewals.value.length,
     projectPermissionHistory,
     projectPendingPermissions,
     projectTicketCounts,
@@ -6414,7 +6484,7 @@ export async function startHotSheetWebClient() {
     partialSourcesByProject,
     pendingPermissions,
     pendingRestoreEntries,
-    pairingRequestCount: () => pairingRequests.waiting.value.length,
+    pairingRequestCount: () => pairingRequests.waiting.value.length + pairingRequests.renewals.value.length,
     permissionCount: (projectId?: string) =>
       permissionCount(projectId) + clientNotifications.pending(projectId ?? selectedProjectId.value).length,
     workersLive: (projectId: string) =>
@@ -6450,6 +6520,13 @@ export async function startHotSheetWebClient() {
     projectRestoreRank,
     projects,
     remotePlaceholders: remoteReconnect.placeholders,
+    remoteApprovalReminder: (projectId: string | undefined) => {
+      const bindingId = projectId ? parseRemoteProjectId(projectId)?.bindingId : undefined;
+      return (
+        (bindingId ? approvalReminders.reminder(bindingId) : undefined) ??
+        approvalReminders.reminder(BROWSER_APPROVAL_SCOPE)
+      );
+    },
     remoteStreamsDown,
     projectTabClaimClock,
     projectTerminalDrawerProps,
@@ -7035,6 +7112,18 @@ export async function startHotSheetWebClient() {
     retryProjectRestore,
     retryRemoteProject: (projectId: string) => {
       void remoteReconnect.retryNow(projectId);
+    },
+    renewRemoteApproval: (scope: string) => {
+      void approvalReminders.renew(scope).then((ok) => {
+        if (!ok) showToast(approvalReminders.message.peek());
+        else if (scope !== BROWSER_APPROVAL_SCOPE) remoteReconnect.renewalRequested(scope);
+      });
+    },
+    dismissRemoteApprovalReminder: (scope: string) => {
+      approvalReminders.dismiss(scope);
+    },
+    reviewRemoteServer: (bindingId: string) => {
+      void reviewDesktopRemoteServer(bindingId);
     },
     onTabBarFit: projectTabFit.onFit,
     terminalDrawerBounds,
@@ -7826,6 +7915,7 @@ export async function startHotSheetWebClient() {
     disposeInteractions: () => {
       disposeRemoteReconnectWakeups();
       remoteReconnect.dispose();
+      approvalReminders.dispose();
       for (const timer of remoteStreamDownTimers.values()) window.clearTimeout(timer);
       remoteStreamDownTimers.clear();
       disposeToolbarVisibility();

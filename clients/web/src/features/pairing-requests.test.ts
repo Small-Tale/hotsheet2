@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ChangeEvent } from '../api';
 import type { RemotePendingDevice } from '../remote-devices-model';
-import { createPairingRequests, PAIRING_REQUESTS_EVENT, pairingRequestNotice } from './pairing-requests';
+import {
+  createPairingRequests,
+  PAIRING_REQUESTS_EVENT,
+  pairingRequestNotice,
+  renewalRequestNotice,
+} from './pairing-requests';
 import { REMOTE_DEVICES_PATH } from './remote-devices';
 
 const NOW = 1_000_000;
@@ -294,5 +299,57 @@ describe('HS2-BZHMEV pairing requests reach device managers over the change chan
     expect(pairingRequestNotice({ label: 'Synthetic tablet' })).toBe(
       '“Synthetic tablet” asks to pair with this host. Open Settings → Devices to approve or reject it.',
     );
+  });
+});
+
+describe('HS2-4B0KSD renewal requests reach device managers', () => {
+  const device = (id: string, requested: number | null) => ({
+    id,
+    label: `Synthetic ${id}`,
+    role: 'read_write',
+    admin: false,
+    local: false,
+    origin: 'http://localhost:4175',
+    created_at: NOW - 100,
+    last_used_at: NOW - 50,
+    expires_at: NOW + 100,
+    renewed_at: NOW - 100,
+    idle_expires_at: NOW - 1,
+    renewal_requested_at: requested,
+    reminder_day: null,
+    expired: true,
+  });
+  const list = (devices: ReturnType<typeof device>[]) =>
+    Response.json({
+      server_id: 'synthetic-server',
+      revision: 1,
+      pair_ttl_seconds: 300,
+      manager: { local: true },
+      devices,
+      pending: [],
+    });
+
+  it('counts devices asking for renewal and announces each new request once', async () => {
+    const host = scriptedHost(),
+      announced: string[] = [];
+    const requests = createPairingRequests({
+      request: host.request,
+      canManage: () => true,
+      onRenewalRequest: (item) => announced.push(item.id),
+    });
+    const first = requests.resync();
+    await host.answer(list([device('a', NOW - 5), device('b', null)]));
+    await first;
+    expect(requests.renewals.value.map((item) => item.id)).toEqual(['a']);
+    expect(announced).toEqual([]);
+    const next = requests.applyEvents([event(3)]);
+    await host.answer(list([device('a', NOW - 5), device('b', NOW)]));
+    await next;
+    expect(announced).toEqual(['b']);
+    // The host renewed both: nothing waits, nothing more is announced.
+    requests.observe([], []);
+    expect(requests.renewals.value).toEqual([]);
+    expect(renewalRequestNotice({ label: 'Synthetic a' })).toContain('keeps its pairing');
+    requests.clear();
   });
 });

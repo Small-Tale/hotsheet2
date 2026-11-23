@@ -75,6 +75,12 @@ export function wireRemoteDevicesSettings(root: HTMLElement, devices: RemoteDevi
     }),
   );
   lifetime.add(
+    delegate(root, 'click', ACTIONS.renewRemoteDevice.selector, (_event, target) => {
+      const id = deviceOf(target);
+      if (id) void devices.renew(id);
+    }),
+  );
+  lifetime.add(
     delegate(root, 'click', ACTIONS.revokeRemoteDevice.selector, (_event, target) => {
       const id = deviceOf(target);
       if (id) void devices.revoke(id);

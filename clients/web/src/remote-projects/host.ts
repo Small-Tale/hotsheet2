@@ -166,6 +166,21 @@ export const selectedRemoteProjects = () => privateRemoteCli<SelectedRemoteProje
 export const discoverRemoteProjects = (id: string) => privateRemoteCli<RemoteDiscoveryView>(['checkouts', id]);
 export const privateRemoteConnection = (id: string) =>
   privateRemoteCli<PrivateRemoteConnection>(['bridge-connection', id]);
+/** This machine's paired session as the peer sees it (HS2-4B0KSD). `failure` names an expired or
+ * revoked approval apart from an unreachable host. */
+export interface RemotePeerSessionView {
+  binding_id: string;
+  device?: {
+    renewed_at: number;
+    expires_at: number;
+    idle_expires_at: number;
+    reminder_day: number | null;
+    renewal_requested_at: number | null;
+  };
+  failure?: string;
+}
+export const remotePeerSession = (id: string) => privateRemoteCli<RemotePeerSessionView>(['session', id]);
+export const requestRemoteRenewal = (id: string) => privateRemoteCli<RemotePeerSessionView>(['renew', id]);
 export const selectRemoteProject = (id: string, checkout: string) =>
   privateRemoteCli<{ selected: boolean }>(['select-project', id, checkout]);
 export const unselectRemoteProject = (id: string, checkout: string) =>

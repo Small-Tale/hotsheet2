@@ -246,7 +246,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/RemoteDevice'
         default:
-          description: Missing, expired or revoked session.
+          description: >-
+            Missing, expired or revoked session. A 401 carries `code` session_expired, session_revoked or
+            session_invalid (HS2-4B0KSD).
           content:
             application/json:
               schema:
@@ -277,6 +279,39 @@ paths:
                 $ref: '#/components/schemas/RemoteDevice'
         default:
           description: Invalid session, origin or CSRF token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/renewal:
+    post:
+      operationId: request_remote_browser_session_renewal
+      summary: Ask the host to renew this device's approval in place
+      description: >-
+        An expired session may ask; a revoked one may not (HS2-4B0KSD). The request needs the paired Origin and
+        CSRF proof and is idempotent. Device managers renew it with /remote-auth/owner/devices/{id}/renew.
+      security:
+        - RemoteSessionCookie: []
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Hotsheet-Csrf
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: The device, with renewal_requested_at set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDevice'
+        default:
+          description: Revoked or unknown session (401 with code), or a missing proof (403).
           content:
             application/json:
               schema:
@@ -469,6 +504,35 @@ paths:
           description: Device revoked.
         default:
           description: Trusted host credential invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /remote-auth/owner/devices/{id}/renew:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: renew_remote_browser_device
+      summary: Renew one paired device in place
+      description: >-
+        Restarts the device's 90-day lifetime, before or after it expired. It keeps its id, credential, role and
+        grants (HS2-4B0KSD). A change by an admin session needs its paired Origin and CSRF proof.
+      security:
+        - HotsheetSecret: []
+        - RemoteSessionCookie: []
+      responses:
+        '200':
+          description: The renewed device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteDevice'
+        default:
+          description: Credential invalid (401/403) or no such device (404).
           content:
             application/json:
               schema:
@@ -19079,6 +19143,9 @@ components:
         - created_at
         - last_used_at
         - expires_at
+        - renewed_at
+        - idle_expires_at
+        - expired
       properties:
         id:
           type: string
@@ -19103,8 +19170,31 @@ components:
           type: integer
           format: int64
         expires_at:
+          description: The absolute end, 90 days after renewed_at (HS2-4B0KSD).
           type: integer
           format: int64
+        renewed_at:
+          description: Approval or the last renewal.
+          type: integer
+          format: int64
+        idle_expires_at:
+          description: When 30 days without use run out.
+          type: integer
+          format: int64
+        renewal_requested_at:
+          description: The device asked to be renewed and the host has not yet.
+          type:
+            - integer
+            - 'null'
+          format: int64
+        reminder_day:
+          description: The latest reminder day reached (45, 50, 55, 60, then daily from 65 to 90).
+          type:
+            - integer
+            - 'null'
+        expired:
+          description: Expired by either clock; only the device list reports such a device.
+          type: boolean
     RemotePendingDevice:
       type: object
       required:

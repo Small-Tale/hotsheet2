@@ -7750,6 +7750,73 @@
       }
     },
     {
+      "id": "remote-approval-reminder-banner",
+      "name": "RemoteApprovalReminderBanner",
+      "kind": "component",
+      "purpose": "Warning strip naming a remote approval near its 90-day limit, with Renew and Dismiss (HS2-4B0KSD).",
+      "source": "src/components/remote-approval-reminder-banner.tsx",
+      "publicExports": [
+        {
+          "name": "RemoteApprovalReminderBanner"
+        }
+      ],
+      "sourceLinks": ["src/components/remote-approval-reminder-banner.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/remote-approval-reminder-banner.tsx",
+        "composition": "src/components/remote-approval-reminder-banner.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "This browser's or a remote server's approval reached a reminder day (45, 50, 55, 60, then daily from 65)."
+        ],
+        "avoidWhen": [
+          "The approval already expired; the remote tab placeholder or the browser's renewal screen shows that."
+        ],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "remote-reconnecting-banner",
       "name": "RemoteReconnectingBanner",
       "kind": "component",

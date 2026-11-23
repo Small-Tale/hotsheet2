@@ -6479,6 +6479,70 @@
       }
     },
     {
+      "key": "hotsheet-web:remote-approval-reminder-banner",
+      "package": "hotsheet-web",
+      "id": "remote-approval-reminder-banner",
+      "name": "RemoteApprovalReminderBanner",
+      "kind": "component",
+      "purpose": "Warning strip naming a remote approval near its 90-day limit, with Renew and Dismiss (HS2-4B0KSD).",
+      "publicExports": [
+        {
+          "name": "RemoteApprovalReminderBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/remote-approval-reminder-banner.tsx"
+      ],
+      "source": "src/components/remote-approval-reminder-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/remote-approval-reminder-banner.tsx",
+        "composition": "src/components/remote-approval-reminder-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:remote-auth-screen",
       "package": "hotsheet-web",
       "id": "remote-auth-screen",

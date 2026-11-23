@@ -54,6 +54,28 @@ impl RemoteRuntime {
         self.registry.bridge_connection(id, self.secrets.as_ref())
     }
 
+    /// HS2-4B0KSD: the peer's view of this machine's paired session for binding `id`: its
+    /// lifetime and reminder day, or why it no longer works (expired, revoked, unreachable).
+    /// `renew` asks the peer's host to renew it in place; the binding, its credential and its
+    /// selected projects stay as they are.
+    pub fn peer_session(&self, id: &str, renew: bool) -> Result<PeerSession, RemoteError> {
+        let (binding, credentials) = self.bridge_connection(id)?;
+        Ok(
+            match peer_session_request(&binding.origin, &credentials, renew) {
+                Ok(device) => PeerSession {
+                    binding_id: binding.id,
+                    device: Some(device),
+                    failure: None,
+                },
+                Err(failure) => PeerSession {
+                    binding_id: binding.id,
+                    device: None,
+                    failure: Some(failure),
+                },
+            },
+        )
+    }
+
     pub fn selected_projects(
         &self,
     ) -> Result<Vec<hotsheet_ticketing::remote_servers::RemoteSelectedProject>, RemoteError> {
@@ -394,6 +416,92 @@ impl hotsheet_ticketing::remote_servers::RemoteCheckoutTransport for MtlsRemoteT
     }
 }
 
+/// The peer's answer about this machine's paired session (HS2-4B0KSD).
+#[derive(Debug, serde::Serialize)]
+pub struct PeerSession {
+    pub binding_id: String,
+    /// The peer's device record: `renewed_at`, `expires_at`, `idle_expires_at`,
+    /// `reminder_day`, `renewal_requested_at`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<RemoteFailure>,
+}
+
+/// Read (`GET /remote-auth/me`) or ask to renew (`POST /remote-auth/renewal`) this machine's
+/// paired session on the peer. A certificate binding has no paired session to renew.
+pub fn peer_session_request(
+    origin: &str,
+    credentials: &RemoteCredentials,
+    renew: bool,
+) -> Result<serde_json::Value, RemoteFailure> {
+    if credentials.session_token().is_none() {
+        return Err(RemoteFailure::Unsupported);
+    }
+    let agent = remote_agent(origin, credentials)?;
+    let url = format!(
+        "{origin}{}",
+        if renew {
+            "/remote-auth/renewal"
+        } else {
+            "/remote-auth/me"
+        }
+    );
+    let mut request = remote_auth_request(
+        if renew {
+            agent.post(&url)
+        } else {
+            agent.get(&url)
+        },
+        origin,
+        credentials,
+    )
+    .set("Accept", "application/json");
+    if renew {
+        let (Some(paired_origin), Some(csrf)) = (
+            credentials.session_origin.as_deref(),
+            credentials.session_csrf.as_deref(),
+        ) else {
+            return Err(RemoteFailure::MissingCredentials);
+        };
+        request = request
+            .set("Origin", paired_origin)
+            .set("X-Hotsheet-Csrf", csrf);
+    }
+    let response = match request.call() {
+        Ok(response) => response,
+        Err(ureq::Error::Status(401 | 403, response)) => return Err(auth_failure(response)),
+        Err(ureq::Error::Status(404, _)) => return Err(RemoteFailure::Unsupported),
+        Err(ureq::Error::Status(300..=399, _)) => return Err(RemoteFailure::Redirect),
+        Err(ureq::Error::Status(_, _)) => return Err(RemoteFailure::InvalidResponse),
+        Err(ureq::Error::Transport(error)) => {
+            return Err(if error.kind() == ureq::ErrorKind::ConnectionFailed {
+                RemoteFailure::Unreachable
+            } else {
+                RemoteFailure::TrustFailed
+            });
+        }
+    };
+    if !matches!(response.status(), 200 | 202) {
+        return Err(RemoteFailure::InvalidResponse);
+    }
+    let mut bytes = Vec::new();
+    response
+        .into_reader()
+        .take(64 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| RemoteFailure::Unreachable)?;
+    if bytes.len() > 64 * 1024 {
+        return Err(RemoteFailure::ResponseLimit);
+    }
+    let device: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| RemoteFailure::InvalidResponse)?;
+    if !device.is_object() {
+        return Err(RemoteFailure::InvalidResponse);
+    }
+    Ok(device)
+}
+
 /// One ticket with its notes fits comfortably; anything larger is not a ticket reply.
 const MAX_TARGET_REPLY_BYTES: usize = 2 * 1024 * 1024;
 
@@ -484,7 +592,9 @@ fn get_limited<T: DeserializeOwned>(
     let result = request.set("Accept", "application/json").call();
     let response = match result {
         Ok(response) => response,
-        Err(ureq::Error::Status(401 | 403, _)) => return Err(RemoteFailure::Unauthorized),
+        // HS2-4B0KSD: an expired or revoked paired session is its own failure, so the desktop
+        // offers renewal instead of retrying; the peer's code says which.
+        Err(ureq::Error::Status(401 | 403, response)) => return Err(auth_failure(response)),
         Err(ureq::Error::Status(404, _)) => return Err(RemoteFailure::Unsupported),
         Err(ureq::Error::Status(300..=399, _)) => return Err(RemoteFailure::Redirect),
         Err(ureq::Error::Status(_, _)) => return Err(RemoteFailure::InvalidResponse),
@@ -517,6 +627,21 @@ fn get_limited<T: DeserializeOwned>(
         return Err(RemoteFailure::ResponseLimit);
     }
     serde_json::from_slice(&bytes).map_err(|_| RemoteFailure::InvalidResponse)
+}
+
+/// The peer's auth refusal by its stable `code` (HS2-4B0KSD). Only the code is read; the
+/// peer's message never reaches the caller.
+fn auth_failure(response: ureq::Response) -> RemoteFailure {
+    let mut bytes = Vec::new();
+    let _ = response.into_reader().take(4096).read_to_end(&mut bytes);
+    let code = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|body| body.get("code")?.as_str().map(str::to_owned));
+    match code.as_deref() {
+        Some("session_expired") => RemoteFailure::SessionExpired,
+        Some("session_revoked") => RemoteFailure::SessionRevoked,
+        _ => RemoteFailure::Unauthorized,
+    }
 }
 
 fn remote_auth_request(

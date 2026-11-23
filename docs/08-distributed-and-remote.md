@@ -280,6 +280,73 @@ promptly. The off-loopback default remains mTLS for existing deployments;
 HTTP never becomes the default. HS2-747RTD adds
 Serve/direct TLS launch, and HS2-WSGZZY owns their cross-transport acceptance.
 
+#### Session lifetime, renewal and reminders (HS2-4B0KSD)
+
+The maintainer set this policy: "30-day idle and 90 days total", with "a very easy way to renew
+without having to re-setup connected remotes". One paired session serves both a browser device
+and a desktop's remote server binding: the binding stores the session token as `session:<token>`.
+
+- **Idle limit: 30 days.** Any authenticated request, long poll or open stream counts as use.
+  `/ws/sync` and terminal attach recheck the session every second through `RemoteAuth::authorize`,
+  so a device whose only activity is an open stream stays active. Use is persisted at most once a
+  minute per session, which bounds catalog writes.
+- **Absolute limit: 90 days** from approval or the last renewal (`renewed_at`). Use never moves it.
+  `expires_at` is stored as `renewed_at` plus 90 days, so an older server enforces the same end.
+- **Renewal in place.** The trusted host or an admin session renews a device from App Settings →
+  Devices (row menu → Renew), with `hotsheet-cli remote sessions renew <device-id>`, or through
+  `POST /remote-auth/owner/devices/{id}/renew`. Renewal works before or after expiry.
+  - Only `renewed_at`, `expires_at` and the idle clock restart. The device id, token, CSRF proof,
+    role, grants, desktop binding and selected projects stay.
+  - A device can ask for renewal, even after it expired: `POST /remote-auth/renewal` with its
+    paired Origin and CSRF proof. This is the browser's Renew button, the desktop's
+    `hotsheet-cli remote renew <binding-id>`, or the remote tab's Renew button. Managers see the
+    request as a Renewal Requested row, a Settings badge and a notice.
+  - Approval stays with the host, so a device cannot extend its own lifetime.
+- **Reminders** fall on days 45, 50, 55 and 60, then every day from 65 to 89, counted from
+  `renewed_at`. Day 90 is the expiry itself, where the expired state, with its Renew action,
+  replaces the reminder.
+  - The host's device list marks a device as Renew Soon, Renewal Requested or Expired.
+  - A remote-mode browser, and a desktop tab on a remote server, show a banner naming the browser
+    or the server, with Renew and Dismiss. Dismissing a reminder hides it until the next reminder
+    day.
+  - Reminders are computed from timestamps the client already received: `/remote-auth/me`, or one
+    `hotsheet-cli remote session <binding-id>` read when a remote tab opens. A local display timer
+    that makes no request re-renders on each reminder day. Nothing polls.
+- **Distinct failures.** A session refusal is a 401 with a `code`:
+  - `session_expired`: renew it.
+  - `session_revoked`: the host revoked it. A revoked session keeps a tombstone digest for one
+    lifetime, so it fails as revoked rather than as unknown.
+  - `session_invalid`: an unknown credential.
+
+  The browser bridge forwards these codes, and answers 503 `host_unavailable` when the machine
+  server does not answer. A restarting host therefore never looks like a lost approval.
+
+- **How each client shows them.** A browser shows a renewal, revocation, pairing or "not
+  answering" screen. A desktop remote tab shows:
+  - Renew for an expired approval, which is never retried in a loop;
+  - Pair Again for a revoked one;
+  - the reconnecting backoff for an unreachable host;
+  - the error text for any other failure, still retrying.
+
+  The registry stores expired and revoked as `unauthorized`, so an older client can still read
+  it. The live discovery's `failure` carries the distinction.
+
+- **Cookie lifetime.** The browser keeps the session cookies for 400 days, the longest lifetime
+  browsers honor. The server decides validity, and `/remote-auth/me` refreshes the cookies while
+  the device is in use.
+
+What a rebuild, reboot or server restart keeps:
+
+| Credential                                                         | Lifetime                                           | Regenerated on rebuild, reboot or restart?                                                                                                                                                             |
+| ------------------------------------------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Paired session (browser device, or desktop binding via `session:`) | 30 days idle, 90 days absolute, renewable in place | No. The catalog `${HOTSHEET_HOME}/remote-auth/<store-id>.json` is durable. It is keyed by the primary store, so a server started on another primary store sees another catalog (follow-up HS2-YDDPN4). |
+| Machine server id (`server-identity.json`)                         | Permanent                                          | No                                                                                                                                                                                                     |
+| Instance secret (`X-Hotsheet-Secret` bearer)                       | One server process                                 | Yes, unless `--secret` is passed. It is used only from loopback, never by an off-box binding.                                                                                                          |
+| mTLS project CA                                                    | 10 years                                           | No (`cert init` refuses to replace it)                                                                                                                                                                 |
+| mTLS server leaf                                                   | 397 days                                           | No; it is renewed by hand                                                                                                                                                                              |
+| mTLS device certificate                                            | 90 days                                            | No; it is rotated by hand with `cert rotate` (follow-up HS2-MSXYJN)                                                                                                                                    |
+| Desktop binding (`remotes.json` plus the private secret store)     | Until removed                                      | No                                                                                                                                                                                                     |
+
 ### 8.2.3 Desktop local and remote projects (HS2-BT4KN6)
 
 The trusted desktop `+` menu asks Local project or Remote project. Local keeps

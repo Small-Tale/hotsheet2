@@ -46,3 +46,45 @@ describe('HS2-EJ5K09 HS2-WNK73S remote project placeholder', () => {
     expect(markup).toContain('Reconnecting to studio');
   });
 });
+
+describe('HS2-4B0KSD expired, revoked and failing remote tabs', () => {
+  const render = (props: Partial<Parameters<typeof RemoteProjectPlaceholder>[0]>) =>
+    String(
+      RemoteProjectPlaceholder({
+        projectId: 'remote:a',
+        name: 'Studio · alpha',
+        phase: 'expired',
+        bindingId: 'binding-a',
+        ...props,
+      }),
+    );
+
+  it('offers Renew for an expired approval, not reconnecting', () => {
+    const markup = render({});
+    expect(markup).toContain('data-remote-project-placeholder="expired"');
+    expect(markup).toContain('Renew Access to Studio · alpha');
+    expect(markup).toContain('data-action="renew-remote-approval"');
+    expect(markup).toContain('data-remote-scope="binding-a"');
+    expect(markup).toContain('Check Again');
+    expect(markup).not.toContain('Reconnecting');
+    const requested = render({ renewalRequested: true });
+    expect(requested).toContain('Renewal requested.');
+    expect(requested).not.toContain('data-action="renew-remote-approval"');
+  });
+
+  it('says a revoked approval was revoked and offers pairing again', () => {
+    const markup = render({ phase: 'revoked' });
+    expect(markup).toContain('Access Revoked by Studio · alpha');
+    expect(markup).toContain('data-action="review-remote-server"');
+    expect(markup).not.toContain('data-action="renew-remote-approval"');
+  });
+
+  it('shows another failure’s text while it keeps reconnecting', () => {
+    const markup = render({ phase: 'reconnecting', error: 'The remote server’s certificate is not trusted.' });
+    expect(markup).toContain('certificate is not trusted');
+    expect(markup).toContain('Reconnecting to Studio · alpha');
+    expect(render({ phase: 'reconnecting', error: 'The server did not answer.' })).toContain(
+      'The remote server is not answering.',
+    );
+  });
+});

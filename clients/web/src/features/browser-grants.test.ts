@@ -1,8 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChangeEvent } from '../api';
-import { browserSessionGrants, resetBrowserSessionGrants, setBrowserSessionGrants } from '../client-origin';
-import { BROWSER_GRANTS_EVENT, BROWSER_SESSION_PATH, createBrowserGrants } from './browser-grants';
+import {
+  browserSessionGrants,
+  browserSessionLifetime,
+  resetBrowserSessionGrants,
+  setBrowserSessionGrants,
+} from '../client-origin';
+import {
+  BROWSER_GRANTS_EVENT,
+  BROWSER_SESSION_PATH,
+  createBrowserGrants,
+  remoteSessionEndCode,
+} from './browser-grants';
 
 const event = (cursor: number | undefined, kind = BROWSER_GRANTS_EVENT): ChangeEvent => ({
   ...(cursor === undefined ? {} : { cursor }),
@@ -137,6 +147,49 @@ describe('HS2-A3TDNH browser grants follow the change channel', () => {
     await host.answer(Response.json({ error: 'invalid pairing or session' }, { status: 401 }));
     await revoked;
     expect(browserSessionGrants()).toEqual({ admin: false, local: false });
+  });
+
+  it('HS2-4B0KSD reports an ended session by kind and never a host that does not answer', async () => {
+    const host = scriptedSession();
+    const ended = vi.fn();
+    const grants = createBrowserGrants({ request: host.request, remoteMode: () => true, onSessionEnded: ended });
+    for (const failure of [
+      Response.json({ error: 'The Hot Sheet host is not answering.', code: 'host_unavailable' }, { status: 503 }),
+      new Response('forbidden', { status: 403 }),
+    ]) {
+      const read = grants.refresh();
+      await host.answer(failure);
+      await read;
+    }
+    expect(ended).not.toHaveBeenCalled();
+    for (const code of ['session_expired', 'session_revoked', undefined]) {
+      const read = grants.refresh();
+      await host.answer(Response.json({ error: 'Remote session required.', code }, { status: 401 }));
+      await read;
+    }
+    expect(ended.mock.calls.map((call) => call[0])).toEqual(['session_expired', 'session_revoked', 'session_invalid']);
+    expect(remoteSessionEndCode('not an object')).toBe('session_invalid');
+  });
+
+  it('HS2-4B0KSD records the session lifetime with its grants', () => {
+    setBrowserSessionGrants({
+      admin: false,
+      local: false,
+      renewed_at: 10,
+      expires_at: 20,
+      idle_expires_at: 30,
+      renewal_requested_at: 15,
+    });
+    expect(browserSessionLifetime()).toEqual({
+      renewed_at: 10,
+      expires_at: 20,
+      idle_expires_at: 30,
+      renewal_requested_at: 15,
+    });
+    setBrowserSessionGrants({ admin: false, local: false });
+    expect(browserSessionLifetime()?.renewed_at).toBe(10);
+    resetBrowserSessionGrants();
+    expect(browserSessionLifetime()).toBeUndefined();
   });
 
   it('never reads on a local-mode host, whose own browser has no session', async () => {

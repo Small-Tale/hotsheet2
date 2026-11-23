@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Checkout } from './api';
-import { changePollSessionHeaders, createDevApp, remoteRouteKind, remoteSessionGrants } from './dev-server';
+import {
+  changePollSessionHeaders,
+  createDevApp,
+  remoteAuthOpenPath,
+  remoteRouteKind,
+  remoteSessionFailureCode,
+  remoteSessionGrants,
+} from './dev-server';
 import { createLocalHostApp } from './local-host';
 import type { MigrationJobApi } from './migration-job-bridge';
 import { openRegisteredProject, type ProjectSession, UnregisteredRemoteProjectError } from './project-bridge';
@@ -508,5 +515,61 @@ describe('HS2-85W6BE / HS2-DXM0YN session grants on a remote-mode bridge', () =>
       headers: { cookie, origin: 'https://foreign.example' },
     });
     expect(write.status).toBe(403);
+  });
+});
+
+describe('HS2-4B0KSD session failures reach the page by kind', () => {
+  function app(check: (headers: Headers) => Promise<Response>) {
+    vi.stubEnv('HOTSHEET_BROWSER_AUTH_MODE', 'remote');
+    const defaults = Array.from({ length: 11 }, () => undefined) as [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ];
+    return createDevApp(true, ...defaults, async () => ({}), check);
+  }
+  const me = (target: ReturnType<typeof createDevApp>) =>
+    target.request('/__hotsheet/checkouts', { headers: { cookie: 'hs2_remote_session=synthetic' } });
+
+  it('keeps the server’s expired and revoked codes and calls anything else invalid', async () => {
+    for (const [code, expected] of [
+      ['session_expired', 'session_expired'],
+      ['session_revoked', 'session_revoked'],
+      ['session_invalid', 'session_invalid'],
+      [undefined, 'session_invalid'],
+    ] as const) {
+      const response = await me(app(async () => Response.json({ error: 'no', code }, { status: 401 })));
+      expect(response.status).toBe(401);
+      expect(await response.json()).toMatchObject({ code: expected });
+    }
+    expect(remoteSessionFailureCode({ code: 'other' })).toBe('session_invalid');
+  });
+
+  it('answers 503 when the host server fails or does not answer, never a lost session', async () => {
+    for (const check of [
+      async () => Response.json({ error: 'busy' }, { status: 502 }),
+      async () => {
+        throw new Error('connection refused');
+      },
+    ]) {
+      const response = await me(app(check));
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ code: 'host_unavailable' });
+    }
+  });
+
+  it('lets an expired session ask for renewal without a valid session', () => {
+    expect(remoteAuthOpenPath('/__hotsheet/remote-auth/renewal')).toBe(true);
+    expect(remoteAuthOpenPath('/__hotsheet/remote-auth/pair')).toBe(true);
+    expect(remoteAuthOpenPath('/__hotsheet/remote-auth/me')).toBe(false);
+    expect(remoteAuthOpenPath('/__hotsheet/remote-auth/owner/devices/D1/renew')).toBe(false);
   });
 });

@@ -9,9 +9,20 @@
 //! (host-trusted: folder chooser, open by path, setup). Neither is derived from the URL,
 //! peer address or forwarded headers, because Tailscale Serve reaches the host over the
 //! same loopback port the owner opens locally.
+//!
+//! HS2-4B0KSD (maintainer policy): a session expires after [`IDLE_TTL`] (30 days) without use,
+//! or [`SESSION_TTL`] (90 days) after its approval or last renewal, whichever comes first. Use
+//! refreshes only the idle clock, persisted at most once per [`ACTIVITY_PERSIST_INTERVAL`];
+//! open streams count as use because the WebSocket and terminal routes recheck their session
+//! every second through [`RemoteAuth::authorize`]. Renewal happens in place
+//! ([`RemoteAuth::renew`]): the device keeps its id, credential, role and grants, so a desktop
+//! binding and its selected projects keep working. Reminders fall on [`reminder_day`]'s days.
+//! A revoked session leaves a tombstone so it fails as revoked, not as unknown, without an
+//! older server ever accepting it again.
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -22,8 +33,23 @@ use ulid::Ulid;
 
 /// HS2-DXM0YN: long enough to walk to the host and approve.
 pub const PAIR_TTL: i64 = 15 * 60;
-const SESSION_TTL: i64 = 30 * 24 * 60 * 60;
-const IDLE_TTL: i64 = 24 * 60 * 60;
+const DAY: i64 = 24 * 60 * 60;
+/// The absolute lifetime, counted from approval or the last renewal; use never extends it.
+pub const SESSION_TTL: i64 = 90 * DAY;
+/// A device that makes no authenticated request, and holds no open stream, this long expires.
+pub const IDLE_TTL: i64 = 30 * DAY;
+/// The days after approval or renewal on which a renewal reminder appears (HS2-4B0KSD):
+/// 45, 50, 55 and 60, then every day from 65 through 90.
+pub const REMINDER_DAYS: [i64; 30] = [
+    45, 50, 55, 60, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84,
+    85, 86, 87, 88, 89, 90,
+];
+/// A revoked session's tombstone prefix. An older server compares digests only, so a
+/// tombstone never matches a presented token there either.
+const REVOKED_PREFIX: &str = "revoked:";
+/// Persist idle activity at most this often per session, so busy reads and the per-second
+/// stream rechecks cost one catalog write a minute (HS2-4B0KSD).
+pub const ACTIVITY_PERSIST_INTERVAL: i64 = 60;
 const MAX_ATTEMPTS: u8 = 5;
 const MAX_REQUESTS_PER_MINUTE: usize = 10;
 
@@ -71,7 +97,30 @@ pub struct Device {
     pub origin: String,
     pub created_at: i64,
     pub last_used_at: i64,
+    /// The absolute end: `renewed_at` plus [`SESSION_TTL`].
     pub expires_at: i64,
+    /// Approval or the last renewal; the reminder and absolute clocks count from it.
+    pub renewed_at: i64,
+    /// When the idle clock runs out unless the device is used first.
+    pub idle_expires_at: i64,
+    /// The device asked the host to renew it and the host has not yet.
+    pub renewal_requested_at: Option<i64>,
+    /// The latest reminder day reached (see [`REMINDER_DAYS`]); filled by [`RemoteAuth::list`]
+    /// and the session routes for the time they answer.
+    pub reminder_day: Option<i64>,
+    /// Already expired, by either clock; only [`RemoteAuth::list`] reports such a device.
+    pub expired: bool,
+}
+
+/// The latest reminder day reached at `now` for a session renewed at `renewed_at`, or `None`
+/// before day 45 (HS2-4B0KSD). Clients compute the same days from the same timestamps.
+pub fn reminder_day(renewed_at: i64, now: i64) -> Option<i64> {
+    let age = now.saturating_sub(renewed_at);
+    REMINDER_DAYS
+        .iter()
+        .rev()
+        .find(|day| age >= **day * DAY)
+        .copied()
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -125,7 +174,28 @@ struct DeviceRecord {
     origin: String,
     created_at: i64,
     last_used_at: i64,
+    /// Kept equal to `renewed_at + SESSION_TTL` so an older server enforces the same end.
     expires_at: i64,
+    /// Absent in catalogs written before HS2-4B0KSD: the approval time counts.
+    #[serde(default)]
+    renewed_at: Option<i64>,
+    #[serde(default)]
+    renewal_requested_at: Option<i64>,
+}
+
+impl DeviceRecord {
+    fn renewed(&self) -> i64 {
+        self.renewed_at.unwrap_or(self.created_at)
+    }
+    fn expires(&self) -> i64 {
+        self.renewed() + SESSION_TTL
+    }
+    fn idle_expires(&self) -> i64 {
+        self.last_used_at + IDLE_TTL
+    }
+    fn expired(&self, now: i64) -> bool {
+        self.expires() <= now || self.idle_expires() <= now
+    }
 }
 
 impl From<&DeviceRecord> for Device {
@@ -140,9 +210,63 @@ impl From<&DeviceRecord> for Device {
             origin: value.origin.clone(),
             created_at: value.created_at,
             last_used_at: value.last_used_at,
-            expires_at: value.expires_at,
+            expires_at: value.expires(),
+            renewed_at: value.renewed(),
+            idle_expires_at: value.idle_expires(),
+            renewal_requested_at: value.renewal_requested_at,
+            reminder_day: None,
+            expired: false,
         }
     }
+}
+
+impl Device {
+    /// The same device with the reminder and expiry state at `now`.
+    #[must_use]
+    pub fn at(mut self, now: i64) -> Self {
+        self.reminder_day = reminder_day(self.renewed_at, now);
+        self.expired = self.expires_at <= now || self.idle_expires_at <= now;
+        self
+    }
+}
+
+impl SessionRecord {
+    fn revoked(&self) -> bool {
+        self.token_hash.starts_with(REVOKED_PREFIX)
+    }
+}
+
+/// The live or revoked session `hash` names.
+fn find_session(sessions: &[SessionRecord], hash: &str) -> Option<usize> {
+    let tombstone = format!("{REVOKED_PREFIX}{hash}");
+    sessions.iter().position(|entry| {
+        equal_digest(&entry.token_hash, hash) || equal_digest(&entry.token_hash, &tombstone)
+    })
+}
+
+/// Turn a session into its tombstone: no credential matches it again.
+fn tombstone(entry: &mut SessionRecord, now: i64) {
+    if !entry.revoked() {
+        entry.token_hash = format!("{REVOKED_PREFIX}{}", entry.token_hash);
+        entry.csrf_hash = format!("{REVOKED_PREFIX}{}", entry.csrf_hash);
+    }
+    // The tombstone is kept for one lifetime after revocation, then pruned.
+    entry.device.last_used_at = now;
+    entry.device.renewed_at = Some(now);
+    entry.device.expires_at = now + SESSION_TTL;
+}
+
+/// Drop tombstones and long-expired sessions once their lifetime has passed again, so the
+/// catalog stays bounded by the devices in use.
+fn prune(sessions: &mut Vec<SessionRecord>, now: i64) {
+    sessions.retain(|entry| {
+        let end = if entry.revoked() {
+            entry.device.expires()
+        } else {
+            entry.device.expires().min(entry.device.idle_expires())
+        };
+        end + SESSION_TTL > now
+    });
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -166,6 +290,38 @@ impl Data {
     }
 }
 
+/// The seconds clock the routes read for every session decision (HS2-4B0KSD).
+pub type Clock = Arc<dyn Fn() -> i64 + Send + Sync>;
+
+/// The wall clock in Unix seconds.
+pub fn wall_clock() -> i64 {
+    time::OffsetDateTime::now_utc().unix_timestamp()
+}
+
+/// A settable clock for transition tests (HS2-4B0KSD): `clock()` hands it to
+/// [`RemoteAuth::with_clock`], and `set` or `advance` moves every reader at once.
+#[derive(Clone, Default)]
+pub struct ManualClock(Arc<AtomicI64>);
+
+impl ManualClock {
+    pub fn new(start: i64) -> Self {
+        Self(Arc::new(AtomicI64::new(start)))
+    }
+    pub fn now(&self) -> i64 {
+        self.0.load(Ordering::SeqCst)
+    }
+    pub fn set(&self, value: i64) {
+        self.0.store(value, Ordering::SeqCst);
+    }
+    pub fn advance(&self, seconds: i64) -> i64 {
+        self.0.fetch_add(seconds, Ordering::SeqCst) + seconds
+    }
+    pub fn clock(&self) -> Clock {
+        let value = self.0.clone();
+        Arc::new(move || value.load(Ordering::SeqCst))
+    }
+}
+
 #[derive(Clone)]
 pub struct RemoteAuth {
     path: PathBuf,
@@ -173,12 +329,20 @@ pub struct RemoteAuth {
     /// In-memory change cursor for device-list long polls. It starts from the clock so a
     /// restarted server never repeats a cursor a client already holds.
     revision: Arc<tokio::sync::watch::Sender<u64>>,
+    clock: Clock,
+    /// How many times this process wrote the catalog; tests bound the activity write rate.
+    writes: Arc<tokio::sync::watch::Sender<u64>>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum AuthFailure {
     Invalid,
+    /// A pairing challenge ran out (HS2-7DBJMS).
     Expired,
+    /// A paired session reached its idle or absolute limit; renewal restores it (HS2-4B0KSD).
+    SessionExpired,
+    /// A paired session was revoked; only a new pairing grants access again.
+    Revoked,
     RateLimited,
     Unapproved,
     ReadOnly,
@@ -213,7 +377,26 @@ impl RemoteAuth {
             path,
             data: Arc::new(Mutex::new(data)),
             revision: Arc::new(tokio::sync::watch::Sender::new(start)),
+            clock: Arc::new(wall_clock),
+            writes: Arc::new(tokio::sync::watch::Sender::new(0)),
         })
+    }
+
+    /// Replace the clock the routes read (HS2-4B0KSD transition tests).
+    #[must_use]
+    pub fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// Now, in Unix seconds, by this catalog's clock.
+    pub fn now(&self) -> i64 {
+        (self.clock)()
+    }
+
+    /// The number of catalog writes this process made, as a watch so tests wait on it.
+    pub fn writes(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.writes.subscribe()
     }
 
     /// The device-list change cursor.
@@ -253,6 +436,7 @@ impl RemoteAuth {
         let result = change(&mut next)?;
         write_private_atomic(&self.path, &serde_json::to_vec(&next)?)?;
         *guard = next;
+        self.writes.send_modify(|count| *count += 1);
         Ok(result)
     }
 
@@ -353,7 +537,11 @@ impl RemoteAuth {
     /// Change one paired device's role or grants. Returns `None` when no such device exists.
     pub fn change(&self, id: &str, change: DeviceChange) -> Result<Option<Device>> {
         self.update(|data| {
-            let Some(entry) = data.sessions.iter_mut().find(|entry| entry.device.id == id) else {
+            let Some(entry) = data
+                .sessions
+                .iter_mut()
+                .find(|entry| entry.device.id == id && !entry.revoked())
+            else {
                 return Ok(None);
             };
             if let Some(role) = change.role {
@@ -413,7 +601,10 @@ impl RemoteAuth {
                 created_at: now,
                 last_used_at: now,
                 expires_at: now + SESSION_TTL,
+                renewed_at: Some(now),
+                renewal_requested_at: None,
             };
+            prune(&mut data.sessions, now);
             data.sessions.push(SessionRecord {
                 device: device.clone(),
                 token_hash: digest(&token),
@@ -422,7 +613,7 @@ impl RemoteAuth {
             Ok(Ok(IssuedSession {
                 token,
                 csrf,
-                device: Device::from(&device),
+                device: Device::from(&device).at(now),
             }))
         })
     }
@@ -435,67 +626,144 @@ impl RemoteAuth {
         write: bool,
         now: i64,
     ) -> Result<Result<Device, AuthFailure>> {
-        // Avoid a disk write for every API read; persist idle activity at most once per
-        // minute. The inner recheck still makes concurrent revocation authoritative.
+        // Avoid a disk write for every API read and every per-second stream recheck: persist
+        // activity at most once per interval. The inner recheck still makes concurrent
+        // revocation authoritative.
         let hash = digest(token);
         {
             let guard = self
                 .data
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let Some(entry) = guard
-                .sessions
-                .iter()
-                .find(|entry| equal_digest(&entry.token_hash, &hash))
-            else {
+            let Some(position) = find_session(&guard.sessions, &hash) else {
                 return Ok(Err(AuthFailure::Invalid));
             };
+            let entry = &guard.sessions[position];
             let result = validate(entry, csrf, origin, write, now);
-            if result.is_err() || entry.device.last_used_at > now - 60 {
-                return Ok(result);
+            if result.is_err() || entry.device.last_used_at > now - ACTIVITY_PERSIST_INTERVAL {
+                return Ok(result.map(|device| device.at(now)));
             }
         }
         self.write(|data| {
-            let Some(entry) = data
-                .sessions
-                .iter_mut()
-                .find(|entry| equal_digest(&entry.token_hash, &hash))
-            else {
+            let Some(position) = find_session(&data.sessions, &hash) else {
                 return Ok(Err(AuthFailure::Invalid));
             };
+            let entry = &mut data.sessions[position];
             if let Err(error) = validate(entry, csrf, origin, write, now) {
                 return Ok(Err(error));
             }
-            entry.device.last_used_at = now;
-            Ok(Ok(Device::from(&entry.device)))
+            touch(&mut entry.device, now);
+            Ok(Ok(Device::from(&entry.device).at(now)))
         })
     }
 
+    /// Every paired device the host may manage, expired ones included so they can be renewed
+    /// in place. Revoked tombstones are never listed.
     pub fn list(&self, now: i64) -> Vec<Device> {
         self.data
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .sessions
             .iter()
-            .filter(|entry| {
-                entry.device.expires_at > now && entry.device.last_used_at + IDLE_TTL > now
-            })
-            .map(|entry| Device::from(&entry.device))
+            .filter(|entry| !entry.revoked())
+            .map(|entry| Device::from(&entry.device).at(now))
             .collect()
     }
 
-    pub fn revoke(&self, id: &str) -> Result<bool> {
+    /// Restart one device's lifetime in place (HS2-4B0KSD), before or after it expired. The
+    /// device keeps its id, credential, role and grants, so nothing on the device needs setting
+    /// up again. Returns `None` for an unknown or revoked device.
+    pub fn renew(&self, id: &str, now: i64) -> Result<Option<Device>> {
         self.update(|data| {
-            let before = data.sessions.len();
-            data.sessions.retain(|entry| entry.device.id != id);
-            Ok(before != data.sessions.len())
+            let Some(entry) = data
+                .sessions
+                .iter_mut()
+                .find(|entry| entry.device.id == id && !entry.revoked())
+            else {
+                return Ok(None);
+            };
+            entry.device.renewed_at = Some(now);
+            entry.device.expires_at = now + SESSION_TTL;
+            entry.device.last_used_at = entry.device.last_used_at.max(now);
+            entry.device.renewal_requested_at = None;
+            Ok(Some(Device::from(&entry.device).at(now)))
+        })
+    }
+
+    /// The device holding `token` asks the host to renew it (HS2-4B0KSD). An expired session
+    /// may ask; a revoked or unknown one may not. The request needs the session's paired Origin
+    /// and CSRF proof and is idempotent: a repeated request keeps the first time.
+    pub fn request_renewal(
+        &self,
+        token: &str,
+        csrf: &str,
+        origin: &str,
+        now: i64,
+    ) -> Result<Result<Device, AuthFailure>> {
+        let hash = digest(token);
+        let current = {
+            let guard = self
+                .data
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let Some(position) = find_session(&guard.sessions, &hash) else {
+                return Ok(Err(AuthFailure::Invalid));
+            };
+            let entry = &guard.sessions[position];
+            if entry.revoked() {
+                return Ok(Err(AuthFailure::Revoked));
+            }
+            if entry.device.origin != origin {
+                return Ok(Err(AuthFailure::Invalid));
+            }
+            if !equal_digest(&entry.csrf_hash, &digest(csrf)) {
+                return Ok(Err(AuthFailure::Csrf));
+            }
+            entry
+                .device
+                .renewal_requested_at
+                .map(|_| Device::from(&entry.device).at(now))
+        };
+        if let Some(device) = current {
+            return Ok(Ok(device));
+        }
+        self.update(|data| {
+            let Some(position) = find_session(&data.sessions, &hash) else {
+                return Ok(Err(AuthFailure::Invalid));
+            };
+            let entry = &mut data.sessions[position];
+            if entry.revoked() {
+                return Ok(Err(AuthFailure::Revoked));
+            }
+            entry.device.renewal_requested_at.get_or_insert(now);
+            Ok(Ok(Device::from(&entry.device).at(now)))
+        })
+    }
+
+    pub fn revoke(&self, id: &str) -> Result<bool> {
+        let now = self.now();
+        self.update(|data| {
+            let mut found = false;
+            for entry in &mut data.sessions {
+                if entry.device.id == id && !entry.revoked() {
+                    tombstone(entry, now);
+                    found = true;
+                }
+            }
+            Ok(found)
         })
     }
 
     pub fn revoke_all(&self) -> Result<usize> {
+        let now = self.now();
         self.update(|data| {
-            let count = data.sessions.len();
-            data.sessions.clear();
+            let mut count = 0;
+            for entry in &mut data.sessions {
+                if !entry.revoked() {
+                    tombstone(entry, now);
+                    count += 1;
+                }
+            }
             Ok(count)
         })
     }
@@ -509,13 +777,10 @@ impl RemoteAuth {
     ) -> Result<Result<IssuedSession, AuthFailure>> {
         let hash = digest(token);
         self.write(|data| {
-            let Some(entry) = data
-                .sessions
-                .iter_mut()
-                .find(|entry| equal_digest(&entry.token_hash, &hash))
-            else {
+            let Some(position) = find_session(&data.sessions, &hash) else {
                 return Ok(Err(AuthFailure::Invalid));
             };
+            let entry = &mut data.sessions[position];
             if let Err(error) = validate(entry, Some(csrf), Some(origin), false, now) {
                 return Ok(Err(error));
             }
@@ -523,14 +788,20 @@ impl RemoteAuth {
             let new_csrf = random_token()?;
             entry.token_hash = digest(&new_token);
             entry.csrf_hash = digest(&new_csrf);
-            entry.device.last_used_at = now;
+            touch(&mut entry.device, now);
             Ok(Ok(IssuedSession {
                 token: new_token,
                 csrf: new_csrf,
-                device: Device::from(&entry.device),
+                device: Device::from(&entry.device).at(now),
             }))
         })
     }
+}
+
+/// Record use: only the idle clock restarts; the absolute lifetime does not move
+/// (HS2-4B0KSD). It never moves backward, so a clock step back cannot shorten a session.
+fn touch(device: &mut DeviceRecord, now: i64) {
+    device.last_used_at = device.last_used_at.max(now);
 }
 
 fn random_token() -> Result<String> {
@@ -550,8 +821,11 @@ fn validate(
     write: bool,
     now: i64,
 ) -> Result<Device, AuthFailure> {
-    if entry.device.expires_at <= now || entry.device.last_used_at + IDLE_TTL <= now {
-        return Err(AuthFailure::Expired);
+    if entry.revoked() {
+        return Err(AuthFailure::Revoked);
+    }
+    if entry.device.expired(now) {
+        return Err(AuthFailure::SessionExpired);
     }
     if write && entry.device.role == Role::ReadOnly {
         return Err(AuthFailure::ReadOnly);
@@ -660,7 +934,7 @@ mod tests {
         assert!(!file.contains(&pair.challenge));
         assert!(!file.contains(&issued.token));
         assert!(!file.contains(&issued.csrf));
-        let reopened = RemoteAuth::open(path, "synthetic-server")?;
+        let reopened = RemoteAuth::open(&path, "synthetic-server")?;
         assert_eq!(reopened.server_id(), issued.device.server_id);
         assert!(
             reopened
@@ -672,8 +946,10 @@ mod tests {
             reopened
                 .authorize(&issued.token, None, None, false, 108)?
                 .unwrap_err(),
-            AuthFailure::Invalid
+            AuthFailure::Revoked
         );
+        let file = fs::read_to_string(&path)?;
+        assert!(!file.contains(&issued.token));
         Ok(())
     }
 
@@ -897,6 +1173,333 @@ mod tests {
         auth.revoke(&rotated.device.id)?;
         assert!(advanced(&auth));
         Ok(())
+    }
+
+    /// Pair one read-write device at `now` and return its session.
+    fn issue(auth: &RemoteAuth, origin: &str, now: i64) -> Result<IssuedSession> {
+        let pair = auth.request("Synthetic laptop", origin, now)?.unwrap();
+        auth.approve(&pair.id, Role::ReadWrite, Grants::default(), now)?
+            .unwrap();
+        Ok(auth
+            .redeem(&pair.id, &pair.challenge, origin, now)?
+            .unwrap())
+    }
+
+    fn writes(auth: &RemoteAuth) -> u64 {
+        *auth.writes().borrow()
+    }
+
+    const ORIGIN: &str = "http://localhost:4175";
+
+    #[test]
+    fn hs2_4b0ksd_use_keeps_a_device_past_thirty_days_until_the_ninety_day_cap() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("remote-auth.json");
+        let start = 1_000_000;
+        let mut auth = RemoteAuth::open(&path, "synthetic-server")?;
+        let issued = issue(&auth, ORIGIN, start)?;
+        assert_eq!(issued.device.renewed_at, start);
+        assert_eq!(issued.device.expires_at, start + SESSION_TTL);
+        assert_eq!(issued.device.idle_expires_at, start + IDLE_TTL);
+        // Use every 12 hours; restart the server every 10 days.
+        let mut now = start;
+        while now + 12 * 3600 < start + SESSION_TTL {
+            now += 12 * 3600;
+            if (now - start) % (10 * DAY) == 0 {
+                auth = RemoteAuth::open(&path, "synthetic-server")?;
+            }
+            let device = auth
+                .authorize(&issued.token, None, None, false, now)?
+                .unwrap_or_else(|error| panic!("{}: {error:?}", now - start));
+            assert_eq!(device.last_used_at, now);
+            // Use never moves the absolute end.
+            assert_eq!(device.expires_at, start + SESSION_TTL);
+        }
+        assert!(now - start > IDLE_TTL);
+        // The cap holds however recently the device was used.
+        assert_eq!(
+            auth.authorize(&issued.token, None, None, false, start + SESSION_TTL)?
+                .unwrap_err(),
+            AuthFailure::SessionExpired
+        );
+        let listed = auth.list(start + SESSION_TTL);
+        assert!(listed[0].expired && listed[0].id == issued.device.id);
+        Ok(())
+    }
+
+    #[test]
+    fn hs2_4b0ksd_a_device_idle_past_thirty_days_expires_and_use_cannot_revive_it() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("remote-auth.json");
+        let auth = RemoteAuth::open(&path, "synthetic-server")?;
+        let issued = issue(&auth, ORIGIN, 100)?;
+        // One second short of the idle limit still counts, and restarts the idle clock.
+        let last = 100 + IDLE_TTL - 1;
+        assert!(
+            auth.authorize(&issued.token, None, None, false, last)?
+                .is_ok()
+        );
+        assert!(
+            auth.authorize(&issued.token, None, None, false, last + IDLE_TTL - 1)?
+                .is_ok()
+        );
+        let last = last + IDLE_TTL - 1;
+        // Durable: a restart, later requests and a rotation all stay expired.
+        let reopened = RemoteAuth::open(&path, "synthetic-server")?;
+        for at in [last + IDLE_TTL, last + IDLE_TTL + 1, last + 3 * IDLE_TTL] {
+            assert_eq!(
+                reopened
+                    .authorize(&issued.token, None, None, false, at)?
+                    .unwrap_err(),
+                AuthFailure::SessionExpired
+            );
+        }
+        assert_eq!(
+            reopened
+                .rotate(&issued.token, &issued.csrf, ORIGIN, last + IDLE_TTL + 2)?
+                .unwrap_err(),
+            AuthFailure::SessionExpired
+        );
+        let listed = reopened.list(last + IDLE_TTL);
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].expired);
+        Ok(())
+    }
+
+    #[test]
+    fn hs2_4b0ksd_renewal_before_and_after_expiry_keeps_the_device_and_its_credential() -> Result<()>
+    {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("remote-auth.json");
+        let auth = RemoteAuth::open(&path, "synthetic-server")?;
+        let issued = issue(&auth, ORIGIN, 0)?;
+        auth.change(
+            &issued.device.id,
+            DeviceChange {
+                admin: Some(true),
+                ..DeviceChange::default()
+            },
+        )?;
+        // Before expiry: day 80, while in use.
+        for day in [25, 50, 75, 80] {
+            auth.authorize(&issued.token, None, None, false, day * DAY)?
+                .unwrap();
+        }
+        let renewed = auth.renew(&issued.device.id, 80 * DAY)?.unwrap();
+        assert_eq!(renewed.id, issued.device.id);
+        assert_eq!(renewed.renewed_at, 80 * DAY);
+        assert_eq!(renewed.expires_at, 80 * DAY + SESSION_TTL);
+        assert_eq!(renewed.reminder_day, None);
+        assert!(renewed.admin && renewed.role == Role::ReadWrite);
+        // The same token and CSRF proof keep working past the original cap.
+        assert!(
+            auth.authorize(
+                &issued.token,
+                Some(&issued.csrf),
+                Some(ORIGIN),
+                true,
+                100 * DAY
+            )?
+            .is_ok()
+        );
+        // After expiry (idle past 30 days): the device asks, the host renews, it works again.
+        let idle = 100 * DAY + IDLE_TTL + 1;
+        assert_eq!(
+            auth.authorize(&issued.token, None, None, false, idle)?
+                .unwrap_err(),
+            AuthFailure::SessionExpired
+        );
+        assert_eq!(
+            auth.request_renewal(&issued.token, "wrong", ORIGIN, idle)?
+                .unwrap_err(),
+            AuthFailure::Csrf
+        );
+        assert_eq!(
+            auth.request_renewal(&issued.token, &issued.csrf, "http://elsewhere:1", idle)?
+                .unwrap_err(),
+            AuthFailure::Invalid
+        );
+        let asked = auth
+            .request_renewal(&issued.token, &issued.csrf, ORIGIN, idle)?
+            .unwrap();
+        assert_eq!(asked.renewal_requested_at, Some(idle));
+        // Asking again is idempotent and writes nothing.
+        let before = writes(&auth);
+        let again = auth
+            .request_renewal(&issued.token, &issued.csrf, ORIGIN, idle + 5)?
+            .unwrap();
+        assert_eq!(again.renewal_requested_at, Some(idle));
+        assert_eq!(writes(&auth), before);
+        let reopened = RemoteAuth::open(&path, "synthetic-server")?;
+        let renewed = reopened.renew(&issued.device.id, idle + 60)?.unwrap();
+        assert_eq!(renewed.renewal_requested_at, None);
+        let device = reopened
+            .authorize(&issued.token, None, None, false, idle + 61)?
+            .unwrap();
+        assert_eq!(device.id, issued.device.id);
+        assert!(device.admin);
+        assert!(reopened.renew("missing", idle)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn hs2_4b0ksd_reminders_fall_on_the_policy_days() {
+        let expected: Vec<i64> = [45, 50, 55, 60].into_iter().chain(65..=90).collect();
+        assert_eq!(REMINDER_DAYS.to_vec(), expected);
+        let renewed = 7_000;
+        assert_eq!(reminder_day(renewed, renewed), None);
+        assert_eq!(reminder_day(renewed, renewed + 45 * DAY - 1), None);
+        let mut shown = Vec::new();
+        for hour in 0..=(92 * 24) {
+            let now = renewed + hour * 3600;
+            if let Some(day) = reminder_day(renewed, now)
+                && shown.last() != Some(&day)
+            {
+                // Each reminder starts exactly on its day.
+                assert_eq!(now, renewed + day * DAY, "day {day}");
+                shown.push(day);
+            }
+        }
+        assert_eq!(shown, expected);
+        // Between thresholds the latest reached day stays.
+        assert_eq!(reminder_day(renewed, renewed + 47 * DAY), Some(45));
+        assert_eq!(reminder_day(renewed, renewed + 64 * DAY), Some(60));
+        assert_eq!(reminder_day(renewed, renewed + 200 * DAY), Some(90));
+    }
+
+    #[test]
+    fn hs2_4b0ksd_activity_writes_at_most_once_per_interval() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let auth = RemoteAuth::open(dir.path().join("remote-auth.json"), "synthetic-server")?;
+        let issued = issue(&auth, ORIGIN, 1_000)?;
+        let before = writes(&auth);
+        // A busy page plus a stream rechecking every second for one interval: no write within
+        // the interval of the redeem's own activity.
+        for second in 0..ACTIVITY_PERSIST_INTERVAL {
+            for _ in 0..20 {
+                assert!(
+                    auth.authorize(&issued.token, None, None, false, 1_000 + second)?
+                        .is_ok()
+                );
+            }
+        }
+        assert_eq!(writes(&auth), before);
+        // Each later interval of continuous use costs exactly one write.
+        for second in ACTIVITY_PERSIST_INTERVAL..ACTIVITY_PERSIST_INTERVAL * 11 {
+            auth.authorize(&issued.token, None, None, false, 1_000 + second)?
+                .unwrap();
+        }
+        assert_eq!(writes(&auth), before + 10);
+        // A failed check never writes.
+        let failed = writes(&auth);
+        assert!(
+            auth.authorize("unknown-token", None, None, false, 1_000_000)?
+                .is_err()
+        );
+        assert!(
+            auth.authorize(&issued.token, None, None, false, 1_000 + SESSION_TTL)?
+                .is_err()
+        );
+        assert_eq!(writes(&auth), failed);
+        Ok(())
+    }
+
+    #[test]
+    fn hs2_4b0ksd_revoking_an_active_device_reports_revoked_and_blocks_renewal() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("remote-auth.json");
+        let auth = RemoteAuth::open(&path, "synthetic-server")?.with_clock(Arc::new(|| 450));
+        let issued = issue(&auth, ORIGIN, 100)?;
+        let kept = issue(&auth, ORIGIN, 100)?;
+        for at in [200, 300, 400] {
+            auth.authorize(&issued.token, None, None, false, at)?
+                .unwrap();
+        }
+        assert!(auth.revoke(&issued.device.id)?);
+        assert!(!auth.revoke(&issued.device.id)?);
+        for at in [451, 500, 100 + SESSION_TTL] {
+            assert_eq!(
+                auth.authorize(&issued.token, None, None, false, at)?
+                    .unwrap_err(),
+                AuthFailure::Revoked
+            );
+        }
+        assert_eq!(
+            auth.request_renewal(&issued.token, &issued.csrf, ORIGIN, 500)?
+                .unwrap_err(),
+            AuthFailure::Revoked
+        );
+        assert!(auth.renew(&issued.device.id, 500)?.is_none());
+        assert!(
+            auth.change(&issued.device.id, DeviceChange::default())?
+                .is_none()
+        );
+        let reopened = RemoteAuth::open(&path, "synthetic-server")?;
+        assert_eq!(
+            reopened
+                .authorize(&issued.token, None, None, false, 600)?
+                .unwrap_err(),
+            AuthFailure::Revoked
+        );
+        // The tombstone is never listed, and revoking one device leaves another alone.
+        let listed = reopened.list(600);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, kept.device.id);
+        assert!(
+            reopened
+                .authorize(&kept.token, None, None, false, 600)?
+                .is_ok()
+        );
+        // An unknown token stays invalid, distinct from revoked.
+        assert_eq!(
+            reopened
+                .authorize("unknown", None, None, false, 600)?
+                .unwrap_err(),
+            AuthFailure::Invalid
+        );
+        // A later pairing prunes the tombstone once its lifetime passed again.
+        let later = 450 + 2 * SESSION_TTL + 1;
+        issue(&reopened, ORIGIN, later)?;
+        let file = fs::read_to_string(&path)?;
+        assert!(!file.contains(REVOKED_PREFIX));
+        Ok(())
+    }
+
+    #[test]
+    fn hs2_4b0ksd_a_catalog_from_before_the_policy_counts_from_approval() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("remote-auth.json");
+        let token = "synthetic-token";
+        let legacy = serde_json::json!({
+            "server_id": "synthetic-server",
+            "pending": [],
+            "sessions": [{
+                "device": {
+                    "id": "D1", "server_id": "synthetic-server", "label": "Old device",
+                    "role": "read_write", "origin": ORIGIN,
+                    "created_at": 0, "last_used_at": 10 * DAY, "expires_at": 30 * DAY
+                },
+                "token_hash": digest(token),
+                "csrf_hash": digest("csrf")
+            }]
+        });
+        fs::write(&path, serde_json::to_vec(&legacy)?)?;
+        let auth = RemoteAuth::open(&path, "synthetic-server")?;
+        // Past the old 30-day end but inside the new 90-day lifetime and idle window.
+        let device = auth.authorize(token, None, None, false, 35 * DAY)?.unwrap();
+        assert_eq!((device.renewed_at, device.expires_at), (0, SESSION_TTL));
+        Ok(())
+    }
+
+    #[test]
+    fn hs2_4b0ksd_the_manual_clock_drives_every_reader() {
+        let clock = ManualClock::new(5);
+        let read = clock.clock();
+        assert_eq!(read(), 5);
+        assert_eq!(clock.advance(10), 15);
+        clock.set(40);
+        assert_eq!((read(), clock.now()), (40, 40));
+        assert!(wall_clock() > 1_600_000_000);
     }
 
     #[tokio::test]

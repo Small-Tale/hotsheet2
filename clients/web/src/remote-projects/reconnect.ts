@@ -1,6 +1,7 @@
 import { signal } from 'kerfjs';
 
 import type { Project } from '../interactions/types';
+import { remoteFailureKind, remoteFailureText } from '../remote-session-lifetime';
 import { remoteProjectId } from './identity';
 
 /**
@@ -14,10 +15,20 @@ import { remoteProjectId } from './identity';
  * matter how many of its projects were selected. Network-online, window focus and an explicit tab
  * selection wake a retry early; nothing here polls on a fixed interval. Only `forget` (an explicit
  * close) removes a placeholder; a failure never drops one.
+ *
+ * HS2-4B0KSD: a probe that reports an expired or revoked approval moves the host's placeholders to
+ * that state and stops retrying it, because retrying an expired credential never succeeds. Only an
+ * explicit Check Again (`retryNow`) or a renewal tries again. Any other failure keeps the backoff and
+ * shows its text.
  */
 
-/** The first attempt is still running (`loading`), or at least one attempt failed (`reconnecting`). */
-export type RemoteTabPlaceholderPhase = 'loading' | 'reconnecting';
+/** The first attempt is still running (`loading`), at least one attempt failed (`reconnecting`), or the
+ * host refused this computer's approval as expired or revoked (HS2-4B0KSD), which no retry fixes. */
+export type RemoteTabPlaceholderPhase = 'loading' | 'reconnecting' | 'expired' | 'revoked';
+
+/** One reachability probe's answer: reachable, or why not (a remote failure code). A bare boolean is an
+ * unclassified answer. */
+export type RemoteProbeResult = boolean | { reachable: boolean; failure?: string | null };
 
 export interface RemoteTabPlaceholder {
   /** The browser project id the opened tab will carry. */
@@ -31,6 +42,8 @@ export interface RemoteTabPlaceholder {
   /** An open or reachability probe for this placeholder's host is in flight. */
   connecting: boolean;
   error?: string;
+  /** This computer asked the host to renew its approval (HS2-4B0KSD). */
+  renewalRequested?: boolean;
 }
 
 export interface RemoteTabSelection {
@@ -95,8 +108,9 @@ export interface RemoteReconnectTimers {
 export interface RemoteReconnectDependencies {
   /** Open one checkout; resolves to the project the tab shows. */
   open: (bindingId: string, checkoutId: string) => Promise<Project>;
-  /** A cheap reachability check of one host; `false` or a rejection keeps its placeholders waiting. */
-  probe: (bindingId: string) => Promise<boolean>;
+  /** A cheap reachability check of one host; `false` or a rejection keeps its placeholders waiting. An
+   * expired or revoked failure stops retrying (HS2-4B0KSD). */
+  probe: (bindingId: string) => Promise<RemoteProbeResult>;
   /** Turn a placeholder into its real tab at the placeholder's rank. A rejection keeps the placeholder. */
   opened: (placeholder: RemoteTabPlaceholder, project: Project) => Promise<void>;
   /** An open that finished after its placeholder was closed re-selected it in the registry: undo that. */
@@ -217,23 +231,36 @@ export function createRemoteReconnect(dependencies: RemoteReconnectDependencies)
     const ids = new Set(pendingFor(bindingId).map((item) => item.id));
     patch(ids, (item) => ({ ...item, connecting: true }));
     const run = async () => {
-      let reachable = true;
-      if (probeFirst) reachable = await dependencies.probe(bindingId).catch(() => false);
-      const targets = pendingFor(bindingId);
+      let reachable = true,
+        failure: string | null | undefined;
+      if (probeFirst) {
+        const answer = await dependencies.probe(bindingId).catch(() => false);
+        reachable = typeof answer === 'boolean' ? answer : answer.reachable;
+        failure = typeof answer === 'boolean' ? undefined : answer.failure;
+      }
+      const targets = pendingFor(bindingId),
+        kind = remoteFailureKind(failure);
       if (!reachable)
         patch(new Set(targets.map((item) => item.id)), (item) => ({
           ...item,
-          error: 'The server did not answer.',
+          error: remoteFailureText(failure),
         }));
       const results = reachable ? await Promise.all(targets.map((item) => openOne(item))) : [false];
       if (disposed) return;
+      // An expired or revoked approval is final until the user acts: no retry is scheduled.
+      const stopped = !reachable && (kind === 'expired' || kind === 'revoked');
       patch(new Set(pendingFor(bindingId).map((item) => item.id)), (item) => ({
         ...item,
         connecting: false,
-        phase: 'reconnecting',
+        phase: stopped ? kind : 'reconnecting',
       }));
       owned.failures = results.every(Boolean) ? 0 : owned.failures + 1;
       owned.inFlight = undefined;
+      if (stopped) {
+        if (owned.timer !== undefined) timers.clearTimeout(owned.timer);
+        owned.timer = undefined;
+        return;
+      }
       schedule(bindingId, owned);
     };
     owned.inFlight = run();
@@ -254,11 +281,21 @@ export function createRemoteReconnect(dependencies: RemoteReconnectDependencies)
     );
   }
 
-  /** The user selected this placeholder's tab: try its host now, whatever the backoff says. */
+  /** The user selected this placeholder's tab or chose Check Again: try its host now, whatever the
+   * backoff says. */
   function retryNow(projectId: string): Promise<void> {
     const item = placeholders.peek().find((candidate) => candidate.id === projectId);
-    return item ? attempt(item.bindingId, item.phase === 'reconnecting') : Promise.resolve();
+    return item ? attempt(item.bindingId, item.phase !== 'loading') : Promise.resolve();
   }
+
+  /** This computer asked the host to renew its approval of `bindingId` (HS2-4B0KSD). */
+  function renewalRequested(bindingId: string) {
+    patch(new Set(pendingFor(bindingId).map((item) => item.id)), (item) => ({ ...item, renewalRequested: true }));
+  }
+
+  /** Whether a host's placeholders wait for the user (expired or revoked), not for the network. */
+  const waitsForUser = (bindingId: string) =>
+    pendingFor(bindingId).some((item) => item.phase === 'expired' || item.phase === 'revoked');
 
   /** Network came back or the window gained focus: retry hosts not tried within the wake interval. */
   function wake() {
@@ -266,6 +303,7 @@ export function createRemoteReconnect(dependencies: RemoteReconnectDependencies)
     for (const bindingId of new Set(placeholders.peek().map((item) => item.bindingId))) {
       const state = bindings.get(bindingId);
       if (state?.inFlight) continue;
+      if (waitsForUser(bindingId)) continue;
       if (state?.lastAttemptAt !== undefined && now - state.lastAttemptAt < wakeMinMs) continue;
       void attempt(bindingId, true);
     }
@@ -293,7 +331,7 @@ export function createRemoteReconnect(dependencies: RemoteReconnectDependencies)
   /** Whether a retry timer is armed for a host (tests and diagnostics). */
   const scheduled = (bindingId: string) => bindings.get(bindingId)?.timer !== undefined;
 
-  return { placeholders, restore, retryNow, wake, forget, dispose, scheduled };
+  return { placeholders, restore, retryNow, renewalRequested, wake, forget, dispose, scheduled };
 }
 
 export type RemoteReconnect = ReturnType<typeof createRemoteReconnect>;

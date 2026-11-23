@@ -45,7 +45,9 @@ import {
   discoverRemoteProjects,
   finishRemotePairing,
   listRemoteServers,
+  remotePeerSession,
   removeRemoteServer,
+  requestRemoteRenewal,
   selectedRemoteProjects,
   selectRemoteProject,
   unselectRemoteProject,
@@ -86,6 +88,27 @@ const verifiedLocalGrant = new WeakSet<Request>();
  * when its session carries the local grant. */
 export function mayUseRemoteProjects(request: Request): boolean {
   return !remoteBrowserAuthRequired() || verifiedLocalGrant.has(request);
+}
+
+/** Remote-auth routes a browser reaches without a live session: pairing, and a renewal request from an
+ * expired session, whose proof the server checks (HS2-4B0KSD). */
+export function remoteAuthOpenPath(path: string): boolean {
+  return [
+    '/__hotsheet/remote-auth/mode',
+    '/__hotsheet/remote-auth/pair',
+    '/__hotsheet/remote-auth/redeem',
+    '/__hotsheet/remote-auth/renewal',
+  ].includes(path);
+}
+
+/** The answer for a remote-mode request whose host server did not answer (HS2-4B0KSD). */
+const HOST_UNAVAILABLE = { error: 'The Hot Sheet host is not answering.', code: 'host_unavailable' };
+
+/** The session failure the server named, by its stable code; anything else is an invalid session
+ * (HS2-4B0KSD). */
+export function remoteSessionFailureCode(body: unknown): 'session_expired' | 'session_revoked' | 'session_invalid' {
+  const code = isRecord(body) ? body.code : undefined;
+  return code === 'session_expired' || code === 'session_revoked' ? code : 'session_invalid';
 }
 
 /** The grants the bridge reads from a `/remote-auth/me` answer; anything missing is not granted. */
@@ -134,12 +157,7 @@ export function createDevApp(
   app.use('/__hotsheet/*', async (context, next) => {
     if (!remoteBrowserAuthRequired()) return next();
     const path = context.req.path;
-    if (
-      path === '/__hotsheet/remote-auth/mode' ||
-      path === '/__hotsheet/remote-auth/pair' ||
-      path === '/__hotsheet/remote-auth/redeem'
-    )
-      return next();
+    if (remoteAuthOpenPath(path)) return next();
     // HS2-85W6BE: trust comes from the session's grants, never from the hostname, peer address,
     // Host or forwarded headers. Tailscale Serve reaches this host through the same loopback
     // port the owner opens locally, so the request itself cannot tell the two apart.
@@ -148,10 +166,25 @@ export function createDevApp(
       if (route === 'host') return context.notFound();
       return context.json({ error: 'Remote session required.' }, 401);
     }
-    const checked = await checkRemoteSession(context.req.raw.headers);
+    // HS2-4B0KSD: an expired or revoked session keeps the server's code, and a host that does not
+    // answer is a 503, so a page never mistakes a restarting host for a lost approval.
+    let checked: Response;
+    try {
+      checked = await checkRemoteSession(context.req.raw.headers);
+    } catch {
+      if (route === 'host') return context.notFound();
+      return context.json(HOST_UNAVAILABLE, 503);
+    }
     if (!checked.ok) {
       if (route === 'host') return context.notFound();
-      return context.json({ error: 'Remote session required.' }, 401);
+      if (checked.status !== 401 && checked.status !== 403) return context.json(HOST_UNAVAILABLE, 503);
+      return context.json(
+        {
+          error: 'Remote session required.',
+          code: remoteSessionFailureCode(await checked.json().catch(() => undefined)),
+        },
+        401,
+      );
     }
     const device = remoteSessionGrants(await checked.json().catch(() => undefined));
     if (device.local) verifiedLocalGrant.add(context.req.raw);
@@ -173,7 +206,7 @@ export function createDevApp(
   app.all('/__hotsheet/remote-auth/*', async (context) => {
     const path = context.req.path.slice('/__hotsheet'.length);
     if (
-      !/^\/remote-auth\/(?:pair|redeem|me|rotate|logout|owner(?:\/approve|\/reject|\/changes|\/revoke-all|\/devices\/[A-Za-z0-9]+)?)$/.test(
+      !/^\/remote-auth\/(?:pair|redeem|me|rotate|logout|renewal|owner(?:\/approve|\/reject|\/changes|\/revoke-all|\/devices\/[A-Za-z0-9]+(?:\/renew)?)?)$/.test(
         path,
       )
     )
@@ -294,6 +327,23 @@ export function createDevApp(
       return context.json(await discoverRemoteProjects(context.req.param('id')));
     } catch {
       return context.json({ error: 'Could not reach or authenticate the approved remote server.' }, 503);
+    }
+  });
+  // HS2-4B0KSD: this machine's paired session on one remote server (lifetime, reminder day, or why it
+  // stopped working) and a request that the remote host renew it in place. Both run the headless
+  // `hotsheet-cli remote session|renew` workflow; the binding and its selected projects stay.
+  app.get('/__hotsheet/remotes/:id/session', async (context) => {
+    try {
+      return context.json(await remotePeerSession(context.req.param('id')));
+    } catch {
+      return context.json({ error: 'Could not read this computer’s approval on the remote server.' }, 503);
+    }
+  });
+  app.post('/__hotsheet/remotes/:id/renew', async (context) => {
+    try {
+      return context.json(await requestRemoteRenewal(context.req.param('id')));
+    } catch {
+      return context.json({ error: 'Could not ask the remote server to renew this computer’s approval.' }, 503);
     }
   });
   app.post('/__hotsheet/remotes/:id/projects/:checkout/open', async (context) => {

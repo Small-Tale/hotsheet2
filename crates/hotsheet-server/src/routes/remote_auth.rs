@@ -16,10 +16,13 @@ use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 
 const SESSION_COOKIE: &str = "hs2_remote_session";
 const CSRF_COOKIE: &str = "hs2_remote_csrf";
+/// How long a browser keeps the session cookies: the longest lifetime browsers honor (400
+/// days). The server's 30-day idle and 90-day session policy decides validity (HS2-4B0KSD); the cookie
+/// only has to outlive it, and `GET /remote-auth/me` refreshes it while the device is in use.
+const COOKIE_MAX_AGE: i64 = 400 * 24 * 60 * 60;
 
 #[derive(Deserialize)]
 pub(crate) struct PairRequest {
@@ -153,8 +156,13 @@ pub(crate) fn retain_visible_events(
     }
 }
 
-fn now() -> i64 {
-    OffsetDateTime::now_utc().unix_timestamp()
+/// The session catalog's clock (HS2-4B0KSD), so transition tests can drive time; the wall clock
+/// when remote authentication is not configured.
+fn now(state: &AppState) -> i64 {
+    state.remote_auth.as_ref().map_or_else(
+        crate::remote_auth::wall_clock,
+        crate::remote_auth::RemoteAuth::now,
+    )
 }
 
 fn catalog(state: &AppState) -> Result<&crate::remote_auth::RemoteAuth, ApiError> {
@@ -166,19 +174,55 @@ fn catalog(state: &AppState) -> Result<&crate::remote_auth::RemoteAuth, ApiError
     })
 }
 
+/// The `code` of a paired session past its idle or absolute limit; renewal restores it.
+pub(crate) const SESSION_EXPIRED_CODE: &str = "session_expired";
+/// The `code` of a revoked paired session; only a new pairing grants access again.
+pub(crate) const SESSION_REVOKED_CODE: &str = "session_revoked";
+/// The `code` of an unknown credential or a failed pairing proof.
+pub(crate) const SESSION_INVALID_CODE: &str = "session_invalid";
+
+/// Each failure carries a stable `code`, so a client tells an expired approval from a revoked
+/// one, an unknown credential, a network failure or a server error (HS2-4B0KSD).
 fn failed(error: AuthFailure) -> ApiError {
-    let (status, message) = match error {
+    let (status, message, code) = match error {
         AuthFailure::RateLimited => (
             StatusCode::TOO_MANY_REQUESTS,
             "pairing attempts are limited",
+            "rate_limited",
         ),
-        AuthFailure::Expired => (StatusCode::GONE, "pairing or session expired"),
-        AuthFailure::Unapproved => (StatusCode::CONFLICT, "waiting for host approval"),
-        AuthFailure::ReadOnly => (StatusCode::FORBIDDEN, "device is read-only"),
-        AuthFailure::Csrf => (StatusCode::FORBIDDEN, "CSRF token required"),
-        AuthFailure::Invalid => (StatusCode::UNAUTHORIZED, "invalid pairing or session"),
+        AuthFailure::Expired => (
+            StatusCode::GONE,
+            "pairing request expired",
+            "pairing_expired",
+        ),
+        AuthFailure::SessionExpired => (
+            StatusCode::UNAUTHORIZED,
+            "this device's approval expired; renew it on the host",
+            SESSION_EXPIRED_CODE,
+        ),
+        AuthFailure::Revoked => (
+            StatusCode::UNAUTHORIZED,
+            "this device's access was revoked",
+            SESSION_REVOKED_CODE,
+        ),
+        AuthFailure::Unapproved => (
+            StatusCode::CONFLICT,
+            "waiting for host approval",
+            "unapproved",
+        ),
+        AuthFailure::ReadOnly => (StatusCode::FORBIDDEN, "device is read-only", "read_only"),
+        AuthFailure::Csrf => (
+            StatusCode::FORBIDDEN,
+            "CSRF token required",
+            "csrf_required",
+        ),
+        AuthFailure::Invalid => (
+            StatusCode::UNAUTHORIZED,
+            "invalid pairing or session",
+            SESSION_INVALID_CODE,
+        ),
     };
-    ApiError::new(status, message)
+    ApiError::new(status, message).with_code(code)
 }
 
 fn internal() -> ApiError {
@@ -248,7 +292,7 @@ fn manager(
         return Err(failed(AuthFailure::Csrf));
     }
     let device = catalog(state)?
-        .authorize(token, csrf, origin, false, now())
+        .authorize(token, csrf, origin, false, now(state))
         .map_err(|_| internal())?
         .map_err(failed)?;
     if !device.admin {
@@ -272,8 +316,8 @@ fn device_list(state: &AppState, manager: Manager) -> Result<DeviceList, ApiErro
         revision,
         pair_ttl_seconds: crate::remote_auth::PAIR_TTL,
         manager,
-        devices: catalog.list(now()),
-        pending: catalog.pending(now()),
+        devices: catalog.list(now(state)),
+        pending: catalog.pending(now(state)),
     })
 }
 
@@ -292,7 +336,7 @@ pub(crate) fn session(
     let csrf = value(headers, "x-hotsheet-csrf")
         .or_else(|| websocket.then(|| cookie(headers, CSRF_COOKIE)).flatten());
     catalog(state)?
-        .authorize(token, csrf, origin, write, now())
+        .authorize(token, csrf, origin, write, now(state))
         .map_err(|_| internal())?
         .map_err(failed)
 }
@@ -304,7 +348,7 @@ pub(crate) async fn pair(
 ) -> Result<impl IntoResponse, ApiError> {
     let origin = value(&headers, "origin").ok_or_else(|| failed(AuthFailure::Invalid))?;
     let pair = catalog(&state)?
-        .request(&request.label, origin, now())
+        .request(&request.label, origin, now(&state))
         .map_err(|_| internal())?
         .map_err(failed)?;
     emit_pairing_requests_changed(&state);
@@ -318,42 +362,108 @@ pub(crate) async fn redeem(
 ) -> Result<Response, ApiError> {
     let origin = value(&headers, "origin").ok_or_else(|| failed(AuthFailure::Invalid))?;
     let issued = catalog(&state)?
-        .redeem(&request.id, &request.challenge, origin, now())
+        .redeem(&request.id, &request.challenge, origin, now(&state))
         .map_err(|_| internal())?
         .map_err(failed)?;
     Ok(issued_response(issued, origin))
 }
 
 fn issued_response(issued: IssuedSession, origin: &str) -> Response {
+    let mut response = Json(issued.device).into_response();
+    set_session_cookies(&mut response, &issued.token, Some(&issued.csrf), origin);
+    response
+}
+
+/// Set the session cookie and, when known, the CSRF cookie, for `origin`'s scheme.
+fn set_session_cookies(response: &mut Response, token: &str, csrf: Option<&str>, origin: &str) {
     let secure = if origin.starts_with("https://") {
         "; Secure"
     } else {
         ""
     };
-    let mut response = Json(issued.device).into_response();
-    for cookie in [
-        format!(
-            "{SESSION_COOKIE}={}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Strict{secure}",
-            issued.token
-        ),
-        format!(
-            "{CSRF_COOKIE}={}; Path=/; Max-Age=2592000; SameSite=Strict{secure}",
-            issued.csrf
-        ),
-    ] {
-        response.headers_mut().append(
-            header::SET_COOKIE,
-            HeaderValue::from_str(&cookie).expect("random token is header safe"),
-        );
+    let session = Some(format!(
+        "{SESSION_COOKIE}={token}; Path=/; Max-Age={COOKIE_MAX_AGE}; HttpOnly; SameSite=Strict{secure}"
+    ));
+    let csrf = csrf.map(|csrf| {
+        format!("{CSRF_COOKIE}={csrf}; Path=/; Max-Age={COOKIE_MAX_AGE}; SameSite=Strict{secure}")
+    });
+    for cookie in [session, csrf].into_iter().flatten() {
+        // A value that is not header safe was never issued by this server: skip it.
+        if let Ok(value) = HeaderValue::from_str(&cookie) {
+            response.headers_mut().append(header::SET_COOKIE, value);
+        }
     }
-    response
 }
 
+/// Whether a cookie value is one this server could have issued (43 URL-safe base64 bytes).
+fn issued_shape(value: &str) -> bool {
+    value.len() == 43
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+/// This browser's own session and grants. A valid session also gets its cookies' browser
+/// lifetime renewed, so a device in use never loses them to `Max-Age` (HS2-4B0KSD). The CSRF
+/// cookie is renewed only when it is the session's own.
 pub(crate) async fn me(
     State(state): State<AppState>,
     headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let device = session(&state, &headers, false, false)?;
+    let token = cookie(&headers, SESSION_COOKIE).unwrap_or_default();
+    let csrf = cookie(&headers, CSRF_COOKIE).filter(|value| {
+        issued_shape(value)
+            && catalog(&state).is_ok_and(|catalog| {
+                catalog
+                    .authorize(token, Some(value), None, false, now(&state))
+                    .is_ok_and(|result| result.is_ok())
+            })
+    });
+    let origin = device.origin.clone();
+    let mut response = Json(device).into_response();
+    if issued_shape(token) {
+        set_session_cookies(&mut response, token, csrf, &origin);
+    }
+    Ok(response)
+}
+
+/// The device asks the host to renew its approval in place (HS2-4B0KSD). An expired session
+/// may ask; it needs its paired Origin and CSRF proof. Device managers see the request in the
+/// device list and renew with one action.
+pub(crate) async fn request_renewal(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<(StatusCode, Json<Device>), ApiError> {
+    let token = cookie(&headers, SESSION_COOKIE).ok_or_else(|| failed(AuthFailure::Invalid))?;
+    let csrf = value(&headers, "x-hotsheet-csrf").ok_or_else(|| failed(AuthFailure::Csrf))?;
+    let origin = value(&headers, "origin").ok_or_else(|| failed(AuthFailure::Invalid))?;
+    let device = catalog(&state)?
+        .request_renewal(token, csrf, origin, now(&state))
+        .map_err(|_| internal())?
+        .map_err(failed)?;
+    emit_pairing_requests_changed(&state);
+    Ok((StatusCode::ACCEPTED, Json(device)))
+}
+
+/// Renew one device in place (HS2-4B0KSD): its 90-day lifetime restarts and it keeps its id,
+/// credential, role and grants. The trusted host or an admin session may renew any device,
+/// expired ones included.
+pub(crate) async fn renew(
+    State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
 ) -> Result<Json<Device>, ApiError> {
-    Ok(Json(session(&state, &headers, false, false)?))
+    manager(&state, &headers, peer.as_ref(), true)?;
+    let renewed = catalog(&state)?
+        .renew(&id, now(&state))
+        .map_err(|_| internal())?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "device not found"))?;
+    // The renewed device's open pages re-read their session; managers re-read the list.
+    emit_grants_changed(&state);
+    emit_pairing_requests_changed(&state);
+    Ok(Json(renewed))
 }
 
 pub(crate) async fn rotate(
@@ -364,7 +474,7 @@ pub(crate) async fn rotate(
     let csrf = value(&headers, "x-hotsheet-csrf").ok_or_else(|| failed(AuthFailure::Csrf))?;
     let origin = value(&headers, "origin").ok_or_else(|| failed(AuthFailure::Invalid))?;
     let issued = catalog(&state)?
-        .rotate(token, csrf, origin, now())
+        .rotate(token, csrf, origin, now(&state))
         .map_err(|_| internal())?
         .map_err(failed)?;
     Ok(issued_response(issued, origin))
@@ -378,7 +488,7 @@ pub(crate) async fn logout(
     let csrf = value(&headers, "x-hotsheet-csrf").ok_or_else(|| failed(AuthFailure::Csrf))?;
     let origin = value(&headers, "origin").ok_or_else(|| failed(AuthFailure::Invalid))?;
     let device = catalog(&state)?
-        .authorize(token, Some(csrf), Some(origin), false, now())
+        .authorize(token, Some(csrf), Some(origin), false, now(&state))
         .map_err(|_| internal())?
         .map_err(failed)?;
     catalog(&state)?
@@ -445,7 +555,7 @@ pub(crate) async fn approve(
                 admin: request.admin,
                 local: request.local,
             },
-            now(),
+            now(&state),
         )
         .map_err(|_| internal())?
         .map_err(failed)?;

@@ -2,7 +2,7 @@ import { signal } from 'kerfjs';
 
 import type { ChangeEvent } from '../api';
 import { canManageRemoteDevices } from '../client-origin';
-import { parseRemoteDeviceList, type RemotePendingDevice } from '../remote-devices-model';
+import { parseRemoteDeviceList, type RemoteDevice, type RemotePendingDevice } from '../remote-devices-model';
 import { REMOTE_DEVICES_PATH } from './remote-devices';
 
 /** The change event kind the server pushes, to device managers only, when the requests waiting for
@@ -16,6 +16,8 @@ export interface PairingRequestsDependencies {
   canManage?: () => boolean;
   /** A request that was not waiting before arrived after the first read (HS2-BZHMEV). */
   onArrival?: (request: RemotePendingDevice) => void;
+  /** A paired device newly asks to be renewed (HS2-4B0KSD). */
+  onRenewalRequest?: (device: RemoteDevice) => void;
   /** The device-list read answered 401 or 403: this page's grants may be stale (HS2-A3TDNH). */
   onForbidden?: () => void;
   /** Wall-clock seconds; injected for tests. */
@@ -46,6 +48,24 @@ export function createPairingRequests(dependencies: PairingRequestsDependencies 
     schedule = dependencies.schedule ?? scheduleTimeout;
   /** Requests still waiting for approval, oldest first. Approved-but-unredeemed ones need no action. */
   const waiting = signal<readonly RemotePendingDevice[]>([]);
+  /** Paired devices asking the host to renew their approval, which the host renews in place (HS2-4B0KSD). */
+  const renewals = signal<readonly RemoteDevice[]>([]);
+  /** Renewal request ids already announced, keyed by device and request time. */
+  let knownRenewals: Set<string> | undefined;
+
+  /** Show the devices asking for renewal and announce new requests. */
+  function showRenewals(devices: readonly RemoteDevice[]) {
+    const next = devices.filter((device) => device.renewal_requested_at !== null),
+      keys = next.map((device) => `${device.id}@${String(device.renewal_requested_at)}`);
+    if (knownRenewals)
+      next.forEach((device, index) => {
+        if (!knownRenewals?.has(keys[index] ?? '')) dependencies.onRenewalRequest?.(device);
+      });
+    knownRenewals = new Set(keys);
+    const current = renewals.peek();
+    if (current.length !== next.length || current.some((item, index) => item.id !== next[index]?.id))
+      renewals.value = next;
+  }
   let reading: Promise<void> | undefined,
     readAgain = false,
     /** The newest pairing event cursor acted on; reset on resync because a restarted server restarts it. */
@@ -82,7 +102,9 @@ export function createPairingRequests(dependencies: PairingRequestsDependencies 
     cancelExpiry?.();
     cancelExpiry = undefined;
     known = undefined;
+    knownRenewals = undefined;
     if (waiting.peek().length > 0) waiting.value = [];
+    if (renewals.peek().length > 0) renewals.value = [];
   }
 
   async function readOnce(): Promise<void> {
@@ -102,8 +124,10 @@ export function createPairingRequests(dependencies: PairingRequestsDependencies 
       unconfigured = false;
       const list = parseRemoteDeviceList(await response.json());
       // The grant may have gone while the read was in flight.
-      if (canManage()) show(list.pending);
-      else clear();
+      if (canManage()) {
+        show(list.pending);
+        showRenewals(list.devices);
+      } else clear();
     } catch {
       // Offline or an invalid answer: keep the last known requests; the next resync reads again.
     }
@@ -155,14 +179,21 @@ export function createPairingRequests(dependencies: PairingRequestsDependencies 
   }
 
   /** The open Devices list reported the host's requests; show them without another read. */
-  function observe(pending: readonly RemotePendingDevice[]) {
-    if (canManage()) show(pending);
+  function observe(pending: readonly RemotePendingDevice[], devices?: readonly RemoteDevice[]) {
+    if (!canManage()) return;
+    show(pending);
+    if (devices) showRenewals(devices);
   }
 
-  return { waiting, refresh, applyEvents, resync, observe, clear };
+  return { waiting, renewals, refresh, applyEvents, resync, observe, clear };
 }
 
 export type PairingRequests = ReturnType<typeof createPairingRequests>;
+
+/** The transient notice for one device asking to be renewed (HS2-4B0KSD). */
+export function renewalRequestNotice(device: Pick<RemoteDevice, 'label'>): string {
+  return `“${device.label}” asks to renew its approval. Open Settings → Devices and choose Renew; it keeps its pairing.`;
+}
 
 /** The transient notice for one new request; the Settings and Devices badges stay as its record. */
 export function pairingRequestNotice(request: Pick<RemotePendingDevice, 'label'>): string {

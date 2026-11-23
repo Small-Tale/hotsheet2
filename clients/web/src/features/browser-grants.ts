@@ -12,6 +12,9 @@ export interface BrowserGrantsDependencies {
   request?: typeof fetch;
   /** Whether this page runs on a remote-mode host; only those pages have session grants. */
   remoteMode?: () => boolean;
+  /** The session itself ended: expired, revoked or unknown (HS2-4B0KSD). The page shows its renewal or
+   * pairing screen instead of failing silently. A host that does not answer is not an ending. */
+  onSessionEnded?: (code: 'session_expired' | 'session_revoked' | 'session_invalid') => void;
 }
 
 /**
@@ -38,8 +41,12 @@ export function createBrowserGrants(dependencies: BrowserGrantsDependencies = {}
         setBrowserSessionGrants(await response.json().catch(() => undefined));
         return;
       }
-      // The session itself ended (revoked or signed out elsewhere): no grant survives it.
-      if (response.status === 401) setBrowserSessionGrants(undefined);
+      // The session itself ended (expired, revoked or signed out elsewhere): no grant survives it.
+      if (response.status === 401) {
+        setBrowserSessionGrants(undefined);
+        const body: unknown = await response.json().catch(() => undefined);
+        dependencies.onSessionEnded?.(remoteSessionEndCode(body));
+      }
       // Any other failure keeps the last known grants; the server still checks every request.
     } catch {
       // Offline: the stream's reconnect resync reads again.
@@ -89,3 +96,9 @@ export function createBrowserGrants(dependencies: BrowserGrantsDependencies = {}
 }
 
 export type BrowserGrants = ReturnType<typeof createBrowserGrants>;
+
+/** The bridge's code for an ended session; anything else counts as invalid. */
+export function remoteSessionEndCode(body: unknown): 'session_expired' | 'session_revoked' | 'session_invalid' {
+  const code = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).code : undefined;
+  return code === 'session_expired' || code === 'session_revoked' ? code : 'session_invalid';
+}

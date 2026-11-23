@@ -18,6 +18,7 @@ import { AppError } from '../components/app-error';
 import { ClientUpdateNoticeBanner } from '../components/client-update-notice-banner';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
+import { RemoteApprovalReminderBanner } from '../components/remote-approval-reminder-banner';
 import { RemoteProjectPlaceholder } from '../components/remote-project-placeholder';
 import { RemoteReconnectingBanner } from '../components/remote-reconnecting-banner';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
@@ -112,12 +113,63 @@ export function RemoteProjectPlaceholderDemo() {
       <CatalogExample label="Reconnecting">
         <RemoteProjectPlaceholder projectId="remote:demo-waiting" name="Studio · alpha" phase="reconnecting" />
       </CatalogExample>
+      <CatalogExample label="Expired">
+        <RemoteProjectPlaceholder
+          projectId="remote:demo-expired"
+          name="Studio · alpha"
+          phase="expired"
+          bindingId="demo-binding"
+        />
+      </CatalogExample>
+      <CatalogExample label="Renewal Requested">
+        <RemoteProjectPlaceholder
+          projectId="remote:demo-requested"
+          name="Studio · alpha"
+          phase="expired"
+          bindingId="demo-binding"
+          renewalRequested
+        />
+      </CatalogExample>
+      <CatalogExample label="Revoked">
+        <RemoteProjectPlaceholder
+          projectId="remote:demo-revoked"
+          name="Studio · alpha"
+          phase="revoked"
+          bindingId="demo-binding"
+        />
+      </CatalogExample>
+      <CatalogExample label="Other Failure">
+        <RemoteProjectPlaceholder
+          projectId="remote:demo-error"
+          name="Studio · alpha"
+          phase="reconnecting"
+          error="The remote server’s certificate is not trusted."
+        />
+      </CatalogExample>
       <CatalogExample label="Retrying">
         <RemoteProjectPlaceholder
           projectId="remote:demo-retrying"
           name="Studio · alpha"
           phase="reconnecting"
           connecting
+        />
+      </CatalogExample>
+    </>
+  );
+}
+
+/** A remote approval nearing its 90-day limit, before and after Renew (HS2-4B0KSD). */
+export function RemoteApprovalReminderBannerDemo() {
+  return (
+    <>
+      <CatalogExample label="Reminder">
+        <RemoteApprovalReminderBanner
+          reminder={{ scope: 'demo-binding', name: 'Studio', day: 65, daysLeft: 25, requested: false }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Renewal Requested">
+        <RemoteApprovalReminderBanner
+          reminder={{ scope: 'browser', name: 'this browser', day: 89, daysLeft: 1, requested: true }}
         />
       </CatalogExample>
     </>
@@ -260,6 +312,7 @@ export const demoModule: DemoModule = {
     'shell-banner': { catalogExamples: true, Demo: ShellBannerDemo },
     'project-setup-warning-banner': { catalogExamples: true, Demo: ProjectSetupWarningBannerDemo },
     'remote-project-placeholder': { catalogExamples: true, Demo: RemoteProjectPlaceholderDemo },
+    'remote-approval-reminder-banner': { catalogExamples: true, Demo: RemoteApprovalReminderBannerDemo },
     'remote-reconnecting-banner': { catalogExamples: true, Demo: RemoteReconnectingBannerDemo },
     'server-build-notice-banner': { catalogExamples: true, Demo: ServerBuildNoticeBannerDemo },
     'source-stale-notice-banner': { catalogExamples: true, Demo: SourceStaleNoticeBannerDemo },

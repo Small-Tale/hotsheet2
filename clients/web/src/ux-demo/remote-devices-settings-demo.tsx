@@ -43,7 +43,12 @@ function fixtureList(): RemoteDeviceList {
         origin: 'http://127.0.0.1:4175',
         created_at: NOW - 86_400,
         last_used_at: NOW,
-        expires_at: NOW + 2_500_000,
+        expires_at: NOW + 89 * 86_400,
+        renewed_at: NOW - 86_400,
+        idle_expires_at: NOW + 30 * 86_400,
+        renewal_requested_at: null,
+        reminder_day: null,
+        expired: false,
       },
       {
         id: '01SYNTHETICDEVICE00000002',
@@ -54,7 +59,30 @@ function fixtureList(): RemoteDeviceList {
         origin: 'https://synthetic-host.example.ts.net',
         created_at: NOW - 400_000,
         last_used_at: NOW - 7_200,
-        expires_at: NOW + 2_000_000,
+        expires_at: NOW + 20 * 86_400,
+        // HS2-4B0KSD: on its day-70 reminder.
+        renewed_at: NOW - 70 * 86_400,
+        idle_expires_at: NOW + 30 * 86_400 - 7_200,
+        renewal_requested_at: null,
+        reminder_day: 70,
+        expired: false,
+      },
+      {
+        id: '01SYNTHETICDEVICE00000003',
+        label: 'Firefox on Linux',
+        role: 'read_write',
+        admin: false,
+        local: false,
+        origin: 'https://synthetic-host.example.ts.net',
+        created_at: NOW - 120 * 86_400,
+        last_used_at: NOW - 31 * 86_400,
+        // Expired after 30 days without use, and asking to be renewed.
+        expires_at: NOW + 60 * 86_400,
+        renewed_at: NOW - 30 * 86_400,
+        idle_expires_at: NOW - 86_400,
+        renewal_requested_at: NOW - 3_600,
+        reminder_day: null,
+        expired: true,
       },
     ],
   };
@@ -94,7 +122,10 @@ function createDemoHost() {
       return json(list);
     }
     if (method === 'GET') return json(list);
-    const id = typeof body.id === 'string' ? body.id : decodeURIComponent(url.pathname.split('/').pop() ?? '');
+    const segments = url.pathname.split('/'),
+      renewing = url.pathname.endsWith('/renew');
+    if (renewing) segments.pop();
+    const id = typeof body.id === 'string' ? body.id : decodeURIComponent(segments.pop() ?? '');
     if (url.pathname.endsWith('/approve')) {
       const request = list.pending.find((entry) => entry.id === id);
       if (!request) return json({ error: 'pairing request not found' }, 410);
@@ -112,12 +143,36 @@ function createDemoHost() {
             origin: request.origin,
             created_at: NOW,
             last_used_at: NOW,
-            expires_at: NOW + 2_592_000,
+            expires_at: NOW + 90 * 86_400,
+            renewed_at: NOW,
+            idle_expires_at: NOW + 30 * 86_400,
+            renewal_requested_at: null,
+            reminder_day: null,
+            expired: false,
           },
         ],
       };
     } else if (url.pathname.endsWith('/reject')) {
       list = { ...list, pending: list.pending.filter((entry) => entry.id !== id) };
+    } else if (renewing) {
+      // HS2-4B0KSD: renewal restarts the lifetime in place; the device keeps everything else.
+      list = {
+        ...list,
+        devices: list.devices.map((entry) =>
+          entry.id === id
+            ? {
+                ...entry,
+                renewed_at: NOW,
+                expires_at: NOW + 90 * 86_400,
+                last_used_at: Math.max(entry.last_used_at, NOW),
+                idle_expires_at: Math.max(entry.idle_expires_at, NOW + 30 * 86_400),
+                renewal_requested_at: null,
+                reminder_day: null,
+                expired: false,
+              }
+            : entry,
+        ),
+      };
     } else if (method === 'DELETE') {
       list = { ...list, devices: list.devices.filter((entry) => entry.id !== id) };
     } else if (method === 'PATCH') {

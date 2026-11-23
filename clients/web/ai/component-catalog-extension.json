@@ -2137,6 +2137,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "remote-approval-reminder-banner",
+      "name": "RemoteApprovalReminderBanner",
+      "kind": "component",
+      "purpose": "Warning strip naming a remote approval near its 90-day limit, with Renew and Dismiss (HS2-4B0KSD).",
+      "useWhen": [
+        "This browser's or a remote server's approval reached a reminder day (45, 50, 55, 60, then daily from 65)."
+      ],
+      "avoidWhen": [
+        "The approval already expired; the remote tab placeholder or the browser's renewal screen shows that."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/remote-approval-reminder-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "remote-auth-screen",
       "name": "RemoteAuthScreen",
       "kind": "component",

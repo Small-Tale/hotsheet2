@@ -924,6 +924,9 @@ test('lists remote servers and projects as rows with an overflow menu (HS2-A5CKQ
 async function remoteRegistryFixture(page: Page, hosts: Array<{ id: string; label: string; checkouts: string[] }>) {
   const up = new Map(hosts.map((host) => [host.id, true])),
     openGates = new Map<string, ReturnType<typeof gate>>(),
+    /** HS2-4B0KSD: a host's live discovery failure code, and its answer about this computer's session. */
+    failures = new Map<string, string>(),
+    sessions = new Map<string, Record<string, unknown>>(),
     calls: string[] = [];
   const servers = hosts.map((host) => ({
     id: host.id,
@@ -943,9 +946,28 @@ async function remoteRegistryFixture(page: Page, hosts: Array<{ id: string; labe
     calls.push(`${request.method()} ${path}`);
     if (path === '/__hotsheet/remotes') return route.fulfill({ json: servers });
     if (path === '/__hotsheet/remotes/selected-projects') return route.fulfill({ json: selected });
+    const lifetime = /^\/__hotsheet\/remotes\/([^/]+)\/(session|renew)$/.exec(path);
+    if (lifetime) {
+      const failure = failures.get(lifetime[1]);
+      if (lifetime[2] === 'renew' && failure) sessions.set(lifetime[1], { renewal_requested_at: 1 });
+      return route.fulfill({
+        json:
+          failure && lifetime[2] === 'session'
+            ? { binding_id: lifetime[1], failure }
+            : { binding_id: lifetime[1], device: sessions.get(lifetime[1]) },
+      });
+    }
     const match = /^\/__hotsheet\/remotes\/([^/]+)\/(?:checkouts|projects\/([^/]+)(\/open)?)$/.exec(path);
     const server = match && servers.find((item) => item.id === match[1]);
     if (!match || !server) return route.fulfill({ status: 404, json: { error: 'Unknown synthetic remote route' } });
+    if (!match[2] && failures.has(server.id))
+      return route.fulfill({
+        json: {
+          remote: { ...server, last_failure: 'unauthorized' },
+          checkouts: null,
+          failure: failures.get(server.id),
+        },
+      });
     if (!match[2])
       return up.get(server.id)
         ? route.fulfill({ json: { remote: server, checkouts: server.last_confirmed_checkouts } })
@@ -977,7 +999,7 @@ async function remoteRegistryFixture(page: Page, hosts: Array<{ id: string; labe
       },
     });
   });
-  return { up, openGates, calls };
+  return { up, openGates, failures, sessions, calls };
 }
 
 const STUDIO = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
@@ -1154,4 +1176,111 @@ test('keeps an open remote tab with a reconnecting state while its host drops mi
   host.down = false;
   await expect(banner).toHaveCount(0, { timeout: 40_000 });
   await expect(tab).toHaveAttribute('data-disconnected', 'false');
+});
+
+test('an expired remote approval offers Renew, never reconnecting, and opens once the host renews it (HS2-4B0KSD)', async ({
+  page,
+}) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  const remote = await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+  remote.up.set(STUDIO, false);
+  remote.failures.set(STUDIO, 'session_expired');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const studio = page.locator(
+    `[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`,
+  );
+  await studio.click();
+  const panel = page.locator('[data-remote-project-placeholder="expired"]');
+  await expect(panel).toContainText('Renew Access to Studio · one-name');
+  await expect(page.locator('[data-remote-project-placeholder="reconnecting"]')).toHaveCount(0);
+  for (const [scheme, width, height] of [
+    ['light', 1440, 900],
+    ['light', 900, 700],
+    ['light', 390, 844],
+    ['dark', 1440, 900],
+    ['dark', 390, 844],
+  ] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width, height });
+    await expect(panel.getByRole('button', { name: 'Renew' })).toBeInViewport();
+    await page.screenshot({
+      path: `target/visual-captures/hs2-4b0ksd-expired-${scheme}-${width}.png`,
+      animations: 'disabled',
+    });
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Renew asks the remote host to renew this computer in place; the binding is never reviewed or removed.
+  await panel.getByRole('button', { name: 'Renew' }).click();
+  await expect(panel).toContainText('Renewal requested.');
+  expect(remote.calls).toContain(`POST /__hotsheet/remotes/${STUDIO}/renew`);
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-4b0ksd-renewal-requested-light-1440.png',
+    animations: 'disabled',
+  });
+  // The host renewed it: Check Again opens the same tab without pairing again.
+  remote.failures.delete(STUDIO);
+  remote.up.set(STUDIO, true);
+  await panel.getByRole('button', { name: 'Check Again' }).click();
+  await expect(
+    page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(STUDIO, 'one')}"]`),
+  ).toHaveAttribute('data-selected', 'true');
+  expect(remote.calls.some((call) => call.startsWith('DELETE') || call.includes('/pair'))).toBe(false);
+});
+
+test('a revoked remote approval says so and offers pairing again (HS2-4B0KSD)', async ({ page }) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  const remote = await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+  remote.up.set(STUDIO, false);
+  remote.failures.set(STUDIO, 'session_revoked');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page
+    .locator(`[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`)
+    .click();
+  const panel = page.locator('[data-remote-project-placeholder="revoked"]');
+  await expect(panel).toContainText('Access Revoked by Studio · one-name');
+  await expect(panel.getByRole('button', { name: 'Pair Again' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Renew' })).toHaveCount(0);
+});
+
+test('an open remote tab reminds before its approval expires, with Renew and Dismiss (HS2-4B0KSD)', async ({
+  page,
+}) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  const remote = await remoteRegistryFixture(page, [{ id: LAPTOP, label: 'Laptop', checkouts: ['two'] }]);
+  const now = Math.floor(Date.now() / 1000),
+    day = 24 * 60 * 60;
+  remote.sessions.set(LAPTOP, {
+    renewed_at: now - 70 * day - 60,
+    expires_at: now + 20 * day - 60,
+    idle_expires_at: now + 30 * day,
+    reminder_day: 70,
+    renewal_requested_at: null,
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(LAPTOP, 'two')}"]`).click();
+  const banner = page.locator('[data-component="remote-approval-reminder-banner"]');
+  await expect(banner).toContainText('Renew access for Laptop');
+  await expect(banner).toContainText('in 20 days');
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await expect(banner.getByRole('button', { name: 'Renew' })).toBeInViewport();
+    await page.screenshot({
+      path: `target/visual-captures/hs2-4b0ksd-reminder-light-${width}.png`,
+      animations: 'disabled',
+    });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // The reminder read the session once when the tab opened; nothing polls it.
+  expect(remote.calls.filter((call) => call === `GET /__hotsheet/remotes/${LAPTOP}/session`)).toHaveLength(1);
+  await banner.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(banner).toHaveCount(0);
+  // A reload keeps it dismissed until the next reminder day.
+  await page.reload();
+  await page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(LAPTOP, 'two')}"]`).click();
+  await expect(page.getByText('Workspace restored work', { exact: true })).toBeVisible();
+  await expect(banner).toHaveCount(0);
 });

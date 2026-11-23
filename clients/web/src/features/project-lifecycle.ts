@@ -1343,6 +1343,12 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     desktopRemoteError.value = '';
   }
 
+  /** Open the Remote project dialog on one server's review form, to pair it again (HS2-4B0KSD). */
+  async function reviewDesktopRemoteServer(id: string) {
+    await chooseDesktopRemoteProject();
+    if (desktopRemoteServers.value.some((server) => server.id === id)) editDesktopRemoteServer(id);
+  }
+
   function showDesktopRemoteForm() {
     desktopRemoteEditing.value = undefined;
     desktopRemoteFormOpen.value = true;
@@ -1517,6 +1523,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     finishDesktopRemotePair,
     discoverDesktopRemoteServer,
     editDesktopRemoteServer,
+    reviewDesktopRemoteServer,
     showDesktopRemoteForm,
     cancelDesktopRemoteForm,
     openDesktopRemoteCheckout,
