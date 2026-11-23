@@ -60,6 +60,24 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
         // At every width the tab names the orchestration project and the run.
         await expect(tab).toBeVisible();
         await expect(tab).toContainText(label);
+        // HS2-8KZF59: a capped tab ellipsizes the middle, so the run suffix that tells two sessions of
+        // one project apart stays wholly visible.
+        await expect
+          .poll(() =>
+            tab.evaluate((element) => {
+              const name = element.querySelector<HTMLElement>('.kui-tab-bar-item__name')!;
+              const tail = element.querySelector<HTMLElement>('.kui-tab-bar-item__name-tail');
+              if (!tail) return { tail: null };
+              const nameRect = name.getBoundingClientRect(),
+                tailRect = tail.getBoundingClientRect();
+              return {
+                tail: tail.textContent,
+                tailClipped: tail.scrollWidth > tail.clientWidth + 1,
+                tailInside: tailRect.left >= nameRect.left - 1 && tailRect.right <= nameRect.right + 1,
+              };
+            }),
+          )
+          .toEqual({ tail: `run ${RUN.slice(-8)}`, tailClipped: false, tailInside: true });
         await page.screenshot({ path: `target/visual-captures/hs2-kthjn2-drawer-${scheme}-${width}.png` });
       }
     }

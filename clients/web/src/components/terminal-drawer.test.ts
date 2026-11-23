@@ -51,6 +51,38 @@ const render = (selectedId: string = 'grid') =>
     }),
   );
 describe('TerminalDrawer', () => {
+  it('HS2-8KZF59 keeps the run suffix of an orchestrator session tab and ellipsizes its middle', () => {
+    const orchestrator = {
+      checkout_id: 'c',
+      operation_id: 'op',
+      project: 'Release train',
+      owner: 'orchestrator' as const,
+      paused: false,
+    };
+    const drawer = (live: TerminalDashboardSession[]) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions: live,
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId: 'grid',
+        }),
+      );
+    const tab = (markup: string, id: string) => markup.split(`data-terminal-id="${id}"`)[1].split('</button>')[1];
+    const run = { ...sessions[0], id: 'run', title: 'Release train: run Q69G5FB0', orchestrator };
+    const renamed = { ...run, id: 'renamed', title: 'Build watcher', named: true };
+    const markup = drawer([run, renamed, sessions[1]]);
+    expect(tab(markup, 'run')).toContain('<span class="kui-tab-bar-item__name-head">Release train: </span>');
+    expect(tab(markup, 'run')).toContain('<span class="kui-tab-bar-item__name-tail">run Q69G5FB0</span>');
+    // A rename with no `: ` suffix and an ordinary terminal keep Kerf's default end ellipsis.
+    expect(tab(markup, 'renamed')).not.toContain('kui-tab-bar-item__name-tail');
+    expect(tab(markup, 'two')).not.toContain('kui-tab-bar-item__name-tail');
+  });
+
   it('HS2-AQ40G7 shows a selected pending tab with a busy placeholder instead of the Project grid', () => {
     const pending = (selectedId: string, resolvedId?: string, live = sessions) =>
       String(

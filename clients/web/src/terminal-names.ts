@@ -186,3 +186,17 @@ export function createTerminalNameWriteQueue(): TerminalNameWriteQueue {
     },
   };
 }
+
+/**
+ * HS2-8KZF59: how many trailing characters a capped drawer tab keeps visible for a session an
+ * orchestrator started. Its default name is `<orchestration project>: run <run tail>` (or
+ * `<project>: <role>`, docs/26 §26.16), and two sessions of one project differ only after the last
+ * `: `, so the tab truncates in the middle and keeps that part. Undefined when the name has no such
+ * part; the caller then keeps Kerf's default end ellipsis.
+ */
+export function orchestratorTabNameKeep(name: string): number | undefined {
+  const at = name.lastIndexOf(': ');
+  if (at < 0) return undefined;
+  const tail = name.slice(at + 2);
+  return tail.trim() === '' ? undefined : tail.length;
+}

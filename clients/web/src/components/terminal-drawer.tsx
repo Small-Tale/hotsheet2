@@ -47,6 +47,7 @@ import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { aiConnectionIcon, aiConnectionLabel } from '../terminal-ai-connection';
 import { TERMINAL_GRID_PHONE_BREAKPOINT, terminalGridContentSize } from '../terminal-grid-layout';
+import { orchestratorTabNameKeep } from '../terminal-names';
 import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
 import {
   type MobileMagnifiedTerminal,
@@ -261,11 +262,17 @@ export function TerminalDrawer({
     tabs = [
       ...orderedIds.map((id) => {
         const session = sessionsById.get(id);
-        if (session)
+        if (session) {
+          const name = session.title ?? session.id;
+          // An orchestrator's sessions of one project differ only in their run suffix, so a capped tab
+          // keeps that suffix and ellipsizes the middle instead (HS2-8KZF59, Kerf KF-SDNA0Z).
+          const keep = session.orchestrator ? orchestratorTabNameKeep(name) : undefined;
           return (
             <TabBarItem
               id={session.id}
-              name={session.title ?? session.id}
+              name={name}
+              nameTruncate={keep === undefined ? 'end' : 'middle'}
+              nameTruncateKeep={keep}
               selected={selected === session.id}
               draggable
               className="terminal-tab"
@@ -329,6 +336,7 @@ export function TerminalDrawer({
               }
             />
           );
+        }
         const chat = chatsById.get(id)!;
         return (
           <TabBarItem

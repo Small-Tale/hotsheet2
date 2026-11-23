@@ -4253,7 +4253,9 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   orchestrating session responses and typed refusals against the contract.
 - `clients/web/tests/orchestrator-session-drawer.spec.ts # HS2-KTHJN2` starts a session
   through the hosted route with a synthetic tool and reads its tab label in the real drawer
-  at 1440, 1100 and 390 px in both color schemes. The delivered role
+  at 1440, 1100 and 390 px in both color schemes, asserting at each width that the run
+  suffix is the tab's unclipped middle-truncation tail (HS2-8KZF59; unit:
+  `terminal-drawer.test.ts`, `terminal-names.test.ts`). The delivered role
   prompt and joining are covered by HS2-2DPGDY below; sessions as a reconciliation source
   are covered under run recovery (HS2-75Q254).
 
