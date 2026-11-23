@@ -485,13 +485,13 @@ function limitsSection({ detail, policyTools, toolLabel, homeLabel, toolModels, 
             <CheckboxGroup
               name="limits.role_sessions"
               label="Coordination Sessions"
-              hint={roleSessionsHint(homeLabel, limits?.roleSessions ?? [])}
+              hint={roleSessionsHint(homeLabel, limits?.roleSessions ?? [], limits?.roleSessionsAuto)}
               choices={[
                 { value: 'dispatcher', label: 'Dispatcher' },
                 { value: 'integrator', label: 'Integrator' },
               ]}
               value={limits?.roleSessions ?? []}
-              disabled={disabled || roleSessionsLocked(homeLabel, limits.roleSessions)}
+              disabled={disabled || roleSessionsLocked(homeLabel, limits.roleSessions, limits.roleSessionsAuto)}
             />
             <TextField
               name="limits.max_sessions"

@@ -28,6 +28,7 @@ const listedLimits: TargetLimitsDraft = {
   models: { codex: 'gpt-5-codex', claude: 'claude-opus-*' },
   resources: 'vm/macos-vm',
   roleSessions: ['dispatcher'],
+  roleSessionsAuto: false,
 };
 const unlistedLimits: TargetLimitsDraft = {
   targetId: DEMO_TARGETS.docs,
@@ -40,7 +41,9 @@ const unlistedLimits: TargetLimitsDraft = {
   buildAhead: 'default',
   models: {},
   resources: '',
-  roleSessions: [],
+  // HS2-R2N33M: unlisted role sessions are Auto, shown as both.
+  roleSessions: ['dispatcher', 'integrator'],
+  roleSessionsAuto: true,
 };
 const policyTools = ['codex', 'claude'];
 /** HS2-1X1TXC: the models each tool reports, which its Models control offers with their families. */

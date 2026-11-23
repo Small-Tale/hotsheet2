@@ -231,6 +231,9 @@ pub struct TimelinePolicy {
     pub present: bool,
     pub revision: Option<String>,
     pub automatic: bool,
+    /// HS2-R2N33M: the policy leaves `placement.automatic` unset, so placement is
+    /// Auto: on once the plan has a step.
+    pub auto: bool,
     /// HS2-J3ZF27: the project's type is Software, so nothing is placed and Start
     /// would do nothing.
     pub software: bool,
@@ -372,6 +375,11 @@ pub struct Timeline {
     pub declared: bool,
     pub phase: TimelinePhase,
     pub automatic: bool,
+    /// HS2-R2N33M: placement runs because the policy leaves it Auto and a plan exists,
+    /// not because a person pressed Start Orchestration. Views say sessions will start
+    /// and offer Pause.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub automatic_by_default: bool,
     pub kick_off: KickOff,
     /// When the earliest unfinished run started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -863,6 +871,7 @@ pub fn timeline(input: &TimelineInput<'_>) -> Timeline {
         declared: input.declared,
         phase,
         automatic: input.policy.automatic,
+        automatic_by_default: input.policy.automatic && input.policy.auto,
         kick_off: kick_off(input, phase),
         running_since_ms: input
             .runs

@@ -50,7 +50,8 @@ const PLANNING_STATUS: Record<string, string> = {
  * HS2-J89JC7: the Orchestration view's page header. It says where orchestration stands and holds the
  * one action that changes it: Propose Plan with no plan, Start Orchestration for a dry-run plan (it
  * turns automatic placement on through the policy), and Pause while running. A proposed plan is
- * labeled as the dry run it is. HS2-190RDX: once there is a plan, Update Plan re-plans beside it while its
+ * labeled as the dry run it is. HS2-R2N33M: placement left Auto runs once a plan exists, under a banner that says
+ * sessions start automatically, with Pause beside it. HS2-190RDX: once there is a plan, Update Plan re-plans beside it while its
  * work keeps running (no pause), and Cancel Plan Update replaces it while an update drafts.
  */
 export function OrchestrationToolbar({
@@ -167,6 +168,16 @@ export function OrchestrationToolbar({
   })();
   return (
     <List gap="xs" rootAttributes={{ 'data-orchestration-toolbar': timeline.phase }}>
+      {timeline.phase === 'running' && timeline.automatic_by_default === true && (
+        <List controlInsets="trl">
+          <StateBanner
+            copyLayout="stacked"
+            tone="info"
+            title="Sessions Start Automatically"
+            detail="A plan exists, so Hot Sheet starts sessions for ready work within the Orchestration settings. Pause stops placing new sessions; running work continues."
+          />
+        </List>
+      )}
       {timeline.phase === 'proposed' && (
         <List controlInsets="trl">
           <StateBanner

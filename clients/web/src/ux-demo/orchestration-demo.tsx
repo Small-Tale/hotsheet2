@@ -28,6 +28,8 @@ export const orchestrationDemoSettings = {
   busy: signal(false),
   /** HS2-YSRT6Y: no explicit goal is open, so planning works through all open tickets. */
   defaultGoal: signal(false),
+  /** HS2-R2N33M: placement runs because the policy leaves it Auto and a plan exists. */
+  autoPlacement: signal(false),
   collapsed: signal<string[]>([]),
 };
 
@@ -68,6 +70,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.planning.value = '';
   settings.busy.value = false;
   settings.defaultGoal.value = false;
+  settings.autoPlacement.value = false;
   settings.collapsed.value = [];
   if (root)
     syncSettingsControls(root, 'orchestration', {
@@ -76,6 +79,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
         'propose-available': settings.proposeAvailable.value,
         busy: settings.busy.value,
         'default-goal': settings.defaultGoal.value,
+        'auto-placement': settings.autoPlacement.value,
       },
     });
 }
@@ -159,7 +163,10 @@ export function OrchestrationToolbarDemo() {
       {PHASES.map(({ value, label }) => (
         <CatalogExample label={label}>
           <OrchestrationToolbar
-            timeline={demoTimeline(value)}
+            timeline={{
+              ...demoTimeline(value),
+              automatic_by_default: value === 'running' && orchestrationDemoSettings.autoPlacement.value,
+            }}
             propose={propose()}
             update={propose()}
             question={orchestrationDemoSettings.planning.value === 'asked' ? 'LCH-1' : undefined}
@@ -299,6 +306,7 @@ export function OrchestrationDemoSettings() {
       <Select name="planning" label="Planning Session" value={settings.planning.value} choices={PLANNING} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
+      <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
@@ -320,6 +328,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'planning') settings.planning.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
+      if (name === 'auto-placement') settings.autoPlacement.value = control.checked;
     }),
   );
   scope.add(

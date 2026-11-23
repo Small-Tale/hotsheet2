@@ -151,7 +151,7 @@ fn hs2_t16sk0_the_dispatcher_wait_defaults_validates_and_is_written_only_when_se
     );
     let json = serde_json::to_value(&body).unwrap();
     assert!(json.get("placement").is_none());
-    body.placement.automatic = true;
+    body.placement.automatic = Some(true);
     body.placement.actor = Some("scheduler".into());
     let json = serde_json::to_value(&body).unwrap();
     assert!(json["placement"].get("dispatcher_wait_minutes").is_none());

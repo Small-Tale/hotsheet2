@@ -134,7 +134,7 @@ impl Opt {
                 ..Speculation::default()
             },
             placement: PlacementPolicy {
-                automatic: self.automatic,
+                automatic: Some(self.automatic),
                 actor: Some("worker-1".into()),
                 ..PlacementPolicy::default()
             },

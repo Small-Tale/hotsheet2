@@ -334,15 +334,18 @@ impl Default for Speculation {
     }
 }
 
-/// HS2-ECWG50: how the scheduler places sessions. Automatic placement is off unless
-/// a person turns it on, so a policy written before this section starts nothing.
+/// HS2-ECWG50: how the scheduler places sessions. HS2-R2N33M: automatic placement left
+/// unset is Auto, on once the project has a plan; an explicit `false` stays off.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlacementPolicy {
-    /// When false every scheduling pass is a dry run: decisions are computed and
-    /// logged, and no session is started or wound down.
-    #[serde(default)]
-    pub automatic: bool,
+    /// When off every scheduling pass is a dry run: decisions are computed and
+    /// logged, and no session is started or wound down. HS2-R2N33M: unset (`None`) is
+    /// Auto: on once the project's live plan has a step ("On once a plan exists"),
+    /// see [`PlacementPolicy::automatic_with`]. Start Orchestration writes `true` and
+    /// Pause writes `false`, which then stays off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automatic: Option<bool>,
     /// Who the server's scheduling loop acts as, when a project names one. Optional
     /// since HS2-XYAHB4: without it the orchestrator acts as the orchestration project
     /// itself ([`PlacementPolicy::acting_actor`]). A one-shot pass acts as whoever
@@ -379,8 +382,11 @@ pub struct PlacementPolicy {
     )]
     pub join_minutes: u32,
     /// HS2-TK9ADC: the targets whose dispatcher or integrator the scheduler starts by
-    /// itself, when the target needs one and its pool shows none live. Empty (the
-    /// default): role sessions stay a person's choice.
+    /// itself, when the target needs one and its pool shows none live. HS2-R2N33M: a
+    /// target the list does not name is Auto: a project with plan work may get both,
+    /// started with placement only when they help (ready work for a dispatcher, a
+    /// pending handoff for an integrator). A listed target keeps the person's choice;
+    /// an entry with no roles starts none there.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub role_sessions: Vec<TargetRoleSessions>,
 }
@@ -460,7 +466,7 @@ fn default_cooldown_minutes() -> u32 {
 impl Default for PlacementPolicy {
     fn default() -> Self {
         Self {
-            automatic: false,
+            automatic: None,
             actor: None,
             aging_minutes: default_aging_minutes(),
             cooldown_minutes: default_cooldown_minutes(),
@@ -474,6 +480,20 @@ impl Default for PlacementPolicy {
 impl PlacementPolicy {
     fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    /// HS2-R2N33M: whether sessions are placed, given whether the project's live plan
+    /// has a step. Unset is Auto: on once a plan exists. A plan update joins the live
+    /// plan only when its planner finishes it, so a plan is accepted once it is live.
+    pub fn automatic_with(&self, plan_exists: bool) -> bool {
+        self.automatic.unwrap_or(plan_exists)
+    }
+
+    /// HS2-R2N33M: the person's explicit entry for a target, if any; unlisted is Auto.
+    pub fn role_session_entry(&self, target_id: &str) -> Option<&TargetRoleSessions> {
+        self.role_sessions
+            .iter()
+            .find(|entry| entry.target_id == target_id)
     }
 }
 
@@ -671,12 +691,11 @@ impl PolicyBody {
     }
 
     /// HS2-TK9ADC: the roles the scheduler starts sessions in by itself on a target.
+    /// HS2-R2N33M: both for a target the list does not name (Auto).
     pub fn role_sessions(&self, target_id: &str) -> &[RoleSessionKind] {
         self.placement
-            .role_sessions
-            .iter()
-            .find(|entry| entry.target_id == target_id)
-            .map_or(&[], |entry| entry.roles.as_slice())
+            .role_session_entry(target_id)
+            .map_or(&RoleSessionKind::ALL, |entry| entry.roles.as_slice())
     }
 
     pub fn machine_limits(&self, target_id: &str) -> MachineLimits {
@@ -959,10 +978,11 @@ impl PolicyBody {
                 );
             }
             let roles: BTreeSet<_> = entry.roles.iter().collect();
-            if entry.roles.is_empty() || roles.len() != entry.roles.len() {
+            // HS2-R2N33M: no roles is the explicit choice of none; unlisted is Auto.
+            if roles.len() != entry.roles.len() {
                 report(
                     "invalid_role_sessions",
-                    "list each of dispatcher and integrator at most once, and at least one",
+                    "list each of dispatcher and integrator at most once",
                     id,
                 );
             }
@@ -978,6 +998,8 @@ impl PolicyBody {
         self.placement
             .role_sessions
             .iter()
+            // HS2-R2N33M: an entry with no roles starts nothing anywhere, so it is fine.
+            .filter(|entry| !entry.roles.is_empty())
             .filter_map(|entry| {
                 let home = sites.home_of(&entry.target_id);
                 (home != entry.target_id).then(|| PolicyWarning {

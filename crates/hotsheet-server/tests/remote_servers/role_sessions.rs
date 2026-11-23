@@ -141,16 +141,31 @@ async fn hs2_tk9adc_role_sessions_set_headlessly_and_the_pool_reported_with_capa
         read["policy"]["placement"]["role_sessions"][0]["roles"][1],
         "integrator"
     );
-    // Narrowed to the dispatcher, then turned off: the entry goes, the rest stays.
+    // Narrowed to the dispatcher, then turned off (an entry with no roles, HS2-R2N33M),
+    // then back to Auto: the entry goes, the rest stays.
     let narrowed = cli_named(&home, &human, &strs(&roles(&["--role", "dispatcher"])));
     assert_eq!(
         narrowed["policy"]["placement"]["role_sessions"][0]["roles"],
         json!(["dispatcher"])
     );
-    let off = cli_named(&home, &human, &strs(&roles(&[])));
+    let none = cli_named(&home, &human, &strs(&roles(&[])));
+    assert_eq!(
+        none["policy"]["placement"]["role_sessions"],
+        json!([{"target_id":TARGET,"roles":[]}]),
+        "{none}"
+    );
+    let off = cli_named(&home, &human, &strs(&roles(&["--auto"])));
     assert!(
         off["policy"]["placement"].get("role_sessions").is_none(),
         "{off}"
+    );
+    assert!(
+        cli_failure(
+            &home,
+            &human,
+            &strs(&roles(&["--auto", "--role", "dispatcher"]))
+        )
+        .contains("cannot be used with")
     );
     assert_eq!(
         off["policy"]["placement"]["resources"],

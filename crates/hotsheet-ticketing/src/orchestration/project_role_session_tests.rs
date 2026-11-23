@@ -174,6 +174,8 @@ fn hs2_5p112z_an_entry_naming_a_site_starts_nothing_until_it_is_its_own_project(
     let mut world = World::new(&[(1, 3), (2, 3)]);
     world.sites = ProjectSites::default().with_site(&target(2), &target(1));
     opted(&mut world, 2, &[D, I]);
+    // HS2-R2N33M: the home opts out, so it is not Auto either.
+    opted(&mut world, 1, &[]);
     pool(&mut world, 1, Some(PoolState::default()));
     pool(&mut world, 2, handoffs(2));
     world.work = vec![work(1, 2)];

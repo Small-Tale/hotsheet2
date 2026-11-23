@@ -355,7 +355,10 @@ impl OrchestrationRuntime {
                 revision: policy.revision.clone(),
                 // HS2-J3ZF27: a Software project's kept automatic policy places
                 // nothing, so it does not read as running.
-                automatic: orchestrating && body.is_some_and(|body| body.placement.automatic),
+                // HS2-R2N33M: unset placement is Auto, on once the plan has a step.
+                automatic: orchestrating
+                    && body.is_some_and(|body| body.placement.automatic_with(!steps.is_empty())),
+                auto: body.is_some_and(|body| body.placement.automatic.is_none()),
                 software: !orchestrating,
             },
         };

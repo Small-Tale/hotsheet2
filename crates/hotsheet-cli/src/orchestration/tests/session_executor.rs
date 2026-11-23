@@ -39,7 +39,9 @@ fn scope(tool: &str) -> ToolScope {
 }
 
 /// Target 1 takes two `codex` sessions. Placement is automatic as `worker-1`, with no
-/// cooldown and the shortest idle time, so a test decides every wait itself.
+/// cooldown and the shortest idle time, so a test decides every wait itself. Role
+/// sessions are off for target 1 (an entry with no roles, HS2-R2N33M), so
+/// only worker sessions are started.
 fn policy() -> PolicyBody {
     PolicyBody {
         machine: MachineLimits {
@@ -66,9 +68,16 @@ fn policy() -> PolicyBody {
             keep_warm: 0,
         },
         placement: PlacementPolicy {
-            automatic: true,
+            automatic: Some(true),
             actor: Some("worker-1".into()),
             cooldown_minutes: 0,
+            role_sessions: [1]
+                .into_iter()
+                .map(|n| hotsheet_ticketing::orchestration::TargetRoleSessions {
+                    target_id: id(n),
+                    roles: Vec::new(),
+                })
+                .collect(),
             ..PlacementPolicy::default()
         },
         ..PolicyBody::default()
@@ -1701,7 +1710,7 @@ fn hs2_t16sk0_a_dry_run_claims_nothing_a_taken_ticket_is_learned_and_a_restart_a
     assert_eq!(view.schedule.retry_at_ms, Some(due));
     // Automatic placement off: past the time, a pass only reports.
     let mut manual = policy();
-    manual.placement.automatic = false;
+    manual.placement.automatic = Some(false);
     f.set_policy(manual, &mut tx);
     f.at(&clock, due + MINUTE);
     let dry = f.tick(&mut tx);
@@ -1891,7 +1900,7 @@ fn hs2_nptks8_a_persons_session_is_left_and_a_dry_run_only_shows_it() {
         )
         .unwrap();
     let mut manual_policy = policy();
-    manual_policy.placement.automatic = false;
+    manual_policy.placement.automatic = Some(false);
     manual_policy.targets[0].max_sessions = Some(3);
     f.set_policy(manual_policy, &mut tx);
     let manual =

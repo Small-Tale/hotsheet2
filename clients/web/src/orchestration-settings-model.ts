@@ -408,7 +408,8 @@ export interface PolicyToolDraft {
 }
 
 export interface PolicyDraft {
-  automatic: boolean;
+  /** HS2-R2N33M: undefined is Auto, on once a plan exists; a person's switch makes it explicit. */
+  automatic: boolean | undefined;
   machine: { max_sessions: string; min_free_ram_mb: string; max_cpu_percent: string; min_free_disk_mb: string };
   tools: PolicyToolDraft[];
   idle_minutes: string;
@@ -431,7 +432,7 @@ export function policyDraftFrom(view: OrchestrationPolicyView | undefined, known
       ...knownTools.filter((tool) => !configured.some((item) => item.tool === tool)),
     ];
   return {
-    automatic: body.placement?.automatic ?? false,
+    automatic: body.placement?.automatic,
     machine: {
       max_sessions: String(machine.max_sessions),
       min_free_ram_mb: String(machine.min_free_ram_mb),
@@ -655,7 +656,10 @@ export function policyFromDraft(
   body.tools = tools;
   body.wind_down = { ...body.wind_down, idle_minutes: idle, keep_warm: warm };
   body.speculation = { ...body.speculation, allowed: draft.build_ahead, redo_reopened: draft.redo_reopened };
-  body.placement = { ...body.placement, automatic: draft.automatic };
+  // HS2-R2N33M: Auto stays unset, so it keeps following whether a plan exists.
+  body.placement = { ...body.placement };
+  if (draft.automatic === undefined) delete body.placement.automatic;
+  else body.placement.automatic = draft.automatic;
   return { policy: body };
 }
 
@@ -682,10 +686,15 @@ export interface TargetLimitsDraft {
   resources: string;
   /** HS2-TK9ADC: the role sessions the scheduler starts here by itself. */
   roleSessions: OrchestrationRoleSession[];
+  /**
+   * HS2-R2N33M: the policy does not list this project's role sessions, so they are Auto: both, started with
+   * placement when they help. Shown checked; choosing any makes the choice explicit.
+   */
+  roleSessionsAuto: boolean;
 }
 
 const ROLE_SESSIONS_HINT =
-  'None checked is Auto: no coordination sessions start here. Checked, the orchestrator starts a dispatcher for ready work or an integrator for handed-off work when needed. Each counts toward Sessions Here.';
+  'Checked, the orchestrator starts a dispatcher for ready work or an integrator for handed-off work when needed. Each counts toward Sessions Here.';
 
 /**
  * HS2-Y737GM: what Sessions Here and Build Ahead mean, under the fields and in the Limits help.
@@ -706,7 +715,8 @@ export const MODELS_HINT = 'Empty allows any model. Choose a model or a family s
 export function advancedLimitsChanged(draft: TargetLimitsDraft | undefined): number {
   if (!draft) return 0;
   return [
-    draft.roleSessions.length > 0,
+    // HS2-R2N33M: unlisted coordination sessions are Auto; any choice, even of none, is a change.
+    !draft.roleSessionsAuto,
     draft.max_sessions.trim() !== '',
     draft.buildAhead !== 'default',
     listOf(draft.resources).length > 0,
@@ -719,10 +729,11 @@ export function advancedLimitsChanged(draft: TargetLimitsDraft | undefined): num
  * the choice points at the home and is unavailable, except to clear roles still checked here (a stored
  * entry), which have no effect.
  */
-export function roleSessionsHint(homeLabel: string | undefined, checked: readonly string[]): string {
-  if (!homeLabel) return ROLE_SESSIONS_HINT;
+export function roleSessionsHint(homeLabel: string | undefined, checked: readonly string[], auto = false): string {
+  if (!homeLabel)
+    return auto ? `${ROLE_SESSIONS_HINT} Auto: follows placement, both when they help.` : ROLE_SESSIONS_HINT;
   const where = `Coordination sessions start only on ${homeLabel}, this project's home site. Set them there.`;
-  return checked.length ? `${where} The roles checked here have no effect; clear them.` : where;
+  return checked.length && !auto ? `${where} The roles checked here have no effect; clear them.` : where;
 }
 
 /**
@@ -732,8 +743,8 @@ export function roleSessionsHint(homeLabel: string | undefined, checked: readonl
  */
 
 /** HS2-SYZB33: on another site the roles can only be cleared, never chosen. */
-export function roleSessionsLocked(homeLabel: string | undefined, checked: readonly string[]): boolean {
-  return Boolean(homeLabel) && checked.length === 0;
+export function roleSessionsLocked(homeLabel: string | undefined, checked: readonly string[], auto = false): boolean {
+  return Boolean(homeLabel) && (checked.length === 0 || auto);
 }
 
 /** HS2-TK9ADC: the role sessions in the order the form and the policy list them. */
@@ -741,6 +752,15 @@ export const ROLE_SESSIONS: readonly OrchestrationRoleSession[] = ['dispatcher',
 
 const targetOf = (body: OrchestrationPolicyBody | null | undefined, targetId: string) =>
   body?.targets?.find((entry) => entry.target_id === targetId);
+
+/** HS2-R2N33M: a project's role sessions; unlisted is Auto, shown as both. */
+function roleSessionsOf(body: OrchestrationPolicyBody | null | undefined, targetId: string) {
+  const listed = body?.placement?.role_sessions?.find((item) => item.target_id === targetId);
+  return {
+    roleSessions: ROLE_SESSIONS.filter((role) => (listed ? listed.roles.includes(role) : true)),
+    roleSessionsAuto: !listed,
+  };
+}
 
 /** The Limits draft of one project, from its entry or the defaults the server applies. */
 export function targetLimitsDraftFrom(view: OrchestrationPolicyView | undefined, targetId: string): TargetLimitsDraft {
@@ -766,9 +786,7 @@ export function targetLimitsDraftFrom(view: OrchestrationPolicyView | undefined,
     resources: (body?.placement?.resources?.find((item) => item.target_id === targetId)?.resources ?? [])
       .map((need) => `${need.namespace}/${need.resource}`)
       .join(', '),
-    roleSessions: ROLE_SESSIONS.filter((role) =>
-      body?.placement?.role_sessions?.find((item) => item.target_id === targetId)?.roles.includes(role),
-    ),
+    ...roleSessionsOf(body, targetId),
   };
 }
 
@@ -845,7 +863,9 @@ export function changeTargetLimits(
     const role = ROLE_SESSIONS.find((known) => known === value);
     if (!role) return draft;
     const chosen = checked ? [...draft.roleSessions, role] : draft.roleSessions.filter((item) => item !== role);
-    return { ...draft, roleSessions: ROLE_SESSIONS.filter((known) => chosen.includes(known)) };
+    const roleSessions = ROLE_SESSIONS.filter((known) => chosen.includes(known));
+    // HS2-R2N33M: both checked is what Auto does, so it is stored as Auto (no entry).
+    return { ...draft, roleSessions, roleSessionsAuto: roleSessions.length === ROLE_SESSIONS.length };
   }
   if (typeof value !== 'string') return draft;
   if (field === 'limits.max_sessions') return { ...draft, max_sessions: value };
@@ -933,9 +953,10 @@ export function policyWithTargetLimits(
     if (next.length) body.placement.resources = next;
     else delete body.placement.resources;
   }
-  // HS2-TK9ADC: this project's role sessions, replaced in place; other projects' stay.
+  // HS2-TK9ADC: this project's role sessions, replaced in place; other projects' stay. HS2-R2N33M: Auto is
+  // no entry; a choice is kept, even of none.
   const opted = body.placement?.role_sessions ?? [],
-    roleEntry = draft.roleSessions.length ? [{ target_id: draft.targetId, roles: [...draft.roleSessions] }] : [],
+    roleEntry = draft.roleSessionsAuto ? [] : [{ target_id: draft.targetId, roles: [...draft.roleSessions] }],
     roleAt = opted.findIndex((item) => item.target_id === draft.targetId),
     roles =
       roleAt < 0 ? [...opted, ...roleEntry] : [...opted.slice(0, roleAt), ...roleEntry, ...opted.slice(roleAt + 1)];

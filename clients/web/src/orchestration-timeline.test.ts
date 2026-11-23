@@ -31,6 +31,10 @@ describe('orchestration timeline response contract (HS2-J89JC7)', () => {
     ).toThrow();
     expect(drifted((value) => ((value.kick_off as Record<string, unknown>).can_start = 'yes'))).toThrow();
     expect(() => parseOrchestrationTimeline([])).toThrow();
+    // HS2-R2N33M: `automatic_by_default` is optional and boolean.
+    expect(drifted((value) => (value.automatic_by_default = 'yes'))).toThrow();
+    const byDefault = { ...demoTimeline('running'), automatic_by_default: true };
+    expect(parseOrchestrationTimeline(JSON.parse(JSON.stringify(byDefault)))).toEqual(byDefault);
   });
 });
 

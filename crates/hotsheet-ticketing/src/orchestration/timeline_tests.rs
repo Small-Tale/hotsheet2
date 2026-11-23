@@ -184,6 +184,7 @@ impl Fixture {
                 present: true,
                 revision: Some("rev-1".into()),
                 automatic: true,
+                auto: false,
                 software: false,
             },
             now_ms: NOW,

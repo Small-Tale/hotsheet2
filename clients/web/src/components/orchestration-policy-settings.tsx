@@ -49,8 +49,12 @@ export function OrchestrationPolicySettings({
         <Switch
           name="automatic"
           label="Place sessions automatically"
-          hint="Off: the orchestrator plans where sessions would run and starts none."
-          checked={draft?.automatic ?? false}
+          hint={
+            draft && draft.automatic === undefined
+              ? 'Auto: on once a plan exists. Off: the orchestrator plans where sessions would run and starts none.'
+              : 'Off: the orchestrator plans where sessions would run and starts none.'
+          }
+          checked={draft?.automatic ?? true}
           disabled={disabled}
         />
         <List gap="m">

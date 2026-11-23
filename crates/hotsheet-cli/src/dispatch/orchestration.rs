@@ -867,13 +867,19 @@ enum PolicyCmd {
     /// HS2-TK9ADC: which role sessions the scheduler starts by itself on one target
     /// (`placement.role_sessions`). Reads the stored policy, replaces that target's
     /// entry and sets it at the revision read, as the Limits form does. Without
-    /// `--role` the target gets none. A person runs this; an AI actor is refused.
+    /// `--role` the target gets none. A target the policy does not list is Auto: the
+    /// scheduler starts either role there, with placement, when it helps
+    /// (HS2-R2N33M); `--auto` returns the target to that. A person runs this; an AI
+    /// actor is refused.
     RoleSessions {
         #[arg(long)]
         target: String,
         /// `dispatcher` or `integrator`; repeat for both.
-        #[arg(long = "role", value_parser = ["dispatcher", "integrator"])]
+        #[arg(long = "role", value_parser = ["dispatcher", "integrator"], conflicts_with = "auto")]
         roles: Vec<String>,
+        /// HS2-R2N33M: remove the target's entry, so its role sessions are Auto.
+        #[arg(long)]
+        auto: bool,
     },
 }
 #[derive(Args)]
@@ -1130,14 +1136,13 @@ fn tool_capacity_route(
     })
 }
 /// HS2-TK9ADC: `policy` with one target's `placement.role_sessions` entry replaced
-/// by `edit` (`{target_id, roles}`), in place, or removed when it lists no role. Every
-/// other member round-trips unchanged.
+/// by `edit` (`{target_id, roles}`), in place. HS2-R2N33M: no roles is kept as the
+/// choice of none; `auto` removes the entry, so the target is Auto again. Every other
+/// member round-trips unchanged.
 fn with_role_sessions(mut policy: Value, edit: &Value) -> Value {
     let target = edit["target_id"].clone();
-    let entry = (edit["roles"]
-        .as_array()
-        .is_some_and(|roles| !roles.is_empty()))
-    .then(|| json!({"target_id": target, "roles": edit["roles"]}));
+    let entry =
+        (edit["auto"] != json!(true)).then(|| json!({"target_id": target, "roles": edit["roles"]}));
     if !policy.is_object() {
         policy = json!({});
     }
@@ -1523,11 +1528,15 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 PolicyCmd::DryRun { file } => {
                     ("POST", format!("{prefix}/dry-run"), proposal(file)?)
                 }
-                PolicyCmd::RoleSessions { target, roles } => (
+                PolicyCmd::RoleSessions {
+                    target,
+                    roles,
+                    auto,
+                } => (
                     "PUT",
                     prefix,
                     // Turned into the edited policy below, at the revision read.
-                    json!({"role_sessions_edit": {"target_id": target, "roles": roles}}),
+                    json!({"role_sessions_edit": {"target_id": target, "roles": roles, "auto": auto}}),
                 ),
             };
             (owner_id, request)

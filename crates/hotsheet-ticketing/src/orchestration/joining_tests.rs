@@ -122,7 +122,7 @@ fn hs2_nptks8_replacements_of_one_run_are_bounded_and_a_late_join_is_left_alone(
 fn hs2_nptks8_the_join_time_defaults_validates_and_is_written_only_when_set() {
     let mut body = PolicyBody::default();
     assert_eq!(body.placement.join_minutes, DEFAULT_JOIN_MINUTES);
-    body.placement.automatic = true;
+    body.placement.automatic = Some(true);
     body.placement.actor = Some("scheduler".into());
     let json = serde_json::to_value(&body).unwrap();
     assert!(json["placement"].get("join_minutes").is_none());

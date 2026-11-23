@@ -249,9 +249,54 @@ fn hs2_tk9adc_nothing_starts_without_the_opt_in_and_a_known_pool() {
     ];
     for (case, roles, state, has_work, expected) in cases {
         let mut world = World::new(&[(1, 3)]);
-        if !roles.is_empty() {
-            opted(&mut world, roles);
+        // HS2-R2N33M: an entry with no roles opts out; an unlisted project is Auto.
+        opted(&mut world, roles);
+        pool(&mut world, state);
+        if has_work {
+            world.work = vec![work(1, 1)];
         }
+        assert_eq!(started(&world.now()), expected, "{case}");
+    }
+}
+
+/// HS2-R2N33M: a project `placement.role_sessions` does not list is Auto: with plan work
+/// gets the dispatcher and integrator it needs, each only when it helps, and nothing
+/// while its pool is unknown or it has no work and no handoff.
+#[test]
+fn hs2_r2n33m_unset_role_sessions_start_when_they_help() {
+    let step = format!("step:{}", id(1));
+    // (case, pool, work, expected starts)
+    let cases: Vec<(&str, Option<PoolState>, bool, Vec<&str>)> = vec![
+        (
+            "ready work, empty pool",
+            empty_pool(),
+            true,
+            vec!["role:dispatcher", step.as_str()],
+        ),
+        (
+            "ready work and a handoff",
+            Some(PoolState {
+                handoffs_pending: 1,
+                ..PoolState::default()
+            }),
+            true,
+            vec!["role:dispatcher", "role:integrator", step.as_str()],
+        ),
+        ("pool unknown", None, true, vec![step.as_str()]),
+        (
+            "dispatcher live already",
+            Some(PoolState {
+                dispatcher_live: true,
+                ..PoolState::default()
+            }),
+            true,
+            vec![step.as_str()],
+        ),
+        ("no work, no session", empty_pool(), false, vec![]),
+    ];
+    for (case, state, has_work, expected) in cases {
+        let mut world = World::new(&[(1, 3)]);
+        assert!(world.policy.placement.role_sessions.is_empty(), "{case}");
         pool(&mut world, state);
         if has_work {
             world.work = vec![work(1, 1)];
@@ -388,10 +433,6 @@ fn hs2_tk9adc_role_sessions_policy_validates_and_stays_out_of_old_files() {
         ),
         (
             "invalid_role_sessions",
-            Box::new(|body| body.placement.role_sessions[0].roles.clear()),
-        ),
-        (
-            "invalid_role_sessions",
             Box::new(|body| body.placement.role_sessions[0].roles = vec![D, D]),
         ),
     ];
@@ -419,8 +460,23 @@ fn hs2_tk9adc_role_sessions_policy_validates_and_stays_out_of_old_files() {
     // The default writes nothing, so a policy stored earlier reads back unchanged.
     let default = serde_json::to_value(PlacementPolicy::default()).unwrap();
     assert!(default.get("role_sessions").is_none());
-    assert!(policy(&[(1, 1)]).role_sessions(&target(1)).is_empty());
+    // HS2-R2N33M: an unlisted target is Auto (both roles, started only when they
+    // help); a listed one keeps the person's choice, and an entry with no roles is a
+    // valid choice of none that round-trips.
+    assert_eq!(policy(&[(1, 1)]).role_sessions(&target(1)), [D, I]);
     assert_eq!(base().role_sessions(&target(1)), [D, I]);
+    assert_eq!(base().role_sessions(&target(2)), [D, I]);
+    let mut none = base();
+    none.placement.role_sessions[0].roles.clear();
+    assert!(none.problems(None).is_empty(), "{:?}", none.problems(None));
+    assert!(none.role_sessions(&target(1)).is_empty());
+    let json = serde_json::to_value(&none.placement).unwrap();
+    assert_eq!(
+        json["role_sessions"],
+        serde_json::json!([{"target_id": target(1), "roles": []}])
+    );
+    let back: PlacementPolicy = serde_json::from_value(json).unwrap();
+    assert_eq!(back, none.placement);
 }
 
 #[test]

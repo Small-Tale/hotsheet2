@@ -319,7 +319,7 @@ impl OrchestrationRuntime {
                 self.policy(&checkout.id)
                     .ok()
                     .and_then(|view| view.policy)
-                    .is_some_and(|policy| policy.placement.automatic)
+                    .is_some_and(|policy| self.placement_on(&checkout.id, &policy.placement))
                     && self.orchestrating(&checkout.id).unwrap_or(false)
             })
             .map(|checkout| checkout.id)
@@ -561,7 +561,16 @@ impl OrchestrationRuntime {
                     .placement
                     .role_sessions
                     .iter()
+                    .filter(|entry| !entry.roles.is_empty())
                     .map(|entry| entry.target_id.as_str())
+                    // HS2-R2N33M: an unlisted project is Auto, so the home of every
+                    // project with placeable work is read for its pool too.
+                    .chain(
+                        work.iter()
+                            .filter(|item| places(item))
+                            .map(|item| sites.home_of(&item.target_id))
+                            .filter(|home| policy.placement.role_session_entry(home).is_none()),
+                    )
                     .filter(|target_id| sites.home_of(target_id) == *target_id),
             )
             // HS2-N5BDE4: an unlisted target, or one listing no tools, is Auto.
@@ -795,7 +804,7 @@ impl OrchestrationRuntime {
         };
         let inputs = TickInputs {
             policy_revision: gathered.revision.clone(),
-            automatic: gathered.policy.placement.automatic,
+            automatic: self.placement_on(owner_id, &gathered.policy.placement),
             work: count(gathered.work.len()),
             confirmed: count(
                 gathered
@@ -886,7 +895,7 @@ impl OrchestrationRuntime {
         Ok(ScheduleView {
             now_ms,
             enabled: true,
-            mode: if gathered.policy.placement.automatic
+            mode: if self.placement_on(owner_id, &gathered.policy.placement)
                 && actor.is_some()
                 && self.orchestrating(owner_id)?
             {
@@ -1190,8 +1199,9 @@ impl OrchestrationRuntime {
         };
         let actor_id = actor.and_then(|actor| actor.id.clone());
         // HS2-J3ZF27: a Software project's pass is a dry run whatever its policy says.
-        let applies =
-            gathered.policy.placement.automatic && !dry_run && self.orchestrating(owner_id)?;
+        let applies = self.placement_on(owner_id, &gathered.policy.placement)
+            && !dry_run
+            && self.orchestrating(owner_id)?;
         let mode = match (applies, &actor_id) {
             (true, Some(_)) => DecisionMode::Applied,
             (true, None) => {
@@ -1538,6 +1548,23 @@ impl OrchestrationRuntime {
         }
     }
 
+    /// HS2-R2N33M: whether the owner's policy places sessions: as set, or, left unset
+    /// (Auto), once the owner's live plan has a step. A plan update joins the live plan
+    /// only when its planner finishes it.
+    pub(super) fn placement_on(
+        &self,
+        owner_id: &str,
+        placement: &hotsheet_ticketing::orchestration::PlacementPolicy,
+    ) -> bool {
+        placement.automatic_with(
+            placement.automatic.is_none()
+                && self
+                    .plan()
+                    .records(owner_id)
+                    .is_ok_and(|records| !records.is_empty()),
+        )
+    }
+
     fn scheduler_actor(&self, owner_id: &str) -> Result<Option<MutationActor>, OrchestrationError> {
         // HS2-J3ZF27: a Software project has no loop.
         if !self.orchestrating(owner_id)? {
@@ -1547,7 +1574,7 @@ impl OrchestrationRuntime {
         Ok(self
             .policy(owner_id)?
             .policy
-            .filter(|policy| policy.placement.automatic)
+            .filter(|policy| self.placement_on(owner_id, &policy.placement))
             .map(|policy| policy.placement.acting_actor(owner_id))
             .and_then(|actor| MutationActor::parse("system", Some(actor)).ok()))
     }

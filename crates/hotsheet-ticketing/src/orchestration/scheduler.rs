@@ -1736,7 +1736,25 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             vec![target_id.to_owned()]
         }
     };
-    for entry in &policy.placement.role_sessions {
+    // HS2-R2N33M: a project the policy does not list is Auto: the home of every
+    // project with plan work or a running session may get both roles, each only when
+    // it helps below.
+    let homes: BTreeSet<&str> = input
+        .work
+        .iter()
+        .map(|item| item.target_id.as_str())
+        .chain(sessions.iter().map(|session| session.target_id.as_str()))
+        .map(|target_id| input.sites.home_of(target_id))
+        .filter(|home| policy.placement.role_session_entry(home).is_none())
+        .collect();
+    let auto_entries: Vec<super::TargetRoleSessions> = homes
+        .into_iter()
+        .map(|target_id| super::TargetRoleSessions {
+            target_id: target_id.to_owned(),
+            roles: RoleSessionKind::ALL.to_vec(),
+        })
+        .collect();
+    for entry in policy.placement.role_sessions.iter().chain(&auto_entries) {
         let target_id = entry.target_id.as_str();
         // HS2-5P112Z: role sessions are started per project, on its home site only. An
         // entry naming another site of a project starts nothing there: that site's

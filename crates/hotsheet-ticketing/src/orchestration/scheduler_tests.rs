@@ -1501,7 +1501,13 @@ fn hs2_ecwg50_standing_says_where_a_step_is_and_why() {
 fn hs2_ecwg50_placement_policy_defaults_validates_and_stays_out_of_old_files() {
     let body = policy(&[(1, 1)]);
     assert_eq!(body.placement, PlacementPolicy::default());
-    assert!(!body.placement.automatic, "nothing is automatic by default");
+    // HS2-R2N33M: unset is Auto, which places nothing until a plan exists.
+    assert_eq!(
+        body.placement.automatic, None,
+        "automatic placement is Auto by default"
+    );
+    assert!(!body.placement.automatic_with(false));
+    assert!(body.placement.automatic_with(true));
     assert_eq!(
         (
             body.placement.aging_minutes,
@@ -1531,10 +1537,13 @@ fn hs2_ecwg50_placement_policy_defaults_validates_and_stays_out_of_old_files() {
     };
     assert_eq!(codes(&|_| {}), [""; 0]);
     // HS2-XYAHB4: automatic placement needs no named actor.
-    assert_eq!(codes(&|placement| placement.automatic = true), [""; 0]);
+    assert_eq!(
+        codes(&|placement| placement.automatic = Some(true)),
+        [""; 0]
+    );
     assert_eq!(
         codes(&|placement| {
-            placement.automatic = true;
+            placement.automatic = Some(true);
             placement.actor = Some("scheduler".into());
         }),
         [""; 0]
@@ -1751,7 +1760,7 @@ fn hs2_xyahb4_the_loop_acts_as_the_orchestration_project_without_a_named_actor()
         (None, "has space", "orchestrator".into()),
     ];
     for (actor, owner, expected) in cases {
-        for automatic in [false, true] {
+        for automatic in [None, Some(false), Some(true)] {
             let placement = PlacementPolicy {
                 automatic,
                 actor: actor.map(Into::into),
@@ -1762,7 +1771,7 @@ fn hs2_xyahb4_the_loop_acts_as_the_orchestration_project_without_a_named_actor()
             body.placement = placement;
             assert!(
                 body.problems(None).is_empty(),
-                "{actor:?} automatic={automatic}"
+                "{actor:?} automatic={automatic:?}"
             );
         }
     }

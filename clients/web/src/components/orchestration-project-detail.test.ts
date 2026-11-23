@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { OrchestrationCapabilities } from '../api';
+import type { OrchestrationCapabilities, OrchestrationRoleSession } from '../api';
 import { OrchestrationProjectDetail } from './orchestration-project-detail';
 
 const macos: OrchestrationCapabilities = {
@@ -178,7 +178,9 @@ describe('OrchestrationProjectDetail Limits (HS2-Y737GM, HS2-25KT42, HS2-1X1TXC,
       buildAhead: 'default' as const,
       models: { claude: 'opus-*' },
       resources: '',
-      roleSessions: [],
+      // HS2-R2N33M: unlisted coordination sessions are Auto, shown as both.
+      roleSessions: ['dispatcher', 'integrator'] as OrchestrationRoleSession[],
+      roleSessionsAuto: true,
       ...overrides,
     },
   });

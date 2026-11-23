@@ -505,7 +505,7 @@ impl OrchestrationRuntime {
             .policy(owner_id)
             .ok()
             .and_then(|view| view.policy)
-            .is_some_and(|policy| policy.placement.automatic);
+            .is_some_and(|policy| self.placement_on(owner_id, &policy.placement));
         if automatic || actor.is_none() {
             return Vec::new();
         }

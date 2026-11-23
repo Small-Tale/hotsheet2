@@ -307,7 +307,22 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
       // HS2-N3HWP9: an unlisted tool is Auto in both fields.
       { tool: 'claude', max_sessions: '', weight: '', accounts: [] },
     ]);
-    expect(policyDraftFrom(undefined, [])).toMatchObject({ automatic: false, idle_minutes: '15', keep_warm: '0' });
+    // HS2-R2N33M: unset automatic placement is Auto (on once a plan exists).
+    expect(policyDraftFrom(undefined, [])).toMatchObject({ automatic: undefined, idle_minutes: '15', keep_warm: '0' });
+  });
+
+  it('keeps Auto placement unset, and a switched value explicit (HS2-R2N33M)', () => {
+    const draft = policyDraftFrom(undefined, ['codex']);
+    const built = policyFromDraft(undefined, draft);
+    if (!('policy' in built)) throw new Error(built.error);
+    expect(built.policy.placement).toEqual({});
+    for (const value of [false, true]) {
+      const set = policyFromDraft(undefined, changePolicyDraft(draft, 'automatic', value));
+      if (!('policy' in set)) throw new Error(set.error);
+      expect(set.policy.placement).toEqual({ automatic: value });
+      // Read back, it stays explicit.
+      expect(policyDraftFrom({ enabled: true, revision: 'r', policy: set.policy }, []).automatic).toBe(value);
+    }
   });
 
   it('changes one field per control and ignores unknown ones', () => {
@@ -530,7 +545,9 @@ describe("one project's limits (HS2-7WF6JD)", () => {
       buildAhead: 'on',
       models: { claude: '' },
       resources: '',
-      roleSessions: [],
+      // HS2-R2N33M: not listed in role_sessions, so Auto (both).
+      roleSessions: ['dispatcher', 'integrator'],
+      roleSessionsAuto: true,
     });
     expect(targetLimitsDraftFrom(stored, 'T9')).toMatchObject({
       listed: false,
@@ -782,7 +799,14 @@ describe("a project's coordination sessions (HS2-TK9ADC)", () => {
   it('reads the roles in the form order and stores them unchanged when untouched', () => {
     const draft = targetLimitsDraftFrom(stored, 'T1');
     expect(draft.roleSessions).toEqual(['dispatcher', 'integrator']);
-    expect(targetLimitsDraftFrom(stored, 'T3').roleSessions).toEqual([]);
+    // HS2-R2N33M: an unlisted project is Auto, shown as both, and stays unlisted when untouched.
+    expect(targetLimitsDraftFrom(stored, 'T3')).toMatchObject({
+      roleSessions: ['dispatcher', 'integrator'],
+      roleSessionsAuto: true,
+    });
+    expect(build(targetLimitsDraftFrom(stored, 'T3')).placement?.role_sessions).toEqual(
+      stored.policy?.placement?.role_sessions,
+    );
     expect(build(draft).placement?.role_sessions).toEqual([
       { target_id: 'T2', roles: ['integrator'] },
       { target_id: 'T1', roles: ['dispatcher', 'integrator'] },
@@ -798,17 +822,30 @@ describe("a project's coordination sessions (HS2-TK9ADC)", () => {
     expect(draft.roleSessions).toEqual(['integrator']);
     draft = toggle(toggle(draft, 'dispatcher', true), 'dispatcher', true);
     expect(draft.roleSessions).toEqual(['dispatcher', 'integrator']);
-    // Emptied: this project's entry goes; the other project's stays where it was.
+    // Emptied: HS2-R2N33M keeps the choice of none in place; the other project's stays where it was.
     draft = toggle(toggle(draft, 'integrator', false), 'dispatcher', false);
     let policy = build(draft);
-    expect(policy.placement).toEqual({ automatic: true, role_sessions: [{ target_id: 'T2', roles: ['integrator'] }] });
-    // Refilled: appended after the others.
+    expect(policy.placement).toEqual({
+      automatic: true,
+      role_sessions: [
+        { target_id: 'T2', roles: ['integrator'] },
+        { target_id: 'T1', roles: [] },
+      ],
+    });
+    // Refilled: in place.
     policy = build(toggle(draft, 'dispatcher', true), { ...stored, policy: policy });
     expect(policy.placement?.role_sessions).toEqual([
       { target_id: 'T2', roles: ['integrator'] },
       { target_id: 'T1', roles: ['dispatcher'] },
     ]);
-    // The last entry removed leaves no member at all; a policy without any gets none.
+    // From Auto, a change becomes this project's explicit choice, appended after the others.
+    const auto = toggle(targetLimitsDraftFrom(stored, 'T3'), 'integrator', false);
+    expect(auto).toMatchObject({ roleSessions: ['dispatcher'], roleSessionsAuto: false });
+    expect(build(auto).placement?.role_sessions).toEqual([
+      ...(stored.policy?.placement?.role_sessions ?? []),
+      { target_id: 'T3', roles: ['dispatcher'] },
+    ]);
+    // An entry turned to none stays as the choice of none; a policy without any gets none.
     const only: OrchestrationPolicyView = {
       enabled: true,
       revision: 'p',
@@ -817,7 +854,9 @@ describe("a project's coordination sessions (HS2-TK9ADC)", () => {
         placement: { role_sessions: [{ target_id: 'T1', roles: ['dispatcher'] }] },
       },
     };
-    expect(build(toggle(targetLimitsDraftFrom(only, 'T1'), 'dispatcher', false), only).placement).toEqual({});
+    expect(build(toggle(targetLimitsDraftFrom(only, 'T1'), 'dispatcher', false), only).placement).toEqual({
+      role_sessions: [{ target_id: 'T1', roles: [] }],
+    });
     const bare: OrchestrationPolicyView = {
       enabled: true,
       revision: 'p',
@@ -849,7 +888,11 @@ describe("a project's coordination sessions (HS2-TK9ADC)", () => {
 describe("a site's coordination sessions (HS2-SYZB33)", () => {
   it('point at the home and allow only clearing roles that have no effect', () => {
     // The home, or a one-site project: the ordinary hint, never locked.
-    expect(roleSessionsHint(undefined, [])).toMatch(/^None checked is Auto/u);
+    expect(roleSessionsHint(undefined, [])).toMatch(/^Checked, the orchestrator starts/u);
+    // HS2-R2N33M: an unlisted project's roles are Auto and follow placement.
+    expect(roleSessionsHint(undefined, ['dispatcher', 'integrator'], true)).toMatch(/Auto: follows placement/u);
+    expect(roleSessionsHint('Widgets', ['dispatcher', 'integrator'], true)).not.toMatch(/no effect/u);
+    expect(roleSessionsLocked('Widgets', ['dispatcher', 'integrator'], true)).toBe(true);
     expect(roleSessionsLocked(undefined, [])).toBe(false);
     expect(roleSessionsLocked(undefined, ['dispatcher'])).toBe(false);
     // Another site with nothing checked: locked, pointing at the home.
@@ -974,14 +1017,14 @@ describe('Advanced limits are Auto until changed (HS2-25KT42)', () => {
     expect(advancedLimitsChanged(draft)).toBe(0);
     draft = changeTargetLimits(draft, 'limits.max_sessions', '2');
     draft = changeTargetLimits(draft, 'limits.build_ahead', 'off');
-    draft = changeTargetLimits(draft, 'limits.role_sessions', 'dispatcher', true);
+    draft = changeTargetLimits(draft, 'limits.role_sessions', 'dispatcher', false);
     draft = addTargetLimitsValue(draft, 'limits.resources', 'vm/*');
     draft = changeTargetLimits(draft, 'limits.machine_override', true);
     expect(advancedLimitsChanged(draft)).toBe(5);
     // Whitespace alone is still Auto; clearing each returns to none.
     draft = changeTargetLimits(draft, 'limits.max_sessions', '  ');
     draft = changeTargetLimits(draft, 'limits.build_ahead', 'default');
-    draft = changeTargetLimits(draft, 'limits.role_sessions', 'dispatcher', false);
+    draft = changeTargetLimits(draft, 'limits.role_sessions', 'dispatcher', true);
     draft = removeTargetLimitsValue(draft, 'limits.resources', 'vm/*');
     draft = changeTargetLimits(draft, 'limits.machine_override', false);
     expect(advancedLimitsChanged(draft)).toBe(0);

@@ -889,9 +889,42 @@ nothing; it is now Auto, so a policy with `"tools": []` and no `targets` lets th
 orchestrator use every installed, signed-in tool on every declared project, within the
 machine limits, once **Place sessions automatically** is on. No earlier file could hold an
 explicit "off" (the old forms dropped the entry), so there is nothing to convert; turn a
-tool or project off with `0`, or a project with `enabled: false`. Placement itself stays
-off until a person turns it on (`placement.automatic`), and coordination sessions stay a
-person's choice (`placement.role_sessions`, HS2-TK9ADC).
+tool or project off with `0`, or a project with `enabled: false`. Placement and
+coordination sessions are Auto too (HS2-R2N33M): see **Placement and coordination
+sessions default to Auto** below.
+
+#### Placement and coordination sessions default to Auto (HS2-R2N33M)
+
+HS2-N5BDE4 asks that a person "should only have to make choices if i want to". The
+maintainer chose, by picker, **"On once a plan exists"**: placement switches on by
+itself once a plan has been proposed and accepted, a clear banner says sessions will
+start, and one click pauses it. On coordination sessions the maintainer wrote:
+"dispatcher and integrator should be used automatically by default if the orchestrator
+thinks theyre beneficial".
+
+- **`placement.automatic`** is `true`, `false` or unset. Unset is Auto: placement is on
+  while the project's live plan (the checked-in plan steps, §26.15) has at least one
+  step. A proposal writes its steps into the live plan, and a plan update joins it only
+  when its planner finishes it (§26.25), so a plan counts once it is live. Start
+  Orchestration writes `true`; Pause writes `false`, which stays off with a plan. A
+  policy stored earlier that says `false` keeps it. A policy and the Orchestration
+  project type stay required, as before; nothing is placed without them.
+- **The safety rails.** The policy's limits (Auto shares, machine floors, caps, daily
+  budgets) and every permission request (§26.22) still apply to each start. While
+  placement runs because it is Auto, the timeline answers `automatic_by_default: true`
+  and the Orchestration header shows the banner **Sessions Start Automatically** ("A
+  plan exists, so Hot Sheet starts sessions for ready work within the Orchestration
+  settings. Pause stops placing new sessions; running work continues.") above Pause.
+  The **Place sessions automatically** switch shows Auto as on, with the hint "Auto: on
+  once a plan exists"; switching it makes the choice explicit.
+- **`placement.role_sessions`** keeps a person's choice per project. A project it does
+  not list is Auto: its home site may get a dispatcher and an integrator, which the
+  scheduler starts with placement only when they help (a dispatcher for ready work, an
+  integrator for a pending handoff, each within the target's cap and with no live one
+  in its pool). An entry with no roles is the choice of none. Limits shows an unlisted
+  project's roles as both checked with "Auto: follows placement, both when they help." under
+  Advanced; unchecking either stores the choice, and both checked again is Auto. `hotsheet-cli orchestration policy role-sessions --target <id>
+--auto` returns a project to Auto.
 
 `validate` reports every problem at once with a stable code and the tool, account or
 target it concerns. Conflicts are errors: a target cap above its machine cap, an
@@ -3699,7 +3732,8 @@ expiry. A claim released before its expiry wakes the loop instead (§26.20).
 
 ### Applying a decision
 
-A pass is **applied** only when the policy sets `placement.automatic`, the caller did
+A pass is **applied** only when the policy's `placement.automatic` is on (set, or Auto
+with a plan, HS2-R2N33M), the caller did
 not ask for a dry run, and an identified actor is given. Otherwise it is a **dry
 run**: computed, logged by a `tick`, and nothing is started or wound down. Merging
 this section therefore starts no session anywhere until a person enables it.
@@ -5218,8 +5252,9 @@ The maintainer's decision on the workspace design (HS2-HSMH2Q, Design v3): "On S
 target tickets, prerequisites and placement as the dry-run plan". The orchestration
 project's own tickets are its **goal tickets**. **Propose Plan** starts one AI
 session, the **planner**, that turns the open goal tickets into the plan of §26.15
-with the existing operations. Nothing is placed: the plan stays a dry run until a
-person presses Start Orchestration (the policy's `placement.automatic`, §26.17).
+with the existing operations. With `placement.automatic` set to `false` the plan stays a
+dry run until a person presses Start Orchestration (§26.17); left unset (Auto), placement
+starts once the plan has a step, under the banner of HS2-R2N33M (§26.8).
 
 ### Where the planner runs
 
@@ -5671,7 +5706,9 @@ A read on the server also starts the target followers of §26.9.
   type is Software (`project_software`, HS2-J3ZF27). No placement actor is needed: the
   orchestrator acts as the orchestration project (HS2-XYAHB4). A Software project's kept
   automatic policy does not read as running. While running, **Pause** turns it off; running work
-  continues. A proposed plan is labeled as the dry run it is. Once there is a plan, **Update Plan**
+  continues. A policy that leaves placement Auto runs once the plan has a step, and the header
+  then shows the **Sessions Start Automatically** banner above Pause (`automatic_by_default`,
+  HS2-R2N33M). A proposed plan is labeled as the dry run it is. Once there is a plan, **Update Plan**
   (secondary, beside the kick-off action) re-plans while the plan keeps running (§26.25, HS2-190RDX),
   disabled with the reason while no AI tool is chosen or the planner waits in its terminal; while an
   update drafts the header reads `· Updating Plan` and **Cancel Plan Update** takes its place.
@@ -6204,8 +6241,9 @@ starts by itself:
 { "placement": { "role_sessions": [{ "target_id": "<target>", "roles": ["dispatcher", "integrator"] }] } }
 ```
 
-Empty (the default, and never written) turns it off. A target is listed once, its
-roles at least once each and only `dispatcher` or `integrator`
+A target the list does not name is Auto (HS2-R2N33M): its home site may get both roles,
+started only when they help. An entry with no roles is the choice of none. A target is
+listed once, each role at most once and only `dispatcher` or `integrator`
 (`duplicate_role_sessions_target`, `role_sessions_without_target`,
 `invalid_role_sessions`). A role session uses the same tool selection as a worker:
 the target's allowed tools, by the tool capacity selection of §26.11 with no preferred
@@ -6268,8 +6306,9 @@ dispatcher again.
   other limits (§26.27). A project's session rows name a role session's role before
   its tool.
 - `hotsheet-cli orchestration policy role-sessions --project <owner> --target <id>
-[--role dispatcher] [--role integrator]` reads the stored policy, replaces that
-  target's entry (no `--role` removes it) and sets it at the revision read, through the
+[--role dispatcher] [--role integrator] [--auto]` reads the stored policy, replaces that
+  target's entry (no `--role` stores the choice of none; `--auto` removes the entry, so
+  the target is Auto again, HS2-R2N33M) and sets it at the revision read, through the
   same policy route the form uses. A person runs it; an AI actor is refused. A repeat
   changes nothing.
 - **On another site of a project (HS2-SYZB33).** Role sessions start only on the

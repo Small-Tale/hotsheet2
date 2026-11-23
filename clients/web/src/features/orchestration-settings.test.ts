@@ -628,24 +628,24 @@ describe("a project's coordination sessions (HS2-TK9ADC)", () => {
     const t = setup();
     await t.settings.loadSettings(DEMO_OWNER);
     t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.docs);
-    expect(t.settings.detailOf(DEMO_OWNER)?.limits?.roleSessions).toEqual([]);
-    t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'integrator', true);
-    t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'dispatcher', true);
-    expect(t.settings.detailOf(DEMO_OWNER)?.limits?.roleSessions).toEqual(['dispatcher', 'integrator']);
+    // HS2-R2N33M: unlisted is Auto, shown as both; a change makes it explicit.
+    expect(t.settings.detailOf(DEMO_OWNER)?.limits).toMatchObject({
+      roleSessions: ['dispatcher', 'integrator'],
+      roleSessionsAuto: true,
+    });
+    t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'integrator', false);
+    expect(t.settings.detailOf(DEMO_OWNER)?.limits?.roleSessions).toEqual(['dispatcher']);
     await t.settings.applyLimits(DEMO_OWNER);
     const [, , body] = vi.mocked(t.api.setOrchestrationPolicy).mock.calls[0];
-    expect(body.placement?.role_sessions).toEqual([
-      { target_id: DEMO_TARGETS.docs, roles: ['dispatcher', 'integrator'] },
-    ]);
+    expect(body.placement?.role_sessions).toEqual([{ target_id: DEMO_TARGETS.docs, roles: ['dispatcher'] }]);
     // The detail reads back what was stored.
     await vi.waitFor(() => {
-      expect(t.settings.detailOf(DEMO_OWNER)?.limits?.roleSessions).toEqual(['dispatcher', 'integrator']);
+      expect(t.settings.detailOf(DEMO_OWNER)?.limits?.roleSessions).toEqual(['dispatcher']);
     });
     t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'dispatcher', false);
-    t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'integrator', false);
     await t.settings.applyLimits(DEMO_OWNER);
     const [, , cleared] = vi.mocked(t.api.setOrchestrationPolicy).mock.calls[1];
-    expect(cleared.placement?.role_sessions).toBeUndefined();
+    expect(cleared.placement?.role_sessions).toEqual([{ target_id: DEMO_TARGETS.docs, roles: [] }]);
   });
 });
 

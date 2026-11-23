@@ -108,7 +108,7 @@ fn policy(automatic: bool) -> PolicyBody {
             speculation: None,
         }],
         placement: PlacementPolicy {
-            automatic,
+            automatic: Some(automatic),
             actor: Some("worker-1".into()),
             ..PlacementPolicy::default()
         },
@@ -2255,8 +2255,12 @@ fn hs2_tk9adc_the_scheduler_starts_a_dispatcher_then_an_integrator_through_the_e
     target_pool(&s.m, |_| {});
     let mut body = policy(true);
     body.targets[0].max_sessions = Some(3);
+    // Opted out (an entry with no roles; unlisted is Auto, HS2-R2N33M): the worker only.
+    body.placement.role_sessions = vec![TargetRoleSessions {
+        target_id: id(1),
+        roles: Vec::new(),
+    }];
     set_policy(&s.m, body.clone(), &mut tx);
-    // Not opted in: the worker only.
     let tick = s.tick(&mut tx);
     assert_eq!(outcomes(&tick), [("started", None)]);
     let starts = |s: &Setup| {
@@ -2456,4 +2460,97 @@ fn hs2_zy4z4g_a_step_starts_only_on_a_machine_that_meets_its_requirements() {
     });
     let tick = s.tick(&mut tx);
     assert_eq!(outcomes(&tick), [("started", None)]);
+}
+
+/// HS2-R2N33M: placement left unset is Auto, "On once a plan exists": with no plan a
+/// pass is a dry run, the owner has no loop and the timeline shows no plan; once the
+/// plan has a step, a pass places its work, the owner's loop runs and the timeline
+/// runs by default (the banner's cue). An explicit `false` stays off with a plan, and
+/// an explicit `true` is not "by default".
+#[test]
+fn hs2_r2n33m_unset_placement_turns_on_once_a_plan_exists() {
+    use hotsheet_ticketing::orchestration::{TargetRoleSessions, TimelinePhase};
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let mut body = policy(true);
+    body.placement.automatic = None;
+    // Worker sessions only, so the starts below are the work's.
+    body.placement.role_sessions = vec![TargetRoleSessions {
+        target_id: id(1),
+        roles: Vec::new(),
+    }];
+    set_policy(&s.m, body.clone(), &mut tx);
+    let timeline = |tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .orchestration_timeline(&s.owner(), None, 0, tx)
+            .unwrap()
+    };
+
+    // No plan yet: nothing is placed.
+    let tick = s.tick(&mut tx);
+    assert_eq!(tick.view.mode, DecisionMode::DryRun);
+    assert!(tick.outcomes.is_empty());
+    assert!(!s.m.runtime.scheduler_owners().contains(&s.owner()));
+    let shown = timeline(&mut tx);
+    assert_eq!(shown.phase, TimelinePhase::NoPlan);
+    assert!(!shown.automatic && !shown.automatic_by_default);
+
+    // A plan exists: sessions start, with no Start Orchestration press.
+    s.ready("First", &mut tx);
+    assert!(s.m.runtime.scheduler_owners().contains(&s.owner()));
+    let shown = timeline(&mut tx);
+    assert_eq!(shown.phase, TimelinePhase::Running);
+    assert!(shown.automatic && shown.automatic_by_default);
+    assert!(shown.kick_off.can_pause);
+    let tick = s.tick(&mut tx);
+    assert_eq!(tick.view.mode, DecisionMode::Applied);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+
+    // Pause writes an explicit false, which stays off with the plan there.
+    body.placement.automatic = Some(false);
+    set_policy(&s.m, body.clone(), &mut tx);
+    assert!(!s.m.runtime.scheduler_owners().contains(&s.owner()));
+    let shown = timeline(&mut tx);
+    assert_ne!(shown.phase, TimelinePhase::Running);
+    assert!(!shown.automatic && !shown.automatic_by_default);
+    assert_eq!(s.tick(&mut tx).view.mode, DecisionMode::DryRun);
+
+    // Start Orchestration writes true: running, but not by default.
+    body.placement.automatic = Some(true);
+    set_policy(&s.m, body, &mut tx);
+    let shown = timeline(&mut tx);
+    assert!(shown.automatic && !shown.automatic_by_default);
+}
+
+/// HS2-R2N33M: with role sessions unlisted (Auto) and placement on by default, the
+/// project's dispatcher starts with its first worker once ready work exists.
+#[test]
+fn hs2_r2n33m_unlisted_role_sessions_follow_placement() {
+    use hotsheet_ticketing::orchestration::SessionRole;
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    target_pool(&s.m, |_| {});
+    let mut body = policy(true);
+    body.placement.automatic = None;
+    body.targets[0].max_sessions = Some(3);
+    set_policy(&s.m, body, &mut tx);
+    // No plan: no session at all, role or worker.
+    assert!(s.tick(&mut tx).outcomes.is_empty());
+    s.ready("First", &mut tx);
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None), ("started", None)]);
+    assert_eq!(
+        tick.outcomes[0].operation_id,
+        format!("sched-role-dispatcher-{}", id(1))
+    );
+    let roles: Vec<Option<SessionRole>> = s
+        .sessions
+        .calls()
+        .into_iter()
+        .filter_map(|call| match call {
+            SessionCall::Start(request) => Some(request.role),
+            SessionCall::WindDown(_) => None,
+        })
+        .collect();
+    assert_eq!(roles, [Some(SessionRole::Dispatcher), None]);
 }

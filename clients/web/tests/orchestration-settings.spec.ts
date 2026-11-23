@@ -793,10 +793,11 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
     await openAdvancedLimits(page);
     const dispatcher = limits.getByRole('checkbox', { name: 'Dispatcher' }),
       integrator = limits.getByRole('checkbox', { name: 'Integrator' });
-    await expect(dispatcher).not.toBeChecked();
-    await expect(integrator).not.toBeChecked();
-    await dispatcher.check();
-    await integrator.check();
+    // HS2-R2N33M: not listed, so Auto: both shown checked, and nothing is stored until a person chooses.
+    await expect(dispatcher).toBeChecked();
+    await expect(integrator).toBeChecked();
+    await expect(limits).toContainText('Auto: follows placement, both when they help.');
+    await integrator.uncheck();
     const directory = join('target', 'visual-captures', 'hs2-tk9adc');
     await mkdir(directory, { recursive: true });
     const capture = async (name: string) => {
@@ -805,9 +806,9 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
     };
     await capture('limits-draft-1440');
     await limits.getByRole('button', { name: 'Apply Limits' }).click();
-    await expect.poll(roles).toEqual([{ target_id: target, roles: ['dispatcher', 'integrator'] }]);
+    await expect.poll(roles).toEqual([{ target_id: target, roles: ['dispatcher'] }]);
     await expect(dispatcher).toBeChecked();
-    await expect(integrator).toBeChecked();
+    await expect(integrator).not.toBeChecked();
     for (const [index, size] of [{ width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
       await page.setViewportSize(size);
       if (size.width === 390) {
@@ -823,14 +824,18 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
     await page.emulateMedia({ colorScheme: 'dark' });
     await capture('limits-1440-dark');
     await page.emulateMedia({ colorScheme: 'light' });
-    // A further edit: the dispatcher off, then the integrator too; the entry goes.
+    // A further edit: the dispatcher off too; the choice of none is kept (HS2-R2N33M).
     await dispatcher.uncheck();
     await limits.getByRole('button', { name: 'Apply Limits' }).click();
-    await expect.poll(roles).toEqual([{ target_id: target, roles: ['integrator'] }]);
-    await integrator.uncheck();
+    await expect.poll(roles).toEqual([{ target_id: target, roles: [] }]);
+    await expect(dispatcher).not.toBeChecked();
+    await expect(limits).not.toContainText('Auto: follows placement');
+    // Both checked again is Auto: the entry goes.
+    await dispatcher.check();
+    await integrator.check();
     await limits.getByRole('button', { name: 'Apply Limits' }).click();
     await expect.poll(roles).toBeUndefined();
-    await expect(integrator).not.toBeChecked();
+    await expect(limits).toContainText('Auto: follows placement, both when they help.');
   } finally {
     await server.stop(page);
   }
@@ -1199,10 +1204,11 @@ test('HS2-SYZB33 a site Limits point Coordination Sessions at the project home',
       await page.screenshot({ path: join(directory, `hs2-syzb33-${name}-${browserName}.png`), animations: 'disabled' });
     };
     await capture('site-stored-1440');
-    // Cleared: the entry goes, and the choice is unavailable, pointing at the home.
+    // Cleared: the entry keeps the choice of none (HS2-R2N33M), and the choice is unavailable, pointing at
+    // the home.
     await dispatcher.uncheck();
     await limits.getByRole('button', { name: 'Apply Limits' }).click();
-    await expect.poll(roles).toBeUndefined();
+    await expect.poll(roles).toEqual([{ target_id: site, roles: [] }]);
     await expect(limits).not.toContainText('no effect');
     await expect(dispatcher).not.toBeChecked();
     await expect(dispatcher).toBeDisabled();
@@ -1225,11 +1231,16 @@ test('HS2-SYZB33 a site Limits point Coordination Sessions at the project home',
 
     // The home's choice is as before.
     await open('Widgets');
-    await expect(limits).toContainText('None checked is Auto: no coordination sessions start here.');
+    await expect(limits).toContainText('Auto: follows placement, both when they help.');
     await expect(dispatcher).toBeEnabled();
-    await dispatcher.check();
+    // HS2-R2N33M: the home is Auto (both); choosing the dispatcher only stores it.
+    await expect(dispatcher).toBeChecked();
+    await integrator.uncheck();
     await limits.getByRole('button', { name: 'Apply Limits' }).click();
-    await expect.poll(roles).toEqual([{ target_id: targets.Widgets, roles: ['dispatcher'] }]);
+    await expect.poll(roles).toEqual([
+      { target_id: site, roles: [] },
+      { target_id: targets.Widgets, roles: ['dispatcher'] },
+    ]);
   } finally {
     await server.stop(page);
   }

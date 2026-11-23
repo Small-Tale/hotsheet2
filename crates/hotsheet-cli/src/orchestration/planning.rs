@@ -564,7 +564,7 @@ impl OrchestrationRuntime {
         let placement_automatic = self
             .policy(owner_id)?
             .policy
-            .is_some_and(|policy| policy.placement.automatic);
+            .is_some_and(|policy| self.placement_on(owner_id, &policy.placement));
         Ok(PlanningView {
             state: planning_state(&facts),
             proposal_id: current,

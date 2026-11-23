@@ -216,6 +216,29 @@ describe('The default goal in the Orchestration toolbar (HS2-YSRT6Y)', () => {
   });
 });
 
+describe('Automatic placement by default in the Orchestration toolbar (HS2-R2N33M)', () => {
+  it('says sessions start automatically and offers Pause while placement runs by default', () => {
+    const byDefault = String(
+      OrchestrationToolbar({ timeline: { ...demoTimeline('running'), automatic_by_default: true }, clock: demoClock }),
+    );
+    expect(byDefault).toContain('Sessions Start Automatically');
+    expect(byDefault).toContain('A plan exists, so Hot Sheet starts sessions for ready work');
+    expect(byDefault).toMatch(/data-action="pause-orchestration"/);
+    expect(byDefault).not.toMatch(/<[^>]*data-action="pause-orchestration"[^>]*disabled/);
+    // Started by a person, paused, or only proposed: no banner.
+    expect(String(OrchestrationToolbar({ timeline: demoTimeline('running'), clock: demoClock }))).not.toContain(
+      'Sessions Start Automatically',
+    );
+    for (const phase of ['paused', 'proposed', 'no_plan'] as const) {
+      expect(
+        String(
+          OrchestrationToolbar({ timeline: { ...demoTimeline(phase), automatic_by_default: true }, clock: demoClock }),
+        ),
+      ).not.toContain('Sessions Start Automatically');
+    }
+  });
+});
+
 describe('OrchestrationInspector (HS2-J89JC7)', () => {
   const inspector = (step: string, extra = {}) =>
     String(OrchestrationInspector({ item: item(step), timeline: demoTimeline('running'), clock: demoClock, ...extra }));
