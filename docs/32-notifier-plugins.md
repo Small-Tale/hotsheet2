@@ -546,6 +546,10 @@ time zone can be resolved (HS2-Z28AD3):
 | A time of day with an IANA zone                       | `resets 3pm (America/Los_Angeles)`            |
 | A time of day in the host's discoverable local zone   | `try again at 3:10 PM`                        |
 
+A time of day must end its clause: the message or sentence ends, or a new line or a separator
+(`·`, `∙`, `•`, `|`) starts the next part, so `resets 3pm (UTC) or later` is not a stated reset.
+Zone abbreviations such as `PST` and offsets such as `UTC+2` are not resolved.
+
 An unknown zone, an undiscoverable local zone, or a daylight-saving gap or repeated local
 hour yields `resets_at_ms: null`: the reset is unknown, never guessed. A
 reset more than 5 minutes before the halt or more than 8 days after it is also unknown. The

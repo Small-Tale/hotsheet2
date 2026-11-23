@@ -228,7 +228,11 @@ fn clock_prefix(text: &str, local_zone: Option<&TimeZone>) -> Option<(Time, Time
     } else {
         (None, rest)
     };
-    if !trailing.trim_start().is_empty() && !trailing.trim_start().starts_with(['.', '!', '?']) {
+    // The time must end its clause: the message ends, a sentence ends, or a new line or a
+    // separator (`·`, `∙`, `•`, `|`) starts the next part. "resets 3pm (UTC) or later" is not a
+    // stated reset.
+    let tail = trailing.trim_start_matches([' ', '\t']);
+    if !tail.is_empty() && !tail.starts_with(['.', '!', '?', '\n', '\r', '·', '∙', '•', '|']) {
         return None;
     }
     let zone = match zone {
@@ -426,5 +430,78 @@ mod tests {
             reset_in_zone("resets 2:30am (America/Los_Angeles)", before_fold, None),
             Some(210)
         );
+    }
+
+    /// HS2-Z28AD3: many phrasings of a stated clock reset, halted at 2026-11-07T01:00:00Z
+    /// with the host in Asia/Manila (UTC+8, 09:00 local). Minutes until the reset, or unknown.
+    #[test]
+    fn hs2_z28ad3_reset_clock_phrasings() {
+        let local = Some("Asia/Manila");
+        let cases: &[(&str, Option<i64>)] = &[
+            // Claude named-zone forms.
+            (
+                "5-hour limit reached ∙ resets 3pm (America/Los_Angeles)",
+                Some(22 * 60),
+            ),
+            (
+                "Your limit will reset at 3pm (America/Los_Angeles).",
+                Some(22 * 60),
+            ),
+            (
+                "Limit reached · resets 3 pm (America/Los_Angeles)",
+                Some(22 * 60),
+            ),
+            ("resets 3PM (AMERICA/LOS_ANGELES)", Some(22 * 60)),
+            ("resets 3pm America/Los_Angeles", Some(22 * 60)),
+            ("resets 3:30pm (Asia/Kolkata)", Some(9 * 60)),
+            ("resets 9am (Europe/London)", Some(8 * 60)),
+            ("resets 11:59pm (UTC)", Some(22 * 60 + 59)),
+            ("resets 12am (UTC)", Some(23 * 60)),
+            ("resets 12pm GMT", Some(11 * 60)),
+            ("resets 15:10 UTC", Some(14 * 60 + 10)),
+            ("resets at 01:00 (UTC)", Some(0)),
+            // A clock just before the halt is skew; earlier than that rolls to tomorrow.
+            ("resets 00:57 (UTC)", Some(-3)),
+            ("resets 00:50 (UTC)", Some(23 * 60 + 50)),
+            // The next part of the message may follow on a new line or after a separator.
+            (
+                "resets 3pm (America/Los_Angeles)\n/upgrade to keep working",
+                Some(22 * 60),
+            ),
+            ("resets 3pm (America/Los_Angeles) · /upgrade", Some(22 * 60)),
+            ("resets 3pm (UTC) | switch models", Some(14 * 60)),
+            ("resets 3pm (UTC)!", Some(14 * 60)),
+            // Codex and other host-local forms.
+            (
+                "You've hit your usage limit. Try again at 3:10 PM.",
+                Some(6 * 60 + 10),
+            ),
+            ("try again at 3:10 pm", Some(6 * 60 + 10)),
+            ("try again at 15:10.", Some(6 * 60 + 10)),
+            ("resets 8am", Some(23 * 60)),
+            // Unknown rather than guessed.
+            ("resets 3pm PST", None),
+            ("resets 3pm (UTC+2)", None),
+            ("resets 3pm (UTC) or later", None),
+            ("resets 3pm, maybe", None),
+            ("resets 3", None),
+            ("resets 13pm (UTC)", None),
+            ("resets 0am (UTC)", None),
+            ("resets 3:5pm (UTC)", None),
+            ("resets 24:00 (UTC)", None),
+            ("resets 15:60 (UTC)", None),
+            ("resets 123pm (UTC)", None),
+            ("resets on Nov 8 at 3pm (UTC)", None),
+            ("presets 3pm (UTC)", None),
+            ("the counter resets daily", None),
+            ("try again at noon", None),
+        ];
+        for (message, expected) in cases {
+            assert_eq!(
+                reset_in_zone(message, halted(), local),
+                *expected,
+                "{message:?}"
+            );
+        }
     }
 }
