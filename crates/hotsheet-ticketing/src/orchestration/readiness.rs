@@ -399,6 +399,16 @@ pub enum ReadinessError {
     /// since the caller read it, or a machine-local definition differs from the
     /// checked-in one). Refused, never guessed.
     PlanConflict,
+    /// HS2-190RDX: no plan update with that id is known here.
+    UpdateNotFound,
+    /// HS2-190RDX: the plan update is not drafting (applied, failed or cancelled).
+    UpdateNotOpen,
+    /// HS2-190RDX: the draft and a change made to the live plan meanwhile disagree.
+    UpdateConflict,
+    /// HS2-190RDX: the merged plan would not be a valid plan.
+    UpdateInvalid,
+    /// HS2-190RDX: the planner is still at work on another proposal.
+    PlannerBusy,
 }
 
 impl ReadinessError {
@@ -416,6 +426,11 @@ impl ReadinessError {
             Self::NoGoals => "plan_no_goals",
             Self::GoalNotOpen => "plan_goal_not_open",
             Self::PlanConflict => "plan_conflict",
+            Self::UpdateNotFound => "plan_update_not_found",
+            Self::UpdateNotOpen => "plan_update_not_open",
+            Self::UpdateConflict => "plan_update_conflict",
+            Self::UpdateInvalid => "plan_update_invalid",
+            Self::PlannerBusy => "plan_update_planner_busy",
         }
     }
 }
@@ -845,6 +860,9 @@ pub struct PlanRegistry {
     storage: Storage,
     root_of: RootOf,
     bind_sites: Option<BindSites>,
+    /// HS2-190RDX: the home whose plan-update draft this registry reads and writes in
+    /// place of the checked-in plan. `None` for the live plan.
+    draft_home: Option<std::path::PathBuf>,
 }
 
 impl PlanRegistry {
@@ -857,7 +875,106 @@ impl PlanRegistry {
             storage: Storage::machine_named(home, "orchestration-plan.json"),
             root_of: std::sync::Arc::new(root_of),
             bind_sites: None,
+            draft_home: None,
         }
+    }
+
+    /// HS2-190RDX: the same plan as seen by an open plan update of `owner_checkout_id`:
+    /// its definitions are the update's machine-local draft, and its ticket reads are
+    /// the draft's own, so nothing it writes touches the live plan, its reads or levels.
+    pub fn for_update(
+        &self,
+        home: &Path,
+        owner_checkout_id: &str,
+    ) -> Result<Self, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        Ok(Self {
+            storage: super::plan_update::PlanUpdateStore::observed_storage(home, owner_checkout_id),
+            root_of: self.root_of.clone(),
+            bind_sites: self.bind_sites.clone(),
+            draft_home: Some(home.into()),
+        })
+    }
+
+    /// HS2-190RDX: the owner's live definitions as checked in (shared connection ids),
+    /// the ones this machine kept before the plan was checked in included, with the
+    /// checked-in revision. The base an update starts from.
+    pub fn checked_in_steps(
+        &self,
+        owner_checkout_id: &str,
+    ) -> Result<(Vec<SharedStep>, Option<String>), OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        let shared = self.shared(owner_checkout_id)?.read()?;
+        let file = self.read_file()?;
+        let checked_in: &[SharedStep] = shared.as_ref().map_or(&[], |document| &document.steps);
+        let steps = merge_steps(checked_in, &legacy(&file, owner_checkout_id))
+            .map_err(|_| OrchestrationError::Readiness(ReadinessError::PlanConflict))?;
+        Ok((steps, shared.map(|document| document.revision)))
+    }
+
+    /// HS2-190RDX: swap the live plan to an update's draft in one write of the
+    /// checked-in plan, under its lock: the three-way merge of `base` (the live steps
+    /// when the update opened), the live steps now and `draft` ([`merge_update`]). A
+    /// refused merge writes nothing. `observed` are the draft's ticket reads; those the
+    /// new plan names are kept here, so new steps start from what the planner read.
+    pub fn apply_update(
+        &self,
+        owner_checkout_id: &str,
+        base: &[SharedStep],
+        draft: &[SharedStep],
+        observed: Vec<TicketRecord>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Result<(PlanSwap, Option<String>), MergeRefusal>, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        let sites = self.sites(owner_checkout_id)?;
+        let shared = self.shared(owner_checkout_id)?;
+        let _shared_lock = shared.lock()?;
+        let _lock = self.storage.lock()?;
+        let mut file = self.read_file()?;
+        let (_, current) = self.migrate_locked(owner_checkout_id, &shared, &mut file, false, tx)?;
+        let live: &[SharedStep] = current.as_ref().map_or(&[], |document| &document.steps);
+        let (steps, swap) = match merge_update(base, live, draft) {
+            Ok(merged) => merged,
+            Err(refusal) => return Ok(Err(refusal)),
+        };
+        let definitions: Vec<PlanStep> = steps
+            .iter()
+            .map(|step| localized(step.step(owner_checkout_id), &sites))
+            .collect();
+        for step in &definitions {
+            if validate_step(step).is_err() {
+                return Ok(Err(MergeRefusal {
+                    reason: super::plan_update::plan_update_reason::INVALID,
+                    conflicts: vec![step.step_id.clone()],
+                }));
+            }
+        }
+        // As in a definition (HS2-G052RV): the reads first, then the steps.
+        let mut seen = false;
+        for record in observed {
+            if record.owner_checkout_id != owner_checkout_id {
+                continue;
+            }
+            let update = TicketUpdate {
+                observed: record.facts.observed,
+                unreachable: Some(record.facts.unreachable),
+            };
+            seen |= apply_observation(
+                &mut file,
+                owner_checkout_id,
+                &definitions,
+                &record.target,
+                update,
+            );
+        }
+        if seen {
+            self.write_file(&file)?;
+        }
+        let document = shared.write_locked(current.as_ref(), steps, tx)?;
+        if prune(&mut file, owner_checkout_id, &definitions) {
+            self.write_file(&file)?;
+        }
+        Ok(Ok((swap, document.map(|document| document.revision))))
     }
 
     /// HS2-EPRWB6: join each site's sources to its home's with `bind`, which receives
@@ -873,6 +990,9 @@ impl PlanRegistry {
     }
 
     fn shared(&self, owner_checkout_id: &str) -> Result<SharedPlanStore, OrchestrationError> {
+        if let Some(home) = &self.draft_home {
+            return Ok(SharedPlanStore::draft(home, owner_checkout_id));
+        }
         Ok(SharedPlanStore::new(&(self.root_of)(owner_checkout_id)?))
     }
 
@@ -1029,7 +1149,8 @@ impl PlanRegistry {
     /// HS2-EPRWB6: with the sources joined when the registry was given a binding.
     pub fn sites(&self, owner_checkout_id: &str) -> Result<ProjectSites, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
-        let sites = ManifestStore::new(self.shared(owner_checkout_id)?.storage.anchor()).sites()?;
+        // HS2-190RDX: the manifest is the checkout's, also for an update's draft.
+        let sites = ManifestStore::new(&(self.root_of)(owner_checkout_id)?).sites()?;
         Ok(match &self.bind_sites {
             Some(bind) if !sites.is_empty() => bind(owner_checkout_id, sites),
             _ => sites,

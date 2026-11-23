@@ -113,6 +113,33 @@ describe('Propose Plan through the planning session (HS2-HCW7MD seam, HS2-J89JC7
     await expect(planner.propose({ ...project, id: 'other' })).rejects.toThrow(/Choose an AI tool/);
   });
 
+  it('updates the plan beside the running one, cancels it, and explains refusals (HS2-190RDX)', async () => {
+    const update = vi.fn();
+    const cancel = vi.fn();
+    const planner = createServerPlanner({
+      choice: (current) => (current.id === project.id ? { tool: 'claude' } : undefined),
+      client: () => ({ updateOrchestrationPlan: update, cancelOrchestrationPlanUpdate: cancel }) as never,
+      personId: () => 'person-1',
+    });
+    update.mockResolvedValueOnce({ outcome: 'started', state: 'drafting' });
+    expect(await planner.update(project)).toMatch(/Work continues on the current plan/);
+    expect(update).toHaveBeenCalledWith(
+      project.id,
+      expect.objectContaining({ tool: 'claude', operation_id: expect.stringMatching(/^update-/) }),
+      'person-1',
+    );
+    update.mockResolvedValueOnce({ outcome: 'existing', state: 'drafting' });
+    expect(await planner.update(project)).toMatch(/already being updated/);
+    update.mockRejectedValueOnce(new ApiHttpError('busy', 409, 'plan_update_planner_busy'));
+    await expect(planner.update(project)).rejects.toThrow(/still working/);
+    await expect(planner.update({ ...project, id: 'other' })).rejects.toThrow(/Choose an AI tool/);
+    cancel.mockResolvedValueOnce({ state: 'cancelled' });
+    expect(await planner.cancelUpdate(project)).toMatch(/current plan is unchanged/);
+    expect(cancel).toHaveBeenCalledWith(project.id, 'person-1');
+    cancel.mockRejectedValueOnce(new ApiHttpError('gone', 409, 'plan_update_not_open'));
+    await expect(planner.cancelUpdate(project)).rejects.toThrow(/No plan update/);
+  });
+
   it('names this browser’s person with one stable, bounded id', () => {
     const values = new Map<string, string>();
     const storage = {
@@ -151,6 +178,13 @@ describe('where planning stands (HS2-5RYXNN)', () => {
     expect(planningPhase({ state: 'planning', replannable: true, session: {} })).toBe('replannable');
     expect(planningPhase({ state: 'planning', replannable: false, session: {} })).toBe('planning');
     expect(planningPhase({ state: 'planning', replannable: true, session: { tool_ready: false } })).toBe('waiting');
+    // HS2-190RDX: a drafting plan update reads as updating, after a waiting tool.
+    expect(planningPhase({ state: 'planning', replannable: true, update: { state: 'drafting' } })).toBe('updating');
+    expect(planningPhase({ state: 'planning', session: { tool_ready: false }, update: { state: 'drafting' } })).toBe(
+      'waiting',
+    );
+    expect(planningPhase({ state: 'planning', update: { state: 'applied' } })).toBe('planning');
+    expect(planningPhase({ state: 'ended', update: { state: 'drafting' } })).toBe('ended');
     expect(planningPhase({ state: 'ended', replannable: true })).toBe('ended');
   });
 });

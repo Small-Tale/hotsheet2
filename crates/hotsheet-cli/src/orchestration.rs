@@ -17,6 +17,7 @@ mod joining;
 mod line_push;
 mod observer;
 mod permissions;
+mod plan_update;
 mod planning;
 mod policy;
 mod projects;
@@ -78,6 +79,9 @@ pub use permissions::{
     PermissionSignalWaiter, PromptRequest, RememberPermission, Remembered, RetiredRemoved,
     RuleView, SignalWaiter, permission_signal_directory, permission_signal_token,
     permission_summary, signal_token,
+};
+pub use plan_update::{
+    PlanQuery, PlanUpdateRef, PlanUpdateView, STEP_REPLANNED_RUN, UpdateOutcome, UpdatePlan,
 };
 pub use planning::{
     GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView, ProposeOutcome, ProposePlan,
@@ -614,7 +618,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
         // HS2-42TARA: an unknown step is absent; work that is not ready is a state
         // conflict a person can resolve.
         OrchestrationError::Readiness(
-            hotsheet_ticketing::orchestration::ReadinessError::StepNotFound,
+            hotsheet_ticketing::orchestration::ReadinessError::StepNotFound
+            | hotsheet_ticketing::orchestration::ReadinessError::UpdateNotFound,
         ) => 404,
         OrchestrationError::Readiness(_) => 409,
         OrchestrationError::Gate(error) => {

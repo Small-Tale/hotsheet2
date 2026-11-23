@@ -4,7 +4,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { Pause, Play, Sparkles } from 'lucide';
+import { Pause, Play, RefreshCw, Sparkles, X } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
@@ -14,11 +14,14 @@ import type { OrchestrationProposeAvailability } from './orchestration-timeline-
 export interface OrchestrationToolbarProps {
   timeline: OrchestrationTimeline;
   propose?: OrchestrationProposeAvailability;
+  /** HS2-190RDX: whether Update Plan can be pressed, and why not. */
+  update?: OrchestrationProposeAvailability;
   /** A kick-off change is on its way to the server. */
   busy?: boolean;
   /**
    * HS2-HCW7MD: `planning` while the planning session works on the plan; HS2-5RYXNN: `waiting` while it
-   * waits on a first-run question in its terminal tab; HS2-FDS95D: `replannable` once it finished its turn.
+   * waits on a first-run question in its terminal tab; HS2-FDS95D: `replannable` once it finished its turn;
+   * HS2-190RDX: `updating` while a plan update drafts beside the running plan.
    */
   planning?: string;
   clock?: ClockFormat;
@@ -30,23 +33,56 @@ const PLANNING_STATUS: Record<string, string> = {
   // HS2-FDS95D: it finished its turn; Propose Plan gives it a new proposal.
   replannable: ' · Planning',
   waiting: ' · Planner waiting in its terminal',
+  // HS2-190RDX: the current plan keeps running while the new one is drafted.
+  updating: ' · Updating Plan',
 };
 
 /**
  * HS2-J89JC7: the Orchestration view's page header. It says where orchestration stands and holds the
  * one action that changes it: Propose Plan with no plan, Start Orchestration for a dry-run plan (it
  * turns automatic placement on through the policy), and Pause while running. A proposed plan is
- * labeled as the dry run it is.
+ * labeled as the dry run it is. HS2-190RDX: once there is a plan, Update Plan re-plans beside it while its
+ * work keeps running (no pause), and Cancel Plan Update replaces it while an update drafts.
  */
 export function OrchestrationToolbar({
   timeline,
   propose = { available: false },
+  update = { available: false },
   busy = false,
   planning,
   clock = clockTime,
 }: OrchestrationToolbarProps) {
   const status = `${timelineStatus(timeline, clock)}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
   const blocked = startBlockedReason(timeline);
+  const updating = planning === 'updating';
+  const replan =
+    timeline.phase === 'proposed' || timeline.phase === 'running' || timeline.phase === 'paused' ? (
+      updating ? (
+        <Button
+          emphasis="secondary"
+          shape="pill"
+          action={ORCHESTRATION_ACTIONS.cancelOrchestrationPlanUpdate.value}
+          disabled={busy}
+          title="Stop updating the plan; the current plan stays as it is"
+          icon={<LucideIcon size="s" icon={X} name="x" />}
+        >
+          Cancel Plan Update
+        </Button>
+      ) : (
+        <Button
+          emphasis="secondary"
+          shape="pill"
+          action={ORCHESTRATION_ACTIONS.updateOrchestrationPlan.value}
+          disabled={busy || !update.available}
+          title={
+            update.available ? 'Plan again from the goal tickets while the current plan keeps running' : update.reason
+          }
+          icon={<LucideIcon size="s" icon={RefreshCw} name="refresh-cw" />}
+        >
+          Update Plan
+        </Button>
+      )
+    ) : undefined;
   const action = (() => {
     switch (timeline.phase) {
       case 'no_projects':
@@ -114,7 +150,12 @@ export function OrchestrationToolbar({
         dividerSides=""
         responsive="wrap"
         leading={<ToolbarText text={status} size="default" headingLevel={2} />}
-        trailing={action}
+        trailing={
+          <>
+            {replan}
+            {action}
+          </>
+        }
       />
     </List>
   );

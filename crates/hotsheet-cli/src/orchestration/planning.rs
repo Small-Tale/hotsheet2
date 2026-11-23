@@ -44,6 +44,10 @@ pub struct ProposePlan {
     /// twice. A fresh one is minted when omitted.
     #[serde(default)]
     pub operation_id: Option<String>,
+    /// HS2-190RDX: the press is an Update Plan, whose proposal id is the plan update
+    /// the planner drafts. Never read from a request.
+    #[serde(skip)]
+    pub(super) plan_update: bool,
 }
 
 /// An open goal ticket of the orchestration project, with the plan steps it has.
@@ -105,6 +109,10 @@ pub struct PlanningView {
     /// proposal rather than answering with it.
     #[serde(default)]
     pub replannable: bool,
+    /// HS2-190RDX: the latest plan update: drafting beside the live plan, or how the
+    /// last one ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<super::PlanUpdateView>,
 }
 
 fn count(value: usize) -> u32 {
@@ -114,7 +122,7 @@ fn count(value: usize) -> u32 {
 impl OrchestrationRuntime {
     /// The open goal tickets of the orchestration project, by canonical id, with the
     /// plan steps each has. `only` names one goal, which must be open.
-    fn plan_goals(
+    pub(super) fn plan_goals(
         &self,
         owner: &Checkout,
         only: Option<&OrchestrationTicket>,
@@ -194,7 +202,7 @@ impl OrchestrationRuntime {
     /// Every planner this machine hosts for the project, newest decisions computed
     /// from what the terminal host says now. A planner whose terminal is gone is
     /// recorded as ended on the way.
-    fn planners(
+    pub(super) fn planners(
         &self,
         owner: &Checkout,
         tx: &mut Transaction<'_>,
@@ -207,7 +215,7 @@ impl OrchestrationRuntime {
             .collect())
     }
 
-    fn planner_facts(planners: &[HostedSessionView]) -> Vec<PlannerFacts> {
+    pub(super) fn planner_facts(planners: &[HostedSessionView]) -> Vec<PlannerFacts> {
         planners
             .iter()
             .map(|view| PlannerFacts {
@@ -287,7 +295,7 @@ impl OrchestrationRuntime {
         outcome
     }
 
-    fn plan_propose_inner(
+    pub(super) fn plan_propose_inner(
         &self,
         owner: &Checkout,
         request: &ProposePlan,
@@ -472,6 +480,7 @@ impl OrchestrationRuntime {
             steps: count(self.plan().records(&owner.id)?.len()),
             placement_automatic,
             replannable,
+            update: self.plan_update_status(&owner, tx)?,
         })
     }
 
@@ -493,7 +502,13 @@ impl OrchestrationRuntime {
             .as_ref()
             .and_then(|_| goals.first())
             .map(|goal| goal.slug.as_str());
-        let text = planner_prompt_text(&owner.id, &view.worker_id, proposal, goal);
+        let text = planner_prompt_text(
+            &owner.id,
+            &view.worker_id,
+            proposal,
+            goal,
+            request.plan_update,
+        );
         let attempt = self
             .sessions
             .join_role(owner, &view.session.session_id, &text);

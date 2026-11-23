@@ -9,6 +9,10 @@ pub(super) struct ReadinessArgs {
     /// Registered owning checkout id.
     #[arg(long, global = true)]
     pub(super) project: Option<String>,
+    /// HS2-190RDX: act on this plan update's draft instead of the live plan
+    /// (define, show, plan and remove only).
+    #[arg(long, global = true)]
+    pub(super) plan_update: Option<String>,
     #[command(subcommand)]
     command: ReadinessCmd,
 }
@@ -143,7 +147,18 @@ pub(super) fn route(
     arguments: ReadinessArgs,
 ) -> Result<(&'static str, String, Value)> {
     let base = format!("/checkouts/{project}/orchestration/readiness");
-    Ok(match arguments.command {
+    let drafts = matches!(
+        arguments.command,
+        ReadinessCmd::Define { .. }
+            | ReadinessCmd::Show { .. }
+            | ReadinessCmd::Plan
+            | ReadinessCmd::Remove { .. }
+    );
+    if arguments.plan_update.is_some() && !drafts {
+        bail!("--plan-update applies to define, show, plan and remove only");
+    }
+    let plan_update = arguments.plan_update;
+    let (method, path, mut body) = match arguments.command {
         ReadinessCmd::Define {
             ticket,
             source,
@@ -225,7 +240,11 @@ pub(super) fn route(
             format!("{base}/reopen"),
             json!({"step_id": step_id, "reason": reason}),
         ),
-    })
+    };
+    if let (Some(update), Some(object)) = (plan_update, body.as_object_mut()) {
+        object.insert("plan_update".into(), Value::String(update));
+    }
+    Ok((method, path, body))
 }
 
 #[cfg(test)]
@@ -258,10 +277,54 @@ mod tests {
             "owner",
             ReadinessArgs {
                 project: None,
+                plan_update: None,
                 command: parsed.command,
             },
         )?;
         Ok(body)
+    }
+
+    /// HS2-190RDX: `--plan-update` sends the draft's id with define, show, plan and
+    /// remove, and is refused for anything else.
+    #[test]
+    fn hs2_190rdx_plan_update_names_the_draft() {
+        #[derive(Parser)]
+        struct Full {
+            #[command(flatten)]
+            arguments: ReadinessArgs,
+        }
+        let route_of = |line: &[&str]| {
+            let parsed =
+                Full::try_parse_from(std::iter::once("readiness").chain(line.iter().copied()))
+                    .map_err(|error| anyhow::anyhow!("{error}"))?;
+            route("owner", parsed.arguments)
+        };
+        for line in [
+            &["plan", "--plan-update", "u-1"][..],
+            &["remove", "S1", "--plan-update", "u-1"],
+            &["show", "S1", "--plan-update", "u-1"],
+            &[
+                "define",
+                "--ticket",
+                "OWN-1",
+                "--target",
+                "t1",
+                "--connection",
+                "git",
+                "--id",
+                "TGT-1",
+                "--plan-update",
+                "u-1",
+            ],
+        ] {
+            assert_eq!(
+                route_of(line).unwrap().2["plan_update"],
+                json!("u-1"),
+                "{line:?}"
+            );
+        }
+        assert_eq!(route_of(&["plan"]).unwrap().2, json!({}));
+        assert!(route_of(&["ready", "--plan-update", "u-1"]).is_err());
     }
 
     /// HS2-ZY4Z4G: `--require` builds the step's requirements; a malformed one is

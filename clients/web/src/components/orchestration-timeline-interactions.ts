@@ -22,6 +22,9 @@ export interface OrchestrationTimelineBindings {
   readonly start: () => void;
   readonly pause: () => void;
   readonly propose: () => void;
+  /** HS2-190RDX: Update Plan and Cancel Plan Update. */
+  readonly updatePlan: () => void;
+  readonly cancelPlanUpdate: () => void;
   readonly chooseProjects: () => void;
   /** `pause`, `resume`, `handoff`, `correct` (with the state to record) or `cancel`. */
   readonly runControl: (control: string, state?: string) => void;
@@ -151,6 +154,16 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
   lifetime.add(
     delegate(root, 'click', ORCHESTRATION_ACTIONS.proposeOrchestrationPlan.selector, () => {
       bindings.propose();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.updateOrchestrationPlan.selector, () => {
+      bindings.updatePlan();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.cancelOrchestrationPlanUpdate.selector, () => {
+      bindings.cancelPlanUpdate();
     }),
   );
   lifetime.add(

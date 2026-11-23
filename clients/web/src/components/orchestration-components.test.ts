@@ -130,6 +130,49 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
   });
 });
 
+describe('Update Plan in the Orchestration toolbar (HS2-190RDX)', () => {
+  const toolbar = (phase: Parameters<typeof demoTimeline>[0], extra = {}) =>
+    String(OrchestrationToolbar({ timeline: demoTimeline(phase), clock: demoClock, ...extra }));
+  const enabled = (markup: string, action: string) =>
+    new RegExp(`<[^>]*data-action="${action}"[^>]*>`).exec(markup)?.[0].includes('disabled') === false;
+
+  it('offers Update Plan beside the kick-off action once there is a plan, with no pause needed', () => {
+    for (const phase of ['proposed', 'running', 'paused'] as const) {
+      const markup = toolbar(phase, { update: { available: true } });
+      expect(markup).toContain('Update Plan');
+      expect(enabled(markup, 'update-orchestration-plan')).toBe(true);
+      // The kick-off action stays: Pause is still offered while running, never required.
+      expect(markup).toContain(phase === 'running' ? 'pause-orchestration' : 'start-orchestration');
+    }
+    for (const phase of ['no_plan', 'no_projects'] as const) {
+      expect(toolbar(phase, { update: { available: true } })).not.toContain('update-orchestration-plan');
+    }
+  });
+
+  it('is disabled with its reason, or while a change is on its way', () => {
+    const reason = 'Choose an AI tool for this project in Settings first';
+    const unavailable = toolbar('running', { update: { available: false, reason } });
+    expect(enabled(unavailable, 'update-orchestration-plan')).toBe(false);
+    expect(unavailable).toContain(reason);
+    expect(enabled(toolbar('running', { update: { available: true }, busy: true }), 'update-orchestration-plan')).toBe(
+      false,
+    );
+    // Without an availability it is disabled, never silently enabled.
+    expect(enabled(toolbar('running'), 'update-orchestration-plan')).toBe(false);
+  });
+
+  it('shows the update in progress and offers to cancel it while the plan keeps running', () => {
+    const markup = toolbar('running', { update: { available: true }, planning: 'updating' });
+    expect(markup).toContain('· Updating Plan');
+    expect(markup).not.toContain('update-orchestration-plan"');
+    expect(enabled(markup, 'cancel-orchestration-plan-update')).toBe(true);
+    expect(markup).toContain('pause-orchestration');
+    expect(enabled(toolbar('running', { planning: 'updating', busy: true }), 'cancel-orchestration-plan-update')).toBe(
+      false,
+    );
+  });
+});
+
 describe('OrchestrationInspector (HS2-J89JC7)', () => {
   const inspector = (step: string, extra = {}) =>
     String(OrchestrationInspector({ item: item(step), timeline: demoTimeline('running'), clock: demoClock, ...extra }));
@@ -447,6 +490,8 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       start: () => calls.push('start'),
       pause: () => calls.push('pause'),
       propose: () => calls.push('propose'),
+      updatePlan: () => calls.push('update plan'),
+      cancelPlanUpdate: () => calls.push('cancel update'),
       chooseProjects: () => calls.push('choose'),
       runControl: (control: string, state?: string) => calls.push(`run ${control} ${state ?? ''}`),
       showRequest: (id: string) => calls.push(`request ${id}`),
@@ -478,6 +523,8 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'start-orchestration', target({}));
     run('click', 'pause-orchestration', target({}));
     run('click', 'propose-orchestration-plan', target({}));
+    run('click', 'update-orchestration-plan', target({}));
+    run('click', 'cancel-orchestration-plan-update', target({}));
     run('click', 'choose-orchestration-projects', target({}));
     run('click', 'orchestration-run-control', target({ control: 'correct', runState: 'failed' }));
     run('click', 'show-orchestration-request', target({ requestId: 'request-6' }));
@@ -502,6 +549,8 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'start',
       'pause',
       'propose',
+      'update plan',
+      'cancel update',
       'choose',
       'run correct failed',
       'request request-6',
@@ -568,6 +617,8 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       start: noop,
       pause: noop,
       propose: noop,
+      updatePlan: noop,
+      cancelPlanUpdate: noop,
       chooseProjects: noop,
       runControl: noop,
       showRequest: noop,

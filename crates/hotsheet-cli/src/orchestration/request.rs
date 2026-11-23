@@ -888,9 +888,9 @@ impl OrchestrationRuntime {
                     }
                     "show" => {
                         let step: super::PlanStepRef = decode(body)?;
-                        value(self.readiness(owner, &step.step_id, tx)?)
+                        value(self.readiness_of(owner, &step, tx)?)
                     }
-                    "plan" => value(self.readiness_plan(owner, tx)?),
+                    "plan" => value(self.readiness_plan_of(owner, &decode(body)?, tx)?),
                     // HS2-F1BKQ0: the plan's state where every read would fail.
                     "health" => value(self.readiness_health(owner)?),
                     "ready" => value(self.ready_work(owner, tx)?),
@@ -924,6 +924,16 @@ impl OrchestrationRuntime {
                     "show" => {
                         decode::<super::PlanRequest>(body)?;
                         value(self.plan_status(owner, tx)?)
+                    }
+                    // HS2-190RDX: Update Plan drafts beside the live plan.
+                    "update" => {
+                        value(self.plan_update(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "update_finish" => {
+                        value(self.plan_update_finish(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "update_cancel" => {
+                        value(self.plan_update_cancel(owner, &decode(body)?, actor.as_ref(), tx)?)
                     }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }

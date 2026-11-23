@@ -51,12 +51,14 @@ pub(super) fn held_by<'a>(step: &PlanStep, runs: &'a [Run]) -> Option<&'a Run> {
 }
 
 /// HS2-YFPZFP: whether the run's work was withdrawn: a person cancelled it, or its
-/// plan step was removed. A session working such a run is told and wound down.
+/// plan step was removed (or, HS2-190RDX, changed by a plan update). A session working such a run is told and wound down.
 pub(super) fn withdrawn(run: &Run) -> bool {
     person_cancelled(run)
         || (run.state == RunState::Cancelled
-            && run.history.last().and_then(|entry| entry.reason.as_deref())
-                == Some(super::readiness::STEP_REMOVED_RUN))
+            && matches!(
+                run.history.last().and_then(|entry| entry.reason.as_deref()),
+                Some(super::readiness::STEP_REMOVED_RUN | super::plan_update::STEP_REPLANNED_RUN)
+            ))
 }
 
 impl OrchestrationRuntime {

@@ -81,6 +81,9 @@ pub struct DefinePlanStep {
     /// step as it is now.
     #[serde(default)]
     pub expected_revision: Option<u32>,
+    /// HS2-190RDX: define the step in this plan update's draft, not the live plan.
+    #[serde(default)]
+    pub plan_update: Option<String>,
 }
 
 /// HS2-YDY5HJ: move this machine's pre-sharing plan definitions into the checked-in
@@ -97,6 +100,9 @@ pub struct MigratePlan {
 #[serde(deny_unknown_fields)]
 pub struct PlanStepRef {
     pub step_id: String,
+    /// HS2-190RDX: the step of this plan update's draft, not of the live plan.
+    #[serde(default)]
+    pub plan_update: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -335,19 +341,20 @@ impl OrchestrationRuntime {
     /// Everything evaluation reads, from this machine's records alone.
     fn plan_facts(
         &self,
+        plan: &PlanRegistry,
         owner_id: &str,
         steps: &[PlanStep],
         now_ms: u64,
     ) -> Result<PlanFacts, OrchestrationError> {
         // HS2-SHH7WW: a ticket reached through several sites of one project has the
         // facts of every site: reads, runs and gates are joined by project.
-        let sites = self.plan().sites(owner_id)?;
+        let sites = plan.sites(owner_id)?;
         let mut facts = PlanFacts {
             sites: sites.clone(),
             ..PlanFacts::default()
         };
         let mut stored: BTreeMap<TicketKey, TicketFacts> = BTreeMap::new();
-        for record in self.plan().tickets(owner_id)? {
+        for record in plan.tickets(owner_id)? {
             let key = sites.ticket_key(&record.target);
             let merged = match stored.remove(&key) {
                 Some(known) => known.merge(record.facts),
@@ -456,14 +463,28 @@ impl OrchestrationRuntime {
         owner_id: &str,
         now_ms: u64,
     ) -> Result<Vec<StepView>, OrchestrationError> {
-        let records = self.plan().records(owner_id)?;
+        self.plan_evaluate_in(&self.plan(), true, owner_id, now_ms)
+    }
+
+    /// HS2-190RDX: evaluate `plan`, the live plan or an update's draft. Only the live
+    /// plan arms the lapse timer; a draft's levels are never published.
+    fn plan_evaluate_in(
+        &self,
+        plan: &PlanRegistry,
+        live: bool,
+        owner_id: &str,
+        now_ms: u64,
+    ) -> Result<Vec<StepView>, OrchestrationError> {
+        let records = plan.records(owner_id)?;
         let steps: Vec<PlanStep> = records.iter().map(|record| record.step.clone()).collect();
         if steps.is_empty() {
             return Ok(Vec::new());
         }
         // HS2-J7N3PQ: a level that time alone will change is published when it does.
-        self.arm_lapse_timer(owner_id, now_ms);
-        let facts = self.plan_facts(owner_id, &steps, now_ms)?;
+        if live {
+            self.arm_lapse_timer(owner_id, now_ms);
+        }
+        let facts = self.plan_facts(plan, owner_id, &steps, now_ms)?;
         let answers = evaluate_plan(&steps, &facts);
         // HS2-JSF985: both are empty while the policy does not opt in.
         let (mut standings, mut work) = self.provisional_annotations(owner_id, &answers, &facts)?;
@@ -537,6 +558,24 @@ impl OrchestrationRuntime {
             .ok_or(OrchestrationError::Readiness(ReadinessError::StepNotFound))
     }
 
+    /// HS2-190RDX: one step's readiness, of the live plan or an update's draft.
+    pub fn readiness_of(
+        &self,
+        owner_id: &str,
+        step: &PlanStepRef,
+        tx: &mut Transaction<'_>,
+    ) -> Result<StepView, OrchestrationError> {
+        let Some(update) = &step.plan_update else {
+            return self.readiness(owner_id, &step.step_id, tx);
+        };
+        let plan = self.plan_for(owner_id, Some(update))?;
+        plan.get(owner_id, &step.step_id)?;
+        self.plan_evaluate_in(&plan, false, owner_id, tx.clock.now_ms())?
+            .into_iter()
+            .find(|view| view.readiness.step.step_id == step.step_id)
+            .ok_or(OrchestrationError::Readiness(ReadinessError::StepNotFound))
+    }
+
     fn plan_view(steps: Vec<StepView>) -> PlanView {
         let mut counts = BTreeMap::new();
         let mut cycles: BTreeSet<Vec<String>> = BTreeSet::new();
@@ -561,8 +600,21 @@ impl OrchestrationRuntime {
         owner_id: &str,
         tx: &mut Transaction<'_>,
     ) -> Result<PlanView, OrchestrationError> {
-        let mut view = Self::plan_view(self.plan_evaluate(owner_id, tx.clock.now_ms())?);
-        view.revision = self.plan().revision(owner_id)?;
+        self.readiness_plan_of(owner_id, &super::PlanQuery::default(), tx)
+    }
+
+    /// HS2-190RDX: the plan, or with `plan_update` that update's draft.
+    pub fn readiness_plan_of(
+        &self,
+        owner_id: &str,
+        query: &super::PlanQuery,
+        tx: &mut Transaction<'_>,
+    ) -> Result<PlanView, OrchestrationError> {
+        let plan = self.plan_for(owner_id, query.plan_update.as_deref())?;
+        let live = query.plan_update.is_none();
+        let mut view =
+            Self::plan_view(self.plan_evaluate_in(&plan, live, owner_id, tx.clock.now_ms())?);
+        view.revision = plan.revision(owner_id)?;
         Ok(view)
     }
 
@@ -664,6 +716,9 @@ impl OrchestrationRuntime {
         }
         // HS2-ZY4Z4G: stored in canonical form, so two spellings are one definition.
         let requirements = request.requirements.clone().normalized()?;
+        // HS2-190RDX: an update's draft, or the live plan.
+        let plan = self.plan_for(owner_id, request.plan_update.as_deref())?;
+        let live = request.plan_update.is_none();
         let (_, source_id, source_connection) =
             self.orchestration_store(owner_id, &request.ticket)?;
         let ticket = RunTicket {
@@ -778,7 +833,7 @@ impl OrchestrationRuntime {
                     )
                 })
                 .collect();
-            let (step, changed) = self.plan().define_observed(
+            let (step, changed) = plan.define_observed(
                 owner_id,
                 NewPlanStep {
                     ticket: ticket.clone(),
@@ -818,6 +873,14 @@ impl OrchestrationRuntime {
             self.finish(reference, authorized, &outcome, tx)?;
         }
         let step = outcome?;
+        if !live {
+            // A draft publishes nothing and wakes no one: the live plan is unchanged.
+            return self
+                .plan_evaluate_in(&plan, false, owner_id, tx.clock.now_ms())?
+                .into_iter()
+                .find(|view| view.readiness.step.step_id == step.step_id)
+                .ok_or(OrchestrationError::Readiness(ReadinessError::StepNotFound));
+        }
         let published = self.readiness_publish(owner_id, tx.clock.now_ms());
         // HS2-1JFVCJ: wake a running scheduler only once the step's readiness event is
         // in the run event stream. Woken first, its pass read the new step from the
@@ -850,6 +913,24 @@ impl OrchestrationRuntime {
         // the gate never asks or refuses it on policy grounds (HS2-XHQ1EH); any other
         // error leaves the plan as it was. A target that cannot be told keeps the run
         // `cancel_requested`, as any cancel does, and the removal goes on.
+        if let Some(update) = &request.plan_update {
+            // HS2-190RDX: only the draft changes; the swap withdraws the work.
+            let plan = self.plan_for(owner_id, Some(update))?;
+            let step = plan.remove(owner_id, &request.step_id, tx)?;
+            self.readiness_audit(
+                owner_id,
+                &step.target.target_id,
+                actor,
+                Audited {
+                    action: "readiness_remove",
+                    outcome: AuditOutcome::Changed,
+                    reason: Some("plan_update_draft"),
+                    operation_id: Some(update),
+                },
+                tx,
+            )?;
+            return Ok(step);
+        }
         let planned = self.plan().get(owner_id, &request.step_id)?;
         for run in self.run_list(owner_id, false)?.into_iter().filter(|run| {
             !run.state.is_terminal()
@@ -887,7 +968,7 @@ impl OrchestrationRuntime {
     /// publishes nothing at all, so without it no follower (the scheduling loop
     /// above all) would learn of the removal. Best effort, like every event. A step
     /// id is never reused, so the event's dedupe key names one removal.
-    fn readiness_withdrawn(&self, owner_id: &str, step_id: &str, now_ms: u64) {
+    pub(super) fn readiness_withdrawn(&self, owner_id: &str, step_id: &str, now_ms: u64) {
         let Ok(journal) = RunEventJournal::new(&self.home, owner_id) else {
             return;
         };

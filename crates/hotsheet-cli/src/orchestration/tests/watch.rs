@@ -1284,6 +1284,7 @@ fn hs2_tma4ya_a_planned_ticket_without_a_run_is_followed_and_publishes_its_level
             &m.owner.id,
             &PlanStepRef {
                 step_id: step_id.clone(),
+                plan_update: None,
             },
             Some(&worker()),
             &mut tx,

@@ -2347,6 +2347,26 @@ export class Api {
       method: 'POST',
       body: JSON.stringify({ ...request, actor: { role: 'human', id: actorId } }),
     });
+  /**
+   * HS2-190RDX: Update Plan. Re-plan in the background without pausing: the server opens a draft beside
+   * the live plan and asks the planner to draft it. A second request answers with the drafting update.
+   */
+  updateOrchestrationPlan = (
+    checkout: string,
+    request: { tool: string; model?: string; effort?: string; operation_id: string },
+    actorId: string,
+  ) =>
+    this.parsed(parseOrchestrationRecord, `/checkouts/${encodeURIComponent(checkout)}/orchestration/planning/update`, {
+      method: 'POST',
+      body: JSON.stringify({ ...request, actor: { role: 'human', id: actorId } }),
+    });
+  /** HS2-190RDX: cancel the drafting plan update; the live plan is unchanged. */
+  cancelOrchestrationPlanUpdate = (checkout: string, actorId: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/planning/update_cancel`,
+      { method: 'POST', body: JSON.stringify({ actor: { role: 'human', id: actorId } }) },
+    );
   /** HS2-HCW7MD: where planning stands (`idle`, `planning` or `ended`); starts nothing. */
   orchestrationPlanning = (checkout: string) =>
     this.parsed(

@@ -911,3 +911,63 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
     await server.stop(page);
   }
 });
+
+test('HS2-190RDX Update Plan re-plans while the plan runs, shows the update and cancels it', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await declareSelf(server);
+    await asOrchestrationProject(server);
+    await planAndDispatch(server);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, 'Launch');
+    // No live AI session: Update Plan and Cancel answer as the server does, and `plan show` reports the
+    // drafting update once it was pressed. Every other request reaches the real server.
+    let drafting = false;
+    const pressed: string[] = [];
+    await page.route(/\/orchestration\/planning\/update$/, (route) => {
+      pressed.push('update');
+      drafting = true;
+      return route.fulfill({ json: { update_id: 'update-1', state: 'drafting', outcome: 'started', draft_steps: 2 } });
+    });
+    await page.route(/\/orchestration\/planning\/update_cancel$/, (route) => {
+      pressed.push('cancel');
+      drafting = false;
+      return route.fulfill({ json: { update_id: 'update-1', state: 'cancelled', draft_steps: 0 } });
+    });
+    await page.route(/\/orchestration\/planning\/show$/, (route) =>
+      route.fulfill({
+        json: {
+          state: drafting ? 'planning' : 'idle',
+          goals: [],
+          goal_count: 1,
+          steps: 2,
+          placement_automatic: false,
+          ...(drafting ? { update: { update_id: 'update-1', state: 'drafting', draft_steps: 2 } } : {}),
+        },
+      }),
+    );
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const toolbar = page.locator('[data-orchestration-toolbar="proposed"]');
+    const update = toolbar.getByRole('button', { name: 'Update Plan' });
+    await expect(update).toBeVisible();
+    // The kick-off action stays beside it: re-planning never needs a pause.
+    await expect(toolbar.getByRole('button', { name: 'Start Orchestration' })).toBeVisible();
+    await expect(update).toBeEnabled();
+    await update.click();
+    await expect(toolbar).toContainText('· Updating Plan');
+    const cancel = toolbar.getByRole('button', { name: 'Cancel Plan Update' });
+    await expect(cancel).toBeEnabled();
+    await capture(page, 'updating-1440', 'hs2-190rdx');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(cancel).toBeVisible();
+    await capture(page, 'updating-390', 'hs2-190rdx');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await cancel.click();
+    await expect(toolbar).not.toContainText('Updating Plan');
+    await expect(toolbar.getByRole('button', { name: 'Update Plan' })).toBeVisible();
+    expect(pressed).toEqual(['update', 'cancel']);
+  } finally {
+    await server.stop(page);
+  }
+});

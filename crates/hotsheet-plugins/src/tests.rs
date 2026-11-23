@@ -842,6 +842,10 @@ fn hs2_hcw7md_planner_skill_proposes_a_dry_run_plan_only() {
         // and a re-proposal that changed nothing does not restate the plan.
         "and tool (or that no tool was preferred)",
         "`No change from <earlier proposal id>`",
+        // HS2-190RDX: a plan update drafts beside the live plan and finishes once.
+        "Pass the update id as `plan_update` to every",
+        "`plan_update_finish`",
+        "Never finish an update you did not draft.",
     ] {
         assert!(planner.contains(phrase), "planner missing {phrase}");
     }

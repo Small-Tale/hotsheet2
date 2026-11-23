@@ -482,6 +482,10 @@ mod tests {
             // HS2-HCW7MD: the planner runs on this machine.
             "/checkouts/owner/orchestration/planning/propose",
             "/checkouts/owner/orchestration/planning/show",
+            // HS2-190RDX: Update Plan drafts and swaps on this machine.
+            "/checkouts/owner/orchestration/planning/update",
+            "/checkouts/owner/orchestration/planning/update_finish",
+            "/checkouts/owner/orchestration/planning/update_cancel",
             // HS2-W27N1D: adding binds here and removing unbinds here.
             "/checkouts/owner/orchestration/projects",
             "/checkouts/owner/orchestration/projects/id",

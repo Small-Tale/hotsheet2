@@ -2,8 +2,8 @@
 //! and real git ticket stores. Synthetic tickets, identities and tools only.
 use hotsheet_model::{Status, Ticket};
 use hotsheet_ticketing::orchestration::{
-    AdmissionStore, AuditOutcome, MachineLimits, PlanningState, PolicyBody, ReadinessError,
-    SessionError, SessionFootprint, SessionRole, SetPolicy, TargetAction,
+    AdmissionStore, AuditOutcome, MachineLimits, PlanUpdateState, PlanningState, PolicyBody,
+    ReadinessError, SessionError, SessionFootprint, SessionRole, SetPolicy, TargetAction,
 };
 use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::json;
@@ -129,7 +129,7 @@ fn hs2_hcw7md_a_press_starts_one_planner_in_the_orchestration_project() {
     let worker_id = hotsheet_aitools::session_worker_id("claude", &launch.session_id);
     assert_eq!(
         launch.role_prompt,
-        planner_prompt_text(&owner, &worker_id, &first.proposal_id, None)
+        planner_prompt_text(&owner, &worker_id, &first.proposal_id, None, false)
     );
     for part in [
         "`hotsheet-planner`",
@@ -521,7 +521,7 @@ fn hs2_fds95d_a_press_replans_a_planner_that_finished_its_turn() {
         f.host.pushes().last().cloned(),
         Some((
             terminal.clone(),
-            planner_prompt_text(&owner, &worker, "press-2", None)
+            planner_prompt_text(&owner, &worker, "press-2", None, false)
         ))
     );
     assert_eq!(
@@ -666,4 +666,180 @@ fn hs2_30vkv9_propose_plan_is_admitted_under_the_projects_policy_limits() {
         .unwrap();
     assert_eq!(started.outcome, ProposeOutcome::Started);
     assert_eq!(f.host.launches().len(), 1);
+}
+
+impl Fixture {
+    fn update(&self, tx: &mut Transaction<'_>) -> Result<PlanUpdateView, OrchestrationError> {
+        self.m.runtime.plan_update(
+            &self.m.owner.id,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    }
+    fn update_id(
+        &self,
+        tx: &mut Transaction<'_>,
+    ) -> Option<(String, PlanUpdateState, Option<String>)> {
+        self.status(tx)
+            .update
+            .map(|update| (update.update_id, update.state, update.reason))
+    }
+}
+
+fn readiness_code<T: std::fmt::Debug>(result: Result<T, OrchestrationError>) -> &'static str {
+    match result {
+        Err(error) => error.code(),
+        Ok(value) => panic!("expected a refusal, got {value:?}"),
+    }
+}
+
+/// HS2-190RDX: one plan update at a time. Update Plan starts the planner with a
+/// prompt that names the draft; a second press answers with the drafting update and
+/// launches nothing; the planner's tab ending first fails the update without
+/// touching the plan; cancel forgets the draft and its later writes are refused; a
+/// planner still at work on another proposal cannot take an update.
+#[test]
+fn hs2_190rdx_one_update_at_a_time_cancel_and_a_planner_that_ends_first() {
+    let mut rng = Rng(700);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    let owner = f.m.owner.id.clone();
+    // Nothing to plan: refused before anything opens.
+    assert_eq!(readiness_code(f.update(&mut tx)), "plan_no_goals");
+    assert!(f.status(&mut tx).update.is_none());
+    f.goal("Ship the release");
+
+    let first = f.update(&mut tx).unwrap();
+    assert_eq!(
+        (first.state, first.outcome),
+        (PlanUpdateState::Drafting, Some(UpdateOutcome::Started))
+    );
+    let session = first.session.clone().unwrap();
+    assert_eq!(first.planner.as_deref(), Some(first.update_id.as_str()));
+    assert_eq!(f.host.launches().len(), 1);
+    // The launch prompt names the draft to write and how to finish.
+    let worker_id = session.worker_id.clone();
+    let prompt = planner_prompt_text(&owner, &worker_id, &first.update_id, None, true);
+    assert!(prompt.contains(&format!("--plan-update {}", first.update_id)));
+    assert!(prompt.contains("update-finish"));
+    assert_eq!(
+        f.m.last_audit(),
+        (
+            "plan_update".into(),
+            AuditOutcome::Succeeded,
+            Some("plan_update_started".into())
+        )
+    );
+
+    // A second press, under another id, answers with the drafting one.
+    let second =
+        f.m.runtime
+            .plan_update(
+                &owner,
+                serde_json::from_value(json!({"tool": "codex", "operation_id": "other"})).unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(second.outcome, Some(UpdateOutcome::Existing));
+    assert_eq!(second.update_id, first.update_id);
+    assert_eq!(f.host.launches().len(), 1, "no second planner");
+
+    // Cancel: the draft is forgotten, the plan is unchanged, later writes refused.
+    let cancelled =
+        f.m.runtime
+            .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(cancelled.state, PlanUpdateState::Cancelled);
+    assert_eq!(cancelled.reason.as_deref(), Some("plan_update_cancelled"));
+    assert_eq!(
+        readiness_code(f.m.runtime.readiness_plan_of(
+            &owner,
+            &PlanQuery {
+                plan_update: Some(first.update_id.clone()),
+            },
+            &mut tx,
+        )),
+        "plan_update_not_open"
+    );
+    assert_eq!(
+        readiness_code(f.m.runtime.plan_update_cancel(
+            &owner,
+            &PlanUpdateRef::default(),
+            Some(&worker()),
+            &mut tx,
+        )),
+        "plan_update_not_open"
+    );
+    assert_eq!(
+        readiness_code(f.m.runtime.readiness_plan_of(
+            &owner,
+            &PlanQuery {
+                plan_update: Some("unknown".into()),
+            },
+            &mut tx,
+        )),
+        "plan_update_not_found"
+    );
+
+    // The open planner finished its turn: a new update replans it, not a new one.
+    let terminal = session.session.session_id.clone();
+    f.host.set_busy(&terminal, false);
+    let third = f.update(&mut tx).unwrap();
+    assert_eq!(third.outcome, Some(UpdateOutcome::Started));
+    assert_ne!(third.update_id, first.update_id);
+    assert_eq!(f.host.launches().len(), 1);
+    assert_eq!(
+        f.host.pushes().last().cloned(),
+        Some((
+            terminal.clone(),
+            planner_prompt_text(&owner, &worker_id, &third.update_id, None, true)
+        ))
+    );
+
+    // Its tab is closed before it finished: the update fails, the plan stands.
+    f.host.crash(&terminal);
+    let failed = f.update_id(&mut tx).unwrap();
+    assert_eq!(
+        failed,
+        (
+            third.update_id.clone(),
+            PlanUpdateState::Failed,
+            Some("plan_update_planner_ended".into())
+        )
+    );
+    assert_eq!(
+        readiness_code(f.m.runtime.plan_update_finish(
+            &owner,
+            &PlanUpdateRef::default(),
+            Some(&worker()),
+            &mut tx,
+        )),
+        "plan_update_not_open"
+    );
+
+    // A planner still at work on a proposal cannot take an update: it fails at once.
+    let busy = f.propose(json!({}), &mut tx).unwrap();
+    f.host.set_busy(&busy.session.session.session_id, true);
+    assert_eq!(
+        readiness_code(f.update(&mut tx)),
+        "plan_update_planner_busy"
+    );
+    let refused = f.update_id(&mut tx).unwrap();
+    assert_eq!(refused.1, PlanUpdateState::Failed);
+    assert_eq!(refused.2.as_deref(), Some("plan_update_planner_busy"));
+    // An update needs an identified actor.
+    assert!(matches!(
+        f.m.runtime.plan_update(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            None,
+            &mut tx,
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
 }

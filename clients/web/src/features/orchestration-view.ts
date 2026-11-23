@@ -43,6 +43,10 @@ export const ORCHESTRATION_GROUP_SCOPE = 'orchestration';
 export interface OrchestrationPlanner {
   availability(project: Project): OrchestrationProposeAvailability;
   propose(project: Project): Promise<string>;
+  /** HS2-190RDX: Update Plan, which re-plans beside the running plan; answers the toast. */
+  update(project: Project): Promise<string>;
+  /** HS2-190RDX: cancel the drafting plan update; answers the toast. */
+  cancelUpdate(project: Project): Promise<string>;
 }
 
 /** The AI tool the person chose for this project (the Drive choice), with its model and effort. */
@@ -75,12 +79,15 @@ export function orchestrationPersonId(storage: Pick<Storage, 'getItem' | 'setIte
  * while its tool has not reported its session start: it may be waiting on a first-run question (trust,
  * an MCP or hook approval, an update notice) that only a person answers in its terminal tab.
  * HS2-FDS95D: `replannable` is a planner that finished its turn, so Propose Plan gives it a new proposal.
+ * HS2-190RDX: `updating` while a plan update drafts beside the running plan.
  */
 export function planningPhase(view: Record<string, unknown> | undefined): string | undefined {
   const state = typeof view?.state === 'string' ? view.state : undefined;
   if (state !== 'planning') return state;
   const session = view?.session as Record<string, unknown> | undefined;
   if (session?.tool_ready === false) return 'waiting';
+  const update = view?.update as Record<string, unknown> | undefined;
+  if (update?.state === 'drafting') return 'updating';
   return view?.replannable === true ? 'replannable' : state;
 }
 
@@ -88,7 +95,18 @@ const PLANNING_REFUSALS: Record<string, string> = {
   plan_no_targets: 'Add projects in Orchestration settings before proposing a plan.',
   plan_no_goals: 'Write an open goal ticket in this project before proposing a plan.',
   plan_goal_not_open: 'That goal ticket is not open.',
+  // HS2-190RDX
+  plan_update_planner_busy: 'The planning session is still working. Try again when it finishes its turn.',
+  plan_update_not_open: 'No plan update is in progress.',
+  plan_update_not_found: 'No plan update is in progress.',
 };
+
+function planningRefusal(reason: unknown): never {
+  const code = (reason as { code?: string } | undefined)?.code;
+  const known = code ? PLANNING_REFUSALS[code] : undefined;
+  if (known) throw new Error(known, { cause: reason });
+  throw reason;
+}
 
 /** Propose Plan through the server's planning session, in the tool the person chose (no server default). */
 export function createServerPlanner(options: {
@@ -117,10 +135,32 @@ export function createServerPlanner(options: {
         if (proposal.outcome === 'replanned') return 'The planning session is planning again. It is in the drawer.';
         return 'Planning started. The planning session is in the drawer.';
       } catch (reason) {
-        const code = (reason as { code?: string } | undefined)?.code;
-        const known = code ? PLANNING_REFUSALS[code] : undefined;
-        if (known) throw new Error(known, { cause: reason });
-        throw reason;
+        planningRefusal(reason);
+      }
+    },
+    async update(project) {
+      const choice = options.choice(project);
+      if (!choice) throw new Error('Choose an AI tool for this project in Settings first.');
+      try {
+        const update = await options
+          .client(project)
+          .updateOrchestrationPlan(
+            project.id,
+            { ...choice, operation_id: `update-${crypto.randomUUID().replaceAll('-', '')}` },
+            options.personId(),
+          );
+        if (update.outcome === 'existing') return 'The plan is already being updated.';
+        return 'Updating the plan. Work continues on the current plan until the new one is ready.';
+      } catch (reason) {
+        planningRefusal(reason);
+      }
+    },
+    async cancelUpdate(project) {
+      try {
+        await options.client(project).cancelOrchestrationPlanUpdate(project.id, options.personId());
+        return 'Plan update cancelled. The current plan is unchanged.';
+      } catch (reason) {
+        planningRefusal(reason);
       }
     },
   };
@@ -971,6 +1011,35 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
   }
 
+  /** HS2-190RDX: Update Plan, while the current plan keeps running; no pause is needed. */
+  async function updatePlan() {
+    const current = dependencies.project();
+    if (!current || busy.value || !planner.availability(current).available) return;
+    busy.value = true;
+    try {
+      dependencies.showToast(await planner.update(current));
+      planning.value = 'updating';
+    } catch (reason) {
+      dependencies.showToast(`Update Plan failed: ${message(reason)}`);
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  async function cancelPlanUpdate() {
+    const current = dependencies.project();
+    if (!current || busy.value) return;
+    busy.value = true;
+    try {
+      dependencies.showToast(await planner.cancelUpdate(current));
+      void refreshPlanning(current, generation);
+    } catch (reason) {
+      dependencies.showToast(`Cancel Plan Update failed: ${message(reason)}`);
+    } finally {
+      busy.value = false;
+    }
+  }
+
   /**
    * Orchestrator requests surface where every permission request does (HS2-XHQ1EH): Notifications.
    * Show Request opens the selected step's own request there (HS2-DBQSWB); with no request id it
@@ -1044,6 +1113,16 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       decisionsDialog.value = undefined;
     },
     propose,
+    updatePlan,
+    cancelPlanUpdate,
+    /** HS2-190RDX: whether Update Plan can be pressed now, and why not. */
+    updateAvailability: (): OrchestrationProposeAvailability => {
+      const current = dependencies.project();
+      if (!current) return { available: false };
+      if (planning.value === 'waiting')
+        return { available: false, reason: 'The planning session is waiting for an answer in its terminal tab' };
+      return planner.availability(current);
+    },
     showRequest,
     openGoal,
     chooseProjects: () => {

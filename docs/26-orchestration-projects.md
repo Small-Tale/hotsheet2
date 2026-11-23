@@ -5314,9 +5314,85 @@ decision, never something to retry around. Nothing in Propose Plan itself asks a
 names, what is linked and the gated list and search of §26.3 (HS2-D85G19). The
 workspace's Propose Plan button is HS2-J89JC7.
 
+### Updating the plan while it runs (HS2-190RDX)
+
+The maintainer's request: "pausing and restarting isn't clear that it replans anyway, but
+we shouldnt need to pause. it should keep working and then do the replanning in the
+background when demanded and then work the new plan when its ready". **Update Plan**
+re-plans in the background; nothing pauses.
+
+- **A draft beside the live plan.** A press opens one plan update per orchestration
+  project on this machine. It copies the live step definitions, as checked in, into a
+  machine-local draft (`${HOTSHEET_HOME}/orchestration-plan-updates/<owner>.draft.json`,
+  with its own ticket reads beside it) and records the update (`<owner>.json`: its id,
+  `drafting`, the live revision and steps it started from, who asked). It then asks the
+  planner exactly as Propose Plan does (§26.25 above): a new planner whose proposal id
+  is the update id, or the open planner that finished its turn, given the update as a
+  new proposal. The planner's prompt names the update. A planner still at work on
+  another proposal cannot take it, and the update fails at once as
+  `plan_update_planner_busy`.
+- **The live plan keeps running.** Placement, running sessions and readiness use the
+  live plan only. The planner passes the update id as `plan_update` (`--plan-update`)
+  to `readiness define`, `show`, `plan` and `remove`, which then read and change the
+  draft and nothing else: no level is published, no run is cancelled and the scheduler
+  is not woken. Ticket creation and links act on the targets as before.
+- **One update at a time.** A second press, under any operation id, answers with the
+  drafting update (`outcome: existing`) and launches nothing. The decision is the pure
+  `decide_update` (`crates/hotsheet-ticketing/src/orchestration/plan_update.rs`).
+- **The switch.** The planner finishes with `plan update-finish <update-id>`. Under the
+  checked-in plan's lock the swap is the pure three-way merge `merge_update` by step
+  id of the steps the update started from, the live steps now and the draft:
+
+  | The draft's step against its start | The live step against its start | The new plan has    |
+  | ---------------------------------- | ------------------------------- | ------------------- |
+  | unchanged                          | anything                        | the live step       |
+  | changed, added or removed          | unchanged                       | the draft's         |
+  | changed                            | changed the same way            | that step           |
+  | changed or removed                 | changed differently or removed  | refused: a conflict |
+
+  A change a person made to the live plan meanwhile is kept, and the merged plan must
+  still be a valid plan (one step per target ticket). It is written in one replacement
+  of `.hotsheet2/orchestration-plan.json`, with the draft's reads of the tickets the new
+  plan names, so a new step starts from what the planner read.
+
+- **What happens to running work.** A step the new plan has unchanged keeps its run and
+  session. The unfinished scheduler runs of a removed step are cancelled as
+  `step_removed` (HS2-YFPZFP), and those of a changed step as `step_replanned`. Either
+  way the session working the run is told and wound down at a safe point its host
+  confirms, never mid-write (`run_cancelled`, §26.16). A changed step stays planned, so
+  the scheduler dispatches it again from its new definition once its ticket is free.
+  Steps that had not started simply follow the new plan. A run whose target could not
+  be told stays `cancel_requested` and is listed under `unwithdrawn` for
+  reconciliation. Each removed step publishes its `removed` readiness event, the levels
+  are re-evaluated and the scheduler is woken.
+- **Failure leaves the plan.** A refused merge fails the update as
+  `plan_update_conflict` (with the step ids in `conflicts`) or `plan_update_invalid`;
+  a planner whose tab ended before finishing fails it as `plan_update_planner_ended`
+  (learned on the next read). The live plan is unchanged and the draft is forgotten;
+  the reason stays on the update until the next one opens.
+- **Cancel.** `plan update-cancel` ends a drafting update as `cancelled` and forgets the
+  draft. The planner's tab stays open; its later draft writes are refused with
+  `plan_update_not_open`. Pausing stays available, but re-planning never needs it.
+- **Audit.** `plan_update` (`plan_update_started`, `plan_update_existing` or the
+  refusal), `plan_update_apply` (`plan_update_applied`, or the failure reason) and
+  `plan_update_cancel`. Unknown ids are `plan_update_not_found` (404); acting on an
+  update that is not drafting is `plan_update_not_open` (409).
+
+`plan show` adds `update`: the latest update's id, `state` (`drafting`, `applied`,
+`failed`, `cancelled`), the planner and its hosted session, the draft's step count, and
+for a finished one its `reason`, `conflicts` or `swap` (`kept`, `added`, `changed`,
+`removed`). The Orchestration view's header shows **Update Plan** beside Start
+Orchestration or Pause once there is a plan; while an update drafts it reads
+`· Updating Plan` and offers **Cancel Plan Update** in its place (§26.26).
+
 ### Headless surface
 
 ```sh
+hotsheet-cli ... orchestration plan update --project <owner> --tool <tool> \
+  [--model <model>] [--effort <effort>] [--operation-id <retained-id>]
+hotsheet-cli ... orchestration plan update-finish [<update-id>] --project <owner>
+hotsheet-cli ... orchestration plan update-cancel [<update-id>] --project <owner>
+hotsheet-cli ... orchestration readiness define|show|plan|remove ... --plan-update <update-id>
 hotsheet-cli ... orchestration plan propose --project <owner> --tool <tool> \
   [--model <model>] [--effort <effort>] [--goal <ticket>] [--source <connection>] \
   [--operation-id <retained-id>]
@@ -5324,11 +5400,14 @@ hotsheet-cli ... orchestration plan show --project <owner>
 hotsheet-cli ... orchestration readiness define ... --tool <tool>
 ```
 
-| Route                                                      | Methods and purpose                                        |
-| ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/planning/{propose,show}` | POST Propose Plan and where planning stands; machine-local |
+| Route                                                                            | Methods and purpose                                                   |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/planning/{propose,show}`                       | POST Propose Plan and where planning stands; machine-local            |
+| `/checkouts/{owner}/orchestration/planning/{update,update_finish,update_cancel}` | POST Update Plan, its swap and its cancel (HS2-190RDX); machine-local |
 
-MCP `hotsheet_targets` adds `plan_propose` (with `tool`, `model`, `effort`, `goal` and
+MCP `hotsheet_targets` adds `plan_update`, `plan_update_finish` and `plan_update_cancel`
+(with `update_id`), and `plan_update` on `readiness_define`, `readiness_show`,
+`readiness_plan` and `readiness_remove` (HS2-190RDX). It adds `plan_propose` (with `tool`, `model`, `effort`, `goal` and
 `operation_id`) and `plan_show`, and `readiness_define` takes `tool`. The runtime
 functions are `OrchestrationRuntime::plan_propose(owner, ProposePlan, actor, tx)` and
 `plan_status(owner, tx)` in `crates/hotsheet-cli/src/orchestration/planning.rs`.
@@ -5485,7 +5564,10 @@ A read on the server also starts the target followers of §26.9.
   type is Software (`project_software`, HS2-J3ZF27). No placement actor is needed: the
   orchestrator acts as the orchestration project (HS2-XYAHB4). A Software project's kept
   automatic policy does not read as running. While running, **Pause** turns it off; running work
-  continues. A proposed plan is labeled as the dry run it is.
+  continues. A proposed plan is labeled as the dry run it is. Once there is a plan, **Update Plan**
+  (secondary, beside the kick-off action) re-plans while the plan keeps running (§26.25, HS2-190RDX),
+  disabled with the reason while no AI tool is chosen or the planner waits in its terminal; while an
+  update drafts the header reads `· Updating Plan` and **Cancel Plan Update** takes its place.
 - **Empty.** A declared project with no target shows _No Projects to Orchestrate Yet_
   with **Choose Projects…**, which opens Settings until the Orchestration category of
   HS2-W27N1D exists (HS2-QFS6SG). Keyboard: cards are reachable with Tab and selected

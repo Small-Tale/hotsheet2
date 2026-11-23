@@ -42,6 +42,8 @@ const PLANNING = [
   { value: 'planning', label: 'Working' },
   { value: 'replannable', label: 'Finished Its Turn' },
   { value: 'waiting', label: 'Waiting in Its Terminal' },
+  // HS2-190RDX: a plan update drafts while the current plan runs.
+  { value: 'updating', label: 'Updating the Plan' },
 ];
 
 const SELECTIONS = [
@@ -153,6 +155,7 @@ export function OrchestrationToolbarDemo() {
           <OrchestrationToolbar
             timeline={demoTimeline(value)}
             propose={propose()}
+            update={propose()}
             busy={orchestrationDemoSettings.busy.value}
             planning={orchestrationDemoSettings.planning.value || undefined}
             clock={demoClock}
@@ -328,6 +331,12 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       },
       propose: () => {
         settings.planning.value = 'planning';
+      },
+      updatePlan: () => {
+        settings.planning.value = 'updating';
+      },
+      cancelPlanUpdate: () => {
+        settings.planning.value = '';
       },
       chooseProjects: () => undefined,
       runControl: () => undefined,

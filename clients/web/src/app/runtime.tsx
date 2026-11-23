@@ -6498,6 +6498,7 @@ export async function startHotSheetWebClient() {
           <OrchestrationToolbar
             timeline={timeline}
             propose={orchestrationView.proposeAvailability()}
+            update={orchestrationView.updateAvailability()}
             busy={orchestrationView.busy.value}
             planning={orchestrationView.planning.value}
           />
@@ -6983,6 +6984,8 @@ export async function startHotSheetWebClient() {
       start: () => void orchestrationView.start(),
       pause: () => void orchestrationView.pause(),
       propose: () => void orchestrationView.propose(),
+      updatePlan: () => void orchestrationView.updatePlan(),
+      cancelPlanUpdate: () => void orchestrationView.cancelPlanUpdate(),
       chooseProjects: () => {
         orchestrationView.chooseProjects();
       },

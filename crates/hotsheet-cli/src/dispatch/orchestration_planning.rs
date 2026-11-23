@@ -42,8 +42,38 @@ enum PlanCmd {
     },
     /// Where planning stands: idle, planning or ended, the live or latest planner, the
     /// open goal tickets with their plan steps, and whether the policy places
-    /// sessions yet. Starts nothing.
+    /// sessions yet, and the latest plan update. Starts nothing.
     Show,
+    /// HS2-190RDX: Update Plan. Re-plan in the background without pausing: open a
+    /// draft of the plan beside the live one and ask the planner (a new one, or the
+    /// open one with a new proposal) to draft it. Running work and placement continue
+    /// on the live plan until the update finishes. One update at a time: a second
+    /// request answers with the drafting one.
+    Update {
+        /// The AI tool a new planner runs in, by plugin id.
+        #[arg(long)]
+        tool: String,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        effort: Option<String>,
+        /// A retained id; the same id answers with the same update.
+        #[arg(long)]
+        operation_id: Option<String>,
+    },
+    /// HS2-190RDX: swap the live plan to the update's draft in one write. Unchanged
+    /// steps keep running; the work of removed or changed steps is withdrawn and its
+    /// sessions wind down at a safe point. A conflicting or invalid draft fails the
+    /// update and leaves the plan as it was.
+    UpdateFinish {
+        /// The update; the drafting one when omitted.
+        update_id: Option<String>,
+    },
+    /// HS2-190RDX: cancel the drafting update; the live plan is unchanged.
+    UpdateCancel {
+        /// The update; the drafting one when omitted.
+        update_id: Option<String>,
+    },
 }
 
 pub(super) fn route(project: &str, arguments: PlanArgs) -> Result<(&'static str, String, Value)> {
@@ -68,6 +98,26 @@ pub(super) fn route(project: &str, arguments: PlanArgs) -> Result<(&'static str,
             }),
         ),
         PlanCmd::Show => ("POST", format!("{base}/show"), json!({})),
+        PlanCmd::Update {
+            tool,
+            model,
+            effort,
+            operation_id,
+        } => (
+            "POST",
+            format!("{base}/update"),
+            json!({"tool": tool, "model": model, "effort": effort, "operation_id": operation_id}),
+        ),
+        PlanCmd::UpdateFinish { update_id } => (
+            "POST",
+            format!("{base}/update_finish"),
+            json!({"update_id": update_id}),
+        ),
+        PlanCmd::UpdateCancel { update_id } => (
+            "POST",
+            format!("{base}/update_cancel"),
+            json!({"update_id": update_id}),
+        ),
     })
 }
 
@@ -129,5 +179,31 @@ mod tests {
         );
         // A press names its tool.
         assert!(request(&["propose"]).is_err());
+        // HS2-190RDX: Update Plan, finish and cancel.
+        assert_eq!(
+            request(&["update", "--tool", "claude"]).unwrap(),
+            (
+                "POST",
+                format!("{base}/update"),
+                json!({"tool":"claude","model":null,"effort":null,"operation_id":null})
+            )
+        );
+        assert!(request(&["update"]).is_err());
+        assert_eq!(
+            request(&["update-finish", "U1"]).unwrap(),
+            (
+                "POST",
+                format!("{base}/update_finish"),
+                json!({"update_id":"U1"})
+            )
+        );
+        assert_eq!(
+            request(&["update-cancel"]).unwrap(),
+            (
+                "POST",
+                format!("{base}/update_cancel"),
+                json!({"update_id":null})
+            )
+        );
     }
 }

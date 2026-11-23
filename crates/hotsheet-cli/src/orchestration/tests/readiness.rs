@@ -266,7 +266,10 @@ fn hs2_42tara_define_reads_through_the_gate_and_stores_canonical_ids() {
     );
 
     // An unknown step is a typed 404, and removal needs someone to attribute it to.
-    let unknown = PlanStepRef { step_id: id(999) };
+    let unknown = PlanStepRef {
+        step_id: id(999),
+        plan_update: None,
+    };
     assert_eq!(
         refusal(m.runtime.readiness(&owner, &unknown.step_id, &mut tx)),
         ReadinessError::StepNotFound
@@ -281,6 +284,7 @@ fn hs2_42tara_define_reads_through_the_gate_and_stores_canonical_ids() {
     );
     let reference = PlanStepRef {
         step_id: step.step_id.clone(),
+        plan_update: None,
     };
     assert!(matches!(
         m.runtime
@@ -1148,6 +1152,7 @@ fn hs2_42tara_unconfirmed_tickets_are_stale_and_cycles_are_exposed() {
                 &owner,
                 &PlanStepRef {
                     step_id: step.step_id.clone(),
+                    plan_update: None,
                 },
                 Some(&worker()),
                 &mut tx,

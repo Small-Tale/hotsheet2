@@ -14,6 +14,7 @@ mod hosted_validations;
 mod joining;
 mod manifest;
 mod permissions;
+mod plan_update;
 mod planning;
 mod policy;
 mod project_type;
@@ -102,6 +103,10 @@ pub use permissions::{
     PermissionAnswer, PermissionAsk, PermissionKey, PermissionLedger, PermissionRequest,
     PermissionRule, PermissionState, RETIRED_APPROVALS_FILE, RETIRED_GRANTS_FILE, RetiredAuthority,
     remove_retired_authority, retired_authority,
+};
+pub use plan_update::{
+    MergeRefusal, PLAN_UPDATE_DIR, PlanSwap, PlanUpdate, PlanUpdateState, PlanUpdateStore,
+    UpdateDecision, decide_update, merge_update, plan_update_reason,
 };
 pub use planning::{
     MAX_PLANNER_PROPOSALS, PlannerFacts, PlanningState, ProposeDecision, current_planner,
@@ -417,6 +422,8 @@ mod joining_tests;
 mod line_observations_tests;
 #[cfg(test)]
 mod permission_tests;
+#[cfg(test)]
+mod plan_update_tests;
 #[cfg(test)]
 mod planning_tests;
 #[cfg(test)]

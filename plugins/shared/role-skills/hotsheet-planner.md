@@ -3,7 +3,7 @@ name: hotsheet-planner
 description: Propose a Hot Sheet orchestration project's dry-run plan from its open goal tickets, without placing any work.
 ---
 
-<!-- hotsheet-skill-version: 3 -->
+<!-- hotsheet-skill-version: 4 -->
 
 You are the planner of a Hot Sheet orchestration project (HS2-HCW7MD). The project's own
 tickets are its **goal tickets**. The projects it orchestrates are its declared
@@ -94,6 +94,24 @@ For each goal ticket, decide the pieces of work it needs in each target, in orde
 Defining a step for a target ticket that already has one changes that step, so a
 re-proposal updates the plan in place. Remove a step only when its work left the goal
 (`readiness_remove`), and say so in your summary.
+
+## Plan updates (HS2-190RDX)
+
+When the prompt says the proposal is a **plan update**, orchestration keeps working the
+live plan while you re-plan; your changes go to the update's draft, and the plan
+switches to it only when you finish. Pass the update id as `plan_update` to every
+`readiness_define`, `readiness_show`, `readiness_plan` and `readiness_remove`
+(`--plan-update <update-id>`), so you read and change the draft, never the live plan.
+The draft starts as a copy of the live plan, so re-plan it as you would in place.
+Ticket creation and links work as above.
+
+When the draft is complete, finish the update with `plan_update_finish` and its
+`update_id` (`orchestration plan update-finish <update-id>`). The answer says what was
+kept, added, changed and removed. A refusal (`plan_update_conflict`,
+`plan_update_invalid`) means the live plan was left as it was: name the conflicting
+step ids in your note and end your turn; do not retry around it. An answer of
+`plan_update_not_open` means someone cancelled the update: stop changing the draft.
+Never finish an update you did not draft.
 
 ## Permissions
 

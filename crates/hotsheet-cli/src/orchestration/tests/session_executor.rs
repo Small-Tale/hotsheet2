@@ -5,6 +5,7 @@
 use std::cell::Cell;
 
 use hotsheet_model::Ticket;
+use hotsheet_ticketing::orchestration::PlanUpdateState;
 use hotsheet_ticketing::orchestration::{
     AuditOutcome, MachineLimits, NewSession, OrchestratedSession, PermissionAction,
     PermissionAnswer, PermissionState, PlacementAction, PlacementPolicy, PolicyBody,
@@ -3516,4 +3517,219 @@ fn hs2_rqdh0q_a_site_handoff_that_never_arrives_asks_a_person_once() {
         .filter(|text| text.contains("still has not seen its handoff"))
         .count();
     assert_eq!(handoff, 1);
+}
+
+impl Placed {
+    /// HS2-190RDX: press Update Plan as `worker-1`.
+    fn update_plan(&self, tx: &mut Transaction<'_>) -> PlanUpdateView {
+        self.m
+            .runtime
+            .plan_update(
+                &self.owner(),
+                serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap()
+    }
+    /// HS2-190RDX: define a ticket's step in the update's draft.
+    fn draft_define(&self, update: &str, slug: &str, tool: Option<&str>, tx: &mut Transaction<'_>) {
+        self.m
+            .runtime
+            .readiness_define(
+                &self.owner(),
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": self.m.owner_connection(),
+                        "native_id": self.orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": self.m.target_connection(),
+                    "native_id": slug, "prerequisites": [], "tool": tool,
+                    "plan_update": update,
+                }))
+                .unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap();
+    }
+    fn live_steps(&self, tx: &mut Transaction<'_>) -> Vec<String> {
+        self.m
+            .runtime
+            .readiness_plan(&self.owner(), tx)
+            .unwrap()
+            .steps
+            .into_iter()
+            .map(|view| view.readiness.step.step_id)
+            .collect()
+    }
+    fn reason(&self, step_id: &str) -> (RunState, Option<String>) {
+        let run = self.run_of(step_id);
+        (run.state, run.history.last().unwrap().reason.clone())
+    }
+}
+
+/// HS2-190RDX: an Update Plan drafts beside the live plan while placement keeps
+/// working it, with no pause. Finishing swaps the plan at once: an unchanged step's
+/// work keeps running, a removed step's run is withdrawn (`step_removed`) and a
+/// changed step's run (`step_replanned`), each session wound down at its safe point
+/// and the changed step dispatched again from its new definition; a step that had
+/// not started follows the new plan. The swap is audited.
+#[test]
+fn hs2_190rdx_a_plan_update_swaps_while_work_runs_and_winds_down_only_withdrawn_work() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let keep = f.ready("Keep", &mut tx);
+    let drop = f.ready("Drop", &mut tx);
+    let waiting = f.ready("Waiting", &mut tx);
+    // The target takes two sessions: two steps start, the third waits.
+    assert_eq!(
+        outcomes(&f.tick(&mut tx)),
+        [("started", None), ("started", None)]
+    );
+    let started: Vec<String> = [&keep, &drop, &waiting]
+        .into_iter()
+        .filter(|step| {
+            f.m.runtime
+                .run_list(&f.owner(), false)
+                .unwrap()
+                .iter()
+                .any(|run| run.operation_id.starts_with(&format!("sched-run-{step}")))
+        })
+        .cloned()
+        .collect();
+    assert_eq!(started, [keep.clone(), drop.clone()]);
+    let keep_slug = f.slug(&f.run_of(&keep));
+    let drop_session = f.record(&format!("sched-start-{drop}"));
+    let keep_session = f.record(&format!("sched-start-{keep}"));
+    let waiting_slug = ops::resolve(
+        &f.m.target_store,
+        &f.m.runtime
+            .plan_step(&f.owner(), &waiting)
+            .unwrap()
+            .target
+            .native_id,
+    )
+    .unwrap()
+    .unwrap()
+    .slug;
+
+    // Update Plan: no pause, the policy still places.
+    let update = f.update_plan(&mut tx);
+    assert_eq!(update.state, PlanUpdateState::Drafting);
+    assert_eq!(update.outcome, Some(UpdateOutcome::Started));
+    assert_eq!(update.draft_steps, 3);
+    assert!(
+        update.session.is_some(),
+        "the planner shows as Propose Plan's does"
+    );
+    let status = f.m.runtime.plan_status(&f.owner(), &mut tx).unwrap();
+    assert_eq!(status.update.as_ref().unwrap().update_id, update.update_id);
+    assert!(status.placement_automatic);
+
+    // The planner drafts: drop is removed, waiting prefers another tool, new work.
+    f.m.runtime
+        .readiness_remove(
+            &f.owner(),
+            &serde_json::from_value(json!({"step_id": drop, "plan_update": update.update_id}))
+                .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    f.draft_define(&update.update_id, &waiting_slug, Some("codex"), &mut tx);
+    let added = ops::create(
+        &f.m.target_store,
+        ulid::Ulid::new(),
+        "TGT",
+        NOW.into(),
+        NewTicket {
+            title: "Added".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    f.draft_define(&update.update_id, &added.slug, None, &mut tx);
+    // Meanwhile the live plan and its work are untouched, and a pass keeps both.
+    assert_eq!(f.live_steps(&mut tx).len(), 3);
+    assert_eq!(f.reason(&drop).0, RunState::Queued);
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &drop_session.session_id).0,
+        PlacementAction::Keep
+    );
+
+    // Finished: the plan swaps at once.
+    let applied =
+        f.m.runtime
+            .plan_update_finish(
+                &f.owner(),
+                &serde_json::from_value(json!({"update_id": update.update_id})).unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(applied.state, PlanUpdateState::Applied);
+    let swap = applied.swap.unwrap();
+    assert_eq!(swap.kept, std::slice::from_ref(&keep));
+    assert_eq!(swap.removed, std::slice::from_ref(&drop));
+    assert_eq!(swap.changed, std::slice::from_ref(&waiting));
+    assert_eq!(swap.added.len(), 1);
+    assert!(applied.unwithdrawn.is_empty());
+    let live = f.live_steps(&mut tx);
+    assert!(live.contains(&keep) && live.contains(&waiting) && !live.contains(&drop));
+    assert_eq!(
+        f.reason(&keep).0,
+        RunState::Queued,
+        "unchanged work keeps running"
+    );
+    assert_eq!(
+        f.reason(&drop),
+        (RunState::Cancelled, Some("step_removed".into()))
+    );
+    // The removed step's session is wound down at its safe point; the kept one stays.
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &drop_session.session_id),
+        (PlacementAction::WindDown, "run_cancelled", None)
+    );
+    assert_eq!(
+        placed(&tick, &keep_session.session_id).0,
+        PlacementAction::Keep
+    );
+    assert_eq!(
+        f.record(&drop_session.operation_id).state,
+        SessionState::Stopped
+    );
+    assert!(f.up_next(&keep_slug));
+    assert!(
+        f.audited("plan_update_apply")
+            .iter()
+            .any(|(outcome, reason, _)| *outcome == AuditOutcome::Changed
+                && reason.as_deref() == Some("plan_update_applied"))
+    );
+
+    // A second update changes the running kept step: its run is withdrawn as
+    // replanned, and the step stays planned for its new definition.
+    let second = f.update_plan(&mut tx);
+    assert_ne!(second.update_id, update.update_id);
+    f.draft_define(&second.update_id, &keep_slug, Some("codex"), &mut tx);
+    let applied =
+        f.m.runtime
+            .plan_update_finish(
+                &f.owner(),
+                &PlanUpdateRef::default(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(applied.swap.unwrap().changed, std::slice::from_ref(&keep));
+    assert_eq!(
+        f.reason(&keep),
+        (RunState::Cancelled, Some("step_replanned".into()))
+    );
+    assert!(f.live_steps(&mut tx).contains(&keep));
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &keep_session.session_id),
+        (PlacementAction::WindDown, "run_cancelled", None)
+    );
 }

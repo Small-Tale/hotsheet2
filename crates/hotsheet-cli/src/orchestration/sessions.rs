@@ -262,15 +262,23 @@ pub fn planner_prompt_text(
     worker_id: &str,
     proposal_id: &str,
     goal: Option<&str>,
+    plan_update: bool,
 ) -> String {
     let goals = goal.map_or_else(
         || "every open goal ticket of this project".to_owned(),
         |goal| format!("the goal ticket `{goal}`"),
     );
-    format!(
+    let mut text = format!(
         "Hot Sheet orchestration started this session as the planner of this orchestration project (`{owner_checkout_id}`). Run the `{}` skill and follow its workflow to propose the dry-run plan for {goals}, as the worker `{worker_id}`, for the proposal `{proposal_id}`. Do not dispatch runs, start sessions or change the policy.",
         SessionRole::Planner.skill()
-    )
+    );
+    // HS2-190RDX: an Update Plan drafts beside the live plan, which keeps running.
+    if plan_update {
+        text.push_str(&format!(
+            " This proposal is the plan update `{proposal_id}`: pass it as `plan_update` (`--plan-update {proposal_id}`) to every readiness define, remove and plan, so only its draft changes while the live plan keeps running, and finish with `plan_update_finish` (`orchestration plan update-finish {proposal_id}`) when the draft is complete."
+        ));
+    }
+    text
 }
 
 /// HS2-R7QH35: the message that tells a running session which exact ticket its new
@@ -1362,7 +1370,7 @@ impl OrchestrationRuntime {
             }
             Err(SessionHostError::Refused) => return refuse(TOOL_SETUP_FAILED),
         };
-        let role_text = Self::role_text(&checkout, &reserved);
+        let role_text = self.role_text(&checkout, &reserved);
         let launched = match self.sessions.start(
             &checkout,
             &HostLaunch {
@@ -1433,7 +1441,7 @@ impl OrchestrationRuntime {
 
     /// HS2-2DPGDY: the prompt that asks this hosted session to take up its role.
     /// HS2-YC2P7K: a session started for a run asks for that run's exact ticket.
-    fn role_text(checkout: &Checkout, session: &HostedSession) -> String {
+    fn role_text(&self, checkout: &Checkout, session: &HostedSession) -> String {
         let worker = hotsheet_aitools::session_worker_id(&session.tool, &session.session_id);
         let request = session.origin.ticket.as_deref().map(|native| {
             Self::ticket_label(checkout, native).unwrap_or_else(|| native.to_owned())
@@ -1445,6 +1453,7 @@ impl OrchestrationRuntime {
                 &worker,
                 &session.operation_id,
                 request.as_deref(),
+                self.plan_update_drafted_by(&checkout.id, &session.operation_id),
             );
         }
         let mut text = role_prompt_text(session.role, &worker, request.as_deref());
@@ -1506,7 +1515,7 @@ impl OrchestrationRuntime {
             let attempt = self.sessions.join_role(
                 &checkout,
                 &session.session_id,
-                &Self::role_text(&checkout, &session),
+                &self.role_text(&checkout, &session),
             );
             if let Some(after) =
                 registry.role_attempt(&checkout.id, &session.operation_id, Some(attempt), now_ms)?

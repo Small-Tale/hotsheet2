@@ -151,6 +151,13 @@ impl SharedPlanStore {
         }
     }
 
+    /// HS2-190RDX: the machine-local draft of a plan update, in the same shape.
+    pub(crate) fn draft(home: &Path, owner_checkout_id: &str) -> Self {
+        Self {
+            storage: super::plan_update::PlanUpdateStore::draft_storage(home, owner_checkout_id),
+        }
+    }
+
     /// The document, or `None` when nothing was checked in yet. Never creates it; a
     /// damaged document (for example one left with merge markers) is an error.
     pub fn read(&self) -> Result<Option<SharedPlan>, OrchestrationError> {
