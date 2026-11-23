@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "setupVersion": "5.0.0-beta.130",
+  "setupVersion": "5.0.0-beta.135",
   "packageManager": "npm",
   "packages": {
     ".": {
@@ -9,7 +9,7 @@
       "packagePath": ".",
       "managed": {
         ".claude/skills/kerf-app/SKILL.md": {
-          "sha256": "9880f36aa1994da1b02c35fed72079d2484c0f384f68e22ae47d0634b233a1cb"
+          "sha256": "c707fcd01923bd2ed74a33e894e43ff1a7be45b9021e91902884530f09382857"
         },
         ".claude/skills/kerf-ui/SKILL.md": {
           "sha256": "ee6e0e1d4028c37c3cc868ec12459e23cfa42c9dcaac791011c656984ae19310"
@@ -30,10 +30,10 @@
           "sha256": "01d54b2ca5c6d487dff7805f7ba7cb7ac3c69381e491c77b370741c3ac2bea7d"
         },
         "package.json#devDependencies.eslint-plugin-kerfjs": {
-          "sha256": "2553cce52341c963721a1468b9224109d6e5b92d5468442470d88df54778937d"
+          "sha256": "967b48a8c4647abcb126d94bb35cb421242f7d25ed63c93db60d058a42d81bde"
         },
         "package.json#devDependencies.create-kerf-component": {
-          "sha256": "2553cce52341c963721a1468b9224109d6e5b92d5468442470d88df54778937d"
+          "sha256": "967b48a8c4647abcb126d94bb35cb421242f7d25ed63c93db60d058a42d81bde"
         },
         "package.json#devDependencies.eslint-plugin-simple-import-sort": {
           "sha256": "fa6a7973ae2f660d323bbf0056dadcf9b0472352e2fc75213a5ee709f99a9348"
