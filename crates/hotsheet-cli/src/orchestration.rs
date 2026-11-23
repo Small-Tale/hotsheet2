@@ -84,7 +84,8 @@ pub use plan_update::{
     PlanQuery, PlanUpdateRef, PlanUpdateView, STEP_REPLANNED_RUN, UpdateOutcome, UpdatePlan,
 };
 pub use planning::{
-    GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView, ProposeOutcome, ProposePlan,
+    DEFAULT_GOAL_TAG, DEFAULT_GOAL_TITLE, GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView,
+    ProposeOutcome, ProposePlan,
 };
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use projects::{

@@ -129,7 +129,7 @@ fn hs2_hcw7md_a_press_starts_one_planner_in_the_orchestration_project() {
     let worker_id = hotsheet_aitools::session_worker_id("claude", &launch.session_id);
     assert_eq!(
         launch.role_prompt,
-        planner_prompt_text(&owner, &worker_id, &first.proposal_id, None, false)
+        planner_prompt_text(&owner, &worker_id, &first.proposal_id, None, None, false)
     );
     for part in [
         "`hotsheet-planner`",
@@ -251,10 +251,10 @@ fn hs2_hcw7md_a_press_is_refused_before_anything_launches() {
     );
 
     let f = Fixture::new(1, &mut tx);
-    // Every goal is closed: nothing to plan.
+    // A named goal that is closed is not planned. (Every goal closed plans the
+    // default goal instead, HS2-YSRT6Y.)
     let closed = f.goal("Done already");
     f.close(&closed);
-    assert_eq!(code(f.propose(json!({}), &mut tx)), "plan_no_goals");
     assert_eq!(
         code(f.propose(json!({"goal": {"native_id": closed.slug}}), &mut tx)),
         "plan_goal_not_open"
@@ -523,7 +523,7 @@ fn hs2_fds95d_a_press_replans_a_planner_that_finished_its_turn() {
         f.host.pushes().last().cloned(),
         Some((
             terminal.clone(),
-            planner_prompt_text(&owner, &worker, "press-2", None, false)
+            planner_prompt_text(&owner, &worker, "press-2", None, None, false)
         ))
     );
     assert_eq!(
@@ -710,8 +710,6 @@ fn hs2_190rdx_one_update_at_a_time_cancel_and_a_planner_that_ends_first() {
     };
     let f = Fixture::new(1, &mut tx);
     let owner = f.m.owner.id.clone();
-    // Nothing to plan: refused before anything opens.
-    assert_eq!(readiness_code(f.update(&mut tx)), "plan_no_goals");
     assert!(f.status(&mut tx).update.is_none());
     f.goal("Ship the release");
 
@@ -725,7 +723,7 @@ fn hs2_190rdx_one_update_at_a_time_cancel_and_a_planner_that_ends_first() {
     assert_eq!(f.host.launches().len(), 1);
     // The launch prompt names the draft to write and how to finish.
     let worker_id = session.worker_id.clone();
-    let prompt = planner_prompt_text(&owner, &worker_id, &first.update_id, None, true);
+    let prompt = planner_prompt_text(&owner, &worker_id, &first.update_id, None, None, true);
     assert!(prompt.contains(&format!("--plan-update {}", first.update_id)));
     assert!(prompt.contains("update-finish"));
     assert_eq!(
@@ -799,7 +797,7 @@ fn hs2_190rdx_one_update_at_a_time_cancel_and_a_planner_that_ends_first() {
         f.host.pushes().last().cloned(),
         Some((
             terminal.clone(),
-            planner_prompt_text(&owner, &worker_id, &third.update_id, None, true)
+            planner_prompt_text(&owner, &worker_id, &third.update_id, None, None, true)
         ))
     );
 
@@ -916,4 +914,129 @@ fn hs2_n5bde4_a_planner_question_is_visible_until_it_is_answered() {
     )
     .unwrap();
     assert!(f.status(&mut tx).questions.is_empty());
+}
+
+/// HS2-YSRT6Y: with no explicit goal open, Propose Plan opens the standing default
+/// goal once and asks the planner to work through every open target ticket by
+/// dependencies, priority, Up Next and claims. An explicit goal takes precedence; when
+/// it closes, the default goal applies again without a second one being opened.
+#[test]
+fn hs2_ysrt6y_no_open_goal_plans_the_default_goal() {
+    let mut rng = Rng(900);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    let owner = f.m.owner.id.clone();
+    // Before any press: the implicit default goal shows, nothing is opened yet.
+    let idle = f.status(&mut tx);
+    assert!(idle.default_goal && idle.goals.is_empty());
+    assert!(f.m.owner_store.list_tickets().unwrap().is_empty());
+
+    let first = f
+        .propose(json!({"operation_id": "press-1"}), &mut tx)
+        .unwrap();
+    assert_eq!(first.outcome, ProposeOutcome::Started);
+    assert_eq!(first.goal_count, 1);
+    let default = first.goals[0].clone();
+    assert!(default.default_goal);
+    let ticket =
+        f.m.owner_store
+            .read_ticket(&default.native_id.parse().unwrap())
+            .unwrap();
+    assert_eq!(ticket.title, DEFAULT_GOAL_TITLE);
+    assert_eq!(ticket.tags, [DEFAULT_GOAL_TAG]);
+    assert!(ticket.details.contains("blocked_by"));
+    // The planner is asked for the default goal, by its slug and its ordering rules.
+    let launch = f.host.launches()[0].clone();
+    let worker = hotsheet_aitools::session_worker_id("claude", &launch.session_id);
+    assert_eq!(
+        launch.role_prompt,
+        planner_prompt_text(&owner, &worker, "press-1", None, Some(&default.slug), false)
+    );
+    for part in [
+        format!("the default goal `{}`", default.slug),
+        "working through all open tickets".into(),
+        "explicit `blocked_by` dependencies, implicit dependencies, priority, Up Next and live claims".into(),
+    ] {
+        assert!(launch.role_prompt.contains(&part), "prompt lacks {part}");
+    }
+    let shown = f.status(&mut tx);
+    assert!(shown.default_goal);
+    assert_eq!(shown.goals, std::slice::from_ref(&default));
+
+    // A second press opens no second default goal.
+    f.host.set_busy(&launch.session_id, false);
+    let again = f
+        .propose(json!({"operation_id": "press-2"}), &mut tx)
+        .unwrap();
+    assert_eq!(again.outcome, ProposeOutcome::Replanned);
+    assert_eq!(f.m.owner_store.list_tickets().unwrap().len(), 1);
+    assert_eq!(
+        f.host.pushes().last().map(|(_, text)| text.clone()),
+        Some(planner_prompt_text(
+            &owner,
+            &worker,
+            "press-2",
+            None,
+            Some(&default.slug),
+            false
+        ))
+    );
+
+    // An explicit goal takes precedence: the default goal is no longer offered.
+    let explicit = f.goal("Ship the release");
+    let shown = f.status(&mut tx);
+    assert!(!shown.default_goal);
+    assert_eq!(shown.goals.len(), 1);
+    assert_eq!(shown.goals[0].slug, explicit.slug);
+    assert!(!shown.goals[0].default_goal);
+    let press = f
+        .propose(json!({"operation_id": "press-3"}), &mut tx)
+        .unwrap();
+    assert_eq!(press.goals.len(), 1);
+    assert_eq!(press.goals[0].slug, explicit.slug);
+    assert_eq!(
+        f.host.pushes().last().map(|(_, text)| text.clone()),
+        Some(planner_prompt_text(
+            &owner, &worker, "press-3", None, None, false
+        ))
+    );
+
+    // It closes: the standing default goal applies again; nothing new is opened.
+    f.close(&explicit);
+    let shown = f.status(&mut tx);
+    assert!(shown.default_goal);
+    assert_eq!(shown.goals, std::slice::from_ref(&default));
+    f.propose(json!({"operation_id": "press-4"}), &mut tx)
+        .unwrap();
+    assert_eq!(f.m.owner_store.list_tickets().unwrap().len(), 2);
+}
+
+/// HS2-YSRT6Y: Update Plan with no open goal plans the default goal too, opening it
+/// once; closing it and updating again opens a fresh one.
+#[test]
+fn hs2_ysrt6y_update_plan_without_a_goal_plans_the_default_goal() {
+    let mut rng = Rng(910);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    let first = f.update(&mut tx).unwrap();
+    assert_eq!(first.state, PlanUpdateState::Drafting);
+    let goals = f.status(&mut tx).goals;
+    assert_eq!(goals.len(), 1);
+    assert!(goals[0].default_goal);
+    let launch = f.host.launches()[0].clone();
+    assert!(
+        launch
+            .role_prompt
+            .contains(&format!("the default goal `{}`", goals[0].slug)),
+        "{}",
+        launch.role_prompt
+    );
+    assert!(launch.role_prompt.contains("--plan-update"));
+    assert_eq!(f.m.owner_store.list_tickets().unwrap().len(), 1);
 }

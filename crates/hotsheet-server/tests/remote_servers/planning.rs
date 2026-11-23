@@ -6,7 +6,7 @@ use super::session_work::{
     PUSH_AGENT, PUSH_PLUGIN, REPORT_TOOL, World, launch_report, received_prompt,
 };
 use super::sessions::drawer;
-use super::support::{cli_failure, cli_named, mcp_named, mcp_rejected};
+use super::support::{cli_named, mcp_named, mcp_rejected};
 use super::*;
 use std::path::Path;
 
@@ -34,19 +34,11 @@ async fn hs2_hcw7md_propose_plan_starts_the_planner_in_the_orchestration_project
         "--project",
         world.checkout.id.as_str(),
     ];
-    // The headless CLI answers the same refusal before anything launches.
-    let refusal = cli_failure(&world.home, &as_person, &["propose", "--tool", REPORT_TOOL]);
-    assert!(refusal.contains("plan_no_goals"), "{refusal}");
-    // No open goal ticket yet: nothing launches.
-    let (status, refused) = world
-        .call(
-            "POST",
-            "/planning/propose",
-            json!({"tool":REPORT_TOOL,"actor":person}),
-        )
-        .await;
-    assert_eq!(status, StatusCode::CONFLICT, "{refused}");
-    assert_eq!(refused["code"], "plan_no_goals", "{refused}");
+    // No open goal ticket yet: `plan show` names the implicit default goal (HS2-YSRT6Y),
+    // and nothing launches until a press.
+    let (status, idle) = world.call("POST", "/planning/show", json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{idle}");
+    assert_eq!(idle["default_goal"], true, "{idle}");
     assert!(drawer(&world.router).await.is_empty());
 
     let goal = world.ticket("Ship the launch");
@@ -131,6 +123,7 @@ async fn hs2_hcw7md_propose_plan_starts_the_planner_in_the_orchestration_project
     assert_eq!(shown["state"], "planning", "{shown}");
     assert_eq!(shown["proposal_id"], "press-1");
     assert_eq!(shown["goal_count"], 1);
+    assert_eq!(shown["default_goal"], false, "{shown}");
     assert_eq!(shown["steps"], 0);
     assert_eq!(shown["placement_automatic"], false);
 
@@ -195,8 +188,8 @@ async fn hs2_hcw7md_propose_plan_starts_the_planner_in_the_orchestration_project
         .iter()
         .filter(|entry| entry["action"] == "plan_propose")
         .collect();
-    // Refused, started, then answered with the same planner by the route, the CLI and
-    // the MCP tool.
+    // Started, then answered with the same planner by the route, the CLI and the MCP
+    // tool.
     let reasons: Vec<&str> = pressed
         .iter()
         .map(|entry| entry["reason"].as_str().unwrap())
@@ -204,8 +197,6 @@ async fn hs2_hcw7md_propose_plan_starts_the_planner_in_the_orchestration_project
     assert_eq!(
         reasons,
         [
-            "plan_no_goals",
-            "plan_no_goals",
             "plan_started",
             "plan_existing",
             "plan_existing",
@@ -213,7 +204,7 @@ async fn hs2_hcw7md_propose_plan_starts_the_planner_in_the_orchestration_project
         ],
         "{audit}"
     );
-    assert_eq!(pressed[2]["operation_id"], "press-1");
+    assert_eq!(pressed[0]["operation_id"], "press-1");
 }
 
 /// HS2-5RYXNN: on a real server, a planner whose tool reports its session start through

@@ -26,6 +26,8 @@ export const orchestrationDemoSettings = {
   /** HS2-5RYXNN, HS2-FDS95D: the planning session's state: none, working, finished its turn, or waiting. */
   planning: signal(''),
   busy: signal(false),
+  /** HS2-YSRT6Y: no explicit goal is open, so planning works through all open tickets. */
+  defaultGoal: signal(false),
   collapsed: signal<string[]>([]),
 };
 
@@ -65,6 +67,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.proposeAvailable.value = true;
   settings.planning.value = '';
   settings.busy.value = false;
+  settings.defaultGoal.value = false;
   settings.collapsed.value = [];
   if (root)
     syncSettingsControls(root, 'orchestration', {
@@ -72,6 +75,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
       checked: {
         'propose-available': settings.proposeAvailable.value,
         busy: settings.busy.value,
+        'default-goal': settings.defaultGoal.value,
       },
     });
 }
@@ -159,6 +163,7 @@ export function OrchestrationToolbarDemo() {
             propose={propose()}
             update={propose()}
             question={orchestrationDemoSettings.planning.value === 'asked' ? 'LCH-1' : undefined}
+            defaultGoal={orchestrationDemoSettings.defaultGoal.value}
             busy={orchestrationDemoSettings.busy.value}
             planning={orchestrationDemoSettings.planning.value || undefined}
             clock={demoClock}
@@ -293,6 +298,7 @@ export function OrchestrationDemoSettings() {
       <Checkbox name="propose-available" checked={settings.proposeAvailable.value} label="Planner Available" />
       <Select name="planning" label="Planning Session" value={settings.planning.value} choices={PLANNING} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
+      <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
@@ -313,6 +319,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'propose-available') settings.proposeAvailable.value = control.checked;
       if (name === 'planning') settings.planning.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
+      if (name === 'default-goal') settings.defaultGoal.value = control.checked;
     }),
   );
   scope.add(

@@ -101,6 +101,14 @@ export function planningPhase(view: Record<string, unknown> | undefined): string
   return view?.replannable === true ? 'replannable' : state;
 }
 
+/**
+ * HS2-YSRT6Y: whether `plan show` says no explicit goal ticket is open, so planning works through all open
+ * tickets of the orchestrated projects.
+ */
+export function planningDefaultGoal(view: Record<string, unknown> | undefined): boolean {
+  return view?.default_goal === true;
+}
+
 /** HS2-N5BDE4: the goal ticket whose question the planner asked the person, from `plan show`. */
 export interface PlanningQuestion {
   connection_id: string;
@@ -125,7 +133,7 @@ export function planningQuestion(view: Record<string, unknown> | undefined): Pla
 
 const PLANNING_REFUSALS: Record<string, string> = {
   plan_no_targets: 'Add projects in Orchestration settings before proposing a plan.',
-  plan_no_goals: 'Write an open goal ticket in this project before proposing a plan.',
+  plan_no_goals: 'Add a Git ticket source to this project before proposing a plan.',
   plan_goal_not_open: 'That goal ticket is not open.',
   // HS2-190RDX
   plan_update_planner_busy: 'The planning session is still working. Try again when it finishes its turn.',
@@ -390,6 +398,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
    */
   /** HS2-N5BDE4: the goal ticket holding the planner's unanswered question. */
   const question = signal<PlanningQuestion | undefined>(undefined);
+  /** HS2-YSRT6Y: no explicit goal is open, so planning works through all open tickets. */
+  const defaultGoal = signal(false);
   const planning = signal<string | undefined>(undefined);
   const disposers: Array<() => void> = [];
   let streamKey = '',
@@ -645,6 +655,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         batch(() => {
           planning.value = planningPhase(view);
           question.value = planningQuestion(view);
+          defaultGoal.value = planningDefaultGoal(view);
         });
     } catch {
       if (run === generation) planning.value = undefined;
@@ -1205,6 +1216,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     planning,
     /** HS2-N5BDE4: the planner's open question, when it asked one. */
     question,
+    defaultGoal,
     answerQuestion,
     /** HS2-5RYXNN: a session an orchestrator started changed; the open project's planner is read again. */
     sessionsChanged: (projectId: string) => {

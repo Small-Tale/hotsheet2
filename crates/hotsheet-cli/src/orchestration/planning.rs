@@ -27,6 +27,14 @@ use super::*;
 /// The most goal tickets an answer lists; `goal_count` still counts every one.
 pub const MAX_LISTED_GOALS: usize = 256;
 
+/// HS2-YSRT6Y: the tag of the standing default goal ticket. While no explicit goal
+/// ticket is open, Propose Plan and Update Plan open one goal with this tag, so the
+/// planner works through every open ticket of the targets.
+pub const DEFAULT_GOAL_TAG: &str = "orchestration-default-goal";
+/// HS2-YSRT6Y: the default goal's title, which is also how views name it.
+pub const DEFAULT_GOAL_TITLE: &str = "Work through all open tickets";
+const DEFAULT_GOAL_DETAILS: &str = "No explicit goal ticket was open, so this orchestration project works through the open tickets of every project it orchestrates, in the order the planner judges best: explicit `blocked_by` dependencies first, then implicit dependencies, priority, Up Next and live claims. Add a goal ticket to steer the work instead; while one is open, this default goal is not planned further. Close this ticket to stop the default goal.";
+
 /// A press of Propose Plan.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -63,6 +71,10 @@ pub struct GoalTicket {
     /// planner (or anyone) asked the person a question there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub question: Option<String>,
+    /// HS2-YSRT6Y: the standing default goal ("Work through all open tickets"), not a
+    /// goal a person wrote.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub default_goal: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +134,11 @@ pub struct PlanningView {
     /// the note to answer; an answer is pushed into the session that asked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub questions: Vec<GoalTicket>,
+    /// HS2-YSRT6Y: no explicit goal ticket is open, so planning works through every
+    /// open ticket of the targets (the standing default goal, opened by the next
+    /// Propose Plan when it does not exist yet).
+    #[serde(default)]
+    pub default_goal: bool,
 }
 
 fn count(value: usize) -> u32 {
@@ -164,6 +181,7 @@ impl OrchestrationRuntime {
                     let question = super::timeline::pending_decision(&ticket)
                         .map(|wait| wait.note_id.unwrap_or_default());
                     GoalTicket {
+                        default_goal: ticket.tags.iter().any(|tag| tag == DEFAULT_GOAL_TAG),
                         question,
                         steps: steps
                             .get(&(connection_id.to_owned(), native_id.clone()))
@@ -198,6 +216,11 @@ impl OrchestrationRuntime {
                 {
                     all.extend(open(&source.connection_id)?);
                 }
+                // HS2-YSRT6Y: explicit goals take precedence. The default goal is
+                // planned only while no goal a person wrote is open.
+                if all.iter().any(|goal| !goal.default_goal) {
+                    all.retain(|goal| !goal.default_goal);
+                }
                 all
             }
         };
@@ -209,6 +232,55 @@ impl OrchestrationRuntime {
         let total = count(goals.len());
         goals.truncate(MAX_LISTED_GOALS);
         Ok((goals, total))
+    }
+
+    /// HS2-YSRT6Y: open the standing default goal ticket when no goal ticket is open,
+    /// so planning works through every open ticket of the targets. It goes to the
+    /// project's first git ticket source; with none, nothing is opened and the press is
+    /// refused as before (`plan_no_goals`). A goal that is already open, explicit or
+    /// default, opens nothing.
+    pub(super) fn ensure_default_goal(
+        &self,
+        owner: &Checkout,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(), OrchestrationError> {
+        if self.plan_goals(owner, None)?.1 > 0 {
+            return Ok(());
+        }
+        let Some(source) = owner.sources.iter().find(|source| source.provider == "git") else {
+            return Ok(());
+        };
+        let store = owner
+            .verified_git_source(&source.connection_id)
+            .map_err(checkout_error)?;
+        let failed = |_| OrchestrationError::TargetOperation(TargetOpError::Failed);
+        let prefix = store.metadata().map_err(failed)?.ticket_prefix;
+        let id = hotsheet_ticketing::mint_ulid(tx.clock, &mut *tx.rng);
+        ops::create_by(
+            &store,
+            id,
+            &prefix,
+            super::tickets::timestamp(tx),
+            ops::NewTicket {
+                title: DEFAULT_GOAL_TITLE.into(),
+                category: "task".into(),
+                details: DEFAULT_GOAL_DETAILS.into(),
+                tags: vec![DEFAULT_GOAL_TAG.into()],
+                ..ops::NewTicket::default()
+            },
+            hotsheet_ticketing::actor::note_actor(actor),
+        )
+        .map_err(failed)?;
+        Ok(())
+    }
+
+    /// The default goal's slug when the open goals are only the default goal.
+    pub(super) fn default_goal_slug(goals: &[GoalTicket]) -> Option<&str> {
+        match goals {
+            [only] if only.default_goal => Some(only.slug.as_str()),
+            _ => None,
+        }
     }
 
     /// Every planner this machine hosts for the project, newest decisions computed
@@ -318,6 +390,10 @@ impl OrchestrationRuntime {
         let targets = count(self.declarations(&owner.id)?.targets.len());
         if targets == 0 {
             return Err(OrchestrationError::Readiness(ReadinessError::NoTargets));
+        }
+        // HS2-YSRT6Y: with no goal open, plan the default goal.
+        if request.goal.is_none() {
+            self.ensure_default_goal(owner, actor, tx)?;
         }
         let (goals, goal_count) = self.plan_goals(owner, request.goal.as_ref())?;
         if goal_count == 0 {
@@ -479,7 +555,8 @@ impl OrchestrationRuntime {
         let replannable = current.is_some_and(PlannerFacts::replannable);
         let current = current.map(|current| current.latest_proposal().to_owned());
         let (goals, goal_count) = self.plan_goals(&owner, None)?;
-        let questions = goals
+        let default_goal = goals.iter().all(|goal| goal.default_goal);
+        let questions: Vec<GoalTicket> = goals
             .iter()
             .filter(|goal| goal.question.is_some())
             .cloned()
@@ -499,6 +576,7 @@ impl OrchestrationRuntime {
             replannable,
             update: self.plan_update_status(&owner, tx)?,
             questions,
+            default_goal,
         })
     }
 
@@ -525,6 +603,7 @@ impl OrchestrationRuntime {
             &view.worker_id,
             proposal,
             goal,
+            Self::default_goal_slug(goals).filter(|_| goal.is_none()),
             request.plan_update,
         );
         let attempt = self

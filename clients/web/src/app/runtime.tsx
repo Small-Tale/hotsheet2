@@ -6517,6 +6517,7 @@ export async function startHotSheetWebClient() {
             propose={orchestrationView.proposeAvailability()}
             update={orchestrationView.updateAvailability()}
             question={orchestrationView.question.value?.slug}
+            defaultGoal={orchestrationView.defaultGoal.value}
             busy={orchestrationView.busy.value}
             planning={orchestrationView.planning.value}
           />

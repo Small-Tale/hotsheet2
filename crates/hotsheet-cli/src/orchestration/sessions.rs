@@ -262,12 +262,17 @@ pub fn planner_prompt_text(
     worker_id: &str,
     proposal_id: &str,
     goal: Option<&str>,
+    default_goal: Option<&str>,
     plan_update: bool,
 ) -> String {
-    let goals = goal.map_or_else(
-        || "every open goal ticket of this project".to_owned(),
-        |goal| format!("the goal ticket `{goal}`"),
-    );
+    let goals = match (goal, default_goal) {
+        (Some(goal), _) => format!("the goal ticket `{goal}`"),
+        // HS2-YSRT6Y: no explicit goal is open, so the default goal applies.
+        (None, Some(default)) => format!(
+            "the default goal `{default}` (working through all open tickets): no explicit goal ticket is open, so plan the open tickets of every target in the order that makes sense, respecting explicit `blocked_by` dependencies, implicit dependencies, priority, Up Next and live claims, and define every step for `{default}`"
+        ),
+        (None, None) => "every open goal ticket of this project".to_owned(),
+    };
     let mut text = format!(
         "Hot Sheet orchestration started this session as the planner of this orchestration project (`{owner_checkout_id}`). Run the `{}` skill and follow its workflow to propose the dry-run plan for {goals}, as the worker `{worker_id}`, for the proposal `{proposal_id}`. Do not dispatch runs, start sessions or change the policy. Choose for any setting left unset; when a choice is truly ambiguous or something you need is missing, ask the person with a FEEDBACK NEEDED note on the goal ticket instead of stopping, and continue when the answer is pushed to you.",
         SessionRole::Planner.skill()
@@ -1448,11 +1453,20 @@ impl OrchestrationRuntime {
         });
         // HS2-HCW7MD: a planner's ticket is the one goal it was asked to plan.
         if session.role == SessionRole::Planner {
+            // HS2-YSRT6Y: a planner of every goal plans the default goal while it is
+            // the only one open.
+            let goals = request
+                .is_none()
+                .then(|| self.plan_goals(checkout, None).ok())
+                .flatten()
+                .map(|(goals, _)| goals)
+                .unwrap_or_default();
             return planner_prompt_text(
                 &checkout.id,
                 &worker,
                 &session.operation_id,
                 request.as_deref(),
+                Self::default_goal_slug(&goals),
                 self.plan_update_drafted_by(&checkout.id, &session.operation_id),
             );
         }

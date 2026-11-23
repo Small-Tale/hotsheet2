@@ -5286,8 +5286,9 @@ re-plans only after its tab is closed. `show` names the latest proposal as
 Orchestration view then keeps Propose Plan enabled while it shows `Planning`.
 
 Before anything launches the press is refused with `plan_no_targets` (the project
-declares no target), `plan_no_goals` (no open goal ticket) or `plan_goal_not_open`
-(the named goal is closed), all HTTP 409. A host that cannot launch answers as a
+declares no target), `plan_goal_not_open` (the named goal is closed) or, only for a
+project with no git ticket source to open the default goal in, `plan_no_goals`, all
+HTTP 409. A host that cannot launch answers as a
 session start does (`session_host_unavailable`, `session_start_failed`,
 `session_admission_refused`) and leaves nothing reserved, so the same press can be
 repeated. A press needs an identified actor and is audited as `plan_propose` with its
@@ -5302,6 +5303,40 @@ and `placement_automatic`, so a view can say the plan is a dry run. The planner'
 hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestration
 view's header reads `Planner waiting in its terminal`, and Propose Plan
 says the planning session waits for an answer in its terminal tab (HS2-5RYXNN).
+
+### The default goal (HS2-YSRT6Y)
+
+The maintainer's words: "the default goal for an orchestrator, if no explicit goals are
+provided / remain open, should be to just work through the tickets in the bound
+projects in whatever order the orchestrator decides makes sense (taking ticket implicit
+and explicit dependencies, priority, etc, in mind)".
+
+- **Opened once.** Every plan step belongs to a goal ticket of the orchestration
+  project, so when Propose Plan or Update Plan (without a named `goal`) finds no open
+  goal ticket, it opens one standing **default goal** in the project's first git
+  ticket source: the task "Work through all open tickets", tagged
+  `orchestration-default-goal`, created by the actor who pressed. It then plans it like
+  any goal. While that ticket is open no second one is opened; a person who closes it
+  stops the default goal until the next press with no goal open.
+- **Explicit goals first.** While any goal ticket without that tag is open, the default
+  goal is not offered to the planner and is not listed in `goals`; its existing steps
+  stay in the plan. When the explicit goals close, the default goal applies again.
+- **What the planner does.** Its prompt names the default goal and asks it to plan the
+  open tickets of every target, respecting explicit `blocked_by` dependencies,
+  implicit dependencies, priority, Up Next and live claims. The `hotsheet-planner`
+  skill (version 6) links each open target ticket to the default goal (never creating
+  target tickets for it), turns `blocked_by` and implicit dependencies into
+  prerequisites, skips tickets held for a person or live-claimed elsewhere, and leaves
+  priority, Up Next and age to the scheduler's ordering rather than adding edges.
+- **Visible.** `plan show` says `default_goal: true` while no explicit goal is open
+  (also before the default goal ticket exists), and each `goals` entry that is the
+  default goal carries `default_goal: true`. The Orchestration header then adds
+  `· Working through all open tickets`, and Propose Plan and Update Plan say they plan
+  from all open tickets.
+- **New tickets later.** A ticket created in a target after the plan was proposed is
+  planned by the next **Update Plan**, which re-plans the default goal beside the
+  running plan (HS2-190RDX). Automatic re-planning when a target reports a new ticket,
+  on the target's change events and never by polling, is HS2-BQN0M5.
 
 ### A planner asks instead of stalling (HS2-N5BDE4)
 

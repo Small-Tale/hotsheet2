@@ -192,6 +192,30 @@ describe('A planner question in the Orchestration toolbar (HS2-N5BDE4)', () => {
   });
 });
 
+describe('The default goal in the Orchestration toolbar (HS2-YSRT6Y)', () => {
+  const toolbar = (phase: Parameters<typeof demoTimeline>[0], extra = {}) =>
+    String(OrchestrationToolbar({ timeline: demoTimeline(phase), clock: demoClock, ...extra }));
+
+  it('says planning works through all open tickets while no goal ticket is open', () => {
+    expect(toolbar('no_plan', { defaultGoal: true, propose: { available: true } })).toContain(
+      'No Plan Yet · Working through all open tickets',
+    );
+    expect(toolbar('no_plan', { defaultGoal: true, propose: { available: true } })).toContain(
+      'Propose a plan that works through all open tickets',
+    );
+    expect(toolbar('running', { defaultGoal: true, update: { available: true } })).toContain(
+      'Plan again from all open tickets while the current plan keeps running',
+    );
+    // With the planner working, both are said.
+    expect(toolbar('no_plan', { defaultGoal: true, planning: 'planning' })).toContain(
+      '· Working through all open tickets · Planning',
+    );
+    // An explicit goal: nothing is added.
+    expect(toolbar('running')).not.toContain('Working through all open tickets');
+    expect(toolbar('no_plan', { propose: { available: true } })).toContain('Propose a plan from the goal tickets');
+  });
+});
+
 describe('OrchestrationInspector (HS2-J89JC7)', () => {
   const inspector = (step: string, extra = {}) =>
     String(OrchestrationInspector({ item: item(step), timeline: demoTimeline('running'), clock: demoClock, ...extra }));

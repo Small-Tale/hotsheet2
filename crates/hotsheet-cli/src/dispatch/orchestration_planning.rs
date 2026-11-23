@@ -20,8 +20,10 @@ enum PlanCmd {
     /// to create or link, plan steps with prerequisites, resources and a preferred
     /// tool. It runs in this project through the ordinary AI terminal launch and
     /// shows in the drawer. One planner at a time: a live one answers instead, and a
-    /// retained --operation-id never launches twice. Nothing is placed until the
-    /// policy places sessions.
+    /// retained --operation-id never launches twice. With no open goal ticket it
+    /// plans the default goal, working through all open tickets of the targets, and
+    /// opens that goal ticket once (HS2-YSRT6Y). Nothing is placed until the policy
+    /// places sessions.
     Propose {
         /// The AI tool the planner runs in, by plugin id.
         #[arg(long)]
@@ -41,7 +43,8 @@ enum PlanCmd {
         operation_id: Option<String>,
     },
     /// Where planning stands: idle, planning or ended, the live or latest planner, the
-    /// open goal tickets with their plan steps, and whether the policy places
+    /// open goal tickets with their plan steps, whether only the default goal
+    /// (working through all open tickets) applies, whether the policy places
     /// sessions yet, and the latest plan update. Starts nothing.
     Show,
     /// HS2-190RDX: Update Plan. Re-plan in the background without pausing: open a

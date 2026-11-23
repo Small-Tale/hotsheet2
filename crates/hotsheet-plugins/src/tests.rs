@@ -850,6 +850,13 @@ fn hs2_hcw7md_planner_skill_proposes_a_dry_run_plan_only() {
         "Never end a proposal having silently planned nothing.",
         "Settings the person left unset mean Auto",
         "Hot Sheet pushes the person's answer into this session.",
+        // HS2-YSRT6Y: with no explicit goal open, work through every open ticket.
+        "## Default goal (HS2-YSRT6Y)",
+        "tagged `orchestration-default-goal`",
+        "an explicit `blocked_by` on the target ticket is a `ticket` prerequisite",
+        "never create target tickets for the default goal",
+        "An explicit goal takes precedence",
+        "Tickets created in a target later are planned by the next Update Plan.",
     ] {
         assert!(planner.contains(phrase), "planner missing {phrase}");
     }

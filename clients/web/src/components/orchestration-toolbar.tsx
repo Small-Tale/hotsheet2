@@ -16,6 +16,11 @@ export interface OrchestrationToolbarProps {
   propose?: OrchestrationProposeAvailability;
   /** HS2-N5BDE4: the slug of the goal ticket holding the planner's question, while it waits. */
   question?: string;
+  /**
+   * HS2-YSRT6Y: no explicit goal ticket is open, so planning works through all open tickets of the
+   * orchestrated projects (the default goal).
+   */
+  defaultGoal?: boolean;
   /** HS2-190RDX: whether Update Plan can be pressed, and why not. */
   update?: OrchestrationProposeAvailability;
   /** A kick-off change is on its way to the server. */
@@ -53,11 +58,13 @@ export function OrchestrationToolbar({
   propose = { available: false },
   update = { available: false },
   question,
+  defaultGoal = false,
   busy = false,
   planning,
   clock = clockTime,
 }: OrchestrationToolbarProps) {
-  const status = `${timelineStatus(timeline, clock)}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
+  const goal = defaultGoal && timeline.phase !== 'no_projects' ? ' · Working through all open tickets' : '';
+  const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
   const blocked = startBlockedReason(timeline);
   const updating = planning === 'updating';
   const answer =
@@ -92,7 +99,11 @@ export function OrchestrationToolbar({
           action={ORCHESTRATION_ACTIONS.updateOrchestrationPlan.value}
           disabled={busy || !update.available}
           title={
-            update.available ? 'Plan again from the goal tickets while the current plan keeps running' : update.reason
+            update.available
+              ? defaultGoal
+                ? 'Plan again from all open tickets while the current plan keeps running'
+                : 'Plan again from the goal tickets while the current plan keeps running'
+              : update.reason
           }
           icon={<LucideIcon size="s" icon={RefreshCw} name="refresh-cw" />}
         >
@@ -111,7 +122,13 @@ export function OrchestrationToolbar({
             shape="pill"
             action={ORCHESTRATION_ACTIONS.proposeOrchestrationPlan.value}
             disabled={busy || !propose.available}
-            title={propose.available ? 'Propose a plan from the goal tickets' : propose.reason}
+            title={
+              propose.available
+                ? defaultGoal
+                  ? 'Propose a plan that works through all open tickets'
+                  : 'Propose a plan from the goal tickets'
+                : propose.reason
+            }
             icon={<LucideIcon size="s" icon={Sparkles} name="sparkles" />}
           >
             Propose Plan

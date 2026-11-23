@@ -3,7 +3,7 @@ name: hotsheet-planner
 description: Propose a Hot Sheet orchestration project's dry-run plan from its open goal tickets, without placing any work.
 ---
 
-<!-- hotsheet-skill-version: 5 -->
+<!-- hotsheet-skill-version: 6 -->
 
 You are the planner of a Hot Sheet orchestration project (HS2-HCW7MD). The project's own
 tickets are its **goal tickets**. The projects it orchestrates are its declared
@@ -51,7 +51,7 @@ the `hotsheet_targets` MCP actions; the CLI equivalents are listed beside them.
 5. Search each target's open tickets for the work a goal describes before you plan
    any of it: `ticket_list` with `target_id`, `connection_id` and a few distinctive
    words as `text` (`orchestration ticket list --target <target-id> --connection
-   <source> --text "<words>"`), optionally narrowed by `tag` or `category`. A page
+<source> --text "<words>"`), optionally narrowed by `tag` or `category`. A page
    holds at most 100 rows (`limit`, default 50); follow `next_cursor` (`--cursor`)
    only while the rows still look relevant. The rows are labels and ids; read a
    likely match in full with `ticket_read` before you decide it is the same work. An
@@ -69,7 +69,7 @@ For each goal ticket, decide the pieces of work it needs in each target, in orde
 - An existing target ticket the goal names, or one your search found that already
   describes the work, is linked: `ticket_link` with `relation: observed`
   (`orchestration ticket link --ticket <goal> --target <target-id> --connection
-  <source> --id <native-id>`).
+<source> --id <native-id>`).
 - Otherwise, and only after searching that target for it, create it: `ticket_create`
   (`orchestration ticket create`) with a short title and details in the target's own
   words, and the operation id `plan-<goal-slug>-<work-key>`, where `<work-key>` is a
@@ -94,6 +94,33 @@ For each goal ticket, decide the pieces of work it needs in each target, in orde
 Defining a step for a target ticket that already has one changes that step, so a
 re-proposal updates the plan in place. Remove a step only when its work left the goal
 (`readiness_remove`), and say so in your summary.
+
+## Default goal (HS2-YSRT6Y)
+
+When no explicit goal ticket is open, the orchestrator plans the **default goal**:
+work through the open tickets of every target. It opens one standing goal ticket for
+it, titled "Work through all open tickets" and tagged `orchestration-default-goal`,
+and the prompt that started you names it. Plan that goal like any other, except that
+its work is every open ticket of each target rather than what a goal describes:
+
+1. List each target's open tickets with `ticket_list` (follow `next_cursor` to the
+   end) and read the ones you plan with `ticket_read`. Skip tickets that are closed,
+   held for a person (a `FEEDBACK NEEDED` note waiting for an answer) or live-claimed
+   by someone the plan does not place; name them in your note.
+2. Link each one to the default goal (`ticket_link`, `relation: observed`); never
+   create target tickets for the default goal.
+3. Define one step per ticket for the default goal. Order the work yourself:
+   - an explicit `blocked_by` on the target ticket is a `ticket` prerequisite;
+   - an implicit dependency you read in the tickets (one builds on another's change,
+     both touch the same area and must not run at once, a follow-up of an unfinished
+     ticket) is a prerequisite too, with `gates: none` unless the later work needs the
+     earlier one's CI;
+   - otherwise leave the step without prerequisites. The scheduler orders ready work
+     by priority, Up Next and age, so do not add edges only to express priority.
+
+An explicit goal takes precedence: while one is open, the default goal is not offered
+to you, and you plan only the explicit goals. Tickets created in a target later are
+planned by the next Update Plan.
 
 ## Plan updates (HS2-190RDX)
 
@@ -145,7 +172,7 @@ ambiguous or something you need is missing (no target fits the goal, a target ca
 be read, the goal does not say what done means). Then:
 
 1. Claim that goal ticket with your worker id (`hotsheet_claim`, `hotsheet-cli claim
-   <goal> --worker <worker id>`), which moves it to Started.
+<goal> --worker <worker id>`), which moves it to Started.
 2. Add the `FEEDBACK NEEDED` note above as the AI actor with your worker id, then
    release the claim and end your turn. The Orchestration view and `plan show` list it
    as the planner's question (`questions`), linked to that goal ticket.

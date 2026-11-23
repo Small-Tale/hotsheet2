@@ -288,6 +288,8 @@ impl OrchestrationRuntime {
         if self.declarations(owner_id)?.targets.is_empty() {
             return Err(OrchestrationError::Readiness(ReadinessError::NoTargets));
         }
+        // HS2-YSRT6Y: with no goal open, the update plans the default goal.
+        self.ensure_default_goal(&owner, actor, tx)?;
         if self.plan_goals(&owner, None)?.1 == 0 {
             return Err(OrchestrationError::Readiness(ReadinessError::NoGoals));
         }

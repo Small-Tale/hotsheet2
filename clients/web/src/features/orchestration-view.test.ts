@@ -13,6 +13,7 @@ import {
   createServerPlanner,
   orchestrationPersonId,
   parseOrchestrationDetails,
+  planningDefaultGoal,
   planningPhase,
   planningQuestion,
   startOrchestrationTimelineStream,
@@ -112,7 +113,7 @@ describe('Propose Plan through the planning session (HS2-HCW7MD seam, HS2-J89JC7
     propose.mockResolvedValueOnce({ outcome: 'replanned' });
     expect(await planner.propose(project)).toMatch(/planning again/);
     propose.mockRejectedValueOnce(new ApiHttpError('no goals', 409, 'plan_no_goals'));
-    await expect(planner.propose(project)).rejects.toThrow(/open goal ticket/);
+    await expect(planner.propose(project)).rejects.toThrow(/Git ticket source/);
     propose.mockRejectedValueOnce(new ApiHttpError('boom', 500, 'internal'));
     await expect(planner.propose(project)).rejects.toThrow('boom');
     await expect(planner.propose({ ...project, id: 'other' })).rejects.toThrow(/Choose an AI tool/);
@@ -231,6 +232,11 @@ describe('where planning stands (HS2-5RYXNN)', () => {
       note_id: undefined,
     });
     expect(planningQuestion(undefined)).toBeUndefined();
+    // HS2-YSRT6Y: `plan show` says only the default goal applies.
+    expect(planningDefaultGoal({ default_goal: true })).toBe(true);
+    expect(planningDefaultGoal({ default_goal: false })).toBe(false);
+    expect(planningDefaultGoal({ default_goal: 'yes' })).toBe(false);
+    expect(planningDefaultGoal(undefined)).toBe(false);
     expect(planningPhase({ state: 'ended', replannable: true })).toBe('ended');
   });
 });
