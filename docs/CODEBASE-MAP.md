@@ -1206,8 +1206,12 @@ hotsheet-aitools/test-permission-vault`, then `cargo nextest run -p hotsheet-cli
 ### Host-approved remote browser sessions (HS2-7DBJMS)
 
 `crates/hotsheet-server/src/remote_auth.rs` owns the private hashed challenge and
-session catalog at `${HOTSHEET_HOME}/remote-auth/<store-id>.json`, bound to the
-machine's existing `server-identity.json`. `routes/remote_auth.rs` exposes
+session catalog at `${HOTSHEET_HOME}/remote-auth/machine.json`, bound to the
+machine's existing `server-identity.json` and shared by every server process on the
+machine under `machine.json.lock` (writes re-read under the lock, reads reload a replaced
+file). `remote_auth/migration.rs` merges the pre-HS2-YDDPN4 per-store catalogs
+(`remote-auth/<store-id>.json`) into it once per source digest; `AppState::with_machine_remote_auth`
+opens it from `main.rs`. `routes/remote_auth.rs` exposes
 pairing, redemption and trusted-owner endpoints; `routes/auth.rs`,
 `routes/store_scoped.rs` and `routes/terminals/attach.rs` enforce REST, polling
 and WebSocket authorization. `crates/hotsheet-cli/src/dispatch/remotes.rs`

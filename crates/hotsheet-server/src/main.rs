@@ -371,11 +371,17 @@ async fn main() -> Result<()> {
         .with_persistent_registered_indexes()
         .with_permission_rules_deferred(permission_rules_path)
         .with_client_drive_persistence(drive_root.join("sessions.json"), drive_root.join("homes"))?
-        .with_remote_auth(
-            hotsheet_plugins::hotsheet_home()
-                .join("remote-auth")
-                .join(format!("{store_id}.json")),
-        )?;
+        .with_machine_remote_auth()?;
+    if let Some(auth) = state.remote_auth() {
+        let migration = auth.migration();
+        if !migration.merged.is_empty() {
+            println!(
+                "remote auth: merged {} per-store catalog(s) into {}",
+                migration.merged.len(),
+                auth.path().display()
+            );
+        }
+    }
     if mode.is_some() {
         state = state.with_remote_listener();
     }

@@ -2150,7 +2150,9 @@ redeem sends a host-only, HttpOnly, SameSite=Strict session cookie and a separat
 CSRF cookie. HTTPS sets Secure on both; explicit HTTP does not, so its session
 cookie is exposed to observers of that transport. The server stores only SHA-256
 digests of the random tokens in a private atomic catalog under
-`${HOTSHEET_HOME}/remote-auth/<store-id>.json`. The catalog is bound to the
+`${HOTSHEET_HOME}/remote-auth/machine.json`, one per machine whichever primary store
+the server runs on; the first open merges the earlier per-store catalogs
+(HS2-YDDPN4, [08](08-distributed-and-remote.md) §8.2.2). The catalog is bound to the
 durable machine server id and fails startup if it belongs to another identity.
 Sessions expire after 30 days without use or 90 days after approval or the last
 renewal (HS2-4B0KSD, [08](08-distributed-and-remote.md) §8.2.2); active-use timestamps,

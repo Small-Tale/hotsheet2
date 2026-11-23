@@ -258,8 +258,9 @@ the same way, and only device managers receive that event (HS2-BZHMEV). The
 server issues a revocable,
 server-side session and checks it on REST, polling and WebSocket routes;
 the browser-facing bridge authenticates before proxying and never passes its
-loopback secret for a remote request. The session catalog is private to each
-server store and bound to the machine's durable server identity.
+loopback secret for a remote request. The session catalog is machine-scoped,
+`${HOTSHEET_HOME}/remote-auth/machine.json`, and bound to the machine's durable server
+identity (see "Machine-scoped session catalog" below).
 An approved session opens only projects the host has already registered,
 through a separate remote open route (HS2-3HC9HT, [06](06-clients.md) §6.2). Its multiplexed
 change long-poll (`/__hotsheet/change-mux/poll`) forwards only the browser's session
@@ -337,15 +338,51 @@ and a desktop's remote server binding: the binding stores the session token as `
 
 What a rebuild, reboot or server restart keeps:
 
-| Credential                                                         | Lifetime                                           | Regenerated on rebuild, reboot or restart?                                                                                                                                                             |
-| ------------------------------------------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Paired session (browser device, or desktop binding via `session:`) | 30 days idle, 90 days absolute, renewable in place | No. The catalog `${HOTSHEET_HOME}/remote-auth/<store-id>.json` is durable. It is keyed by the primary store, so a server started on another primary store sees another catalog (follow-up HS2-YDDPN4). |
-| Machine server id (`server-identity.json`)                         | Permanent                                          | No                                                                                                                                                                                                     |
-| Instance secret (`X-Hotsheet-Secret` bearer)                       | One server process                                 | Yes, unless `--secret` is passed. It is used only from loopback, never by an off-box binding.                                                                                                          |
-| mTLS project CA                                                    | 10 years                                           | No (`cert init` refuses to replace it)                                                                                                                                                                 |
-| mTLS server leaf                                                   | 397 days                                           | No; it is renewed by hand                                                                                                                                                                              |
-| mTLS device certificate                                            | 90 days                                            | No; it is rotated by hand with `cert rotate` (follow-up HS2-MSXYJN)                                                                                                                                    |
-| Desktop binding (`remotes.json` plus the private secret store)     | Until removed                                      | No                                                                                                                                                                                                     |
+| Credential                                                         | Lifetime                                           | Regenerated on rebuild, reboot or restart?                                                                                                                                  |
+| ------------------------------------------------------------------ | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Paired session (browser device, or desktop binding via `session:`) | 30 days idle, 90 days absolute, renewable in place | No. The catalog `${HOTSHEET_HOME}/remote-auth/machine.json` is durable and machine-scoped, so a server started on any primary store keeps every paired device (HS2-YDDPN4). |
+| Machine server id (`server-identity.json`)                         | Permanent                                          | No                                                                                                                                                                          |
+| Instance secret (`X-Hotsheet-Secret` bearer)                       | One server process                                 | Yes, unless `--secret` is passed. It is used only from loopback, never by an off-box binding.                                                                               |
+| mTLS project CA                                                    | 10 years                                           | No (`cert init` refuses to replace it)                                                                                                                                      |
+| mTLS server leaf                                                   | 397 days                                           | No; it is renewed by hand                                                                                                                                                   |
+| mTLS device certificate                                            | 90 days                                            | No; it is rotated by hand with `cert rotate` (follow-up HS2-MSXYJN)                                                                                                         |
+| Desktop binding (`remotes.json` plus the private secret store)     | Until removed                                      | No                                                                                                                                                                          |
+
+#### Machine-scoped session catalog (HS2-YDDPN4)
+
+A paired device authorizes this machine's server, not one primary store. The server keeps
+every pairing, device and revocation in one catalog, `${HOTSHEET_HOME}/remote-auth/machine.json`,
+whichever primary store it was started on.
+
+**When the primary store differs.** The desktop host, `hotsheet-mcp`, `hotsheet-cli` setup and
+external launch, and the `server:rebuild*` and `prod:rebuild` scripts all start the machine server
+on `${HOTSHEET_HOME}/server-bootstrap.hs2`. Its store id is the hash of the canonical path, so it
+stays the same across rebuilds and reboots. The primary store differs only when someone runs
+`hotsheet-cli serve` or `hotsheet-server` with `-C` naming another store, for example a
+checkout's ticket store or a test store. Before HS2-YDDPN4 the catalog was
+`remote-auth/<store-id>.json`, so such a server knew none of the devices the bootstrap server had
+approved, and answered `session_invalid`.
+
+**Migration.** The first open of the machine catalog merges every per-store catalog in
+`remote-auth/`, under the catalog's lock:
+
+- Devices merge by id. When two catalogs disagree about one device, a revocation on either side
+  wins. Otherwise the newest renewal wins and keeps the later idle activity of the two. Each such
+  conflict is logged and recorded with the merged source in the machine catalog.
+- Unexpired pending pairings carry over. Nothing is pruned, so no valid session is dropped.
+- Each merged source is recorded with its SHA-256 digest. Reopening never merges an unchanged
+  source again; a source an older server rewrote merges again under the same rules.
+- A source that cannot be read or parsed is skipped with a warning and retried at the next
+  start. A source bound to another server identity is skipped once, with a warning.
+- The per-store files stay in place. An older server still reads its own file, but it does not
+  know devices paired after the upgrade.
+
+**Several servers at once.** The writer lock is per store, so servers on different primary
+stores may run together and share the catalog. Every write takes `machine.json.lock` and applies
+its change to the file's latest content, so neither server loses the other's change. Every read
+reloads the file when another process replaced it, so a revocation through one server holds in
+the other at its next request. A long poll on the device list wakes on such a reload only when a
+request reaches that server; follow-up HS2-Q5FFWN owns waking it on the file change itself.
 
 ### 8.2.3 Desktop local and remote projects (HS2-BT4KN6)
 

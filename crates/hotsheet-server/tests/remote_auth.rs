@@ -1320,3 +1320,103 @@ async fn hs2_bzhmev_pairing_request_events_reach_only_device_managers_over_webso
     assert_eq!(next_kind(&mut reader_socket).await, "browser_grants");
     assert_eq!(next_kind(&mut admin_socket).await, "browser_grants");
 }
+
+/// HS2-YDDPN4: a paired device authorizes the machine's server, not one primary store. A
+/// device paired while the server ran on store A under the per-store catalog layout keeps
+/// working after the server restarts on store B, and a device paired on B then works when the
+/// server returns to A. Revoking on B holds on A.
+#[tokio::test]
+async fn hs2_yddpn4_restart_on_another_primary_store_keeps_paired_devices() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    let store_a = FsStore::init_git(dir.path().join("a.hs2"), &StoreMetadata::new("SYN")).unwrap();
+    let store_b = FsStore::init_git(dir.path().join("b.hs2"), &StoreMetadata::new("SYN")).unwrap();
+    let legacy = home.join("remote-auth").join(format!(
+        "{}.json",
+        hotsheet_server::multistore::store_url_id(&store_a)
+    ));
+    let old_layout = app(AppState::new(store_a.clone(), SECRET.into())
+        .unwrap()
+        .with_machine_home(&home)
+        .with_remote_auth(&legacy)
+        .unwrap());
+    let (tablet, _, tablet_device) = paired(
+        &old_layout,
+        "Synthetic tablet",
+        json!({"role": "read_write"}),
+    )
+    .await;
+    drop(old_layout);
+    let legacy_bytes = std::fs::read(&legacy).unwrap();
+
+    let on_b = AppState::new(store_b, SECRET.into())
+        .unwrap()
+        .with_machine_home(&home)
+        .with_machine_remote_auth()
+        .unwrap();
+    assert_eq!(
+        on_b.remote_auth().unwrap().migration().merged,
+        vec![legacy.file_name().unwrap().to_string_lossy().into_owned()]
+    );
+    let on_b = app(on_b);
+    let me = |cookie: &str| request("GET", "/remote-auth/me", None, Some(cookie), None, false);
+    assert_eq!(status(&on_b, me(&tablet)).await, StatusCode::OK);
+    let (phone, _, phone_device) =
+        paired(&on_b, "Synthetic phone", json!({"role": "read_only"})).await;
+    drop(on_b);
+
+    let on_a = AppState::new(store_a, SECRET.into())
+        .unwrap()
+        .with_machine_home(&home)
+        .with_machine_remote_auth()
+        .unwrap();
+    assert!(on_a.remote_auth().unwrap().migration().merged.is_empty());
+    let on_a = app(on_a);
+    assert_eq!(status(&on_a, me(&tablet)).await, StatusCode::OK);
+    assert_eq!(status(&on_a, me(&phone)).await, StatusCode::OK);
+    let listed = json_body(
+        on_a.clone()
+            .oneshot(request("GET", "/remote-auth/owner", None, None, None, true))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let ids: Vec<_> = listed["devices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|device| device["id"].clone())
+        .collect();
+    assert!(ids.contains(&tablet_device["id"]) && ids.contains(&phone_device["id"]));
+    // The per-store file stays untouched for an older server.
+    assert_eq!(std::fs::read(&legacy).unwrap(), legacy_bytes);
+
+    // Two servers on different primary stores share the catalog: a revocation through one
+    // holds in the other at its next request.
+    let store_b = FsStore::open(dir.path().join("b.hs2")).unwrap();
+    let on_b = app(AppState::new(store_b, SECRET.into())
+        .unwrap()
+        .with_machine_home(&home)
+        .with_machine_remote_auth()
+        .unwrap());
+    let revoked = on_b
+        .clone()
+        .oneshot(request(
+            "DELETE",
+            &format!(
+                "/remote-auth/owner/devices/{}",
+                tablet_device["id"].as_str().unwrap()
+            ),
+            None,
+            None,
+            None,
+            true,
+        ))
+        .await
+        .unwrap();
+    assert!(revoked.status().is_success(), "{}", revoked.status());
+    let refused = on_a.clone().oneshot(me(&tablet)).await.unwrap();
+    assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(json_body(refused).await["code"], "session_revoked");
+    assert_eq!(status(&on_a, me(&phone)).await, StatusCode::OK);
+}

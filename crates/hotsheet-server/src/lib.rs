@@ -889,6 +889,22 @@ impl AppState {
         Ok(self)
     }
 
+    /// Enable remote browser authorization with this machine's one session catalog,
+    /// `<machine home>/remote-auth/machine.json`, merging the per-store catalogs written
+    /// before HS2-YDDPN4. A paired device then works whichever primary store the machine
+    /// server was started on.
+    pub fn with_machine_remote_auth(mut self) -> anyhow::Result<Self> {
+        let identity =
+            hotsheet_ticketing::remote_servers::server_identity(self.machine_home(), || {
+                ulid::Ulid::new().to_string()
+            })?;
+        self.remote_auth = Some(remote_auth::RemoteAuth::open_machine(
+            self.machine_home(),
+            &identity.server_id,
+        )?);
+        Ok(self)
+    }
+
     /// Drive the remote session catalog from `clock` instead of the wall clock (HS2-4B0KSD
     /// transition tests). Call after [`Self::with_remote_auth`].
     #[must_use]

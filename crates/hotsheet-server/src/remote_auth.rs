@@ -19,6 +19,18 @@
 //! binding and its selected projects keep working. Reminders fall on [`reminder_day`]'s days.
 //! A revoked session leaves a tombstone so it fails as revoked, not as unknown, without an
 //! older server ever accepting it again.
+//!
+//! HS2-YDDPN4: one catalog serves the whole machine, `${HOTSHEET_HOME}/remote-auth/machine.json`
+//! ([`RemoteAuth::open_machine`]). A paired device authorizes this machine's server, not one
+//! primary store, so a server started on another primary store keeps every device. The first
+//! open merges the earlier per-store catalogs (`remote-auth/<store-id>.json`) into it, under the
+//! catalog's file lock, and leaves those files in place (see [`migration`]). Servers on several
+//! primary stores may run at once: every write re-reads the file under that lock, and every read
+//! reloads the file when another process replaced it, so a revocation anywhere holds everywhere.
+
+mod migration;
+
+pub use migration::MigrationReport;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -154,14 +166,14 @@ struct PendingRecord {
     approved_grants: Grants,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct SessionRecord {
     device: DeviceRecord,
     token_hash: String,
     csrf_hash: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct DeviceRecord {
     id: String,
     server_id: String,
@@ -277,6 +289,9 @@ struct Data {
     sessions: Vec<SessionRecord>,
     #[serde(default)]
     recent_requests: Vec<i64>,
+    /// The per-store catalogs already merged into the machine catalog (HS2-YDDPN4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    migrated: Vec<migration::MigratedSource>,
 }
 
 impl Data {
@@ -286,8 +301,82 @@ impl Data {
             pending: Vec::new(),
             sessions: Vec::new(),
             recent_requests: Vec::new(),
+            migrated: Vec::new(),
         }
     }
+}
+
+/// The machine catalog's directory under `${HOTSHEET_HOME}`; it also holds the per-store
+/// catalogs written before HS2-YDDPN4.
+pub const CATALOG_DIR: &str = "remote-auth";
+/// The machine catalog's file name inside [`CATALOG_DIR`].
+pub const MACHINE_CATALOG: &str = "machine.json";
+
+/// The machine-scoped session catalog under `home` (HS2-YDDPN4).
+pub fn machine_catalog_path(home: &Path) -> PathBuf {
+    home.join(CATALOG_DIR).join(MACHINE_CATALOG)
+}
+
+/// The catalog in memory and the file version it was read from.
+struct Loaded {
+    data: Data,
+    stamp: Option<Stamp>,
+}
+
+/// Identifies one version of the catalog file. Every write replaces the file, so a write by any
+/// process changes the inode (Unix), the length or the modification time. Reads use it to skip
+/// re-parsing an unchanged file; writes re-read regardless. A revocation always changes the
+/// length, because its tombstone prefixes both digests.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Stamp {
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    inode: u64,
+}
+
+fn stamp(path: &Path) -> Option<Stamp> {
+    let metadata = fs::metadata(path).ok()?;
+    #[cfg(unix)]
+    let inode = std::os::unix::fs::MetadataExt::ino(&metadata);
+    #[cfg(not(unix))]
+    let inode = 0;
+    Some(Stamp {
+        len: metadata.len(),
+        modified: metadata.modified().ok(),
+        inode,
+    })
+}
+
+/// Read and check the catalog at `path`; `None` when it does not exist yet. A corrupt catalog
+/// or one bound to another server identity is an error, never an empty catalog, so no
+/// revocation is silently forgotten.
+fn read_catalog(path: &Path, server_id: &str) -> Result<Option<Data>> {
+    let data: Data = match fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).context("invalid remote auth catalog")?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error).context("read remote auth catalog"),
+    };
+    if data.server_id != server_id {
+        anyhow::bail!("remote auth catalog belongs to another server identity");
+    }
+    Ok(Some(data))
+}
+
+/// Hold the catalog's cross-process lock (`<catalog>.lock`) until the result is dropped.
+fn lock_catalog(path: &Path) -> Result<hotsheet_ticketing::FileLock> {
+    let mut lock = path.as_os_str().to_owned();
+    lock.push(".lock");
+    let mut options = fs::OpenOptions::new();
+    options.create(true).truncate(false).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options
+        .open(PathBuf::from(lock))
+        .context("open remote auth catalog lock")?;
+    hotsheet_ticketing::FileLock::acquire(file).context("lock remote auth catalog")
 }
 
 /// The seconds clock the routes read for every session decision (HS2-4B0KSD).
@@ -325,7 +414,9 @@ impl ManualClock {
 #[derive(Clone)]
 pub struct RemoteAuth {
     path: PathBuf,
-    data: Arc<Mutex<Data>>,
+    data: Arc<Mutex<Loaded>>,
+    /// What opening merged from the per-store catalogs (HS2-YDDPN4).
+    migration: Arc<MigrationReport>,
     /// In-memory change cursor for device-list long polls. It starts from the clock so a
     /// restarted server never repeats a cursor a client already holds.
     revision: Arc<tokio::sync::watch::Sender<u64>>,
@@ -350,23 +441,43 @@ pub enum AuthFailure {
 }
 
 impl RemoteAuth {
+    /// Open the catalog at `path` alone, without merging any per-store catalog (tests and
+    /// single-file callers).
     pub fn open(path: impl Into<PathBuf>, server_id: &str) -> Result<Self> {
-        let path = path.into();
-        let (data, fresh) = match fs::read(&path) {
-            Ok(bytes) => (
-                serde_json::from_slice(&bytes).context("invalid remote auth catalog")?,
-                false,
-            ),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                (Data::new(server_id), true)
-            }
-            Err(error) => return Err(error).context("read remote auth catalog"),
-        };
-        if data.server_id != server_id {
-            anyhow::bail!("remote auth catalog belongs to another server identity");
-        }
-        if fresh {
+        Self::open_with(path.into(), server_id, None, wall_clock())
+    }
+
+    /// Open this machine's catalog under `home` and merge the per-store catalogs beside it
+    /// (HS2-YDDPN4).
+    pub fn open_machine(home: &Path, server_id: &str) -> Result<Self> {
+        Self::open_machine_at(home, server_id, wall_clock())
+    }
+
+    /// [`Self::open_machine`] at `now`, which only decides which pending pairings are still
+    /// worth carrying over.
+    pub fn open_machine_at(home: &Path, server_id: &str, now: i64) -> Result<Self> {
+        let path = machine_catalog_path(home);
+        let legacy = home.join(CATALOG_DIR);
+        Self::open_with(path, server_id, Some(&legacy), now)
+    }
+
+    fn open_with(path: PathBuf, server_id: &str, legacy: Option<&Path>, now: i64) -> Result<Self> {
+        let parent = path.parent().context("remote auth catalog has no parent")?;
+        fs::create_dir_all(parent)?;
+        let lock = lock_catalog(&path)?;
+        let existing = read_catalog(&path, server_id)?;
+        let fresh = existing.is_none();
+        let mut data = existing.unwrap_or_else(|| Data::new(server_id));
+        let report = legacy.map_or_else(MigrationReport::default, |dir| {
+            migration::migrate(&mut data, dir, &path, now)
+        });
+        if fresh || report.changed {
             write_private_atomic(&path, &serde_json::to_vec(&data)?)?;
+        }
+        let stamp = stamp(&path);
+        drop(lock);
+        for warning in &report.warnings {
+            tracing::warn!("remote auth catalog migration: {warning}");
         }
         let start = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -375,11 +486,51 @@ impl RemoteAuth {
             });
         Ok(Self {
             path,
-            data: Arc::new(Mutex::new(data)),
+            data: Arc::new(Mutex::new(Loaded { data, stamp })),
+            migration: Arc::new(report),
             revision: Arc::new(tokio::sync::watch::Sender::new(start)),
             clock: Arc::new(wall_clock),
             writes: Arc::new(tokio::sync::watch::Sender::new(0)),
         })
+    }
+
+    /// The catalog file this process reads and writes.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// What opening merged from the per-store catalogs, with every warning it recorded.
+    pub fn migration(&self) -> &MigrationReport {
+        &self.migration
+    }
+
+    /// The catalog as of now: reloaded first when another process replaced the file since this
+    /// process last read or wrote it, so a revocation made by another server holds here at the
+    /// next request. A reload counts as a device-list change. An unreadable replacement keeps
+    /// the last good catalog and is logged once.
+    fn current(&self) -> std::sync::MutexGuard<'_, Loaded> {
+        let mut guard = self
+            .data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let on_disk = stamp(&self.path);
+        if on_disk != guard.stamp {
+            guard.stamp = on_disk;
+            match read_catalog(&self.path, &guard.data.server_id) {
+                Ok(Some(data)) => {
+                    guard.data = data;
+                    self.revision
+                        .send_modify(|revision| *revision = revision.wrapping_add(1));
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        "remote auth catalog reload failed; keeping the last good copy: {error:#}"
+                    );
+                }
+            }
+        }
+        guard
     }
 
     /// Replace the clock the routes read (HS2-4B0KSD transition tests).
@@ -414,6 +565,7 @@ impl RemoteAuth {
         self.data
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .data
             .server_id
             .clone()
     }
@@ -427,15 +579,26 @@ impl RemoteAuth {
     }
 
     /// A bookkeeping write (idle activity, credential rotation) that no list shows changing.
+    ///
+    /// The change applies to the file's latest content, read under the catalog's cross-process
+    /// lock, so two servers sharing the machine catalog never overwrite each other's changes
+    /// (HS2-YDDPN4). A catalog that cannot be read fails the write rather than being replaced.
     fn write<T>(&self, change: impl FnOnce(&mut Data) -> Result<T>) -> Result<T> {
         let mut guard = self
             .data
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut next = guard.clone();
+        let _lock = lock_catalog(&self.path)?;
+        // Always re-read under the lock: a stamp can repeat on a coarse-clock filesystem
+        // that reuses inodes, and a stale base would lose another server's change.
+        if let Some(data) = read_catalog(&self.path, &guard.data.server_id)? {
+            guard.data = data;
+        }
+        let mut next = guard.data.clone();
         let result = change(&mut next)?;
         write_private_atomic(&self.path, &serde_json::to_vec(&next)?)?;
-        *guard = next;
+        guard.stamp = stamp(&self.path);
+        guard.data = next;
         self.writes.send_modify(|count| *count += 1);
         Ok(result)
     }
@@ -483,9 +646,8 @@ impl RemoteAuth {
     }
 
     pub fn pending(&self, now: i64) -> Vec<PendingDevice> {
-        self.data
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.current()
+            .data
             .pending
             .iter()
             .filter(|entry| entry.expires_at > now)
@@ -631,14 +793,11 @@ impl RemoteAuth {
         // revocation authoritative.
         let hash = digest(token);
         {
-            let guard = self
-                .data
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let Some(position) = find_session(&guard.sessions, &hash) else {
+            let guard = self.current();
+            let Some(position) = find_session(&guard.data.sessions, &hash) else {
                 return Ok(Err(AuthFailure::Invalid));
             };
-            let entry = &guard.sessions[position];
+            let entry = &guard.data.sessions[position];
             let result = validate(entry, csrf, origin, write, now);
             if result.is_err() || entry.device.last_used_at > now - ACTIVITY_PERSIST_INTERVAL {
                 return Ok(result.map(|device| device.at(now)));
@@ -660,9 +819,8 @@ impl RemoteAuth {
     /// Every paired device the host may manage, expired ones included so they can be renewed
     /// in place. Revoked tombstones are never listed.
     pub fn list(&self, now: i64) -> Vec<Device> {
-        self.data
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.current()
+            .data
             .sessions
             .iter()
             .filter(|entry| !entry.revoked())
@@ -702,14 +860,11 @@ impl RemoteAuth {
     ) -> Result<Result<Device, AuthFailure>> {
         let hash = digest(token);
         let current = {
-            let guard = self
-                .data
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let Some(position) = find_session(&guard.sessions, &hash) else {
+            let guard = self.current();
+            let Some(position) = find_session(&guard.data.sessions, &hash) else {
                 return Ok(Err(AuthFailure::Invalid));
             };
-            let entry = &guard.sessions[position];
+            let entry = &guard.data.sessions[position];
             if entry.revoked() {
                 return Ok(Err(AuthFailure::Revoked));
             }
