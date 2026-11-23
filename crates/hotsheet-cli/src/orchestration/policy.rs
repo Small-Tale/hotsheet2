@@ -234,7 +234,7 @@ impl OrchestrationRuntime {
                         tool: tool.into(),
                         model: entry
                             .and_then(|entry| entry.tools.iter().find(|scope| scope.tool == tool))
-                            .and_then(|scope| scope.models.first().cloned()),
+                            .and_then(hotsheet_ticketing::orchestration::ToolScope::start_model),
                         running: 0,
                         starting: true,
                     });

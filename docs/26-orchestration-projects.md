@@ -841,14 +841,14 @@ its default, a newer version is an explicit unsupported-version error and is nev
 overwritten, and a stored policy that no longer validates is treated as corrupt
 rather than evaluated. All quantities are integers: megabytes, percent and cents.
 
-| Section       | Fields and defaults                                                                                                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                                                                |
-| `tools[]`     | `tool`, `max_sessions` Auto (0 off, else 1 to 64), `weight` Auto (0 off, else 1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`. See Auto below. |
-| `targets[]`   | `target_id`, `enabled` true, `tools[]` Auto (empty) with optional `models`, `max_sessions` Auto (0 starts none, else 1 to 64), and optional `machine` and `speculation` overrides. See Auto below.                 |
-| `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                                                                    |
-| `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`, `redo_reopened` false (HS2-NCMATS, §26.22). |
-| `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5, and `resources[]` (§26.20). Left out of the file while it holds only defaults.                                           |
+| Section       | Fields and defaults                                                                                                                                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                                                                                    |
+| `tools[]`     | `tool`, `max_sessions` Auto (0 off, else 1 to 64), `weight` Auto (0 off, else 1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`. See Auto below.                     |
+| `targets[]`   | `target_id`, `enabled` true, `tools[]` Auto (empty) with optional `models` (names or `*` patterns, HS2-1X1TXC), `max_sessions` Auto (0 starts none, else 1 to 64), and optional `machine` and `speculation` overrides. See Auto below. |
+| `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                                                                                        |
+| `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`, `redo_reopened` false (HS2-NCMATS, §26.22).                     |
+| `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5, and `resources[]` (§26.20). Left out of the file while it holds only defaults.                                                               |
 
 **Retired fields.** `targets[].actions` and `approval.required_for` are read and
 ignored. `validate` reports each as `target_actions_ignored` or `approval_ignored`
@@ -872,6 +872,16 @@ other number is used as given. Auto is written by leaving the member out.
 | A target's `tools`        | Empty: any tool not turned off that is installed and signed in on the target's machine (from its capacity read), then any tool the policy lists. Models are any, as before.                                                                                              |
 | A target's `max_sessions` | The target machine's `max_sessions` (its `machine` override, else the policy's). `0` starts no session there.                                                                                                                                                            |
 | A target the policy omits | Auto in everything: enabled, Auto tools, Auto sessions, the policy's machine limits and build-ahead. A target is only ever asked about once the manifest declares it.                                                                                                    |
+
+**Model patterns (HS2-1X1TXC).** An entry of a target tool's `models` is an exact model
+name or a pattern in which `*` matches any run of characters (`claude-opus-*`, `gpt-*`,
+`*-mini`). A session's model is allowed when any entry matches it. A session the
+orchestrator starts names the first exact model listed; when every entry is a pattern
+it names none, so the tool runs its own default model, and a session that names no model
+is allowed only under such a pattern-only list. The maintainer's request was to pick a
+family rather than type a version; resolving a pattern to the newest matching model the
+host reports is follow-up work. Validation is unchanged: at most 32 unique entries of at
+most 128 bytes without whitespace.
 
 Files written before Auto read unchanged: every stored number keeps its meaning. What
 changes is the unset case. A tool or project the policy did not list used to start
@@ -4155,6 +4165,22 @@ step's own resources. A step's set is stored sorted,
 so the same set in another order is the same definition; a changed set is a new
 revision and wakes the scheduler; defining a step without `resources` withdraws
 them. A requirement is not a prerequisite: readiness (§26.15) does not look at it.
+
+**Patterns (HS2-NPAZQW).** A requirement in the policy may be a pattern: `*` in the
+resource part matches any run of resource characters (`vm/*`, `vm/macos-*`); the
+namespace is always exact, and a plan step or a session start names exact resources
+only. A pattern means _hold any one matching resource_. The claim service keeps no list
+of resources, so the candidates are the **declared** resources on the site's machine: the
+exact resources the policy requires of any target, those any plan step in the pass
+names, and those someone holds there now. A pattern never invents a name nobody
+declared. Each pass gives the work the first free candidate in name order (not held
+there, and not given to better-ranked work in this pass) and hands that exact resource
+to the session start (`Placement.resources`), so the session acquires one exact name as
+before. An exact resource the work already needs that matches satisfies the pattern.
+With every candidate held the work is `resource_held` (detail: the pattern) and retried
+at the earliest expiry; with no candidate at all it is `resource_unknown`. The
+maintainer left "any one or all of them" open; "any one" is the simplest safe reading,
+because "all" of an open-ended set is not knowable.
 
 Validation refuses a malformed name, a resource named twice and more than four, on
 a step before any target is read. Policy validation adds `invalid_resource`,

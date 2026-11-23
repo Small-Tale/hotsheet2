@@ -26,7 +26,7 @@ use super::{
     CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OfflinePolicy,
     OrchestrationError, PolicyBody, PolicyDenial, ProjectSites, RequirementState,
     ResourceContention, ResourceState, RoleSessionKind, SelectionRequest, SessionCount,
-    SessionRole, SignalSupport, StepRequirements, UnreadableClaims, UnreadableReason,
+    SessionRole, SignalSupport, StepRequirements, ToolScope, UnreadableClaims, UnreadableReason,
     decide_admission, requirement_misses, select,
 };
 
@@ -159,6 +159,42 @@ impl WorkItem {
         }
         needs
     }
+}
+
+/// HS2-NPAZQW: the declared resources a pattern requirement can be given on one
+/// machine, sorted: the exact resources the policy names for any target, those any
+/// plan step of this pass names, and those someone holds there now. A name nobody
+/// declared is never invented for a pattern.
+fn declared_matches(
+    input: &ScheduleInput<'_>,
+    machine: &str,
+    pattern: &ResourceNeed,
+) -> Vec<ResourceNeed> {
+    let held = input
+        .held
+        .iter()
+        .filter(|held| held.server_id.as_deref().is_none_or(|id| id == machine))
+        .map(|held| ResourceNeed {
+            namespace: held.namespace.clone(),
+            resource: held.resource.clone(),
+        });
+    input
+        .policy
+        .placement
+        .resources
+        .iter()
+        .flat_map(|entry| entry.resources.iter().cloned())
+        .chain(
+            input
+                .work
+                .iter()
+                .flat_map(|item| item.resources.iter().cloned()),
+        )
+        .chain(held)
+        .filter(|candidate| pattern.satisfied_by(candidate))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -589,6 +625,11 @@ pub struct Placement {
     /// over; `target_id` is the site chosen. Empty for a one-site project.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sites: Vec<SitePass>,
+    /// HS2-NPAZQW: for a start, the exact resources its work must hold on the chosen
+    /// site, each pattern of the policy resolved to the one free resource this pass
+    /// gave it. The session is told to acquire these.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<ResourceNeed>,
 }
 
 /// Why ready work gets no session in this pass. The wire spelling equals `code()`.
@@ -851,12 +892,8 @@ fn session_denial(policy: &PolicyBody, session: &ScheduledSession) -> Option<Pol
     if policy.tool_policy(&session.tool).is_off() {
         return Some(PolicyDenial::ToolNotPermitted);
     }
-    if !scope.models.is_empty()
-        && !session
-            .model
-            .as_ref()
-            .is_some_and(|model| scope.models.contains(model))
-    {
+    // HS2-1X1TXC: an entry may be a pattern.
+    if !scope.allows(session.model.as_deref()) {
         return Some(PolicyDenial::ModelNotPermitted);
     }
     None
@@ -953,6 +990,9 @@ struct SiteTry<'a> {
     waits: Vec<WaitNote<'a>>,
     /// Resources taken there without their claims being readable.
     unverified: Vec<(&'a ResourceNeed, UnreadableReason)>,
+    /// HS2-NPAZQW: the exact resources the work would hold there, each pattern
+    /// resolved to one free declared resource.
+    resolved: Vec<ResourceNeed>,
 }
 
 impl SiteTry<'_> {
@@ -1055,7 +1095,7 @@ struct SiteContext<'p, 'a> {
     on_target: &'p BTreeMap<&'a str, u32>,
     planned_target: &'p BTreeMap<&'a str, u32>,
     planned_machine: &'p BTreeMap<&'a str, u32>,
-    allocated: &'p BTreeMap<(&'a str, &'a ResourceNeed), &'a str>,
+    allocated: &'p BTreeMap<(&'a str, ResourceNeed), &'a str>,
     cooldown_ms: u64,
 }
 
@@ -1082,6 +1122,7 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
         retries: Vec::new(),
         waits: Vec::new(),
         unverified: Vec::new(),
+        resolved: Vec::new(),
     };
     macro_rules! finish {
         ($outcome:expr) => {{
@@ -1162,17 +1203,52 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
             tried.waits.push(wait(None, need, ResourceState::NotRead));
             continue;
         };
-        let holder = input
-            .held
-            .iter()
-            .filter(|held| {
-                held.namespace == need.namespace
-                    && held.resource == need.resource
-                    && held.expires_at_ms > now
-                    && held.server_id.as_deref().is_none_or(|id| id == machine)
-            })
-            .map(|held| held.expires_at_ms)
-            .max();
+        let held_until = |exact: &ResourceNeed| {
+            input
+                .held
+                .iter()
+                .filter(|held| {
+                    held.namespace == exact.namespace
+                        && held.resource == exact.resource
+                        && held.expires_at_ms > now
+                        && held.server_id.as_deref().is_none_or(|id| id == machine)
+                })
+                .map(|held| held.expires_at_ms)
+                .max()
+        };
+        // HS2-NPAZQW: a pattern takes any one free declared resource it matches. An
+        // exact resource the work already needs that matches satisfies it.
+        if need.is_pattern() && needs.iter().any(|other| need.satisfied_by(other)) {
+            continue;
+        }
+        let exact = if need.is_pattern() {
+            let candidates = declared_matches(input, machine, need);
+            let free = candidates.iter().find(|candidate| {
+                held_until(candidate).is_none()
+                    && !cx.allocated.contains_key(&(machine, (*candidate).clone()))
+                    && !tried.resolved.contains(candidate)
+            });
+            match free {
+                Some(free) => free.clone(),
+                None if candidates.is_empty() => {
+                    finish!(blocked(Blocker::ResourceUnknown, Some(need.name()), None));
+                }
+                None => {
+                    let expires = candidates.iter().filter_map(&held_until).min();
+                    tried.waits.push(WaitNote {
+                        expires_at_ms: expires,
+                        ..wait(Some(machine), need, ResourceState::Held)
+                    });
+                    if let Some(at) = expires {
+                        tried.retries.push(at);
+                    }
+                    finish!(blocked(Blocker::ResourceHeld, Some(need.name()), expires));
+                }
+            }
+        } else {
+            need.clone()
+        };
+        let holder = held_until(&exact);
         if let Some(expires) = holder {
             tried.waits.push(WaitNote {
                 expires_at_ms: Some(expires),
@@ -1185,7 +1261,7 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
                 Some(expires)
             ));
         }
-        if let Some(taker) = cx.allocated.get(&(machine, need)) {
+        if let Some(taker) = cx.allocated.get(&(machine, exact.clone())) {
             tried.waits.push(WaitNote {
                 taken_by: Some(taker),
                 ..wait(Some(machine), need, ResourceState::Taken)
@@ -1208,6 +1284,7 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
             Some(unread) => tried.unverified.push((need, unread.reason)),
             None => {}
         }
+        tried.resolved.push(exact);
     }
     // A free session of the site takes the work: idle ones before those that wait
     // on a gate, which may be called back to their own ticket. HS2-TH53NN: the work's
@@ -1358,20 +1435,17 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
                 item.tool
                     .as_ref()
                     .is_none_or(|tool| tool == &candidate.tool)
-                    && target.scope(&candidate.tool).is_some_and(|scope| {
-                        scope.models.is_empty()
-                            || item
-                                .model
-                                .as_ref()
-                                .is_some_and(|m| scope.models.contains(m))
-                    })
+                    && target
+                        .scope(&candidate.tool)
+                        .is_some_and(|scope| scope.allows(item.model.as_deref()))
             })
             .or_else(|| {
+                // HS2-1X1TXC: the first exact model; patterns alone name none.
                 target
                     .tools
                     .iter()
                     .find(|scope| scope.tool == candidate.tool)
-                    .and_then(|scope| scope.models.first().cloned())
+                    .and_then(ToolScope::start_model)
             });
         let admission = decide_admission(
             snapshot,
@@ -1451,6 +1525,7 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
     });
     finish!(SiteOutcome::Start {
         placement: Box::new(Placement {
+            resources: Vec::new(),
             action: PlacementAction::Start,
             target_id: site.to_owned(),
             tool: candidate.tool.clone(),
@@ -1629,7 +1704,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
     let mut planned_target: BTreeMap<&str, u32> = BTreeMap::new();
     let mut planned_machine: BTreeMap<&str, u32> = BTreeMap::new();
     // HS2-2FG91X: a resource given to work in this pass, per machine, and to which step.
-    let mut allocated: BTreeMap<(&str, &ResourceNeed), &str> = BTreeMap::new();
+    let mut allocated: BTreeMap<(&str, ResourceNeed), &str> = BTreeMap::new();
     let mut contention = ContentionLog::default();
     let mut starts = Vec::new();
     let mut unplaced = Vec::new();
@@ -1789,7 +1864,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                     .tools
                     .iter()
                     .find(|scope| scope.tool == candidate.tool)
-                    .and_then(|scope| scope.models.first().cloned());
+                    .and_then(ToolScope::start_model);
                 let admission = decide_admission(
                     snapshot,
                     &AdmissionConfig::default(),
@@ -1808,6 +1883,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             };
             let account = candidate.account.as_deref();
             starts.push(Placement {
+                resources: Vec::new(),
                 action: A::Start,
                 target_id: target_id.to_owned(),
                 tool: candidate.tool.clone(),
@@ -1919,8 +1995,9 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         }
         // Given to this step: nothing ranked below it in this pass gets it too.
         if let Some(machine) = tried.machine {
-            for need in item.needs_on(input.policy, tried.site) {
-                allocated.insert((machine, need), item.step_id.as_str());
+            // HS2-NPAZQW: the exact resources, a pattern's resolved one included.
+            for need in &tried.resolved {
+                allocated.insert((machine, need.clone()), item.step_id.as_str());
             }
             for (need, reason) in &tried.unverified {
                 let entry = contention.entry(Some(machine), need, ResourceState::Unverified);
@@ -1940,6 +2017,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 *planned_machine.entry(server).or_default() += 1;
                 starts.push(Placement {
                     sites,
+                    resources: tried.resolved.clone(),
                     ..(**placement).clone()
                 });
             }
@@ -2072,6 +2150,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 Fate::Role => (A::Keep, R::RoleNeeded, None, Vec::new(), None, None),
             };
             Placement {
+                resources: Vec::new(),
                 action,
                 target_id: session.target_id.clone(),
                 tool: session.tool.clone(),

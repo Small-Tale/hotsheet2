@@ -689,3 +689,151 @@ fn hs2_2fg91x_a_snapshot_names_an_offline_policy_only_for_unknown_claims() {
     assert_eq!(OfflinePolicy::default(), OfflinePolicy::FailClosed);
     assert!(OfflinePolicy::FailClosed < OfflinePolicy::Provisional);
 }
+
+/// HS2-NPAZQW: `*` matches any run of characters; anything else matches itself.
+#[test]
+fn hs2_npazqw_wildcards_match_any_run_of_characters() {
+    for (pattern, text, matches) in [
+        ("vm/*", "vm/macos-vm", true),
+        ("*", "", true),
+        ("a*", "a", true),
+        ("*a", "ba", true),
+        ("a*a", "a", false),
+        ("mac*-vm", "macos-vm", true),
+        ("mac*-vm", "macos-vm2", false),
+        ("*-*-*", "a-b-c", true),
+        ("*-*-*", "a-b", false),
+        ("exact", "exact", true),
+        ("exact", "exactly", false),
+    ] {
+        assert_eq!(wildcard_match(pattern, text), matches, "{pattern} {text}");
+    }
+    // The policy may require a pattern of resource names; a plan step and a session
+    // name exact resources only, and the namespace is always exact.
+    let pattern = ResourceNeed {
+        namespace: "vm".into(),
+        resource: "*".into(),
+    };
+    assert!(pattern.is_pattern() && pattern.validate_requirement().is_ok());
+    assert!(pattern.validate().is_err() && ResourceNeed::parse("vm/*").is_err());
+    for bad in [("v*", "a"), ("vm", "a b*"), ("vm", "")] {
+        let need = ResourceNeed {
+            namespace: bad.0.into(),
+            resource: bad.1.into(),
+        };
+        assert!(need.validate_requirement().is_err(), "{bad:?}");
+    }
+    assert!(pattern.satisfied_by(&need("vm/macos-vm")));
+    assert!(!pattern.satisfied_by(&need("ports/8080")));
+    assert!(!pattern.satisfied_by(&pattern));
+    let base = World::new(&[(1, 1)]).policy;
+    let mut policy = base.clone();
+    policy.placement.resources = vec![TargetResources {
+        target_id: target(1),
+        resources: vec![pattern.clone(), need("ports/8080")],
+    }];
+    assert!(
+        policy.problems(None).is_empty(),
+        "{:?}",
+        policy.problems(None)
+    );
+}
+
+/// HS2-NPAZQW: a pattern the policy requires of a target means "hold any one declared
+/// resource that matches". The pass gives each piece of work one free match, in name
+/// order, never one held or given to better work, and never a name nobody declared.
+#[test]
+fn hs2_npazqw_a_pattern_requirement_takes_one_free_declared_resource() {
+    let lease = T0 + 30 * MIN;
+    let world = |declared: &[&str]| {
+        let mut world = World::new(&[(1, 3), (2, 1)]);
+        world.policy.placement.resources = vec![TargetResources {
+            target_id: target(1),
+            resources: vec![ResourceNeed {
+                namespace: "vm".into(),
+                resource: "mac-*".into(),
+            }],
+        }];
+        if !declared.is_empty() {
+            // Another target's requirement declares the exact names.
+            world.policy.placement.resources.push(TargetResources {
+                target_id: target(2),
+                resources: declared.iter().map(|text| need(text)).collect(),
+            });
+        }
+        world.work = vec![work(1, 1), work(2, 1)];
+        world
+    };
+    let resources = |schedule: &Schedule, n: u128| {
+        schedule
+            .placements
+            .iter()
+            .find(|placement| placement.steps.first() == Some(&id(n)))
+            .map(|placement| {
+                placement
+                    .resources
+                    .iter()
+                    .map(ResourceNeed::name)
+                    .collect::<Vec<_>>()
+            })
+    };
+    let declared = ["vm/mac-b", "vm/mac-a", "vm/win-a"];
+
+    // Two free matches: each step gets its own, in name order; never vm/win-a.
+    let free = world(&declared).now();
+    assert_eq!(starts(&free).len(), 2);
+    assert_eq!(resources(&free, 1), Some(vec!["vm/mac-a".to_owned()]));
+    assert_eq!(resources(&free, 2), Some(vec!["vm/mac-b".to_owned()]));
+
+    // One held: the first step takes the other; the second waits for the lease.
+    let mut one_held = world(&declared);
+    one_held.held = vec![held_on(1, "vm/mac-a", lease)];
+    let schedule = one_held.now();
+    assert_eq!(resources(&schedule, 1), Some(vec!["vm/mac-b".to_owned()]));
+    assert_eq!(
+        blocked(&schedule, 2),
+        ("resource_held", Some("vm/mac-*".to_owned()))
+    );
+    assert_eq!(schedule.retry_at_ms, Some(lease));
+
+    // Both held: nothing starts, and the earlier lease is when to look again.
+    let mut both = world(&declared);
+    both.held = vec![
+        held_on(1, "vm/mac-a", lease),
+        held_on(1, "vm/mac-b", lease - MIN),
+    ];
+    let schedule = both.now();
+    assert!(starts(&schedule).is_empty());
+    assert_eq!(blocked(&schedule, 1).0, "resource_held");
+    assert_eq!(schedule.retry_at_ms, Some(lease - MIN));
+
+    // Released again: the same world places both once more.
+    both.held.clear();
+    assert_eq!(starts(&both.now()).len(), 2);
+
+    // Nothing declared: a pattern never invents a name.
+    let schedule = world(&[]).now();
+    assert!(starts(&schedule).is_empty());
+    assert_eq!(
+        blocked(&schedule, 1),
+        ("resource_unknown", Some("vm/mac-*".to_owned()))
+    );
+
+    // A live claim on the target's machine declares the name it holds; a claim on
+    // another machine does not.
+    let mut claimed = world(&[]);
+    claimed.held = vec![held_on(2, "vm/mac-z", lease)];
+    assert_eq!(blocked(&claimed.now(), 1).0, "resource_unknown");
+    claimed.held = vec![held_on(1, "vm/mac-z", lease)];
+    assert_eq!(blocked(&claimed.now(), 1).0, "resource_held");
+
+    // A plan step's exact resource declares it too, and is not given twice.
+    let mut stepped = world(&[]);
+    stepped.work = vec![work(1, 1), needing(2, 1, &["vm/mac-c"])];
+    let schedule = stepped.now();
+    let given: Vec<_> = [1, 2]
+        .iter()
+        .filter_map(|n| resources(&schedule, *n))
+        .collect();
+    assert_eq!(given.concat(), ["vm/mac-c".to_owned()], "{schedule:#?}");
+}

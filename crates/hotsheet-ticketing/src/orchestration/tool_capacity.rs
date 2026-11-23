@@ -664,10 +664,11 @@ pub fn select(
             exclude(None, ExclusionReason::ToolNotConfigured, None);
             continue;
         }
+        // HS2-1X1TXC: an entry may be a pattern.
         if !scope.models.is_empty()
             && request
                 .model
-                .is_some_and(|model| !scope.models.iter().any(|allowed| allowed == model))
+                .is_some_and(|model| !scope.allows(Some(model)))
         {
             exclude(None, ExclusionReason::ModelNotPermitted, None);
             continue;

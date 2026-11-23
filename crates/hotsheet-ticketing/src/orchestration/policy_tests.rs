@@ -930,3 +930,69 @@ fn hs2_n3hwp9_admission_treats_auto_as_machine_bounded_and_zero_as_off() {
     assert_eq!(run(&body, load(1)), V::Allowed);
     assert_eq!(run(&body, load(2)), V::Denied(D::ToolCap));
 }
+
+/// HS2-1X1TXC: a target's models may be patterns. `*` matches any run of characters;
+/// a start names the first exact model, or none when every entry is a pattern.
+#[test]
+fn hs2_1x1txc_model_patterns_allow_matching_models_and_pick_the_start_model() {
+    let scope = |models: &[&str]| scope("claude", models);
+    let any = scope(&[]);
+    assert!(any.allows(None) && any.allows(Some("model-a")));
+    assert_eq!(any.start_model(), None);
+
+    let exact = scope(&["model-a"]);
+    assert!(exact.allows(Some("model-a")));
+    assert!(!exact.allows(Some("model-a2")) && !exact.allows(None));
+    assert_eq!(exact.start_model().as_deref(), Some("model-a"));
+
+    let family = scope(&["opus-*"]);
+    for allowed in ["opus-", "opus-4", "opus-4-2"] {
+        assert!(family.allows(Some(allowed)), "{allowed}");
+    }
+    for refused in ["sonnet-4", "xopus-4", "opus"] {
+        assert!(!family.allows(Some(refused)), "{refused}");
+    }
+    // Only patterns: the start names no model and the tool's own default runs.
+    assert!(family.allows(None));
+    assert_eq!(family.start_model(), None);
+
+    let mixed = scope(&["*-mini", "model-b", "gpt-*-codex"]);
+    assert!(mixed.allows(Some("gpt-5-mini")));
+    assert!(mixed.allows(Some("gpt-5.1-codex")));
+    assert!(!mixed.allows(Some("gpt-5")));
+    // An exact entry is listed, so a session must name a model.
+    assert!(!mixed.allows(None));
+    assert_eq!(mixed.start_model().as_deref(), Some("model-b"));
+
+    // The policy check and validation accept patterns like names.
+    let mut body = policy();
+    body.targets[0].tools = vec![scope(&["opus-*"])];
+    assert!(
+        body.problems(None)
+            .iter()
+            .all(|problem| problem.code != "invalid_models"),
+        "{:?}",
+        body.problems(None)
+    );
+    let ask = |model: Option<&str>| {
+        let session = SessionRequest {
+            tool: "claude".into(),
+            model: model.map(str::to_owned),
+            running: 0,
+            starting: false,
+        };
+        body.evaluate(&PolicyQuestion {
+            target_id: &id(1),
+            action: TargetAction::SessionsManage,
+            session: Some(&session),
+            load: None,
+            provisional: false,
+            role_session: false,
+        })
+    };
+    assert_eq!(ask(Some("opus-4-2")), PolicyVerdict::Allowed);
+    assert_eq!(
+        ask(Some("sonnet-4")),
+        PolicyVerdict::Denied(PolicyDenial::ModelNotPermitted)
+    );
+}

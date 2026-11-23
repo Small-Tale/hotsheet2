@@ -258,8 +258,9 @@ impl Gathered {
             .iter()
             .filter(|item| steps.contains(&item.step_id))
         {
+            // HS2-NPAZQW: a pattern is never handed to a session as a name.
             for need in item.needs_on(&self.policy, site) {
-                if !needs.contains(need) {
+                if !need.is_pattern() && !needs.contains(need) {
                     needs.push(need.clone());
                 }
             }

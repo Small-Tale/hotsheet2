@@ -225,7 +225,12 @@ impl OrchestrationRuntime {
             load,
             limits: gathered.policy.machine_limits(&placement.target_id),
             probe: placement.probe,
-            resources: gathered.resources_of(&placement.steps, &placement.target_id),
+            // HS2-NPAZQW: the pass resolved each pattern to one exact resource.
+            resources: if placement.resources.is_empty() {
+                gathered.resources_of(&placement.steps, &placement.target_id)
+            } else {
+                placement.resources.clone()
+            },
             role: placement.role,
         };
         let answer = self.session_executor.start(self, &request, tx);

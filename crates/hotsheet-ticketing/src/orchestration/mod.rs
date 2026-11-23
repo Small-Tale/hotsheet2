@@ -150,7 +150,7 @@ pub use reconcile_sources::{
 pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,
     ResourceState, TargetResources, UnreadableClaims, UnreadableReason, resource_standings,
-    validate_needs,
+    validate_needs, wildcard_match,
 };
 pub use role_delivery::{
     MAX_ROLE_ATTEMPTS, PushAttempt, ROLE_PROMPT_WINDOW_MS, RoleDelivery, RolePrompt,

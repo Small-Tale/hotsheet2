@@ -172,6 +172,36 @@ pub struct ToolScope {
     pub models: Vec<String>,
 }
 
+impl ToolScope {
+    /// HS2-1X1TXC: whether a session of this tool may use `model` here. No models
+    /// allows any. Each entry is an exact name or a pattern where `*` matches any run
+    /// of characters (`claude-opus-*`). A session that names no model runs the tool's
+    /// own default: allowed when the list names no exact model, because the person
+    /// chose only patterns and the start could name none (see [`Self::start_model`]).
+    pub fn allows(&self, model: Option<&str>) -> bool {
+        if self.models.is_empty() {
+            return true;
+        }
+        match model {
+            Some(model) => self
+                .models
+                .iter()
+                .any(|allowed| super::wildcard_match(allowed, model)),
+            None => self.models.iter().all(|allowed| allowed.contains('*')),
+        }
+    }
+
+    /// HS2-1X1TXC: the model a session the orchestrator starts names: the first exact
+    /// model listed. A list of patterns only names none, so the tool runs its own
+    /// default model.
+    pub fn start_model(&self) -> Option<String> {
+        self.models
+            .iter()
+            .find(|model| !model.contains('*'))
+            .cloned()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TargetPolicy {
@@ -1017,12 +1047,8 @@ impl PolicyBody {
         let Some(scope) = target.scope(&session.tool) else {
             return PolicyVerdict::Denied(D::ToolNotPermitted);
         };
-        if !scope.models.is_empty()
-            && !session
-                .model
-                .as_ref()
-                .is_some_and(|model| scope.models.contains(model))
-        {
+        // HS2-1X1TXC: an entry may be a pattern.
+        if !scope.allows(session.model.as_deref()) {
             return PolicyVerdict::Denied(D::ModelNotPermitted);
         }
         if session.starting {

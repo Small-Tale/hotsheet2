@@ -1708,3 +1708,32 @@ fn hs2_awb7bx_a_remote_capacity_follow_uses_the_peers_wait() {
     );
     *r.peer.status_override.lock().unwrap() = None;
 }
+
+/// HS2-NPAZQW: a pattern the policy requires of a target is resolved by the pass to
+/// one free declared resource, and the started session is told to acquire that exact
+/// name, never the pattern. An exact resource the work names that matches satisfies it.
+#[test]
+fn hs2_npazqw_a_pattern_requirement_starts_a_session_holding_one_exact_match() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let mut body = policy(true);
+    body.placement.resources = vec![TargetResources {
+        target_id: id(1),
+        resources: vec![ResourceNeed {
+            namespace: "vm".into(),
+            resource: "mac-*".into(),
+        }],
+    }];
+    set_policy(&s.m, body, &mut tx);
+    // One step names nothing; the other names an exact match, which declares it.
+    let (_, plain) = s.ready("Names nothing", &mut tx);
+    let (_, named) = s.ready_needing("Names a match", &["vm/mac-b"], &mut tx);
+
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(unplaced(&tick.view), [("resource_held", Some("vm/mac-b"))]);
+    let started = &s.starts()[0];
+    assert!(started.steps == [plain.clone()] || started.steps == [named.clone()]);
+    // Either way the session holds the one exact resource, never the pattern.
+    assert_eq!(started.resources, [need("vm/mac-b")]);
+}

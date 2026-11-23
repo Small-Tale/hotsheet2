@@ -57,6 +57,34 @@ impl ResourceNeed {
         }
     }
 
+    /// HS2-NPAZQW: a requirement of the policy may name a pattern: `*` in the resource
+    /// part matches any run of resource characters (`vm/*`, `vm/macos-*`). The work
+    /// must hold any one declared resource that matches. The namespace stays exact.
+    pub fn is_pattern(&self) -> bool {
+        self.resource.contains('*')
+    }
+
+    /// HS2-NPAZQW: [`Self::validate`] for a policy requirement, which may be a
+    /// pattern: the resource part may contain `*` and may start with one.
+    pub fn validate_requirement(&self) -> Result<(), OrchestrationError> {
+        if !self.is_pattern() {
+            return self.validate();
+        }
+        let concrete = Self {
+            namespace: self.namespace.clone(),
+            resource: self.resource.replace('*', "x"),
+        };
+        concrete.validate()
+    }
+
+    /// HS2-NPAZQW: whether the concrete `other` satisfies this requirement: the same
+    /// name, or for a pattern the same namespace and a resource the pattern matches.
+    pub fn satisfied_by(&self, other: &ResourceNeed) -> bool {
+        self.namespace == other.namespace
+            && !other.is_pattern()
+            && wildcard_match(&self.resource, &other.resource)
+    }
+
     /// `<namespace>/<resource>`, as every surface writes it.
     pub fn name(&self) -> String {
         format!("{}/{}", self.namespace, self.resource)
@@ -72,6 +100,27 @@ impl ResourceNeed {
         need.validate()?;
         Ok(need)
     }
+}
+
+/// HS2-1X1TXC, HS2-NPAZQW: whether `pattern` matches `text`, where `*` in the pattern
+/// matches any run of characters (none included) and every other character matches
+/// itself. A pattern without `*` matches only the same text.
+pub fn wildcard_match(pattern: &str, text: &str) -> bool {
+    let Some((first, rest)) = pattern.split_once('*') else {
+        return pattern == text;
+    };
+    let Some(mut remaining) = text.strip_prefix(first) else {
+        return false;
+    };
+    let mut parts: Vec<&str> = rest.split('*').collect();
+    let last = parts.pop().unwrap_or("");
+    for part in parts {
+        match remaining.find(part) {
+            Some(at) => remaining = &remaining[at + part.len()..],
+            None => return false,
+        }
+    }
+    remaining.len() >= last.len() && remaining.ends_with(last)
 }
 
 /// Bounded, valid and each named once.
@@ -109,7 +158,8 @@ impl TargetResources {
             ));
         }
         for (index, need) in self.resources.iter().enumerate() {
-            if need.validate().is_err() {
+            // HS2-NPAZQW: a policy requirement may be a pattern.
+            if need.validate_requirement().is_err() {
                 return Some((
                     "invalid_resource",
                     "a resource is <namespace>/<resource> in the claim service's names",
