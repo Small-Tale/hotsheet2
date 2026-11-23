@@ -652,6 +652,11 @@ pub struct AdmissionDecision {
     pub unknown: Vec<CapacityField>,
     /// The limits enforced, after the machine owner's file was applied.
     pub limits: MachineLimits,
+    /// HS2-30VKV9: the running AI sessions counted against `limits.max_sessions`:
+    /// every one on this machine, a person's own included (§26.10). `None` when the
+    /// host could not list them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running_sessions: Option<u32>,
     pub footprint_mb: u64,
     pub footprint_source: FootprintSource,
     pub sampled_at_ms: Option<u64>,
@@ -712,13 +717,16 @@ pub fn decide_admission(
         },
     }
     // Each `room` is how many more sessions that limit leaves space for.
-    let session_room = match &snapshot.sessions {
+    let running_sessions = snapshot
+        .sessions
+        .as_ref()
+        .map(|sessions| u32::try_from(sessions.len()).unwrap_or(u32::MAX));
+    let session_room = match running_sessions {
         None => {
             unknown.push(CapacityField::Sessions);
             None
         }
-        Some(sessions) => {
-            let running = u32::try_from(sessions.len()).unwrap_or(u32::MAX);
+        Some(running) => {
             let room = limits.max_sessions.saturating_sub(running);
             if room == 0 {
                 refuse(R::SessionCapReached);
@@ -778,6 +786,7 @@ pub fn decide_admission(
         reason,
         unknown,
         limits,
+        running_sessions,
         footprint_mb,
         footprint_source,
         sampled_at_ms: snapshot.sampled_at_ms,

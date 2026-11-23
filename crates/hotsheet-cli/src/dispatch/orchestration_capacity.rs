@@ -88,7 +88,8 @@ enum AdmissionCmd {
     /// Ask whether sessions of a tool may start now. With --target (and --project) the
     /// machine that hosts the target answers under the project's policy limits, and a
     /// sessions_manage grant for the tool is needed; with --checkout this machine
-    /// answers under the policy defaults and its own admission file.
+    /// answers under that checkout's own checked-in orchestration policy limits (the
+    /// policy defaults when it has none) and its own admission file (HS2-30VKV9).
     Check {
         #[arg(long, requires = "target")]
         project: Option<String>,

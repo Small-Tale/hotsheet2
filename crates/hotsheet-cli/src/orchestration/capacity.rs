@@ -315,12 +315,25 @@ impl OrchestrationRuntime {
 
     /// This machine's own answer: its snapshot, its admission file, the limits the
     /// caller sent. A damaged admission file is an error, never a looser default.
+    ///
+    /// HS2-30VKV9: a caller that sends no limits is asking for the checkout itself (the
+    /// Propose Plan planner, or `admission check --checkout`). When that checkout is an
+    /// orchestration project, its own checked-in policy's `machine` limits apply, read
+    /// here from its file, never from the request; otherwise the policy defaults do.
+    /// The admission file can still only make either stricter. A damaged policy file
+    /// is an error, never a looser default.
     pub fn hosted_admission(
         &self,
         checkout_id: &str,
-        request: AdmissionRequest,
+        mut request: AdmissionRequest,
     ) -> Result<AdmissionDecision, OrchestrationError> {
         request.validate()?;
+        if request.limits.is_none() {
+            request.limits = self
+                .policy(checkout_id)?
+                .policy
+                .map(|policy| policy.machine);
+        }
         let config = AdmissionStore::new(&self.home).read()?.admission;
         let snapshot = self.hosted_capacity(checkout_id, &[])?;
         Ok(decide_admission(&snapshot, &config, &request))

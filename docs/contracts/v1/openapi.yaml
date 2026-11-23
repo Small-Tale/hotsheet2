@@ -22448,6 +22448,10 @@ components:
             min_free_disk_mb:
               type: integer
               minimum: 0
+        running_sessions:
+          description: The running AI sessions counted against limits.max_sessions, every one on the machine whoever started it; absent when the host could not list them (HS2-30VKV9).
+          type: integer
+          minimum: 0
         footprint_mb:
           description: The estimated resident memory of one session of the tool.
           type: integer

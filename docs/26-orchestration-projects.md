@@ -1272,8 +1272,20 @@ machine that hosts C, from three inputs:
 
 1. its own snapshot;
 2. the limits the orchestrator sends, which are the policy's `machine` limits for that
-   target (§26.8), or the policy defaults when a caller sends none;
+   target (§26.8). A caller that sends none is asking about the checkout itself (the
+   Propose Plan planner, `admission check --checkout`): when that checkout is an
+   orchestration project, its own checked-in policy's `machine` limits apply, read on
+   this machine from its file and never from the request; otherwise the policy
+   defaults stand in (HS2-30VKV9);
 3. its owner's admission file, `${HOTSHEET_HOME}/orchestration-admission.json`.
+
+**What the session cap counts (HS2-30VKV9).** `max_sessions` here is a machine limit: it
+protects the machine's memory and CPU, so it counts every running AI session the host
+lists on that machine, whoever started it. A person's own terminals and other agents'
+sessions take the same room as orchestrated ones and count. The orchestration-only
+counts are the policy's tool, account and target caps (§26.8, §26.15), which count only
+the project's own `requested` and `running` sessions. The answer reports the counted
+sessions as `running_sessions` beside the enforced `limits`, so a refusal shows both.
 
 The file can only make the answer stricter. For each limit the enforced value is the
 stricter of the two: the smaller `max_sessions` and `max_cpu_percent`, the larger

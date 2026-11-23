@@ -2,7 +2,8 @@
 //! and real git ticket stores. Synthetic tickets, identities and tools only.
 use hotsheet_model::{Status, Ticket};
 use hotsheet_ticketing::orchestration::{
-    AuditOutcome, PlanningState, ReadinessError, SessionError, SessionRole, TargetAction,
+    AdmissionStore, AuditOutcome, MachineLimits, PlanningState, PolicyBody, ReadinessError,
+    SessionError, SessionFootprint, SessionRole, SetPolicy, TargetAction,
 };
 use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::json;
@@ -14,6 +15,7 @@ use super::*;
 struct Fixture {
     m: Machine,
     host: Arc<ScriptedHost>,
+    probe: Arc<Probe>,
 }
 
 impl Fixture {
@@ -27,12 +29,12 @@ impl Fixture {
         m.runtime = m
             .runtime
             .clone()
-            .with_capacity_probe(probe)
+            .with_capacity_probe(probe.clone())
             .with_session_host(host.clone());
         for n in 1..=targets {
             bind_and_allow(&m, n, &[TargetAction::TicketsRead], tx);
         }
-        Self { m, host }
+        Self { m, host, probe }
     }
 
     fn goal(&self, title: &str) -> Ticket {
@@ -593,4 +595,75 @@ fn hs2_fds95d_a_press_replans_a_planner_that_finished_its_turn() {
     assert_eq!(pending.outcome, ProposeOutcome::Existing);
     assert_eq!(pending.proposal_id, next.proposal_id);
     assert_eq!(f.host.launches().len(), 2);
+}
+
+/// HS2-30VKV9: the planner is admitted under its project's checked-in machine limits.
+/// With five AI sessions already running on the machine (a person's and other
+/// agents', none orchestrated), the default cap of 2 refuses the press; the project's
+/// `max_sessions: 10` admits it. A stricter machine admission file still refuses.
+#[test]
+fn hs2_30vkv9_propose_plan_is_admitted_under_the_projects_policy_limits() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    f.goal("Ship the release");
+    f.probe.set(|observation| {
+        observation.sessions = Some(
+            (0..5)
+                .map(|n| SessionFootprint {
+                    session_id: format!("person-{n}"),
+                    tool: Some("claude".into()),
+                    busy: false,
+                    on_checkout: Some(false),
+                    resident_mb: None,
+                })
+                .collect(),
+        );
+    });
+    // The policy defaults: refused, and nothing launched or left reserved.
+    assert_eq!(
+        code(f.propose(json!({"operation_id": "press-1"}), &mut tx)),
+        SessionError::AdmissionRefused.code()
+    );
+    assert!(f.host.launches().is_empty());
+
+    // A stricter machine admission file refuses even under the project's 10.
+    let expected_revision = f.m.runtime.policy(&f.m.owner.id).unwrap().revision;
+    f.m.runtime
+        .set_policy(
+            &f.m.owner.id,
+            SetPolicy {
+                expected_revision,
+                policy: PolicyBody {
+                    machine: MachineLimits {
+                        max_sessions: 10,
+                        ..MachineLimits::default()
+                    },
+                    ..PolicyBody::default()
+                },
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let local = AdmissionStore::new(&f.m.home);
+    local
+        .update(|config| config.max_sessions = Some(5))
+        .unwrap();
+    assert_eq!(
+        code(f.propose(json!({"operation_id": "press-1"}), &mut tx)),
+        SessionError::AdmissionRefused.code()
+    );
+    assert!(f.host.launches().is_empty());
+
+    // Without that file the project's own limits admit the same press.
+    local.update(|config| config.max_sessions = None).unwrap();
+    let started = f
+        .propose(json!({"operation_id": "press-1"}), &mut tx)
+        .unwrap();
+    assert_eq!(started.outcome, ProposeOutcome::Started);
+    assert_eq!(f.host.launches().len(), 1);
 }

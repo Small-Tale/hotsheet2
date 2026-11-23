@@ -392,6 +392,8 @@ impl OrchestrationRuntime {
             &owner.id,
             HostedSessionStart {
                 session,
+                // HS2-30VKV9: the planner runs in this project, so the host applies
+                // the project's own checked-in machine limits (`hosted_admission`).
                 limits: None,
                 actor: actor.cloned(),
                 resources: Vec::new(),

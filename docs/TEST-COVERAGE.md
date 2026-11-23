@@ -4325,6 +4325,12 @@ hs2_86mk1y` drives a `/bin/sh` stand-in through `run_trigger` and the real
   the grant and policy gate, the owner's file beating the policy, no approval asked,
   the hosted and orchestrating routes, a remote destination through a transport fake
   that runs the peer's real runtime, and a process without a session host.
+- HS2-30VKV9: `tests/capacity.rs # hs2_30vkv9` asks about an orchestration project
+  itself with no limits sent: the policy defaults refuse five machine-wide sessions,
+  the project's checked-in `max_sessions: 10` admits them, a checkout without a policy
+  keeps the defaults, sent limits still win, a stricter admission file refuses and a
+  looser one changes nothing, with `running_sessions` counting a person's sessions.
+  `tests/planning.rs # hs2_30vkv9` drives Propose Plan through the same cases.
 - `host_health/capacity_tests.rs` covers the `vm_stat`, `/proc/meminfo` and `ps`
   parsers, the real host's readers, one reading shared inside the cache window, an
   idle server that reads nothing, a burst of six callers served by one reading, low

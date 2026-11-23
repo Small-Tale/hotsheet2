@@ -2,10 +2,10 @@
 //! destination and a remote one. Scripted probes and synthetic identities only.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionStore, AuditOutcome,
-    CapacityField, CapacitySnapshot, CpuCapacity, DiskCapacity, HostObservation, MachineLimits,
-    MemoryCapacity, PolicyBody, SessionFootprint, SetPolicy, TargetAction, TargetOpError,
-    TargetPolicy, ToolAvailability, ToolPolicy, ToolScope,
+    AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRequest, AdmissionStore,
+    AuditOutcome, CapacityField, CapacitySnapshot, CpuCapacity, DiskCapacity, HostObservation,
+    MachineLimits, MemoryCapacity, PolicyBody, SessionFootprint, SetPolicy, TargetAction,
+    TargetOpError, TargetPolicy, ToolAvailability, ToolPolicy, ToolScope,
 };
 use serde_json::{Value, json};
 
@@ -1083,4 +1083,104 @@ fn hs2_ydzafh_an_unnamed_capacity_read_lists_every_held_claim_or_none_at_all() {
     // Nothing on the machine: an empty list, not unknown.
     let (empty, _) = read(Some(0), &[]);
     assert_eq!(empty.claims, Some(Vec::new()));
+}
+
+/// HS2-30VKV9: a question about the orchestration project itself (the Propose Plan
+/// planner, `admission check --checkout`) is answered under the project's own
+/// checked-in machine limits, read from its file on this machine, not the policy
+/// defaults. The admission file can still only make them stricter, and every running
+/// AI session on the machine counts, a person's own included (§26.10).
+#[test]
+fn hs2_30vkv9_a_projects_own_admission_uses_its_checked_in_machine_limits() {
+    use AdmissionOutcome::{Accepted, Refused};
+    let mut m = machine(10, false, unsupported);
+    let probe = probed(&mut m);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    // Five AI sessions run on the machine: four a person or another agent opened
+    // elsewhere, one in the project. None of them is an orchestrated session.
+    probe.set(|observation| {
+        observation.sessions = Some(
+            (0..5)
+                .map(|n| SessionFootprint {
+                    session_id: format!("term-{n}"),
+                    tool: Some("claude".into()),
+                    busy: false,
+                    on_checkout: Some(n == 0),
+                    resident_mb: None,
+                })
+                .collect(),
+        );
+    });
+    let bare = || serde_json::from_value(json!({"tool": "codex"})).unwrap();
+    let check = |checkout: &str| m.runtime.hosted_admission(checkout, bare()).unwrap();
+
+    // Without a policy the defaults stand in: a cap of 2, already exceeded.
+    let defaults = check(&m.owner.id);
+    assert_eq!(
+        answer(&defaults),
+        (Refused, 0, Some(AdmissionReason::SessionCapReached))
+    );
+    assert_eq!(
+        (defaults.limits.max_sessions, defaults.running_sessions),
+        (2, Some(5))
+    );
+
+    // The project's policy allows 10 on its machines: the same question is admitted.
+    let ten = PolicyBody {
+        machine: MachineLimits {
+            max_sessions: 10,
+            ..MachineLimits::default()
+        },
+        ..PolicyBody::default()
+    };
+    set_policy(&m.runtime, &m.owner.id, ten, &mut tx);
+    let admitted = check(&m.owner.id);
+    assert_eq!(answer(&admitted), (Accepted, 1, None));
+    assert_eq!(
+        (admitted.limits.max_sessions, admitted.running_sessions),
+        (10, Some(5))
+    );
+    // The project's policy governs only the project: a checkout without one keeps
+    // the defaults.
+    assert_eq!(check(&m.target.id).limits.max_sessions, 2);
+    // Limits a caller sends are the orchestrator's for a target and still apply as
+    // before; they are never replaced by the hosted checkout's file.
+    let sent: AdmissionRequest =
+        serde_json::from_value(json!({"tool": "codex", "limits": MachineLimits {
+            max_sessions: 3,
+            ..MachineLimits::default()
+        }}))
+        .unwrap();
+    assert_eq!(
+        m.runtime
+            .hosted_admission(&m.owner.id, sent)
+            .unwrap()
+            .limits
+            .max_sessions,
+        3
+    );
+
+    // The machine owner's file is stricter than the policy and wins.
+    let local = AdmissionStore::new(&m.home);
+    local
+        .update(|config| config.max_sessions = Some(4))
+        .unwrap();
+    let stricter = check(&m.owner.id);
+    assert_eq!(
+        answer(&stricter),
+        (Refused, 0, Some(AdmissionReason::SessionCapReached))
+    );
+    assert_eq!(
+        (stricter.limits.max_sessions, stricter.running_sessions),
+        (4, Some(5))
+    );
+    // A looser file changes nothing.
+    local
+        .update(|config| config.max_sessions = Some(64))
+        .unwrap();
+    assert_eq!(check(&m.owner.id).limits.max_sessions, 10);
 }
