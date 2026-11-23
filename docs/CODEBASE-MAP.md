@@ -307,7 +307,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/feedback-needed.ts   #   Client mirror of the core feedback projection (`Ticket::feedback_needed`, `wire::api_feedback_needed`): marker, exchange, presented kinds, details-card state, stale dismissals (HS2-NVD36W)
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
-    src/controlled-open.ts   #   Post-render sync that drives marked (`data-controlled-open`) custom elements' live `open` (Kerf beta.51) and opens/closes marked Kerf DialogSurface `<dialog>`s with openDialog/closeDialog (beta.106)
+    src/controlled-open.ts   #   Post-render sync that drives marked (`data-controlled-open`) custom elements' live `open` (Kerf beta.51) and opens/closes marked Kerf DialogSurface `<dialog>`s with openDialog/closeDialog (beta.106); re-asserts a `wa-dialog` declared open during its hide (HS2-6TJRYX)
     src/popup-menu-state.ts  #   Kerf PopupMenu open state (opener `aria-expanded`) and closing-panel `toggle` detection, replacing Web Awesome dropdown `open`/`wa-hide` (beta.106)
     tests/project-startup.spec.ts # Production startup request/order/failure/session/onboarding transition coverage
     tests/desktop-draft-files-fixture.ts # Owned real HTTP API proxy preserving raw File bytes/auth/gates/faults; exact direct/relaunch proof: desktop-draft-byte-transport.spec.ts (HS2-ZMVQR4); isolated empty AI inventory and stopped-upstream proof: desktop-fixture-inventory.spec.ts (HS2-T9TGKQ)

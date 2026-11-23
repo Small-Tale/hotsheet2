@@ -25,6 +25,32 @@ type OpenableElement = Element & { open?: boolean };
 const isDialogSurface = (element: Element): element is HTMLDialogElement =>
   element.localName === 'dialog' && element.classList.contains('kui-dialog-surface');
 
+const reopenPending = new WeakSet<Element>();
+
+/**
+ * Web Awesome's `requestClose` keeps the host's `open` property `true` through its hide animation
+ * (at least one frame), then sets it `false` and closes the shadow dialog. A controlled reopen
+ * declared during that window matches the live property, so writing `open` is a no-op and the
+ * dialog would end closed while the app says it is open: a failed Not Working submission reopening
+ * the dialog it closed while submitting lost its report and error that way (HS2-6TJRYX). Re-assert
+ * the declared state once that hide finishes; a close declared meanwhile leaves the dialog closed.
+ */
+function reopenAfterInterruptedHide(element: OpenableElement): void {
+  if (reopenPending.has(element)) return;
+  const native = element.shadowRoot?.querySelector('dialog');
+  if (!native?.open || !native.classList.contains('hide')) return;
+  reopenPending.add(element);
+  const afterHide = (event: Event) => {
+    // Nested Web Awesome popups bubble their own wa-after-hide through the dialog.
+    if (event.target !== element) return;
+    element.removeEventListener('wa-after-hide', afterHide);
+    reopenPending.delete(element);
+    if (element.isConnected && element.getAttribute(CONTROLLED_OPEN_ATTRIBUTE) === 'true' && !element.open)
+      element.open = true;
+  };
+  element.addEventListener('wa-after-hide', afterHide);
+}
+
 /** Drive every marked element under `root` to its declared open state. */
 export function syncControlledOpen(root: ParentNode): void {
   for (const element of root.querySelectorAll<OpenableElement>(`[${CONTROLLED_OPEN_ATTRIBUTE}]`)) {
@@ -47,9 +73,11 @@ export function syncControlledOpen(root: ParentNode): void {
         }
       }
     } else if (typeof element.open === 'boolean') {
-      // A raw Web Awesome dialog whose host is the exposed dialog keeps its shadow dialog unnamed.
-      if (element.localName === 'wa-dialog' && element.getAttribute('role') === 'dialog')
-        quietWebAwesomeNativeDialog(element);
+      if (element.localName === 'wa-dialog') {
+        // A raw Web Awesome dialog whose host is the exposed dialog keeps its shadow dialog unnamed.
+        if (element.getAttribute('role') === 'dialog') quietWebAwesomeNativeDialog(element);
+        if (desired) reopenAfterInterruptedHide(element);
+      }
       if (element.open !== desired) element.open = desired;
     } else if (element.hasAttribute('open') !== desired) element.toggleAttribute('open', desired);
   }
