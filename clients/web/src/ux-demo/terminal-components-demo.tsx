@@ -46,7 +46,6 @@ import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
-import { pointInFixedContainingBlock } from './fixed-containing-block';
 import { TERMINAL_DRAWER_DEMO_PROVIDERS } from './fixtures';
 import { syncSettingsControls } from './settings-controls';
 import { syncTerminalDemoViewports } from './terminal-demo';
@@ -800,14 +799,9 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   demoListeners.add(
     wireTerminalDashboardMenu(root, {
       open: (menu) => {
-        // The menu renders inside the dashboard, whose app-height example frame is the containing block
-        // of its fixed context anchor; anchor it at the requested viewport point (HS2-CY6A6K).
-        const dashboard = [...root.querySelectorAll(TERMINALS_TARGETS.terminalTile.selector)]
-          .find((tile) => (tile as HTMLElement).dataset.terminalKey === menu.key)
-          ?.closest('[data-component="terminal-dashboard"]');
-        terminalDashboardContextMenu.value = dashboard
-          ? { key: menu.key, ...pointInFixedContainingBlock(dashboard, menu.x, menu.y) }
-          : menu;
+        // Kerf places a context menu at its viewport point even inside the app-height example frame's
+        // transform (KF-7PEMC6), so the point passes through unconverted (HS2-HVD74J, was HS2-CY6A6K).
+        terminalDashboardContextMenu.value = menu;
       },
       clearHalt: () => {
         terminalDashboardHaltCleared.value = true;

@@ -140,15 +140,15 @@ test('clears the halted terminal example from its menu at wide and phone widths 
     const trigger = tile.getByRole('button', { name: 'More Actions' });
     await trigger.click();
     const clear = page.getByRole('menuitem', { name: 'Clear stopped state' });
-    // The example frame is the containing block of the menu's fixed anchor; the demo must still anchor the
-    // menu at its trigger's viewport point, not offset by the frame's position and off screen (HS2-CY6A6K).
+    // The example frame is the containing block of the menu's fixed anchor; the menu must still open at its
+    // trigger's viewport point, not offset by the frame's position (HS2-CY6A6K). Kerf owns that placement
+    // since KF-7PEMC6, so the demo passes the point unconverted (HS2-HVD74J).
     await expect(clear).toBeInViewport();
-    if (width === 1280) {
-      // The wide tile is in view without scrolling, so its trigger stays put while the menu opens below it.
-      const opener = (await trigger.boundingBox())!,
-        menu = (await page.getByRole('menu', { name: 'Terminal Actions' }).boundingBox())!;
-      expect(Math.abs(menu.y - (opener.y + opener.height))).toBeLessThanOrEqual(8);
-    }
+    // Measured once the menu is open, after any scroll that brought the phone tile into view: the menu
+    // opens just below its trigger at both widths.
+    const opener = (await trigger.boundingBox())!,
+      menu = (await page.getByRole('menu', { name: 'Terminal Actions' }).boundingBox())!;
+    expect(Math.abs(menu.y - (opener.y + opener.height))).toBeLessThanOrEqual(8);
     await clear.click();
     await expect(tile).not.toHaveAttribute('data-halted', 'true');
     await expect(tile.locator('.terminal-tile__halt')).toHaveCount(0);
