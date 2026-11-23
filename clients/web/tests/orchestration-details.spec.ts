@@ -433,7 +433,7 @@ test('HS2-77SRHC a ready card says why it is not running and the overview lists 
 
 /**
  * HS2-QDARNW (HS2-9FKTB3): a project with two sites, the second one able to run the step and the first one
- * not listed in the policy, so the scheduler chooses the second. The card's Why It Is Not Running names the
+ * turned off in the policy (Sessions 0), so the scheduler chooses the second. The card's Why It Is Not Running names the
  * chosen site and why the first was passed over, through the real Orchestration view and a real server.
  */
 test('HS2-QDARNW Why It Is Not Running names the chosen site and each site passed over', async ({
@@ -481,14 +481,18 @@ test('HS2-QDARNW Why It Is Not Running names the chosen site and each site passe
       });
     }
     const plan = await planTwoSteps(server);
-    // Self is not listed in the policy, so no session may start there; the second site may run the tool.
+    // Self's Sessions is 0, so no session may start there; the second site may run the tool. Self must be
+    // listed with 0: an unlisted project is Auto (HS2-N5BDE4) and would win on site order.
     // The machine limits never refuse on a busy test host.
     await send(server, 'PUT', `${base}/policy`, {
       expected_revision: null,
       policy: {
         machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
         tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 4 }],
-        targets: [{ target_id: SITE, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 2 }],
+        targets: [
+          { target_id: TARGET, max_sessions: 0 },
+          { target_id: SITE, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 2 },
+        ],
         placement: { automatic: false, actor: 'scheduler-1' },
       },
       actor: person,
@@ -503,6 +507,8 @@ test('HS2-QDARNW Why It Is Not Running names the chosen site and each site passe
     })) as { standing: string; placement?: { target_id: string }; sites?: { target_id: string; reason: string }[] };
     expect(explained, JSON.stringify(explained)).toMatchObject({ standing: 'start', placement: { target_id: SITE } });
     expect(explained.sites?.map((pass) => pass.target_id)).toEqual([TARGET]);
+    // Refused for a stated reason, not merely passed over on site order.
+    expect(explained.sites?.[0]?.reason).not.toBe('not_chosen');
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await openOrchestration(page, server);
