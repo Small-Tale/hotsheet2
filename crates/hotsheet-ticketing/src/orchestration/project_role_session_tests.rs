@@ -346,3 +346,122 @@ fn hs2_syzb33_role_sessions_on_a_site_warn_and_name_the_home() {
     // Separated again: target 2 is its own home, and its entry takes effect.
     assert!(world.policy.warnings(&ProjectSites::default()).is_empty());
 }
+
+/// HS2-70Z2Z6: one two-site project whose home (target 1) runs Linux and whose site
+/// (target 2) runs `site_os`, with these caps, the home listing the dispatcher, and
+/// ready step 1 that needs Linux and may run on either site.
+fn linux_step_world(home_cap: u32, site_cap: u32, site_os: OsFamily) -> World {
+    let mut world = World::new(&[(1, home_cap), (2, site_cap)]);
+    world.sites = ProjectSites::default().with_site(&target(2), &target(1));
+    for (n, family) in [(1, OsFamily::Linux), (2, site_os)] {
+        world
+            .targets
+            .iter_mut()
+            .find(|state| state.target_id == target(n))
+            .and_then(|state| state.capacity.as_mut())
+            .unwrap()
+            .capabilities = Some(HostCapabilities::bare(family, "x86_64"));
+    }
+    opted(&mut world, 1, &[D]);
+    pool(&mut world, 1, Some(PoolState::default()));
+    let mut item = site_work(&world, 1, 1);
+    item.requirements.add("os=linux").unwrap();
+    item.requirements = item.requirements.clone().normalized().unwrap();
+    world.work = vec![item];
+    world
+}
+
+/// The repro: a one-slot home and a one-slot site that cannot run the only ready
+/// step. The dispatcher would hold the home's slot for work nobody could take, so the
+/// worker starts there instead, on every pass.
+#[test]
+fn hs2_70z2z6_the_dispatcher_leaves_the_last_slot_to_work_that_fits_nowhere_else() {
+    let world = linux_step_world(1, 1, OsFamily::Macos);
+    for now in [T0, T0 + MIN, T0 + 600 * MIN] {
+        let schedule = world.at(now);
+        assert_eq!(
+            roles_started(&schedule),
+            Vec::<String>::new(),
+            "{schedule:#?}"
+        );
+        assert_eq!(steps_started(&schedule), vec!["1@1"], "{schedule:#?}");
+    }
+    // A worker already running on the site that cannot run the step does not let
+    // the dispatcher take the home's slot either.
+    let mut world = linux_step_world(1, 2, OsFamily::Macos);
+    world.sessions = vec![session("site-worker", 2, SessionActivity::Idle)];
+    let schedule = world.now();
+    assert_eq!(
+        roles_started(&schedule),
+        Vec::<String>::new(),
+        "{schedule:#?}"
+    );
+    assert_eq!(steps_started(&schedule), vec!["1@1"], "{schedule:#?}");
+}
+
+/// The site can run the step and has room: the dispatcher takes the home's last slot
+/// and the worker starts on the site.
+#[test]
+fn hs2_70z2z6_the_dispatcher_takes_the_last_slot_when_the_work_runs_elsewhere() {
+    let schedule = linux_step_world(1, 1, OsFamily::Linux).now();
+    assert_eq!(
+        roles_started(&schedule),
+        vec!["dispatcher@1"],
+        "{schedule:#?}"
+    );
+    assert_eq!(steps_started(&schedule), vec!["1@2"], "{schedule:#?}");
+}
+
+/// Room for both on the home: the dispatcher starts even though only the home can
+/// run the step, and the worker starts beside it.
+#[test]
+fn hs2_70z2z6_the_dispatcher_starts_beside_the_work_when_the_home_has_spare_room() {
+    let schedule = linux_step_world(2, 1, OsFamily::Macos).now();
+    assert_eq!(
+        roles_started(&schedule),
+        vec!["dispatcher@1"],
+        "{schedule:#?}"
+    );
+    assert_eq!(steps_started(&schedule), vec!["1@1"], "{schedule:#?}");
+}
+
+/// No site meets the step's requirements: nothing starts, not even the dispatcher
+/// with room to spare, and the step stays unplaced naming what each site misses.
+#[test]
+fn hs2_70z2z6_work_no_site_can_run_starts_no_dispatcher() {
+    let mut world = linux_step_world(3, 3, OsFamily::Macos);
+    world
+        .targets
+        .iter_mut()
+        .find(|state| state.target_id == target(1))
+        .and_then(|state| state.capacity.as_mut())
+        .unwrap()
+        .capabilities = Some(HostCapabilities::bare(OsFamily::Windows, "x86_64"));
+    let schedule = world.now();
+    assert_eq!(
+        roles_started(&schedule),
+        Vec::<String>::new(),
+        "{schedule:#?}"
+    );
+    assert_eq!(
+        steps_started(&schedule),
+        Vec::<String>::new(),
+        "{schedule:#?}"
+    );
+    let standing = schedule.standing(&id(1)).unwrap();
+    assert_eq!(
+        (
+            standing.standing,
+            standing.reason,
+            standing.detail.as_deref()
+        ),
+        ("not_placed", "requirement_unmet", Some("os:linux")),
+        "{standing:#?}"
+    );
+    let sites: Vec<_> = standing
+        .sites
+        .iter()
+        .map(|pass| (pass.target_id.clone(), pass.reason.as_str()))
+        .collect();
+    assert_eq!(sites, vec![(target(2), "requirement_unmet")]);
+}

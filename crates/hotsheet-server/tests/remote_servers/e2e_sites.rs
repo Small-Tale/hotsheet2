@@ -867,6 +867,20 @@ async fn hs2_rcr4a6_one_project_on_two_servers_end_to_end() {
 /// step a second time there, and nothing claims its ticket a second time.
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn hs2_rcr4a6_a_peer_outage_takes_no_second_claim() {
+    // HS2-R2N33M: the project chooses no role sessions.
+    peer_outage_takes_no_second_claim(Some(json!([{"target_id":TARGET_A,"roles":[]}]))).await;
+}
+
+/// HS2-70Z2Z6: the same outage with the project unlisted, so Auto may start both role
+/// sessions on the home. The home's one slot goes to the Linux-only step the peer
+/// cannot run, not to a dispatcher, and no pass starts a role session in its place.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_70z2z6_a_peer_outage_with_auto_role_sessions_takes_no_second_claim() {
+    peer_outage_takes_no_second_claim(None).await;
+}
+
+/// The peer-outage scenario; `role_sessions` is the policy's list, or `None` for Auto.
+async fn peer_outage_takes_no_second_claim(role_sessions: Option<Value>) {
     let mut fleet = Fleet::sites().await;
     let orchestration = fleet.orchestration_ticket("Coordinate the synthetic project");
     let linux = fleet.target_ticket(Side::Controller, "Linux-only change");
@@ -878,15 +892,17 @@ async fn hs2_rcr4a6_a_peer_outage_takes_no_second_claim() {
             "target_id":TARGET_A,"connection_id":connection,
             "native_id":ticket.slug,"prerequisites":[],"requirements":requirements})
     };
-    // One worker session on each machine. HS2-R2N33M: the project chooses no role
-    // sessions, which Auto would otherwise start in the home's one slot.
+    // One worker session on each machine.
+    let mut placement = json!({"automatic":true,"actor":ACTOR,"cooldown_minutes":0});
+    if let Some(role_sessions) = role_sessions {
+        placement["role_sessions"] = role_sessions;
+    }
     fleet
         .policy(json!({
             "targets":[
                 {"target_id":TARGET_A,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1},
                 {"target_id":TARGET_B,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1}],
-            "placement":{"automatic":true,"actor":ACTOR,"cooldown_minutes":0,
-                "role_sessions":[{"target_id":TARGET_A,"roles":[]}]}
+            "placement":placement
         }))
         .await;
     let defined = fleet

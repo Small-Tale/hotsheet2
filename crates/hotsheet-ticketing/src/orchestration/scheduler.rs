@@ -1773,42 +1773,64 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         };
         let project = served(target_id);
         let in_project = |id: &str| project.iter().any(|site| site == id);
-        let workers_running = sessions
-            .iter()
-            .any(|session| in_project(&session.target_id) && is_worker(session));
         let ready = input
             .work
             .iter()
             .any(|item| in_project(&item.target_id) && placeable(item));
+        // HS2-70Z2Z6: a site of the project can still take a worker for some ready
+        // step after the dispatcher starts: the step may run there (the site it names
+        // or one of its other sites), the site is enabled, its machine meets every
+        // requirement the step names, and the site either runs a worker already or
+        // keeps a free slot with the dispatcher counted on the home. Without such a
+        // site the dispatcher would hold a slot for work it can give to nobody: ready
+        // work that fits only the home's last slot, or work no site meets at all
+        // (which stays unplaced with each site's reason).
+        let site_takes_work = |site: &str, planned: &BTreeMap<&str, u32>, dispatcher_here: u32| {
+            let other = policy.target(site);
+            if !other.enabled {
+                return false;
+            }
+            let worker_there = sessions
+                .iter()
+                .any(|session| session.target_id == site && is_worker(session));
+            let room = on_target.get(site).copied().unwrap_or(0)
+                + planned.get(site).copied().unwrap_or(0)
+                + dispatcher_here
+                < policy.target_cap(&other);
+            if !worker_there && !room {
+                return false;
+            }
+            let snapshot = input
+                .targets
+                .iter()
+                .find(|state| state.target_id == site)
+                .and_then(|state| state.capacity.as_ref());
+            input.work.iter().any(|item| {
+                in_project(&item.target_id)
+                    && placeable(item)
+                    && (item.target_id == site || item.sites.iter().any(|named| named == site))
+                    && (item.requirements.is_empty()
+                        || snapshot.is_some_and(|snapshot| {
+                            requirement_misses(&item.requirements, snapshot).is_empty()
+                        }))
+            })
+        };
         for kind in RoleSessionKind::ALL {
             if !entry.roles.contains(&kind) {
                 continue;
             }
             let role = kind.role();
-            // HS2-5P112Z: another enabled site of the project with a free slot can take
-            // the worker the dispatcher assigns to.
-            let other_site_room = project.iter().any(|site| {
-                site != target_id && {
-                    let other = policy.target(site);
-                    other.enabled
-                        && on_target.get(site.as_str()).copied().unwrap_or(0)
-                            + planned_target.get(site.as_str()).copied().unwrap_or(0)
-                            < policy.target_cap(&other)
-                }
-            });
-            let (live, wanted, room_for) = match kind {
-                // Room for the dispatcher and a worker, unless a worker already runs:
-                // a dispatcher alone in the target's last slot assigns to nobody.
+            let (live, wanted) = match kind {
+                // HS2-5P112Z, HS2-70Z2Z6: the dispatcher starts only when some site of
+                // the project can take a worker for ready work it can run.
                 RoleSessionKind::Dispatcher => (
                     pool.dispatcher_live,
-                    ready,
-                    if workers_running || other_site_room {
-                        1
-                    } else {
-                        2
-                    },
+                    ready
+                        && project.iter().any(|site| {
+                            site_takes_work(site, &planned_target, u32::from(site == target_id))
+                        }),
                 ),
-                RoleSessionKind::Integrator => (pool.integrator_live, pool.handoffs_pending > 0, 1),
+                RoleSessionKind::Integrator => (pool.integrator_live, pool.handoffs_pending > 0),
             };
             let held = sessions
                 .iter()
@@ -1818,7 +1840,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             }
             let target_sessions = on_target.get(target_id).copied().unwrap_or(0)
                 + planned_target.get(target_id).copied().unwrap_or(0);
-            if target_sessions + room_for > target_cap {
+            if target_sessions + 1 > target_cap {
                 continue;
             }
             let remembered = memory(target_id);

@@ -6265,16 +6265,29 @@ no git checkout, an unreadable pool, an older host) starts nothing.
 
 Before any worker, for each listed role of a target whose policy entry is enabled:
 
-| Role       | Started when                                                        | Room needed                                                       |
-| ---------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| dispatcher | the target has placeable work and the pool shows no live dispatcher | itself and one worker, unless a worker of the target already runs |
-| integrator | the pool shows handoffs pending and no live integrator              | itself                                                            |
+| Role       | Started when                                                        | Room needed                                                     |
+| ---------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| dispatcher | the target has placeable work and the pool shows no live dispatcher | itself, and a site that can take a worker for that work (below) |
+| integrator | the pool shows handoffs pending and no live integrator              | itself                                                          |
 
 Neither starts while a session of that role already runs on the target (one the pool
 has not seen join yet included), while the target waits out a refusal backoff or a
 cooldown, or when the machine's admission refuses. A role session counts against the
 target's, the machine's, the tool's and the account's caps like any session; the room
 rule keeps a dispatcher from taking a target's last slot with no worker to assign to.
+
+**The dispatcher's room rule (HS2-70Z2Z6).** The dispatcher starts only when some site
+of the project could still take a worker for some ready placeable step with the
+dispatcher counted on the home. That site must be one the step may run on (the site it
+names or one of its other sites), enabled, and on a machine that meets every
+requirement the step names (§26.30). It must also either run a worker already or have
+a free slot under its cap after the dispatcher. A one-site project therefore needs room
+for the dispatcher and a worker, unless a worker already runs there. Otherwise the
+slot is left to the worker: ready work that fits only the home's last slot gets it,
+and work no site can run (requirements unmet or unknown everywhere) starts no
+dispatcher at all and stays unplaced with each site's reason in its standing. The rule
+checks requirements and caps, not resources, which change from pass to pass.
+
 The placement is a `start` with reason `role_needed`, detail and `role` naming the
 role, and no steps. It is applied under operation id `sched-role-<role>-<target>`
 (stable, so a repeated start is the same session), dispatches no run, passes the gate
@@ -6355,8 +6368,10 @@ grouping (`ScheduleInput.sites`):
   (HS2-SYZB33); it applies again once that site is separated into its own project.
 - The home's **dispatcher** starts when placeable work exists on any site of the
   project and the home's pool shows no live dispatcher. It needs room on the home for
-  itself and a worker, unless a worker of the project already runs, or another enabled
-  site of the project has a free slot under its cap.
+  itself and a site of the project that can take a worker for that work: one the
+  step may run on, enabled, meeting the step's requirements, and running a worker or
+  keeping a free slot after the dispatcher (HS2-70Z2Z6, **The dispatcher's room rule**
+  above).
 - The home's **integrator** starts when the home's pool shows handoffs pending. A
   handoff another site's own pool shows starts nothing.
 - **Keeping:** a role session on the home is kept while a worker on any site of the
