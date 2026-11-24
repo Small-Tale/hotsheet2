@@ -8481,6 +8481,7 @@ test('HS2-JRQG1T keeps an immediately failed AI launch visible in the drawer', a
   await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   const parent = drawer.locator('[data-terminal-drawer-create] [data-item-id="ai-shell-providers"]');
   await page.mouse.move(0, 0);
