@@ -855,6 +855,11 @@ export interface TicketRow {
   /** Whether a live claim's worker belongs to this Hot Sheet server or a separate one seen through
    * the synced store (HS2-DQJPW0); absent without a claim or when the claim predates host records. */
   claim_origin?: 'local' | 'remote';
+  /**
+   * HS2-ZR8B4N: how this server's store sees the live claim beside it: provisional (taken offline, not confirmed,
+   * never exclusive) or lost to another machine while the losing session has not been told. Absent otherwise.
+   */
+  claim_standing?: ClaimStanding;
   legacy_number?: string;
   claim_count: number;
   /** Derived completion confidence of a completed/verified ticket (HS2-RD4M29). */
@@ -871,6 +876,9 @@ export interface TicketRow {
   details?: string;
   notes?: Note[];
 }
+/** HS2-ZR8B4N: a ticket's claim standing (`ClaimStanding` in the contract). */
+export type ClaimStanding =
+  { kind: 'provisional' } | { kind: 'lost'; worker: string; holder: string; detected_at: string };
 export interface ClaimEvent {
   id: string;
   kind: 'claim' | 'renew' | 'release';

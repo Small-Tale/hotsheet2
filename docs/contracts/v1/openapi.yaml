@@ -27716,6 +27716,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -27923,6 +27925,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -28213,6 +28217,36 @@ components:
         eta:
           type: string
       additionalProperties: false
+    ClaimStanding:
+      description:
+        HS2-ZR8B4N. How this server's ticket store sees the claim beside its frontmatter, from its bound claim backend
+        (docs/36 §36.14). `provisional` while the live claim was taken offline and is not confirmed (advisory, never
+        exclusive); `lost` while a claim this host's `worker` held was given to another machine and the losing session
+        has not been told yet; `holder` is the readable holder label or the unreadable-holder marker. Absent otherwise.
+      oneOf:
+        - type: object
+          required:
+            - kind
+          additionalProperties: false
+          properties:
+            kind:
+              const: provisional
+        - type: object
+          required:
+            - kind
+            - worker
+            - holder
+            - detected_at
+          additionalProperties: false
+          properties:
+            kind:
+              const: lost
+            worker:
+              type: string
+            holder:
+              type: string
+            detected_at:
+              type: string
     ClaimEvent:
       type: object
       required:
@@ -28565,6 +28599,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -28768,6 +28804,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -29080,6 +29118,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:

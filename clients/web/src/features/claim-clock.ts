@@ -51,12 +51,7 @@ export function createClaimClockController(dependencies: ClaimClockDependencies)
   let generation = 0;
   /** The inspector/reader header's live-claim notice, on the same local ETA clock as rows (HS2-QKNQXC). */
   function liveClaimNotice(ticket: WireTicketRow): LiveClaimNoticeProps | undefined {
-    const now = claimEtaClock.value;
-    if (!isTicketActivelyWorkedOn(ticket, now)) return undefined;
-    return {
-      agentName: claimHolderName(ticket),
-      eta: claimEtaPresentation(ticket, now),
-    };
+    return claimNotice(ticket, claimEtaClock.value);
   }
   /** Re-render ETA countdowns while a live claim or testing phase has a future estimate; a local timer only (HS2-XQMDQB, HS2-YDGM04). */
   function scheduleClaimEtaTick() {
@@ -131,4 +126,20 @@ export function createClaimClockController(dependencies: ClaimClockDependencies)
     claimLeaseExpiryTimer = undefined;
   }
   return { liveClaimNotice, scheduleClaimEtaTick, scheduleClaimLeaseExpiry, dispose };
+}
+
+/**
+ * The inspector/reader header's claim notice as of `now` (HS2-QKNQXC). HS2-ZR8B4N: a claim this machine lost shows
+ * whatever the lease, naming the session that lost it and the new holder; a provisional live claim says so.
+ */
+export function claimNotice(ticket: WireTicketRow, now: number): LiveClaimNoticeProps | undefined {
+  const standing = ticket.claim_standing;
+  if (standing?.kind === 'lost')
+    return { agentName: standing.worker, standing: { kind: 'lost', holder: standing.holder } };
+  if (!isTicketActivelyWorkedOn(ticket, now)) return undefined;
+  return {
+    agentName: claimHolderName(ticket),
+    eta: claimEtaPresentation(ticket, now),
+    ...(standing?.kind === 'provisional' ? { standing: { kind: 'provisional' as const } } : {}),
+  };
 }

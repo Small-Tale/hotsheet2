@@ -107,6 +107,13 @@ pub struct ApiTicket {
     /// before hosts were recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_origin: Option<crate::claim_host::ClaimOrigin>,
+    /// HS2-ZR8B4N: how this machine's ticket store sees the claim beside the frontmatter,
+    /// from its claim backend (`docs/36` §36.14): `provisional` while the live claim was
+    /// taken offline and is not confirmed (advisory, never exclusive), or `lost` while a
+    /// claim this host held was given to another machine and the losing session has not
+    /// been told yet. Absent otherwise and for every store without a bound claim backend.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_standing: Option<crate::claim_gate::ClaimStanding>,
     /// The ticket's original Hot Sheet 1 number (e.g. `HS-1234`) when imported (HS2-XB5R3Y).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub legacy_number: Option<String>,
@@ -318,6 +325,7 @@ impl ApiTicket {
                 t,
                 crate::claim_host::local_host_id().as_deref(),
             ),
+            claim_standing: None,
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
             claim_history: t.claim_history.clone(),
@@ -457,6 +465,9 @@ pub struct TicketRow {
     /// [`ApiTicket::claim_origin`] for the row (HS2-DQJPW0).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_origin: Option<crate::claim_host::ClaimOrigin>,
+    /// [`ApiTicket::claim_standing`] for the row (HS2-ZR8B4N).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_standing: Option<crate::claim_gate::ClaimStanding>,
     /// The ticket's original Hot Sheet 1 number (e.g. `HS-1234`) when it was imported,
     /// so clients can recognize and resolve legacy references in ticket text without an
     /// extra lookup (HS2-XB5R3Y). Absent for tickets that were not imported from HS1.
@@ -513,6 +524,7 @@ impl From<&Ticket> for TicketRow {
                 t,
                 crate::claim_host::local_host_id().as_deref(),
             ),
+            claim_standing: None,
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
             latest_confidence: crate::ops::latest_confidence(t).map(Confidence::get),
@@ -561,6 +573,7 @@ impl From<&ApiTicket> for TicketRow {
             started_phase_estimate_ms: t.started_phase_estimate_ms,
             worker_label: t.worker_label.clone(),
             claim_origin: t.claim_origin,
+            claim_standing: t.claim_standing.clone(),
             legacy_number: t.legacy_number.clone(),
             claim_count: t.claim_count,
             latest_confidence: t.latest_confidence,
@@ -643,6 +656,7 @@ pub const PROJECTABLE_FIELDS: &[&str] = &[
     "claim_history",
     "claim_lease_expires_at",
     "claim_origin",
+    "claim_standing",
     "claim_started_at",
     "claimed_by",
     "close_reason",

@@ -3952,6 +3952,7 @@ export async function startHotSheetWebClient() {
     phaseEstimate: phaseEstimatePresentation(ticket, claimEtaClock.value),
     agentName: claimHolderName(ticket),
     remoteClaim: ticket.claim_origin === 'remote',
+    claimStanding: ticket.claim_standing?.kind,
     updatedLabel: ago(ticket.updated_at),
     latestConfidence: ticket.latest_confidence,
     aiCreatorLabel: aiCreatorLabel(ticket.created_by),

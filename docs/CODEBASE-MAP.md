@@ -332,7 +332,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       halted-sessions.tsx     # Halt/question prompt acknowledgment, direct Claude question answers and terminal fallback, cross-window persistence, and Open/Dismiss wiring (HS2-E6KAWY/HS2-SWY32A)
       gallery.tsx             # Gallery gestures/playback/measurement, annotation API/browser adapter, and surfaces
       drive-conversations.ts  # Drive/sidebar AI conversations: session-push routing before dedicated chat fallback, persisted transcripts, drafts, start/send/stop/refresh (HS2-K7SYHQ, HS2-FWCE1Y)
-      claim-clock.ts          # Local live-claim ETA tick and lease-expiry wake-up timers (no network polling)
+      claim-clock.ts          # Local live-claim ETA tick and lease-expiry wake-up timers (no network polling); claimNotice with provisional/lost standing (HS2-ZR8B4N)
       corrupt-ticket-recovery.ts # Corrupt-ticket recovery state plus reveal and queue-AI-repair actions
       terminal-names.ts       # Terminal tab names: local in-flight copy, serialized writes, reset, reconcile, live rename events
       workspace-search.ts     # Workspace token search: debounced server search, boolean paging, sidebar match counts, partial warning (HS2-3JGWTV)
@@ -742,7 +742,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/gitref_cas.rs      #   Git-ref compare-and-swap markers (refs/hotsheet/claims/<ulid>, refs/hotsheet/resource-claims/<ns>/<res>): acquire/renew/release with force-with-lease, fencing (HS2-WJF0D8, docs/36 §36.14)
       src/claim_codec.rs     #   ClaimKey and the plain:/hmac-sha256:/enc:v1: metadata codecs shared by ticket and resource claims (HS2-EWGPTZ, docs/36 §36.15)
       src/plugin_digest.rs   #   SHA-256 over a plugin directory, shared by notifier and claim-backend plugin approval (HS2-208RB1, HS2-322ZSZ)
-      src/claim_gate.rs      #   routes ops claims of a store bound to a git_ref configuration through gitref_cas: claim, claim-next skip, renew, release on any claim-ending write (store.rs hook), provisional claims and conflicts in the Git dir, reconcile after a pulling sync (HS2-WJF0D8); keyed holder fields (HS2-EWGPTZ)
+      src/claim_gate.rs      #   routes ops claims of a store bound to a git_ref configuration through gitref_cas: claim, claim-next skip, renew, release on any claim-ending write (store.rs hook), provisional claims and conflicts in the Git dir, reconcile after a pulling sync (HS2-WJF0D8); keyed holder fields (HS2-EWGPTZ); ClaimStandings marks rows and tickets `claim_standing` provisional or lost (HS2-ZR8B4N)
       src/claim_host.rs      #   machine-home host id (HOTSHEET_HOME/host-id) stamped on claims as claim_host; claim_origin local/remote/unknown for wire tickets and index rows (HS2-DQJPW0)
       src/corrupt_cache.rs   #   stat-validated per-store memo of corrupt ticket files; re-parses only changed files (checkout corrupt-tickets, HS2-KYSBT2)
       src/commands.rs        #   typed program/shell/AI command schema plus portable presentation metadata; `command_groups` kept-group list (HS2-EZ5KMC)

@@ -219,6 +219,7 @@ graphical client.
 | CLI, MCP, and server surfaces with token-only renew and release (§36.10 to §36.12)               | Shipped for machine-scoped namespaces on the local backend                                  | HS2-FMHH9Y |
 | Backend configurations, namespace and data-source binding, offline policy, credential-store keys | Shipped in the CLI and library (§36.13); server and web settings are HS2-JJWESD's follow-up | HS2-JJWESD |
 | Git-ref backend; exact ticket claims of a bound Git store through it                             | Shipped (§36.14)                                                                            | HS2-WJF0D8 |
+| Provisional and lost ticket claims on the wire and in the web client                             | Shipped (§36.14)                                                                            | HS2-ZR8B4N |
 | AI guidance for the acquire-and-hand-off pattern                                                 | Design only                                                                                 | HS2-SHDW2Q |
 
 The first consumer outside tickets is the machine-wide `browser-engines` pool that caps local
@@ -546,8 +547,26 @@ server-initiated prompt uses: "your claim on `<slug>` was lost; another machine 
 (`<holder>`); stop work on it". The holder is the readable label (or the unreadable marker of §36.15),
 never a worker id or a key. A delivered conflict is acknowledged, so a session is told once; one whose
 session is not reachable, or whose push failed, stays pending (the record keeps its last 256) and is
-tried again after the next pass. Showing lost and provisional claims in the web client and on the wire
-is HS2-ZR8B4N.
+tried again after the next pass.
+
+**Provisional and lost claims on the wire and in the web client (HS2-ZR8B4N).** Ticket and row
+responses (`/tickets`, `/stores/{store}/tickets`, `/checkouts/{checkout}/tickets` and their details)
+carry an optional `claim_standing` beside the claim fields, read once per page from this machine's two
+records (`claim_gate::ClaimStandings`):
+
+- `{"kind": "provisional"}` while the ticket's live claim is a provisional claim this clone took offline
+  and has not confirmed. A provisional record whose claim lapsed or was replaced marks nothing.
+- `{"kind": "lost", "worker", "holder", "detected_at"}` while a conflict for the ticket is pending:
+  the local worker that lost it and the readable holder. A loss wins over a provisional record. It
+  stops showing once the losing session has been told and the conflict is acknowledged; the holder's
+  claim then reads as theirs.
+
+A store with no records (no Git directory, no bound backend, nothing recorded) carries no member.
+The web client never shows a provisional claim as exclusive work. A row adds a **Provisional** or
+**Claim lost** badge, and its activity indicator says "under a provisional claim". The inspector and
+reader header show a warning banner, _<worker> is working on this provisionally. Not confirmed yet;
+another machine may hold it._, or a danger banner, _<worker> lost this claim. Another machine holds it
+now (<holder>)._
 
 ## 36.15 Holder fields and per-configuration keys (HS2-EWGPTZ)
 

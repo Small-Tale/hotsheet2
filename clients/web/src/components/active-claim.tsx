@@ -55,6 +55,11 @@ export interface LiveClaimNoticeProps {
   /** Who holds the live claim (worker label, else worker id). */
   agentName: string;
   eta?: ClaimEtaPresentation;
+  /**
+   * HS2-ZR8B4N: `provisional` for a claim taken while the claim backend was unreachable, not confirmed and never
+   * exclusive; `lost` for a claim this machine's `agentName` held that another machine now holds (`holder`).
+   */
+  standing?: { kind: 'provisional' } | { kind: 'lost'; holder: string };
 }
 
 function visibleClaimHolder(agentName: string): string {
@@ -73,7 +78,44 @@ function visibleClaimHolder(agentName: string): string {
 }
 
 /** Header status line for a ticket someone is actively working on (HS2-QKNQXC). */
-export function LiveClaimNotice({ agentName, eta }: LiveClaimNoticeProps) {
+export function LiveClaimNotice({ agentName, eta, standing }: LiveClaimNoticeProps) {
+  // HS2-ZR8B4N: a lost claim names who lost it and who holds it now; nobody here works on it.
+  if (standing?.kind === 'lost') {
+    const label = `${agentName} lost the claim on this ticket to ${standing.holder}`;
+    return (
+      <div class="live-claim-notice" data-component="live-claim-notice" data-claim-standing="lost" title={label}>
+        <StateBanner
+          title={`${visibleClaimHolder(agentName)} lost this claim.`}
+          detail={`Another machine holds it now (${standing.holder}).`}
+          copyLayout="stacked"
+          tone="danger"
+          urgency="status"
+        />
+      </div>
+    );
+  }
+  // HS2-ZR8B4N: a provisional claim never reads as exclusive work.
+  if (standing?.kind === 'provisional') {
+    const label = `${agentName} holds a provisional claim on this ticket`;
+    return (
+      <div class="live-claim-notice" data-component="live-claim-notice" data-claim-standing="provisional" title={label}>
+        <StateBanner
+          title={`${visibleClaimHolder(agentName)} is working on this provisionally.`}
+          detail="Not confirmed yet; another machine may hold it."
+          tone="warning"
+          urgency="status"
+          icon={
+            <ActiveClaimIndicator
+              label={label}
+              eta={eta}
+              color={foregroundColorVar('--kui-state-banner-warning-foreground')}
+            />
+          }
+          action={eta ? <ClaimEta eta={eta} /> : undefined}
+        />
+      </div>
+    );
+  }
   const label = `${agentName} is actively working on this ticket`;
   return (
     <div class="live-claim-notice" data-component="live-claim-notice" title={label}>

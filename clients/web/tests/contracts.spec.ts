@@ -584,6 +584,90 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
  * misses fails a real response. Walk acquire, conflict, show, list, wait, token-only renew
  * and release on a real server, and check the renewal token is no credential elsewhere.
  */
+/**
+ * HS2-ZR8B4N: a real server reads this machine's provisional-claim and claim-conflict records from the store's Git
+ * directory (`claim_gate::ClaimStandings`) and reports them as `claim_standing` on list rows and ticket details. The
+ * records are written in the shape `claim_gate` writes them; the claims themselves go through the real claim route.
+ */
+test('HS2-ZR8B4N real provisional and lost claim standings match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as { components: { schemas: Record<string, object> } };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const schema = (name: string) => ajv.compile({ ...openapi.components.schemas[name], components: openapi.components });
+  const ticketSchema = schema('Ticket'),
+    rowSchema = schema('TicketRow');
+  const server = await realTicketServer();
+  try {
+    const created = [];
+    for (const title of ['Provisional work', 'Lost work', 'Exclusive work'])
+      created.push(await server.request<{ id: string; slug: string }>('/tickets', 'POST', { title }));
+    const [provisional, lost, exclusive] = created;
+    for (const ticket of [provisional, exclusive])
+      await server.request(`/tickets/${ticket.id}/claim`, 'POST', { worker: 'worker-a', lease_minutes: 30 });
+    await server.request(`/tickets/${lost.id}/claim`, 'POST', { worker: 'worker-b', lease_minutes: 30 });
+    const gitPath = async (name: string) =>
+      (
+        await promisify(execFile)('git', ['rev-parse', '--git-path', name], {
+          cwd: server.store,
+          env: withoutGitRepositoryEnv(process.env),
+        })
+      ).stdout.trim();
+    const absolute = (path: string) => (path.startsWith('/') ? path : join(server.store, path));
+    await writeFile(
+      absolute(await gitPath('hotsheet-provisional-claims.json')),
+      JSON.stringify({ [provisional.id]: { claim_id: '01JSYNTHETICATTEMPT0000000', worker: 'worker-a' } }),
+    );
+    await writeFile(
+      absolute(await gitPath('hotsheet-claim-conflicts.json')),
+      JSON.stringify([
+        {
+          ticket: lost.id,
+          slug: lost.slug,
+          worker: 'worker-a',
+          holder: 'worker-b',
+          detected_at: '2026-11-24T12:00:00Z',
+        },
+      ]),
+    );
+    const rows = await server.request<Array<{ id: string; claim_standing?: unknown }>>('/tickets');
+    for (const value of rows) expect(rowSchema(value), JSON.stringify(rowSchema.errors)).toBe(true);
+    const standing = (id: string) => rows.find((value) => value.id === id)?.claim_standing;
+    expect(standing(provisional.id)).toEqual({ kind: 'provisional' });
+    expect(standing(lost.id)).toEqual({
+      kind: 'lost',
+      worker: 'worker-a',
+      holder: 'worker-b',
+      detected_at: '2026-11-24T12:00:00Z',
+    });
+    expect(standing(exclusive.id)).toBeUndefined();
+    for (const [ticket, expected] of [
+      [provisional, { kind: 'provisional' }],
+      [exclusive, undefined],
+    ] as const) {
+      const detail = await server.request<{ claim_standing?: unknown }>(`/tickets/${ticket.id}`);
+      expect(ticketSchema(detail), JSON.stringify(ticketSchema.errors)).toBe(true);
+      expect(detail.claim_standing).toEqual(expected);
+    }
+    // The checkout list a client reads carries the same member.
+    const page = await server.request<{ tickets?: Array<{ id: string; claim_standing?: unknown }> }>(
+      `/checkouts/${server.checkoutId}/tickets`,
+    );
+    const listed = (page.tickets ?? (page as unknown as Array<{ id: string; claim_standing?: unknown }>)).find(
+      (value) => value.id === provisional.id,
+    );
+    expect(listed?.claim_standing).toEqual({ kind: 'provisional' });
+    // Released, the provisional record no longer marks the ticket.
+    await server.request(`/tickets/${provisional.id}/release`, 'POST', { worker: 'worker-a' });
+    expect((await server.request<{ claim_standing?: unknown }>(`/tickets/${provisional.id}`)).claim_standing).toBe(
+      undefined,
+    );
+  } finally {
+    await server.stop();
+  }
+});
+
 test('HS2-FMHH9Y real resource-claim responses match the OpenAPI contract', async () => {
   test.setTimeout(90_000);
   const openapi = YAML.parse(
