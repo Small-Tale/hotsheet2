@@ -325,6 +325,7 @@ fn spawn_watcher_in_scope_with_startup_hook(
                 let canonical_signal_tickets = canonical_signal_root
                     .as_ref()
                     .map(|root| root.join("tickets"));
+                let removal_freshness = resync.freshness.clone();
                 let mut watcher =
                     match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
                         if let Ok(event) = &res
@@ -336,6 +337,12 @@ fn spawn_watcher_in_scope_with_startup_hook(
                                 canonical_signal_tickets.as_deref(),
                             )
                         {
+                            // HS2-R6FZ54: a native unwatch may block on FSEvents. Invalidate
+                            // before the supervisor handles the signal, including root-only
+                            // events that the scoped ticket stream does not admit.
+                            if signal.root_removed || signal.tickets_removed {
+                                removal_freshness.set_live(false);
+                            }
                             let _ = rearm_tx.send(signal);
                         }
                         if is_access_event(&res) {
@@ -442,6 +449,16 @@ fn spawn_watcher_in_scope_with_startup_hook(
                     resync.freshness.set_live(false);
                 }
                 while let Ok(signal) = rearm_rx.recv() {
+                    // The signal can also describe a path that vanished before the callback
+                    // observed a Remove event. Do not leave a stale index live while a native
+                    // watch or unwatch waits on the platform run loop.
+                    if signal.root_removed
+                        || signal.tickets_removed
+                        || !store_root.is_dir()
+                        || !watch_dir.is_dir()
+                    {
+                        resync.freshness.set_live(false);
+                    }
                     let mut slot = started.lock_or_recover();
                     if slot.stopped {
                         return;
@@ -461,13 +478,9 @@ fn spawn_watcher_in_scope_with_startup_hook(
                             let _ = watcher.unwatch(&store_root);
                             root_watched = false;
                         }
-                        resync.freshness.set_live(false);
-                    } else if signal.tickets_removed || !watch_dir.is_dir() {
-                        if watched_dir {
-                            let _ = watcher.unwatch(&watch_dir);
-                            watched_dir = false;
-                        }
-                        resync.freshness.set_live(false);
+                    } else if (signal.tickets_removed || !watch_dir.is_dir()) && watched_dir {
+                        let _ = watcher.unwatch(&watch_dir);
+                        watched_dir = false;
                     }
                     if store_root.is_dir() && !root_watched && watch_dir != store_root {
                         root_watched = watcher
@@ -2182,9 +2195,10 @@ mod freshness_tests {
             });
 
             std::fs::rename(&root, &away).unwrap();
-            wait_for("deleted store to be marked out of sync", || {
-                !entry.freshness.in_sync()
-            });
+            wait_for_native_rearm(
+                &format!("deleted store to be marked out of sync (watch_root={watch_root})"),
+                || !entry.freshness.in_sync(),
+            );
             let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
             let first = create(&replacement, "replacement ticket");
             wait_for_native_rearm("recreated store to replace its index", || {
@@ -2216,9 +2230,10 @@ mod freshness_tests {
             });
 
             std::fs::rename(&root, parent.path().join("away-again")).unwrap();
-            wait_for("second removal to mark the store out of sync", || {
-                !entry.freshness.in_sync()
-            });
+            wait_for_native_rearm(
+                &format!("second removal to mark the store out of sync (watch_root={watch_root})"),
+                || !entry.freshness.in_sync(),
+            );
             let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
             let second = create(&replacement, "second replacement ticket");
             wait_for_native_rearm("second recreation to replace its index", || {

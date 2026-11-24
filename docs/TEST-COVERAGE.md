@@ -4854,7 +4854,8 @@ same ordered selection and a later headless `sync` retry with synthetic conflict
 reconciliation that removes old rows and adds replacement rows, and the native watcher
 transition for both root and `tickets/` scopes. Reconciliation also asserts a client
 invalidation. The native case verifies that a later
-external write is indexed after the store is recreated. Windows and Linux platform CI
+external write is indexed after the store is recreated, and that each removal marks
+freshness out of sync before the next registration. Windows and Linux platform CI
 must exercise their own native backends before the ticket completes.
 The Windows-only identity test pins stable handle-based directory IDs across rename and
 recreation at the same path; the Windows cfg check compiles that platform implementation.

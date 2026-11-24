@@ -209,6 +209,8 @@ If a hosted store is deleted and recreated at the same path, the server watches 
 for the store root to return (HS2-R6FZ54). On macOS and Linux it also watches the root without
 recursion for a new `tickets/` directory. It removes the invalid native watch, registers the
 replacement directory, and reconciles the entire store index before declaring the watch live.
+The removal signal marks the index out of sync before a platform-native unwatch can block,
+so queries do not trust rows from a deleted store during re-registration.
 That reconciliation removes rows from the deleted store as well as indexing files in the new one.
 When rows change, it emits one store-scoped ticket invalidation so connected clients reread the index.
 These parent and root monitors respond to filesystem events; they do not rescan idle stores.
