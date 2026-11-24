@@ -254,8 +254,15 @@ tab's composite id for the client's ownership rule. Two tabs on one server, and
 equal checkout ids on two servers, therefore never share a terminal. Creating,
 typing into or attaching a remote terminal needs the host owner's **read-write**
 approval of the desktop's session ([08](08-distributed-and-remote.md) §8.2.3);
-remote AI chats and their project mapping are tracked by HS2-TCJQHX, and the
-read-only drawer explanation by HS2-NHB2XF.
+the read-only drawer explanation is tracked by HS2-NHB2XF.
+**Remote AI connections (HS2-TCJQHX).** Creating an AI chat or Drive connection
+through a remote tab translates that tab's composite checkout id to the native id
+only inside the trusted bridge. The bridge scopes host-wide live connections and
+saved tool sessions to the owning open checkout, then presents their project as
+the composite tab id. A tab never receives a sibling checkout's connections; two
+hosts exposing the same native checkout id remain separate by reviewed binding.
+Connections registered against a linked ticket store follow that tab's store
+membership. Write operations still require the remote host's read-write approval.
 On a remote-mode host the `/__hotsheet/remotes` routes are host-only: a session
 with the **local** grant manages the registry like the host's own browser, and
 any other session gets 404 and is never offered Remote Project (HS2-HBM3JN). The

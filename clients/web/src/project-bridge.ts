@@ -24,6 +24,12 @@ import type { MigrationJob, MigrationProgress, MigrationResult } from './migrati
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
 import type { RegisteredProject } from './registered-projects-model';
 import {
+  remoteConnectionCreate,
+  remoteConnectionItem,
+  remoteConnectionList,
+  type RemoteConnectionScope,
+} from './remote-projects/connections';
+import {
   discoverRemoteProjects,
   type PrivateRemoteConnection,
   privateRemoteConnection,
@@ -108,6 +114,8 @@ interface SessionTarget {
     connection: PrivateRemoteConnection;
     /** The checkout's root on the remote host, read once for terminal launch and ownership. */
     root?: string;
+    /** Ticket stores linked by that checkout, for store-root AI connections. */
+    stores?: string[];
   };
 }
 interface CorruptDiagnostic {
@@ -2047,7 +2055,13 @@ async function remoteCheckoutRoot(projectId: string, target: SessionTarget): Pro
   if (!response.ok) return undefined;
   const checkout = (await response.json().catch(() => undefined)) as unknown;
   const root = isRecord(checkout) && typeof checkout.root === 'string' && checkout.root ? checkout.root : undefined;
-  if (root !== undefined && sessions.get(projectId) === target) target.remote.root = root;
+  if (root !== undefined && sessions.get(projectId) === target) {
+    target.remote.root = root;
+    target.remote.stores =
+      isRecord(checkout) && Array.isArray(checkout.stores)
+        ? checkout.stores.filter((store): store is string => typeof store === 'string')
+        : [];
+  }
   return root;
 }
 
@@ -2059,6 +2073,54 @@ async function remoteTerminalScopes(target: SessionTarget): Promise<RemoteTermin
   return peers.flatMap(([id], index) => {
     const root = roots[index];
     return root === undefined ? [] : [{ id, root }];
+  });
+}
+
+/** A host's connection registry is machine-wide. Only tabs on this reviewed binding may
+ * participate in ownership, even when another host exposes an equal native checkout id. */
+async function remoteConnectionScopes(target: SessionTarget): Promise<RemoteConnectionScope[]> {
+  const bindingId = target.remote?.bindingId;
+  const peers = [...sessions.entries()].filter(([, session]) => session.remote?.bindingId === bindingId);
+  const roots = await Promise.all(peers.map(([id, session]) => remoteCheckoutRoot(id, session).catch(() => undefined)));
+  return peers.flatMap(([id, session], index) => {
+    const root = roots[index];
+    return root === undefined ? [] : [{ id, root, stores: session.remote?.stores ?? [] }];
+  });
+}
+
+function remoteConnectionCreateBody(body: ArrayBuffer | undefined, projectId: string, checkoutId: string): ArrayBuffer {
+  const text = body ? Buffer.from(body).toString('utf8') : '';
+  const value: unknown = text.trim() ? JSON.parse(text) : {};
+  const encoded = Buffer.from(JSON.stringify(remoteConnectionCreate(value, projectId, checkoutId)), 'utf8');
+  return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
+}
+
+async function remoteConnectionResponse(
+  response: Response,
+  projectId: string,
+  target: SessionTarget,
+  list: boolean,
+): Promise<Response> {
+  const text = await response.text();
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return new Response(text, { status: response.status, headers: response.headers });
+  }
+  const scopes = await remoteConnectionScopes(target);
+  const projected = list
+    ? remoteConnectionList(value, projectId, scopes)
+    : remoteConnectionItem(value, projectId, scopes);
+  if (projected === undefined)
+    return Response.json({ error: 'The remote AI connection belongs to a different project.' }, { status: 502 });
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  headers.delete('content-encoding');
+  headers.set('content-type', 'application/json');
+  return new Response(JSON.stringify(projected), {
+    status: response.status,
+    headers,
   });
 }
 
@@ -2134,8 +2196,11 @@ export async function proxyProjectRequest(
       }
       const [pathname, query] = path.split('?', 2);
       const terminalPath = pathname === '/terminals' || /^\/terminals\/[^/]+$/.test(pathname);
+      const connectionList =
+        request.method === 'GET' && (pathname === '/connections' || pathname === '/drive/sessions');
+      const connectionCreate = pathname === '/drive/connections' && request.method === 'POST';
       // Terminal answers are rewritten for ownership, so they must arrive uncompressed (HS2-JJKVJJ).
-      if (terminalPath) headers.delete('accept-encoding');
+      if (terminalPath || connectionList || connectionCreate) headers.delete('accept-encoding');
       let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
       if (pathname === '/terminals' && request.method === 'POST') {
         const root = await remoteCheckoutRoot(projectId, target);
@@ -2146,6 +2211,16 @@ export async function proxyProjectRequest(
         } catch (error) {
           return Response.json(
             { error: error instanceof Error ? error.message : 'Invalid terminal launch.' },
+            { status: 400 },
+          );
+        }
+      }
+      if (connectionCreate) {
+        try {
+          body = remoteConnectionCreateBody(body, projectId, target.remote.checkoutId);
+        } catch (error) {
+          return Response.json(
+            { error: error instanceof Error ? error.message : 'Invalid AI connection creation.' },
             { status: 400 },
           );
         }
@@ -2176,6 +2251,8 @@ export async function proxyProjectRequest(
           target,
           pathname === '/terminals' && request.method === 'GET',
         );
+      if ((connectionList || connectionCreate) && response.ok)
+        return await remoteConnectionResponse(response, projectId, target, connectionList);
       return new Response(response.body, { status: response.status, headers: response.headers });
     } catch {
       return Response.json({ error: 'Remote server is unavailable or its approval changed.' }, { status: 503 });

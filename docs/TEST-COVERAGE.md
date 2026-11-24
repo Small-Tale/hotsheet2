@@ -233,6 +233,19 @@ refused, and two checkouts on one server and equal checkout ids on two servers l
 disjoint terminals. Unit and integration only; the remote drawer browser E2E is HS2-NHB2XF.
 No customer content was copied into fixtures.
 
+HS2-TCJQHX (remote AI connection ownership):
+`clients/web/src/remote-projects/connections.test.ts` covers native checkout
+translation, foreign-tab rejection, the two-checkout host list, linked-store
+connections, malformed records, and equal native ids on different hosts.
+`clients/web/src/project-bridge.remote-connections.test.ts` exercises the bridge's
+POST `/drive/connections`, GET `/connections`, and GET `/drive/sessions` with two
+open remote tabs and separate reviewed bindings. The bridge returns only the
+owning tab's records with its composite project id.
+`clients/web/src/remote-projects/connections.transport.test.ts` repeats the
+cross-checkout and cross-host requests through two real localhost remote servers.
+The remote drawer browser
+flow remains in HS2-72HT9Y; no customer content was copied into fixtures.
+
 HS2-85W6BE / HS2-DXM0YN: `hotsheet-server/src/remote_auth.rs` tests the 15-minute
 boundary, admin and local grants through approve, redeem, reopen and change, reject,
 a pre-grant catalog, the change cursor (visible changes only) and the long-poll wait.
