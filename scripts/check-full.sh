@@ -6,6 +6,11 @@ cd "$(dirname "$0")/.."
 cargo fmt --all --check
 # HS2-PQVRR1: validate coverage evidence before a long affected suite can fail or exhaust CI First's budget.
 zsh -ic 'node scripts/check-test-coverage.mjs'
+# HS2-140YMZ: route inventory must reach the versioned contract before broad suites start.
+(
+  cd clients/web
+  zsh -ic 'node scripts/check-openapi-routes.mjs'
+)
 cargo lint
 zsh -ic 'node scripts/windows-cfg-check.mjs'
 cargo nextest run --all-features --status-level leak

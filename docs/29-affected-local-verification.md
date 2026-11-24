@@ -317,7 +317,10 @@ lists every deferred check, and the receipt's `bestEffort` block records what ra
 the plan deferred and what the clock deferred. Feature coverage matrix validation
 runs before broad affected suites (HS2-PQVRR1), so an unrelated suite failure cannot
 hide malformed coverage evidence from the local check. A failing stage still fails
-the gate. A rerun on the same inputs reuses passed stage receipts and spends a fresh budget on the
+the gate. The cheap server route/OpenAPI completeness check runs next, before broad Rust
+suites (HS2-140YMZ); it catches a newly added undocumented path or method even when a later
+browser contracts test would be deferred. Its selected or deferred status appears in the
+same plan and receipt as every other stage. A rerun on the same inputs reuses passed stage receipts and spends a fresh budget on the
 deferred stages. Under CI First `scripts/push.sh` does not require the receipt at all;
 the covering main CI run is the gate.
 

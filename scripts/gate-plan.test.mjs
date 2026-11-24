@@ -35,7 +35,7 @@ const selectedGroups = (changes, fixtures = noFixtures) => {
 };
 
 test('HS2-FCCRCK reads every stage of the real scripts/check.sh and classifies each one', () => {
-  assert.equal(stages.length, 20); // HS2-6CK09C adds the browser shard completeness test; HS2-V3R4JR the Windows cfg check.
+  assert.equal(stages.length, 21); // HS2-140YMZ adds the early route/OpenAPI check after HS2-PQVRR1 coverage.
   assert.deepEqual(
     stages.filter((stage) => stageGroup(stage) === undefined),
     [],

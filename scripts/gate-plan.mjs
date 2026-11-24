@@ -26,6 +26,7 @@ export const STAGE_GROUPS = {
   '.::cargo nextest run --all-features --status-level leak': 'rust',
   '.::node --test scripts/verify-playwright-shards.test.mjs': 'tooling',
   '.::node scripts/check-test-coverage.mjs': 'always',
+  'clients/web::node scripts/check-openapi-routes.mjs': 'always',
   '.::node scripts/check-test-quarantine.mjs': 'always',
   '.::node scripts/sync-role-skills.mjs --check': 'always',
   'clients/web::npm run format:sources:check': 'always',
@@ -94,9 +95,9 @@ const rootTestCommand = (names, preload) =>
 /** Repository files and directories outside scripts/ that root tooling tests read (HS2-WC74CR). */
 export const ROOT_TEST_FIXTURES = readManifest(root);
 
-/** Why each group can never be omitted: these checks read the whole repository. */
+/** Why the cross-cutting floor runs even when a changed path does not select its package group. */
 const ALWAYS_REASON =
-  'always runs: repository-wide formatting, cross-package policy, coverage-matrix and quarantine checks read every area';
+  'always runs: repository-wide formatting, cross-package policy, route/OpenAPI completeness, coverage-matrix and quarantine checks';
 
 /**
  * Path rules, first match wins. `full` forces the whole gate. Edges come from source (HS2-FCCRCK):

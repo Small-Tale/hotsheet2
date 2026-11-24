@@ -1930,6 +1930,32 @@ test('HS2-PQVRR1 CI First validates feature coverage before an affected Rust sui
   assert.ok(!ran.includes(nextest), 'a coverage failure stops the gate before the broad Rust suite');
 });
 
+test('HS2-140YMZ CI First validates route/OpenAPI completeness before an affected Rust suite', (t) => {
+  const f = fixture(t);
+  f.put('crates/hotsheet-server/src/lib.rs', 'pub fn synthetic_route_change() {}\n');
+  f.git('add', 'crates/hotsheet-server/src/lib.rs');
+  f.git('commit', '--quiet', '-m', 'synthetic server route change');
+  const profile = ciFirstProfile(10);
+  const plan = prepare(f.repo, undefined, false, f.options.versions, { profile });
+  const coverage = 'node scripts/check-test-coverage.mjs';
+  const openapi = 'node scripts/check-openapi-routes.mjs';
+  const nextest = 'cargo nextest run --all-features --status-level leak';
+  const commands = plan.checks.map((stage) => stage.command);
+  assert.ok(commands.indexOf(coverage) < commands.indexOf(openapi));
+  assert.ok(commands.indexOf(openapi) < commands.indexOf(nextest));
+  assert.equal(plan.checks.find((stage) => stage.command === openapi)?.cwd, 'clients/web');
+  assert.ok(!plan.deferred.some((stage) => stage.command === openapi), 'the early check is selected');
+
+  const ran = [];
+  const runner = (stage) => {
+    ran.push(stage.command);
+    return { status: stage.command === openapi ? 1 : 0 };
+  };
+  assert.equal(runGate({ ...f.options, profile, runner }), 1);
+  assert.ok(ran.includes(openapi), 'the validator ran');
+  assert.ok(!ran.includes(nextest), 'a route mismatch stops the gate before broad Rust tests');
+});
+
 test('HS2-ZGS7JP best effort budgets a T2 ticket, needs no analyzed selection or plan, and lists deferrals', (t) => {
   const f = fixture(t);
   const profile = ciFirstProfile();
