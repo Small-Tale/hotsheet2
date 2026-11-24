@@ -19,6 +19,11 @@
   -webkit-user-select: none;
   font-variant-numeric: tabular-nums;
 }
+/* The night display hides the pointer until it moves a little (HS2-1RGBCT, standby.ts). */
+.standby-screen[data-cursor-hidden='true'],
+.standby-screen[data-cursor-hidden='true'] * {
+  cursor: none;
+}
 /* The app overlay covers the whole viewport in the top layer. */
 .standby-screen[data-presentation='overlay'] {
   position: fixed;

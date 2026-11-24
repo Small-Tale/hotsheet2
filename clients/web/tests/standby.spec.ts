@@ -213,6 +213,35 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
+  test('hides the mouse cursor until it moves a little, and hides it again after a rest (HS2-1RGBCT)', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openStandbyProject(page);
+    await page.mouse.move(700, 450);
+    await page.getByRole('button', { name: 'Enter Standby' }).click();
+    const screen = standby(page),
+      cursorOver = () =>
+        screen.evaluate((node) => getComputedStyle(node.querySelector('.standby-screen__content')!).cursor);
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true');
+    expect(await cursorOver()).toBe('none');
+    // A nudge of a few pixels is not a wake.
+    await page.mouse.move(702, 450);
+    await page.mouse.move(704, 452);
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true');
+    // A real move shows it, and the display stays up.
+    await page.mouse.move(760, 480, { steps: 4 });
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'false');
+    expect(await cursorOver()).not.toBe('none');
+    await expect(screen).toBeVisible();
+    // Resting a few seconds hides it again.
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true', { timeout: 6_000 });
+    // Exiting restores the cursor over the app.
+    await page.keyboard.press('Escape');
+    await expect(screen).toHaveCount(0);
+    expect(await page.evaluate(() => getComputedStyle(document.body).cursor)).not.toBe('none');
+  });
+
   test('enters after the idle threshold, shows all projects from the grid, and lights a stalled project', async ({
     page,
   }) => {

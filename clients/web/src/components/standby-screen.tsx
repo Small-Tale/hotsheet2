@@ -20,6 +20,8 @@ export interface StandbyScreenProps {
   presentation?: 'overlay' | 'inline';
   /** Respect a phone or tablet hint: say "tap" instead of "click". */
   touch?: boolean;
+  /** Hide the mouse cursor over the display until the pointer moves (HS2-1RGBCT). */
+  cursorHidden?: boolean;
 }
 
 /** Average advance of a light tabular digit, in em; the colon is narrower. */
@@ -56,6 +58,7 @@ export function StandbyScreen({
   freshness,
   presentation = 'overlay',
   touch = false,
+  cursorHidden = false,
 }: StandbyScreenProps) {
   const overlay = presentation === 'overlay';
   const content = (
@@ -138,6 +141,7 @@ export function StandbyScreen({
       class="standby-screen"
       data-component="standby-screen"
       data-presentation="overlay"
+      data-cursor-hidden={String(cursorHidden)}
       data-action="exit-standby"
       popover="manual"
       {...{ [TOP_LAYER_OVERLAY_ATTRIBUTE]: '' }}

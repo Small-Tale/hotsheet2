@@ -152,6 +152,9 @@ The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
   collapsed, it moves with the toggle into the workspace toolbar.
 - **Exit.** A click or tap anywhere on the display exits. Any key also exits, and the app beneath
   never receives that key.
+- **Cursor.** The mouse cursor is hidden over the display as soon as it shows. Moving the pointer a
+  little (more than 8 px from where it rested) shows it again, and it hides again after 3 seconds
+  without movement; a nudge of a few pixels keeps it hidden, and moving never exits (HS2-1RGBCT).
 - **Scope.** Always every open project, entered from any tab or page (HS2-JGW031).
 - **Freshness.** The freshness line reads the health of each project's change stream. A dropped
   stream turns the line amber ("connection lost · last update …") once it has stayed down past a

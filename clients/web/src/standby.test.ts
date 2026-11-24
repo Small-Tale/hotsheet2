@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { LiveStoreState } from './api';
 import {
+  createStandbyCursor,
   createStandbyIdleTimer,
   formatStandbyAge,
   formatStandbyClock,
@@ -308,5 +309,70 @@ describe('standby idle timer', () => {
     expect(onIdle).not.toHaveBeenCalled();
     advance(MINUTE);
     expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('standby cursor (HS2-1RGBCT)', () => {
+  function harness() {
+    const changes: boolean[] = [];
+    let pending: (() => void) | undefined;
+    const cursor = createStandbyCursor({
+      onChange: (hidden) => changes.push(hidden),
+      hideMs: 3000,
+      wakePx: 8,
+      setTimer: (callback) => {
+        pending = callback;
+        return callback;
+      },
+      clearTimer: () => {
+        pending = undefined;
+      },
+    });
+    const elapse = () => {
+      const run = pending;
+      pending = undefined;
+      run?.();
+    };
+    return { cursor, changes, elapse, pending: () => pending };
+  }
+
+  it('hides on entry, ignores a nudge, shows on a real move, and hides again after a rest', () => {
+    const { cursor, changes, elapse, pending } = harness();
+    cursor.move(1, 1); // inactive before standby: nothing
+    expect(changes).toEqual([]);
+    cursor.start();
+    expect(changes).toEqual([true]);
+    cursor.move(100, 100); // the first report only records where the pointer rests
+    cursor.move(104, 103); // a 5px nudge is not a wake
+    expect(cursor.hidden()).toBe(true);
+    expect(pending()).toBeUndefined();
+    cursor.move(110, 100); // 10px from the rest point
+    expect(changes).toEqual([true, false]);
+    cursor.move(300, 300); // moving keeps it shown and re-arms one timer
+    expect(changes).toEqual([true, false]);
+    elapse();
+    expect(changes).toEqual([true, false, true]);
+    // Hidden again: a new rest point, then another real move shows it.
+    cursor.move(300, 300);
+    cursor.move(320, 300);
+    expect(changes).toEqual([true, false, true, false]);
+  });
+
+  it('shows on exit, cancels the pending hide, and repeats cleanly', () => {
+    const { cursor, changes, elapse, pending } = harness();
+    cursor.start();
+    cursor.move(0, 0);
+    cursor.move(50, 0);
+    expect(pending()).toBeDefined();
+    cursor.stop();
+    expect(changes).toEqual([true, false]);
+    expect(pending()).toBeUndefined();
+    elapse(); // nothing pending
+    cursor.move(500, 500); // ignored while stopped
+    expect(changes).toEqual([true, false]);
+    cursor.stop(); // repeated exit changes nothing
+    cursor.start();
+    cursor.start(); // repeated entry stays hidden once
+    expect(changes).toEqual([true, false, true]);
   });
 });
