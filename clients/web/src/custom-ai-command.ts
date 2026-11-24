@@ -13,7 +13,7 @@ export function customAiCommandTicket(command: CommandDefinition) {
     priority: 'urgent',
     up_next: true,
     tags: [customAiCommandTag(command.id)],
-  } as const;
+  };
 }
 
 export function customAiCommandSignalConnection(
