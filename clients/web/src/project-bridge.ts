@@ -2248,6 +2248,7 @@ export function projectScopedServerPath(projectId: string, path: string): string
       pathname === '/commands' ||
       pathname === '/command-groups' ||
       pathname === '/command-runs' ||
+      /^\/command-schedules(?:\/preview|\/[^/]+)?$/.test(pathname) ||
       pathname === '/views' ||
       pathname === '/terminal-settings' ||
       pathname === '/permission-automation' ||
