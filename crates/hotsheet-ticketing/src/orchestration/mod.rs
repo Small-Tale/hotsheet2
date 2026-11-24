@@ -165,9 +165,11 @@ pub use runs::{
 };
 pub use scheduler::{
     Blocker, DecisionEntry, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
-    DecisionRecord, HeldResource, MAX_SCHEDULE_SESSIONS, MAX_SCHEDULE_WORK, Placement,
-    PlacementAction, PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason,
-    REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, SITE_NOT_CHOSEN,
+    DecisionRecord, HeldResource, INTEGRATOR_CI_PENDING, INTEGRATOR_HANDOFF_PENDING,
+    INTEGRATOR_IDLE, INTEGRATOR_POLICY_OPT_OUT, INTEGRATOR_QUEUE, INTEGRATOR_TARGET_DISABLED,
+    INTEGRATOR_WORKER_RUN, MAX_SCHEDULE_SESSIONS, MAX_SCHEDULE_WORK, Placement, PlacementAction,
+    PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason, REFUSAL_BACKOFF_BASE_MS,
+    REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, RoleBlocker, RoleUnplaced, SITE_NOT_CHOSEN,
     Schedule, ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts, SessionActivity,
     SitePass, Standing, TargetState, TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation,
     is_capacity_refusal, lift_capacity_refusal, plan, refusal_backoff_ms, remember,
@@ -498,6 +500,8 @@ mod gate_tests;
 mod hosted_audit_tests;
 #[cfg(test)]
 mod hosted_validation_tests;
+#[cfg(test)]
+mod integrator_session_tests;
 #[cfg(test)]
 mod joining_tests;
 #[cfg(test)]

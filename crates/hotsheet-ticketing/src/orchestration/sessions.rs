@@ -654,6 +654,8 @@ impl SessionRegistry {
                 }),
                 None => 0,
             },
+            // The caller says whether the start is an integrator's (HS2-4JQ41V).
+            integrator: false,
         })
     }
 

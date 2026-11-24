@@ -103,7 +103,7 @@ fn orchestrator(actor_id: &str) -> Option<MutationActor> {
 
 /// Which start of the work `base` names the session operation `operation` was: 1 for
 /// the first, `n` for `<base>.<n>`.
-fn generation(base: &str, operation: &str) -> Option<u32> {
+pub(super) fn generation(base: &str, operation: &str) -> Option<u32> {
     if operation == base {
         return Some(1);
     }

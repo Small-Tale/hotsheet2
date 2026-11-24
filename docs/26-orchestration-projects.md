@@ -3233,15 +3233,15 @@ session again without polling. Answering the question stays a person's act.
 Only the hosting machine can say whether a session is at a safe point. It establishes
 five facts, and anything it cannot establish counts against the session:
 
-| Blocker                               | When                                                                                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `mid_turn`                            | The tool is in the middle of a turn                                                                                                       |
-| `held_claim`                          | A live ticket claim in one of the checkout's git stores is held under the session's worker id                                             |
-| `uncommitted_changes`                 | A worktree the session owns has uncommitted changes, untracked files included (HS2-TRP2MJ, below)                                         |
-| `pending_handoff`                     | An assignment of the session in the target's coordination pool is not `done`; a dispatcher or integrator answers for every unfinished one |
-| `session_unknown`                     | The terminal host could not be asked                                                                                                      |
-| `claims_unknown`                      | A ticket store could not be read                                                                                                          |
-| `worktree_unknown`, `handoff_unknown` | The checkout is not a git work tree, git could not answer, or the pool's state file could not be read (for a worker, both)                |
+| Blocker                               | When                                                                                                                                                                                                           |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mid_turn`                            | The tool is in the middle of a turn                                                                                                                                                                            |
+| `held_claim`                          | A live ticket claim in one of the checkout's git stores is held under the session's worker id                                                                                                                  |
+| `uncommitted_changes`                 | A worktree the session owns has uncommitted changes, untracked files included (HS2-TRP2MJ, below)                                                                                                              |
+| `pending_handoff`                     | An assignment of the session in the target's coordination pool is not `done`; a dispatcher or integrator the pool names in its role answers for every unfinished one, one it never named for none (HS2-4JQ41V) |
+| `session_unknown`                     | The terminal host could not be asked                                                                                                                                                                           |
+| `claims_unknown`                      | A ticket store could not be read                                                                                                                                                                               |
+| `worktree_unknown`, `handoff_unknown` | The checkout is not a git work tree, git could not answer, or the pool's state file could not be read (for a worker, both)                                                                                     |
 
 The answer lists every blocker at once in that order, with the counts it found. A
 session whose process is already gone has nothing left to interrupt and is safe. The
@@ -6271,7 +6271,7 @@ Before any worker, for each listed role of a target whose policy entry is enable
 | Role       | Started when                                                        | Room needed                                                     |
 | ---------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
 | dispatcher | the target has placeable work and the pool shows no live dispatcher | itself, and a site that can take a worker for that work (below) |
-| integrator | the pool shows handoffs pending and no live integrator              | itself                                                          |
+| integrator | the pool shows handoffs pending and no live integrator              | itself; may run one over the target's cap (HS2-4JQ41V)          |
 
 Neither starts while a session of that role already runs on the target (one the pool
 has not seen join yet included), while the target waits out a refusal backoff or a
@@ -6292,7 +6292,8 @@ dispatcher at all and stays unplaced with each site's reason in its standing. Th
 checks requirements and caps, not resources, which change from pass to pass.
 
 The placement is a `start` with reason `role_needed`, detail and `role` naming the
-role, and no steps. It is applied under operation id `sched-role-<role>-<target>`
+role, and no steps. An integrator's start has reason `integrator_started` with detail
+`handoff_pending` instead (HS2-4JQ41V, below). It is applied under operation id `sched-role-<role>-<target>`
 (stable, so a repeated start is the same session), dispatches no run, passes the gate
 as a session start (`session_start` for its tool, §26.28), and launches in its role
 through the hosting machine's drawer like any orchestrator session (§26.16).
@@ -6309,11 +6310,78 @@ target's cooldown, then wound down at its safe point. The host's safe point for 
 session counts every unfinished assignment of the pool (§26.16), so a role session is
 never stopped while a handoff it serves remains.
 
+An integrator's decisions carry reasons of their own (HS2-4JQ41V): kept with
+`integrator_kept` and detail `queue`, `ci_pending` or `worker_run`, and wound down with
+`integrator_wound_down` and detail `idle`. Its other keeps (`idle_grace`, `cooldown`,
+`awaiting_safe_point`, `busy`) are as above.
+
 A typical target walks: no work, nothing runs; work arrives, the dispatcher starts
 before the worker; the worker runs, both kept; the work is handed off, the integrator
 starts and the idle dispatcher waits out its grace; the handoff is integrated and
 nothing is pending, so both wind down at their safe points; new work starts the
 dispatcher again.
+
+### The integrator on demand (HS2-4JQ41V)
+
+Integration is required before any orchestrated ticket can complete, so a project gets
+its integrator when work waits to be integrated, without configuration.
+
+- **Start on demand.** A project `placement.role_sessions` does not list is Auto: its
+  home gets an integrator when the home's pool shows handoffs pending, no integrator is
+  live there and no integrator session of the owner runs there (one starting, or
+  winding down, counts). That holds also once the workers that handed off have gone:
+  the pass reads the pool of every Auto home with work, with an unfinished run the
+  scheduler dispatched (`sched-run-…`) or with a running session, and a home whose pool
+  shows a handoff joins the Auto homes. A run a person dispatched by hand adds no read.
+- **One per project.** At most one integrator session of the owner per home, so two
+  handoffs arriving together start one, and merges into the shipping branch stay
+  serialized.
+- **Keep while needed.** It is kept with `integrator_kept` while handoffs are queued
+  (detail `queue`: pending handoffs not yet at CI), while an integrated commit waits on
+  its CI gate (detail `ci_pending`: assignments in phase `ci`, which the pool snapshot
+  reports as `pool.ci_pending`, written only when not zero) or while a worker it serves
+  has a run (detail `worker_run`). It holds a claim only at a safe point the host
+  refuses, so a claim keeps it as `awaiting_safe_point`. With none of those it waits
+  out `wind_down.idle_minutes` and the cooldown, then is wound down at its safe point
+  (`integrator_wound_down`, `idle`); a later handoff starts a new one, as a new
+  generation of its operation id.
+- **Not starved.** Workers filling `targets[].max_sessions` never block it: an
+  integrator may run **one over the target's cap**. The machine's, tool's and account's
+  caps still count it. A cap of 0 still starts nothing. The policy gate applies the
+  same allowance: a start's load carries `integrator: true` (`SessionLoad.integrator`,
+  written only when set), and a lowered cap does not wind a worker down for the
+  integrator's extra slot.
+- **Opt-out.** A `placement.role_sessions` entry for the home that does not list
+  `integrator` (for example `policy role-sessions --target <home> --role dispatcher`,
+  or no role at all) is the per-project opt-out: the project integrates by hand. No
+  separate `integrator: "never"` field exists. Listing `integrator` keeps the on-demand
+  rule above; a listed role is not kept warm without a handoff.
+- **Failure handling.** A scheduler-started integrator whose role prompt failed, or
+  that has not joined the pool within `placement.join_minutes`, is wound down at once
+  (`role_prompt_failed` or `never_joined`, detail `integrator`) and a new generation
+  starts on a later pass. A role session the pool never named in its role answers for
+  no pool assignment at its safe point, so it can be stopped while handoffs still wait.
+  After `MAX_JOIN_REPLACEMENTS` (2) replacements failed in a row the last is wound
+  down too, with detail `replacements_exhausted`, never kept in its slot, and the
+  project reports `integrator_unavailable` (detail `replacements_exhausted`, with
+  `retry_at_ms`). No integrator is started for it for an hour after that stop
+  (`INTEGRATOR_UNAVAILABLE_MS`); the loop wakes then and tries again.
+- **Explainability.** Each pass lists in `roles_unplaced` every home whose handoffs wait
+  for an integrator this pass does not start: `{target_id, role: "integrator", reason,
+detail, retry_at_ms}` with reason `integrator_not_started` and detail `target_cap`,
+  `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
+  `machine_refused`, `target_disabled` or `policy_opt_out`, or reason
+  `integrator_unavailable`. The decision log records each as kind `role_unplaced`, and
+  `scheduler_explain` of a running step adds `integrator`: the project's integrator in
+  a fresh pass (`standing` `start`, `keep`, `wind_down`, `not_started` or `none`, with
+  reason, detail, session and retry time). An unknown pool reports nothing: nothing
+  starts on a guess.
+
+The states and events are pinned in `integrator_session_tests.rs` (none, starting,
+live, idle, winding down and failed against a handoff arriving, the queue emptying, a
+CI gate resolving, the cap filling and the opt-out toggling), the failure path through
+the real pass in the CLI's `hs2_4jq41v_an_integrator_that_never_takes_its_role_is_replaced_then_reported`,
+and the start for a handoff and the wind-down in the two-server `e2e_roles.rs`.
 
 ### Surfaces
 
@@ -6376,7 +6444,8 @@ grouping (`ScheduleInput.sites`):
   keeping a free slot after the dispatcher (HS2-70Z2Z6, **The dispatcher's room rule**
   above).
 - The home's **integrator** starts when the home's pool shows handoffs pending. A
-  handoff another site's own pool shows starts nothing.
+  handoff another site's own pool shows starts nothing. It may run one over the
+  home's cap (HS2-4JQ41V).
 - **Keeping:** a role session on the home is kept while a worker on any site of the
   project has a run, while any site has placeable work (dispatcher), or while handoffs
   are pending in the home's pool (integrator). A role session on another site, for

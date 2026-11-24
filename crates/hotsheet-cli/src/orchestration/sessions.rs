@@ -1001,10 +1001,17 @@ pub(super) fn hosted_pool(
             )
         })
         .count();
+    // HS2-4JQ41V: integrated and waiting on the CI gate, as opposed to queued.
+    let ci = state
+        .assignments
+        .values()
+        .filter(|assignment| assignment.phase == Phase::Ci)
+        .count();
     Some(hotsheet_ticketing::orchestration::PoolState {
         dispatcher_live: state.dispatcher.is_some_and(|lease| lease.expires_at > now),
         integrator_live: state.integrator.is_some_and(|lease| lease.expires_at > now),
         handoffs_pending: u32::try_from(handed_off).unwrap_or(u32::MAX),
+        ci_pending: u32::try_from(ci).unwrap_or(u32::MAX),
     })
 }
 
@@ -1075,15 +1082,26 @@ impl OrchestrationRuntime {
 
     /// Assignments of the pool this session still has a part in. A worker answers for
     /// its own; the dispatcher and the integrator answer for every unfinished one.
+    /// HS2-4JQ41V: a role session the pool never named in its role (its role prompt
+    /// failed, or it never joined) answers for none, so it can be stopped and its slot
+    /// freed while the handoffs it never took up still wait.
     fn pending_handoffs(checkout: &Checkout, session: &HostedSession, worker: &str) -> Option<u32> {
         let Some(state) = coordination_state(Path::new(&checkout.root)).ok()? else {
             return Some(0);
+        };
+        let named = |holder: Option<&crate::coordination::Session>| {
+            holder.is_some_and(|holder| holder.id == worker)
+        };
+        let holds_role = match session.role {
+            SessionRole::Dispatcher => named(state.dispatcher.as_ref()),
+            SessionRole::Integrator => named(state.integrator.as_ref()),
+            SessionRole::Worker | SessionRole::Planner => false,
         };
         let pending = state
             .assignments
             .values()
             .filter(|assignment| assignment.phase != crate::coordination::Phase::Done)
-            .filter(|assignment| session.role.is_role_session() || assignment.worker == worker)
+            .filter(|assignment| holds_role || assignment.worker == worker)
             .count();
         u32::try_from(pending).ok()
     }
@@ -2401,6 +2419,8 @@ impl OrchestrationRuntime {
             load.tool_sessions = load.tool_sessions.saturating_sub(1);
             load.account_sessions = load.account_sessions.saturating_sub(1);
         }
+        // HS2-4JQ41V: an integrator may run one over the target's cap.
+        load.integrator = role == SessionRole::Integrator;
         if let Some(decided) = placed.and_then(|placed| placed.load) {
             // HS2-95SWQ4: the scheduler decided on a count that includes sessions these
             // records do not hold (other owners' and people's on the machine), and

@@ -3744,6 +3744,28 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   # HS2-TK9ADC` turns both roles on and off through the real policy route in Chromium
   and WebKit with captures at 1440, 1100, 390 and 1440 again, and dark.
 
+### The integrator on demand (HS2-4JQ41V)
+
+- `integrator_session_tests.rs` (core) walks the integrator states (none, starting,
+  live, idle, winding down, failed) against a handoff arriving, two arriving together,
+  the queue emptying into CI (`queue`, then `ci_pending`), the CI gate resolving, idle
+  grace, awaiting a safe point and `integrator_wound_down`, a new handoff while one
+  winds down, the cooldown reported then a refill, and empty-then-refill with nothing
+  reported. A table fills the target cap with busy workers (one over the cap allowed,
+  never twice, a cap of 0 starts none, no worker wound down for it, new work still
+  waits) and the opt-out toggles (an entry without `integrator` reports
+  `policy_opt_out`, back to Auto and listed both start), with `target_disabled`,
+  `machine_refused`, a live integrator and an unknown pool. The policy gate's one-slot
+  allowance and `pool.ci_pending` in the capacity version only when reported are pinned
+  too. `role_session_tests.rs` and `project_role_session_tests.rs` follow the new reasons.
+- `tests/session_executor.rs # hs2_4jq41v` runs the real pass: three integrators whose
+  role prompt fails are each wound down (the last with `replacements_exhausted`) and
+  replaced, then no start for an hour with `integrator_unavailable` in the plan and a
+  `role_unplaced` decision, and a new integrator after it. `tests/scheduler.rs # hs2_tk9adc`
+  checks the logged `integrator_started` / `handoff_pending`.
+- `remote_servers/e2e_roles.rs # hs2_1nj04q` and `e2e_sites.rs` find the integrator's
+  start by `integrator_started` and its wind-down by `integrator_wound_down`.
+
 ### One pool per project (HS2-5P112Z, HS2-B2N8EH)
 
 - `project_role_session_tests.rs # hs2_5p112z` (core) pins the home rule and walks a

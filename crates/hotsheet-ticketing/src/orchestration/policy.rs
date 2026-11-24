@@ -563,6 +563,11 @@ pub struct SessionLoad {
     pub account: Option<String>,
     #[serde(default)]
     pub account_sessions: u32,
+    /// HS2-4JQ41V: the start is a project's integrator, which may run one over the
+    /// target's cap so workers filling it never starve integration. The machine's,
+    /// tool's and account's caps still apply.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub integrator: bool,
 }
 
 pub struct PolicyQuestion<'a> {
@@ -1093,7 +1098,10 @@ impl PolicyBody {
         if tool.is_off() {
             return Err(D::ToolNotPermitted);
         }
-        if load.target_sessions >= self.target_cap(target) {
+        let cap = self.target_cap(target);
+        // HS2-4JQ41V: an integrator's one slot over the cap; a cap of 0 starts nothing.
+        let reserve = u32::from(load.integrator && cap > 0);
+        if load.target_sessions >= cap + reserve {
             return Err(D::TargetCap);
         }
         if load.machine_sessions >= self.machine_limits(&target.target_id).max_sessions {

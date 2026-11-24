@@ -190,8 +190,70 @@ pub struct Explanation {
     /// who will assign it and when its session claims it for itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assignment: Option<super::assignment::Assignment>,
+    /// HS2-4JQ41V: for a running step, how its project's integrator stands in a fresh
+    /// pass, so a person sees why integration is or is not running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub integrator: Option<IntegratorStanding>,
     /// `dry_run` when a placement shown here would not be applied by a tick.
     pub mode: DecisionMode,
+}
+
+/// HS2-4JQ41V: a project's integrator as one pass decides it, on its home site.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IntegratorStanding {
+    pub target_id: String,
+    /// `start`, `keep`, `wind_down`, `not_started` or `none` (no integrator runs and
+    /// none is needed).
+    pub standing: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_at_ms: Option<u64>,
+}
+
+impl IntegratorStanding {
+    /// How the integrator on `home` stands in `schedule`.
+    pub fn of(schedule: &Schedule, home: &str) -> Self {
+        use hotsheet_ticketing::orchestration::SessionRole;
+        if let Some(placement) = schedule.placements.iter().find(|placement| {
+            placement.target_id == home && placement.role == Some(SessionRole::Integrator)
+        }) {
+            return Self {
+                target_id: home.into(),
+                standing: placement.action.code().into(),
+                reason: Some(placement.reason.code().into()),
+                detail: placement.detail.clone(),
+                session_id: placement.session_id.clone(),
+                retry_at_ms: placement.retry_at_ms,
+            };
+        }
+        if let Some(item) = schedule
+            .roles_unplaced
+            .iter()
+            .find(|item| item.target_id == home && item.role == SessionRole::Integrator)
+        {
+            return Self {
+                target_id: home.into(),
+                standing: "not_started".into(),
+                reason: Some(item.reason.code().into()),
+                detail: item.detail.clone(),
+                session_id: None,
+                retry_at_ms: item.retry_at_ms,
+            };
+        }
+        Self {
+            target_id: home.into(),
+            standing: "none".into(),
+            reason: None,
+            detail: None,
+            session_id: None,
+            retry_at_ms: None,
+        }
+    }
 }
 
 /// One resource a step's work requires, with who declared it.
@@ -545,6 +607,18 @@ impl OrchestrationRuntime {
         let sites = hotsheet_ticketing::orchestration::ProjectSites::active(
             &self.declarations(owner_id)?.targets,
         );
+        // HS2-4JQ41V: an unlisted project with an unfinished run the scheduler
+        // dispatched, or a running session, is read for its pool too, so a handoff its
+        // worker left behind starts an integrator after that worker has gone. A run a
+        // person or agent dispatched by hand contacts nothing more than before.
+        let unfinished: Vec<String> = self
+            .run_list(owner_id, true)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|run| run.operation_id.starts_with("sched-run-"))
+            .map(|run| run.target.target_id)
+            .chain(sessions.iter().map(|session| session.target_id.clone()))
+            .collect();
         // HS2-TK9ADC: a target that lists role sessions is read every pass, so its pool
         // (a handoff waiting for an integrator) is known without work there.
         // HS2-9FKTB3: every site the work may run on is read too.
@@ -569,6 +643,7 @@ impl OrchestrationRuntime {
                         work.iter()
                             .filter(|item| places(item))
                             .map(|item| sites.home_of(&item.target_id))
+                            .chain(unfinished.iter().map(|target_id| sites.home_of(target_id)))
                             .filter(|home| policy.placement.role_session_entry(home).is_none()),
                     )
                     .filter(|target_id| sites.home_of(target_id) == *target_id),
@@ -963,6 +1038,7 @@ impl OrchestrationRuntime {
             provisional: None,
             provisional_dependents: Vec::new(),
             assignment: None,
+            integrator: None,
             mode: DecisionMode::DryRun,
         };
         let Some(step) = step else {
@@ -1023,6 +1099,17 @@ impl OrchestrationRuntime {
                         .into();
                     answer.detail = Some(code);
                     answer.retry_at_ms = None;
+                }
+                // HS2-4JQ41V: who integrates the work once it is handed off.
+                let view = self.scheduler_plan(owner_id, actor, tx)?;
+                if view.enabled {
+                    let home = hotsheet_ticketing::orchestration::ProjectSites::active(
+                        &self.declarations(owner_id)?.targets,
+                    )
+                    .home_of(&step.readiness.step.target.target_id)
+                    .to_owned();
+                    answer.integrator = Some(IntegratorStanding::of(&view.schedule, &home));
+                    answer.mode = view.mode;
                 }
             }
             ReadinessLevel::Finished => answer.standing = "finished".into(),
@@ -1406,6 +1493,16 @@ impl OrchestrationRuntime {
                 )
                     .hash(&mut hasher);
             }
+            // HS2-4JQ41V: a project's integrator that is not started.
+            for item in &schedule.roles_unplaced {
+                (
+                    &item.target_id,
+                    item.role.code(),
+                    item.reason.code(),
+                    &item.detail,
+                )
+                    .hash(&mut hasher);
+            }
             for found in &reported {
                 (
                     &found.run_id,
@@ -1507,6 +1604,17 @@ impl OrchestrationRuntime {
                 score: Some(*score),
                 sites: sites.clone(),
                 ..base(DecisionKind::Unplaced)
+            })?;
+            logged += 1;
+        }
+        // HS2-4JQ41V: a project's integrator not started, and why.
+        for item in &schedule.roles_unplaced {
+            journal.append(DecisionRecord {
+                target_id: Some(item.target_id.clone()),
+                reason: Some(item.reason.code().into()),
+                detail: item.detail.clone(),
+                retry_at_ms: item.retry_at_ms,
+                ..base(DecisionKind::RoleUnplaced)
             })?;
             logged += 1;
         }

@@ -79,7 +79,8 @@ fn hints(records: &[DecisionRecord]) -> BTreeMap<String, PlacementHint> {
             DecisionKind::Tick
             | DecisionKind::WindDown
             | DecisionKind::Assignment
-            | DecisionKind::Reconcile => continue,
+            | DecisionKind::Reconcile
+            | DecisionKind::RoleUnplaced => continue,
         };
         let Some(step_id) = &record.step_id else {
             continue;

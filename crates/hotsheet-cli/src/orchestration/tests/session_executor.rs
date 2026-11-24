@@ -316,6 +316,7 @@ fn no_load() -> SessionLoad {
         tool_sessions: 0,
         account: None,
         account_sessions: 0,
+        integrator: false,
     }
 }
 
@@ -541,6 +542,7 @@ fn hs2_95swq4_the_gate_sees_the_larger_of_the_decided_and_the_recorded_load() {
         tool_sessions: 2,
         account: None,
         account_sessions: 0,
+        integrator: false,
     };
     assert_eq!(
         OwnedSessions.start(&f.m.runtime, &f.start_request(&step, crowded), &mut tx),
@@ -3741,4 +3743,93 @@ fn hs2_190rdx_a_plan_update_swaps_while_work_runs_and_winds_down_only_withdrawn_
         placed(&tick, &keep_session.session_id),
         (PlacementAction::WindDown, "run_cancelled", None)
     );
+}
+
+/// HS2-4JQ41V: a scheduler-started integrator whose role prompt fails is wound down
+/// and replaced; once its replacements are exhausted the last is wound down too (never
+/// kept in its slot), the project reports `integrator_unavailable` in the plan, the
+/// decision log and no start follows until the hour is up, after which one starts.
+#[test]
+fn hs2_4jq41v_an_integrator_that_never_takes_its_role_is_replaced_then_reported() {
+    use hotsheet_ticketing::orchestration::{DecisionKind, RoleBlocker, RoleSessionKind};
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let mut body = policy();
+    body.placement.role_sessions[0].roles = vec![RoleSessionKind::Integrator];
+    f.set_policy(body, &mut tx);
+    f.pool(|state| {
+        let handed = super::sessions::assignment("someone", crate::coordination::Phase::Handoff);
+        state.assignments.insert(handed.id.clone(), handed);
+    });
+    let base = format!("sched-role-integrator-{}", id(1));
+    let unavailable = |tick: &TickView| {
+        tick.view
+            .schedule
+            .roles_unplaced
+            .iter()
+            .find(|item| item.reason == RoleBlocker::IntegratorUnavailable)
+            .map(|item| (item.detail.clone(), item.retry_at_ms))
+    };
+    for generation in 1..=3 {
+        // Each integrator's role prompt is refused by its tool.
+        f.host
+            .push_answers
+            .lock()
+            .unwrap()
+            .extend([PushAttempt::Rejected]);
+        let tick = f.tick(&mut tx);
+        assert_eq!(
+            outcomes(&tick),
+            [("started", None)],
+            "generation {generation}"
+        );
+        let operation = if generation == 1 {
+            base.clone()
+        } else {
+            format!("{base}.{generation}")
+        };
+        let started = f.record(&operation);
+        assert_eq!(started.role, SessionRole::Integrator);
+        // Its prompt failed: learned on the next read, wound down at once.
+        let tick = f.tick(&mut tx);
+        let expected = if generation < 3 {
+            Some("integrator".to_owned())
+        } else {
+            Some("replacements_exhausted".to_owned())
+        };
+        assert_eq!(
+            placed(&tick, &started.session_id),
+            (PlacementAction::WindDown, "role_prompt_failed", expected),
+            "generation {generation}"
+        );
+        assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);
+        assert_eq!(f.record(&operation).state, SessionState::Stopped);
+        assert_eq!(unavailable(&tick).is_some(), generation == 3);
+    }
+    // Exhausted: no fourth start while the hour runs, and the reason is surfaced.
+    let stopped_at = START;
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+        let (detail, retry) = unavailable(&tick).expect("integrator_unavailable");
+        assert_eq!(detail.as_deref(), Some("replacements_exhausted"));
+        assert_eq!(retry, Some(stopped_at + 60 * MINUTE));
+        assert!(tick.view.schedule.retry_at_ms <= retry);
+    }
+    let log =
+        f.m.runtime
+            .scheduler_decisions(&f.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries;
+    assert!(log.iter().any(|entry| {
+        entry.record.kind == DecisionKind::RoleUnplaced
+            && entry.record.reason.as_deref() == Some("integrator_unavailable")
+            && entry.record.target_id.as_deref() == Some(id(1).as_str())
+    }));
+    // The hour is up: a new integrator starts.
+    f.at(&clock, stopped_at + 60 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(f.record(&format!("{base}.4")).role, SessionRole::Integrator);
+    assert!(unavailable(&tick).is_none());
 }

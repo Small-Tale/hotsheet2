@@ -159,6 +159,9 @@ impl OrchestrationRuntime {
             tool_sessions: inputs.tool_sessions.unwrap_or(0),
             account: placement.account.clone(),
             account_sessions: inputs.account_sessions.unwrap_or(0),
+            // HS2-4JQ41V: the integrator's one slot over the target's cap.
+            integrator: placement.role
+                == Some(hotsheet_ticketing::orchestration::SessionRole::Integrator),
         };
         let target = TargetRef {
             owner_checkout_id: owner_id.into(),

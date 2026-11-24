@@ -2351,13 +2351,27 @@ fn hs2_tk9adc_the_scheduler_starts_a_dispatcher_then_an_integrator_through_the_e
         .log()
         .into_iter()
         .filter(|record| {
-            record.kind == DecisionKind::Start && record.reason.as_deref() == Some("role_needed")
+            record.kind == DecisionKind::Start
+                && matches!(
+                    record.reason.as_deref(),
+                    Some("role_needed" | "integrator_started")
+                )
         })
-        .map(|record| record.detail)
+        .map(|record| (record.reason, record.detail))
         .collect();
+    // HS2-4JQ41V: an integrator's start says it was for a pending handoff.
     assert_eq!(
         logged,
-        [Some("dispatcher".to_owned()), Some("integrator".to_owned())]
+        [
+            (
+                Some("role_needed".to_owned()),
+                Some("dispatcher".to_owned())
+            ),
+            (
+                Some("integrator_started".to_owned()),
+                Some("handoff_pending".to_owned())
+            )
+        ]
     );
 }
 

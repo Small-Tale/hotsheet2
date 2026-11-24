@@ -191,6 +191,15 @@ pub struct PoolState {
     /// Assignments handed off and not yet done: in handoff, verifying, integrating,
     /// suspended integration or CI.
     pub handoffs_pending: u32,
+    /// HS2-4JQ41V: of those, the ones integrated and waiting on their CI gate. The
+    /// integrator is kept for them with detail `ci_pending`; the rest are its queue.
+    /// Written only when not zero, so a snapshot without it keeps its version.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub ci_pending: u32,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 /// HS2-P5GTSW: free memory is compared in steps of this many MiB.
@@ -301,6 +310,10 @@ pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
             u8::from(pool.integrator_live),
             pool.handoffs_pending
         );
+        // HS2-4JQ41V: likewise only when not zero.
+        if pool.ci_pending > 0 {
+            let _ = write!(text, "/c{}", pool.ci_pending);
+        }
     }
     // HS2-ZY4Z4G: likewise only when reported. It changes when a tool or toolchain is
     // installed, removed or upgraded.

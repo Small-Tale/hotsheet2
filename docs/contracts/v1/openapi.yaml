@@ -20115,6 +20115,11 @@ components:
                 account_sessions:
                   type: integer
                   minimum: 0
+                integrator:
+                  description:
+                    The start is a project's integrator, which may run one over the target's cap (HS2-4JQ41V). Omitted
+                    when false.
+                  type: boolean
               additionalProperties: false
             - type: 'null'
         provisional:
@@ -22387,6 +22392,10 @@ components:
               description: Assignments handed off and not yet done.
               type: integer
               minimum: 0
+            ci_pending:
+              description: Of those, the ones integrated and waiting on their CI gate (HS2-4JQ41V). Omitted when zero.
+              type: integer
+              minimum: 0
           additionalProperties: false
         capabilities:
           $ref: '#/components/schemas/MachineCapabilities'
@@ -24469,6 +24478,9 @@ components:
             - role_prompt_failed
             - run_cancelled
             - role_needed
+            - integrator_started
+            - integrator_kept
+            - integrator_wound_down
         detail:
           description: A stable code behind the reason, such as the policy rule a session breaks.
           type: string
@@ -24705,6 +24717,35 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SchedulerResourceContention'
+        roles_unplaced:
+          description:
+            Each project home whose pending handoffs get no integrator in this pass, and why (HS2-4JQ41V). Left out
+            when there is none.
+          type: array
+          items:
+            type: object
+            required:
+              - target_id
+              - role
+              - reason
+            properties:
+              target_id:
+                type: string
+              role:
+                enum:
+                  - integrator
+              reason:
+                enum:
+                  - integrator_not_started
+                  - integrator_unavailable
+              detail:
+                description: '`target_cap`, `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
+                  `machine_refused`, `target_disabled`, `policy_opt_out` or `replacements_exhausted`.'
+                type: string
+              retry_at_ms:
+                type: integer
+                minimum: 0
+            additionalProperties: false
         outcomes:
           type: array
           items:
@@ -24845,6 +24886,32 @@ components:
             type: string
         assignment:
           $ref: '#/components/schemas/SchedulerAssignment'
+        integrator:
+          description: For a running step, how its project's integrator stands in a fresh pass, on the project's home (HS2-4JQ41V).
+          type: object
+          required:
+            - target_id
+            - standing
+          properties:
+            target_id:
+              type: string
+            standing:
+              enum:
+                - start
+                - keep
+                - wind_down
+                - not_started
+                - none
+            reason:
+              type: string
+            detail:
+              type: string
+            session_id:
+              type: string
+            retry_at_ms:
+              type: integer
+              minimum: 0
+          additionalProperties: false
         mode:
           enum:
             - dry_run
@@ -24891,6 +24958,8 @@ components:
             - wind_down
             - unplaced
             - assignment
+            - reconcile
+            - role_unplaced
         actor_id:
           type: string
         target_id:

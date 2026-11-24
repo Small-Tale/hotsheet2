@@ -1526,9 +1526,34 @@ fn hs2_gdjxgz_a_role_session_starts_only_when_the_target_has_none() {
         dispatcher.label.as_deref(),
         Some(format!("{}: dispatcher", f.m.owner.alias).as_str())
     );
-    // A dispatcher answers for every unfinished assignment of the pool, not only for
-    // one worker's.
+    // HS2-4JQ41V: until the pool names it in its role it answers for no assignment,
+    // so a dispatcher that never took up its role can be stopped.
     f.pool(|state| {
+        state.assignments.insert(
+            "assignment-1".into(),
+            assignment("some-worker", crate::coordination::Phase::Ci),
+        );
+    });
+    assert!(
+        f.safe_point(&dispatcher.session.session_id, &mut tx)
+            .is_empty()
+    );
+    // Once the pool names it in its role (here with a lease that has since lapsed), a
+    // dispatcher answers for every unfinished assignment of the pool, not only for
+    // one worker's.
+    let worker_id = dispatcher
+        .session
+        .hosted
+        .as_ref()
+        .unwrap()
+        .worker_id
+        .clone();
+    f.pool(|state| {
+        state.dispatcher = Some(
+            serde_json::from_value(json!({"id": worker_id, "generation": "g1",
+                "expires_at": 0, "return_route": {"kind": "human_relay"}}))
+            .unwrap(),
+        );
         state.assignments.insert(
             "assignment-1".into(),
             assignment("some-worker", crate::coordination::Phase::Ci),
