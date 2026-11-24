@@ -2579,7 +2579,22 @@ mod store_root_scope_tests {
             );
             std::fs::rename(&away, &root).expect("the store moves back");
             let after = create(&store, &format!("written after return {round}"));
-            wait_for_change(&mut watched.events, after.id);
+            let after_id = after.id.to_string();
+            let mut seen_after_return = Vec::new();
+            wait_for("the returned store to reconcile and notify clients", || {
+                seen_after_return.extend(drain(&mut watched.events));
+                let indexed = entry
+                    .index
+                    .lock()
+                    .unwrap()
+                    .slug_candidates(&after.slug)
+                    .unwrap()
+                    == vec![after.id];
+                indexed
+                    && seen_after_return
+                        .iter()
+                        .any(|(kind, id)| kind == "changed" && (id.is_empty() || *id == after_id))
+            });
             if !cfg!(target_os = "macos") {
                 wait_for("the rescan to index the write made while away", || {
                     entry
