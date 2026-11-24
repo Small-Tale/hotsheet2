@@ -93,7 +93,12 @@ function timingPath(repo) {
 
 function reportFor(stage, repo) {
   if (stage.command.startsWith('cargo nextest run '))
-    return { kind: 'nextest', path: join(repo, 'target/nextest/default/junit.xml'), root: repo };
+    return {
+      kind: 'nextest',
+      path: join(repo, 'target/nextest/default/junit.xml'),
+      transcriptPath: join(repo, 'target', `gate-nextest-${stage.key}.log`),
+      root: repo,
+    };
   if (stage.command === 'npm run test:unit')
     return {
       kind: 'vitest',
@@ -134,7 +139,13 @@ export function instrumentedCommand(command, report) {
 function instrumentedRunner(stage, repo, report) {
   const env = withoutGitRepositoryEnv(process.env);
   if (report?.kind === 'playwright') env.PLAYWRIGHT_JSON_OUTPUT_NAME = report.path;
-  return spawnSync('zsh', ['-ic', instrumentedCommand(stage.command, report)], {
+  let command = instrumentedCommand(stage.command, report);
+  if (report?.kind === 'nextest') {
+    // HS2-664XN4: require nextest's selected and executed counts before reusing failed-case evidence.
+    env.CARGO_TERM_COLOR = 'never';
+    command = `set -o pipefail\n${command} 2>&1 | tee ${quote(report.transcriptPath)}`;
+  }
+  return spawnSync('zsh', ['-ic', command], {
     cwd: join(repo, stage.cwd),
     stdio: 'inherit',
     env,
@@ -901,6 +912,10 @@ export function runGate(options = {}) {
       mkdirSync(dirname(report.path), { recursive: true });
       rmSync(report.path, { force: true });
     }
+    if (report?.transcriptPath) {
+      mkdirSync(dirname(report.transcriptPath), { recursive: true });
+      rmSync(report.transcriptPath, { force: true });
+    }
     const started = Date.now();
     const check = { id: observationStageKey(stage), outcome: 'interrupted', startedAt: started };
     attempt.checks.push(check);
@@ -919,6 +934,7 @@ export function runGate(options = {}) {
     check.outcome = outcome.signal ? 'interrupted' : result.status === 0 ? 'pass' : 'fail';
     check.category = outcome.signal ? `signal:${outcome.signal}` : result.status === 0 ? null : `exit:${result.status}`;
     let body = null;
+    let transcript = null;
     if (report) {
       try {
         // Playwright and Vitest reports were removed before the run, so any report is fresh;
@@ -927,6 +943,15 @@ export function runGate(options = {}) {
           body = readFileSync(report.path, 'utf8');
       } catch {
         /* A missing runner report leaves case observations unknown. */
+      }
+      if (report.transcriptPath) {
+        try {
+          if (partial || result.status !== 0) transcript = readFileSync(report.transcriptPath, 'utf8');
+        } catch {
+          /* Without the runner's counts, nextest's report cannot establish complete coverage. */
+        } finally {
+          rmSync(report.transcriptPath, { force: true });
+        }
       }
       try {
         if (body !== null) {
@@ -940,7 +965,13 @@ export function runGate(options = {}) {
     remember();
     let stageFlaky = [];
     if (partial) {
-      const judged = judgeNarrowedRun(partial, { ...outcome, status: result.status, body, root: report.root });
+      const judged = judgeNarrowedRun(partial, {
+        ...outcome,
+        status: result.status,
+        body,
+        root: report.root,
+        transcript,
+      });
       if (judged.result === 'passed') {
         rmSync(partialPath, { force: true });
         stageFlaky = judged.flaky;
@@ -966,6 +997,7 @@ export function runGate(options = {}) {
         signal: outcome.signal,
         body,
         root: report.root,
+        transcript,
       });
       if (next) {
         writePartial(partialPath, next);

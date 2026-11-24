@@ -40,7 +40,7 @@ const vitestReport = (root, files) =>
   });
 
 const junit = (cases) =>
-  `<testsuites>${cases
+  `<testsuites tests="${cases.length}">${cases
     .map(
       ([binary, name, failed]) =>
         `<testcase classname="${binary}" name="${name}" time="0.1">${failed ? '<failure message="x"/>' : ''}</testcase>`,
@@ -209,6 +209,42 @@ test('HS2-5340N1 records failed cases only when the whole run is provable', () =
   );
 });
 
+test('HS2-664XN4 narrows only a complete nextest failure and verifies the full targeted rerun', () => {
+  const transcript = (selected, executed) =>
+    `    Starting ${selected} tests across 1 binary\n     Summary [ 0.134s] ${executed} tests run: 1 failed\n`;
+  const body = junit([
+    ['bin', 'passed', false],
+    ['bin', 'failed', true],
+  ]);
+  const complete = run({
+    kind: 'nextest',
+    command: 'cargo nextest run --all-features --status-level leak',
+    status: 100,
+    body,
+    transcript: transcript(2, 2),
+  });
+  const partial = partialFromRun(complete);
+  assert.deepEqual(
+    partial.failed.map((entry) => entry.selector),
+    [{ binary: 'bin', name: 'failed' }],
+  );
+  assert.equal(partialFromRun({ ...complete, transcript: transcript(3, 2) }), null, 'an unstarted case is missing');
+  assert.equal(partialFromRun({ ...complete, transcript: '' }), null, 'the runner counts are required');
+  assert.equal(partialFromRun({ ...complete, body: body.replace('tests="2"', 'tests="3"') }), null);
+  const abort = '<failure type="test abort">process aborted with signal 2 (SIGINT)</failure>';
+  const interrupted = body.replace('time="0.1"></testcase>', `time="0.1">${abort}</testcase>`);
+  assert.equal(partialFromRun({ ...complete, body: interrupted }), null, 'active cases were interrupted');
+
+  const rerun = {
+    status: 0,
+    body: junit([['bin', 'failed', false]]),
+    transcript: '    Starting 1 test across 1 binary\n     Summary [ 0.002s] 1 test run: 1 passed\n',
+    root: complete.root,
+  };
+  assert.equal(judgeNarrowedRun(partial, rerun).result, 'passed');
+  assert.equal(judgeNarrowedRun(partial, { ...rerun, transcript: transcript(2, 1) }).result, 'full');
+});
+
 test('HS2-5340N1 judges targeted reruns: pass, narrow again, extra failure, or fall back', () => {
   const partial = partialFromRun(run());
   const report = (nine, twenty, extra = []) =>
@@ -274,7 +310,7 @@ test('HS2-5340N1 a stored record is reused only for the same stage key and comma
   writeFileSync(path, '{');
   assert.equal(readPartial(path, 'stage-key', PLAYWRIGHT), null);
   assert.equal(existsSync(path), false);
-  writeFileSync(path, JSON.stringify({ ...partial, version: 2 }));
+  writeFileSync(path, JSON.stringify({ ...partial, version: 1 }));
   assert.equal(readPartial(path, 'stage-key', PLAYWRIGHT), null);
   assert.equal(readPartial(join(directory, 'absent.json'), 'stage-key', PLAYWRIGHT), null);
 });

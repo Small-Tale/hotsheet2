@@ -456,8 +456,12 @@ The record is only as complete as the report. nextest's JUnit report lists only 
 cases that ran, so a fail-fast cancellation used to leave most of the Rust stage out
 of it, and a passing rerun of the few failed cases then recorded a receipt for cases
 that never ran. The gate therefore always runs nextest stages, full and narrowed,
-with `--no-fail-fast`, as CI does (HS2-RS0SYH). Playwright and Vitest stages set no
-failure limit.
+with `--no-fail-fast`, as CI does (HS2-RS0SYH). An interrupt can still produce a
+JUnit report and the ordinary failure exit status. Before using that report to
+retry individual cases, the gate checks that nextest selected and ran the same
+number of tests, that the report contains that many distinct cases, and that none
+was interrupted (HS2-664XN4). A missing count or incomplete report requires a full
+stage rerun. Playwright and Vitest stages set no failure limit.
 
 Receipts live under the Git common directory's `hotsheet-local-gate` directory.
 The existing per-worktree `hotsheet-root-gate/<tree>` compatibility marker is written

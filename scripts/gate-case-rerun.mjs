@@ -8,7 +8,8 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
 
-const VERSION = 1;
+// HS2-664XN4: older nextest records could have come from incomplete runs.
+const VERSION = 2;
 const SAFE_TOKEN = /^[A-Za-z0-9_@%+=:,./-]+$/;
 const SAFE_NEXTEST = /^[A-Za-z0-9_:.\-/ ]+$/;
 // Playwright options whose next token is a value, never a file filter.
@@ -128,13 +129,38 @@ function nextestCases(xml) {
   return [...xml.matchAll(/<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g)].map(([, tag, body = '']) => {
     const binary = xmlAttribute(tag, 'classname');
     const name = xmlAttribute(tag, 'name');
+    const abort = /<failure\b[^>]*\btype="test abort"[^>]*>([\s\S]*?)<\/failure>/.exec(body)?.[1];
+    const interrupted = /\((?:SIGINT|SIGTERM|SIGQUIT|STATUS_CONTROL_C_EXIT)\)/.test(abort ?? '');
     return {
       key: `${binary} ${name}`,
       name: `${binary} ${name}`,
       selector: binary && name && SAFE_NEXTEST.test(binary) && SAFE_NEXTEST.test(name) ? { binary, name } : null,
-      outcome: /<(?:failure|error)\b/.test(body) ? 'fail' : /<skipped\b/.test(body) ? 'skip' : 'pass',
+      outcome: interrupted
+        ? 'interrupted'
+        : /<(?:failure|error)\b/.test(body)
+          ? 'fail'
+          : /<skipped\b/.test(body)
+            ? 'skip'
+            : 'pass',
     };
   });
+}
+
+/** An interrupt can return nextest's ordinary failure status and a well-formed partial JUnit file. */
+function completeNextestRun(xml, transcript, cases) {
+  if (!transcript || !/<\/testsuites>\s*$/.test(xml)) return false;
+  const root = /<testsuites\b([^>]*)>/.exec(xml)?.[1];
+  const selected = [...transcript.matchAll(/^[ \t]*Starting (\d+) tests? across \d+ binar(?:y|ies)\b/gm)];
+  const executed = [...transcript.matchAll(/^[ \t]*Summary[ \t]+\[[^\]\r\n]+\][ \t]+(\d+) tests? run:/gm)];
+  return (
+    root !== undefined &&
+    selected.length === 1 &&
+    executed.length === 1 &&
+    Number(selected[0][1]) === cases.length &&
+    Number(executed[0][1]) === cases.length &&
+    Number(xmlAttribute(root, 'tests')) === cases.length &&
+    new Set(cases.map((entry) => entry.key)).size === cases.length
+  );
 }
 
 /** Every case in one runner report with its final outcome and rerun selector, or null when unreadable. */
@@ -190,10 +216,11 @@ export function narrowedCommand(command, kind, failed) {
 }
 
 /** What a full stage run leaves for the next attempt, or null to rerun the whole stage. */
-export function partialFromRun({ key, command, kind, status, signal, body, root }) {
+export function partialFromRun({ key, command, kind, status, signal, body, root, transcript }) {
   if (status === 0 || signal || body === null || body === undefined) return null;
   const cases = reportCases(kind, body, root);
   if (!cases?.length || cases.some((entry) => entry.outcome === 'interrupted')) return null;
+  if (kind === 'nextest' && !completeNextestRun(body, transcript, cases)) return null;
   const failed = cases.filter((entry) => entry.outcome === 'fail');
   if (!failed.length) return null;
   const narrowed = narrowedCommand(command, kind, failed);
@@ -215,10 +242,14 @@ export function partialFromRun({ key, command, kind, status, signal, body, root 
  * cases are flaky). `retry`: a smaller record for the cases that still fail. `full`: the rerun
  * could not be proven, so drop the record and rerun the whole stage next time.
  */
-export function judgeNarrowedRun(partial, { status, signal, body, root }) {
+export function judgeNarrowedRun(partial, { status, signal, body, root, transcript }) {
   if (signal) return { result: 'full', reason: 'the targeted rerun was interrupted' };
   const cases = body === null || body === undefined ? null : reportCases(partial.kind, body, root);
   if (!cases) return { result: 'full', reason: 'the targeted rerun left no readable report' };
+  if (partial.kind === 'nextest' && !completeNextestRun(body, transcript, cases))
+    return { result: 'full', reason: 'nextest did not report every selected case' };
+  if (cases.some((entry) => entry.outcome === 'interrupted'))
+    return { result: 'full', reason: 'the targeted rerun reported an interrupted case' };
   const byKey = new Map(cases.map((entry) => [entry.key, entry]));
   const missing = partial.failed.filter((entry) => !byKey.has(entry.key));
   if (missing.length)

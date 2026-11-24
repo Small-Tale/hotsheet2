@@ -1768,6 +1768,44 @@ test('HS2-5340N1 a failed suite stage reruns only its failed cases on the same i
   ]);
 });
 
+test('HS2-664XN4 an interrupted nextest report forces the next attempt to run the whole stage', (t) => {
+  const f = fixture(t);
+  const command = 'cargo nextest run --all-features --status-level leak';
+  const report = {
+    kind: 'nextest',
+    path: join(f.repo, '.git', 'nextest.xml'),
+    transcriptPath: join(f.repo, '.git', 'nextest.log'),
+    root: f.repo,
+  };
+  const attempts = [];
+  const options = {
+    ...f.options,
+    full: true,
+    reportFor: (stage) => (stage.command === command ? report : null),
+    runner: (stage, stageReport) => {
+      if (!stageReport) return { status: 0 };
+      attempts.push(stage.command);
+      if (attempts.length > 1) return { status: 0 };
+      writeFileSync(
+        report.path,
+        '<testsuites tests="2">' +
+          '<testcase classname="bin" name="fails"><failure message="assertion failure"/></testcase>' +
+          '<testcase classname="bin" name="stops"><failure type="test abort">process aborted with signal 2 (SIGINT)</failure></testcase>' +
+          '</testsuites>',
+      );
+      writeFileSync(
+        report.transcriptPath,
+        '    Starting 3 tests across 1 binary\n     Summary [ 0.3s] 2 tests run: 2 failed\n',
+      );
+      return { status: 100 };
+    },
+  };
+  assert.equal(runGate(options), 100);
+  assert.equal(existsSync(report.transcriptPath), false);
+  assert.equal(runGate(options), 0);
+  assert.deepEqual(attempts, [command, command]);
+});
+
 test('HS2-5340N1 an unprovable failure or changed inputs rerun the whole suite stage', (t) => {
   const f = fixture(t);
   const reportPath = join(f.repo, '.git', 'synthetic-playwright.json');
