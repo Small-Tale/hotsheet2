@@ -9,13 +9,13 @@
 use hotsheet_ticketing::actor::{ActorRole, MutationActor};
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
-    AdmissionOutcome, AdmissionRequest, AuditOutcome, AuditRecord, DenialReason, ExternalWork,
-    HostedRef, HostedSession, HostedSessionRegistry, MachineLimits, NewHostedSession, NewSession,
-    Observed, OrchestratedSession, RecordedRequest, RunEvent, RunEventKind, RunEventSource,
-    SafePoint, SafePointFacts, SessionControl, SessionError, SessionLoad, SessionOrigin,
-    SessionOwner, SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate,
-    StopRequest, TargetAction, TargetDestination, TargetOpError, Withdrawal, decide_hand_back,
-    decide_safe_point, decide_stop,
+    AdmissionOutcome, AdmissionRefusal, AdmissionRequest, AuditOutcome, AuditRecord, DenialReason,
+    ExternalWork, HostedRef, HostedSession, HostedSessionRegistry, MachineLimits, NewHostedSession,
+    NewSession, Observed, OrchestratedSession, RecordedRequest, RunEvent, RunEventKind,
+    RunEventSource, SafePoint, SafePointFacts, SessionControl, SessionError, SessionLoad,
+    SessionOrigin, SessionOwner, SessionRegistry, SessionRequest, SessionRole, SessionState,
+    SessionUpdate, StopRequest, TargetAction, TargetDestination, TargetOpError, Withdrawal,
+    decide_hand_back, decide_safe_point, decide_stop,
 };
 pub use hotsheet_ticketing::orchestration::{PushAttempt, RequestKind, RolePrompt};
 use serde::{Deserialize, Serialize};
@@ -711,6 +711,31 @@ pub struct HostedStartReply {
     /// HS2-WEFJV8: what the checkout's tool setup wrote before this launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_setup: Option<ToolSetup>,
+    /// HS2-8Z9VHH: a refused admission's limit and observed value. An older host
+    /// sends only `reason`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admission: Option<AdmissionRefusal>,
+}
+
+impl HostedStartReply {
+    /// HS2-8Z9VHH: the error a refused start answers with. A session code is reported
+    /// as itself; an admission reason as a refused admission that keeps the reason and,
+    /// from a current host, its limit and observed value.
+    pub(crate) fn refusal_error(&self, reason: &str) -> OrchestrationError {
+        if let Some(error) = SessionError::from_code(reason) {
+            return OrchestrationError::Session(error);
+        }
+        if reason == TOOL_SETUP_FAILED {
+            // The machine had room; the start itself could not be made.
+            return OrchestrationError::Session(SessionError::StartFailed);
+        }
+        let refusal = self
+            .admission
+            .clone()
+            .filter(|admission| admission.reason == reason)
+            .unwrap_or_else(|| AdmissionRefusal::bare(reason));
+        OrchestrationError::AdmissionRefused(Box::new(refusal))
+    }
 }
 
 /// Whether the target's pool already has a live session in each single-holder role.
@@ -1276,6 +1301,7 @@ impl OrchestrationRuntime {
             session: None,
             role_prompt: None,
             tool_setup: None,
+            admission: None,
         };
         let (reserved, _) =
             match registry.reserve_with(&checkout.id, &request.session, &request.resources, tx) {
@@ -1293,11 +1319,12 @@ impl OrchestrationRuntime {
                 session: Some(self.hosted_view(&checkout, session, live.as_deref(), false, tx)),
                 role_prompt: None,
                 tool_setup: None,
+                admission: None,
             });
         }
         // Nothing runs for this reservation yet, so a refusal forgets it and the same
         // request can be made again later.
-        let refuse = |reason: &str| {
+        let refuse_with = |reason: &str, admission: Option<AdmissionRefusal>| {
             registry.release(&checkout.id, &reserved.operation_id)?;
             Ok(HostedStartReply {
                 outcome: HostedStartOutcome::Refused,
@@ -1305,8 +1332,10 @@ impl OrchestrationRuntime {
                 session: None,
                 role_prompt: None,
                 tool_setup: None,
+                admission,
             })
         };
+        let refuse = |reason: &str| refuse_with(reason, None);
         if reserved.role.is_role_session() {
             let roles = Self::hosted_roles(&checkout, tx.clock.now_ms());
             let taken = match reserved.role {
@@ -1345,12 +1374,14 @@ impl OrchestrationRuntime {
             }
         };
         if decision.outcome == AdmissionOutcome::Refused || decision.admitted == 0 {
-            return refuse(
+            // HS2-8Z9VHH: the refusal keeps its limit and observed value.
+            return refuse_with(
                 decision
                     .reason
                     .map_or(SessionError::AdmissionRefused.code(), |reason| {
                         reason.code()
                     }),
+                decision.refusal.clone(),
             );
         }
         // The capacity reading is shared for a few seconds, so a burst of starts could
@@ -1363,7 +1394,13 @@ impl OrchestrationRuntime {
                 .iter()
                 .any(|state| state.session_id == reserved.session_id)
         {
-            return refuse("session_cap_reached");
+            return refuse_with(
+                "session_cap_reached",
+                Some(AdmissionRefusal::session_cap(
+                    decision.limits.max_sessions,
+                    u64::try_from(live.len()).unwrap_or(u64::MAX),
+                )),
+            );
         }
         // HS2-WEFJV8: the tool starts in the target checkout, so that is where its MCP,
         // instruction and hook configuration has to be. The launch path sets up the
@@ -1441,6 +1478,7 @@ impl OrchestrationRuntime {
             session: Some(self.hosted_view(&checkout, started, live.as_deref(), false, tx)),
             role_prompt,
             tool_setup: Some(tool_setup),
+            admission: None,
         })
     }
 
@@ -2503,25 +2541,17 @@ impl OrchestrationRuntime {
                 // same request can be repeated.
                 Err(error) => return Err(error),
             };
-            let Some(hosted) = reply
-                .session
-                .filter(|_| reply.outcome != HostedStartOutcome::Refused)
-            else {
+            let refused = reply.outcome == HostedStartOutcome::Refused;
+            let Some(hosted) = reply.session.clone().filter(|_| !refused) else {
                 let reason = reply
                     .reason
+                    .clone()
                     .filter(|reason| identifier(reason, "code").is_ok())
                     .unwrap_or_else(|| SessionError::AdmissionRefused.code().into());
                 fail(&reason, tx)?;
                 // A session code is reported as itself; an admission reason as a
                 // refused admission, with the reason in the session's history.
-                return Err(OrchestrationError::Session(
-                    SessionError::from_code(&reason).unwrap_or(if reason == TOOL_SETUP_FAILED {
-                        // The machine had room; the start itself could not be made.
-                        SessionError::StartFailed
-                    } else {
-                        SessionError::AdmissionRefused
-                    }),
-                ));
+                return Err(reply.refusal_error(&reason));
             };
             if hosted.session.ended_at_ms.is_some() {
                 // The host launched it for an earlier request that never heard back,

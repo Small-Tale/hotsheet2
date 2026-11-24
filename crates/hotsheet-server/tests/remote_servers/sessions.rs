@@ -1541,6 +1541,11 @@ async fn hs2_crbr8x_the_host_journals_a_remote_orchestrators_start_stop_and_refu
         refused.contains("session_admission_refused"),
         "the host's admission refusal reaches the orchestrator: {refused}"
     );
+    // HS2-8Z9VHH: with its reason, limit and observed count, in words.
+    assert!(
+        refused.contains("its limit (max_sessions) is 0"),
+        "the refusal names the host's limit: {refused}"
+    );
     assert!(drawer(&peer_router).await.is_empty());
 
     // The host's owner reads the journal headlessly, with no orchestration side.

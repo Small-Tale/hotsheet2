@@ -22567,6 +22567,9 @@ components:
             - integer
             - 'null'
           minimum: 0
+        refusal:
+          description: The limit behind `reason` with its observed value; absent when accepted (HS2-8Z9VHH).
+          $ref: '#/components/schemas/AdmissionRefusal'
     ValidationCheck:
       description: What a step runs. A profile is defined by the target project; a command is chosen by the caller.
       oneOf:
@@ -28039,6 +28042,40 @@ components:
         note_id:
           description: With `decision_required`, the decision note on the orchestration ticket (HS2-XHQ1EH).
           type: string
+        admission:
+          description:
+            With `session_admission_refused`, why the session's machine refused it, with the limit and the observed
+            value (HS2-8Z9VHH).
+          $ref: '#/components/schemas/AdmissionRefusal'
+      additionalProperties: false
+    AdmissionRefusal:
+      description: Why a machine refused or reduced a session (HS2-8Z9VHH). `setting` names the machine limit (a policy
+        `machine` field) behind `reason`, `limit` its enforced value and `observed` what the machine measured. A reason
+        with no limit carries the `tool` or nothing.
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          description: The admission reason code, such as `session_cap_reached`.
+          type: string
+          maxLength: 64
+        setting:
+          type: string
+          enum:
+            - max_sessions
+            - max_cpu_percent
+            - min_free_disk_mb
+            - min_free_ram_mb
+        limit:
+          type: integer
+          minimum: 0
+        observed:
+          type: integer
+          minimum: 0
+        tool:
+          type: string
+          maxLength: 64
       additionalProperties: false
     CreateTicket:
       type: object

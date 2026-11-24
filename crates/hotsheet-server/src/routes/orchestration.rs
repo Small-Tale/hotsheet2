@@ -678,6 +678,14 @@ pub(crate) fn orchestration_error(error: OrchestrationError) -> ApiError {
         error.to_string(),
     )
     .with_code(error.code());
+    // HS2-8Z9VHH: a refused admission names its reason, limit and observed value.
+    let api = match error
+        .admission_refusal()
+        .and_then(|refusal| serde_json::to_value(refusal).ok())
+    {
+        Some(admission) => api.with_detail("admission", admission),
+        None => api,
+    };
     match error.answer_reference() {
         Some((field, id)) => api.with_field(field, id),
         None => api,
@@ -960,4 +968,41 @@ pub(crate) async fn write(
     // HS2-CRBR8X: the hosting machine's session journal names who asked.
     let requester = requester.map(|axum::Extension(requester)| requester.0);
     execute(state, method, uri.path().into(), body, requester).await
+}
+
+#[cfg(test)]
+mod hs2_8z9vhh_tests {
+    use axum::response::IntoResponse;
+    use hotsheet_ticketing::orchestration::{AdmissionRefusal, OrchestrationError};
+
+    /// HS2-8Z9VHH: a refused admission's body keeps its code and adds the reason, the
+    /// limit and the observed value, so a client says what to change.
+    #[tokio::test]
+    async fn hs2_8z9vhh_a_refused_admission_body_names_its_limit() {
+        let error =
+            OrchestrationError::AdmissionRefused(Box::new(AdmissionRefusal::session_cap(2, 3)));
+        let response = super::orchestration_error(error).into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::CONFLICT);
+        let body = axum::body::to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["code"], "session_admission_refused");
+        assert_eq!(
+            body["admission"],
+            serde_json::json!({
+                "reason": "session_cap_reached",
+                "setting": "max_sessions",
+                "limit": 2,
+                "observed": 3
+            })
+        );
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap()
+                .contains("already runs 3 AI sessions"),
+            "{body}"
+        );
+    }
 }

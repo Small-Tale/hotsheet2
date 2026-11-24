@@ -637,6 +637,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 | E::DeploymentScriptUntracked => 409,
             }
         }
+        // HS2-8Z9VHH: a refused admission, with its reason and limit.
+        OrchestrationError::AdmissionRefused(_) => 409,
         OrchestrationError::Session(error) => {
             use hotsheet_ticketing::orchestration::SessionError as E;
             match error {
