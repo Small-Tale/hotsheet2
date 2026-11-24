@@ -679,7 +679,10 @@ mod tests {
         let (_writer, mut reader) = child.into_halves();
         let sleeper: i32 = reader.recv().unwrap().unwrap().trim().parse().unwrap();
         assert_eq!(
-            stop_process(signals.as_mut(), Duration::from_secs(5)),
+            // HS2-3WDRBW: a full-suite host can defer the shell's trap for more than
+            // five seconds. This fixture checks cooperative cleanup, not the caller's
+            // production grace policy; keep enough room for process scheduling load.
+            stop_process(signals.as_mut(), Duration::from_secs(20)),
             StopOutcome::Terminated
         );
         let deadline = Instant::now() + Duration::from_secs(5);
