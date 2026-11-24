@@ -590,6 +590,19 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   Stats retain their existing main-toolbar titles. Mobile retains its two compact project
   and view rows, including the New ticket action in the view row (HS2-9R1F91).
 
+  Project tabs can be minimized without closing or unregistering their projects (HS2-4Q9DVS).
+  Desktop offers Minimize Tab above the close commands in a tab's context menu; the phone
+  project row offers Minimize Tab and Close Tab in the actions menu beside the picker.
+  Minimized Projects appears immediately before Add Project while any project is hidden.
+  Its restore menu lists projects in their original tab order, adds a host or path when
+  names collide, and restores a chosen project to its original slot and activates it.
+  Hiding the selected tab activates the next visible tab, then the previous one; hiding a
+  background tab leaves the workspace alone. When all tabs are hidden, Workspace Grid or
+  a neutral workspace still exposes restore and add controls. Bulk close commands act on
+  visible tabs only. Minimization is an identity-keyed client display preference across
+  reloads; terminal sessions, project configuration, CLI access, and permission prompts
+  continue while their project tab is hidden.
+
 - **Installable web identity.** Every web route publishes a web app manifest, the
   exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,
   a maskable 512-pixel icon, and a 180-pixel Apple touch icon. Browser chrome and the

@@ -3,21 +3,28 @@ import './project-tab-bar.css';
 
 import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ArchiveRestore, CircleAlert, X } from 'lucide';
+import { ArchiveRestore, CircleAlert, Ellipsis, Minus, X } from 'lucide';
 
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
-import { AddProjectAction, ProjectDashboardModes, type ProjectStripMode } from './project-strip-actions';
+import {
+  AddProjectAction,
+  type MinimizedProjectChoice,
+  ProjectDashboardModes,
+  type ProjectStripMode,
+} from './project-strip-actions';
 import { ProjectTab, type ProjectTabProps } from './project-tab';
 import { TicketViewAction, type TicketViewActionSpec } from './workspace-controls';
 
 export interface ProjectTabBarProps {
   tabs: ProjectTabProps[];
+  minimizedProjects?: readonly MinimizedProjectChoice[];
   label?: string;
   mode?: ProjectTabBarMode;
   /** Project-specific Stats keeps the active project tab selected instead of the global Stats switch. */
@@ -43,6 +50,7 @@ export const PROJECT_TAB_BAR_ID = 'projects';
 
 export function ProjectTabBar({
   tabs,
+  minimizedProjects = [],
   label = 'Open Projects',
   mode = 'project',
   projectStats = false,
@@ -126,7 +134,42 @@ export function ProjectTabBar({
                   />
                 </ToolbarControlGroup>
               )}
-              {choosable.length > 0 && !active.pending && (active.closable !== false || active.restoreFailure) && (
+              {choosable.length > 0 && !active.pending && !active.restoreFailure && (
+                <ToolbarControlGroup
+                  single
+                  nestedDropdown
+                  menuInset="none"
+                  appearance="borderless"
+                  size="compact"
+                  content="icon"
+                >
+                  <PopupMenu
+                    label={`${active.name} Project Actions`}
+                    icon={<LucideIcon size="s" icon={Ellipsis} name="ellipsis" />}
+                    caret={false}
+                    rootAttributes={{ 'data-mobile-project-actions': active.id }}
+                    items={[
+                      {
+                        label: 'Minimize Tab',
+                        icon: <LucideIcon icon={Minus} name="minus" />,
+                        action: TERMINALS_ACTIONS.minimizeProjectTab.value,
+                        attributes: { 'data-project-id': active.id },
+                      },
+                      ...(active.closable !== false
+                        ? [
+                            {
+                              label: 'Close Tab',
+                              icon: <LucideIcon icon={X} name="x" />,
+                              action: TERMINALS_ACTIONS.closeProjectTab.value,
+                              attributes: { 'data-project-id': active.id },
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </ToolbarControlGroup>
+              )}
+              {choosable.length > 0 && active.restoreFailure && (
                 <ToolbarControlGroup single appearance="borderless" size="compact" content="icon">
                   <button
                     type="button"
@@ -138,7 +181,23 @@ export function ProjectTabBar({
                   </button>
                 </ToolbarControlGroup>
               )}
-              <AddProjectAction />
+              <AddProjectAction minimizedProjects={minimizedProjects} />
+            </>
+          }
+        />
+      </div>
+    );
+  }
+  if (tabs.length === 0 && minimizedProjects.length > 0) {
+    return (
+      <div class="project-tab-bar" {...rootAttributes}>
+        <Toolbar
+          label="Projects"
+          dividerSides=""
+          leading={
+            <>
+              <ProjectDashboardModes mode={mode} projectStats={projectStats} />
+              <AddProjectAction minimizedProjects={minimizedProjects} />
             </>
           }
         />
@@ -157,7 +216,7 @@ export function ProjectTabBar({
         // HS2-YFKQT1); a project view's workspace action uses the far-edge `end` zone.
         trailingPlacement="adjacent"
         leading={<ProjectDashboardModes mode={mode} projectStats={projectStats} />}
-        trailing={<AddProjectAction />}
+        trailing={<AddProjectAction minimizedProjects={minimizedProjects} />}
         end={workspaceAction && <TicketViewAction action={workspaceAction} />}
       >
         {tabs.map((tab) => (

@@ -16,7 +16,12 @@ import {
 } from '../api';
 import { type AppRegionId } from '../app-region-resize';
 import { showsClientUpdateNotice } from '../client-update-notice';
-import { AppEmptyState, ProjectOpeningState, ProjectRestoreState } from '../components/app-empty-state';
+import {
+  AppEmptyState,
+  AppMessageState,
+  ProjectOpeningState,
+  ProjectRestoreState,
+} from '../components/app-empty-state';
 import { type AppShellMobileView } from '../components/app-shell';
 import { ClientUpdateNoticeBanner } from '../components/client-update-notice-banner';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
@@ -95,6 +100,7 @@ import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { mobileViewChoices } from '../mobile-view-choices';
 import type { PermissionItem } from '../permission-notifications';
 import type { WorkersLive } from '../project-live-summary';
+import { minimizedProjectDescription } from '../project-minimization';
 import { projectTabDropKind } from '../project-tab-file-drop';
 import type { DesktopRemoteServer } from '../remote-projects/client';
 import { parseRemoteProjectId } from '../remote-projects/identity';
@@ -165,6 +171,7 @@ export interface HotSheetShellDependencies {
   projectRestoreFailures: Signal<ProjectRestoreFailure[]>;
   projectRestoreRank: (id: string) => number | undefined;
   projects: Signal<Project[]>;
+  minimizedProjectIds: Signal<string[]>;
   desktopRemoteServers: Signal<DesktopRemoteServer[]>;
   /** Remembered remote tabs that are not open yet: loading or reconnecting (HS2-EJ5K09, HS2-WNK73S). */
   remotePlaceholders?: Signal<readonly RemoteTabPlaceholder[]>;
@@ -281,6 +288,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     projectRestoreFailures,
     projectRestoreRank,
     projects,
+    minimizedProjectIds,
     desktopRemoteServers,
     remotePlaceholders = signal<readonly RemoteTabPlaceholder[]>([]),
     remoteApprovalReminder = () => undefined,
@@ -353,7 +361,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           : pendingRestoreEntries((root) => root)
               .map((entry) => entry.item)
               .find((root) => root === selectedProjectRestoreRoot.value);
-    if (!current && !restoreFailure && !openingRoot && !remotePlaceholder) return <AppEmptyState />;
+    if (!current && !restoreFailure && !openingRoot && !remotePlaceholder && minimizedProjectIds.value.length === 0)
+      return <AppEmptyState />;
     // A chat hosts the permission sidecar within its own modal top layer, and Settings → Permissions
     // lays it out above its automation controls (HS2-84XE8Q). Otherwise the shell popup uses the global
     // top layer above the terminal drawer (HS2-VBG6W5, HS2-ZESCM2). It always renders in the viewport
@@ -448,8 +457,16 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             })),
         ],
       ).map((entry) => entry.tab);
+    const hidden = new Set(minimizedProjectIds.value),
+      minimizedProjects = projects.value
+        .filter((item) => hidden.has(item.id))
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          description: minimizedProjectDescription(item, projects.value),
+        }));
     const tabs = [
-      ...rankedProjectTabs,
+      ...rankedProjectTabs.filter((tab) => !hidden.has(tab.id)),
       ...projectRestoreFailures.value.map((item) => ({
         id: projectRestoreTabId(item.root),
         name: item.name,
@@ -466,6 +483,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       return (
         <MainShell
           tabs={tabs}
+          minimizedProjects={minimizedProjects}
           announcerTrigger={announcerTrigger()}
           announcer={announcerPanel()}
           mode={shellMode.value}
@@ -512,6 +530,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       return (
         <MainShell
           tabs={tabs}
+          minimizedProjects={minimizedProjects}
           announcerTrigger={announcerTrigger()}
           announcer={announcerPanel()}
           mode="project"
@@ -526,6 +545,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       return (
         <MainShell
           tabs={tabs}
+          minimizedProjects={minimizedProjects}
           announcerTrigger={announcerTrigger()}
           announcer={announcerPanel()}
           mode="project"
@@ -551,6 +571,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       return (
         <MainShell
           tabs={tabs}
+          minimizedProjects={minimizedProjects}
           announcerTrigger={announcerTrigger()}
           announcer={announcerPanel()}
           mode="project"
@@ -562,6 +583,26 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         />
       );
     }
+    if (tabs.length === 0 && minimizedProjects.length > 0)
+      return (
+        <MainShell
+          tabs={tabs}
+          minimizedProjects={minimizedProjects}
+          announcerTrigger={announcerTrigger()}
+          announcer={announcerPanel()}
+          mode="project"
+          header={<WorkspaceIdentity projectName="Projects minimized" id="workspace-page-title" headingLevel={1} />}
+          mobile={viewportMobile.value}
+          workspace={
+            <AppMessageState
+              title="All projects are minimized"
+              message="Restore a project from Minimized Projects or add another project."
+            />
+          }
+          inspectorVisible={false}
+          viewportOverlay={popup}
+        />
+      );
     if (!current) return <AppEmptyState />;
     const selection = selectedRows(),
       selectedSlug = selectedTicketSlugs.value.length === 1 ? selectedTicketSlugs.value[0] : undefined,
@@ -683,6 +724,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     return (
       <MainShell
         tabs={tabs}
+        minimizedProjects={minimizedProjects}
         announcerTrigger={announcerTrigger()}
         announcer={announcerPanel()}
         mode="project"

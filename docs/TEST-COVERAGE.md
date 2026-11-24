@@ -842,6 +842,12 @@ HS2-Q8WF64 minimized ticket readers are covered at three layers:
 - `components/minimized-tickets-control.test.ts` pins the single and menu markup and AppShell's restore-corner and standalone placement.
 - `minimized-readers.spec.ts` drives the shipped app in Chromium and WebKit: the workspace reader and its reply, several tickets with draft badges, Restore All, Close All with Cancel and confirm, a tab switch, a reload, the keyboard chord, the motion stand-in with reduced motion, and no server write while typing or minimizing.
 
+HS2-4Q9DVS minimized project tabs are covered by `project-minimization.test.ts`
+for selection fallback, stable ordering, persistence parsing, and duplicate-name
+labels; `components/project-tab-bar.test.ts` for desktop/phone controls and the
+all-minimized strip; and `project-minimization.spec.ts` for the shipped desktop
+context menu, phone actions, restore, reload, and wide-to-phone-to-wide layout.
+
 HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
 the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the
 `providers.spec.ts` browser flow that links both slugs in an inspector blocked reason,

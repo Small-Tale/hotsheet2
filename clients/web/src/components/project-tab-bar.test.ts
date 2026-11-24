@@ -117,7 +117,7 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
     expect(recovered).not.toContain('stopped on an error');
   });
 
-  it('HS2-7V2EEV closes the selected mobile project, including a failed remembered root, but not a pending root', () => {
+  it('HS2-4Q9DVS offers phone minimize and close, preserving failed-root close and pending behavior', () => {
     const failed = String(
       ProjectTabBar({
         mobile: true,
@@ -142,7 +142,9 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
       ProjectTabBar({ mobile: true, tabs: [{ id: 'healthy', name: 'Healthy', location: 'local', selected: true }] }),
     );
     expect(healthy).toContain('data-project-id="healthy"');
-    expect(healthy).toContain('aria-label="Close Healthy Project"');
+    expect(healthy).toContain('aria-label="Healthy Project Actions"');
+    expect(healthy).toContain('Minimize Tab');
+    expect(healthy).toContain('Close Tab');
     const pending = String(
       ProjectTabBar({
         mobile: true,
@@ -150,5 +152,26 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
       }),
     );
     expect(pending).not.toContain('data-action="close-project-tab"');
+  });
+
+  it('HS2-4Q9DVS shows Minimized Projects before Add Project and keeps it when all tabs are hidden', () => {
+    const minimizedProjects = [
+      { id: 'docs', name: 'Docs Portal' },
+      { id: 'analytics', name: 'Analytics Service', description: 'Host B' },
+    ];
+    const desktop = String(
+      ProjectTabBar({ tabs: [{ id: 'studio', name: 'Studio', location: 'local', selected: true }], minimizedProjects }),
+    );
+    expect(desktop.indexOf('aria-label="Minimized Projects"')).toBeLessThan(
+      desktop.indexOf('aria-label="Add Project"'),
+    );
+    expect(desktop).toContain('data-lucide="list-chevrons-up-down"');
+    expect(desktop).toContain('data-action="restore-minimized-project"');
+    expect(desktop).toContain('Host B');
+    const empty = String(ProjectTabBar({ tabs: [], minimizedProjects }));
+    expect(empty).not.toContain('role="tablist"');
+    expect(empty).toContain('aria-label="Minimized Projects"');
+    expect(empty).toContain('aria-label="Add Project"');
+    expect(String(ProjectTabBar({ tabs: [] }))).not.toContain('aria-label="Minimized Projects"');
   });
 });

@@ -150,6 +150,9 @@ export interface TerminalInteractionsDependencies {
   >;
   readonly openSavedConversation: () => Promise<void>;
   readonly requestProjectClose: (ids: readonly string[]) => void;
+  readonly minimizeProjectTab: (id: string) => void;
+  readonly restoreMinimizedProject: (id: string) => void;
+  readonly minimizedProjectIds: Signal<string[]>;
   readonly projectCloseDialog: Signal<ProjectCloseDialogState | undefined>;
   readonly restoreBorrowedProjectCloseTerminal: (state: ProjectCloseDialogState | undefined) => void;
   readonly cancelProjectClose: () => void;
@@ -227,6 +230,9 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     createDrawerAIChat,
     openSavedConversation,
     requestProjectClose,
+    minimizeProjectTab,
+    restoreMinimizedProject,
+    minimizedProjectIds,
     projectCloseDialog,
     restoreBorrowedProjectCloseTerminal,
     cancelProjectClose,
@@ -1018,6 +1024,18 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       requestProjectClose([data(target.closest<HTMLElement>('[data-project-id]')!).projectId!]);
     }),
   );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.minimizeProjectTab.selector, (_event, target) => {
+      const id = data(target).projectId;
+      if (id) minimizeProjectTab(id);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.restoreMinimizedProject.selector, (_event, target) => {
+      const id = data(target).projectId;
+      if (id) restoreMinimizedProject(id);
+    }),
+  );
   // Project Settings' Close Project… (HS2-C7GMQN) enters the same close flow as the tab button.
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.closeProjectFromSettings.selector, () => {
@@ -1106,8 +1124,15 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         const menu = appTabContextMenu.value;
         if (!menu) return;
         const ordered =
-            menu.kind === 'project' ? projects.value.map((item) => item.id) : currentDrawerTabIds(project()?.id ?? ''),
+            menu.kind === 'project'
+              ? projects.value.map((item) => item.id).filter((id) => !minimizedProjectIds.value.includes(id))
+              : currentDrawerTabIds(project()?.id ?? ''),
           action = data(target).tabAction;
+        if (action === 'minimize' && menu.kind === 'project') {
+          appTabContextMenu.value = undefined;
+          minimizeProjectTab(menu.id);
+          return;
+        }
         if ((action === 'orchestrator-takeover' || action === 'orchestrator-pause') && menu.kind === 'terminal') {
           appTabContextMenu.value = undefined;
           void takeOverHostedSession(menu.id, action === 'orchestrator-pause');

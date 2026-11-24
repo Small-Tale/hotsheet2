@@ -249,6 +249,13 @@ import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
 import { type DrawerAIChat } from '../project-drive';
 import { projectLiveSummary, workersLive } from '../project-live-summary';
+import {
+  loadMinimizedProjects,
+  minimizeProject,
+  restoreProject,
+  saveMinimizedProjects,
+  visibleProjectIds,
+} from '../project-minimization';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { projectTabActionFit } from '../project-tab-action-fit';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
@@ -400,6 +407,7 @@ export async function startHotSheetWebClient() {
   loadTicketEditorSizes(localStorage, document.documentElement.style);
 
   const projects = signal<Project[]>([]),
+    minimizedProjectIds = signal(loadMinimizedProjects(localStorage)),
     selectedProjectId = signal(''),
     tickets = signal<WireTicketRow[]>([]),
     ticketRowsByProject = signal<Record<string, WireTicketRow[]>>({}),
@@ -3131,6 +3139,53 @@ export async function startHotSheetWebClient() {
       void refreshActivatedProject(activated, terminalDrawerVisible.value);
     }
   }
+  function minimizeProjectTab(id: string) {
+    const order = projects.value.map((item) => item.id),
+      result = minimizeProject(order, minimizedProjectIds.value, selectedProjectId.value, id);
+    if (result.minimized.length === minimizedProjectIds.value.length) return;
+    minimizedProjectIds.value = result.minimized;
+    saveMinimizedProjects(localStorage, result.minimized);
+    if (shellMode.value !== 'project' || selectedProjectId.value !== id) return;
+    if (result.nextSelected) selectProjectTab(result.nextSelected);
+    else if (featureOn('workspace-grid')) setShellMode('terminals');
+  }
+  function restoreMinimizedProject(id: string) {
+    if (!minimizedProjectIds.value.includes(id) || !projects.value.some((item) => item.id === id)) return;
+    const restored = restoreProject(minimizedProjectIds.value, id);
+    minimizedProjectIds.value = restored;
+    saveMinimizedProjects(localStorage, restored);
+    selectProjectTab(id);
+    // The restore trigger disappears after the final restore. Put keyboard focus on the restored
+    // project's live control after Kerf has rendered the new tab or phone choice (HS2-4Q9DVS).
+    queueMicrotask(() => {
+      const tab = [...document.querySelectorAll<HTMLElement>('[data-tab-kind="project"]')].find(
+        (item) => item.dataset.projectId === id,
+      );
+      (
+        tab?.querySelector<HTMLElement>('[data-action="select-project-tab"]') ??
+        document.querySelector<HTMLElement>('kui-select[name="mobile-project"] button')
+      )?.focus();
+    });
+  }
+  effect(() => {
+    if (initialProjectRestorePending.value || shellMode.value !== 'project') return;
+    const selected = selectedProjectId.value,
+      hidden = minimizedProjectIds.value,
+      visible = visibleProjectIds(
+        projects.value.map((item) => item.id),
+        hidden,
+      );
+    if (!selected || !hidden.includes(selected)) return;
+    if (visible[0])
+      queueMicrotask(() => {
+        if (minimizedProjectIds.peek().includes(selectedProjectId.peek())) selectProjectTab(visible[0]);
+      });
+    else if (featureOn('workspace-grid'))
+      queueMicrotask(() => {
+        if (shellMode.peek() === 'project' && minimizedProjectIds.peek().includes(selectedProjectId.peek()))
+          setShellMode('terminals');
+      });
+  });
   const status = (value?: string): TicketStatus =>
     ['not_started', 'started', 'completed', 'verified', 'backlog', 'archive', 'deleted'].includes(value ?? '')
       ? (value as TicketStatus)
@@ -5388,6 +5443,11 @@ export async function startHotSheetWebClient() {
   });
   // A hoisted entry point: the project-close owner built earlier receives it as its teardown callback.
   function closeProjectIds(ids: readonly string[]) {
+    const remainingMinimized = minimizedProjectIds.value.filter((id) => !ids.includes(id));
+    if (remainingMinimized.length !== minimizedProjectIds.value.length) {
+      minimizedProjectIds.value = remainingMinimized;
+      saveMinimizedProjects(localStorage, remainingMinimized);
+    }
     const placeholderTabs = ids.filter((id) => remotePlaceholderProjectId(id) !== undefined);
     for (const tabId of placeholderTabs) {
       // Closing a remote tab that is not open yet is the explicit forget (HS2-WNK73S).
@@ -6542,6 +6602,7 @@ export async function startHotSheetWebClient() {
     projectRestoreFailures,
     projectRestoreRank,
     projects,
+    minimizedProjectIds,
     remotePlaceholders: remoteReconnect.placeholders,
     remoteApprovalReminder: (projectId: string | undefined) => {
       const bindingId = projectId ? parseRemoteProjectId(projectId)?.bindingId : undefined;
@@ -7191,6 +7252,9 @@ export async function startHotSheetWebClient() {
     createDrawerAIChat,
     openSavedConversation,
     requestProjectClose,
+    minimizeProjectTab,
+    restoreMinimizedProject,
+    minimizedProjectIds,
     projectCloseDialog,
     restoreBorrowedProjectCloseTerminal,
     cancelProjectClose,

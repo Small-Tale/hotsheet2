@@ -1,10 +1,12 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
+import { ChartNoAxesCombined, Folder, Grid3X3, ListChevronsUpDown, Plus } from 'lucide';
 
 import { featureOn } from '../feature-areas';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 
 /** The shell mode the project strip's dashboard switcher reflects. */
 export type ProjectStripMode = 'project' | 'terminals' | 'stats';
@@ -67,9 +69,42 @@ export function ProjectDashboardModes({
  * The strip's Add-project action: one native button in a single borderless compact
  * `ToolbarControlGroup` (declared `rendersAs @kerfjs/ui:toolbar-control-group`, HS2-PNCDAE).
  */
-export function AddProjectAction() {
+export interface MinimizedProjectChoice {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export function AddProjectAction({
+  minimizedProjects = [],
+}: { minimizedProjects?: readonly MinimizedProjectChoice[] } = {}) {
   return (
-    <ToolbarControlGroup single appearance="borderless" size="compact" content="icon">
+    <ToolbarControlGroup
+      single={minimizedProjects.length === 0}
+      nestedDropdown={minimizedProjects.length > 0}
+      menuInset="none"
+      appearance="borderless"
+      size="compact"
+      content="icon"
+    >
+      {minimizedProjects.length > 0 && (
+        <PopupMenu
+          label="Minimized Projects"
+          icon={<LucideIcon size="s" icon={ListChevronsUpDown} name="list-chevrons-up-down" />}
+          caret={false}
+          rootAttributes={{ 'data-minimized-projects': 'true' }}
+          items={[
+            { kind: 'heading', label: 'Restore Project' },
+            ...minimizedProjects.map((item) => ({
+              label: item.name,
+              description: item.description,
+              icon: <LucideIcon icon={Folder} name="folder" />,
+              action: TERMINALS_ACTIONS.restoreMinimizedProject.value,
+              attributes: { 'data-project-id': item.id },
+            })),
+          ]}
+        />
+      )}
       <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.chooseProject.attrs} aria-label="Add Project">
         <LucideIcon size="s" icon={Plus} name="plus" />
       </button>

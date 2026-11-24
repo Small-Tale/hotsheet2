@@ -17,6 +17,7 @@ import { SHELL_AND_GLOBAL_ACTIONS } from '../interaction-attrs/shell-and-global'
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { STANDBY_ICON } from '../live-state-icons';
 import { WORKSPACE_TOOLBAR_LABEL } from '../workspace-toolbar-visibility';
+import type { MinimizedProjectChoice } from './project-strip-actions';
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
 import { ProjectTabBar } from './project-tab-bar';
@@ -42,6 +43,7 @@ export interface AppShellMobileView {
 
 export interface AppShellProps {
   tabs: ProjectTabProps[];
+  minimizedProjects?: readonly MinimizedProjectChoice[];
   /** The left rail's panel parts; the Workbench composes its toolbar and collapse toggle. */
   sidebar?: SidebarPanelParts;
   header: SafeHtml;
@@ -120,6 +122,7 @@ export interface AppShellProps {
  */
 export function AppShell({
   tabs,
+  minimizedProjects = [],
   sidebar,
   header,
   headerActions,
@@ -353,6 +356,7 @@ export function AppShell({
                 between it and the work area, so it draws the separator itself (HS2-WH6CCR). */}
             <ProjectTabBar
               tabs={tabs}
+              minimizedProjects={minimizedProjects}
               mode={mode}
               projectStats={projectStats}
               workspaceAction={projectTabAction}

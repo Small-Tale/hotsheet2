@@ -32,6 +32,7 @@ import { ticketInspectorPlaceholderPanel } from '../components/ticket-inspector-
 import { TicketList } from '../components/ticket-list';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { hostCallouts, projectLiveSummary } from '../project-live-summary';
 import { DemoEvent } from './components/demo-event';
 import { tabContextMenu } from './components/demo-state';
@@ -100,6 +101,7 @@ const initialTabs: ProjectTabProps[] = [
 ];
 
 export const projectTabs = signal<ProjectTabProps[]>(initialTabs.map((tab) => ({ ...tab })));
+export const minimizedProjectTabs = signal<string[]>([]);
 export const shellConnectionState = signal<ConnectionState | undefined>('reconnecting');
 export const shellMode = signal<ProjectTabBarMode>('project');
 export const shellStatsProjectName = signal<string | undefined>(undefined);
@@ -204,6 +206,7 @@ export function setRegionSize(id: string, size: number): void {
 }
 
 export function selectProjectTab(id: string): void {
+  minimizedProjectTabs.value = minimizedProjectTabs.value.filter((candidate) => candidate !== id);
   shellMode.value = 'project';
   shellStatsProjectName.value = undefined;
   projectTabs.value = projectTabs.value.map((tab) => ({ ...tab, selected: tab.id === id }));
@@ -211,11 +214,36 @@ export function selectProjectTab(id: string): void {
 }
 
 export function closeProjectTab(id: string): void {
+  minimizedProjectTabs.value = minimizedProjectTabs.value.filter((candidate) => candidate !== id);
   const closing = projectTabs.value.find((tab) => tab.id === id);
   const remaining = projectTabs.value.filter((tab) => tab.id !== id);
   if (closing?.selected && remaining.length > 0) remaining[0] = { ...remaining[0], selected: true };
   projectTabs.value = remaining;
   shellEvent.value = `${closing?.name ?? 'Project'} closed.`;
+}
+
+export function minimizeDemoProjectTab(id: string): void {
+  if (minimizedProjectTabs.value.includes(id)) return;
+  const tabs = projectTabs.value;
+  minimizedProjectTabs.value = [...minimizedProjectTabs.value, id];
+  if (tabs.find((tab) => tab.id === id)?.selected) {
+    const index = tabs.findIndex((tab) => tab.id === id);
+    const next = [...tabs.slice(index + 1), ...tabs.slice(0, index)].find(
+      (tab) => !minimizedProjectTabs.value.includes(tab.id),
+    );
+    if (next) selectProjectTab(next.id);
+    else shellMode.value = 'terminals';
+  }
+  shellEvent.value = 'Project tab minimized.';
+}
+
+function demoMinimizedProjects() {
+  return projectTabs.value
+    .filter((tab) => minimizedProjectTabs.value.includes(tab.id))
+    .map((tab) => ({
+      id: tab.id,
+      name: tab.name,
+    }));
 }
 
 export function closeOtherProjectTabs(id: string): void {
@@ -303,7 +331,11 @@ export function ProjectTabBarDemo() {
   return (
     <>
       <CatalogExample label="Default" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
-        <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} />
+        <ProjectTabBar
+          tabs={projectTabs.value.filter((tab) => !minimizedProjectTabs.value.includes(tab.id))}
+          minimizedProjects={demoMinimizedProjects()}
+          mode={shellMode.value}
+        />
       </CatalogExample>
       <CatalogExample label="With Workspace Action" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar
@@ -334,7 +366,12 @@ export function ProjectTabBarDemo() {
         />
       </CatalogExample>
       <CatalogExample label="Phone Project Picker" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
-        <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} mobile />
+        <ProjectTabBar
+          tabs={projectTabs.value.filter((tab) => !minimizedProjectTabs.value.includes(tab.id))}
+          minimizedProjects={demoMinimizedProjects()}
+          mode={shellMode.value}
+          mobile
+        />
         <DemoEvent>{shellEvent.value}</DemoEvent>
       </CatalogExample>
     </>
@@ -556,7 +593,8 @@ export function AppShellDemo() {
         presentation={appShellSettings.presentation.value}
         workAreaFocusRing={!appShellSettings.overlayOpen.value}
         mode={shellMode.value}
-        tabs={projectTabs.value}
+        tabs={projectTabs.value.filter((tab) => !minimizedProjectTabs.value.includes(tab.id))}
+        minimizedProjects={demoMinimizedProjects()}
         sidebar={shellMode.value === 'terminals' ? shellTerminalOperationsPanel() : shellSidebarPanel()}
         sidebarVisible={shellSidebarVisible.value}
         banner={banner}
@@ -691,6 +729,16 @@ function wireAppShellDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
+    delegate(root, 'click', TERMINALS_ACTIONS.minimizeProjectTab.selector, (_event, target) => {
+      minimizeDemoProjectTab((target as HTMLElement).dataset.projectId!);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', TERMINALS_ACTIONS.restoreMinimizedProject.selector, (_event, target) => {
+      selectProjectTab((target as HTMLElement).dataset.projectId!);
+    }),
+  );
+  demoListeners.add(
     delegate(root, 'contextmenu', DEMO_MARKERS.tabKindProject.selector, (event, target) => {
       event.preventDefault();
       const pointer = event as MouseEvent;
@@ -705,6 +753,7 @@ function wireAppShellDemo(root: HTMLElement): () => void {
     delegate(root, 'click', DEMO_ACTIONS.projectTabContextAction.selector, (_event, target) => {
       const element = target as HTMLElement;
       const id = element.dataset.projectId!;
+      if (element.dataset.tabAction === 'minimize') minimizeDemoProjectTab(id);
       if (element.dataset.tabAction === 'close') closeProjectTab(id);
       if (element.dataset.tabAction === 'close-others') closeOtherProjectTabs(id);
       if (element.dataset.tabAction === 'close-right') closeProjectTabsToRight(id);

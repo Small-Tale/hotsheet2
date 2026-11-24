@@ -1,6 +1,18 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
-import { ArrowLeft, ArrowRight, CircleX, Hand, HandHelping, type IconNode, Pause, Pencil, Trash2, X } from 'lucide';
+import {
+  ArrowLeft,
+  ArrowRight,
+  CircleX,
+  Hand,
+  HandHelping,
+  type IconNode,
+  Minus,
+  Pause,
+  Pencil,
+  Trash2,
+  X,
+} from 'lucide';
 
 import type { TerminalOrchestrator } from '../api';
 import { contextMenuAnchor } from '../context-menu-position';
@@ -56,6 +68,7 @@ export function AppTabContextMenu({
           },
         ]
       : []),
+    ...(kind === 'project' ? [{ id: 'minimize', label: 'Minimize Tab', icon: Minus, iconName: 'minus' }] : []),
     { id: 'close', label: 'Close Tab', icon: X, iconName: 'x' },
     { id: 'close-others', label: 'Close Other Tabs', icon: CircleX, iconName: 'circle-x' },
     directional,
@@ -92,7 +105,9 @@ export function AppTabContextMenu({
       label={`${label} Tab Actions`}
       rootAttributes={{ 'data-context-menu': 'app-tab', 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId }}
       items={actions.flatMap((item): PopupMenuEntry[] => [
-        ...(item.id === 'close-all' ? [{ kind: 'divider' } as const] : []),
+        ...(item.id === 'close-all' || (kind === 'project' && item.id === 'close')
+          ? [{ kind: 'divider' } as const]
+          : []),
         {
           label: item.label,
           action,

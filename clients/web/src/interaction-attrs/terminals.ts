@@ -52,6 +52,8 @@ export const TERMINALS_ACTIONS = {
   openSavedConversation: action('open-saved-conversation'),
   createProjectTerminal: action('create-project-terminal'),
   closeProjectTab: action('close-project-tab'),
+  minimizeProjectTab: action('minimize-project-tab'),
+  restoreMinimizedProject: action('restore-minimized-project'),
   /** Project Settings' Close Project… runs the tab close flow for the selected project (HS2-C7GMQN). */
   closeProjectFromSettings: action('close-project-from-settings'),
   selectProjectCloseResource: action('select-project-close-resource'),
