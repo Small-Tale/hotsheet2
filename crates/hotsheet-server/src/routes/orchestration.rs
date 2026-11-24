@@ -678,6 +678,11 @@ pub(crate) fn orchestration_error(error: OrchestrationError) -> ApiError {
         error.to_string(),
     )
     .with_code(error.code());
+    // HS2-061YTB: a refused dispatch names the step requirement its target misses.
+    let api = match error.refusal_detail() {
+        Some((field, value)) => api.with_field(field, value),
+        None => api,
+    };
     match error.answer_reference() {
         Some((field, id)) => api.with_field(field, id),
         None => api,

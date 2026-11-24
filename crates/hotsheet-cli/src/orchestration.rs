@@ -660,6 +660,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
             404
         }
         OrchestrationError::Site(_) => 409,
+        // HS2-061YTB: the target's machine is not what the plan step requires.
+        OrchestrationError::Requirement { .. } => 409,
         OrchestrationError::TargetOperation(error) => {
             use hotsheet_ticketing::orchestration::TargetOpError as E;
             match error {

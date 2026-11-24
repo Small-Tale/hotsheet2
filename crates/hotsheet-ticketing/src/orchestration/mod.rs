@@ -286,6 +286,17 @@ pub enum OrchestrationError {
     /// HS2-SHH7WW: a site of a project does not fit the project it names.
     #[error("orchestration site refused the request: {}", .0.code())]
     Site(SiteError),
+    /// HS2-061YTB: a dispatch of a planned ticket whose target machine does not meet
+    /// a requirement of its plan step (`unmet`) or did not report it (`unknown`).
+    /// `requirement` names it, such as `os:windows`.
+    #[error(
+        "orchestration dispatch refused: the target's machine {} requirement `{requirement}`",
+        if *.state == RequirementState::Unmet { "does not meet" } else { "did not report" }
+    )]
+    Requirement {
+        state: RequirementState,
+        requirement: String,
+    },
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -318,6 +329,19 @@ impl OrchestrationError {
             Self::Readiness(error) => error.code(),
             Self::Session(error) => error.code(),
             Self::Site(error) => error.code(),
+            Self::Requirement { state, .. } => match state {
+                RequirementState::Unmet => "requirement_unmet",
+                RequirementState::Unknown => "requirement_unknown",
+            },
+        }
+    }
+
+    /// HS2-061YTB: a refusal's detail that is not a record to answer: the step
+    /// requirement a dispatch's target machine misses, as `("requirement", name)`.
+    pub fn refusal_detail(&self) -> Option<(&'static str, &str)> {
+        match self {
+            Self::Requirement { requirement, .. } => Some(("requirement", requirement)),
+            _ => None,
         }
     }
 

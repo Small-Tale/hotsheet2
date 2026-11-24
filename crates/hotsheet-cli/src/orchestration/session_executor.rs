@@ -517,6 +517,9 @@ impl OrchestrationRuntime {
                 worker_label: None,
                 lease_minutes: None,
                 override_readiness: false,
+                override_requirements: false,
+                // HS2-061YTB: the pass placed it where the step's requirements are met.
+                requirements_checked: true,
             },
             Some(actor),
             tx,

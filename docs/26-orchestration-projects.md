@@ -1054,6 +1054,10 @@ transition. A person's correction is the one exception to the edges (§26.14).
 - **Readiness.** A target ticket that a plan step works is dispatched only when that
   step is `confirmed`, or when a person overrides it for the exact operation
   (§26.15). A ticket no step works is not gated.
+- **Requirements (HS2-061YTB).** When that step declares requirements, the target's
+  machine must meet them: it is read through the gate and a miss refuses with 409
+  `requirement_unmet` or `requirement_unknown` naming the requirement, unless
+  `override_requirements` lets the exact operation through (§26.15).
 - **Refusals.** The target ticket is read first, so a ticket that does not exist is
   never recorded as a run. A definitive target refusal ends the run as `failed` with
   the target's code; a failure that may be transient leaves it `requested` so the
@@ -2833,7 +2837,9 @@ are not prerequisites: readiness ignores them, and the scheduler waits on them.
 
 A step may also declare **requirements** (HS2-ZY4Z4G): what the target's machine must
 be for its work. Like resources, readiness ignores them; the scheduler places the work
-only where every one is met (§26.17).
+only where every one is met (§26.17), and a manual `run dispatch` of the step's ticket
+is refused on a machine that misses one (HS2-061YTB, "Dispatch guard and override"
+below).
 
 | Requirement     | Met when the machine's capabilities (§26.10) show                                                 |
 | --------------- | ------------------------------------------------------------------------------------------------- |
@@ -2942,6 +2948,25 @@ is ready needs and asks nothing. The audit journal records each answer under
 note naming the step, the level, the operation and who decided, by identifiers only.
 The scheduler never sets the flag.
 
+**Requirements (HS2-061YTB).** A dispatch of a planned ticket whose step declares
+requirements also reads the target's capacity snapshot through the gate (an
+observation, which never asks) and checks it with `requirement_misses`. A machine that
+misses a requirement refuses with 409 `requirement_unmet`, and one that did not report
+it with 409 `requirement_unknown`: nothing on a guess. The refusal names the first
+miss in the order of the table above (`requirement`, such as `os:windows`; the route
+body's `requirement` field and the CLI's error line), and nothing is claimed or
+recorded. A ticket no step names, a step without requirements and a repeat of an
+admitted dispatch read nothing; the scheduler's own dispatch is not read again,
+because the pass placed it against the same snapshot. `override_requirements` (CLI
+`--override-requirements`, MCP `override_requirements`) lets one exact operation
+through as `override_readiness` does: a person's own override proceeds, an AI's is a
+judgment call on the orchestration ticket ("Start anyway" / "Wait until it is
+ready") answering 403 `decision_required` until a person responds, and a "wait"
+answer refuses with the requirement again. The audit journal records each under
+`requirement_override` with the operation id and the code overridden
+(`requirement_unmet`, `requirement_unknown`) or `decision_required`,
+`decision_wait`. The scheduler never sets the flag.
+
 ### Reevaluation and events
 
 Readiness is recomputed where the things it reads change: wherever a run event is
@@ -3012,7 +3037,8 @@ prerequisite as JSON for what the flags do not say, such as a pinned `commit`.
 
 MCP `hotsheet_targets` adds `readiness_define` (with `requirements`, HS2-ZY4Z4G),
 `readiness_show`, `readiness_plan`, `readiness_ready`, `readiness_refresh` and
-`readiness_remove`, and `run_dispatch` takes `override_readiness`. The route body and
+`readiness_remove`, and `run_dispatch` takes `override_readiness` and
+`override_requirements` (HS2-061YTB). The route body and
 `ReadyItem` carry `requirements` as the JSON object of the table above. Plan steps are the orchestration project's own records: defining, refreshing and
 removing one reads the target at most and never asks. Removing a step needs an
 identified actor and is audited (`readiness_remove`; HS2-TZT505, settled by

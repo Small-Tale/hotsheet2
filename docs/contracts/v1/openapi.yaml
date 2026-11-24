@@ -21354,6 +21354,13 @@ components:
             ahead; an AI or system override answers 403 `decision_required` with the `note_id` of a decision note on the
             orchestration ticket until a person answers it (HS2-XHQ1EH).
           type: boolean
+        override_requirements:
+          description:
+            HS2-061YTB. Start this exact operation although the target's machine does not meet, or did not report, a
+            requirement of its plan step; without it the dispatch answers 409 `requirement_unmet` or
+            `requirement_unknown` with the `requirement` named. A person's own override goes ahead; an AI or system
+            override answers 403 `decision_required` with the `note_id` of a decision note until a person answers it.
+          type: boolean
       additionalProperties: false
     OrchestrationRun:
       type: object

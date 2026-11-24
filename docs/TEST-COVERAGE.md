@@ -3744,6 +3744,18 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   # HS2-TK9ADC` turns both roles on and off through the real policy route in Chromium
   and WebKit with captures at 1440, 1100, 390 and 1440 again, and dark.
 
+### Requirements on a manual dispatch (HS2-061YTB)
+
+- `tests/readiness.rs # hs2_061ytb` dispatches a planned ticket whose step needs
+  Windows through the real runtime and capacity probe: an unreported OS refuses
+  `requirement_unknown` (repeated, the same), a Linux machine `requirement_unmet`, both
+  409 naming `os:windows` and recording no run; an AI's `override_requirements` waits
+  as `decision_required`, a person's goes ahead and is audited as
+  `requirement_override`; a repeat of the admitted dispatch reads nothing; a step
+  without requirements and an unplanned ticket never read the machine; the route body
+  names the requirement. `orchestration_tools.rs # hs2_42tara` (MCP) forwards
+  `override_requirements`.
+
 ### The integrator on demand (HS2-4JQ41V)
 
 - `integrator_session_tests.rs` (core) walks the integrator states (none, starting,

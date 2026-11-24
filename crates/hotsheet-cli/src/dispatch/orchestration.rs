@@ -404,6 +404,12 @@ enum RunCmd {
         /// decision note on the goal ticket (HS2-XHQ1EH); repeat it after the answer.
         #[arg(long)]
         override_readiness: bool,
+        /// HS2-061YTB: start this operation although the target's machine does not meet,
+        /// or did not report, a requirement of its plan step (`requirement_unmet`,
+        /// `requirement_unknown`). A person's own override goes ahead; an AI's waits as
+        /// `decision_required` on a decision note on the goal ticket.
+        #[arg(long)]
+        override_requirements: bool,
     },
     /// Runs of this project; --active leaves out finished ones.
     List {
@@ -494,13 +500,15 @@ fn run_route(project: &str, command: RunCmd) -> (&'static str, String, Value) {
             worker_label,
             lease_minutes,
             override_readiness,
+            override_requirements,
         } => (
             "POST",
             base,
             json!({"ticket":{"connection_id":source,"native_id":ticket},"target_id":target,
                 "connection_id":connection,"native_id":id,"operation_id":operation_id,
                 "mode":via,"worker_id":worker,"worker_label":worker_label,
-                "lease_minutes":lease_minutes,"override_readiness":override_readiness}),
+                "lease_minutes":lease_minutes,"override_readiness":override_readiness,
+                "override_requirements":override_requirements}),
         ),
         RunCmd::List { active } => ("GET", format!("{base}?active={active}"), Value::Null),
         RunCmd::Show { run_id } => ("GET", format!("{base}/{run_id}"), Value::Null),
