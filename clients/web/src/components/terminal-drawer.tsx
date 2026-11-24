@@ -643,7 +643,7 @@ export function TerminalDrawer({
       {selectedSession?.kind === 'ai' && !selectedSession.alive && selectedSession.exit_code !== undefined && (
         <StateBanner
           tone="danger"
-          title={`AI terminal exited (status ${selectedSession.exit_code})`}
+          title={`AI Terminal Exited (Status ${selectedSession.exit_code})`}
           detail="Its output remains in this tab briefly so you can inspect the launch failure."
           copyLayout="stacked"
         />

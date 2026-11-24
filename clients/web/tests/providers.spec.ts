@@ -8489,23 +8489,23 @@ test('HS2-JRQG1T keeps an immediately failed AI launch visible in the drawer', a
     .locator('xpath=..')
     .locator('[data-action="create-terminal-drawer-item"][data-provider="claude"]')
     .click();
-  await expect(drawer).toContainText('AI terminal exited (status 17)');
+  await expect(drawer).toContainText('AI Terminal Exited (Status 17)');
   await expect(drawer.locator('[data-component="terminal-session"]')).toBeVisible();
   await settleRails();
   await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-1280.png') });
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(drawer).toContainText('AI terminal exited (status 17)');
+  await expect(drawer).toContainText('AI Terminal Exited (Status 17)');
   await settleRails();
   await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-760.png') });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(drawer).toContainText('AI terminal exited (status 17)');
+  await expect(drawer).toContainText('AI Terminal Exited (Status 17)');
   await expect(drawer.locator('[data-component="terminal-session"]')).toBeVisible();
   await settleRails();
   await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-390.png') });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-390-dark.png') });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(drawer).toContainText('AI terminal exited (status 17)');
+  await expect(drawer).toContainText('AI Terminal Exited (Status 17)');
   await settleRails();
   await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-restored.png') });
 });

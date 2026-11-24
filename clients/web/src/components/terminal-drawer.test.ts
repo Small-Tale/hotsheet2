@@ -73,7 +73,7 @@ describe('TerminalDrawer', () => {
         selectedId: 'failed-ai',
       }),
     );
-    expect(markup).toContain('AI terminal exited (status 17)');
+    expect(markup).toContain('AI Terminal Exited (Status 17)');
     expect(markup).toContain('Its output remains in this tab briefly');
     expect(markup).toContain('data-terminal-id="failed-ai"');
     expect(markup).toContain('data-component="terminal-viewport"');
