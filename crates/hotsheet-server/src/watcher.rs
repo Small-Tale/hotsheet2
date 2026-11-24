@@ -2550,15 +2550,18 @@ mod store_root_scope_tests {
 
         std::fs::rename(&away, &root).unwrap();
         let after = create(&store, "written after return");
-        wait_for_change(&mut watched.events, after.id);
-        wait_for("the rescan to index the write made while away", || {
-            entry
-                .index
-                .lock()
-                .unwrap()
-                .slug_candidates(&while_away.slug)
-                .unwrap()
-                == vec![while_away.id]
+        let after_id = after.id.to_string();
+        let mut saw_invalidation = false;
+        wait_for("the returned store to reconcile and notify clients", || {
+            // HS2-R6FZ54: a whole-store rearm may emit one aggregate invalidation
+            // instead of the ticket-specific event from an uninterrupted watch.
+            saw_invalidation |= drain(&mut watched.events)
+                .iter()
+                .any(|(kind, id)| kind == "changed" && (id.is_empty() || id == &after_id));
+            let index = entry.index.lock().unwrap();
+            index.slug_candidates(&after.slug).unwrap() == vec![after.id]
+                && index.slug_candidates(&while_away.slug).unwrap() == vec![while_away.id]
+                && saw_invalidation
         });
         drop(watched.handle);
         drop(watched.state);
