@@ -8,7 +8,7 @@
 
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -55,7 +55,7 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<()> {
     let base_url = format!("http://127.0.0.1:{port}");
     let authorization = basic_auth_header("opencode", &password);
     let http = UreqHttp::new(Duration::from_millis(250));
-    let server = Command::new(&program)
+    let server = hotsheet_ticketing::git::launch(&program)
         .args(["serve", "--hostname", "127.0.0.1", "--port"])
         .arg(port.to_string())
         .stdin(Stdio::null())
@@ -87,7 +87,7 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<()> {
         .map_err(|error| anyhow::anyhow!("sending the initial OpenCode v2 prompt: {error}"))?;
     }
 
-    let status = Command::new(&program)
+    let status = hotsheet_ticketing::git::launch(&program)
         .args(["--server", &base_url, "--session", &session_id])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())

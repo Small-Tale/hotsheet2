@@ -401,14 +401,15 @@ fn terminal_launch(
 /// OpenCode v1 accepts the manifest's `--model` and `--port`; v2 needs a private server
 /// beside the TUI. Probe the binary itself before choosing either launch protocol.
 fn opencode_major_version(program: &FsPath) -> Result<u64, ApiError> {
-    let output =
-        hotsheet_aitools::probe::run_probe(std::process::Command::new(program).arg("--version"))
-            .map_err(|error| {
-                ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    format!("checking the OpenCode CLI version: {error}"),
-                )
-            })?;
+    let output = hotsheet_aitools::probe::run_probe(
+        hotsheet_ticketing::git::launch(program).arg("--version"),
+    )
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("checking the OpenCode CLI version: {error}"),
+        )
+    })?;
     if !output.status.success() {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
