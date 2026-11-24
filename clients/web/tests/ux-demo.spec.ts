@@ -7952,10 +7952,15 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   await page.setViewportSize({ width: 1280, height: 900 });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   const tabMenu = page.locator('[data-context-menu="app-tab"]');
-  await expect(tabMenu.locator('.kui-popup-menu__item')).toHaveCount(4);
-  await expect(tabMenu.locator('[data-lucide]')).toHaveCount(4);
-  await page.keyboard.press('Escape');
-  await expect(tabMenu).toHaveCount(0);
+  // HS2-P6TAZ8: Minimize Tab is the fifth action, and the demo wires it through the real shell.
+  await expect(tabMenu.locator('.kui-popup-menu__item')).toHaveCount(5);
+  await expect(tabMenu.locator('[data-lucide]')).toHaveCount(5);
+  await tabMenu.getByRole('menuitem', { name: 'Minimize Tab' }).click();
+  await expect(tabBar.getByRole('tab')).toHaveCount(3);
+  await tabBar.getByRole('button', { name: 'Minimized Projects' }).click();
+  await page.getByRole('menuitem', { name: 'Hot Sheet 2' }).click();
+  await expect(tabBar.getByRole('tab')).toHaveCount(4);
+  await expect(tabBar.getByRole('button', { name: 'Minimized Projects' })).toHaveCount(0);
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   await tabMenu.locator('.kui-popup-menu__item', { hasText: 'Close Tabs to the Right' }).click();
   await expect(tabBar.getByRole('tab')).toHaveCount(1);
