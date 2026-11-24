@@ -16676,6 +16676,35 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await page.screenshot({ path: 'target/visual-captures/hs2-90ntv5-empty-after-create-narrow.png', fullPage: true });
 });
 
+test('selecting a whole column keeps a hidden inspector hidden (HS2-85TR7P)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByLabel('Columns View').click();
+  await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
+  const show = page.getByRole('button', { name: 'Show Ticket Inspector' });
+  await expect(show).toBeVisible();
+  const columns = page.locator('[data-component="ticket-board-column"]'),
+    counts = await columns.evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: (node as HTMLElement).dataset.columnId!,
+        rows: node.querySelectorAll('[data-ticket-slug]').length,
+      })),
+    ),
+    busiest = counts.find((column) => column.rows > 1);
+  expect(busiest).toBeDefined();
+  const column = page.locator(`[data-column-id="${busiest!.id}"]`);
+  await column.locator('button.ticket-board-column__header').click();
+  await expect(column.locator('[data-row-selected="true"]')).toHaveCount(busiest!.rows);
+  // A multi-selection shows no single ticket's details, so the inspector is not opened for it.
+  await expect(show).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide Ticket Inspector' })).toHaveCount(0);
+  // Opening it by hand still works and shows the selection.
+  await show.click();
+  await expect(page.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeVisible();
+});
+
 test('creates a ticket with a chosen priority and in Backlog from the composer (HS2-V72HCC)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

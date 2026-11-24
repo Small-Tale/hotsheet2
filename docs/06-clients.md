@@ -538,6 +538,9 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   side inspector on mobile, a plain tap on a ticket in the list auto-opens the right inspector
   overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tapping
   away returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
+  A hidden inspector (side rail or overlay) opens on its own only to show one ticket's
+  details: selecting a whole column or group selects its tickets and leaves it hidden
+  (HS2-85TR7P).
   Creating a ticket likewise opens the overlay on the new ticket with its details editor focused,
   as on desktop, instead of leaving the editor inert in a closed overlay (HS2-QFW2A7). The editor
   takes focus only after the closing composer has returned focus to its launcher, so a busy main

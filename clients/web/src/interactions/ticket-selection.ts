@@ -49,7 +49,6 @@ export interface TicketSelectionInteractionsDependencies {
   readonly cancelTicketDrafts: () => void;
   readonly selectedCorruptKey: Signal<string | undefined>;
   ticketSelectionAnchor: string | undefined;
-  readonly setInspectorVisible: (visible: boolean) => void;
   readonly openTicketReader: (slug: string, ordered?: string[], trigger?: HTMLElement) => Promise<void>;
   readonly ticketContextMenu: Signal<
     { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string; groupScope?: string } | undefined
@@ -109,7 +108,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     visibleTickets,
     cancelTicketDrafts,
     selectedCorruptKey,
-    setInspectorVisible,
     openTicketReader,
     ticketContextMenu,
     selectedRows,
@@ -161,14 +159,16 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     notWorkingNoteInput.cancel();
   });
   const menuTicket = (slug: string) => tickets.value.find((item) => item.slug === slug);
-  /** Select a set of tickets at once, as a column header's Select All does. */
+  /**
+   * Select a set of tickets at once, as a column header's Select All does. A hidden inspector stays
+   * hidden: it opens on its own only to show one ticket's details, never a multi-selection (HS2-85TR7P).
+   */
   function selectMany(slugs: string[]): void {
     cancelTicketDrafts();
     selectedCorruptKey.value = undefined;
     selectedTicketSlugs.value = slugs;
     dependencies.ticketSelectionAnchor = slugs[0];
     selectedTicket.value = null;
-    setInspectorVisible(true);
   }
   /**
    * Select every ticket a group shows in one container: the list, or one board column
