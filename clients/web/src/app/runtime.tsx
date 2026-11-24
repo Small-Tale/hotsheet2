@@ -145,6 +145,7 @@ import { createAutomaticTicketGrouping } from '../features/automatic-ticket-grou
 import { createBoardColumnPaging } from '../features/board-column-paging';
 import { createBrowserGrants } from '../features/browser-grants';
 import { createClaimClockController } from '../features/claim-clock';
+import { createCommandSchedulesController } from '../features/command-schedules';
 import { createCommandsController } from '../features/commands';
 import { createConversationArchiveController } from '../features/conversation-archive';
 import { createCorruptTicketRecoveryController } from '../features/corrupt-ticket-recovery';
@@ -1225,6 +1226,7 @@ export async function startHotSheetWebClient() {
     commandIcon,
     commandDialogSurface,
   } = createCommandsController({ projects, selectedProjectId, storedWorkspacePreferences, tickets });
+  const commandSchedules = createCommandSchedulesController(() => project());
   const driveConversations = createDriveConversationsController({
     projects,
     confirm: confirmation.request,
@@ -4674,6 +4676,7 @@ export async function startHotSheetWebClient() {
   async function refreshCommands(current = project(), quiet = false) {
     const generation = ++commandRefreshGeneration;
     if (!current) return;
+    void commandSchedules.refresh(current);
     const active = () => generation === commandRefreshGeneration && project()?.id === current.id;
     try {
       const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
@@ -5826,6 +5829,17 @@ export async function startHotSheetWebClient() {
     commandIconSearch,
     commandSettingsMessage,
     commandSettingsLoadState,
+    commandSchedules: (projectId) => commandSchedules.viewsByProject.value[projectId] ?? [],
+    commandScheduleDialog: () => ({
+      commandTitle: commandSettingsDefinitions().find((item) => item.id === commandSchedules.openCommandId.value)
+        ?.title,
+      draft: commandSchedules.draft.value,
+      saved: commandSchedules.currentView(),
+      preview: commandSchedules.preview.value,
+      previewBusy: commandSchedules.previewBusy.value,
+      busy: commandSchedules.busy.value,
+      error: commandSchedules.error.value,
+    }),
     commandSettingsLoadError,
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
@@ -7423,6 +7437,7 @@ export async function startHotSheetWebClient() {
     commandStopConfirmation,
     commandRuns,
     commandSettingsEditingId,
+    commandSchedules,
     commandIconSearch,
     addCommandSetting,
     manualModelDialog,

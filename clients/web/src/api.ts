@@ -1,5 +1,6 @@
 import { browserRandomId } from './browser-id';
 import { isTicketCollectionRead, responseChangeCursor, ticketReadCursors } from './change-read-gap';
+import { parseSchedulePreview, parseScheduleView, parseScheduleViews, type ScheduleInput } from './command-schedules';
 import { type FeatureSettingsChange, parseFeatureSettings } from './feature-areas';
 import { parseHostCpuFrame } from './host-cpu-feed';
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
@@ -3428,6 +3429,25 @@ export class Api {
       body: JSON.stringify({ name }),
     });
   commands = () => this.parsed(parseCommandDefinition.list, '/commands');
+  commandSchedules = (checkout: string) =>
+    this.parsed(parseScheduleViews, `/checkouts/${encodeURIComponent(checkout)}/command-schedules`);
+  previewCommandSchedule = (checkout: string, input: ScheduleInput) =>
+    this.parsed(parseSchedulePreview, `/checkouts/${encodeURIComponent(checkout)}/command-schedules/preview`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  saveCommandSchedule = (checkout: string, commandId: string, input: ScheduleInput) =>
+    this.parsed(
+      parseScheduleView,
+      `/checkouts/${encodeURIComponent(checkout)}/command-schedules/${encodeURIComponent(commandId)}`,
+      { method: 'PUT', body: JSON.stringify(input) },
+    );
+  deleteCommandSchedule = (checkout: string, commandId: string) =>
+    this.parsed(
+      ignoreBody,
+      `/checkouts/${encodeURIComponent(checkout)}/command-schedules/${encodeURIComponent(commandId)}`,
+      { method: 'DELETE' },
+    );
   commandsWithRevision = async (): Promise<{ definitions: CommandDefinition[]; revision: string }> => {
     let revision = '*';
     const definitions = await this.parsed(parseCommandDefinition.list, '/commands', {}, true, (response) => {

@@ -11,6 +11,7 @@ import { demoModule as awayDigest } from './away-digest-demo';
 import { demoModule as bulkTicketDialog } from './bulk-ticket-dialog-demo';
 import { demoModule as choiceCard } from './choice-card-demo';
 import { demoModule as commandRunDialog } from './command-run-dialog-demo';
+import { demoModule as commandScheduleDialog } from './command-schedule-dialog-demo';
 import { demoModule as confidenceBadge } from './confidence-badge-demo';
 import { demoModule as confidenceCalibration } from './confidence-calibration-demo';
 import { demoModule as confirmationDialog } from './confirmation-dialog-demo';
@@ -99,6 +100,7 @@ export const demoModules: readonly DemoModule[] = [
   permissionComponents,
   appChrome,
   projectSidebar,
+  commandScheduleDialog,
   dialogLayout,
   terminalComponents,
   appDialogs,

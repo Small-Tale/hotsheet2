@@ -39,6 +39,8 @@ export interface SettingsSurfaceDependencies {
   commandSettingsMessage: (projectId: string) => Props['commands']['message'];
   /** The editor's first-load state and failure reason (HS2-BZKTDC). */
   commandSettingsLoadState: (projectId: string) => Props['commands']['loadState'];
+  commandSchedules?: (projectId: string) => Props['commands']['schedules'];
+  commandScheduleDialog?: () => Props['commands']['scheduleDialog'];
   commandSettingsLoadError: (projectId: string) => Props['commands']['loadError'];
   trashCleanupDaysByProject: Readable<Record<string, number>>;
   trashSettingsMessagesByProject: Readable<Record<string, string>>;
@@ -120,6 +122,8 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     commandIconSearch,
     commandSettingsMessage,
     commandSettingsLoadState,
+    commandSchedules,
+    commandScheduleDialog,
     commandSettingsLoadError,
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
@@ -221,6 +225,8 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           iconSearch: commandIconSearch.value,
           message: commandSettingsMessage(current.id),
           loadState: commandSettingsLoadState(current.id),
+          schedules: commandSchedules?.(current.id),
+          scheduleDialog: commandScheduleDialog?.(),
           loadError: commandSettingsLoadError(current.id),
           aiTools: aiTools.value,
           aiDefaults: aiDefaults.value,

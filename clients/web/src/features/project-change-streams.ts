@@ -540,7 +540,12 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             if (response.events.some((event) => event.kind === 'permission_rules_changed'))
               permissionRulesChanged(current.id);
             if (response.events.some((event) => event.kind === 'drive_updated')) await refreshDriveConnections(current);
-            if (response.events.some((event) => event.kind === 'command_updated') && project()?.id === current.id)
+            if (
+              response.events.some(
+                (event) => event.kind === 'command_updated' || event.kind === 'command_schedules_updated',
+              ) &&
+              project()?.id === current.id
+            )
               await refreshCommands(current);
             if (response.events.some((event) => event.kind === 'views_updated')) await refreshCustomViews(current);
             if (

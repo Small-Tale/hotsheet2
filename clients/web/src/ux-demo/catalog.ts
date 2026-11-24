@@ -83,6 +83,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('view-navigation', ['list', 'list-header', 'list-item', 'list-action-row', 'badge', 'loading-spinner']),
       cataloged('command-navigation', ['list', 'list-header', 'list-item', 'loading-spinner']),
       cataloged('command-settings-editor', ['command-navigation', 'toolbar', 'list-header']),
+      cataloged('command-schedule-dialog'),
       cataloged('drive-control'),
       cataloged('drive-options-menu'),
       cataloged('workspace-header', [

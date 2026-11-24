@@ -2046,6 +2046,14 @@ capability-aware sections when their underlying features and data contracts land
   dragging any row of the selection moves the whole selection together as one block,
   preserving relative order and adopting the drop target's group (HS2-VJYQHG). Each row
   exposes an overflow "…" menu — also opened by right-click — with Edit and Delete, and
+  AI commands add Schedule… or Manage Schedule… there (HS2-17663F). A scheduled row shows its
+  cadence, pause state, and next run. The modal schedule form uses Kerf `DialogSurface`, `Form`,
+  `RadioGroup`, `Select`, `TextField`, `Grid`, and `StateBanner`; it previews the next three local
+  occurrences through the server's recurrence engine before saving. The form supports one-time,
+  daily, weekly, monthly, yearly, and selected-date rules, an explicit time zone, exceptions,
+  pause/resume, and the three ticket/AI-session actions. A skipped occurrence links to the
+  outstanding ticket for that command. Shell and program schedules remain HS2-8J7ZRF.
+  The list still permits
   double-clicking a row edits it. The page actions are pills in the workspace action zone where ticket views put
   New ticket… (the project tab bar's far edge, or the narrow page header): a secondary outlined
   "Add group…" and the brand-filled primary "Add command…", shortened to "Group…" and "Command…" in the

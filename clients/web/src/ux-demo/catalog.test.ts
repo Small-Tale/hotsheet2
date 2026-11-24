@@ -73,6 +73,7 @@ describe('UX demo catalog', () => {
       'view-navigation',
       'command-navigation',
       'command-settings-editor',
+      'command-schedule-dialog',
       'drive-control',
       'drive-options-menu',
       'workspace-header',

@@ -17749,6 +17749,220 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
   }
 });
 
+test('schedules an AI command through Settings and the real server (HS2-17663F)', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(
+      `${server.root}/.hotsheet2/settings.json`,
+      JSON.stringify({
+        $hotsheetSchema: 1,
+        commands: [{ id: 'review', kind: 'ai', title: 'Review synthetic plan', prompt: 'Review a synthetic plan.' }],
+      }),
+    );
+    await mockProject(page);
+    await page.route(
+      /\/__hotsheet\/project-api\/demo-checkout\/(commands|checkouts\/demo-checkout\/command-schedules)(\/.*)?$/,
+      async (route) => {
+        const incoming = new URL(route.request().url());
+        const path = incoming.pathname
+          .replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', `/checkouts/${server.checkoutId}`)
+          .replace('/__hotsheet/project-api/demo-checkout/commands', `/checkouts/${server.checkoutId}/commands`);
+        const response = await proxyFetch(route, {
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      },
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Commands', exact: true }).click();
+    const row = page.locator('[data-component="command-settings-editor"] [data-command-id="review"]');
+    await expect(row).toBeVisible();
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    const dialog = page.getByRole('dialog', { name: 'Schedule Command' });
+    await expect(dialog).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath('hs2-17663f-schedule-dialog-wide-light.png'),
+      animations: 'disabled',
+    });
+    const future = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+    await dialog.getByLabel('Date').fill(future);
+    await dialog.getByLabel('Time (24-hour)').fill('09:00');
+    await dialog.getByRole('button', { name: 'Create Schedule' }).click();
+    await expect(dialog).not.toBeVisible();
+    const saved = () =>
+      server.request<
+        Array<{
+          schedule: { command_id: string; recurrence: { kind: string; date?: string }; paused: boolean };
+          next_runs: string[];
+        }>
+      >(`/checkouts/${server.checkoutId}/command-schedules`);
+    await expect.poll(async () => (await saved())[0]?.schedule.recurrence.date).toBe(future);
+    await expect(row).toContainText(`${future} at 09:00`);
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    const manage = page.getByRole('dialog', { name: 'Manage Schedule' });
+    await expect(manage).toBeVisible();
+    await page.setViewportSize({ width: 900, height: 800 });
+    await page.screenshot({
+      path: testInfo.outputPath('hs2-17663f-manage-dialog-medium-light.png'),
+      animations: 'disabled',
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(manage).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath('hs2-17663f-manage-dialog-phone-dark.png'),
+      animations: 'disabled',
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect(manage).toBeVisible();
+    await manage.getByRole('button', { name: 'Pause Schedule' }).click();
+    await expect.poll(async () => (await saved())[0]?.schedule.paused).toBe(true);
+    await expect(row).toContainText('Paused');
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    await manage.getByRole('button', { name: 'Resume Schedule' }).click();
+    await expect.poll(async () => (await saved())[0]?.schedule.paused).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath('hs2-17663f-schedule-wide-light.png'), animations: 'disabled' });
+    await page.setViewportSize({ width: 900, height: 800 });
+    await expect(row).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath('hs2-17663f-schedule-medium-light.png'),
+      animations: 'disabled',
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(row).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('hs2-17663f-schedule-phone-light.png'), animations: 'disabled' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(row).toBeVisible();
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    await expect(manage).toBeVisible();
+    await manage.getByRole('radio', { name: 'Repeating' }).check();
+    await manage.getByRole('combobox', { name: 'Repeats' }).click();
+    await page.getByRole('option', { name: 'Yearly' }).click();
+    await manage.getByRole('combobox', { name: 'Month' }).click();
+    await page.getByRole('option', { name: 'February' }).click();
+    await manage.getByRole('combobox', { name: 'On', exact: true }).click();
+    await page.getByRole('option', { name: 'Weekday Occurrence' }).click();
+    await manage.getByRole('combobox', { name: 'Occurrence' }).click();
+    await page.getByRole('option', { name: 'Third' }).click();
+    await manage.getByRole('combobox', { name: 'Weekday' }).click();
+    await page.getByRole('option', { name: 'Monday' }).click();
+    const threeRunPreview = manage.getByText(/Then .* and /);
+    await expect(threeRunPreview).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('hs2-17663f-yearly-wide-light.png'), animations: 'disabled' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(manage).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('hs2-17663f-yearly-phone-dark.png'), animations: 'disabled' });
+    await manage.locator(':scope > .kui-dialog-surface__body').evaluate((body) => {
+      body.scrollTop = body.scrollHeight;
+    });
+    await expect(manage).toBeInViewport();
+    await expect(manage.getByRole('heading', { name: 'Manage Schedule' })).toBeInViewport();
+    await expect(manage.getByRole('button', { name: 'Save Schedule' })).toBeInViewport();
+    await expect(threeRunPreview).toBeInViewport();
+    await page.screenshot({
+      path: testInfo.outputPath('hs2-17663f-yearly-preview-phone-dark.png'),
+      animations: 'disabled',
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: 'light' });
+    await manage.getByRole('button', { name: 'Cancel' }).click();
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('shows a skipped scheduled command with its outstanding ticket link (HS2-17663F)', async ({ page }, testInfo) => {
+  const server = await realTicketServer();
+  const ticketSlug = 'HS2-DEMO01';
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(
+      `${server.root}/.hotsheet2/settings.json`,
+      JSON.stringify({
+        $hotsheetSchema: 1,
+        commands: [{ id: 'review', kind: 'ai', title: 'Review synthetic plan', prompt: 'Review a synthetic plan.' }],
+      }),
+    );
+    await server.request(`/checkouts/${server.checkoutId}/command-schedules/review`, 'PUT', {
+      time_zone: 'UTC',
+      local_time: '09:00',
+      action: 'create_ticket',
+      paused: false,
+      recurrence: { kind: 'daily', start_date: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10), every: 1 },
+    });
+    await mockProject(page);
+    await page.route(
+      /\/__hotsheet\/project-api\/demo-checkout\/(commands|checkouts\/demo-checkout\/command-schedules)(\/.*)?$/,
+      async (route) => {
+        const incoming = new URL(route.request().url());
+        const path = incoming.pathname
+          .replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', `/checkouts/${server.checkoutId}`)
+          .replace('/__hotsheet/project-api/demo-checkout/commands', `/checkouts/${server.checkoutId}/commands`);
+        const response = await proxyFetch(route, {
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        if (path.endsWith('/command-schedules') && route.request().method() === 'GET') {
+          const schedules = (await response.json()) as Array<{ history: unknown[] }>;
+          await route.fulfill({
+            response,
+            json: schedules.map((item) => ({
+              ...item,
+              history: [
+                ...item.history,
+                { occurrence_date: '2026-11-24', outcome: 'skipped_open_ticket', ticket_slug: ticketSlug },
+              ],
+            })),
+          });
+          return;
+        }
+        await route.fulfill({ response });
+      },
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Commands', exact: true }).click();
+    const row = page.locator('[data-component="command-settings-editor"] [data-command-id="review"]');
+    await expect(row).toBeVisible();
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    const manage = page.getByRole('dialog', { name: 'Manage Schedule' });
+    const linkedTicket = manage.getByRole('link', { name: ticketSlug });
+    await expect(linkedTicket).toHaveAttribute('href', `#ticket-${ticketSlug}`);
+    await manage.locator(':scope > .kui-dialog-surface__body').evaluate((body) => {
+      body.scrollTop = body.scrollHeight;
+    });
+    await expect(linkedTicket).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath('hs2-17663f-skipped-wide-light.png'), animations: 'disabled' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await manage.locator(':scope > .kui-dialog-surface__body').evaluate((body) => {
+      body.scrollTop = body.scrollHeight;
+    });
+    await expect(linkedTicket).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath('hs2-17663f-skipped-phone-dark.png'), animations: 'disabled' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect(manage.getByRole('heading', { name: 'Manage Schedule' })).toBeInViewport();
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('keeps a command edit made just before a reload through the real server (HS2-25HAK3)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();

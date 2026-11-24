@@ -24,9 +24,12 @@ import { Bot, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
 
 import type { AiToolDefaults, AiToolDescriptor, CommandDefinition } from '../api';
 import { commandGroupSections } from '../command-order';
+import { scheduleCadence, scheduleNextRun } from '../command-schedule-form';
+import type { ScheduleView } from '../command-schedules';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { lucideCatalogVersion } from '../lucide-catalog';
 import { resolveCommandIcon } from './command-icon';
+import { CommandScheduleDialog, type CommandScheduleDialogProps } from './command-schedule-dialog';
 import {
   COMMAND_CUSTOMIZATION_COLORS,
   customizationContrastColor,
@@ -67,6 +70,8 @@ export interface CommandSettingsEditorProps {
    * that mounts several (the ux-demo loading and failed-load examples) gives each its own (HS2-CP5F46).
    */
   dialogId?: string;
+  schedules?: readonly ScheduleView[];
+  scheduleDialog?: CommandScheduleDialogProps;
 }
 
 const kind = (command: CommandDefinition) => command.kind ?? 'program';
@@ -83,10 +88,14 @@ function CommandRow({
   command,
   editing,
   selected,
+  schedule,
+  schedulingAvailable,
 }: {
   command: CommandDefinition;
   editing: boolean;
   selected: boolean;
+  schedule?: ScheduleView;
+  schedulingAvailable: boolean;
 }) {
   const icon = resolveCommandIcon(command.icon),
     transparent = resolveCommandColor(command.color) === TRANSPARENT_CUSTOMIZATION_COLOR,
@@ -95,11 +104,16 @@ function CommandRow({
   // Kerf owns the row geometry, hover/selected states, and the dragging and drop-position marks the
   // reorder wiring paints. The leading icon repeats the sidebar button's filled color tile through
   // Kerf's `iconTile` (KF-77AVAJ, HS2-RDX8ZY); a transparent command uses the quiet neutral tile.
-  const color = resolveCommandColor(command.color);
+  const color = resolveCommandColor(command.color),
+    nextRun = schedule ? scheduleNextRun(schedule) : undefined;
   return (
     <ListActionRow
       label={label}
-      description={TYPE_LABELS[kind(command)]}
+      description={
+        schedule
+          ? `${TYPE_LABELS[kind(command)]} · ${scheduleCadence(schedule)}${nextRun ? ` · Next ${nextRun}` : ''}`
+          : TYPE_LABELS[kind(command)]
+      }
       icon={<LucideIcon icon={icon.icon} name={icon.name} />}
       iconTile={
         transparent
@@ -119,6 +133,14 @@ function CommandRow({
         icon: <LucideIcon icon={MoreHorizontal} name="more-horizontal" />,
         items: [
           { label: 'Edit', action: 'edit-command-setting', icon: <LucideIcon icon={Pencil} name="pencil" /> },
+          ...(kind(command) === 'ai' && schedulingAvailable
+            ? [
+                {
+                  label: schedule ? 'Manage Schedule…' : 'Schedule…',
+                  action: COMMANDS_AND_AI_ACTIONS.openCommandSchedule.value,
+                },
+              ]
+            : []),
           {
             label: 'Delete',
             action: 'delete-command-setting',
@@ -349,11 +371,15 @@ function CommandGroup({
   commands,
   editingId,
   selectedIds,
+  schedules,
+  schedulingAvailable,
 }: {
   group: string;
   commands: CommandDefinition[];
   editingId?: string;
   selectedIds: ReadonlySet<string>;
+  schedules: readonly ScheduleView[];
+  schedulingAvailable: boolean;
 }) {
   const empty = commands.length === 0;
   return (
@@ -386,7 +412,13 @@ function CommandGroup({
         ) : (
           <List selectionMode="multiple" ariaLabel={group ? `${group} commands` : 'Commands'}>
             {commands.map((command) => (
-              <CommandRow command={command} editing={command.id === editingId} selected={selectedIds.has(command.id)} />
+              <CommandRow
+                command={command}
+                editing={command.id === editingId}
+                selected={selectedIds.has(command.id)}
+                schedule={schedules.find((item) => item.schedule.command_id === command.id)}
+                schedulingAvailable={schedulingAvailable}
+              />
             ))}
           </List>
         )}
@@ -430,6 +462,8 @@ export function CommandSettingsEditor({
   aiTools = [],
   aiDefaults = { tool: 'codex' },
   dialogId = COMMAND_EDITOR_DIALOG_ID,
+  schedules = [],
+  scheduleDialog,
 }: CommandSettingsEditorProps) {
   const editing = editingId ? commands.find((command) => command.id === editingId) : undefined;
   const selection = new Set(selectedIds);
@@ -460,6 +494,8 @@ export function CommandSettingsEditor({
               commands={section.commands}
               editingId={editingId}
               selectedIds={selection}
+              schedules={schedules}
+              schedulingAvailable={Boolean(scheduleDialog)}
             />
           ))}
         </ul>
@@ -531,6 +567,7 @@ export function CommandSettingsEditor({
           </div>
         ) : null}
       </PopoverDialogSurface>
+      {scheduleDialog ? <CommandScheduleDialog {...scheduleDialog} /> : null}
     </div>
   );
 }

@@ -1710,6 +1710,82 @@
       }
     },
     {
+      "key": "hotsheet-web:command-schedule-dialog",
+      "package": "hotsheet-web",
+      "id": "command-schedule-dialog",
+      "name": "CommandScheduleDialog",
+      "kind": "composition",
+      "purpose": "Schedule and manage one AI custom command with a recurrence preview.",
+      "publicExports": [
+        {
+          "name": "CommandScheduleDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/command-schedule-dialog.tsx"
+      ],
+      "source": "src/components/command-schedule-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": true,
+        "helpers": [
+          "wireCommandScheduleDialog"
+        ],
+        "sources": [
+          {
+            "export": "wireCommandScheduleDialog",
+            "source": "src/components/command-schedule-dialog-interactions.ts"
+          }
+        ],
+        "scope": "application",
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "Kerf DialogSurface owns the modal, scrollport, inset, and footer geometry."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/command-schedule-dialog.tsx",
+        "composition": "src/components/command-schedule-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:command-settings-editor",
       "package": "hotsheet-web",
       "id": "command-settings-editor",

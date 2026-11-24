@@ -570,6 +570,30 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "command-schedule-dialog",
+      "name": "CommandScheduleDialog",
+      "kind": "composition",
+      "purpose": "Schedule and manage one AI custom command with a recurrence preview.",
+      "useWhen": [
+        "A project AI command needs a checkout-local schedule."
+      ],
+      "avoidWhen": [
+        "The command is a shell or program command."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/command-schedule-dialog.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "Kerf DialogSurface owns the modal, scrollport, inset, and footer geometry."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "command-settings-editor",
       "name": "CommandSettingsEditor",
       "kind": "composition",

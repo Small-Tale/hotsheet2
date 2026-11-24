@@ -20,6 +20,7 @@ import { type CommandDropTarget } from '../command-order';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { wireAppComboboxes } from '../components/app-combobox-wiring';
+import { wireCommandScheduleDialog } from '../components/command-schedule-dialog-interactions';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { wireCommandSettingsEditor } from '../components/command-settings-editor-interactions';
 import { type ConversationExportDialogState } from '../components/conversation-export-dialog';
@@ -39,6 +40,7 @@ import { type ConversationExportDraft } from '../conversation-export';
 import { type ConversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers } from '../conversation-selection';
 import { syncDesktopWindowTheme } from '../desktop-window-theme';
+import type { createCommandSchedulesController } from '../features/command-schedules';
 import type { OrchestrationSettings } from '../features/orchestration-settings';
 import { terminalLimitChoiceValue, type TerminalLimitsSettings } from '../features/terminal-limits-settings';
 import { wireInputDialogs } from '../input-dialog-interactions';
@@ -164,6 +166,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly commandRuns: Signal<CommandRun[]>;
   readonly error: Signal<string>;
   readonly commandSettingsEditingId: Signal<string | undefined>;
+  readonly commandSchedules?: ReturnType<typeof createCommandSchedulesController>;
   readonly commandIconSearch: Signal<string>;
   readonly addCommandSetting: (projectId: string) => string;
   readonly aiLaunchDialog: ReturnType<typeof createAiLaunchDialog>;
@@ -344,6 +347,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     commandRuns,
     error,
     commandSettingsEditingId,
+    commandSchedules,
     commandIconSearch,
     addCommandSetting,
     manualModelDialog,
@@ -913,6 +917,24 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       },
     }),
   );
+  if (commandSchedules)
+    lifetime.add(
+      wireCommandScheduleDialog(document.body, {
+        ownsCommand: (id) => {
+          const current = projectId();
+          return Boolean(
+            current &&
+            commandSettingsDefinitions(current).some((command) => command.id === id && command.kind === 'ai'),
+          );
+        },
+        open: commandSchedules.open,
+        change: commandSchedules.change,
+        save: commandSchedules.save,
+        close: commandSchedules.close,
+        remove: commandSchedules.remove,
+        togglePaused: commandSchedules.togglePaused,
+      }),
+    );
   lifetime.add(
     delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.selector, (_event, target) => {
       const checked = (target as HTMLInputElement).checked;
