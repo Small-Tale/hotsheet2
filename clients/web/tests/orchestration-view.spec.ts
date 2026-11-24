@@ -941,32 +941,37 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
     await asOrchestrationProject(server);
     await server.request('/tickets', 'POST', { title: 'Ship the synthetic sign-on' });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openProject(page, server, 'Launch');
     // `plan show` as the server answers it while the planner's terminal runs and its tool has not reported
     // its session start yet (it stopped on a trust question). Every other request reaches the real server.
     let toolReady = false;
-    await page.route(/\/orchestration\/planning\/show$/, (route) =>
-      route.fulfill({
-        json: {
-          state: 'planning',
-          proposal_id: 'press-1',
-          session: {
-            session: { session_id: '01M7P8BSGHY0SJ91R2ZG39V8JC', operation_id: 'press-1', role: 'planner' },
-            server_id: '01M7P876C534DEY3F1YTD2QR8Y',
-            worker_id: 'claude-01M7P8BSGHY0SJ91R2ZG39V8JC',
-            label: 'Launch: planner',
-            alive: true,
-            busy: false,
-            role_prompt: 'pending',
-            tool_ready: toolReady,
+    let planningReads = 0;
+    // HS2-GYJHA3: opening an orchestration project starts its first planning read immediately.
+    await openProject(page, server, 'Launch', async () => {
+      await page.route(/\/orchestration\/planning\/show$/, (route) => {
+        planningReads += 1;
+        return route.fulfill({
+          json: {
+            state: 'planning',
+            proposal_id: 'press-1',
+            session: {
+              session: { session_id: '01M7P8BSGHY0SJ91R2ZG39V8JC', operation_id: 'press-1', role: 'planner' },
+              server_id: '01M7P876C534DEY3F1YTD2QR8Y',
+              worker_id: 'claude-01M7P8BSGHY0SJ91R2ZG39V8JC',
+              label: 'Launch: planner',
+              alive: true,
+              busy: false,
+              role_prompt: 'pending',
+              tool_ready: toolReady,
+            },
+            goals: [],
+            goal_count: 1,
+            steps: 0,
+            placement_automatic: false,
           },
-          goals: [],
-          goal_count: 1,
-          steps: 0,
-          placement_automatic: false,
-        },
-      }),
-    );
+        });
+      });
+    });
+    await expect.poll(() => planningReads).toBeGreaterThan(0);
     await page.locator('[data-segment-value="orchestration"]').first().click();
     const toolbar = page.locator('[data-orchestration-toolbar="no_plan"]');
     await expect(toolbar).toContainText('No Plan Yet · Planner waiting in its terminal');
