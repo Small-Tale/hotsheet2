@@ -7263,6 +7263,8 @@ export async function startHotSheetWebClient() {
     terminalPaste,
     terminalEditMenu,
     createProjectTerminal,
+    retryFailedDrawerTab: terminalDrawer.retryFailedDrawerTab,
+    closeFailedDrawerTab: terminalDrawer.closeFailedDrawerTab,
     aiLaunchConfiguration,
     createDrawerAIChat,
     openSavedConversation,

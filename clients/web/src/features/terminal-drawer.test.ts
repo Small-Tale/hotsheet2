@@ -7,7 +7,7 @@ import { drawerSelectionView, type PendingDrawerTab } from '../drawer-tab-order'
 import type { Project } from '../interactions/types';
 import { handBackOperationId } from '../orchestration-hand-back';
 import type { DrawerAIChat } from '../project-drive';
-import { createTerminalDrawerController } from './terminal-drawer';
+import { createTerminalDrawerController, DRAWER_APPEAR_TIMEOUT_MS, DRAWER_CREATE_TIMEOUT_MS } from './terminal-drawer';
 
 const project: Project = {
   id: 'a',
@@ -449,19 +449,97 @@ describe('drawer add and remove transitions (HS2-AQ40G7)', () => {
     dispose();
   });
 
-  it('removes a failed placeholder, returns to the previous tab, and reports why', async () => {
+  it('keeps a failed placeholder with recovery, then closes back to the previous tab', async () => {
     const { drawer, bindings, calls } = owner();
     bindings.terminalGroups.value = sessions('t1');
     bindings.terminalDrawerSelected.value = 't1';
     fetchMock.mockImplementation(() => Promise.resolve(new Response('no pty', { status: 500 })));
     const { views, dispose } = recordViews(bindings);
     await drawer.createProjectTerminal();
+    const failed = bindings.terminalDrawerPendingByProject.value.a[0];
+    expect(failed.failure).toBe('a: 500');
+    expect(bindings.terminalDrawerSelected.value).toBe(failed.id);
+    expect(bindings.terminalDashboardMessage.value).not.toBe('');
+    expect(calls.showToast).not.toHaveBeenCalled();
+    drawer.closeFailedDrawerTab(failed.id);
     expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
     expect(bindings.terminalDrawerSelected.value).toBe('t1');
-    expect(bindings.terminalDashboardMessage.value).not.toBe('');
-    expect(calls.showToast).toHaveBeenCalledWith(expect.stringMatching(/^Terminal could not start: /));
     expect(views).toEqual(['t1', 'pending:Terminal', 't1']);
     dispose();
+  });
+
+  it('times out a hung create, releases the queue, and retries from the failed tab (HS2-S2T4VJ)', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = sessions('t1');
+    bindings.terminalDrawerSelected.value = 't1';
+    let aborted = false;
+    fetchMock.mockImplementationOnce(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            aborted = true;
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        }),
+    );
+    fetchMock.mockImplementation(() => json({ id: 't2', alive: true, busy: false, cwd: '/work/a' }));
+    calls.refreshTerminalDashboard.mockImplementation(async () => {
+      bindings.terminalGroups.value = sessions('t1', 't2');
+      bindings.terminalDashboardLoading.value = false;
+    });
+    const first = drawer.createProjectTerminal();
+    const second = drawer.createProjectTerminal();
+    await vi.advanceTimersByTimeAsync(DRAWER_CREATE_TIMEOUT_MS);
+    await Promise.all([first, second]);
+    expect(aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const failed = bindings.terminalDrawerPendingByProject.value.a[0];
+    expect(failed.failure).toContain('15 seconds on a');
+    expect(bindings.terminalDashboardLoading.value).toBe(false);
+    expect(bindings.terminalDrawerPendingByProject.value.a).toHaveLength(1);
+    drawer.retryFailedDrawerTab(failed.id);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string).id).toBe(
+      JSON.parse(fetchMock.mock.calls[2][1]?.body as string).id,
+    );
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
+  });
+
+  it('closes a second failed retry back to the original live tab (HS2-S2T4VJ)', async () => {
+    const { drawer, bindings } = owner();
+    bindings.terminalGroups.value = sessions('t1');
+    bindings.terminalDrawerSelected.value = 't1';
+    fetchMock.mockImplementation(() => Promise.resolve(new Response('unavailable', { status: 503 })));
+    await drawer.createProjectTerminal();
+    const first = bindings.terminalDrawerPendingByProject.value.a[0];
+    drawer.retryFailedDrawerTab(first.id);
+    await vi.advanceTimersByTimeAsync(0);
+    const second = bindings.terminalDrawerPendingByProject.value.a[0];
+    expect(second.failure).toContain('503');
+    drawer.closeFailedDrawerTab(second.id);
+    expect(bindings.terminalDrawerSelected.value).toBe('t1');
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
+  });
+
+  it('fails a created terminal that never appears, then accepts a later stream update (HS2-S2T4VJ)', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = sessions('t1');
+    fetchMock.mockImplementation(() => json({ id: 't3', alive: true, busy: false, cwd: '/work/a' }));
+    const run = drawer.createProjectTerminal();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.refreshTerminalDashboard).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(DRAWER_APPEAR_TIMEOUT_MS);
+    await run;
+    expect(bindings.terminalDrawerPendingByProject.value.a[0]?.failure).toContain('did not appear');
+    drawer.closeFailedDrawerTab(bindings.terminalDrawerPendingByProject.value.a[0].id);
+
+    const later = drawer.createProjectTerminal();
+    await vi.advanceTimersByTimeAsync(0);
+    bindings.terminalGroups.value = sessions('t1', 't3');
+    await later;
+    expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
+    expect(bindings.terminalDrawerSelected.value).toBe('t3');
   });
 
   it('leaves the selection alone when the person moved to another tab while the terminal started', async () => {
@@ -504,11 +582,27 @@ describe('drawer add and remove transitions (HS2-AQ40G7)', () => {
 
     fetchMock.mockImplementation(() => Promise.resolve(new Response('down', { status: 502 })));
     await drawer.createDrawerAIChat({ tool: 'claude', model: 'm', effort: 'e' }, { connectionId: 'c3' });
+    const failed = bindings.terminalDrawerPendingByProject.value.a[0];
+    expect(bindings.terminalDrawerSelected.value).toBe(failed.id);
+    expect(failed.failure).toBe('a: 502');
+    expect(bindings.error.value).not.toBe('');
+    drawer.closeFailedDrawerTab(failed.id);
     expect(bindings.terminalDrawerSelected.value).toBe('ai-chat:c2');
     expect(bindings.terminalDrawerPendingByProject.value.a).toEqual([]);
-    expect(bindings.error.value).not.toBe('');
     expect(views.slice(-2)).toEqual(['pending:claude chat', 'ai-chat:c2']);
     dispose();
+  });
+
+  it('times out a hung AI chat create and clears its drive-pending state (HS2-S2T4VJ)', async () => {
+    const { drawer, bindings } = owner();
+    fetchMock.mockImplementation(() => new Promise<Response>(() => undefined));
+    const run = drawer.createDrawerAIChat({ tool: 'claude', model: 'm', effort: 'e' }, { connectionId: 'stuck' });
+    expect(bindings.drivePendingByProject.value.a).toBe(true);
+    await vi.advanceTimersByTimeAsync(DRAWER_CREATE_TIMEOUT_MS);
+    await run;
+    expect(bindings.drivePendingByProject.value.a).toBe(false);
+    expect(bindings.terminalDrawerPendingByProject.value.a[0].failure).toContain('15 seconds on a');
+    expect(bindings.error.value).toContain('15 seconds');
   });
 
   it('selects the neighbor before deleting the selected tab, and the grid only after the last one', async () => {

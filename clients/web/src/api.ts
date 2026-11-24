@@ -3090,16 +3090,19 @@ export class Api {
   saveAiSettings = (value: AiToolDefaults) =>
     this.parsed(parseAiToolDefaults, '/ai-settings', { method: 'PUT', body: JSON.stringify(value) });
   toolSessions = () => this.parsed(parseToolSession.list, '/drive/sessions');
-  createToolConnection = (value: {
-    tool: string;
-    checkout: string;
-    source?: string;
-    connection_id?: string;
-    session_id?: string;
-    model?: string;
-    effort?: string;
-    permission_mode?: string;
-  }) => this.parsed(parseToolConnection, '/drive/connections', { method: 'POST', body: JSON.stringify(value) });
+  createToolConnection = (
+    value: {
+      tool: string;
+      checkout: string;
+      source?: string;
+      connection_id?: string;
+      session_id?: string;
+      model?: string;
+      effort?: string;
+      permission_mode?: string;
+    },
+    signal?: AbortSignal,
+  ) => this.parsed(parseToolConnection, '/drive/connections', { method: 'POST', body: JSON.stringify(value), signal });
   sendToolTurn = (
     id: string,
     content: string,
@@ -3410,7 +3413,8 @@ export class Api {
       model?: string;
       effort?: string;
     } = {},
-  ) => this.parsed(parseTerminalInfo, '/terminals', { method: 'POST', body: JSON.stringify(value) });
+    signal?: AbortSignal,
+  ) => this.parsed(parseTerminalInfo, '/terminals', { method: 'POST', body: JSON.stringify(value), signal });
   deleteTerminal = (id: string) =>
     this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}`, { method: 'DELETE' });
   /** Clear only the stopped episode the user saw; a newer failure remains visible. */

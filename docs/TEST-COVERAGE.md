@@ -1,5 +1,13 @@
 # Feature Coverage Matrix
 
+HS2-S2T4VJ: `clients/web/src/features/terminal-drawer.test.ts` covers an aborted hung
+create, serialized second create, Retry/Close, a created terminal missing from the
+dashboard, and a later stream update. `clients/web/src/components/terminal-drawer.test.ts`
+covers the failed tab's cause and controls. The real-parent
+`clients/web/tests/terminal-drawer-transitions.spec.ts` hangs a create route, verifies
+the busy banner clears and the failed tab is actionable, then retries into a live tab.
+Wide, medium, narrow, restored-wide, and dark captures document the failure state.
+
 HS2-JRQG1T: failed AI terminal launches retain a bounded recent diagnostic tab,
 exit status, and existing terminal scrollback. The manager's retention and expiry
 test, broker and in-process HTTP launch tests, and drawer banner render test cover

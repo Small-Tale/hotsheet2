@@ -109,6 +109,8 @@ export interface TerminalInteractionsDependencies {
   readonly terminalDrawerVisible: Signal<boolean>;
   readonly toggleTerminalDrawerMaximized: () => void;
   readonly selectDrawerItem: (id: string) => void;
+  readonly retryFailedDrawerTab: (id: string) => void;
+  readonly closeFailedDrawerTab: (id: string) => void;
   readonly enterMobileTerminalFocus: (terminalId: string, search?: boolean) => void;
   readonly exitMobileTerminalFocus: () => void;
   /** Open or close the full-screen terminal's search bar (HS2-7HPXCY). */
@@ -213,6 +215,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalDrawerVisible,
     toggleTerminalDrawerMaximized,
     selectDrawerItem,
+    retryFailedDrawerTab,
+    closeFailedDrawerTab,
     enterMobileTerminalFocus,
     exitMobileTerminalFocus,
     setMobileTerminalSearch,
@@ -991,6 +995,16 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
           data(target).itemId ||
           'grid',
       );
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.retryFailedDrawerTab.selector, (_event, target) => {
+      retryFailedDrawerTab(data(target).pendingTabId!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.closeFailedDrawerTab.selector, (_event, target) => {
+      closeFailedDrawerTab(data(target).pendingTabId!);
     }),
   );
   lifetime.add(

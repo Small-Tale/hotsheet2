@@ -170,3 +170,64 @@ for (const width of [1280, 900, 390]) {
     expect(claims.filter((claim) => !/terminals\/(terminal-new|second)\/attach/.test(claim.url))).toEqual([]);
   });
 }
+
+test('a hung terminal create becomes a recoverable drawer error and Retry can start a session (HS2-S2T4VJ)', async ({
+  page,
+}) => {
+  await installTerminalFixture(page);
+  let attempts = 0;
+  const first = deferred();
+  await page.route(
+    (url) => url.pathname === `${project.apiPath}/terminals`,
+    async (route) => {
+      if (route.request().method() !== 'POST')
+        return route.fulfill({
+          json: [
+            { id: 'nano', alive: true, busy: true, cwd: project.root, progress: 50 },
+            ...(attempts >= 2 ? [{ id: 'terminal-retry', alive: true, busy: false, cwd: project.root }] : []),
+          ],
+        });
+      attempts += 1;
+      if (attempts === 1) {
+        await first.promise;
+        try {
+          await route.abort('failed');
+        } catch {
+          /* The client already aborted the timed-out request. */
+        }
+        return;
+      }
+      await route.fulfill({ status: 201, json: { id: 'terminal-retry', alive: true, busy: false, cwd: project.root } });
+    },
+  );
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
+  await expect(drawer).toHaveAttribute('data-mode', 'pending');
+  await expect(drawer).toHaveAttribute('data-mode', 'failed', { timeout: 20_000 });
+  first.resolve();
+  await expect(drawer.getByText('Terminal could not start')).toBeVisible();
+  await expect(drawer.getByText(/15 seconds/)).toBeVisible();
+  await expect(page.getByText('Preparing terminals')).toHaveCount(0);
+  for (const width of [1280, 900, 390, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect(drawer).toHaveAttribute('data-mode', 'failed');
+    await expect(drawer.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(drawer.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+    await drawer.screenshot({ path: `target/visual-captures/hs2-s2t4vj-failed-${width}.png` });
+    if (width === 1280 || width === 390)
+      await page.screenshot({ path: `target/visual-captures/hs2-s2t4vj-app-${width}.png` });
+  }
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-s2t4vj-after-2048.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await drawer.screenshot({ path: 'target/visual-captures/hs2-s2t4vj-failed-1280-dark.png' });
+  await drawer.getByRole('button', { name: 'Retry' }).click();
+  await expect.poll(() => attempts).toBe(2);
+  await expect(drawer.locator('[data-tab-kind="terminal"][data-terminal-id="terminal-retry"]')).toBeVisible();
+  await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
+});

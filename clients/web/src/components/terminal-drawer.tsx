@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './terminal-drawer.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
@@ -403,7 +404,9 @@ export function TerminalDrawer({
           id={tab.id}
           name={tab.name}
           selected={selected === tab.id}
-          pending
+          pending={!tab.failure}
+          closable={false}
+          draggable={false}
           size="compact"
           labelMaxWidth={width <= 768 ? 112 : 144}
           selectAction="select-drawer-item"
@@ -415,7 +418,13 @@ export function TerminalDrawer({
               <LucideIcon icon={SquareTerminal} name="square-terminal" />
             )
           }
-          trailing={<LoadingSpinner size="s" />}
+          trailing={
+            tab.failure ? (
+              <LucideIcon icon={TriangleAlert} name="triangle-alert" label="Failed" />
+            ) : (
+              <LoadingSpinner size="s" />
+            )
+          }
         />
       )),
     ];
@@ -424,7 +433,17 @@ export function TerminalDrawer({
       class="terminal-drawer"
       data-component="terminal-drawer"
       data-project-id={projectId}
-      data-mode={selectedChat ? 'ai-chat' : selectedPending ? 'pending' : selected === 'grid' ? 'grid' : 'dedicated'}
+      data-mode={
+        selectedChat
+          ? 'ai-chat'
+          : selectedPending?.failure
+            ? 'failed'
+            : selectedPending
+              ? 'pending'
+              : selected === 'grid'
+                ? 'grid'
+                : 'dedicated'
+      }
       data-maximized={String(maximized)}
       data-focus-mode={String(focusMode)}
       data-terminal-drawer-measure="true"
@@ -653,6 +672,29 @@ export function TerminalDrawer({
           selectedChat.content
         ) : selectedSession ? (
           <TerminalSession session={selectedSession} mobile={mobile} focus={focusMode} />
+        ) : selectedPending?.failure ? (
+          <EmptyState
+            title={`${selectedPending.name} could not start`}
+            detail={selectedPending.failure}
+            icon={<LucideIcon icon={TriangleAlert} name="triangle-alert" />}
+            action={
+              <Row gap="xs">
+                <Button
+                  emphasis="primary"
+                  action={TERMINALS_ACTIONS.retryFailedDrawerTab.value}
+                  rootAttributes={{ 'data-pending-tab-id': selectedPending.id }}
+                >
+                  Retry
+                </Button>
+                <Button
+                  action={TERMINALS_ACTIONS.closeFailedDrawerTab.value}
+                  rootAttributes={{ 'data-pending-tab-id': selectedPending.id }}
+                >
+                  Close
+                </Button>
+              </Row>
+            }
+          />
         ) : selectedPending ? (
           <EmptyState title={`Starting ${selectedPending.name}…`} busy />
         ) : (

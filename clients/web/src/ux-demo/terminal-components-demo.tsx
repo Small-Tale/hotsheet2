@@ -78,6 +78,7 @@ export const editMenuDemo = signal<TerminalEditMenuState | undefined>(undefined)
   editMenuDemoOutput = signal('');
 export const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 export const terminalDashboardHaltCleared = signal(false);
+export const drawerCreateFailureDemo = signal<'failed' | 'retried' | 'closed'>('failed');
 
 // HS2-174S6X: the rail's terminal search (HS2-TWZSZF) and match count (HS2-M5QPED) over a real Kerf
 // SearchField model. A demo terminal has no xterm search addon, so each state supplies the results a
@@ -131,6 +132,7 @@ export function stepTerminalSearchDemo(direction: TerminalSearchDirection): void
 
 export function resetTerminalDrawerDemo(root?: ParentNode): void {
   applyTerminalSearchDemoState('collapsed');
+  drawerCreateFailureDemo.value = 'failed';
   if (root) syncSettingsControls(root, 'terminal-drawer', { values: { 'search-state': 'collapsed' } });
 }
 
@@ -250,6 +252,45 @@ export function TerminalDrawerDemo() {
           contextMenu={terminalDashboardContextMenu.value}
           aiProviders={TERMINAL_DRAWER_DEMO_PROVIDERS}
           defaultAiProvider="claude"
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Failed session creation"
+        viewport={{ ...drawerFrame, height: 'medium' }}
+        rootAttributes={{ 'data-demo-scope': 'drawer-create-failure-demo' }}
+      >
+        <TerminalDrawer
+          projectId="demo"
+          projectName="Demo project"
+          sessions={[
+            shell,
+            ...(drawerCreateFailureDemo.value === 'retried'
+              ? [{ ...shell, id: 'demo-retry', title: 'Claude 1', busy: false }]
+              : []),
+          ]}
+          pendingTabs={
+            drawerCreateFailureDemo.value === 'failed'
+              ? [
+                  {
+                    id: 'pending:demo',
+                    name: 'Claude',
+                    kind: 'terminal',
+                    failure: 'Demo project did not respond. Check the server and try again.',
+                  },
+                ]
+              : []
+          }
+          width={900}
+          height={320}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId={
+            drawerCreateFailureDemo.value === 'failed'
+              ? 'pending:demo'
+              : drawerCreateFailureDemo.value === 'retried'
+                ? 'demo-retry'
+                : 'shell'
+          }
         />
       </CatalogExample>
       {/* The rail's terminal search beside Hide (HS2-TWZSZF) and its match count (HS2-M5QPED, HS2-174S6X).
@@ -753,6 +794,19 @@ export function TerminalRenameDialogDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `${TERMINALS_ACTIONS.retryFailedDrawerTab.selector}, ${TERMINALS_ACTIONS.closeFailedDrawerTab.selector}`,
+      (_event, target) => {
+        if (target.closest('[data-demo-scope="drawer-create-failure-demo"]'))
+          drawerCreateFailureDemo.value = target.matches(TERMINALS_ACTIONS.retryFailedDrawerTab.selector)
+            ? 'retried'
+            : 'closed';
+      },
+    ),
+  );
   // The search specimen's count yields its room on a narrow rail through production's wiring (HS2-HPDX81).
   demoListeners.add(
     wireTerminalSearchCountFit(root, (compact) => {

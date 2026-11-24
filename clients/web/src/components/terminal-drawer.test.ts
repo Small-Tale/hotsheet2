@@ -144,6 +144,29 @@ describe('TerminalDrawer', () => {
     expect(pending('one')).toContain('data-pending-tab-id="pending:1"');
   });
 
+  it('HS2-S2T4VJ shows a failed drawer tab with the cause and Retry and Close actions', () => {
+    const markup = String(
+      TerminalDrawer({
+        projectId: 'project',
+        projectName: 'Project',
+        sessions,
+        pendingTabs: [{ id: 'pending:1', name: 'Claude', kind: 'terminal', failure: 'Server unreachable on Project.' }],
+        width: 900,
+        height: 320,
+        fitAcross: 2,
+        fitHigh: 2,
+        selectedId: 'pending:1',
+      }),
+    );
+    expect(markup).toContain('data-mode="failed"');
+    expect(markup).toContain('Claude could not start');
+    expect(markup).toContain('Server unreachable on Project.');
+    expect(markup).toContain('data-action="retry-failed-drawer-tab"');
+    expect(markup).toContain('data-action="close-failed-drawer-tab"');
+    expect(markup).not.toContain('Starting Claude…');
+    expect(markup).not.toContain('data-component="terminal-dashboard"');
+  });
+
   it('HS2-JVSFES omits the removed message action even on a capable selected terminal', () => {
     expect(render('one')).not.toContain('Message AI Session');
     const markup = String(

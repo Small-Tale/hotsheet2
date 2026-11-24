@@ -48,6 +48,8 @@ export const TERMINALS_ACTIONS = {
   toggleTerminalDrawer: action('toggle-terminal-drawer'),
   toggleTerminalDrawerMaximize: action('toggle-terminal-drawer-maximize'),
   selectDrawerItem: action('select-drawer-item'),
+  retryFailedDrawerTab: action('retry-failed-drawer-tab'),
+  closeFailedDrawerTab: action('close-failed-drawer-tab'),
   createTerminalDrawerItem: action('create-terminal-drawer-item'),
   openSavedConversation: action('open-saved-conversation'),
   createProjectTerminal: action('create-project-terminal'),

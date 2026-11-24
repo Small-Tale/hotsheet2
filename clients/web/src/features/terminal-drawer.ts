@@ -1,4 +1,4 @@
-import { batch, type Signal } from 'kerfjs';
+import { batch, effect, type Signal } from 'kerfjs';
 
 import { type AiToolDefaults, Api, ApiHttpError, type CommandDefinition, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
@@ -29,6 +29,8 @@ import { hideNewTerminalInNamedGroups, type parseTerminalVisibilityState } from 
 
 type TerminalVisibilityState = ReturnType<typeof parseTerminalVisibilityState>;
 type ProjectActivation = { project: Project; generation: number; cached: boolean };
+export const DRAWER_CREATE_TIMEOUT_MS = 15_000;
+export const DRAWER_APPEAR_TIMEOUT_MS = 10_000;
 
 /** Live application bindings the terminal drawer owner reads and writes (HS2-BSSWGV). */
 export interface TerminalDrawerDependencies {
@@ -127,6 +129,60 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   let lastAsks: readonly PendingOrchestratorAsk[] = [];
   let drawerInputFocusGeneration = 0;
   let pendingTabSequence = 0;
+  const pendingRetries = new Map<string, () => void>();
+  const pendingPrevious = new Map<string, string>();
+  async function withCreateDeadline<T>(name: string, current: Project, run: (signal: AbortSignal) => Promise<T>) {
+    const controller = new AbortController();
+    let timer: number | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = window.setTimeout(() => {
+        reject(
+          new Error(`${name} did not start within 15 seconds on ${current.name}. Check the server and try again.`),
+        );
+        controller.abort();
+      }, DRAWER_CREATE_TIMEOUT_MS);
+    });
+    try {
+      return await Promise.race([run(controller.signal), deadline]);
+    } finally {
+      if (timer !== undefined) window.clearTimeout(timer);
+    }
+  }
+  function terminalAppeared(projectId: string, terminalId: string): Promise<void> {
+    if (
+      terminalGroups.value.some(
+        (group) => group.projectId === projectId && group.sessions.some((s) => s.id === terminalId),
+      )
+    )
+      return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      let stop: () => void = () => undefined;
+      let settled = false;
+      const settle = (present: boolean) => {
+        if (settled) return;
+        settled = true;
+        stop();
+        window.clearTimeout(timer);
+        if (present) resolve();
+        else
+          reject(new Error('The server accepted the session, but it did not appear in the terminal list. Try again.'));
+      };
+      const timer = window.setTimeout(() => {
+        settle(false);
+      }, DRAWER_APPEAR_TIMEOUT_MS);
+      stop = effect(() => {
+        if (
+          terminalGroups.value.some(
+            (group) => group.projectId === projectId && group.sessions.some((s) => s.id === terminalId),
+          )
+        )
+          settle(true);
+      });
+      queueMicrotask(() => {
+        if (settled) stop();
+      });
+    });
+  }
   /**
    * Select a new pending tab at once, so the drawer shows a busy placeholder rather than falling back
    * to the Project grid (which would mount and resize every terminal) while the create resolves
@@ -139,6 +195,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
       ...terminalDrawerPendingByProject.value,
       [projectId]: [...(terminalDrawerPendingByProject.value[projectId] ?? []), tab],
     };
+    pendingPrevious.set(tab.id, previous);
     if (previous !== tab.id) exitMobileTerminalFocus();
     // Not remembered: a reload never restores a placeholder.
     terminalDrawerSelected.value = tab.id;
@@ -156,20 +213,45 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   function pendingTabSelected(projectId: string, tab: PendingDrawerTab) {
     return project()?.id === projectId && terminalDrawerSelected.value === tab.id;
   }
-  /**
-   * A failed create removes its placeholder and returns to where the person was. The caller records
-   * the reason where it persists; `toast` also announces it when that record may be out of view.
-   */
+  /** Keep the failure where it happened, with explicit recovery even after a request times out. */
   function failPendingTab(
     projectId: string,
     pending: { tab: PendingDrawerTab; previous: string },
     message: string,
     toast: boolean,
   ) {
-    // Select first: removing a still-selected placeholder would leave the selection unknown (the grid).
-    if (pendingTabSelected(projectId, pending.tab)) selectDrawerItem(pending.previous, false);
-    updatePendingTab(projectId, pending.tab.id, undefined);
-    if (toast) showToast(`${pending.tab.name} could not start: ${message}`);
+    const current = (terminalDrawerPendingByProject.value[projectId] ?? []).find((tab) => tab.id === pending.tab.id);
+    if (!current) return;
+    const visibleHere =
+      project()?.id === projectId &&
+      (terminalDrawerSelected.value === current.id || terminalDrawerSelected.value === current.resolvedId);
+    if (terminalDrawerSelected.value === current.resolvedId) selectDrawerItem(current.id, false);
+    const projectName = projects.value.find((item) => item.id === projectId)?.name ?? projectId;
+    updatePendingTab(projectId, pending.tab.id, {
+      ...current,
+      resolvedId: undefined,
+      failure: message.includes(projectName) ? message : `${projectName}: ${message}`,
+    });
+    if (toast && !visibleHere) showToast(`${pending.tab.name} could not start: ${message}`);
+  }
+  function closeFailedDrawerTab(id: string) {
+    const current = project();
+    if (!current) return;
+    const tab = (terminalDrawerPendingByProject.value[current.id] ?? []).find((item) => item.id === id);
+    if (!tab?.failure) return;
+    if (terminalDrawerSelected.value === id) selectDrawerItem(pendingPrevious.get(id) ?? 'grid', false);
+    updatePendingTab(current.id, id, undefined);
+    pendingRetries.delete(id);
+    pendingPrevious.delete(id);
+  }
+  function retryFailedDrawerTab(id: string) {
+    const retry = pendingRetries.get(id);
+    if (!retry) return;
+    const previous = pendingPrevious.get(id) ?? 'grid';
+    retry(); // The new pending tab is selected before the failed one is removed.
+    const newId = terminalDrawerSelected.value;
+    if (newId !== id && isPendingDrawerTabId(newId)) pendingPrevious.set(newId, previous);
+    closeFailedDrawerTab(id);
   }
   function focusDrawerTab(projectId: string, id: string) {
     const scheduled = document.activeElement;
@@ -298,22 +380,37 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     terminalCreateChain = next.catch(() => undefined);
     return next;
   }
-  async function createProjectTerminal(selection?: AiToolDefaults) {
+  async function createProjectTerminal(selection?: AiToolDefaults, requestedId = browserRandomId()) {
     const current = project();
     if (!current) return;
     const pending = beginPendingTab(current.id, selection ? aiToolLabel(selection.tool) : 'Terminal', 'terminal');
+    pendingRetries.set(pending.tab.id, () => void createProjectTerminal(selection, requestedId));
     await queueTerminalCreate(async () => {
       if (project()?.id !== current.id) {
         updatePendingTab(current.id, pending.tab.id, undefined);
+        pendingRetries.delete(pending.tab.id);
+        pendingPrevious.delete(pending.tab.id);
         return;
       }
       terminalDashboardLoading.value = true;
       terminalDashboardMessage.value = '';
       try {
-        const created = await new Api(current.apiPath).createTerminal({
-          cwd: current.root,
-          ...(selection ? { connect: selection.tool, model: selection.model, effort: selection.effort } : {}),
-        });
+        const created = await withCreateDeadline(pending.tab.name, current, (signal) =>
+          new Api(current.apiPath).createTerminal(
+            {
+              id: requestedId,
+              cwd: current.root,
+              ...(selection ? { connect: selection.tool, model: selection.model, effort: selection.effort } : {}),
+            },
+            signal,
+          ),
+        );
+        if (project()?.id !== current.id) {
+          updatePendingTab(current.id, pending.tab.id, undefined);
+          pendingRetries.delete(pending.tab.id);
+          pendingPrevious.delete(pending.tab.id);
+          return;
+        }
         persistTerminalVisibility(
           hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${created.id}`),
         );
@@ -326,7 +423,10 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
           selectDrawerItem(created.id);
         }
         await refreshTerminalDashboard();
+        await terminalAppeared(current.id, created.id);
         updatePendingTab(current.id, pending.tab.id, undefined);
+        pendingRetries.delete(pending.tab.id);
+        pendingPrevious.delete(pending.tab.id);
         if (selected) focusDrawerTab(current.id, created.id);
       } catch (reason) {
         const message = reason instanceof Error ? reason.message : String(reason);
@@ -347,10 +447,15 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
       terminalDashboardLoading.value = true;
       terminalDashboardMessage.value = '';
       try {
-        const created = await new Api(current.apiPath).createTerminal({
-          shell_command: command.command,
-          cwd: command.cwd || current.root,
-        });
+        const created = await withCreateDeadline(command.title, current, (signal) =>
+          new Api(current.apiPath).createTerminal(
+            {
+              shell_command: command.command,
+              cwd: command.cwd || current.root,
+            },
+            signal,
+          ),
+        );
         createdId = created.id;
         saveTerminalName(current.id, created.id, command.title);
         persistTerminalVisibility(
@@ -385,18 +490,26 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     }
     const name = options.drive ? `${aiToolLabel(selection.tool)} Drive` : `${aiToolLabel(selection.tool)} chat`,
       pending = beginPendingTab(current.id, name, 'ai-chat');
+    pendingRetries.set(pending.tab.id, () => void createDrawerAIChat(selection, { ...options, connectionId }));
     drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
     try {
-      const created = await new Api(current.apiPath).createToolConnection({
-        tool: selection.tool,
-        checkout: current.id,
-        connection_id: connectionId,
-        model: selection.model,
-        effort: selection.effort,
-        ...(selection.permission_mode ? { permission_mode: selection.permission_mode } : {}),
-      });
+      const created = await withCreateDeadline(name, current, (signal) =>
+        new Api(current.apiPath).createToolConnection(
+          {
+            tool: selection.tool,
+            checkout: current.id,
+            connection_id: connectionId,
+            model: selection.model,
+            effort: selection.effort,
+            ...(selection.permission_mode ? { permission_mode: selection.permission_mode } : {}),
+          },
+          signal,
+        ),
+      );
       if (project()?.id !== current.id) {
         updatePendingTab(current.id, pending.tab.id, undefined);
+        pendingRetries.delete(pending.tab.id);
+        pendingPrevious.delete(pending.tab.id);
         return;
       }
       driveConnectionsByProject.value = {
@@ -424,6 +537,8 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
         };
         selectDrawerItem(tab.id);
         updatePendingTab(current.id, pending.tab.id, undefined);
+        pendingRetries.delete(pending.tab.id);
+        pendingPrevious.delete(pending.tab.id);
       });
       persistTerminalVisibility(hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${tab.id}`));
       setTerminalDrawerVisible(true);
@@ -658,6 +773,8 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     createShellCommandTerminal,
     createDrawerAIChat,
     closeDrawerTabIds,
+    closeFailedDrawerTab,
+    retryFailedDrawerTab,
     closeTerminalIds,
     closeDrawerAIChat,
     messageTerminalSession,

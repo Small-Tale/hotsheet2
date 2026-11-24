@@ -4272,10 +4272,14 @@ size. A new terminal, AI shell, or AI chat appears at once as a selected pending
 `EmptyState` ("Starting Claude…"). The pending tab is not closable, draggable, or remembered as
 the drawer selection. When the server answers, the placeholder stays under the created id until
 the refreshed snapshot carries the item, and then the live tab replaces it in place. If the
-person selected another tab meanwhile, the new item does not take the selection. A failed create
-removes the placeholder, returns to the previously selected tab, and reports the reason: a
-terminal failure shows a toast and keeps the drawer message, and an AI chat failure keeps the
-app error. Closing the selected tab selects its neighbor before the delete request, and returns
+person selected another tab meanwhile, the new item does not take the selection. A create that
+does not respond within 15 seconds is aborted, so the terminal-create queue continues and the
+server-busy indication clears (HS2-S2T4VJ). Once a terminal is accepted, its tab waits up to 10
+seconds for the authoritative dashboard state to include it; a change-stream update may complete
+that wait without polling. A rejected or timed-out create keeps its tab with the project-specific
+error and **Retry** and **Close** actions. Closing the failed tab returns to the prior selection;
+Retry starts a new attempt. A terminal failure also shows a toast when its failed tab is out of view and keeps the drawer message,
+while an AI chat failure keeps the app error. Closing a live selected tab selects its neighbor before the delete request, and returns
 to the tab if the delete fails. Only closing the last tab shows the grid.
 Double-clicking non-interactive space in the drawer rail toggles that measured maximum
 and the last manually resized height (or 320px before the first resize); tab and action

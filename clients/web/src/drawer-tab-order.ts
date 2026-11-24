@@ -115,6 +115,8 @@ export interface PendingDrawerTab {
   name: string;
   kind: 'terminal' | 'ai-chat';
   resolvedId?: string;
+  /** Creation failed; the tab remains available for Retry or Close (HS2-S2T4VJ). */
+  failure?: string;
 }
 
 export const PENDING_DRAWER_TAB_PREFIX = 'pending:';
