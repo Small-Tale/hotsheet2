@@ -17363,6 +17363,7 @@ test('serves the repository Quality commands from a real server and queues Every
           category: 'task',
           priority: 'highest',
           up_next: true,
+          tags: ['hs2-command:quality-everything'],
           actor: { role: 'human' },
         },
       ]);
@@ -17419,6 +17420,7 @@ test('queues a custom AI command as an urgent Up Next ticket and signals an avai
         category: 'task',
         priority: 'highest',
         up_next: true,
+        tags: ['hs2-command:review'],
         actor: { role: 'human' },
       },
     ]);

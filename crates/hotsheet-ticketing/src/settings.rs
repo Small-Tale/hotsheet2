@@ -431,6 +431,29 @@ impl Settings {
                 }
             })?;
         }
+        if key == crate::command_schedules::SETTING {
+            if scope != Scope::Local {
+                return Err(invalid_value(
+                    key,
+                    "command schedules must be project-local",
+                ));
+            }
+            let records: Vec<crate::command_schedules::ScheduleRecord> =
+                serde_json::from_value(value.clone()).map_err(|source| SettingsError::Invalid {
+                    key: key.into(),
+                    source,
+                })?;
+            let mut ids = std::collections::HashSet::new();
+            for record in records {
+                record
+                    .schedule
+                    .validate()
+                    .map_err(|reason| invalid_value(key, &reason))?;
+                if !ids.insert(record.schedule.command_id) {
+                    return Err(invalid_value(key, "duplicate schedule command_id"));
+                }
+            }
+        }
         Ok(())
     }
 

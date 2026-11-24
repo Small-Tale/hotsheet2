@@ -2,6 +2,9 @@ import type { CommandDefinition, ToolConnection } from './api';
 
 export const HOTSHEET_SKILL_SIGNAL = '$hotsheet';
 
+/** Manual and scheduled tickets share this provenance for the same-command guard (HS2-G5J2E7). */
+export const customAiCommandTag = (commandId: string) => `hs2-command:${commandId}`;
+
 export function customAiCommandTicket(command: CommandDefinition) {
   return {
     title: command.title.trim(),
@@ -9,6 +12,7 @@ export function customAiCommandTicket(command: CommandDefinition) {
     category: 'task',
     priority: 'urgent',
     up_next: true,
+    tags: [customAiCommandTag(command.id)],
   } as const;
 }
 

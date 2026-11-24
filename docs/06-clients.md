@@ -1069,6 +1069,19 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   client also sends `$hotsheet` so that connection re-reads and works the prioritized
   queue. Ticket creation remains the authoritative action and succeeds when no connection
   is available or the optional signal fails. Optional icon/color metadata controls the sidebar presentation.
+  Manual and scheduled AI command tickets carry the stable `hs2-command:<command-id>`
+  provenance tag (HS2-G5J2E7). Scheduling is checkout-local and supports one-time,
+  daily, weekly, monthly, yearly, and selected-date recurrences with bounds and
+  date exceptions. Every eligible occurrence creates the same highest-priority
+  Up Next task before any AI session is asked to work it; an incomplete ticket
+  from the same command skips that occurrence. A one-time occurrence missed while
+  the host is offline creates its ticket on return. A missing daylight-saving
+  wall time runs once at the next valid local minute, and a repeated time uses
+  its first occurrence. An occurrence's local date is its durable identity, so
+  a restart or delivery retry cannot create a second ticket for it. The local
+  schedule API lists the next three instants and recent outcomes; a draft can
+  request the same preview without saving. Auto-start delivery is tracked by
+  HS2-MB3BQE, and the schedule editor by HS2-17663F.
   Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling. Press-and-hold
   remains reserved for output/history. A context or overflow menu will provide “Run in

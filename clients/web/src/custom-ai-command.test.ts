@@ -23,6 +23,7 @@ describe('custom AI commands', () => {
       category: 'task',
       priority: 'urgent',
       up_next: true,
+      tags: ['hs2-command:review'],
     });
     expect(HOTSHEET_SKILL_SIGNAL).toBe('$hotsheet');
   });

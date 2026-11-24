@@ -266,6 +266,8 @@ type LiveProviderCache = Arc<
 
 #[derive(Clone)]
 pub struct AppState {
+    /// Wakes the checkout-local command recurrence loop after schedule edits.
+    pub(crate) command_schedule_kick: Arc<tokio::sync::Notify>,
     remote_runtime: Option<Arc<hotsheet_cli::remote_servers::RemoteRuntime>>,
     orchestration_runtime: Option<Arc<hotsheet_cli::orchestration::OrchestrationRuntime>>,
     store: FsStore,
@@ -638,6 +640,7 @@ impl AppState {
                 );
             }));
         Self {
+            command_schedule_kick: Arc::new(tokio::sync::Notify::new()),
             store,
             remote_runtime: None,
             orchestration_runtime: None,
@@ -1780,6 +1783,19 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/commands",
             get(list_checkout_commands).put(save_checkout_commands),
+        )
+        .route(
+            "/checkouts/{reference}/command-schedules",
+            get(routes::command_schedules::list),
+        )
+        .route(
+            "/checkouts/{reference}/command-schedules/preview",
+            post(routes::command_schedules::preview),
+        )
+        .route(
+            "/checkouts/{reference}/command-schedules/{command_id}",
+            axum::routing::put(routes::command_schedules::put)
+                .delete(routes::command_schedules::delete),
         )
         .route(
             "/checkouts/{reference}/command-groups",
