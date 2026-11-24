@@ -3756,6 +3756,17 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
 - `orchestration_readiness.rs # hs2_zh9c6w` (CLI) sends `--require toolchain=node>=20`
   and `tool=codex>=0.40` as those strings.
 
+### Redo of a scheduler session's run (HS2-DBCN9N)
+
+- `tests/provisional.rs # hs2_dbcn9n` places an orchestrator-owned session on the
+  reopened run and forgets every `work_start` rule: a remembered `session_start`
+  rule lets the redo cancel at once with nothing asked (repeated reconciliation adds
+  nothing); without it the card asks `session_start` for `codex` under the `redo-`
+  operation, unanswered reconciliations do nothing and repeat the one request,
+  Allow Once cancels as the redo (not a person's hold), and a denial falls back to the
+  HS2-2K0DM8 ask once. It pinned a defect: the check carried no load, so the policy
+  always refused it.
+
 ### Requirements on a manual dispatch (HS2-061YTB)
 
 - `tests/readiness.rs # hs2_061ytb` dispatches a planned ticket whose step needs

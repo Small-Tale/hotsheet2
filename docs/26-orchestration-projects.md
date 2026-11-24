@@ -4855,7 +4855,10 @@ orchestration ticket, and the person answers with the run's existing controls.
   - The cancel needs the permission a replacement start needs. When an
     orchestrator-owned session works the run, that is `session_start` for the session's
     tool; otherwise it is `work_start`. The existing permission card and remembered
-    rules answer it, under one operation id per reopen (`redo-<assignment>-<n>`).
+    rules answer it, under one operation id per reopen (`redo-<assignment>-<n>`). The
+    `session_start` check carries the load the replacement would start under, with the
+    replaced session not counted, so the policy's caps judge it as they judge the
+    scheduler's own start (HS2-DBCN9N; before, it carried none and was always refused).
   - Until a person answers, nothing is done to the run. Each reconciliation repeats the
     same request, and an answer wakes the scheduler, whose pass reconciles.
   - A denial, or a policy that refuses that start, falls back to the `FEEDBACK NEEDED`
