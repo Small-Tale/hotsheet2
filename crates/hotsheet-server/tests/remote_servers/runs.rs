@@ -845,7 +845,7 @@ async fn hs2_bdnj5s_target_feed_sees_writes_made_outside_the_server() {
         .unwrap();
     assert_eq!(checkout.sources.len(), 2, "{:?}", checkout.sources);
     let connection_for = |root: &std::path::Path| {
-        let canonical = root.canonicalize().unwrap();
+        let canonical = hotsheet_sync::paths::canonicalize(root).unwrap();
         checkout
             .sources
             .iter()
