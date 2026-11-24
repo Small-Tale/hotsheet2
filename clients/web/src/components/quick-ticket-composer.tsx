@@ -3,6 +3,7 @@ import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './quick-ticket-composer.css';
 
 import { Button } from '@kerfjs/ui/button';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -17,7 +18,9 @@ import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../int
 import { SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { NEW_TICKET_COMPOSER_DROP_KEY, NEW_TICKET_LAUNCHER_DROP_KEY } from '../ticket-drop-target';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
+import { type TicketPriority } from './priority-presentation';
 import { TicketCategorySelect } from './ticket-category-select';
+import { TicketPrioritySelect } from './ticket-priority-select';
 
 /** The warning foreground of the composer's attachment notices. */
 const WARNING_TEXT = foregroundColorVar('--wa-color-warning-on-quiet');
@@ -28,6 +31,10 @@ export interface QuickTicketComposerProps {
   details?: string;
   category?: string;
   upNext?: boolean;
+  /** The new ticket's priority (HS2-V72HCC). */
+  priority?: TicketPriority;
+  /** Create the ticket in Backlog instead of Not Started (HS2-V72HCC); Up Next clears it. */
+  backlog?: boolean;
   providerName?: string;
   /** The project default, which may differ from the selected or only writable source. */
   defaultSourceName?: string;
@@ -144,6 +151,8 @@ export function QuickTicketComposer({
   details = '',
   category = 'task',
   upNext = false,
+  priority = 'default',
+  backlog = false,
   providerName = 'Hot Sheet',
   defaultSourceName = providerName,
   sourceIsDefault = true,
@@ -220,6 +229,14 @@ export function QuickTicketComposer({
             >
               <LucideIcon size="s" icon={Star} name="star" appearance={upNext ? 'solid' : 'outline'} />
             </button>
+          </div>
+          <div class="quick-ticket-composer__placement">
+            <div class="quick-ticket-composer__priority">
+              <TicketPrioritySelect name="new-ticket-priority" label="Priority" value={priority} />
+            </div>
+            <div class="quick-ticket-composer__backlog">
+              <Checkbox name="new-ticket-backlog" label="Add to Backlog" checked={backlog} />
+            </div>
           </div>
           <label class="quick-ticket-composer__details">
             <span>Details</span>

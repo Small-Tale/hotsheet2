@@ -33,6 +33,8 @@ function fixture() {
       details: '',
       category: 'task',
       upNext: false,
+      priority: 'default',
+      backlog: false,
       attachments: [{ id: 'old', name: 'old.bin' }],
     },
     notWorking: {

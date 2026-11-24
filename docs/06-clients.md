@@ -3168,7 +3168,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   keeps its reference for the next reopen. The existing attachment warning reports both.
   Its expanded first row keeps the title beside the
   category and an immediately trailing star toggle; the star creates directly in Up Next
-  (and therefore overrides a Backlog-view default to active Not Started). A full-width
+  (and therefore active Not Started). A second row holds a **Priority** select (Default
+  unless changed) and an **Add to Backlog** checkbox, unchecked by default and checked when a
+  fresh draft opens from the Backlog view; checked, the ticket is created in Backlog instead of
+  Not Started. Up Next and Add to Backlog are exclusive, so choosing one clears the other. Both
+  choices persist with the draft and reset after creation (HS2-V72HCC). A full-width
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
   On touch screens (a coarse primary pointer), which draw no resize grip, it and every other
   app textarea (details editor, notes, note replies, blocked reason, conflict merges, command

@@ -22,6 +22,10 @@ export interface ProjectWorkspaceSession {
     details: string;
     category: string;
     upNext: boolean;
+    /** The composer's priority choice (HS2-V72HCC); sessions saved before it read `default`. */
+    priority: string;
+    /** The composer's Add to Backlog choice (HS2-V72HCC). */
+    backlog: boolean;
     attachments: StoredPendingAttachment[];
   };
   composingNote: boolean;
@@ -128,6 +132,8 @@ export function loadProjectWorkspaceSession(
         details: stringValue(composer.details),
         category: stringValue(composer.category, 'task'),
         upNext: booleanValue(composer.upNext),
+        priority: stringValue(composer.priority, 'default') || 'default',
+        backlog: booleanValue(composer.backlog),
         attachments: validAttachments(composer.attachments),
       },
       composingNote: booleanValue(value.composingNote),

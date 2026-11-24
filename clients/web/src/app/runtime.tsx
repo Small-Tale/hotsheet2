@@ -1053,6 +1053,9 @@ export async function startHotSheetWebClient() {
     composerDetails = signal(''),
     composerCategory = signal(lastUsedTicketCategory),
     composerUpNext = signal(false),
+    // The composer's priority and Add to Backlog choices (HS2-V72HCC).
+    composerPriority = signal('default'),
+    composerBacklog = signal(false),
     // The new ticket's target source while the composer is open, and the last source a ticket was
     // created in per project — in memory only, never persisted (HS2-NZMJBJ).
     composerSource = signal<string | undefined>(undefined),
@@ -3282,6 +3285,8 @@ export async function startHotSheetWebClient() {
         details: composerDetails.value,
         category: composerCategory.value,
         upNext: composerUpNext.value,
+        priority: composerPriority.value,
+        backlog: composerBacklog.value,
         attachments: [
           ...composerAttachments.value.map(({ id, name }) => ({ id, name })),
           ...composerUnrestoredAttachments.value,
@@ -3395,6 +3400,8 @@ export async function startHotSheetWebClient() {
           composerDetails.value = stored.composer.details;
           composerCategory.value = stored.composer.category;
           composerUpNext.value = stored.composer.upNext;
+          composerPriority.value = stored.composer.priority;
+          composerBacklog.value = stored.composer.backlog;
           composerUnrestoredAttachments.value = [...stored.composer.attachments];
           if (stored.notWorking) {
             notWorkingTarget.value = {
@@ -3598,6 +3605,8 @@ export async function startHotSheetWebClient() {
         composerDetails.value = stored.composer.details;
         composerCategory.value = stored.composer.category;
         composerUpNext.value = stored.composer.upNext;
+        composerPriority.value = stored.composer.priority;
+        composerBacklog.value = stored.composer.backlog;
       }
       const previousFiles = composerAttachments.value,
         previousUnrestored = composerUnrestoredAttachments.value,
@@ -5229,6 +5238,8 @@ export async function startHotSheetWebClient() {
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     composerSource,
     lastTicketSourceByProject,
     composerAttachments,
@@ -6765,6 +6776,8 @@ export async function startHotSheetWebClient() {
     composerTitle,
     followUpSource,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     conversationExportDialog,
     conversationOpen,
     conversationRenderRevision,
@@ -7581,6 +7594,8 @@ export async function startHotSheetWebClient() {
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     composerSource,
     addNewTicketFiles,
     composerAttachments,

@@ -25,10 +25,12 @@ export function finishDraftSubmission(
         current.title === submitted.title &&
         current.details === submitted.details &&
         current.category === submitted.category &&
-        current.upNext === submitted.upNext;
+        current.upNext === submitted.upNext &&
+        current.priority === submitted.priority &&
+        current.backlog === submitted.backlog;
     stored.composer = {
       ...current,
-      ...(unchanged ? { open: false, title: '', details: '', upNext: false } : {}),
+      ...(unchanged ? { open: false, title: '', details: '', upNext: false, priority: 'default', backlog: false } : {}),
       attachments: current.attachments.filter((item) => !ids.has(item.id)),
     };
   } else {

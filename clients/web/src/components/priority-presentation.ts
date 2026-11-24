@@ -24,6 +24,11 @@ export const TICKET_PRIORITIES: readonly TicketPriorityPresentation[] = [
 
 const BY_VALUE = new Map(TICKET_PRIORITIES.map((priority) => [priority.value, priority]));
 
+/** A stored or submitted priority as a known value; anything else reads as `default` (HS2-V72HCC). */
+export function ticketPriorityValue(value: string | undefined): TicketPriority {
+  return BY_VALUE.has(value as TicketPriority) ? (value as TicketPriority) : 'default';
+}
+
 /** The presentation for one priority. */
 export function priorityPresentation(priority: TicketPriority): TicketPriorityPresentation {
   return BY_VALUE.get(priority) ?? BY_VALUE.get('default')!;

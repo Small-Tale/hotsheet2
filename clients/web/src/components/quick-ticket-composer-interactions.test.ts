@@ -53,6 +53,8 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     setCategory: vi.fn(),
     setSource: vi.fn(),
     toggleUpNext: vi.fn(),
+    setPriority: vi.fn(),
+    setBacklog: vi.fn(),
     addFiles: vi.fn(),
     removeAttachment: vi.fn(),
     clearAttachments: vi.fn(),
@@ -68,6 +70,9 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     handler('change', 'new-ticket-source')({}, { value: '' });
     handler('change', 'new-ticket-source')({}, { value: 'git' });
     handler('click', 'toggle-new-ticket-up-next')({}, {});
+    handler('change', 'new-ticket-priority')({}, { value: 'high' });
+    handler('change', 'new-ticket-backlog')({}, { checked: true });
+    handler('change', 'new-ticket-backlog')({}, { checked: false });
     handler('click', 'remove-new-ticket-attachment')({}, { dataset: { pendingAttachmentId: 'a' } });
     handler('click', 'clear-new-ticket-attachments')({}, {});
     const submit = cancelable();
@@ -77,6 +82,8 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     expect(bindings.setCategory).toHaveBeenCalledWith('bug');
     expect(bindings.setSource.mock.calls).toEqual([[undefined], ['git']]);
     expect(bindings.toggleUpNext).toHaveBeenCalledTimes(1);
+    expect(bindings.setPriority).toHaveBeenCalledWith('high');
+    expect(bindings.setBacklog.mock.calls).toEqual([[true], [false]]);
     expect(bindings.removeAttachment).toHaveBeenCalledWith('a');
     expect(bindings.clearAttachments).toHaveBeenCalledTimes(1);
     expect(submit.preventDefault).toHaveBeenCalled();

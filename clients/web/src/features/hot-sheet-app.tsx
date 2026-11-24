@@ -28,6 +28,7 @@ import type { ManualModelDialogState } from '../components/manual-model-dialog';
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import { NoteMetadataDialog, type NoteMetadataDialogState } from '../components/note-metadata-dialog';
 import { type NotificationView } from '../components/notification-navigation';
+import { ticketPriorityValue } from '../components/priority-presentation';
 import { ProjectCloseDialog, type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
 import { ProjectSourceChoiceDialog } from '../components/project-source-choice-dialog';
@@ -130,6 +131,8 @@ export interface HotSheetAppDependencies {
   composerTitle: Signal<string>;
   followUpSource: () => string | undefined;
   composerUpNext: Signal<boolean>;
+  composerPriority: Signal<string>;
+  composerBacklog: Signal<boolean>;
   conversationExportDialog: Signal<ConversationExportDialogState | undefined>;
   conversationOpen: Signal<boolean>;
   conversationRenderRevision: Signal<number>;
@@ -285,6 +288,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     composerTitle,
     followUpSource,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     conversationExportDialog,
     conversationOpen,
     conversationRenderRevision,
@@ -610,6 +615,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           details={composerDetails.value}
           category={composerCategory.value}
           upNext={composerUpNext.value}
+          priority={ticketPriorityValue(composerPriority.value)}
+          backlog={composerBacklog.value}
           providerName={composerTarget?.name ?? provider?.name ?? 'Hot Sheet Git'}
           defaultSourceName={provider?.name ?? 'Hot Sheet Git'}
           sourceIsDefault={composerTarget?.default ?? true}

@@ -31,6 +31,8 @@ describe('workspace session', () => {
         details: 'Still here',
         category: 'bug',
         upNext: true,
+        priority: 'high',
+        backlog: false,
         attachments: [{ id: 'a', name: 'proof.png' }],
       },
       composingNote: true,
@@ -66,7 +68,8 @@ describe('workspace session', () => {
       selectedTicketSlugs: ['HS2-X'],
       inspectorTab: 'info',
       readerTab: 'info',
-      composer: { attachments: [{ id: 'x', name: 'x' }] },
+      // Sessions saved before HS2-V72HCC have no priority or backlog choice.
+      composer: { attachments: [{ id: 'x', name: 'x' }], priority: 'default', backlog: false },
       feedbackReplies: { n: [{ offset: 1, text: 'ok' }] },
     });
   });

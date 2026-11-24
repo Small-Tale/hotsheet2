@@ -133,6 +133,7 @@ import {
   createdTicketVisibleInView,
   isTrashedTicket,
   newTicketCreationPlacement,
+  newTicketStatusForView,
   selectionVisibleInView,
   type TicketView,
 } from '../ticket-views';
@@ -224,6 +225,8 @@ export interface TicketWorkflowDependencies {
   composerDetails: Signal<string>;
   composerCategory: Signal<string>;
   composerUpNext: Signal<boolean>;
+  composerPriority: Signal<string>;
+  composerBacklog: Signal<boolean>;
   /** The source picked in the open composer, if any (HS2-NZMJBJ). */
   composerSource: Signal<string | undefined>;
   /** The source each project last created a ticket in, in memory only (HS2-NZMJBJ). */
@@ -386,6 +389,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     composerSource,
     lastTicketSourceByProject,
     composerAttachments,
@@ -2507,6 +2512,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     if (trigger && document.activeElement !== trigger) trigger.focus({ preventScroll: true });
     const epoch = ++composerAttachmentEpoch,
       projectId = project()?.id;
+    // A fresh draft from the Backlog view starts with Add to Backlog checked; a restored draft keeps
+    // its own choice (HS2-V72HCC).
+    if (!composerTitle.value.trim() && !composerDetails.value.trim() && !composerUpNext.value)
+      composerBacklog.value = newTicketStatusForView(selectedView.value) === 'backlog';
     composerExpanded.value = true;
     scheduleProjectSessionPersistence();
     requestAnimationFrame(() =>
@@ -2559,6 +2568,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerTitle.value = '';
     composerDetails.value = '';
     composerUpNext.value = false;
+    composerPriority.value = 'default';
+    composerBacklog.value = false;
     composerSource.value = undefined;
     composerFollowUpTo = undefined;
     composerAttachments.value = [];
@@ -2642,13 +2653,15 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         details: composerDetails.value,
         category: composerCategory.value,
         upNext: composerUpNext.value,
+        priority: composerPriority.value,
+        backlog: composerBacklog.value,
         attachments: submitted.map(({ id, name }) => ({ id, name })),
       },
       active = () => composerAttachmentEpoch === epoch && project()?.id === origin.id;
     const client = new Api(origin.apiPath),
       files = submitted.map((item) => item.file),
       batch_id = browserRandomId(),
-      placement = newTicketCreationPlacement(selectedView.value, composerUpNext.value),
+      placement = newTicketCreationPlacement(composerUpNext.value, composerBacklog.value),
       finishLocalCreation = beginLocalTicketCreation();
     let completedEpoch: number | undefined;
     composerSubmitting.value = true;
@@ -2666,6 +2679,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               title,
               details: snapshot.details,
               category: snapshot.category,
+              ...(snapshot.priority !== 'default' ? { priority: snapshot.priority } : {}),
               ...placement,
               follow_up_to: composerFollowUpTo?.qualified,
             },

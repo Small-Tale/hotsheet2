@@ -16676,6 +16676,69 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await page.screenshot({ path: 'target/visual-captures/hs2-90ntv5-empty-after-create-narrow.png', fullPage: true });
 });
 
+test('creates a ticket with a chosen priority and in Backlog from the composer (HS2-V72HCC)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  const creates: Record<string, unknown>[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname.endsWith('/checkouts/demo-checkout/tickets'))
+      creates.push(request.postDataJSON() as Record<string, unknown>);
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  const launcher = page.getByRole('button', { name: 'New ticket…' }),
+    dialog = page.getByRole('dialog', { name: 'Create ticket' }),
+    priority = dialog.locator('kui-select[name="new-ticket-priority"]'),
+    backlog = dialog.getByRole('checkbox', { name: 'Add to Backlog' }),
+    upNext = dialog.locator('[data-action="toggle-new-ticket-up-next"]');
+  await launcher.click();
+  // Defaults: Default priority and Not Started (unchecked) outside the Backlog view.
+  await expect(priority).toHaveJSProperty('value', 'default');
+  await expect(backlog).not.toBeChecked();
+  await priority.locator('.kui-select__trigger').click();
+  await priority.locator('.kui-select__option[data-value="high"]').click();
+  await expect(priority).toHaveJSProperty('value', 'high');
+  await backlog.check();
+  await expect(backlog).toBeChecked();
+  // Up Next and Backlog are exclusive: each choice clears the other.
+  await upNext.click();
+  await expect(upNext).toHaveAttribute('aria-pressed', 'true');
+  await expect(backlog).not.toBeChecked();
+  await backlog.check();
+  await expect(upNext).toHaveAttribute('aria-pressed', 'false');
+  await page.waitForTimeout(350); // let the dialog's open transition settle before the evidence capture
+  await page.screenshot({ path: 'target/visual-captures/hs2-v72hcc-composer-wide.png' });
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Prioritized backlog idea');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(dialog).toBeHidden();
+  expect(creates.at(-1)).toMatchObject({
+    title: 'Prioritized backlog idea',
+    priority: 'high',
+    status: 'backlog',
+    up_next: false,
+  });
+  // The next draft starts over at the defaults.
+  await launcher.click();
+  await expect(priority).toHaveJSProperty('value', 'default');
+  await expect(backlog).not.toBeChecked();
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Plain queue ticket');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(dialog).toBeHidden();
+  expect(creates.at(-1)).toMatchObject({ title: 'Plain queue ticket', status: 'not_started', up_next: false });
+  expect(creates.at(-1)).not.toHaveProperty('priority');
+  // A fresh draft from the Backlog view starts with Add to Backlog checked.
+  await page
+    .getByRole('button', { name: /Backlog/ })
+    .first()
+    .click();
+  await launcher.click();
+  await expect(backlog).toBeChecked();
+  await page.setViewportSize({ width: 560, height: 760 });
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: 'target/visual-captures/hs2-v72hcc-composer-narrow.png' });
+});
+
 test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7)', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockProject(page);

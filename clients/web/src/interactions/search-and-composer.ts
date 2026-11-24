@@ -5,6 +5,7 @@ import { attr, delegate, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
+import { ticketPriorityValue } from '../components/priority-presentation';
 import { STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
 import { wireQuickTicketComposer } from '../components/quick-ticket-composer-interactions';
 import { wireSearchScopeToolbar } from '../components/search-scope-toolbar';
@@ -75,6 +76,8 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly composerDetails: Signal<string>;
   readonly composerCategory: Signal<string>;
   readonly composerUpNext: Signal<boolean>;
+  readonly composerPriority: Signal<string>;
+  readonly composerBacklog: Signal<boolean>;
   readonly composerSource: Signal<string | undefined>;
   readonly addNewTicketFiles: (files: FileList | File[]) => Promise<void>;
   readonly draftScope: (kind: 'composer' | 'not-working', projectId?: string) => string;
@@ -128,6 +131,8 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     composerSource,
     addNewTicketFiles,
     draftScope,
@@ -376,6 +381,17 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       },
       toggleUpNext: () => {
         composerUpNext.value = !composerUpNext.value;
+        // Up Next tickets start as Not Started, so the two placements are exclusive (HS2-V72HCC).
+        if (composerUpNext.value) composerBacklog.value = false;
+        scheduleProjectSessionPersistence();
+      },
+      setPriority: (priority) => {
+        composerPriority.value = ticketPriorityValue(priority);
+        scheduleProjectSessionPersistence();
+      },
+      setBacklog: (backlog) => {
+        composerBacklog.value = backlog;
+        if (backlog) composerUpNext.value = false;
         scheduleProjectSessionPersistence();
       },
       addFiles: (files) => {

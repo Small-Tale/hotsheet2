@@ -25,6 +25,8 @@ export const SEARCH_AND_COMPOSER_TARGETS = {
   newTicketTitleField: attr('name', 'new-ticket-title'),
   newTicketDetailsField: attr('name', 'new-ticket-details'),
   newTicketCategoryField: attr('name', 'new-ticket-category'),
+  newTicketPriorityField: attr('name', 'new-ticket-priority'),
+  newTicketBacklogField: attr('name', 'new-ticket-backlog'),
   newTicketSourceField: attr('name', 'new-ticket-source'),
   newTicketDropTarget: attr('data-new-ticket-drop-target', 'true'),
   newTicketAttachmentsField: attr('name', 'new-ticket-attachments'),
