@@ -36,6 +36,19 @@ fn wait_until(mut cond: impl FnMut() -> bool, secs: u64) -> bool {
 }
 
 #[test]
+fn hs2_2tt0yg_fake_agent_reports_v1_for_push_capable_fleet_launches() {
+    let output = std::process::Command::new(fake_agent())
+        .arg("--version")
+        .output()
+        .expect("probe fake agent version");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "hs-fake-agent 1.0.0\n"
+    );
+}
+
+#[test]
 fn fake_agent_drives_busy_cwd_progress_output_then_idle_and_exit() {
     let mut spec = TermSpec::new(fake_agent());
     spec.args = vec![

@@ -21,6 +21,7 @@
 //!   --report /tmp/seen    # write what the agent saw at this point, as JSON (HS2-WEFJV8)
 //!   --report-dir /tmp/r   # the same, to <dir>/<HOTSHEET_TERMINAL_ID>.json
 //!   --serve-opencode 1500 # after this many ms, answer as an OpenCode session API (HS2-2DPGDY)
+//!   --version             # report v1 for the push-capable fleet fixture (HS2-2TT0YG)
 //!   --prompt "text"       # a first prompt given at launch, recorded like a pushed one
 //!   -i "text"             # the same, spelled as Antigravity's `agy -i` (HS2-KK3CCE)
 //!   --print-template "t"  # write t without a newline, expanding {env:NAME} and {arg:N} (HS2-6EW369)
@@ -145,6 +146,10 @@ fn main() {
                 i += 1;
             }
             "--port" | "--prompt" | "-i" => i += 1,
+            "--version" => {
+                // HS2-2TT0YG: push-capable fleet fixtures use the v1 launch protocol.
+                let _ = writeln!(w, "hs-fake-agent 1.0.0");
+            }
             "--serve-opencode" => {
                 let delay = val(i).parse::<u64>().unwrap_or(0);
                 let port = flag_value("--port").and_then(|port| port.parse::<u16>().ok());
