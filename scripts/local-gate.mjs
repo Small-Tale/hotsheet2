@@ -211,6 +211,22 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
   if (exercised?.providerWhole) files.add('tests/providers.spec.ts');
   reasons.push(...(exercised?.reasons ?? []));
   const scoped = [];
+  const priority = [];
+  // HS2-79GJYG: a full browser command can consume CI First's budget before Playwright reaches
+  // the late ux-demo spec. Run the small shared app-shell/demo-state contract first, including
+  // catalog specimen counts and the interactive project-tab state that escaped HS2-TGYKHQ.
+  const sharedDemoStateChanged = changes.some((path) =>
+    /^clients\/web\/src\/ux-demo\/(?:app-shell-demo\.tsx|components\/demo-state\.ts)$/.test(path),
+  );
+  if (sharedDemoStateChanged)
+    priority.push({
+      cwd: 'clients/web',
+      group: 'web',
+      selected: true,
+      command:
+        "npx playwright test 'tests/ux-demo.spec.ts' --grep 'labels converted demo specimens through Kerf CatalogExample|represents the application states extracted from main\\.tsx|operates the project tab bar across pointer, keyboard, and responsive states|reorders demo project tabs through Kerf wireTabBars'",
+      reasons: ['HS2-79GJYG: shared demo state needs an early catalog and project-tab browser check'],
+    });
   for (const path of changes) {
     if (/^clients\/web\/tests\/.*\.spec\.ts$/.test(path) && !path.endsWith('/providers.spec.ts')) {
       const file = path.replace('clients/web/', '');
@@ -338,6 +354,7 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
       command: 'npm run test:fixtures',
       reasons: ['build the real-server browser fixtures once before the selected flows'],
     },
+    ...priority,
     ...result,
     ...scoped.filter(
       (stage) => ![...files].some((file) => stage.command.startsWith(`npx playwright test ${quote(file)} --grep `)),

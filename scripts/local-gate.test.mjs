@@ -526,6 +526,32 @@ test('HS2-RS0FFT bounded browser selection includes affected terminal and timeli
   assert.ok(shared.some((stage) => stage.command.includes('providers.spec.ts')));
 });
 
+test('HS2-79GJYG runs shared demo-state smoke before broad browser selection', () => {
+  const changes = ['clients/web/src/ux-demo/app-shell-demo.tsx', 'clients/web/src/ux-demo/components/demo-state.ts'];
+  for (const full of [false, true]) {
+    const stages = browserStages(changes, full, [], {}, { files: ['tests/ux-demo.spec.ts'], reasons: [] });
+    const smoke = stages.findIndex((stage) => stage.reasons.some((reason) => reason.startsWith('HS2-79GJYG:')));
+    const broad = stages.findIndex(
+      (stage) =>
+        stage.command ===
+        "npx playwright test 'tests/contracts.spec.ts' 'tests/shell-composition.spec.ts' 'tests/ux-demo.spec.ts'",
+    );
+    assert.ok(smoke > 0 && broad > smoke, `focused demo check must precede broad browser run (full=${full})`);
+    for (const title of [
+      'labels converted demo specimens through Kerf CatalogExample',
+      'represents the application states extracted from main\\.tsx',
+      'operates the project tab bar across pointer, keyboard, and responsive states',
+      'reorders demo project tabs through Kerf wireTabBars',
+    ])
+      assert.ok(stages[smoke].command.includes(title), title);
+  }
+  assert.ok(
+    !browserStages(['clients/web/src/ux-demo/ticket-reader-demo.tsx'], false).some((stage) =>
+      stage.reasons.some((reason) => reason.startsWith('HS2-79GJYG:')),
+    ),
+  );
+});
+
 test('HS2-WWZS75 app startup changes select the degraded WebKit boot spec', () => {
   for (const path of ['clients/web/src/app/runtime.tsx', 'clients/web/src/main.tsx', 'clients/web/src/browser-id.ts']) {
     const stages = browserStages([path], false);

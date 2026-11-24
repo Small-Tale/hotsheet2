@@ -208,6 +208,13 @@ against 53.4 s for its whole file. Shared layout compositions such as `project-t
 already select their geometry cases through the exercise index; the project-strip overflow case
 is selected for a `project-tab-bar.tsx` change.
 
+**Shared demo-state smoke (HS2-79GJYG).** An `app-shell-demo.tsx` or its shared
+`components/demo-state.ts` edit first runs a focused UX demo browser stage for
+specimen counts, application states, interactive project tabs, and their reorder
+behavior. This stage runs before the broader affected browser command, so CI First
+can reach those state contracts within its budget even when the full suite is
+deferred. Covering CI still runs the broad browser suite.
+
 ## Scoped repository-wide checks (HS2-3ZJBRM)
 
 The local stage catalog now runs repository-wide Prettier and `cargo fmt`
