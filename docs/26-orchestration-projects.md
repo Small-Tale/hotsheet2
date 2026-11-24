@@ -1170,6 +1170,11 @@ recorded in the change log as a `target_store_changed` event that carries only t
 ticket id and is read only by the feed, so cursors and replay work as they do for hosted
 stores (HS2-G5FYP6).
 
+When a hosted store is recreated, its watcher may reconcile several files in one
+pass and publish a store-scoped `changed` event with an empty ticket id. The target
+feed preserves that connection-scoped invalidation; a follower refreshes every
+planned ticket and syncs every run of that connection (HS2-R6FZ54).
+
 **Planned tickets without a run (HS2-TMA4YA).** A target is also followed while an
 unfinished plan step names one of its tickets: a prerequisite, or the step's own
 ticket. On the first request, after an `overflow` and on a reconnect every such ticket

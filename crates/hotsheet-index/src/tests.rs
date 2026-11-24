@@ -1360,10 +1360,14 @@ fn hs2_pt0y8a_full_walk_skips_a_ticket_removed_after_enumeration() {
 
     // The checkout changes after the directory walk, before the index reads this path.
     std::fs::remove_file(&path).unwrap();
+    let mut corrupt_source_changed = false;
     assert_eq!(
-        index.reconcile_full_paths(enumerated.clone()).unwrap(),
+        index
+            .reconcile_full_paths(enumerated.clone(), &mut corrupt_source_changed)
+            .unwrap(),
         (0, 1)
     );
+    assert!(!corrupt_source_changed);
     assert_eq!(index.ticket_count().unwrap(), 2);
     assert!(
         index
@@ -1376,30 +1380,56 @@ fn hs2_pt0y8a_full_walk_skips_a_ticket_removed_after_enumeration() {
     assert_eq!(index.ticket_count().unwrap(), 2);
 
     std::fs::write(&path, bytes).unwrap();
-    assert_eq!(index.reconcile_full(&store).unwrap(), (1, 0));
-    assert_eq!(index.reconcile_full(&store).unwrap(), (0, 0));
+    assert_eq!(
+        index
+            .reconcile_full(&store, &mut corrupt_source_changed)
+            .unwrap(),
+        (1, 0)
+    );
+    assert_eq!(
+        index
+            .reconcile_full(&store, &mut corrupt_source_changed)
+            .unwrap(),
+        (0, 0)
+    );
     assert_eq!(index.ticket_count().unwrap(), 3);
 }
 
 #[test]
 fn hs2_pt0y8a_delta_removes_only_not_found_and_preserves_other_io_errors() {
     let (_dir, store, index) = seeded();
+    let mut corrupt_source_changed = false;
     let vanished = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1");
     let path = store.ticket_path(&vanished);
     let bytes = std::fs::read(&path).unwrap();
 
     std::fs::remove_file(&path).unwrap();
-    assert_eq!(index.reconcile_ids(&store, [vanished]).unwrap(), (0, 1));
+    assert_eq!(
+        index
+            .reconcile_ids(&store, [vanished], &mut corrupt_source_changed)
+            .unwrap(),
+        (0, 1)
+    );
     assert_eq!(index.ticket_count().unwrap(), 2);
     std::fs::write(&path, bytes).unwrap();
-    assert_eq!(index.reconcile_ids(&store, [vanished]).unwrap(), (1, 0));
-    assert_eq!(index.reconcile_ids(&store, [vanished]).unwrap(), (0, 0));
+    assert_eq!(
+        index
+            .reconcile_ids(&store, [vanished], &mut corrupt_source_changed)
+            .unwrap(),
+        (1, 0)
+    );
+    assert_eq!(
+        index
+            .reconcile_ids(&store, [vanished], &mut corrupt_source_changed)
+            .unwrap(),
+        (0, 0)
+    );
 
     // A directory at the ticket path is a real read error, not a missing ticket.
     std::fs::remove_file(&path).unwrap();
     std::fs::create_dir(&path).unwrap();
     assert!(matches!(
-        index.reconcile_ids(&store, [vanished]),
+        index.reconcile_ids(&store, [vanished], &mut corrupt_source_changed),
         Err(IndexError::Io(_))
     ));
     assert_eq!(index.ticket_count().unwrap(), 3);
@@ -1489,6 +1519,53 @@ fn a_corrupt_ticket_file_is_skipped_not_fatal_on_rebuild_and_reconcile() {
     .unwrap();
     ix.reconcile(&store).unwrap();
     assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 2);
+}
+
+#[test]
+fn hs2_r6fz54_reconcile_reports_a_corrupt_source_change_without_an_upsert() {
+    for git in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = if git {
+            FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap()
+        } else {
+            FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap()
+        };
+        let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+        let ticket = ops::create(
+            &store,
+            id,
+            "HS",
+            Timestamp::new("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "synthetic ticket".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let ix = Index::open_in_memory(store.root().display().to_string()).unwrap();
+        assert_eq!(ix.reconcile(&store).unwrap(), (1, 0));
+        let corrupt = format!(
+            "{}unexpected trailing content\n",
+            hotsheet_model::to_file_string(&ticket)
+        );
+        std::fs::write(store.ticket_path(&id), corrupt).unwrap();
+        assert_eq!(
+            ix.reconcile_with_invalidations(&store).unwrap(),
+            (0, 0, true),
+            "corrupt source transition must wake clients (git={git})"
+        );
+        assert_eq!(
+            ix.reconcile_with_invalidations(&store).unwrap(),
+            (0, 0, false)
+        );
+        assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 1);
+        store.write_ticket(&ticket).unwrap();
+        assert_eq!(
+            ix.reconcile_with_invalidations(&store).unwrap(),
+            (1, 0, false)
+        );
+    }
 }
 
 // ---- git-diff fast path (docs/03 §3.4, HS2-90) ------------------------------------

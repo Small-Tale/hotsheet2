@@ -781,13 +781,15 @@ async fn hs2_7qhwhj_a_remote_run_completes_from_the_peers_change_feed_without_po
     peer.stop().await;
 }
 
-/// Follow a hosted target feed from `cursor`, as a run follower does, until a page names
-/// `native` or `wait_ms` passed. Returns whether it was named and the cursor reached.
+/// Follow a hosted target feed from `cursor`, as a run follower does, until a page
+/// invalidates `native` or `wait_ms` passed. A store-scoped invalidation names its
+/// connection but has an empty native id (HS2-R6FZ54).
 async fn feed_names(
     router: &axum::Router,
     feed: &str,
     mut cursor: u64,
     wait_ms: u64,
+    connection: &str,
     native: &str,
 ) -> (bool, u64) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(wait_ms);
@@ -809,12 +811,10 @@ async fn feed_names(
         .await;
         assert_eq!(status, StatusCode::OK, "{page}");
         cursor = page["cursor"].as_u64().unwrap_or(cursor);
-        if page["events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|event| event["native_id"] == native)
-        {
+        if page["events"].as_array().unwrap().iter().any(|event| {
+            event["connection_id"] == connection
+                && (event["native_id"] == native || event["native_id"] == "")
+        }) {
             return (true, cursor);
         }
     }
@@ -844,6 +844,18 @@ async fn hs2_bdnj5s_target_feed_sees_writes_made_outside_the_server() {
         .register(&project, None, None, vec![source.clone(), linked.clone()])
         .unwrap();
     assert_eq!(checkout.sources.len(), 2, "{:?}", checkout.sources);
+    let connection_for = |root: &std::path::Path| {
+        let canonical = root.canonicalize().unwrap();
+        checkout
+            .sources
+            .iter()
+            .find(|source| std::path::Path::new(&source.locator) == canonical)
+            .unwrap()
+            .connection_id
+            .clone()
+    };
+    let hosted_connection = connection_for(&source);
+    let linked_connection = connection_for(&linked);
     let router = app(host);
     let feed = format!("/checkouts/{}/target-events", checkout.id);
     let (status, handshake) = api(router.clone(), "GET", &feed, Value::Null, true).await;
@@ -854,8 +866,8 @@ async fn hs2_bdnj5s_target_feed_sees_writes_made_outside_the_server() {
     let now: hotsheet_model::Timestamp = NOW.into();
     let lease: hotsheet_model::Timestamp = "2030-01-01T00:00:00Z".into();
     let feed_sees = |cursor: u64, native: String| {
-        let (router, feed) = (router.clone(), feed.clone());
-        async move { feed_names(&router, &feed, cursor, 30_000, &native).await }
+        let (router, feed, connection) = (router.clone(), feed.clone(), hosted_connection.clone());
+        async move { feed_names(&router, &feed, cursor, 30_000, &connection, &native).await }
     };
     let id = work.id.to_string();
     ops::claim_with_eta(
@@ -898,7 +910,15 @@ async fn hs2_bdnj5s_target_feed_sees_writes_made_outside_the_server() {
     // A store the server does not host reaches the feed through the feed's own watch on
     // its tickets, which the requests above started.
     ops::claim_with_eta(&other, &elsewhere.id, &now, lease, "cli-worker", None, None).unwrap();
-    let (seen, _) = feed_names(&router, &feed, cursor, 30_000, &elsewhere.id.to_string()).await;
+    let (seen, _) = feed_names(
+        &router,
+        &feed,
+        cursor,
+        30_000,
+        &linked_connection,
+        &elsewhere.id.to_string(),
+    )
+    .await;
     assert!(
         seen,
         "the claim in an unhosted linked store never reached the feed"

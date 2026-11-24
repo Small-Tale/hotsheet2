@@ -3499,6 +3499,11 @@ HS2-Y3N3PH` opens an added project's detail in the real shell against the real
   with no runs, handshake, unrelated changes, a completion with nobody calling sync,
   a replayed change, overflow, an outage that is one event and keeps the cursor,
   reconnect replay, the waiting event read, and a remote target through the transport.
+  HS2-R6FZ54 covers a store-scoped empty-id invalidation syncing every run and
+  refreshing every planned ticket of its connection, while another connection's
+  invalidation does neither. `remote_servers/runs.rs` accepts that invalidation
+  for a hosted external write, and `http.rs` checks the indexed legacy duplicate
+  backlink after the same event.
   `# hs2_257q2z` follows a target with only a session: the handshake wakes the
   scheduler once, another server's session does not, the owner's session's repeated
   changes do, a ticket change wakes only while the session works no unfinished run,
@@ -4857,8 +4862,12 @@ same ordered selection and a later headless `sync` retry with synthetic conflict
 
 `crates/hotsheet-server/src/watcher.rs` tests parent event filtering, re-arm index
 reconciliation that removes old rows and adds replacement rows, and the native watcher
-transition for both root and `tickets/` scopes. Reconciliation also asserts a client
-invalidation. The native case verifies that a later
+transition for both root and `tickets/` scopes on Unix and the production root
+scope on Windows, where a watched child prevents moving the parent directory.
+Reconciliation also asserts a client invalidation; a corrupt source-hash transition preserves the healthy index row
+and still emits that invalidation. The index test exercises the same outcome for
+both full and Git-delta reconciliation and requires a second unchanged pass to
+stay quiet. The native case verifies that a later
 external write is indexed after the store is recreated, and that each removal marks
 freshness out of sync before the next registration. Windows and Linux platform CI
 must exercise their own native backends before the ticket completes.
@@ -4866,6 +4875,6 @@ The Windows-only identity test pins stable handle-based directory IDs across ren
 recreation at the same path; the Windows cfg check compiles that platform implementation.
 Startup-race tests replace the watched directory after initial registration and remove it
 before child registration, then recreate it. Both transitions run under root and `tickets/`
-scopes before the native watch becomes live.
+scopes on Unix and root scope on Windows before the native watch becomes live.
 The replacement test covers both sides of the post-registration identity sample and checks
 that a subsequent external write reaches the rearmed index.
