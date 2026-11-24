@@ -1123,8 +1123,10 @@ fn power_and_sleep_risk_rank_lid_battery_and_assertions() {
         (Normal, None),
         "an assertion holds the machine awake"
     );
+    assert_eq!(verdict(power(true, 100, false, true, 0)), (Normal, None));
+    assert_eq!(verdict(power(true, 50, false, true, 0)), (Normal, None));
     assert_eq!(
-        verdict(power(true, 80, false, true, 0)),
+        verdict(power(true, 49, false, true, 0)),
         (Warning, Some("on_battery"))
     );
     assert_eq!(
@@ -1135,6 +1137,17 @@ fn power_and_sleep_risk_rank_lid_battery_and_assertions() {
         verdict(power(true, 80, true, true, 0)),
         (Critical, Some("lid_closed_on_battery"))
     );
+    let unknown_charge = HostReading {
+        power: Probe::Value(PowerReading {
+            on_battery: Some(true),
+            battery_percent: None,
+            lid_closed: Some(false),
+            sleep_prevented: Some(true),
+            idle_sleep_minutes: Some(0),
+        }),
+        ..healthy()
+    };
+    assert_eq!(verdict(unknown_charge), (Normal, None));
     // Unknown assertion state (Linux) never claims idle-sleep risk.
     let unknown = HostReading {
         power: Probe::Value(PowerReading {
@@ -1145,6 +1158,80 @@ fn power_and_sleep_risk_rank_lid_battery_and_assertions() {
         ..healthy()
     };
     assert_eq!(verdict(unknown), (Normal, None));
+}
+
+#[test]
+fn hs2_z9dayd_battery_warning_recovers_only_after_five_points_and_three_samples() {
+    let thresholds = default_thresholds();
+    let mut monitor = Monitor::new(host());
+    let reading = |percent| HostReading {
+        power: Probe::Value(PowerReading {
+            on_battery: Some(true),
+            battery_percent: Some(percent),
+            lid_closed: Some(false),
+            sleep_prevented: Some(true),
+            idle_sleep_minutes: Some(0),
+        }),
+        ..healthy()
+    };
+    let status = |monitor: &Monitor| monitor.snapshot().signals.power.header.status;
+    use super::Status::{Normal, Warning};
+    monitor.observe(reading(49), T0, &thresholds);
+    assert_eq!(status(&monitor), Warning);
+    monitor.observe(reading(50), T0 + MINUTE, &thresholds);
+    assert_eq!(status(&monitor), Warning);
+    monitor.observe(reading(54), T0 + 2 * MINUTE, &thresholds);
+    assert_eq!(status(&monitor), Warning);
+    monitor.observe(reading(55), T0 + 3 * MINUTE, &thresholds);
+    assert_eq!(status(&monitor), Warning);
+    monitor.observe(reading(54), T0 + 4 * MINUTE, &thresholds);
+    assert_eq!(status(&monitor), Warning, "a relapse resets recovery");
+    monitor.observe(reading(55), T0 + 5 * MINUTE, &thresholds);
+    monitor.observe(reading(55), T0 + 6 * MINUTE, &thresholds);
+    assert_eq!(status(&monitor), Warning);
+    monitor.observe(reading(55), T0 + 7 * MINUTE, &thresholds);
+    assert_eq!(status(&monitor), Normal);
+}
+
+#[test]
+fn hs2_z9dayd_idle_sleep_warning_does_not_raise_the_battery_warning_line() {
+    let thresholds = default_thresholds();
+    let mut monitor = Monitor::new(host());
+    let reading = |on_battery, percent, sleep_prevented, idle_sleep_minutes| HostReading {
+        power: Probe::Value(PowerReading {
+            on_battery: Some(on_battery),
+            battery_percent: Some(percent),
+            lid_closed: Some(false),
+            sleep_prevented: Some(sleep_prevented),
+            idle_sleep_minutes: Some(idle_sleep_minutes),
+        }),
+        ..healthy()
+    };
+    use super::Status::{Normal, Warning};
+    monitor.observe(reading(false, 80, false, 10), T0, &thresholds);
+    assert_eq!(monitor.snapshot().signals.power.header.status, Warning);
+    assert_eq!(
+        monitor.snapshot().signals.power.header.reason,
+        Some("idle_sleep_allowed")
+    );
+    for sample in 1..=3 {
+        monitor.observe(
+            reading(true, 54, true, 0),
+            T0 + sample * MINUTE,
+            &thresholds,
+        );
+        assert_ne!(
+            monitor.snapshot().signals.power.header.reason,
+            Some("on_battery")
+        );
+    }
+    assert_eq!(monitor.snapshot().signals.power.header.status, Normal);
+    monitor.observe(reading(true, 49, true, 0), T0 + 4 * MINUTE, &thresholds);
+    assert_eq!(monitor.snapshot().signals.power.header.status, Warning);
+    assert_eq!(
+        monitor.snapshot().signals.power.header.reason,
+        Some("on_battery")
+    );
 }
 
 #[test]

@@ -103,7 +103,7 @@ export function demoHostHealth(scenario: DemoHostScenario): HostHealthSnapshot {
       power: {
         ...(scenario === 'battery' ? { status: 'warning', reason: 'on_battery', since: null } : NORMAL),
         on_battery: scenario === 'battery',
-        battery_percent: scenario === 'battery' ? 64 : 100,
+        battery_percent: scenario === 'battery' ? 49 : 100,
         lid_closed: false,
         sleep_prevented: true,
         idle_sleep_minutes: null,

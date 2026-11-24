@@ -86,6 +86,8 @@ impl From<Level> for Status {
 
 /// Consecutive lower samples a signal needs before its callout clears (no flapping).
 pub(crate) const RECOVERY_SAMPLES: u32 = 3;
+/// HS2-Z9DAYD: battery use alone is not a warning while charge is at least 50%.
+const BATTERY_WARNING_PERCENT: u64 = 50;
 /// The window swap growth is fitted over, and the shortest span a rate needs.
 const RATE_WINDOW_MS: u64 = 60 * 60 * 1000;
 const RATE_MIN_SPAN_MS: u64 = 10 * 60 * 1000;
@@ -1166,6 +1168,8 @@ impl Monitor {
             }
         };
         let critical_held = self.holding(3, Status::Critical);
+        let battery_warning_held = self.holding(3, Status::Warning)
+            && self.snapshot.signals.power.header.reason == Some("on_battery");
         let signal = &mut self.snapshot.signals.power;
         signal.on_battery = power.on_battery;
         signal.battery_percent = power.battery_percent;
@@ -1182,7 +1186,11 @@ impl Monitor {
                 .is_some_and(|percent| percent <= low_limit)
         {
             (Status::Critical, Some("battery_low"))
-        } else if on_battery {
+        } else if on_battery
+            && power.battery_percent.is_some_and(|percent| {
+                percent < BATTERY_WARNING_PERCENT + if battery_warning_held { 5 } else { 0 }
+            })
+        {
             (Status::Warning, Some("on_battery"))
         } else if power.idle_sleep_minutes.is_some_and(|minutes| minutes > 0)
             && power.sleep_prevented == Some(false)

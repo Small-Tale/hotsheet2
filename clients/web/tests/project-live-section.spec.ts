@@ -45,6 +45,49 @@ async function openProject(
   await openMockedProject(page);
 }
 
+test('HS2-Z9DAYD keeps a full battery quiet and shows a below-50% warning in Live', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    const highCharge = demoHostHealth('normal');
+    highCharge.signals.power.on_battery = true;
+    let lowCharge = false;
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server, () =>
+      page.route('**/host-health', (route) =>
+        route.fulfill({ json: lowCharge ? demoHostHealth('battery') : highCharge }),
+      ),
+    );
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toBeVisible({ timeout: 30_000 });
+    await expect(live.locator('[data-host-callout="power"]')).toHaveCount(0);
+    await sidebar.screenshot({ path: 'target/visual-captures/hs2-z9dayd-battery-100-sidebar-1280.png' });
+    lowCharge = true;
+    await page.reload();
+    await expect(live.locator('[data-host-callout="power"]')).toContainText('On battery · 49%', {
+      timeout: 30_000,
+    });
+    for (const width of [1280, 760, 390, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      const callout = live.locator('[data-host-callout="power"]');
+      await expect(callout).toBeVisible();
+      await callout.scrollIntoViewIfNeeded();
+      await live.screenshot({ path: `target/visual-captures/hs2-z9dayd-battery-49-${width}.png` });
+      if (width === 390) await page.screenshot({ path: 'target/visual-captures/hs2-z9dayd-battery-49-page-390.png' });
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await live.screenshot({ path: 'target/visual-captures/hs2-z9dayd-battery-49-dark-1280.png' });
+  } finally {
+    await server.stop(page);
+  }
+});
+
 // HS2-F788GW: the project sidebar's Live section, from the server's real `/live-state` and the change
 // stream, compact by default; the header action switches to the detail rows and the choice survives a
 // reload, and the section sits under the completion chart.

@@ -184,7 +184,7 @@ describe('hostCallouts (HS2-F788GW, HS2-DTAVQA)', () => {
       { signal: 'network', level: 'critical', text: 'No network route' },
       { signal: 'disk', level: 'warning', text: 'Disk low' },
       { signal: 'cpu', level: 'warning', text: 'CPU 97% busy · cargo' },
-      { signal: 'power', level: 'warning', text: 'On battery · 64%' },
+      { signal: 'power', level: 'warning', text: 'On battery · 49%' },
       { signal: 'thermal', level: 'warning', text: 'CPU throttled' },
     ]);
   });
