@@ -937,7 +937,7 @@ async fn launch_permission_mode(
 
 /// The effective AI defaults: the project's own choice (machine-local project settings, HS2-SW5S13),
 /// else the legacy machine-wide value, else the discovered default tool.
-async fn effective_ai_settings(
+pub(crate) async fn effective_ai_settings(
     state: &AppState,
     project: Option<&Settings>,
 ) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
@@ -1225,10 +1225,70 @@ pub(crate) struct SendDriveTurnReq {
     turn_id: Option<String>,
 }
 
+/// A scheduled command targets an already claimed ticket and names its session explicitly
+/// before the normal client-drive turn is accepted (HS2-MB3BQE).
+pub(crate) struct ScheduledDriveTurn {
+    pub checkout: String,
+    pub source: String,
+    pub connection_id: String,
+    pub session_id: Option<String>,
+    pub tool: String,
+    pub model: Option<String>,
+    pub effort: Option<String>,
+    pub content: String,
+}
+
+pub(crate) async fn send_scheduled_drive_turn(
+    state: &AppState,
+    request: ScheduledDriveTurn,
+) -> Result<tokio::sync::oneshot::Receiver<bool>, ApiError> {
+    if state.client_drives.get(&request.connection_id).is_err() {
+        let _ = create_drive_connection(
+            State(state.clone()),
+            Json(CreateDriveConnectionReq {
+                tool: request.tool,
+                model: request.model,
+                effort: request.effort,
+                permission_mode: None,
+                checkout: Some(request.checkout),
+                source: Some(request.source),
+                connection_id: Some(request.connection_id.clone()),
+                session_id: request.session_id,
+            }),
+        )
+        .await?;
+    }
+    let (completed, receiver) = tokio::sync::oneshot::channel();
+    let _ = send_drive_turn_inner(
+        state.clone(),
+        request.connection_id,
+        SendDriveTurnReq {
+            content: request.content,
+            session_id: None,
+            model: None,
+            effort: None,
+            permission_mode: None,
+            turn_id: None,
+        },
+        Some(completed),
+    )
+    .await?;
+    Ok(receiver)
+}
+
 pub(crate) async fn send_drive_turn(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(request): Json<SendDriveTurnReq>,
+) -> Result<(StatusCode, Json<client_drive::ClientConnectionInfo>), ApiError> {
+    send_drive_turn_inner(state, id, request, None).await
+}
+
+async fn send_drive_turn_inner(
+    state: AppState,
+    id: String,
+    request: SendDriveTurnReq,
+    completed: Option<tokio::sync::oneshot::Sender<bool>>,
 ) -> Result<(StatusCode, Json<client_drive::ClientConnectionInfo>), ApiError> {
     if request.content.trim().is_empty() {
         return Err(ApiError::new(
@@ -1442,6 +1502,12 @@ pub(crate) async fn send_drive_turn(
         }
         if let Ok(info) = manager.get(&thread_id) {
             thread_state.emit_drive_updated(&info);
+        }
+        if let Some(completed) = completed {
+            let succeeded = result
+                .as_ref()
+                .is_ok_and(|done| done.reason.failure_message().is_none());
+            let _ = completed.send(succeeded);
         }
     });
     Ok((StatusCode::ACCEPTED, Json(info)))

@@ -690,6 +690,17 @@ manually: open two projects, enter Settings and select a non-default view (e.g. 
 in one, switch to the other project, and confirm it shows the same Settings view rather
 than resetting to Ticket sources (HS2-4J50K3).
 
+### Scheduled AI command handoff with a live provider (HS2-MB3BQE)
+
+With a synthetic AI command and an installed provider, save a one-time schedule a minute
+ahead with Auto-Start in a New AI Session. Leave the project view closed and confirm the
+host creates one Up Next ticket, claims that exact ticket under the new AI session, and
+opens a turn naming its qualified id. Repeat with Reuse or Start an AI Session and an
+idle matching session, then with a mismatched provider; confirm reuse in the first case
+and a new session in the second. A held ticket claim must leave delivery pending and
+resume after the holder releases it. This live-provider check supplements the hermetic
+real-store and fake-drive regressions without copying customer content.
+
 ### Command edit survives an immediate reload (HS2-25HAK3)
 
 Playwright cannot route the `keepalive` request a real page unload sends, so the browser test

@@ -239,7 +239,7 @@ pub(crate) async fn renew_ticket(
 
 /// Resolve the owner before a claim mutation. An unqualified id must identify one
 /// ticket in this checkout; a qualified id selects its linked source directly.
-fn checkout_claim_entry(
+pub(crate) fn checkout_claim_entry(
     state: &AppState,
     reference: &str,
     id: &str,

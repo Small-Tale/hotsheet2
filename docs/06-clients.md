@@ -1093,8 +1093,17 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   its first occurrence. An occurrence's local date is its durable identity, so
   a restart or delivery retry cannot create a second ticket for it. The local
   schedule API lists the next three instants and recent outcomes; a draft can
-  request the same preview without saving. Auto-start delivery is tracked by
-  HS2-MB3BQE, and the schedule editor by HS2-17663F.
+  request the same preview without saving. For **Create Ticket Only**, the host leaves
+  that ticket queued. For **Auto-Start in a New AI Session**, it creates a distinct
+  client-owned session for the occurrence. For **Reuse or Start an AI Session**, it
+  uses an idle session in the same checkout and ticket source when its provider,
+  model, and effort are compatible; otherwise it starts a new one (HS2-MB3BQE).
+  The configured command AI selection takes precedence over the project default.
+  Before either auto-start handoff, the host claims the exact recorded ticket under
+  the selected session worker identity. A claim held by another worker leaves the
+  ticket pending for retry. A failed handoff or failed provider turn is recorded in the occurrence history
+  and on that ticket, then retried using its existing identity after a later wake or
+  host restart. The schedule editor is tracked by HS2-17663F.
   Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling. Press-and-hold
   remains reserved for output/history. A context or overflow menu will provide “Run in

@@ -1,6 +1,5 @@
 //! Checkout-local AI command schedules (HS2-G5J2E7).
 
-use crate::AppState;
 use crate::api_error::ApiError;
 use crate::dto::CreateReq;
 use crate::events::ChangeEvent;
@@ -8,6 +7,8 @@ use crate::routes::checkout_tickets::checkout_source_for_create;
 use crate::routes::project_tools::checkout_settings;
 use crate::routes::providers::{do_provider_create, provider_for};
 use crate::routes::ticket_writes::do_create;
+use crate::routes::{claims, permissions};
+use crate::{AppState, multistore};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -15,7 +16,7 @@ use hotsheet_ticketing::command_schedules::{
     self, CommandSchedule, OccurrenceResult, Recurrence, ScheduleAction, ScheduleRecord,
 };
 use hotsheet_ticketing::commands::{self, CommandDefinition, CommandKind};
-use hotsheet_ticketing::{ApiTicket, Scope, Settings, TicketQuery};
+use hotsheet_ticketing::{ApiTicket, Scope, Settings, TicketQuery, ops};
 use jiff::{
     Timestamp, civil,
     tz::{AmbiguousOffset, TimeZone},
@@ -516,6 +517,377 @@ pub(crate) fn process_checkout(
     Ok(next_wake)
 }
 
+/// A refused claim is not a delivery failure: another worker owns the exact ticket.
+enum DeliveryAttempt {
+    Accepted {
+        completed: tokio::sync::oneshot::Receiver<bool>,
+        worker: String,
+    },
+    AwaitClaim,
+    Failed(&'static str),
+}
+
+fn selected_ai(
+    command: &CommandDefinition,
+    defaults: &hotsheet_plugins::AiToolDefaults,
+) -> (String, Option<String>, Option<String>) {
+    let tool = command
+        .tool
+        .as_deref()
+        .filter(|tool| !tool.trim().is_empty())
+        .unwrap_or(&defaults.tool)
+        .to_owned();
+    let provider = defaults.providers.get(&tool);
+    let primary = (tool == defaults.tool).then_some(defaults);
+    (
+        tool,
+        command
+            .model
+            .clone()
+            .or_else(|| provider.and_then(|entry| entry.model.clone()))
+            .or_else(|| primary.and_then(|entry| entry.model.clone())),
+        command
+            .effort
+            .clone()
+            .or_else(|| provider.and_then(|entry| entry.effort.clone()))
+            .or_else(|| primary.and_then(|entry| entry.effort.clone())),
+    )
+}
+
+/// A live idle connection is compatible only when its checkout, ticket source, tool,
+/// model, and effort agree. A scheduled new-session id is stable across retries.
+struct DeliverySession<'a> {
+    project: &'a str,
+    source: &'a str,
+    tool: &'a str,
+    model: Option<&'a str>,
+    effort: Option<&'a str>,
+    action: ScheduleAction,
+    ticket_id: &'a str,
+}
+
+fn delivery_connection(state: &AppState, target: DeliverySession<'_>) -> (String, Option<String>) {
+    let own_id = format!(
+        "hotsheet-scheduled-{}",
+        target.ticket_id.to_ascii_lowercase()
+    );
+    if target.action == ScheduleAction::ReuseOrNewAiSession {
+        let mut live = state.client_drives.list();
+        live.sort_by(|a, b| a.id.cmp(&b.id));
+        if let Some(connection) = live.into_iter().find(|connection| {
+            connection.project == target.project
+                && connection.source == target.source
+                && connection.tool == target.tool
+                && !connection.busy
+                && connection.actions.iter().any(|item| item == "send_turn")
+                && target
+                    .model
+                    .is_none_or(|value| connection.model.as_deref() == Some(value))
+                && target
+                    .effort
+                    .is_none_or(|value| connection.effort.as_deref() == Some(value))
+        }) {
+            return (connection.id, None);
+        }
+        // After a host restart, the durable session catalog can resume a compatible
+        // provider session even though its live connection has gone away.
+        if target.model.is_none() && target.effort.is_none() {
+            if let Some(session) = state
+                .client_drives
+                .sessions(target.project)
+                .into_iter()
+                .filter(|session| session.tool == target.tool)
+                .max_by_key(|session| session.updated_at_ms)
+            {
+                return (own_id, Some(session.session_id));
+            }
+        }
+    }
+    (own_id, None)
+}
+
+struct DeliveryTarget<'a> {
+    reference: &'a str,
+    project: &'a str,
+    settings: &'a Settings,
+    command: &'a CommandDefinition,
+    action: ScheduleAction,
+    ticket_id: &'a str,
+    ticket_slug: &'a str,
+}
+
+async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAttempt {
+    let defaults = match permissions::effective_ai_settings(state, Some(target.settings)).await {
+        Ok(defaults) => defaults,
+        Err(_) => return DeliveryAttempt::Failed("ai_provider_unavailable"),
+    };
+    let (tool, model, effort) = selected_ai(target.command, &defaults);
+    let (entry, native_id) =
+        match claims::checkout_claim_entry(state, target.reference, target.ticket_id) {
+            Ok(owner) => owner,
+            Err(_) => return DeliveryAttempt::Failed("ticket_source_unavailable"),
+        };
+    let ticket = match entry.resolve(&native_id) {
+        Ok(Some(ticket)) => ticket,
+        _ => return DeliveryAttempt::Failed("ticket_unavailable"),
+    };
+    let source = multistore::store_url_id(&entry.store);
+    let (connection_id, session_id) = delivery_connection(
+        state,
+        DeliverySession {
+            project: target.project,
+            source: &source,
+            tool: &tool,
+            model: model.as_deref(),
+            effort: effort.as_deref(),
+            action: target.action,
+            ticket_id: &ticket.id.to_string(),
+        },
+    );
+    let worker = hotsheet_aitools::session_worker_id(&tool, &connection_id);
+    let now = crate::now();
+    let claimed = ops::claim_with_eta(
+        &entry.store,
+        &ticket.id,
+        &now,
+        now.plus_minutes(30),
+        &worker,
+        Some("Scheduled AI command".into()),
+        None,
+    );
+    match claimed {
+        Ok(ticket) => state.changed_in(&entry, "claimed", &ticket),
+        Err(ops::OpError::WrongWorker { .. } | ops::OpError::ClaimUnavailable { .. }) => {
+            return DeliveryAttempt::AwaitClaim;
+        }
+        Err(_) => return DeliveryAttempt::Failed("ticket_claim_failed"),
+    }
+    let prompt = format!(
+        "$hotsheet Work the exact ticket {} (qualified id {}) now. Read its full details and notes before acting. The ticket is already claimed by this AI session.",
+        target.ticket_slug, target.ticket_id
+    );
+    let delivered = permissions::send_scheduled_drive_turn(
+        state,
+        permissions::ScheduledDriveTurn {
+            checkout: target.reference.to_owned(),
+            source,
+            connection_id,
+            session_id,
+            tool,
+            model,
+            effort,
+            content: prompt,
+        },
+    )
+    .await;
+    match delivered {
+        Ok(completed) => DeliveryAttempt::Accepted { completed, worker },
+        Err(_) => {
+            if let Ok(ticket) = ops::release(&entry.store, &ticket.id, crate::now(), &worker, false)
+            {
+                state.changed_in(&entry, "released", &ticket);
+            }
+            DeliveryAttempt::Failed("ai_handoff_failed")
+        }
+    }
+}
+
+/// Persist the outcome against the same ticket identity, even if another settings
+/// writer changed a different schedule while the provider was being prepared.
+fn set_delivery_outcome(
+    settings: &Settings,
+    command_id: &str,
+    occurrence_date: &str,
+    ticket_id: &str,
+    outcome: command_schedules::OccurrenceOutcome,
+    allow_delivered: bool,
+) -> Result<Option<command_schedules::OccurrenceOutcome>, ApiError> {
+    for _ in 0..4 {
+        let prior = records(settings)?;
+        let mut next = prior.clone();
+        let Some(item) = next
+            .iter_mut()
+            .find(|record| record.schedule.command_id == command_id)
+            .and_then(|record| {
+                record.history.iter_mut().find(|item| {
+                    item.occurrence_date == occurrence_date
+                        && item.ticket_id.as_deref() == Some(ticket_id)
+                })
+            })
+        else {
+            return Ok(None);
+        };
+        if !matches!(
+            item.outcome,
+            command_schedules::OccurrenceOutcome::DeliveryPending
+                | command_schedules::OccurrenceOutcome::DeliveryFailed
+        ) && !(allow_delivered
+            && item.outcome == command_schedules::OccurrenceOutcome::Delivered)
+        {
+            return Ok(None);
+        }
+        let previous = item.outcome;
+        item.outcome = outcome;
+        if write_records(settings, &prior, &next).is_ok() {
+            return Ok(Some(previous));
+        }
+    }
+    Err(ApiError::new(
+        StatusCode::CONFLICT,
+        "command delivery history changed; retry on next wake",
+    ))
+}
+
+fn note_delivery_failure(state: &AppState, reference: &str, ticket_id: &str, reason: &str) {
+    let Ok((entry, native_id)) = claims::checkout_claim_entry(state, reference, ticket_id) else {
+        return;
+    };
+    let Ok(Some(ticket)) = entry.resolve(&native_id) else {
+        return;
+    };
+    let note = ops::add_note_with_metadata(
+        &entry.store,
+        &ticket.id,
+        hotsheet_model::Ulid::new(),
+        crate::now(),
+        hotsheet_model::NoteKind::Regular,
+        ops::NoteMetadataInput {
+            summary: Some("Scheduled AI delivery will retry".into()),
+            actor: Some(hotsheet_model::NoteActor {
+                role: hotsheet_model::AttachmentActorRole::System,
+                id: Some("hotsheet-command-scheduler".into()),
+            }),
+            ..ops::NoteMetadataInput::default()
+        },
+        format!(
+            "The scheduled AI command could not be delivered ({reason}). This same ticket will be retried."
+        ),
+    );
+    if let Ok(ticket) = note {
+        state.changed_in(&entry, "note_added", &ticket);
+    }
+}
+
+async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiError> {
+    let (checkout, settings) = checkout_settings(state, reference)?;
+    let definitions = commands::from_settings(&settings).map_err(invalid)?;
+    for record in records(&settings)? {
+        if record.schedule.action == ScheduleAction::CreateTicket {
+            continue;
+        }
+        for item in record.history.iter().filter(|item| {
+            matches!(
+                item.outcome,
+                command_schedules::OccurrenceOutcome::DeliveryPending
+                    | command_schedules::OccurrenceOutcome::DeliveryFailed
+            )
+        }) {
+            let Some(ticket_id) = item.ticket_id.as_deref() else {
+                continue;
+            };
+            let Some(ticket_slug) = item.ticket_slug.as_deref() else {
+                continue;
+            };
+            let result = if let Some(command) = definitions.iter().find(|command| {
+                command.id == record.schedule.command_id && command.kind == CommandKind::Ai
+            }) {
+                deliver_one(
+                    state,
+                    DeliveryTarget {
+                        reference,
+                        project: &checkout.root,
+                        settings: &settings,
+                        command,
+                        action: record.schedule.action,
+                        ticket_id,
+                        ticket_slug,
+                    },
+                )
+                .await
+            } else {
+                DeliveryAttempt::Failed("ai_command_unavailable")
+            };
+            let (outcome, reason, completed) = match result {
+                DeliveryAttempt::Accepted { completed, worker } => (
+                    command_schedules::OccurrenceOutcome::Delivered,
+                    None,
+                    Some((completed, worker)),
+                ),
+                DeliveryAttempt::AwaitClaim => continue,
+                DeliveryAttempt::Failed(reason) => (
+                    command_schedules::OccurrenceOutcome::DeliveryFailed,
+                    Some(reason),
+                    None,
+                ),
+            };
+            let previous = set_delivery_outcome(
+                &settings,
+                &record.schedule.command_id,
+                &item.occurrence_date,
+                ticket_id,
+                outcome,
+                false,
+            )?;
+            if previous.is_some() {
+                emit_changed(state, &checkout.id, &record.schedule.command_id);
+            }
+            if let (Some(reason), Some(previous)) = (reason, previous) {
+                if previous != command_schedules::OccurrenceOutcome::DeliveryFailed {
+                    note_delivery_failure(state, reference, ticket_id, reason);
+                }
+            }
+            if let Some((completed, worker)) = completed {
+                let state = state.clone();
+                let reference = reference.to_owned();
+                let command_id = record.schedule.command_id.clone();
+                let occurrence_date = item.occurrence_date.clone();
+                let ticket_id = ticket_id.to_owned();
+                tokio::spawn(async move {
+                    if completed.await != Ok(true) {
+                        if let Ok((checkout, settings)) = checkout_settings(&state, &reference) {
+                            if let Ok(Some(previous)) = set_delivery_outcome(
+                                &settings,
+                                &command_id,
+                                &occurrence_date,
+                                &ticket_id,
+                                command_schedules::OccurrenceOutcome::DeliveryFailed,
+                                true,
+                            ) {
+                                emit_changed(&state, &checkout.id, &command_id);
+                                if previous != command_schedules::OccurrenceOutcome::DeliveryFailed
+                                {
+                                    note_delivery_failure(
+                                        &state,
+                                        &reference,
+                                        &ticket_id,
+                                        "ai_turn_failed",
+                                    );
+                                }
+                            }
+                        }
+                        if let Ok((entry, native_id)) =
+                            claims::checkout_claim_entry(&state, &reference, &ticket_id)
+                        {
+                            if let Ok(Some(ticket)) = entry.resolve(&native_id) {
+                                if let Ok(ticket) = ops::release(
+                                    &entry.store,
+                                    &ticket.id,
+                                    crate::now(),
+                                    &worker,
+                                    false,
+                                ) {
+                                    state.changed_in(&entry, "released", &ticket);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 impl AppState {
     /// Run once at startup and after schedule writes; the fallback wake only reads
     /// checkout-local settings, never the network (HS2-G5J2E7).
@@ -529,26 +901,33 @@ impl AppState {
                 let work = state.clone();
                 let result = tokio::task::spawn_blocking(move || {
                     let mut next = None;
+                    let mut checkouts = Vec::new();
                     for checkout in work.checkout_registry.list().map_err(invalid)? {
                         match process_checkout(&work, &checkout.id, Timestamp::now()) {
                             Ok(Some(instant)) => next = Some(next.map_or(instant, |old: Timestamp| old.min(instant))),
                             Ok(None) => {},
                             Err(error) => tracing::warn!(checkout = %checkout.id, error = %error.message, "command schedule evaluation failed"),
                         }
+                        checkouts.push(checkout.id);
                     }
-                    Ok::<_, ApiError>(next)
+                    Ok::<_, ApiError>((next, checkouts))
                 }).await;
-                let next = match result {
-                    Ok(Ok(next)) => next,
+                let (next, checkouts) = match result {
+                    Ok(Ok(result)) => result,
                     Ok(Err(error)) => {
                         tracing::warn!(error = %error.message, "command schedule scan failed");
-                        None
+                        (None, Vec::new())
                     }
                     Err(error) => {
                         tracing::warn!(%error, "command schedule worker failed");
-                        None
+                        (None, Vec::new())
                     }
                 };
+                for checkout in checkouts {
+                    if let Err(error) = deliver_pending(&state, &checkout).await {
+                        tracing::warn!(checkout, error = %error.message, "scheduled AI delivery failed");
+                    }
+                }
                 let sleep = next
                     .and_then(|instant| {
                         let nanos =
@@ -572,10 +951,104 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client_drive::{
+        ClientDriveBackend, ClientTurnRequest, PrepareDrive, PreparedClientDrive,
+    };
     use axum::{body::Body, http::Request};
     use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
     use serde_json::json;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
     use tower::ServiceExt;
+
+    type PreparationRecord = (String, Option<String>, Option<String>, Option<String>);
+
+    #[derive(Default, Clone)]
+    struct ScheduledFakeDrive {
+        preparations: Arc<Mutex<Vec<PreparationRecord>>>,
+        turns: Arc<Mutex<Vec<String>>>,
+        fail_prepare_once: Arc<AtomicBool>,
+        fail_turn_once: Arc<AtomicBool>,
+    }
+
+    struct ScheduledPreparedDrive {
+        tool: String,
+        turns: Arc<Mutex<Vec<String>>>,
+        fail_turn_once: Arc<AtomicBool>,
+    }
+
+    impl ClientDriveBackend for ScheduledFakeDrive {
+        fn prepare(&self, request: PrepareDrive) -> Result<Arc<dyn PreparedClientDrive>, String> {
+            let store = FsStore::open(&request.store_path).map_err(|error| error.to_string())?;
+            let claimed = ops::query(&store, &TicketQuery::default())
+                .map_err(|error| error.to_string())?
+                .first()
+                .and_then(|ticket| ticket.claimed_by.clone());
+            self.preparations.lock().unwrap().push((
+                request.tool.clone(),
+                request.model,
+                request.effort,
+                claimed,
+            ));
+            if self.fail_prepare_once.swap(false, Ordering::SeqCst) {
+                return Err("synthetic provider unavailable".into());
+            }
+            Ok(Arc::new(ScheduledPreparedDrive {
+                tool: request.tool,
+                turns: self.turns.clone(),
+                fail_turn_once: self.fail_turn_once.clone(),
+            }))
+        }
+    }
+
+    impl PreparedClientDrive for ScheduledPreparedDrive {
+        fn tool(&self) -> &str {
+            &self.tool
+        }
+        fn supports_interrupt(&self) -> bool {
+            false
+        }
+        fn run_turn(
+            &self,
+            request: ClientTurnRequest<'_>,
+            _on_event: &mut dyn FnMut(&hotsheet_aitools::TurnEvent),
+        ) -> Result<hotsheet_aitools::TurnDone, String> {
+            self.turns.lock().unwrap().push(request.prompt.into());
+            if self.fail_turn_once.swap(false, Ordering::SeqCst) {
+                return Ok(hotsheet_aitools::TurnDone {
+                    reason: hotsheet_aitools::DoneReason::failed(1, "synthetic provider limit"),
+                    session_id: Some("synthetic-session".into()),
+                    session_cost_usd: None,
+                });
+            }
+            Ok(hotsheet_aitools::TurnDone {
+                reason: hotsheet_aitools::DoneReason::Completed,
+                session_id: Some("synthetic-session".into()),
+                session_cost_usd: None,
+            })
+        }
+    }
+
+    fn with_scheduled_backend(state: AppState, backend: ScheduledFakeDrive) -> AppState {
+        state
+            .with_ai_tool_discovery(std::time::Duration::from_secs(3600), |_, _, _, _| {
+                vec![
+                    hotsheet_plugins::AiToolDescriptor {
+                        id: "codex".into(),
+                        display_name: "Codex".into(),
+                        ..Default::default()
+                    },
+                    hotsheet_plugins::AiToolDescriptor {
+                        id: "claude".into(),
+                        display_name: "Claude".into(),
+                        ..Default::default()
+                    },
+                ]
+            })
+            .with_client_drive_backend(Arc::new(backend))
+    }
 
     fn fixture() -> (tempfile::TempDir, AppState, String, Settings, FsStore) {
         let root = tempfile::tempdir().unwrap();
@@ -629,6 +1102,369 @@ mod tests {
             last_processed_date: Some(cursor.into()),
             history: Vec::new(),
         }
+    }
+
+    fn due_ticket(
+        state: &AppState,
+        checkout: &str,
+        settings: &Settings,
+        action: ScheduleAction,
+    ) -> (String, String) {
+        settings
+            .set(
+                command_schedules::SETTING,
+                json!([sample_record("2026-03-07", action)]),
+                Scope::Local,
+            )
+            .unwrap();
+        process_checkout(
+            state,
+            checkout,
+            Timestamp::from_second(1_772_980_200).unwrap(),
+        )
+        .unwrap();
+        let item = records(settings).unwrap()[0].history[0].clone();
+        (item.ticket_id.unwrap(), item.ticket_slug.unwrap())
+    }
+
+    #[test]
+    fn hs2_mb3bqe_resolves_command_and_provider_defaults_without_cross_provider_model() {
+        let (_root, _state, _checkout, settings, _store) = fixture();
+        let mut command = commands::from_settings(&settings).unwrap().remove(0);
+        let mut defaults = hotsheet_plugins::AiToolDefaults {
+            tool: "claude".into(),
+            model: Some("opus".into()),
+            effort: Some("high".into()),
+            ..Default::default()
+        };
+        defaults.providers.insert(
+            "codex".into(),
+            hotsheet_plugins::AiProviderDefaults {
+                model: Some("codex-model".into()),
+                effort: Some("medium".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            selected_ai(&command, &defaults),
+            ("claude".into(), Some("opus".into()), Some("high".into()))
+        );
+        command.tool = Some("codex".into());
+        assert_eq!(
+            selected_ai(&command, &defaults),
+            (
+                "codex".into(),
+                Some("codex-model".into()),
+                Some("medium".into())
+            )
+        );
+        command.model = Some("explicit-model".into());
+        assert_eq!(
+            selected_ai(&command, &defaults).1.as_deref(),
+            Some("explicit-model")
+        );
+    }
+
+    #[tokio::test]
+    async fn hs2_mb3bqe_new_session_claims_exact_ticket_before_handoff() {
+        let (_root, state, checkout, settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        let (ticket_id, ticket_slug) =
+            due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        deliver_pending(&state, &checkout).await.unwrap();
+        let history = records(&settings).unwrap()[0].history.clone();
+        assert_eq!(
+            history[0].outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
+        assert_eq!(history[0].ticket_id.as_deref(), Some(ticket_id.as_str()));
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert_eq!(ticket.slug, ticket_slug);
+        let expected_worker = hotsheet_aitools::session_worker_id(
+            "codex",
+            &format!(
+                "hotsheet-scheduled-{}",
+                ticket.id.to_string().to_ascii_lowercase()
+            ),
+        );
+        assert_eq!(ticket.claimed_by.as_deref(), Some(expected_worker.as_str()));
+        {
+            let preparations = backend.preparations.lock().unwrap();
+            assert_eq!(preparations.len(), 1);
+            assert_eq!(preparations[0].0, "codex");
+            assert_eq!(preparations[0].3.as_deref(), Some(expected_worker.as_str()));
+        }
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(backend.preparations.lock().unwrap().len(), 1);
+        assert_eq!(
+            ops::query(&store, &TicketQuery::default()).unwrap().len(),
+            1
+        );
+        let response = crate::app(state)
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/checkouts/{checkout}/command-schedules"))
+                    .header("x-hotsheet-secret", "synthetic-secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let listed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(listed[0]["history"][0]["outcome"], "delivered");
+        assert_eq!(listed[0]["history"][0]["ticket_id"], ticket_id);
+    }
+
+    #[tokio::test]
+    async fn hs2_mb3bqe_command_provider_override_and_ticket_only_action() {
+        let (_root, state, checkout, settings, _store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        due_ticket(&state, &checkout, &settings, ScheduleAction::CreateTicket);
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert!(backend.preparations.lock().unwrap().is_empty());
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::Created
+        );
+        let (_root, state, checkout, settings, _store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        settings
+            .set(
+                "commands",
+                json!([{"id":"daily-summary","title":"Daily summary","kind":"ai","prompt":"Synthetic work","tool":"claude"}]),
+                Scope::Local,
+            )
+            .unwrap();
+        due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(backend.preparations.lock().unwrap()[0].0, "claude");
+    }
+
+    #[tokio::test]
+    async fn hs2_mb3bqe_reuse_waits_for_claim_then_uses_compatible_idle_session() {
+        let (_root, state, checkout, settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        let source = multistore::store_url_id(&store);
+        std::mem::drop(
+            permissions::send_scheduled_drive_turn(
+                &state,
+                permissions::ScheduledDriveTurn {
+                    checkout: checkout.clone(),
+                    source: source.clone(),
+                    connection_id: "existing-session".into(),
+                    session_id: None,
+                    tool: "codex".into(),
+                    model: None,
+                    effort: None,
+                    content: "synthetic setup".into(),
+                },
+            )
+            .await
+            .unwrap(),
+        );
+        let project = state.checkout_registry.resolve(&checkout).unwrap();
+        let (mismatched, _) = delivery_connection(
+            &state,
+            DeliverySession {
+                project: &project.root,
+                source: &source,
+                tool: "codex",
+                model: Some("another-model"),
+                effort: None,
+                action: ScheduleAction::ReuseOrNewAiSession,
+                ticket_id: "synthetic-ticket-id",
+            },
+        );
+        assert_ne!(mismatched, "existing-session");
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            while state.client_drives.get("existing-session").unwrap().busy {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let (ticket_id, _) = due_ticket(
+            &state,
+            &checkout,
+            &settings,
+            ScheduleAction::ReuseOrNewAiSession,
+        );
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        let now = crate::now();
+        ops::claim(
+            &store,
+            &ticket.id,
+            &now,
+            now.plus_minutes(30),
+            "another-worker",
+            None,
+        )
+        .unwrap();
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::DeliveryPending
+        );
+        assert_eq!(backend.preparations.lock().unwrap().len(), 1);
+        ops::release(&store, &ticket.id, crate::now(), "another-worker", false).unwrap();
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0]
+                .ticket_id
+                .as_deref(),
+            Some(ticket_id.as_str())
+        );
+        assert_eq!(backend.preparations.lock().unwrap().len(), 1);
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert_eq!(
+            ticket.claimed_by.as_deref(),
+            Some(hotsheet_aitools::session_worker_id("codex", "existing-session").as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn hs2_mb3bqe_failed_delivery_retries_same_ticket_after_host_restart() {
+        let (root, state, checkout, settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        backend.fail_prepare_once.store(true, Ordering::SeqCst);
+        let state = with_scheduled_backend(state, backend.clone());
+        let (ticket_id, _) = due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::DeliveryFailed
+        );
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert!(ticket.claimed_by.is_none());
+        assert!(
+            ticket
+                .notes
+                .iter()
+                .any(|note| note.text.contains("same ticket will be retried"))
+        );
+        let recovered = AppState::new(store.clone(), "synthetic-secret".into())
+            .unwrap()
+            .with_checkout_registry(root.path().join("checkouts.json"));
+        let recovered = with_scheduled_backend(recovered, backend.clone());
+        deliver_pending(&recovered, &checkout).await.unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0]
+                .ticket_id
+                .as_deref(),
+            Some(ticket_id.as_str())
+        );
+        assert_eq!(
+            ops::query(&store, &TicketQuery::default()).unwrap().len(),
+            1
+        );
+        assert_eq!(backend.preparations.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn hs2_mb3bqe_failed_provider_turn_releases_claim_and_retries_same_ticket() {
+        let (_root, state, checkout, settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        backend.fail_turn_once.store(true, Ordering::SeqCst);
+        let state = with_scheduled_backend(state, backend.clone());
+        let (ticket_id, _) = due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        deliver_pending(&state, &checkout).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            while records(&settings).unwrap()[0].history[0].outcome
+                != command_schedules::OccurrenceOutcome::DeliveryFailed
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert!(ticket.claimed_by.is_none());
+        assert!(
+            ticket
+                .notes
+                .iter()
+                .any(|note| note.text.contains("ai_turn_failed"))
+        );
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0]
+                .ticket_id
+                .as_deref(),
+            Some(ticket_id.as_str())
+        );
+        assert_eq!(
+            ops::query(&store, &TicketQuery::default()).unwrap().len(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn hs2_mb3bqe_host_startup_delivers_existing_pending_one_time_ticket() {
+        let (_root, state, checkout, settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        let (ticket_id, _) = due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        let mut stored = records(&settings).unwrap();
+        stored[0].schedule.recurrence.kind = command_schedules::RecurrenceKind::Once;
+        stored[0].schedule.recurrence.date = Some("2026-03-08".into());
+        stored[0].schedule.recurrence.start_date = None;
+        stored[0].last_processed_date = Some("2026-03-08".into());
+        settings
+            .set(command_schedules::SETTING, json!(stored), Scope::Local)
+            .unwrap();
+
+        state.spawn_command_schedule_runner();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while records(&settings).unwrap()[0].history[0].outcome
+                != command_schedules::OccurrenceOutcome::Delivered
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        state.begin_stopping();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0]
+                .ticket_id
+                .as_deref(),
+            Some(ticket_id.as_str())
+        );
+        assert_eq!(
+            ops::query(&store, &TicketQuery::default()).unwrap().len(),
+            1
+        );
+        assert_eq!(backend.preparations.lock().unwrap().len(), 1);
     }
 
     #[test]
