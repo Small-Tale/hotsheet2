@@ -13648,7 +13648,14 @@ fn github_sign_in_prints_device_code_and_reports_denial_without_a_keychain_write
 fn provider_ls_unwraps_a_github_app_bundle_before_the_live_read() {
     use std::io::Write;
     let dir = tempfile::tempdir().unwrap();
-    hs(dir.path()).arg("init").assert().success();
+    // HS2-VN29V5: provider ids are machine-global; a shared test home can retain
+    // another parallel case's github-main endpoint after that case stops its server.
+    let home = tempfile::tempdir().unwrap();
+    hs(dir.path())
+        .env("HOTSHEET_HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     std::fs::write(dir.path().join("providers.json"), format!(
@@ -13673,12 +13680,55 @@ fn provider_ls_unwraps_a_github_app_bundle_before_the_live_read() {
         .as_secs();
     let bundle = serde_json::json!({"kind":"github_app","client_id":"IvTest12345678","web_base":"https://github.com","obtained_at":now,"token":{"access_token":"fixture-access","refresh_token":"fixture-refresh","expires_in":28800}});
     hs(dir.path())
+        .env("HOTSHEET_HOME", home.path())
         .env("HOTSHEET_API_KEY_CLI_BUNDLE", bundle.to_string())
         .args(["provider-ls", "github-main"])
         .assert()
         .success()
         .stdout(predicate::str::contains("[]"));
     server.join().unwrap();
+}
+
+#[test]
+fn hs2_vn29v5_matching_provider_ids_stay_in_their_own_cli_homes() {
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    let first_home = tempfile::tempdir().unwrap();
+    let second_home = tempfile::tempdir().unwrap();
+    for (store, home, locator) in [
+        (first.path(), first_home.path(), "synthetic/first"),
+        (second.path(), second_home.path(), "synthetic/second"),
+    ] {
+        hs(store)
+            .env("HOTSHEET_HOME", home)
+            .arg("init")
+            .assert()
+            .success();
+        std::fs::write(
+            store.join("providers.json"),
+            format!(r#"{{"connections":[{{"id":"github-main","provider":"github","locator":"{locator}","settings":{{}}}}]}}"#),
+        )
+        .unwrap();
+        let output = hs(store)
+            .env("HOTSHEET_HOME", home)
+            .args(["providers", "--json"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let providers: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let text = providers.to_string();
+        assert!(text.contains(locator), "{text}");
+        let other = if locator.ends_with("first") {
+            "synthetic/second"
+        } else {
+            "synthetic/first"
+        };
+        assert!(!text.contains(other), "{text}");
+    }
 }
 
 #[test]
