@@ -1952,6 +1952,22 @@ mod freshness_tests {
         }
     }
 
+    // HS2-R6FZ54: macOS FSEvents may spend tens of seconds in a native watch()
+    // registration even when this test has the full Nextest runner. Wait for the
+    // observable rearm result instead of mistaking registration latency for a lost watch.
+    fn wait_for_native_rearm(what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now()
+            + if cfg!(target_os = "macos") {
+                Duration::from_secs(120)
+            } else {
+                Duration::from_secs(30)
+            };
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// Drives the real watch loop with hand-fed events, walking the freshness states:
     /// starting → live → event queued → applied → events lost → rescanned → stopped.
     #[test]
@@ -2161,7 +2177,7 @@ mod freshness_tests {
             let scope = Arc::new(TicketsWatchScope::new(&root, watch_root));
             let handle =
                 super::spawn_watcher_in_scope(target, WatcherBackend::Recommended, scope).unwrap();
-            wait_for("native watcher to become live", || {
+            wait_for_native_rearm("native watcher to become live", || {
                 entry.freshness.in_sync()
             });
 
@@ -2171,7 +2187,7 @@ mod freshness_tests {
             });
             let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
             let first = create(&replacement, "replacement ticket");
-            wait_for("recreated store to replace its index", || {
+            wait_for_native_rearm("recreated store to replace its index", || {
                 entry.freshness.in_sync()
                     && entry
                         .index
@@ -2189,7 +2205,7 @@ mod freshness_tests {
                         == vec![first.id]
             });
             let later = create(&replacement, "external write after rearm");
-            wait_for("rearmed native watch to index an external write", || {
+            wait_for_native_rearm("rearmed native watch to index an external write", || {
                 entry
                     .index
                     .lock()
@@ -2205,7 +2221,7 @@ mod freshness_tests {
             });
             let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
             let second = create(&replacement, "second replacement ticket");
-            wait_for("second recreation to replace its index", || {
+            wait_for_native_rearm("second recreation to replace its index", || {
                 entry.freshness.in_sync()
                     && entry
                         .index
@@ -2262,8 +2278,8 @@ mod freshness_tests {
                 after_children,
             )
             .unwrap();
-            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(30)).unwrap();
-            wait_for("startup replacement to reconcile", || {
+            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(60)).unwrap();
+            wait_for_native_rearm("startup replacement to reconcile", || {
                 entry.freshness.in_sync()
                     && entry
                         .index
@@ -2282,7 +2298,7 @@ mod freshness_tests {
             });
             let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
             let later = create(&replacement, "write after startup rearm");
-            wait_for("startup rearm to index a later external write", || {
+            wait_for_native_rearm("startup rearm to index a later external write", || {
                 entry
                     .index
                     .lock()
@@ -2325,8 +2341,8 @@ mod freshness_tests {
                 Some(after),
             )
             .unwrap();
-            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(10)).unwrap();
-            wait_for("missing startup child to reconcile", || {
+            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(60)).unwrap();
+            wait_for_native_rearm("missing startup child to reconcile", || {
                 entry.freshness.in_sync()
                     && entry
                         .index
@@ -2416,6 +2432,22 @@ mod store_root_scope_tests {
         }
     }
 
+    // HS2-R6FZ54: a macOS FSEvents root registration took over 40 seconds in an
+    // otherwise isolated test. Give native startup and rearm their own deadline;
+    // ordinary event assertions keep the shorter wait above.
+    fn wait_for_native_rearm(what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now()
+            + if cfg!(target_os = "macos") {
+                Duration::from_secs(120)
+            } else {
+                Duration::from_secs(30)
+            };
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// Every change event received so far.
     fn drain(rx: &mut broadcast::Receiver<ChangeEvent>) -> Vec<(String, String)> {
         let mut seen = Vec::new();
@@ -2453,7 +2485,7 @@ mod store_root_scope_tests {
         )
         .unwrap();
         let entry = state.default_entry();
-        wait_for("the watcher to go live", || entry.freshness.in_sync());
+        wait_for_native_rearm("the watcher to go live", || entry.freshness.in_sync());
         Watched {
             state,
             scope,
@@ -2581,7 +2613,7 @@ mod store_root_scope_tests {
             let after = create(&store, &format!("written after return {round}"));
             let after_id = after.id.to_string();
             let mut seen_after_return = Vec::new();
-            wait_for("the returned store to reconcile and notify clients", || {
+            wait_for_native_rearm("the returned store to reconcile and notify clients", || {
                 seen_after_return.extend(drain(&mut watched.events));
                 let indexed = entry
                     .index
