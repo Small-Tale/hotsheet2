@@ -674,7 +674,7 @@ export function TerminalDrawer({
           <TerminalSession session={selectedSession} mobile={mobile} focus={focusMode} />
         ) : selectedPending?.failure ? (
           <EmptyState
-            title={`${selectedPending.name} could not start`}
+            title={`${selectedPending.name} Could Not Start`}
             detail={selectedPending.failure}
             icon={<LucideIcon icon={TriangleAlert} name="triangle-alert" />}
             action={

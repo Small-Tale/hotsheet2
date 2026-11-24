@@ -159,7 +159,7 @@ describe('TerminalDrawer', () => {
       }),
     );
     expect(markup).toContain('data-mode="failed"');
-    expect(markup).toContain('Claude could not start');
+    expect(markup).toContain('Claude Could Not Start');
     expect(markup).toContain('Server unreachable on Project.');
     expect(markup).toContain('data-action="retry-failed-drawer-tab"');
     expect(markup).toContain('data-action="close-failed-drawer-tab"');

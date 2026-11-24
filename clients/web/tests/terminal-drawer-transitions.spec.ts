@@ -176,6 +176,7 @@ test('a hung terminal create becomes a recoverable drawer error and Retry can st
 }) => {
   await installTerminalFixture(page);
   let attempts = 0;
+  let requestedId: string | undefined;
   const first = deferred();
   await page.route(
     (url) => url.pathname === `${project.apiPath}/terminals`,
@@ -184,11 +185,13 @@ test('a hung terminal create becomes a recoverable drawer error and Retry can st
         return route.fulfill({
           json: [
             { id: 'nano', alive: true, busy: true, cwd: project.root, progress: 50 },
-            ...(attempts >= 2 ? [{ id: 'terminal-retry', alive: true, busy: false, cwd: project.root }] : []),
+            ...(attempts >= 2 && requestedId ? [{ id: requestedId, alive: true, busy: false, cwd: project.root }] : []),
           ],
         });
+      const body = route.request().postDataJSON() as { id: string };
       attempts += 1;
       if (attempts === 1) {
+        requestedId = body.id;
         await first.promise;
         try {
           await route.abort('failed');
@@ -197,19 +200,21 @@ test('a hung terminal create becomes a recoverable drawer error and Retry can st
         }
         return;
       }
-      await route.fulfill({ status: 201, json: { id: 'terminal-retry', alive: true, busy: false, cwd: project.root } });
+      expect(body.id).toBe(requestedId);
+      await route.fulfill({ status: 201, json: { id: body.id, alive: true, busy: false, cwd: project.root } });
     },
   );
   await page.goto('/');
   await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'pending');
   await expect(drawer).toHaveAttribute('data-mode', 'failed', { timeout: 20_000 });
   first.resolve();
-  await expect(drawer.getByText('Terminal could not start')).toBeVisible();
+  await expect(drawer.getByText('Terminal Could Not Start')).toBeVisible();
   await expect(drawer.getByText(/15 seconds/)).toBeVisible();
   await expect(page.getByText('Preparing terminals')).toHaveCount(0);
   for (const width of [1280, 900, 390, 1280]) {
@@ -228,6 +233,6 @@ test('a hung terminal create becomes a recoverable drawer error and Retry can st
   await drawer.screenshot({ path: 'target/visual-captures/hs2-s2t4vj-failed-1280-dark.png' });
   await drawer.getByRole('button', { name: 'Retry' }).click();
   await expect.poll(() => attempts).toBe(2);
-  await expect(drawer.locator('[data-tab-kind="terminal"][data-terminal-id="terminal-retry"]')).toBeVisible();
+  await expect(drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${requestedId}"]`)).toBeVisible();
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
 });

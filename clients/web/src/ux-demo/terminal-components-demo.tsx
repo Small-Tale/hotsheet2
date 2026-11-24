@@ -255,7 +255,7 @@ export function TerminalDrawerDemo() {
         />
       </CatalogExample>
       <CatalogExample
-        label="Failed session creation"
+        label="Failed Session Creation"
         viewport={{ ...drawerFrame, height: 'medium' }}
         rootAttributes={{ 'data-demo-scope': 'drawer-create-failure-demo' }}
       >
