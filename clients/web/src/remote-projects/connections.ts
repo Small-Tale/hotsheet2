@@ -1,7 +1,7 @@
-import { terminalProjectOwner, type TerminalProjectScope } from '../terminal-project-scope';
-
 /** A remote server reports its own paths; the browser knows only the tab's composite id. */
-export interface RemoteConnectionScope extends TerminalProjectScope {
+export interface RemoteConnectionScope {
+  id: string;
+  root: string;
   stores: readonly string[];
 }
 
@@ -15,11 +15,9 @@ export function remoteConnectionCreate(value: unknown, projectId: string, checko
 
 function belongsToTab(project: unknown, projectId: string, scopes: readonly RemoteConnectionScope[]): boolean {
   if (typeof project !== 'string' || !project) return false;
-  const owner = terminalProjectOwner(scopes, project);
-  if (owner !== undefined) return owner === projectId;
-  // A terminal hook can register against a ticket store outside the checkout root. Shared
-  // stores belong to every linked tab, as with the local project's store membership.
-  return scopes.some((scope) => scope.id === projectId && scope.stores.includes(project));
+  // Connections name the exact checkout or ticket-store root, unlike terminals whose cwd may
+  // be anywhere under a checkout. A shared store belongs to every tab that links it.
+  return scopes.some((scope) => scope.id === projectId && (scope.root === project || scope.stores.includes(project)));
 }
 
 export function remoteConnectionList(

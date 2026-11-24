@@ -262,7 +262,10 @@ saved tool sessions to the owning open checkout, then presents their project as
 the composite tab id. A tab never receives a sibling checkout's connections; two
 hosts exposing the same native checkout id remain separate by reviewed binding.
 Connections registered against a linked ticket store follow that tab's store
-membership. Write operations still require the remote host's read-write approval.
+membership, even when two tabs share that store. A different descendant directory
+is not a connection owner. Peer tabs from an older binding revision or a changed
+server identity do not participate in ownership. Write operations still require
+the remote host's read-write approval.
 On a remote-mode host the `/__hotsheet/remotes` routes are host-only: a session
 with the **local** grant manages the registry like the host's own browser, and
 any other session gets 404 and is never offered Remote Project (HS2-HBM3JN). The

@@ -2079,8 +2079,14 @@ async function remoteTerminalScopes(target: SessionTarget): Promise<RemoteTermin
 /** A host's connection registry is machine-wide. Only tabs on this reviewed binding may
  * participate in ownership, even when another host exposes an equal native checkout id. */
 async function remoteConnectionScopes(target: SessionTarget): Promise<RemoteConnectionScope[]> {
-  const bindingId = target.remote?.bindingId;
-  const peers = [...sessions.entries()].filter(([, session]) => session.remote?.bindingId === bindingId);
+  const current = target.remote;
+  if (!current) return [];
+  const peers = [...sessions.entries()].filter(
+    ([, session]) =>
+      session.remote?.bindingId === current.bindingId &&
+      session.remote.bindingRevision === current.bindingRevision &&
+      session.remote.connection.binding.identity.server_id === current.connection.binding.identity.server_id,
+  );
   const roots = await Promise.all(peers.map(([id, session]) => remoteCheckoutRoot(id, session).catch(() => undefined)));
   return peers.flatMap(([id, session], index) => {
     const root = roots[index];

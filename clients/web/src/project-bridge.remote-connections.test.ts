@@ -15,20 +15,30 @@ const hostB = '01ARZ3NDEKTSV4RRFFQ69G5FAW';
 const app = remoteProjectId(hostA, 'same');
 const api = remoteProjectId(hostA, 'api');
 const equalOtherHost = remoteProjectId(hostB, 'same');
+const staleRevision = remoteProjectId(hostA, 'stale-revision');
+const staleIdentity = remoteProjectId(hostA, 'stale-identity');
 const registry = projectSessionRegistry();
 const credentials = { bearer_secret: 'session:approved', session_origin: 'https://host.test', session_csrf: 'csrf' };
 
-function register(id: string, bindingId: string, checkoutId: string, root: string, origin: string): void {
+function register(
+  id: string,
+  bindingId: string,
+  checkoutId: string,
+  root: string,
+  origin: string,
+  revision = 1,
+  serverId = bindingId,
+): void {
   registry.set(id, {
     url: origin,
     secret: '',
     remote: {
       bindingId,
-      bindingRevision: 1,
+      bindingRevision: revision,
       checkoutId,
       root,
       stores: [`${root}.hs2`],
-      connection: { credentials } as never,
+      connection: { credentials, binding: { identity: { server_id: serverId } } } as never,
     },
   });
 }
@@ -48,6 +58,8 @@ afterEach(() => {
   registry.delete(app);
   registry.delete(api);
   registry.delete(equalOtherHost);
+  registry.delete(staleRevision);
+  registry.delete(staleIdentity);
   vi.mocked(remoteRequest).mockReset();
 });
 
@@ -106,5 +118,19 @@ describe('HS2-TCJQHX remote AI bridge', () => {
     expect(await (await request(equalOtherHost, '/connections')).json()).toEqual([
       { id: 'b.test', project: equalOtherHost, tool: 'claude' },
     ]);
+  });
+
+  it('does not consult tabs from an old binding revision or server identity', async () => {
+    register(app, hostA, 'same', '/srv/app', 'https://a.test');
+    register(staleRevision, hostA, 'old', '/srv/old', 'https://a.test', 0);
+    register(staleIdentity, hostA, 'replaced', '/srv/replaced', 'https://a.test', 1, hostB);
+    registry.get(staleRevision)!.remote!.root = undefined;
+    registry.get(staleIdentity)!.remote!.root = undefined;
+    vi.mocked(remoteRequest).mockImplementation(async (url) => {
+      if (new URL(url).pathname !== '/connections') throw new Error('Stale peer was consulted');
+      return Response.json([{ id: 'owned', project: '/srv/app', tool: 'claude' }]);
+    });
+    expect(await (await request(app, '/connections')).json()).toEqual([{ id: 'owned', project: app, tool: 'claude' }]);
+    expect(remoteRequest).toHaveBeenCalledTimes(1);
   });
 });

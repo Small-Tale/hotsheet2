@@ -235,12 +235,14 @@ No customer content was copied into fixtures.
 
 HS2-TCJQHX (remote AI connection ownership):
 `clients/web/src/remote-projects/connections.test.ts` covers native checkout
-translation, foreign-tab rejection, the two-checkout host list, linked-store
-connections, malformed records, and equal native ids on different hosts.
+translation, foreign-tab rejection, the two-checkout host list, exact checkout
+root versus unlinked descendant, a store linked by two tabs, malformed records,
+and equal native ids on different hosts.
 `clients/web/src/project-bridge.remote-connections.test.ts` exercises the bridge's
 POST `/drive/connections`, GET `/connections`, and GET `/drive/sessions` with two
 open remote tabs and separate reviewed bindings. The bridge returns only the
 owning tab's records with its composite project id.
+It excludes peers from an older binding revision or changed server identity.
 `clients/web/src/remote-projects/connections.transport.test.ts` repeats the
 cross-checkout and cross-host requests through two real localhost remote servers.
 The remote drawer browser

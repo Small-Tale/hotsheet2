@@ -27,20 +27,26 @@ describe('HS2-TCJQHX remote AI connection identity', () => {
 
   it('projects only the owning checkout connections and saved sessions into a tab', () => {
     const scopes = [
-      { id: app, root: '/srv/app', stores: ['/srv/app.hs2'] },
-      { id: api, root: '/srv/api', stores: ['/srv/api.hs2'] },
+      { id: app, root: '/srv/app', stores: ['/srv/app.hs2', '/srv/shared.hs2'] },
+      { id: api, root: '/srv/api', stores: ['/srv/api.hs2', '/srv/shared.hs2'] },
     ];
     const connections = [
       { id: 'app-chat', project: '/srv/app' },
       { id: 'api-chat', project: '/srv/api' },
       { id: 'app-hook', project: '/srv/app.hs2' },
+      { id: 'shared-hook', project: '/srv/shared.hs2' },
+      { id: 'unlinked-descendant', project: '/srv/app/other' },
       { id: 'stray', project: '/srv/stray' },
     ];
     expect(remoteConnectionList(connections, app, scopes)).toEqual([
       { id: 'app-chat', project: app },
       { id: 'app-hook', project: app },
+      { id: 'shared-hook', project: app },
     ]);
-    expect(remoteConnectionList(connections, api, scopes)).toEqual([{ id: 'api-chat', project: api }]);
+    expect(remoteConnectionList(connections, api, scopes)).toEqual([
+      { id: 'api-chat', project: api },
+      { id: 'shared-hook', project: api },
+    ]);
     expect(remoteConnectionItem({ id: 'new', project: '/srv/app' }, app, scopes)).toEqual({ id: 'new', project: app });
     expect(remoteConnectionItem({ id: 'foreign', project: '/srv/api' }, app, scopes)).toBeUndefined();
   });
