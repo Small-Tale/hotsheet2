@@ -4325,7 +4325,8 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   through the hosted route with a synthetic tool and reads its tab label in the real drawer
   at 1440, 1100 and 390 px in both color schemes, asserting at each width that the run
   suffix is the tab's unclipped middle-truncation tail (HS2-8KZF59; unit:
-  `terminal-drawer.test.ts`, `terminal-names.test.ts`). The delivered role
+  `terminal-drawer.test.ts`, `terminal-names.test.ts`), and the same of the Project grid
+  tile caption (HS2-3RBYJK; unit: `terminal-dashboard.test.ts # HS2-3RBYJK`). The delivered role
   prompt and joining are covered by HS2-2DPGDY below; sessions as a reconciliation source
   are covered under run recovery (HS2-75Q254).
 

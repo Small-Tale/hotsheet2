@@ -3136,6 +3136,8 @@ test reads it in the real drawer at wide and narrow widths, in both color scheme
 middle of its label and keeps everything after the last `: ` (the run suffix or role)
 visible, so two sessions of one project stay distinguishable; the full label is the tab's
 accessible name and its title while truncated (HS2-8KZF59, Kerf `nameTruncate="middle"`). The
+Project grid tile's `project › label` caption does the same through Kerf `Text`
+`truncate="middle"` with the same kept suffix (HS2-3RBYJK). The
 link from the orchestration workspace is HS2-HSMH2Q.
 
 **Roles.** A session joins the target's existing role model

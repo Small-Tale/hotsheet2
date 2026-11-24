@@ -165,6 +165,39 @@ describe('TerminalDashboard', () => {
     expect(markup).toMatch(/class="terminal-tile__state" title="Busy"><span class="kui-badge"[^>]*aria-label="Busy"/);
     expect(markup).not.toContain('/work/one');
   });
+  it('keeps an orchestrator session’s run suffix in its grid caption through Kerf Text (HS2-3RBYJK)', () => {
+    const orchestrated: TerminalDashboardGroup[] = [
+      {
+        ...groups[0],
+        chats: [],
+        sessions: [
+          {
+            ...groups[0].sessions[0],
+            title: 'Release train: run Q69G5FB0',
+            orchestrator: {
+              checkout_id: 'one',
+              operation_id: 'op',
+              project: 'Release train',
+              owner: 'orchestrator',
+              paused: false,
+            },
+          },
+          { ...groups[0].sessions[0], id: 'term-2', title: 'Plain shell: one' },
+        ],
+      },
+    ];
+    const markup = String(
+      TerminalDashboard({ groups: orchestrated, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }),
+    );
+    // The orchestrator's caption cuts the middle and keeps `run Q69G5FB0` whole.
+    expect(markup).toContain('class="kui-text__truncate-tail"><strong>run Q69G5FB0</strong>');
+    expect(markup).toContain('title="Project One › Release train: run Q69G5FB0"');
+    // Another terminal keeps the ordinary end ellipsis.
+    expect(markup).toContain('Project One › Plain shell: one');
+    expect(markup.match(/kui-text__truncate-middle/g)).toHaveLength(1);
+    // No app rule reaches the strong inside Kerf Text.
+    expect(css).not.toMatch(/\.terminal-tile__identity(:hover)? strong/);
+  });
   it('keeps fixed 80x24 sizing in dashboard previews and magnified terminals', () => {
     const session = groups[0].sessions[0],
       preview = String(FixedAspectTerminalCard({ session })),
@@ -424,7 +457,7 @@ describe('TerminalDashboard', () => {
     expect(css).toContainSource(".terminal-viewport[data-display-mode='interactive'] { -webkit-touch-callout: none; }");
     // The identity button's reset is merged into its one rule (HS2-GWDD1Z).
     expect(css).toContainSource(
-      '.terminal-tile__identity { display: flex; min-width: 0; padding: 0; border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-quiet); background: transparent; flex: 1; flex-direction: column; text-align: left; }',
+      '.terminal-tile__identity { display: flex; min-width: 0; padding: 0; border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-quiet); background: transparent; font-size: var(--wa-font-size-s); flex: 1; flex-direction: column; text-align: left; }',
     );
     expect(css.match(/^\.terminal-tile__identity \{/gm)).toHaveLength(1);
     expect(css.match(/^\.terminal-dashboard-controls__visibility-select \{/gm)).toHaveLength(1);
