@@ -15,6 +15,8 @@ use time::OffsetDateTime;
 use tokio::net::TcpListener;
 use ulid::Ulid;
 
+mod opencode_v2_terminal;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 enum RemoteTransportMode {
     Http,
@@ -166,6 +168,10 @@ const DEFAULT_SHUTDOWN_DRAIN_MS: u64 = 5_000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--opencode-v2-terminal"))
+    {
+        return opencode_v2_terminal::run(std::env::args_os().skip(2));
+    }
     let cli = Cli::parse();
     // HS2-9TV6A2: hosted stores register the installed `hotsheet-cli merge-driver` as their
     // semantic ticket merge driver before any sync integrates.

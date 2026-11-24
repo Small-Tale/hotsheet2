@@ -2674,6 +2674,13 @@ checkout/source project both immediately and after broker restart; the existing 
 browser HS2-JVSFES test covers the filtered drawer composition without a message action. Its live visual repro is
 attached to the bug ticket, with the after-state review recorded there.
 
+HS2-W42KWS covers OpenCode v2's authenticated `/api/session` creation, host-assigned session ID,
+selected model and directory, `/api/session/{id}/prompt` delivery, unsupported TUI commands, and
+version selection in focused Rust tests (`opencode_v2_terminal.rs`, `opencode_v2.rs`, and
+`routes/terminals/launch.rs`). A synthetic isolated live check with the installed OpenCode v2 CLI
+verifies that the supervised server and attached TUI start and that the private server exits with
+the TUI; this check sends no model request.
+
 ### Durable Codex permission hook across a local-host restart (HS2-86VAAG)
 
 | Behavior                                                                                                                                                                                                                                                                                                                                          | Unit coverage                                                                                                                                                                                                                                                                                                                                  | End-to-end coverage                                                                                                                        | Manual follow-up                                                                                                    |

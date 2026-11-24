@@ -470,12 +470,44 @@ pub(crate) fn prepare_session_push(
     }))
 }
 
+/// V2 starts a private server before the TUI. Assign the OpenCode session id here so the
+/// wrapper, live adapter, and detached broker all use one address without a session-list race.
+pub(crate) fn prepare_opencode_v2(push: &mut PreparedSessionPush) -> String {
+    let session_id = format!("ses_{}", hotsheet_model::Ulid::new());
+    push.args.clear(); // The v1 manifest's `--port` belongs to the wrapper's server child.
+    push.broker_state.mechanism = session_push::OPENCODE_V2_HTTP.into();
+    push.broker_state.session_id = Some(session_id.clone());
+    push.adapter = Arc::new(session_push::OpenCodeV2Push::new(
+        push.broker_state.port,
+        &push.broker_state.password,
+        session_id.clone(),
+        Arc::new(UreqHttp::default()),
+    ));
+    session_id
+}
+
 /// Restore a launch-wired adapter from state retained beside its live broker PTY.
 pub(crate) fn restore_broker_push(
     state: &AppState,
     id: &str,
     push: hotsheet_terminals::BrokerPushState,
 ) {
+    if push.mechanism == session_push::OPENCODE_V2_HTTP {
+        let Some(session_id) = push.session_id else {
+            return;
+        };
+        register(
+            state,
+            id,
+            Arc::new(session_push::OpenCodeV2Push::new(
+                push.port,
+                &push.password,
+                session_id,
+                Arc::new(UreqHttp::default()),
+            )),
+        );
+        return;
+    }
     if push.mechanism != session_push::OPENCODE_HTTP {
         return;
     }

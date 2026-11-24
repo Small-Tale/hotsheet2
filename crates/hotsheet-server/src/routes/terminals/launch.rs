@@ -291,6 +291,7 @@ fn terminal_launch(
     }
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let opencode_v2 = tool == "opencode" && opencode_major_version(&program)? == 2;
     let mut env = terminal_permission_route_env(state, req, terminal_id);
     env.push(("HOTSHEET_AGENT".to_string(), tool.to_string()));
     // The session's worker id: its claims are released when the terminal exits (HS2-1VAW1C).
@@ -314,9 +315,13 @@ fn terminal_launch(
         env.push(("HOTSHEET_SESSION_ROLE".to_string(), role.code().to_string()));
         env.push(("HOTSHEET_ROLE_SKILL".to_string(), role.skill().to_string()));
     }
-    let mut args = plugin
-        .launch_args(req.model.as_deref(), req.effort.as_deref())
-        .unwrap_or_default();
+    let mut args = if opencode_v2 {
+        Vec::new()
+    } else {
+        plugin
+            .launch_args(req.model.as_deref(), req.effort.as_deref())
+            .unwrap_or_default()
+    };
     // HS2-2DPGDY: a first prompt goes on the command line only for a plugin that
     // declares how its launch takes one.
     if let Some(prompt) = req
@@ -333,7 +338,8 @@ fn terminal_launch(
         .cwd
         .clone()
         .unwrap_or_else(|| root.to_string_lossy().into_owned());
-    let push = session_messages::prepare_session_push(&plugin, &directory, req.model.as_deref())?;
+    let mut push =
+        session_messages::prepare_session_push(&plugin, &directory, req.model.as_deref())?;
     let codex_bootstrap = plugin
         .manifest
         .session_push
@@ -343,14 +349,100 @@ fn terminal_launch(
         args.extend(prepared.args.iter().cloned());
         env.extend(prepared.env.iter().cloned());
     }
+    let command = if opencode_v2 {
+        let prepared = push.as_mut().ok_or_else(|| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "OpenCode v2 requires session push wiring",
+            )
+        })?;
+        let session_id = session_messages::prepare_opencode_v2(prepared);
+        args = vec![
+            "--opencode-v2-terminal".into(),
+            program.to_string_lossy().into_owned(),
+            prepared.broker_state.port.to_string(),
+            session_id,
+            req.model.clone().unwrap_or_default(),
+        ];
+        if let Some(prompt) = req
+            .initial_prompt
+            .as_deref()
+            .filter(|prompt| !prompt.trim().is_empty())
+        {
+            args.push(prompt.to_string());
+        }
+        std::env::current_exe()
+            .map_err(|error| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("finding the OpenCode v2 supervisor: {error}"),
+                )
+            })?
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        program.to_string_lossy().into_owned()
+    };
     Ok(PreparedTerminalLaunch {
-        command: program.to_string_lossy().into_owned(),
+        command,
         args,
         env,
         broker_push: push.as_ref().map(|prepared| prepared.broker_state.clone()),
         push: push.map(|prepared| prepared.adapter),
         codex_bootstrap,
     })
+}
+
+/// OpenCode v1 accepts the manifest's `--model` and `--port`; v2 needs a private server
+/// beside the TUI. Probe the binary itself before choosing either launch protocol.
+fn opencode_major_version(program: &FsPath) -> Result<u64, ApiError> {
+    let output =
+        hotsheet_aitools::probe::run_probe(std::process::Command::new(program).arg("--version"))
+            .map_err(|error| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("checking the OpenCode CLI version: {error}"),
+                )
+            })?;
+    if !output.status.success() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "OpenCode did not report a usable CLI version",
+        ));
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let major = parse_opencode_major(&text);
+    match major {
+        Some(major @ (1 | 2)) => Ok(major),
+        _ => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("unsupported OpenCode CLI version: {}", text.trim()),
+        )),
+    }
+}
+
+fn parse_opencode_major(text: &str) -> Option<u64> {
+    text.split_whitespace()
+        .filter_map(|word| {
+            word.trim_start_matches('v')
+                .split('.')
+                .next()?
+                .parse::<u64>()
+                .ok()
+        })
+        .next()
+}
+
+#[cfg(test)]
+mod opencode_version_tests {
+    use super::parse_opencode_major;
+
+    #[test]
+    fn hs2_w42kws_selects_the_supported_v1_and_v2_protocols() {
+        assert_eq!(parse_opencode_major("opencode 1.17.18"), Some(1));
+        assert_eq!(parse_opencode_major("opencode v2.4.1"), Some(2));
+        assert_eq!(parse_opencode_major("opencode dev"), None);
+    }
 }
 
 fn user_default_shell() -> String {

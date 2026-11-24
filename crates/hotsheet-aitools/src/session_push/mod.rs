@@ -22,6 +22,7 @@ mod claude;
 mod codex;
 mod http;
 mod opencode;
+mod opencode_v2;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -39,6 +40,7 @@ pub use codex::{
 };
 pub use http::{HttpPort, HttpRequest, HttpResponse, UreqHttp, basic_auth_header, query_escape};
 pub use opencode::{MECHANISM as OPENCODE_HTTP, OpenCodeHttpPush};
+pub use opencode_v2::{MECHANISM as OPENCODE_V2_HTTP, OpenCodeV2Push};
 
 /// What to deliver into a live session.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1213,8 +1213,10 @@ A plugin may also declare **`[session_push]`** (`mechanism`, `port_args`, `passw
 host can message the interactive session its `[launch]` started (HS2-PEJ962). The launch then
 appends the port wiring and exports a per-session random password; the connection advertises the
 `message` action and `POST /connections/{id}/message` delivers a prompt (with an optional banner)
-or a tool UI command through that mechanism's adapter. OpenCode declares `opencode-http`; a tool
-with no section (Antigravity) reports the capability as unsupported. Details and the OpenCode
+or a tool UI command through that mechanism's adapter. OpenCode's v1 manifest declares
+`opencode-http`; HS2-W42KWS selects a supervised `opencode-v2-http` launch for v2, where prompt
+push is supported and TUI commands are explicitly unavailable. A tool with no section
+(Antigravity) reports the capability as unsupported. Details and the OpenCode
 protocol are in [13](13-drive-transport-interface.md) §13.12.
 
 `[launch] prompt_args` (HS2-2DPGDY) says how the interactive launch takes a first

@@ -473,7 +473,9 @@ Hot Sheet can push a message into an _interactive_ AI session that one of its te
 launched (Connect / `POST /terminals {connect}`), so an attached agent hears about a new note or
 an answered question without a human typing it. Each tool reaches its live session differently,
 so the host keeps one small trait, `hotsheet_aitools::session_push::SessionPush`, with one
-adapter per **mechanism**. The plugin manifest selects it; core code never branches on a tool id.
+adapter per **mechanism**. The push route stays mechanism-neutral. OpenCode terminal launch probes
+its CLI major version before selecting the v1 manifest launch or the v2 supervised launch
+(HS2-W42KWS).
 
 ```toml
 [session_push]
@@ -508,7 +510,7 @@ point, and only Hot Sheet-owned `stream-json` processes could be messaged.
   over the machine-local broker socket; HTTP terminal and connection responses never include
   the password. A broker predating this state reports the session as unsupported after restart.
 
-### OpenCode (`opencode-http`)
+### OpenCode v1 (`opencode-http`)
 
 Pinned against opencode 1.17.18 by a spike (TUI under a PTY) and a live Hot Sheet run; the
 sanitized capture is `crates/hotsheet-aitools/tests/fixtures/opencode-1.17.18-session-push.json`.
@@ -537,6 +539,25 @@ sanitized capture is `crates/hotsheet-aitools/tests/fixtures/opencode-1.17.18-se
 - The port is allocated by binding `127.0.0.1:0` and releasing it before launch; if another
   process takes it first the tool fails to bind and the push reports `session_unreachable`
   (the per-session password keeps it from reaching another process's API).
+
+### OpenCode v2 (`opencode-v2-http`, HS2-W42KWS)
+
+OpenCode v2's top-level TUI accepts neither `--model` nor `--port`. Its `serve` command accepts
+`--port`, and the TUI attaches with `--server` and `--session`. Hot Sheet probes
+`opencode --version` with a deadline and rejects an unrecognized major version before launching
+a terminal.
+For v2, the terminal's foreground process supervises an authenticated private `opencode serve`
+child on the allocated loopback port. It creates a host-addressed `ses_…` session with the
+selected `provider/model` through `POST /api/session`, then opens the real TUI attached to that
+server and session. The child exits when the TUI exits; a detached terminal broker keeps both
+alive across a Hot Sheet server restart. This avoids sharing the user's OpenCode background
+service or exposing its credentials. An initial launch prompt is admitted into this session
+before the TUI attaches.
+
+The v2 adapter sends prompts to `POST /api/session/{id}/prompt` using the per-terminal Basic-auth
+password and reports the assigned session id before the first message. V2's public API has no
+TUI-command or toast route, so UI commands are explicitly unsupported and an optional banner
+does not block prompt delivery. The v1 adapter and its protocol remain for v1 installations.
 
 ### Codex (`codex-queue`, a reported mechanism)
 
