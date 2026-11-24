@@ -33534,6 +33534,12 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        launch_within_ms:
+          description: How long the caller waits for this launch's answer, from the request's arrival. Once it has passed before the terminal spawns, the launch is refused with 409 and nothing starts (HS2-62099G).
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
       additionalProperties: false
     TerminalHalt:
       type: object

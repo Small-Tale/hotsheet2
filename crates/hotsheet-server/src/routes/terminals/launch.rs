@@ -25,6 +25,7 @@ pub(crate) async fn open_terminal(
     Json(req): Json<OpenTerminalReq>,
 ) -> Result<Json<TerminalInfo>, ApiError> {
     let id = req.id.clone().unwrap_or_else(|| Ulid::new().to_string());
+    let fence = LaunchFence::new(req.launch_within_ms);
     let launch_state = state.clone();
     let launch_id = id.clone();
     // Setup and model discovery may launch subprocesses or wait for a shared catalog
@@ -55,6 +56,10 @@ pub(crate) async fn open_terminal(
         .clone()
         .unwrap_or_else(|| state.store.root().to_string_lossy().into_owned());
     let connection_project = terminal_permission_project(&state, &req);
+    // HS2-62099G: the last point before anything runs. A caller that already gave up
+    // would never record this terminal, so a late launch spawns nothing. A caller
+    // that disconnects drops this handler before it gets here.
+    fence.check()?;
 
     // Broker mode: the PTY lives in the detached broker (survives a server restart).
     if let Some(tb) = &state.terminal_broker {
@@ -172,6 +177,30 @@ pub(crate) async fn open_terminal(
         }
     }
     Ok(Json(term_info(&term, &id)))
+}
+
+/// HS2-62099G: the window a caller waits for a launch's answer, measured from the
+/// request's arrival. A launch whose window has passed before its terminal spawns is
+/// refused, so a caller that timed out never leaves a terminal running untracked.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LaunchFence(Option<std::time::Instant>);
+
+impl LaunchFence {
+    pub(crate) fn new(within_ms: Option<u64>) -> Self {
+        Self(within_ms.and_then(|ms| {
+            std::time::Instant::now().checked_add(std::time::Duration::from_millis(ms))
+        }))
+    }
+
+    pub(crate) fn check(self) -> Result<(), ApiError> {
+        match self.0 {
+            Some(deadline) if std::time::Instant::now() >= deadline => Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "the launch window passed before the terminal started; nothing was started",
+            )),
+            _ => Ok(()),
+        }
+    }
 }
 
 /// Compose the caller's explicit command, a plugin-declared interactive launch, or the user's

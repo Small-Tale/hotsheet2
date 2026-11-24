@@ -3701,3 +3701,35 @@ fn hs2_ywn8jt_a_launch_the_host_took_is_never_read_as_no_host() {
     // The launch waits as long as a person may need for a prompt the host shows.
     assert!(LAUNCH_ANSWER >= std::time::Duration::from_secs(5 * 60));
 }
+
+/// HS2-62099G: a headless launch fences itself on the server. The server refuses a
+/// launch it reaches after the window, and the window closes before this side stops
+/// waiting, so a terminal that does spawn is still awaited or found in the listing.
+#[test]
+fn hs2_62099g_a_headless_launch_carries_a_fence_inside_its_wait() {
+    let launch = HostLaunch {
+        session_id: "terminal-1".into(),
+        tool: "claude".into(),
+        model: None,
+        effort: None,
+        label: "Project: worker".into(),
+        role: SessionRole::Worker,
+        role_prompt: "Work".into(),
+    };
+    let body = launch_body("/checkout", &launch);
+    assert_eq!(body["id"], "terminal-1");
+    assert_eq!(body["cwd"], "/checkout");
+    assert_eq!(body["session_role"], "worker");
+    let window = body["launch_within_ms"].as_u64().unwrap();
+    let wait = u64::try_from(LAUNCH_ANSWER.as_millis()).unwrap();
+    assert_eq!(
+        window,
+        wait - u64::try_from(LAUNCH_FENCE_MARGIN.as_millis()).unwrap()
+    );
+    assert!(window > 0 && window < wait);
+    // A fenced launch is the server's refusal: nothing runs, the reservation goes.
+    assert_eq!(
+        launch_outcome(HostCall::Status(409), false),
+        Err(SessionHostError::Refused)
+    );
+}

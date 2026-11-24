@@ -71,6 +71,12 @@ pub(crate) struct OpenTerminalReq {
     /// `[launch] prompt_args`.
     #[serde(default)]
     pub(crate) initial_prompt: Option<String>,
+    /// HS2-62099G: a caller that stops waiting for the answer after a bounded time
+    /// fences the launch: once this many milliseconds have passed since the request
+    /// arrived, the server refuses it (409) instead of spawning a terminal nobody
+    /// records. Omitted, the launch waits as long as its setup takes.
+    #[serde(default)]
+    pub(crate) launch_within_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

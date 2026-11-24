@@ -2961,6 +2961,7 @@ mod terminal_permission_route_tests {
             effort: None,
             session_role: None,
             initial_prompt: None,
+            launch_within_ms: None,
         }
     }
 

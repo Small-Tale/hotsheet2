@@ -419,6 +419,31 @@ const HOST_ANSWER: std::time::Duration = std::time::Duration::from_secs(60);
 /// the headless path waits as well, within a bound.
 pub const LAUNCH_ANSWER: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
+/// HS2-62099G: how long before this side stops waiting the server must have spawned
+/// the terminal. The server measures the window from the request's arrival, which is
+/// later than this side's send; the margin keeps its fence inside this side's wait, so
+/// a terminal that spawns is always one this side can still see and record.
+pub const LAUNCH_FENCE_MARGIN: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// HS2-62099G: the `POST /terminals` body for a hosted launch. It carries the fence
+/// window, so a launch the server reaches only after this side gave up (or exited)
+/// starts nothing rather than a terminal no session records.
+pub fn launch_body(root: &str, launch: &HostLaunch) -> Value {
+    serde_json::json!({
+        "connect": launch.tool,
+        "id": launch.session_id,
+        "cwd": root,
+        "model": launch.model,
+        "effort": launch.effort,
+        "session_role": launch.role.code(),
+        "initial_prompt": launch.role_prompt,
+        "launch_within_ms": u64::try_from(
+            LAUNCH_ANSWER.saturating_sub(LAUNCH_FENCE_MARGIN).as_millis()
+        )
+        .unwrap_or(u64::MAX),
+    })
+}
+
 /// HS2-YWN8JT: why a request to a local server did not succeed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostCall {
@@ -476,15 +501,7 @@ impl SessionHost for LocalServerSessions {
         let prompt_at_launch = plugin_role_paths(&launch.tool, &hotsheet_plugins::default_dirs())
             .is_some_and(|(at_launch, _)| at_launch);
         for server in self.servers() {
-            let body = serde_json::json!({
-                "connect": launch.tool,
-                "id": launch.session_id,
-                "cwd": checkout.root,
-                "model": launch.model,
-                "effort": launch.effort,
-                "session_role": launch.role.code(),
-                "initial_prompt": launch.role_prompt,
-            });
+            let body = launch_body(&checkout.root, launch);
             let launched =
                 match Self::call_within(&server, "POST", "/terminals", Some(body), LAUNCH_ANSWER) {
                     Ok(_) => Ok(()),

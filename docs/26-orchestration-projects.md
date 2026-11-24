@@ -3512,7 +3512,13 @@ A server that cannot be connected to within 5 seconds is no host
 (`session_host_unavailable`). A launch the server took is awaited for up to 10
 minutes. If its answer is lost, the server's terminal listing decides: a live
 terminal with the reserved id is the launch and is recorded as started, so it is
-never left running untracked. A real-process test proposes a plan with
+never left running untracked. The launch is also fenced on the server
+(HS2-62099G): its body carries `launch_within_ms`, 30 seconds shorter than the
+headless wait, and a server that reaches the spawn point after that window,
+measured from the request's arrival, refuses with 409 and starts nothing. A caller
+that exits drops its request before the spawn point. A terminal that does spawn is
+therefore always one the headless side still awaits or finds in the listing; a
+launch it gave up on never runs untracked. A real-process test proposes a plan with
 `hotsheet-cli` against a running `hotsheet-server` whose permission vault is held
 during the launch, and the planner starts on the first press.
 

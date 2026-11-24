@@ -4046,6 +4046,72 @@ async fn terminal_ai_connection_ignores_stale_session_end_after_clear() {
     assert!(ended[0].get("halt").is_none());
 }
 
+/// HS2-62099G: a launch whose caller's window has passed before the terminal spawns
+/// starts nothing, so a caller that gave up never leaves a terminal running untracked;
+/// within its window, or without one, the same launch starts.
+#[tokio::test]
+#[cfg(unix)]
+async fn hs2_62099g_a_launch_past_its_window_starts_nothing() {
+    let (_dir, st) = state();
+    let router = app(st);
+    let late = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"late","launch_within_ms":0}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(late.status(), StatusCode::CONFLICT);
+    let listed = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed, serde_json::json!([]), "nothing spawned: {listed}");
+    for (id, body) in [
+        (
+            "in-window",
+            r#"{"command":"cat","id":"in-window","launch_within_ms":600000}"#,
+        ),
+        ("unfenced", r#"{"command":"cat","id":"unfenced"}"#),
+    ] {
+        let opened = router
+            .clone()
+            .oneshot(authed("POST", "/terminals", Some(body)))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK, "{id}");
+    }
+    let listed = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let mut ids: Vec<_> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|terminal| terminal["id"].as_str().unwrap().to_owned())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, ["in-window", "unfenced"]);
+    for id in ids {
+        router
+            .clone()
+            .oneshot(authed("DELETE", &format!("/terminals/{id}"), None))
+            .await
+            .unwrap();
+    }
+}
+
 #[tokio::test]
 #[cfg(unix)] // HS2-2TD7M7: detached Unix broker fixture.
 async fn a_restart_prunes_names_of_terminals_that_did_not_survive() {
