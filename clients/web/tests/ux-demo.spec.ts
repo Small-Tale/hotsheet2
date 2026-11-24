@@ -7384,7 +7384,7 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tab');
   const tabStates = page.locator('[data-tab-kind="project"]');
-  await expect(tabStates).toHaveCount(16);
+  await expect(tabStates).toHaveCount(17);
   // A still-opening remembered project is Kerf's named pending tab: visible, accessible name, busy, with close
   // and drag off and a decorative spinner (HS2-2BEJXD, HS2-XGSSK1).
   const pendingTab = page.locator('[data-tab-kind="project"][data-project-pending="true"]');
@@ -7799,7 +7799,7 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   await expect(tabBar).toHaveCSS('padding', '0px 4px');
   await expect(tabBar.locator('[data-component="tab-bar"]')).toHaveCSS('padding', '4px');
   await expect(tabBar.locator('[data-component="tab-bar"]')).toHaveCSS('gap', '4px');
-  await expect(tabBar.getByRole('tab')).toHaveCount(4);
+  await expect(tabBar.getByRole('tab')).toHaveCount(5);
   // The tabs strip does not stretch, so the trailing Add-project (+) button follows the tabs instead of
   // being pushed to the far right (HS2-HV52WR).
   expect(await tabBar.locator('.kui-tab-bar__tabs').evaluate((n) => getComputedStyle(n).flexGrow)).toBe('0');
@@ -7950,23 +7950,26 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);
   await firstTab.screenshot({ path: 'target/visual-captures/hs2-3n470h-project-tab-centered-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
+  await tabBar.getByRole('tab', { name: /Unavailable project/ }).click({ button: 'right' });
   const tabMenu = page.locator('[data-context-menu="app-tab"]');
+  await expect(tabMenu.getByRole('menuitem')).toHaveCount(1);
+  await expect(tabMenu.getByRole('menuitem', { name: 'Close Tab' })).toBeVisible();
+  await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   // HS2-P6TAZ8: Minimize Tab is the fifth action, and the demo wires it through the real shell.
   await expect(tabMenu.locator('.kui-popup-menu__item')).toHaveCount(5);
   await expect(tabMenu.locator('[data-lucide]')).toHaveCount(5);
   await tabMenu.getByRole('menuitem', { name: 'Minimize Tab' }).click();
-  await expect(tabBar.getByRole('tab')).toHaveCount(3);
+  await expect(tabBar.getByRole('tab')).toHaveCount(4);
   await tabBar.getByRole('button', { name: 'Minimized Projects' }).click();
   await page.getByRole('menuitem', { name: 'Hot Sheet 2' }).click();
-  await expect(tabBar.getByRole('tab')).toHaveCount(4);
+  await expect(tabBar.getByRole('tab')).toHaveCount(5);
   await expect(tabBar.getByRole('button', { name: 'Minimized Projects' })).toHaveCount(0);
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   await tabMenu.locator('.kui-popup-menu__item', { hasText: 'Close Tabs to the Right' }).click();
   await expect(tabBar.getByRole('tab')).toHaveCount(1);
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.reload();
-  await expect(tabBar.getByRole('tab')).toHaveCount(4);
+  await expect(tabBar.getByRole('tab')).toHaveCount(5);
   await tabBar.getByRole('tab', { name: /Internal API/ }).click();
   await expect(tabBar.getByRole('tab', { name: /Internal API/ })).toHaveAttribute('aria-selected', 'true');
   // Project tabs use the application's manual activation through Kerf's wireTabBars (HS2-KB5PJQ):
@@ -8109,10 +8112,10 @@ test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (
     bar
       .locator('[data-tab-kind="project"]')
       .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId));
-  await expect.poll(names).toEqual(['hotsheet', 'website', 'api', 'archive']);
+  await expect.poll(names).toEqual(['hotsheet', 'website', 'api', 'archive', 'unavailable']);
   await bar.getByRole('tab', { name: /Hot Sheet 2/ }).focus();
   await page.keyboard.press('Alt+Shift+ArrowRight');
-  await expect.poll(names).toEqual(['website', 'hotsheet', 'api', 'archive']);
+  await expect.poll(names).toEqual(['website', 'hotsheet', 'api', 'archive', 'unavailable']);
   await expect(bar.getByRole('tab', { name: /Hot Sheet 2/ })).toBeFocused();
   // Both ProjectTabBar demos render the same controlled order.
   const second = page.getByRole('navigation', { name: 'Open Projects with Workspace Action' });
@@ -8122,7 +8125,7 @@ test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (
         .locator('[data-tab-kind="project"]')
         .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId)),
     )
-    .toEqual(['website', 'hotsheet', 'api', 'archive']);
+    .toEqual(['website', 'hotsheet', 'api', 'archive', 'unavailable']);
   // The shell-column variant shares the column surface and draws no bottom rule (HS2-DR549A).
   const shellColumn = page.locator('[data-catalog-example] .project-tab-bar').filter({
     has: page.getByRole('navigation', { name: 'Open Projects in the Shell Column' }),
@@ -8137,17 +8140,17 @@ test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (
         .locator('[data-tab-kind="project"]')
         .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId)),
     )
-    .toEqual(['website', 'hotsheet', 'api', 'archive']);
+    .toEqual(['website', 'hotsheet', 'api', 'archive', 'unavailable']);
   await expect(page.locator('[data-demo-event]')).toHaveText('Moved hotsheet after website by keyboard.');
   await bar
     .locator('[data-component="tab-bar-item"][data-tab-id="archive"]')
     .dragTo(bar.locator('[data-component="tab-bar-item"][data-tab-id="website"]'), { targetPosition: { x: 4, y: 10 } });
-  await expect.poll(names).toEqual(['archive', 'website', 'hotsheet', 'api']);
+  await expect.poll(names).toEqual(['archive', 'website', 'hotsheet', 'api', 'unavailable']);
   await expect(page.locator('[data-demo-event]')).toHaveText('Moved archive before website by pointer.');
   // Delete closes the focused tab through the same wiring.
   await bar.getByRole('tab', { name: /Internal API/ }).focus();
   await page.keyboard.press('Delete');
-  await expect.poll(names).toEqual(['archive', 'website', 'hotsheet']);
+  await expect.poll(names).toEqual(['archive', 'website', 'hotsheet', 'unavailable']);
 });
 
 test('renders and reconnects the connection-state banner variants', async ({ page }) => {
