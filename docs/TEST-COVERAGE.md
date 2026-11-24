@@ -2967,6 +2967,13 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-server/src/permission_startup_tests.rs # failed_vault_loader_stays_closed` pins the error transition with synthetic credentials.
 - End to end: `crates/hotsheet-server/src/permission_startup_tests.rs # stalled_vault_loader_leaves_http_available_and_rules_locked` discovers a configured extra store, holds a synthetic primary loader, checks that both vault loads finish after release, requests `/health` over a real loopback listener, and exercises permission listing and answer transitions through the shipped router.
 
+### Credential prompts hold no vault lock (HS2-55P61R)
+
+- Behavior: an OS credential read that waits on an access prompt holds neither a vault's file lock, the shared master lock, nor the process credential cache; a terminal launch returns without waiting for its checkout vault, which loads once free.
+- Unit: `crates/hotsheet-aitools/src/permission_vault.rs # hs2_55p61r_a_prompting_keychain_read_holds_no_vault_lock` blocks a fake keychain read and acquires both locks and a cached credential meanwhile.
+- End to end: `crates/hotsheet-server/src/routes/terminals/launch.rs # hs2_55p61r_launch_does_not_wait_on_a_busy_checkout_vault` holds the checkout vault lock through a launch's permission identity resolution, then observes the background registration.
+- Manual: whether release-signed CLI and server binaries prompt for each other's keychain item is tracked separately.
+
 ### Explicit legacy permission discard (HS2-AFSF4X)
 
 The server peer fixture explicitly normalizes accepted sockets to blocking reads

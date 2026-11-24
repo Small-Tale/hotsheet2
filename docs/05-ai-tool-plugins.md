@@ -1561,7 +1561,12 @@ explicit Always answer returns 503 without resolving the pending request. Once
 the authenticated vault loads, its rules become available without replacing
 in-session or checkout answers, and a rule-change event notifies open clients;
 a load failure leaves the legacy vault locked. Health and unrelated routes
-remain available during an OS credential prompt.
+remain available during an OS credential prompt. No vault operation holds a
+vault file lock, the shared master-creation lock, or the process credential cache
+while an OS credential read may wait on a person; the shared lock is taken only to
+create a missing master. A terminal launch registers its checkout vault in the
+background, so launches never wait on a credential prompt; a permission request for
+that checkout still loads the vault before it can auto-answer (HS2-55P61R).
 Legacy fingerprint-only rules
 are discarded and require fresh approval; no migration guesses an action.
 Rules are personal machine state, stored per linked ticket store under

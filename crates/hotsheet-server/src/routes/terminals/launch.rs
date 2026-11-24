@@ -643,7 +643,20 @@ fn terminal_permission_identity(state: &AppState, cwd: Option<&str>) -> String {
         || format!("unregistered:{}", cwd.display()),
         |checkout| {
             let identity = checkout.permission_identity();
-            state.register_checkout_permission_rules(&identity);
+            // HS2-55P61R: loading the checkout vault may wait on an OS keychain access
+            // prompt. The launch needs only the identity; a permission request for this
+            // checkout registers the vault itself before it can auto-answer, so a
+            // background load never weakens a decision.
+            let background = state.clone();
+            let register = identity.clone();
+            let spawned = std::thread::Builder::new()
+                .name("checkout-permission-rules".into())
+                .spawn(move || {
+                    background.register_checkout_permission_rules(&register);
+                });
+            if let Err(error) = spawned {
+                tracing::warn!(%error, "checkout permission vault load not started");
+            }
             identity
         },
     )
@@ -1321,6 +1334,84 @@ mod turn_end_tests {
             let mut turn = TurnEnd::default();
             let ended: Vec<bool> = feed.iter().map(|busy| turn.ended(*busy)).collect();
             assert_eq!(ended, expected, "{feed:?}");
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod checkout_permission_launch_tests {
+    use super::terminal_permission_identity;
+    use hotsheet_sync::LockExt;
+    use std::os::fd::AsRawFd;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    /// HS2-55P61R: a terminal launch never waits on a checkout permission vault that is
+    /// busy, for example behind an OS keychain access prompt. The vault still loads in
+    /// the background once it is free.
+    #[test]
+    fn hs2_55p61r_launch_does_not_wait_on_a_busy_checkout_vault() {
+        hotsheet_aitools::enable_test_permission_vault();
+        let home = tempfile::tempdir().unwrap();
+        let store_dir = home.path().join("store");
+        let store = hotsheet_ticketing::FsStore::init_git(
+            &store_dir,
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+        let rules = home.path().join("permissions").join("rules.json");
+        let state = crate::AppState::new(store, "synthetic-secret".into())
+            .unwrap()
+            .with_machine_home(home.path())
+            .with_checkout_registry(home.path().join("checkouts.json"))
+            .with_permission_rules(&rules);
+        let root = home.path().join("checkout");
+        std::fs::create_dir_all(&root).unwrap();
+        let checkout = state
+            .checkout_registry
+            .register(&root, None, None, vec![store_dir])
+            .unwrap();
+        let identity = checkout.permission_identity();
+
+        // Another vault user holds this checkout vault's lock.
+        let lock_path = rules.with_file_name(format!("checkout-{}.json.lock", checkout.id));
+        let held = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&lock_path)
+            .unwrap();
+        // SAFETY: flock on an owned, open descriptor.
+        assert_eq!(unsafe { libc::flock(held.as_raw_fd(), libc::LOCK_EX) }, 0);
+
+        let (done, launched) = mpsc::channel();
+        let launching = state.clone();
+        let cwd = root.display().to_string();
+        std::thread::spawn(move || {
+            done.send(terminal_permission_identity(&launching, Some(&cwd)))
+                .unwrap()
+        });
+        assert_eq!(
+            launched.recv_timeout(Duration::from_secs(10)).unwrap(),
+            identity,
+            "the launch waited on the busy vault"
+        );
+        assert!(
+            !state
+                .permission_rule_paths
+                .lock_or_recover()
+                .contains_key(&identity)
+        );
+
+        drop(held);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !state
+            .permission_rule_paths
+            .lock_or_recover()
+            .contains_key(&identity)
+        {
+            assert!(Instant::now() < deadline, "the checkout vault never loaded");
+            std::thread::yield_now();
         }
     }
 }
