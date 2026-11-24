@@ -435,6 +435,9 @@ pub struct AppState {
     >,
     /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
     terminal_ai_last_reports: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
+    /// HS2-2AN9C8: Claude and Codex turn state their hooks and rollouts report, which
+    /// overrides the OSC 133 busy inference neither tool feeds.
+    terminal_hook_turns: Arc<Mutex<routes::terminals::hook_turns::HookTurns>>,
     /// Per-terminal follows of a Codex session's own rollout, for halt detection and usage
     /// (HS2-CYHAWB). Dropping an entry stops its watcher.
     codex_session_watches: Arc<
@@ -704,6 +707,7 @@ impl AppState {
             terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
             claude_usage_follows: Arc::default(),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_hook_turns: Arc::default(),
             codex_session_watches: Arc::default(),
             target_store_watches: Arc::default(),
             code_ref_watches: Arc::default(),

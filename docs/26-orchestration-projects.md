@@ -3994,7 +3994,8 @@ scheduler decides anything.
   so nothing is interrupted. A start for a changed tool, model or account ends it at
   once instead (HS2-7VV79Q, below).
 - **Idle time (HS2-RG91SK).** A host says since when a session has been idle: its
-  terminal stamps the moment a turn finishes (the OSC 133 prompt after command output),
+  terminal stamps the moment a turn finishes (the OSC 133 prompt after command output,
+  or for Claude and Codex the turn end their hooks and rollouts report, HS2-2AN9C8),
   or its launch, and clears it while a turn runs. The time travels as `idle_since_ms` on
   the terminal listing (`GET /terminals`, the broker's terminal info) and in the safe
   point's facts, and the scheduler uses it, so a turn that began and ended between two
@@ -5317,8 +5318,9 @@ ends its turn but keeps its terminal open. A person who then adds a goal or answ
 `FEEDBACK NEEDED` question expects Propose Plan to plan again, so the press pushes the
 planner prompt, naming the new proposal id, into that planner through its session push
 (the role prompt's path, §26.16). It does not stop the planner and start a fresh one.
-The busy state both would rest on is inferred from OSC 133 markers, which Claude and
-Codex do not emit, so those tools always read as not busy. Winding the planner down
+The busy state both would rest on was inferred from OSC 133 markers, which Claude and
+Codex do not emit, so those tools always read as not busy; since HS2-2AN9C8 their turn
+reports supply it. Winding the planner down
 could then stop one that is still at work, while a push only gives it one more prompt.
 The push also keeps the planner's terminal and context for the person, and planning is
 idempotent by goal and target ticket. Only a delivered push is recorded: the hosted

@@ -5,6 +5,7 @@
 mod attach;
 pub(crate) mod claude_usage;
 pub(crate) mod codex_watch;
+pub(crate) mod hook_turns;
 pub(crate) mod launch;
 mod replay;
 mod signals;
@@ -948,4 +949,29 @@ pub(crate) fn broker_err(resp: hotsheet_terminals::BrokerResponse) -> ApiError {
             format!("unexpected broker response: {other:?}"),
         ),
     }
+}
+
+/// HS2-2AN9C8: record a turn boundary terminal `id`'s Claude or Codex session reported.
+pub(crate) fn note_hook_turn(state: &AppState, id: &str, boundary: hook_turns::TurnBoundary) {
+    use hotsheet_sync::LockExt;
+    state.terminal_hook_turns.lock_or_recover().record(
+        id,
+        boundary,
+        crate::routes::permissions::now_ms(),
+    );
+}
+
+/// HS2-2AN9C8: terminal `id`'s session ended; its next session starts unreported.
+pub(crate) fn forget_hook_turn(state: &AppState, id: &str) {
+    use hotsheet_sync::LockExt;
+    state.terminal_hook_turns.lock_or_recover().forget(id);
+}
+
+/// HS2-2AN9C8: whether terminal `id` is busy, by its tool's report when it made one.
+pub(crate) fn hook_busy_or(state: &AppState, id: &str, inferred: bool) -> bool {
+    use hotsheet_sync::LockExt;
+    state
+        .terminal_hook_turns
+        .lock_or_recover()
+        .busy_or(id, inferred)
 }

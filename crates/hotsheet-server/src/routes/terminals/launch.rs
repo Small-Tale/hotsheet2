@@ -813,7 +813,12 @@ fn register_terminal_connection(
                 crate::routes::orchestration_sessions::note_session_change(&events, &conn_id);
                 break;
             }
-            let busy = matches!(term.activity(), hotsheet_terminals::Activity::Busy);
+            // HS2-2AN9C8: a Claude or Codex turn report outranks the byte inference.
+            let busy = super::hook_busy_or(
+                &events,
+                &conn_id,
+                matches!(term.activity(), hotsheet_terminals::Activity::Busy),
+            );
             {
                 let mut r = registry.lock_or_recover();
                 if !r.is_generation(&conn_id, generation) {
@@ -886,18 +891,20 @@ fn register_broker_terminal_connection(
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             match broker.info(&conn_id).await {
                 Ok(Some(info)) if info.alive => {
+                    // HS2-2AN9C8: a Claude or Codex turn report outranks the inference.
+                    let busy = super::hook_busy_or(&events, &conn_id, info.busy);
                     {
                         let mut r = registry.lock_or_recover();
                         if !r.is_generation(&conn_id, generation) {
                             break;
                         }
-                        if info.busy {
+                        if busy {
                             r.note_activity(&conn_id, now_ms());
                         } else {
                             r.set_idle(&conn_id);
                         }
                     }
-                    if turn.ended(info.busy) {
+                    if turn.ended(busy) {
                         crate::routes::orchestration_sessions::note_session_change(
                             &events, &conn_id,
                         );

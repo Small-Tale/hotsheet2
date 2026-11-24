@@ -1367,6 +1367,18 @@ declarative.
      markers through unchanged, but it drops an OSC sequence that arrives as typed
      input. Windows has no tty echo that would turn input back into output
      (HS2-YM55P3, confirmed on Windows 11 ARM64).
+  3. **Turn reports for Claude and Codex (HS2-2AN9C8).** Neither tool writes OSC 133,
+     so their terminals' `busy` and `idle_since_ms` come from the turn boundaries the
+     server already receives: Claude's `UserPromptSubmit` opens a turn and `Stop` or
+     `StopFailure` ends it (the `claude-turn` report), and a watched Codex rollout's
+     `task_started` opens one and `task_complete` ends it, with or without an error.
+     Once a terminal's session has reported a boundary, that report is the terminal's
+     busy state in `GET /terminals`, the broker listing, the connection registry and
+     every session host's safe-point facts; a repeated boundary keeps the original
+     time, and ending the session returns the terminal to byte inference. The state is
+     in memory only, so after a server restart a terminal reads inferred busy until its
+     next boundary. Claude runs no `Stop` hook when a person interrupts a turn, so such
+     a terminal reads busy until its next prompt (HS2-HZ294D).
      The registry exposes `isBusy(connection)`; the UI shows "X working / X idle."
 
 **Ticket-level active work.** Connection busy state answers whether a tool connection is

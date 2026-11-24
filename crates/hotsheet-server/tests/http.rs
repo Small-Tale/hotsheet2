@@ -3000,6 +3000,108 @@ async fn hs2_5ycgh5_an_interactive_claude_terminal_session_is_narrated() {
     );
 }
 
+/// HS2-2AN9C8: Claude emits no OSC 133, so its terminal's `busy` and `idle_since_ms`
+/// follow its prompt and stop hooks once it reports one, through the listing every
+/// session host reads; ending the session returns the terminal to byte inference.
+#[tokio::test]
+async fn hs2_2an9c8_claude_hooks_drive_the_terminal_busy_state() {
+    let (dir, state) = state();
+    let router = app(state);
+    let transcript_dir = dir.path().join("projects").join("fixture");
+    std::fs::create_dir_all(&transcript_dir).unwrap();
+    let path = transcript_dir
+        .join("turn-session.jsonl")
+        .to_string_lossy()
+        .to_string();
+    let send = |method: &'static str, uri: String, body: Option<String>| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, &uri, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    let turn = |event: &str| {
+        Some(
+            serde_json::json!({
+                "event": event, "session_id": "turn-session", "transcript_path": path
+            })
+            .to_string(),
+        )
+    };
+    let listed = || async {
+        let terminals = body_json(send("GET", "/terminals".into(), None).await).await;
+        let terminal = terminals
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|terminal| terminal["id"] == "claude-turns")
+            .unwrap()
+            .clone();
+        (terminal["busy"].clone(), terminal["idle_since_ms"].clone())
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals".into(),
+            Some(r#"{"command":"cat","id":"claude-turns"}"#.into())
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/claude-turns/ai-connection".into(),
+            Some(r#"{"agent":"claude","session_id":"turn-session"}"#.into())
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let endpoint = || "/terminals/claude-turns/claude-turn".to_owned();
+    // Before any hook the byte inference stands: `cat` prints no OSC 133, so idle.
+    assert_eq!(listed().await.0, false);
+    // UserPromptSubmit: mid-turn.
+    assert_eq!(
+        send("POST", endpoint(), turn("start")).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        listed().await,
+        (serde_json::json!(true), serde_json::Value::Null)
+    );
+    // Stop: idle since the stop, kept through a duplicate Stop.
+    send("POST", endpoint(), turn("stop")).await;
+    let (busy, idle_since) = listed().await;
+    assert_eq!(busy, false);
+    let idle_since = idle_since.as_u64().unwrap();
+    send("POST", endpoint(), turn("stop")).await;
+    assert_eq!(listed().await.1, idle_since);
+    // A turn that fails (StopFailure) also ends the busy stretch.
+    send("POST", endpoint(), turn("start")).await;
+    assert_eq!(listed().await.0, true);
+    send("POST", endpoint(), turn("failure")).await;
+    assert_eq!(listed().await.0, false);
+    // A new prompt while the session ends: the ended session forgets its turn.
+    send("POST", endpoint(), turn("start")).await;
+    assert_eq!(listed().await.0, true);
+    assert_eq!(
+        send(
+            "DELETE",
+            "/terminals/claude-turns/ai-connection?session_id=turn-session".into(),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(listed().await.0, false);
+    send("DELETE", "/terminals/claude-turns".into(), None).await;
+}
+
 #[tokio::test]
 async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim() {
     let (dir, state) = state();
