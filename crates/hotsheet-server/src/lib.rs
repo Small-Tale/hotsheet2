@@ -854,7 +854,7 @@ impl AppState {
         }
         if self.terminal_broker.is_none() {
             self.terminals.reap();
-            let terminals = self.terminals.count();
+            let terminals = self.terminals.live_count();
             if terminals > 0 {
                 blockers.push(QuiescenceBlocker {
                     kind: "terminals",

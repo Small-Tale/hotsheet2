@@ -1511,6 +1511,7 @@ export const parseToolSession = shape<ToolSession>('tool session', {
 });
 
 const terminalOptional: Record<string, Check> = {
+  exit_code: isNumber,
   kind: isString,
   tool: isString,
   cwd: isString,

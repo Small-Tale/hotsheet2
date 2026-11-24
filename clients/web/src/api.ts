@@ -1474,6 +1474,8 @@ export interface TerminalInfo {
   /** The AI tool an `ai` terminal launched (for example `claude`); names its tab (HS2-HZK0NK). */
   tool?: string;
   alive: boolean;
+  /** Nonzero AI startup exit status, when known (HS2-JRQG1T). */
+  exit_code?: number;
   busy: boolean;
   cwd?: string;
   /** Directory where this terminal was opened; stays fixed as the shell changes directory. */

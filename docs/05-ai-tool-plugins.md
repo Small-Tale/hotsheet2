@@ -928,6 +928,14 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   child has exited and the master has nothing left to read, so a command that writes and
   exits while the drain is starved still lands in scrollback (macOS discards unread output
   shortly after the last slave close; HS2-BCE5XG).
+- **Failed AI launch diagnostics (HS2-JRQG1T):** a nonzero AI PTY exit observed in
+  the first ten seconds remains in the
+  terminal list for up to two minutes after broker housekeeping, with its exit status.
+  The drawer shows a persistent failure banner and retains the terminal tab for the
+  user to inspect its existing scrollback through the authenticated terminal view.
+  A terminal-exit change event refreshes subscribed clients; no client polling is added.
+  At most 16 failed AI terminals are retained, and closing a tab removes its PTY and
+  output at once. Terminal content is not copied to a new log or telemetry record.
 - A **scrollback ring buffer** and multi-client attach (many viewers see one
   stream, tmux-style). Retained scrollback and the live broadcast share one atomic
   handoff: output concurrent with attach appears exactly once in either the snapshot or

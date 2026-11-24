@@ -61,6 +61,7 @@ export interface TerminalDashboardSession {
   /** Whether a user rename (saved or in flight) supplies `title` rather than the default. */
   named?: boolean;
   alive: boolean;
+  exit_code?: number;
   busy: boolean;
   cwd?: string;
   progress?: number;

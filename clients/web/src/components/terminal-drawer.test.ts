@@ -51,6 +51,33 @@ const render = (selectedId: string = 'grid') =>
     }),
   );
 describe('TerminalDrawer', () => {
+  it('HS2-JRQG1T keeps a failed AI launch tab and its output viewport inspectable', () => {
+    const failed: TerminalDashboardSession = {
+      ...sessions[0],
+      id: 'failed-ai',
+      kind: 'ai',
+      alive: false,
+      busy: false,
+      exit_code: 17,
+      scrollback: 'invalid flag',
+    };
+    const markup = String(
+      TerminalDrawer({
+        projectId: 'project',
+        projectName: 'Project',
+        sessions: [failed],
+        width: 390,
+        height: 320,
+        fitAcross: 1,
+        fitHigh: 1,
+        selectedId: 'failed-ai',
+      }),
+    );
+    expect(markup).toContain('AI terminal exited (status 17)');
+    expect(markup).toContain('Its output remains in this tab briefly');
+    expect(markup).toContain('data-terminal-id="failed-ai"');
+    expect(markup).toContain('data-component="terminal-viewport"');
+  });
   it('HS2-8KZF59 keeps the run suffix of an orchestrator session tab and ellipsizes its middle', () => {
     const orchestrator = {
       checkout_id: 'c',

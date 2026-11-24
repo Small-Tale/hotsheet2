@@ -444,6 +444,9 @@ enum Decided {
 /// A running PTY terminal.
 pub struct Terminal {
     kind: TerminalKind,
+    /// A failed process is a launch failure only during this initial window (HS2-JRQG1T).
+    started_at: std::time::Instant,
+    startup_failure_code: Mutex<Option<u32>>,
     /// Directory chosen at launch; unlike OSC 7 cwd, it never follows shell navigation.
     launch_cwd: Option<String>,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
@@ -708,6 +711,7 @@ impl Terminal {
             cmd.env(k, v);
         }
 
+        let started_at = std::time::Instant::now();
         let child = pair.slave.spawn_command(cmd).map_err(pty_err)?;
         let reader = pair.master.try_clone_reader().map_err(pty_err)?;
         let writer = pair.master.take_writer().map_err(pty_err)?;
@@ -840,6 +844,8 @@ impl Terminal {
         sizer.set_applied(spec.cols, spec.rows);
         Ok(Terminal {
             kind: spec.kind,
+            started_at,
+            startup_failure_code: Mutex::new(None),
             launch_cwd: initial_cwd,
             master,
             child,
@@ -1175,10 +1181,26 @@ impl Terminal {
 
     /// Whether the child process is still running.
     pub fn is_alive(&self) -> bool {
-        self.child
-            .with_lock(|c| c.try_wait().ok())
-            .map(|status| status.is_none())
-            .unwrap_or(false)
+        match self.child.with_lock(|child| child.try_wait().ok()) {
+            Some(None) => true,
+            Some(Some(status)) => {
+                if self.kind == TerminalKind::Ai
+                    && !status.success()
+                    && self.started_at.elapsed() <= std::time::Duration::from_secs(10)
+                {
+                    let mut failure = self.startup_failure_code.lock_or_recover();
+                    failure.get_or_insert(status.exit_code());
+                }
+                false
+            }
+            None => false,
+        }
+    }
+
+    /// Nonzero exit status observed in the first ten seconds of an AI launch.
+    pub fn startup_failure_code(&self) -> Option<u32> {
+        self.is_alive();
+        *self.startup_failure_code.lock_or_recover()
     }
 
     /// Kill the child process.

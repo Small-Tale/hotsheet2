@@ -530,6 +530,9 @@ pub(crate) struct TerminalInfo {
     pub(crate) kind: hotsheet_terminals::TerminalKind,
     /// The PTY is still running.
     pub(crate) alive: bool,
+    /// Nonzero AI startup exit status; the terminal read endpoint retains its bounded replay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) exit_code: Option<u32>,
     /// Inferred busy (a tool is actively working) vs idle.
     pub(crate) busy: bool,
     /// The shell's reported working directory (OSC 7), if any (HS2-RCKEJ9).
@@ -883,6 +886,7 @@ pub(crate) fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> Termin
         id: id.to_string(),
         kind: term.kind(),
         alive: term.is_alive(),
+        exit_code: term.startup_failure_code(),
         busy: term.activity() == hotsheet_terminals::Activity::Busy,
         idle_since_ms: term.idle_since_ms(),
         cwd: osc.cwd,
@@ -908,6 +912,7 @@ pub(crate) fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInf
         id: bi.id,
         kind: bi.kind,
         alive: bi.alive,
+        exit_code: bi.exit_code,
         busy: bi.busy,
         idle_since_ms: bi.idle_since_ms,
         cwd: bi.cwd,

@@ -17,7 +17,12 @@ pub type TermKey = (String, String);
 #[derive(Default)]
 pub struct TerminalManager {
     terminals: Mutex<HashMap<TermKey, Arc<Terminal>>>,
+    /// Failed AI exits remain briefly inspectable after broker housekeeping (HS2-JRQG1T).
+    exited_ai_at: Mutex<HashMap<TermKey, std::time::Instant>>,
 }
+
+const FAILED_AI_DIAGNOSTIC_AGE: std::time::Duration = std::time::Duration::from_secs(120);
+const MAX_FAILED_AI_DIAGNOSTICS: usize = 16;
 
 impl TerminalManager {
     pub fn new() -> Self {
@@ -46,6 +51,7 @@ impl TerminalManager {
             }
         }
         let term = Arc::new(Terminal::spawn(spec)?);
+        self.exited_ai_at.lock_or_recover().remove(&key);
         map.insert(key, term.clone());
         Ok((term, true))
     }
@@ -67,9 +73,16 @@ impl TerminalManager {
         self.terminals.with_lock(|m| m.len())
     }
 
+    /// Exited diagnostic tabs must not count as live blockers for server shutdown.
+    pub fn live_count(&self) -> usize {
+        self.terminals
+            .with_lock(|terminals| terminals.values().filter(|term| term.is_alive()).count())
+    }
+
     /// Kill and forget the terminal for `key`. Returns whether one was present.
     pub fn kill(&self, key: &TermKey) -> Result<bool, TermError> {
         let removed = self.terminals.lock_or_recover().remove(key);
+        self.exited_ai_at.lock_or_recover().remove(key);
         match removed {
             Some(t) => {
                 let _ = t.kill(); // best-effort; a dead child's kill is harmless
@@ -79,12 +92,39 @@ impl TerminalManager {
         }
     }
 
-    /// Drop terminals whose child has exited (a housekeeping sweep). Returns how many were
-    /// reaped.
+    /// Drop exited terminals, retaining a bounded recent failed AI launch for inspection.
+    /// Returns how many were reaped (HS2-JRQG1T).
     pub fn reap(&self) -> usize {
         let mut map = self.terminals.lock_or_recover();
+        let mut exited = self.exited_ai_at.lock_or_recover();
         let before = map.len();
-        map.retain(|_, t| t.is_alive());
+        let now = std::time::Instant::now();
+        map.retain(|key, term| {
+            if term.is_alive() {
+                exited.remove(key);
+                return true;
+            }
+            if term.startup_failure_code().is_some() {
+                let since = exited.entry(key.clone()).or_insert(now);
+                if now.duration_since(*since) < FAILED_AI_DIAGNOSTIC_AGE {
+                    return true;
+                }
+            }
+            exited.remove(key);
+            false
+        });
+        // A burst of broken launches cannot pin unlimited PTY replay buffers.
+        if exited.len() > MAX_FAILED_AI_DIAGNOSTICS {
+            let mut oldest: Vec<_> = exited.iter().map(|(key, at)| (key.clone(), *at)).collect();
+            oldest.sort_by_key(|(_, at)| *at);
+            for (key, _) in oldest
+                .into_iter()
+                .take(exited.len() - MAX_FAILED_AI_DIAGNOSTICS)
+            {
+                exited.remove(&key);
+                map.remove(&key);
+            }
+        }
         before - map.len()
     }
 }
@@ -191,5 +231,53 @@ mod tests {
             "the exited terminal is reaped"
         );
         assert_eq!(mgr.count(), 0);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn hs2_jrqg1t_failed_ai_exit_stays_inspectable_then_expires() {
+        let mgr = TerminalManager::new();
+        let k = key("proj", "bad-launch");
+        let mut spec = TermSpec::new("sh");
+        spec.kind = TerminalKind::Ai;
+        spec.args = vec!["-c".into(), "printf 'invalid flag'; exit 17".into()];
+        let term = mgr.get_or_spawn(k.clone(), spec).unwrap();
+        assert!(wait_until(|| !term.is_alive(), 5));
+        assert_eq!(term.startup_failure_code(), Some(17));
+        assert_eq!(mgr.reap(), 0);
+        assert_eq!(mgr.live_count(), 0);
+        assert!(mgr.get(&k).is_some());
+        mgr.exited_ai_at.lock_or_recover().insert(
+            k.clone(),
+            std::time::Instant::now() - FAILED_AI_DIAGNOSTIC_AGE,
+        );
+        assert_eq!(mgr.reap(), 1);
+        assert!(mgr.get(&k).is_none());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn hs2_jrqg1t_failed_ai_diagnostics_are_capped() {
+        let mgr = TerminalManager::new();
+        let mut spec = TermSpec::new("sh");
+        spec.kind = TerminalKind::Ai;
+        spec.args = vec!["-c".into(), "exit 17".into()];
+        let term = Arc::new(Terminal::spawn(spec).unwrap());
+        assert!(wait_until(|| !term.is_alive(), 5));
+        let now = Instant::now();
+        for index in 0..=MAX_FAILED_AI_DIAGNOSTICS {
+            let key = key("proj", &format!("failed-{index}"));
+            mgr.terminals
+                .lock_or_recover()
+                .insert(key.clone(), term.clone());
+            mgr.exited_ai_at.lock_or_recover().insert(
+                key,
+                now - Duration::from_secs((MAX_FAILED_AI_DIAGNOSTICS - index + 1) as u64),
+            );
+        }
+        assert_eq!(mgr.reap(), 1);
+        assert_eq!(mgr.count(), MAX_FAILED_AI_DIAGNOSTICS);
+        assert!(mgr.get(&key("proj", "failed-0")).is_none());
+        assert!(mgr.get(&key("proj", "failed-16")).is_some());
     }
 }

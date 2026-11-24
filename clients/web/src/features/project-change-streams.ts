@@ -568,6 +568,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               response.events.some(
                 (event) =>
                   event.kind === 'terminal_halted' ||
+                  event.kind === 'terminal_exited' ||
                   event.kind === 'terminal_question' ||
                   event.kind === 'terminal_ai_connection' ||
                   event.kind === 'terminal_hook_report' ||

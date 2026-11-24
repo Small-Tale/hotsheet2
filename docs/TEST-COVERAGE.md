@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-JRQG1T: failed AI terminal launches retain a bounded recent diagnostic tab,
+exit status, and existing terminal scrollback. The manager's retention and expiry
+test, broker and in-process HTTP launch tests, and drawer banner render test cover
+the core transitions. The real-browser drawer flow is reviewed manually at wide
+and phone widths before ticket completion.
+
 HS2-7VB81E: `clients/web/tests/providers.spec.ts` covers explicit Git ticket-repository
 linking, rejection of a non-store folder, and both canceling and confirming a
 Create collision. `clients/web/src/project-bridge.test.ts` verifies read-only

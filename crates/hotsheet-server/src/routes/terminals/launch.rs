@@ -764,6 +764,7 @@ fn register_terminal_connection(
                         super::announce_session_push_gone(&events, &conn_id);
                     }
                     release_session_claims(host, worker).await;
+                    announce_terminal_exit(&events, &conn_id);
                 }
                 // HS2-95SWQ4: an orchestrator's scheduler learns of the exit.
                 crate::routes::orchestration_sessions::note_session_change(&events, &conn_id);
@@ -871,6 +872,7 @@ fn register_broker_terminal_connection(
                             super::announce_session_push_gone(&events, &conn_id);
                         }
                         release_session_claims(host, worker).await;
+                        announce_terminal_exit(&events, &conn_id);
                     }
                     // HS2-95SWQ4: an orchestrator's scheduler learns of the exit.
                     crate::routes::orchestration_sessions::note_session_change(&events, &conn_id);
@@ -878,6 +880,23 @@ fn register_broker_terminal_connection(
                 }
             }
         }
+    });
+}
+
+/// Wake subscribed clients when an AI PTY closes so a failed launch's retained
+/// diagnostic tab appears without client network polling (HS2-JRQG1T).
+fn announce_terminal_exit(state: &AppState, id: &str) {
+    state.emit(crate::ChangeEvent {
+        live: None,
+        cursor: None,
+        store: String::new(),
+        kind: "terminal_exited".into(),
+        id: id.to_owned(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
     });
 }
 

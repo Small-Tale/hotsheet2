@@ -8405,6 +8405,111 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
   await expect.poll(tabNames).toEqual(['Claude 1', 'Claude 2', 'Codex 1', 'Terminal 1']);
 });
 
+test('HS2-JRQG1T keeps an immediately failed AI launch visible in the drawer', async ({ page }) => {
+  const settleRails = async () => {
+    // A viewport resize may start Workbench's 200 ms rail transition after the first frame.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              resolve();
+            }),
+          ),
+        ),
+    );
+    await expect
+      .poll(() =>
+        page
+          .locator('.kui-workbench__rail .kui-workbench__panel-content')
+          .evaluateAll((contents) =>
+            contents.every((content) =>
+              content.getAnimations().every((animation) => animation.playState !== 'running'),
+            ),
+          ),
+      )
+      .toBe(true);
+  };
+  await mockProject(page);
+  const id = '01JEDZC1ATK1BH4KGAZC3Z6W18';
+  let created = false;
+  await page.route(appRequests, async (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname;
+    if (path.endsWith('/terminals') && request.method() === 'GET')
+      return route.fulfill({
+        json: created
+          ? [
+              {
+                id,
+                kind: 'ai',
+                tool: 'claude',
+                alive: false,
+                busy: false,
+                exit_code: 17,
+                cwd: '/work/demo',
+                launch_cwd: '/work/demo',
+              },
+            ]
+          : [],
+      });
+    if (path.endsWith('/terminals') && request.method() === 'POST') {
+      created = true;
+      return route.fulfill({
+        json: { id, kind: 'ai', tool: 'claude', alive: true, busy: false, cwd: '/work/demo', launch_cwd: '/work/demo' },
+      });
+    }
+    if (path.endsWith(`/terminals/${id}`) && request.method() === 'GET')
+      return route.fulfill({
+        json: {
+          id,
+          kind: 'ai',
+          tool: 'claude',
+          alive: false,
+          busy: false,
+          exit_code: 17,
+          cwd: '/work/demo',
+          launch_cwd: '/work/demo',
+          scrollback: 'invalid flag\r\n',
+        },
+      });
+    return route.fallback();
+  });
+  await routeAllFeaturesOn(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  const parent = drawer.locator('[data-terminal-drawer-create] [data-item-id="ai-shell-providers"]');
+  await page.mouse.move(0, 0);
+  await parent.hover();
+  await parent
+    .locator('xpath=..')
+    .locator('[data-action="create-terminal-drawer-item"][data-provider="claude"]')
+    .click();
+  await expect(drawer).toContainText('AI terminal exited (status 17)');
+  await expect(drawer.locator('[data-component="terminal-session"]')).toBeVisible();
+  await settleRails();
+  await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-1280.png') });
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(drawer).toContainText('AI terminal exited (status 17)');
+  await settleRails();
+  await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-760.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(drawer).toContainText('AI terminal exited (status 17)');
+  await expect(drawer.locator('[data-component="terminal-session"]')).toBeVisible();
+  await settleRails();
+  await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-390.png') });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-390-dark.png') });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(drawer).toContainText('AI terminal exited (status 17)');
+  await settleRails();
+  await page.screenshot({ path: test.info().outputPath('hs2-jrqg1t-failed-launch-restored.png') });
+});
+
 test('reopens the drawer AI shell submenu after Escape closes and breakpoint resizes (HS2-GV7A43)', async ({
   page,
 }) => {

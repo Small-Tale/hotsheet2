@@ -10,6 +10,7 @@ import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { SearchField } from '@kerfjs/ui/search-field';
 import { type SearchFieldModel } from '@kerfjs/ui/search-field-model';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -300,6 +301,15 @@ export function TerminalDrawer({
                     color={uiColor('danger-on-quiet')}
                     label={`Stopped: ${session.halt.message}`}
                     title={`Stopped: ${session.halt.message}`}
+                  />
+                ) : session.kind === 'ai' && !session.alive && session.exit_code !== undefined ? (
+                  <LucideIcon
+                    size="s"
+                    icon={TriangleAlert}
+                    name="triangle-alert"
+                    color={uiColor('danger-on-quiet')}
+                    label={`Exited with status ${session.exit_code}`}
+                    title={`Exited with status ${session.exit_code}`}
                   />
                 ) : session.aiConnection ? (
                   <Row vAlign="middle" gap="2xs">
@@ -628,6 +638,14 @@ export function TerminalDrawer({
           count={search.count}
           hasMatches={search.hasMatches}
           hasQuery={search.hasQuery}
+        />
+      )}
+      {selectedSession?.kind === 'ai' && !selectedSession.alive && selectedSession.exit_code !== undefined && (
+        <StateBanner
+          tone="danger"
+          title={`AI terminal exited (status ${selectedSession.exit_code})`}
+          detail="Its output remains in this tab briefly so you can inspect the launch failure."
+          copyLayout="stacked"
         />
       )}
       <div class="terminal-drawer__content">

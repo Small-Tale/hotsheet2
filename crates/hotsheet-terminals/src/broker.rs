@@ -335,6 +335,9 @@ pub struct BrokerTermInfo {
     #[serde(default)]
     pub kind: TerminalKind,
     pub alive: bool,
+    /// Present after a nonzero startup exit; old brokers omit it (HS2-JRQG1T).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<u32>,
     pub busy: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
@@ -365,6 +368,7 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
         spawned: None,
         kind: term.kind(),
         alive: term.is_alive(),
+        exit_code: term.startup_failure_code(),
         busy: term.activity() == crate::busy::Activity::Busy,
         cwd: osc.cwd,
         launch_cwd: term.launch_cwd().map(str::to_string),

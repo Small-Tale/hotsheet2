@@ -20746,6 +20746,98 @@ async fn an_exited_broker_ai_terminal_reregisters_when_reopened() {
     assert_exited_ai_terminal_reregisters(application).await;
 }
 
+async fn assert_failed_ai_launch_remains_readable(application: axum::Router) {
+    let request = serde_json::json!({
+        "command": fixture_program::path(),
+        "args": ["--print", "invalid flag", "--exit", "17"],
+        "connect": "claude",
+        "id": "failed-ai-launch"
+    })
+    .to_string();
+    let response = application
+        .clone()
+        .oneshot(authed("POST", "/terminals", Some(&request)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let mut read = serde_json::Value::Null;
+    for _ in 0..50 {
+        let response = application
+            .clone()
+            .oneshot(authed("GET", "/terminals/failed-ai-launch", None))
+            .await
+            .unwrap();
+        if response.status() == StatusCode::OK {
+            read = body_json(response).await;
+            if read["exit_code"] == 17
+                && read["scrollback"]
+                    .as_str()
+                    .is_some_and(|output| output.contains("invalid flag"))
+            {
+                break;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(read["alive"], false, "failed launch: {read}");
+    assert_eq!(read["exit_code"], 17, "failed launch: {read}");
+    assert!(
+        read["scrollback"]
+            .as_str()
+            .unwrap()
+            .contains("invalid flag")
+    );
+    let listed = body_json(
+        application
+            .clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["id"] == "failed-ai-launch" && entry["exit_code"] == 17)
+    );
+    assert_eq!(
+        application
+            .oneshot(authed("DELETE", "/terminals/failed-ai-launch", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+}
+
+#[tokio::test]
+async fn hs2_jrqg1t_failed_in_process_ai_launch_remains_readable() {
+    assert_failed_ai_launch_remains_readable(app(state().1)).await;
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn hs2_jrqg1t_failed_broker_ai_launch_remains_readable() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("broker.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker_with_idle(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+        Some(std::time::Duration::from_secs(30)),
+    ));
+    let application = app(state()
+        .1
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj")));
+    assert_failed_ai_launch_remains_readable(application).await;
+}
+
 #[tokio::test]
 async fn terminal_without_a_command_launches_the_users_default_shell() {
     let (_d, st) = state();
