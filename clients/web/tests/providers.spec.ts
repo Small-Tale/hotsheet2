@@ -5973,9 +5973,8 @@ test('HS2-VKNA12 invalid sign-in origins open no popup and issue no auth request
 });
 
 for (const choice of ['Link', 'Create', 'Create in a custom location'] as const) {
-  test(`HS2-7VB81E ${choice} uses an existing ticket repository only after the person chooses it`, async ({
-    page,
-  }, testInfo) => {
+  // HS2-4GB8J0: the browser selection index needs a stable title prefix for each variant.
+  test(`HS2-7VB81E existing repository setup honors the ${choice} choice`, async ({ page }, testInfo) => {
     await mockProject(page, true, false, 0, 0, 0, true);
     await page.setViewportSize({ width: 1280, height: 800 });
     const location = choice === 'Create' ? '/work/demo.hs2' : '/chosen/tickets.hs2';
