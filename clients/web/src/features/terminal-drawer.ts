@@ -60,7 +60,7 @@ export interface TerminalDrawerDependencies {
   settleTerminalDrawerGeometry: () => void;
   observeTerminalDrawer: () => void;
   disconnectTerminalDrawerSize: () => void;
-  refreshTerminalDashboard: () => Promise<void>;
+  refreshTerminalDashboard: (quiet?: boolean, targetProject?: Project, signal?: AbortSignal) => Promise<void>;
   terminalSession: (key: string) => { projectId: string; id: string } | undefined;
   currentDrawerTabIds: (projectId: string) => string[];
   persistDrawerTabOrder: (projectId: string, ids: readonly string[]) => void;
@@ -422,8 +422,17 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
           pendingTerminalFocus = { projectId: current.id, terminalId: created.id };
           selectDrawerItem(created.id);
         }
-        await refreshTerminalDashboard();
-        await terminalAppeared(current.id, created.id);
+        // Start the appearance deadline before refreshing: a stalled GET for any open project
+        // must not hold this placeholder or the serialized create queue forever (HS2-S2T4VJ).
+        const appeared = terminalAppeared(current.id, created.id),
+          refreshController = new AbortController();
+        try {
+          await Promise.race([refreshTerminalDashboard(true, undefined, refreshController.signal), appeared]);
+          await appeared;
+        } finally {
+          refreshController.abort();
+        }
+        terminalDashboardLoading.value = false;
         updatePendingTab(current.id, pending.tab.id, undefined);
         pendingRetries.delete(pending.tab.id);
         pendingPrevious.delete(pending.tab.id);

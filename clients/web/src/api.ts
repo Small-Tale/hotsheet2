@@ -3125,7 +3125,7 @@ export class Api {
     this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/drive/connections/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
-  terminals = () => this.parsed(parseTerminalInfo.list, '/terminals');
+  terminals = (signal?: AbortSignal) => this.parsed(parseTerminalInfo.list, '/terminals', { signal });
   terminalSettings = () => this.parsed(parseTerminalSettings, '/terminal-settings');
   saveTerminalSettings = (value: TerminalSettings) =>
     this.parsed(parseTerminalSettings, '/terminal-settings', { method: 'PUT', body: JSON.stringify(value) });

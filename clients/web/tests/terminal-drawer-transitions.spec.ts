@@ -236,3 +236,44 @@ test('a hung terminal create becomes a recoverable drawer error and Retry can st
   await expect(drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${requestedId}"]`)).toBeVisible();
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
 });
+
+test('a hung terminal list after create fails the drawer and releases the create queue (HS2-S2T4VJ)', async ({
+  page,
+}) => {
+  await installTerminalFixture(page);
+  const listGate = deferred();
+  let created = false;
+  let postCount = 0;
+  await page.route(
+    (url) => url.pathname === `${project.apiPath}/terminals`,
+    async (route) => {
+      if (route.request().method() === 'POST') {
+        postCount += 1;
+        if (postCount > 1) return route.fulfill({ status: 503, body: 'unavailable' });
+        created = true;
+        const body = route.request().postDataJSON() as { id: string };
+        return route.fulfill({
+          status: 201,
+          json: { id: body.id, alive: true, busy: false, cwd: project.root },
+        });
+      }
+      if (created) await listGate.promise;
+      return route.fulfill({ json: [{ id: 'nano', alive: true, busy: true, cwd: project.root }] });
+    },
+  );
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
+  await expect(drawer).toHaveAttribute('data-mode', 'failed', { timeout: 20_000 });
+  await expect(drawer.getByText('Terminal Could Not Start')).toBeVisible();
+  await expect(drawer.getByText(/did not appear in the terminal list/)).toBeVisible();
+  await expect(page.getByText('Preparing terminals')).toHaveCount(0);
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
+  await expect.poll(() => postCount).toBe(2);
+  listGate.resolve();
+});

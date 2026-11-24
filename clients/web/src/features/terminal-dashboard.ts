@@ -144,7 +144,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
     if (!sameTerminalDashboardSnapshot(terminalGroups.peek(), groups)) terminalGroups.value = groups;
     if (nextCheckInMs !== undefined) aiConnectionTimer = setTimeout(applyAiConnectionStates, nextCheckInMs);
   }
-  async function refreshTerminalDashboard(quiet = false, targetProject?: Project) {
+  async function refreshTerminalDashboard(quiet = false, targetProject?: Project, signal?: AbortSignal) {
     const generation = quiet ? terminalDashboardGeneration : ++terminalDashboardGeneration,
       openProjects = [...projects.value],
       fetchProjects = targetProject ? openProjects.filter((project) => project.id === targetProject.id) : openProjects,
@@ -157,7 +157,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
       fetchProjects.map(async (current) => {
         try {
           const [infos] = await Promise.all([
-              new Api(current.apiPath, '', { trackBusy: !quiet }).terminals(),
+              new Api(current.apiPath, '', { trackBusy: !quiet }).terminals(signal),
               ...(current.id !== selectedProjectId() && !hasDriveConnections(current.id)
                 ? [refreshDriveConnections(current, true, quiet)]
                 : []),

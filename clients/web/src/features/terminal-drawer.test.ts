@@ -542,6 +542,29 @@ describe('drawer add and remove transitions (HS2-AQ40G7)', () => {
     expect(bindings.terminalDrawerSelected.value).toBe('t3');
   });
 
+  it('releases the create queue when dashboard refresh hangs after a successful POST (HS2-S2T4VJ)', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = sessions('t1');
+    fetchMock
+      .mockImplementationOnce(() => json({ id: 't3', alive: true, busy: false, cwd: '/work/a' }))
+      .mockImplementationOnce(() => Promise.resolve(new Response('unavailable', { status: 503 })));
+    calls.refreshTerminalDashboard.mockImplementation(() => new Promise<undefined>(() => undefined));
+
+    const first = drawer.createProjectTerminal();
+    const second = drawer.createProjectTerminal();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.refreshTerminalDashboard).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(DRAWER_APPEAR_TIMEOUT_MS);
+    await Promise.all([first, second]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(bindings.terminalDrawerPendingByProject.value.a).toHaveLength(2);
+    expect(bindings.terminalDrawerPendingByProject.value.a[0].failure).toContain('did not appear');
+    expect(bindings.terminalDrawerPendingByProject.value.a[1].failure).toContain('503');
+    expect(bindings.terminalDashboardLoading.value).toBe(false);
+  });
+
   it('leaves the selection alone when the person moved to another tab while the terminal started', async () => {
     const { drawer, bindings, calls } = owner();
     bindings.terminalGroups.value = sessions('t1', 't2');
