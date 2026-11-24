@@ -308,13 +308,13 @@ Deviate only at the project level for a compelling or necessary reason, recorded
 
 <!-- hotsheet:end section=deployment-scripts -->
 
-<!-- hotsheet:begin section=git-commit-and-push v=1 -->
+<!-- hotsheet:begin section=git-commit-and-push v=2 -->
 
 ## Git Commit and Push
 
 Every repository declares its push policy in its project instructions. An agent that cannot find one does not guess: it commits, files a ticket to add the declaration, and leaves the push to a person. Commit discipline is the same everywhere.
 
-- **One commit per ticket.** Commit a finished, verified ticket before starting the next one. Combine tickets in one commit only when their changes cannot be separated safely, and name every slug the commit addresses.
+- **One commit per ticket.** The Hot Sheet workflow's commit hygiene owns this rule (one commit per finished, verified ticket, naming every slug it addresses); this rule adds the commit's shape and the push policy.
 - **Subject shape.** `<SLUG> <imperative summary>`, slug first so `git log --oneline` reads as a ticket list, under 72 characters, no trailing period, no type prefix. The only exception is the release script's own `release: vX.Y.Z` commit. The body says why the change was made and what behavior changed, not which files; it names follow-up slugs and any deliberate deviation from a rule. A tool may draft the body from the staged diff (`gitgist-release-notes`); the author edits it and keeps the subject shape.
 - **Stage by path.** Stage named files, never `git add -A` or `git add .`, and read `git diff --cached` before every commit to remove anything you did not change. Generated artifacts regenerate in the same commit as their source and are staged by name.
 - **Never rewrite shared history.** No amend, rebase, reset, or force-push on a commit that has reached the shipping branch or any remote; fix forward with a new commit. Local unpushed commits may be amended before they leave the machine. Never pass `--no-verify`: a failing hook is a failing gate, and the fix is the code, not the flag.
@@ -383,7 +383,7 @@ Any project with a rendered interface keeps a UI conventions document. It points
 
 <!-- hotsheet:end section=requirements-documentation -->
 
-<!-- hotsheet:begin section=testing-philosophy v=6 -->
+<!-- hotsheet:begin section=testing-philosophy v=7 -->
 
 ## Testing Philosophy
 
@@ -395,21 +395,20 @@ Any project with a rendered interface keeps a UI conventions document. It points
 - Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated.
 - Give every code package a working local lint command and configuration when it is added. Keep lint warning-free, fix lint and type errors before finishing, and document justified suppressions.
 - When a reviewer corrects a convention, pin it in the same change as a source-level policy test or lint rule named with the ticket slug; prose alone does not hold.
+- Keep test output quiet: run suites with failure-only reporters (the project's quiet test wrapper when it has one) and read the summary and failure excerpts, not the full log. A cheaper background agent may run the tests and report only pass/fail and the failures.
+- Rerun only what failed. After a failure, rerun just the failing tests (for example `cargo nextest run -E 'test(<name>)'`, `vitest run <file> -t '<name>'`, or `playwright test -g '<title>'`) until they pass, then run the ticket's affected set once. A rebase onto commits that do not touch the ticket's area needs no rerun; an overlapping one reruns only the overlap's affected tests. Never rerun a passing suite to double-check.
 - Verify on the rebuilt instance and reproduce the user's actual steps or command before claiming a fix; never test against the user's running host or a stale build. Isolation, build-once, and flake policy live in the `test-operations` rule when a project installs it.
 
 <!-- hotsheet:end section=testing-philosophy -->
 
-<!-- hotsheet:begin section=ticket-driven-work v=6 -->
+<!-- hotsheet:begin section=ticket-driven-work v=8 -->
 
 ## Ticket-Driven Work
 
-Create a Hot Sheet ticket before substantial work described directly by a user, including features, bugs, refactors, and multi-step code changes. Claim it before editing, keep its phase and ETA current, and release the claim whenever work stops. A claim is the live activity signal; `claim_count` records past attempts and must not be used to infer current activity.
+The Hot Sheet workflow owns ticket creation, claims, phases and ETAs, releasing, follow-ups, the `FEEDBACK NEEDED` rule, and the completion checklist (HS2-B39GQ9). This rule adds what the workflow does not say.
 
-- Create follow-up tickets immediately for unfinished steps, open decisions, known gaps, and designed but unbuilt behavior. Include their slugs in the current ticket's completion note.
-- Use `FEEDBACK NEEDED` only when the current ticket cannot proceed without a user decision or unavailable external state. Leave it Started, describe the blocker, and release its claim. Status reports, release waits, and sandbox blockers are regular notes, not feedback requests; close tickets you created yourself; give a visual tradeoff captures and `CHOICE` options; check open tickets and the code before asking.
-- Before completing, verify the scope, update tests, coverage and docs, scan for placeholders and incomplete behavior, and record the result, verification, and every follow-up.
-- When a UI ticket has a problem or design image, capture and attach an after image of the matching component, state, and viewport. Explain any unavailable capture in the completion note.
-- Name every addressed ticket slug in its commit message.
+- A claim is the live activity signal; `claim_count` records past attempts and must not be used to infer current activity.
+- Before asking for feedback, check open tickets and the code. Status reports, release waits, and sandbox blockers are regular notes, not feedback requests; close tickets you created yourself; give a visual tradeoff captures and `CHOICE` options.
 - Re-read the whole ticket, including notes added since your last read, before every action on it, and quote the note you are acting on in your result.
 - Change only what the ticket asks and preserve neighboring appearance and behavior; propose collateral changes as separate tickets. When the ticket names an attachment, reference art, a prior implementation, or another project, open it before designing.
 - Measure before restructuring: record the number that justifies a performance or architecture change, and close the ticket as not worth it when the number is small.
@@ -429,7 +428,7 @@ If the ticket has a problem or design image, capture the corresponding after sta
 
 <!-- hotsheet:end section=visual-qa -->
 
-<!-- hotsheet-instructions-version: 64 -->
+<!-- hotsheet-instructions-version: 65 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -573,37 +572,6 @@ developer-specific home directory, username, or absolute clone path. Use reposit
 paths, a stable repo name/URL, or a placeholder such as `<repo-root>/path`. Keep an exact
 local path only as clearly labeled machine-local diagnostic evidence.
 
-## Testing
-
-- **Double coverage:** cover each feature with both unit tests (logic in isolation, external
-  dependencies mocked) **and** end-to-end tests (real user flows through the running system,
-  minimal mocking). Keep test fakes faithful to the real contract — same shapes, fields, and
-  status codes.
-- **Coverage is a floor, not a ceiling.** 100% lines means every line *ran*, not that every
-  *behavior* — or every *sequence* of behaviors — is *asserted*. It is blind to missing state
-  transitions.
-- **Stateful code gets transition-matrix + adversarial tests.** For anything with modes, a
-  cache, or a state machine, enumerate the states *and* the transitions, then walk realistic
-  multi-step sequences that cross boundaries. Deliberately try to break it with out-of-order,
-  interleaved, repeated, and empty-then-refill sequences; pin any bug you find as a permanent
-  regression test.
-- **Keep test output quiet.** Run suites with failure-only reporters (the project's quiet
-  test wrapper when it has one) and read the summary and failure excerpts, not the full log.
-  A cheaper background agent may run the tests and report only pass/fail and the failures.
-- **Rerun only what failed.** After a failure, rerun just the failing tests (for example
-  `cargo nextest run -E 'test(<name>)'`, `vitest run <file> -t '<name>'`, or
-  `playwright test -g '<title>'`) until they pass, then run the ticket's affected set once.
-  A rebase onto commits that do not touch the ticket's area needs no rerun; an overlapping
-  one reruns only the overlap's affected tests. Never rerun a passing suite to double-check.
-- **Fix lint and type errors before finishing** — as you go, not batched.
-
-## Requirements & docs
-
-Keep human-readable requirements/docs as the source of truth for what the project does, and
-update them **in the same change as the code**: add, remove, or modify a behavior → update
-its doc in the same commit. Create a new doc for a major new functional area and cross-link
-related docs.
-
 ## Commit hygiene
 
 Keep the repo in a known-good state.
@@ -636,13 +604,14 @@ or repeat the full suite for every ticket; keep each ticket's affected local gat
 **Pushing is up to this repository.** Follow whatever push/PR/review conventions this project
 already uses; this default guidance does not require or forbid pushing on its own.
 
-<!-- hotsheet:begin section=kerf-ui-catalog-demos v=1 -->
+<!-- hotsheet:begin section=kerf-ui-catalog-demos v=2 -->
 
 ## Kerf UI Catalog Demos
 
 The `/ux-demo` route mounts Kerf's `Catalog` with production components. It is absent from production builds and is the first place to look before composing a screen.
 
 - Every exported component has its own demo file that renders the production component with deterministic fixtures (no API calls), exposes every variant and state through settings with a reset, opens dialogs from a visible trigger and lets them dismiss, and runs live behavior (timers, drag, validation) for real.
+- When a change adds or alters states its component's demo cannot show, extend the demo in the same change; when that needs a structural extraction, file the follow-up before completing and name it in the completing note.
 - Demos reuse production CSS and wiring and never own interaction behavior; a demo that reimplements a fake version of a screen is misinformation and is removed.
 - An application-views group mounts the real root for every routed state so the whole app is reviewable without setup.
 - A structural test enforces export-level demo coverage and signal resets; the catalog manifest (`kerf.components.json` → `component-composition.json`) is regenerated in the same change and byte-checked in CI.
@@ -689,7 +658,7 @@ Kerf's own guidance is authoritative for component selection, layout and spacing
 
 <!-- hotsheet:end section=kerf-ui-usage -->
 
-<!-- hotsheet:begin section=playwright-operations v=1 -->
+<!-- hotsheet:begin section=playwright-operations v=2 -->
 
 ## Playwright Operations
 
@@ -698,7 +667,7 @@ Kerf's own guidance is authoritative for component selection, layout and spacing
 - **Realism.** Interaction tests hit real targets (the glyph, the line number), use real pointer events rather than synthesized shortcuts, assert positive fitted geometry and distinct drag coordinates, hit-test overlays for clipping, and assert live `value`, focus, and emitted events rather than attributes. Resize wide to narrow to wide inside the test when layout is under test.
 - **Engines and fonts.** Include WebKit for sizing, overflow, sticky layers, and focus rings; pin CI fonts to match local metrics when specs measure text.
 - **Flakes.** A flake fix is done when `--repeat-each=N --workers=M --retries=0` passes under full-suite load; retries only in the full CI job, bounded at two, with a ticket per retried test; quarantine with a tagged title naming the fix ticket (see `test-operations`).
-- **Captures.** Save screenshots to a project path named by slug, state, and width; do not add snapshot diffing by default; review captures per `ui-evaluation`.
+- **Captures.** Write screenshots to the runner's output directory as `<slug>-<state>-<width>.png`; wait for the state's settled readiness signal (enabled controls, finished transitions) and disable animations before capturing; attach the inspected captures to the ticket and never commit them; do not add snapshot diffing by default; review captures per `ui-evaluation`.
 
 <!-- hotsheet:end section=playwright-operations -->
 
@@ -734,7 +703,7 @@ Deviate only at the project level for a compelling or necessary reason, recorded
 
 <!-- hotsheet:end section=rust-lint-and-format -->
 
-<!-- hotsheet:begin section=test-operations v=1 -->
+<!-- hotsheet:begin section=test-operations v=3 -->
 
 ## Test Operations
 
@@ -742,8 +711,7 @@ Deviate only at the project level for a compelling or necessary reason, recorded
 - **Build once.** Binaries and client bundles build in the suite's global setup, skipped when fresh, never inside a test file. The full gate executes the built artifact (boot the bundle or binary and hit its health endpoint), not only builds it.
 - **Waiting.** Wait on events, readiness signals, or state, never fixed delays. Fixtures that simulate pending responses gate on a promise or channel, not a timer.
 - **Flakes.** A flake fix is done when the test passes repeatedly with retries disabled under full-suite load (for example `--repeat-each=20 --retries=0`). Retries run only in the full CI job, bounded at two, visible in the report, and every retried test gets a ticket. Quarantine markers name the fix ticket, one table row per marker, checked one-to-one in CI. A retry or quarantine is a reprieve, not a fix.
-- **Realism.** Reproduce the user's actual steps or command before claiming a fix, on the rebuilt instance, never against the user's running host or a stale build kept open from before the change.
-- **Output.** Run suites through a failure-only wrapper that prints a summary, capped failure excerpts, and a log path; keep a slowest-tests profile and act on it.
+- **Output.** The quiet-output rule lives in `hotsheet-testing-philosophy`; the project's failure-only wrapper prints a summary, capped failure excerpts, and a log path. Keep a slowest-tests profile and act on it.
 - **Record.** A script validates the coverage matrix (unit, end-to-end, manual per feature) by checking each status against its evidence paths; the manual test plan holds only what CI cannot do reliably.
 
 <!-- hotsheet:end section=test-operations -->
@@ -762,7 +730,7 @@ Deviate only at the project level for a compelling or necessary reason, recorded
 
 <!-- hotsheet:end section=typescript-lint-and-format -->
 
-<!-- hotsheet:begin section=ui-composition v=2 -->
+<!-- hotsheet:begin section=ui-composition v=3 -->
 
 ## UI Composition
 
@@ -773,21 +741,21 @@ Build interfaces from the design system's components, configured through their p
 - **Configure, never override.** A missing prop, variant, or token is an upstream ticket referenced from the app ticket, which stays blocked rather than shipping an override. This holds even when the maintainer asks for the visual directly: name the conflict and the missing API, and file the gap.
 - **Earn every control.** Every control, container, and line of copy traces to a human requirement or a reference precedent. Do not add explanatory paragraphs, permanent caveats, counts, "view options" menus, custom back and forward, theme toggles, duplicate titles, nested boxes, or editable fields for values the interaction already knows; use browser history and `prefers-color-scheme`. When a human says remove, remove; do not relocate.
 - **Human words are the spec.** Carry the human's exact component, placement, state, and viewport nouns into derived tickets and test names. AI notes, preliminary thoughts, and rewritten requirements never supersede them; when a phrase admits two behaviors, ask with a `CHOICE` note before building.
-- **Sign off before fanning out.** For a new screen or redesign, especially from a title-only ticket, post the region plan or wide and narrow captures and wait for feedback before building further; never fan dozens of tickets off an unreviewed layout.
+- **Sign off before fanning out.** For a new screen or redesign, especially from a title-only ticket, post the region plan or wide and narrow captures and wait for feedback before building further; never fan dozens of tickets off an unreviewed layout. A bounded redesign of one screen whose ticket states the intent may proceed once the region plan is posted in the preliminary note; the wait applies before deriving further tickets or screens from an unreviewed layout.
 - **Reuse semantics.** The same feature uses the same component everywhere, in a read-only variant when needed, never a copy; new lists inherit the app's selection, context-menu, edit, and autosave grammar; one concept per indicator and one name per concept.
 
 <!-- hotsheet:end section=ui-composition -->
 
-<!-- hotsheet:begin section=ui-evaluation v=1 -->
+<!-- hotsheet:begin section=ui-evaluation v=2 -->
 
 ## UI Evaluation
 
-- **Evidence comes from the real app**, not the demo route, on the rebuilt instance, with revealing content (long titles, two-line fields, full output). Capture wide, medium, and narrow widths and the wide-narrow-wide transition; open rails, dialogs, and menus; include empty and loading states; use WebKit as well as Chromium when sizing, overflow, sticky layers, or focus rings are involved; check both color schemes on the real backdrop.
-- **Inspect before attaching**, zoomed to the edge in question: anything clipped by an ancestor (shadows and focus rings included); icons not on one x, labels not on one x, selection boxes not on one edge, measured against the highlight box even when hidden; double insets; stray separators; truncation; overlap; contrast; popovers off the viewport; font or size that differs from the reference app. A capture with a visible defect is never correctness evidence: fix, rerun, recapture.
+- **Evidence** follows `hotsheet-visual-qa` (real app, rebuilt instance, its widths and transition) and adds: revealing content (long titles, two-line fields, full output); open rails, dialogs, and menus; include empty and loading states; use WebKit as well as Chromium when sizing, overflow, sticky layers, or focus rings are involved; check both color schemes on the real backdrop.
+- **Inspect before attaching**, zoomed to the edge in question: anything clipped by an ancestor (shadows and focus rings included); icons not on one x, labels not on one x, selection boxes not on one edge, measured against the highlight box even when hidden; double insets; stray separators; truncation; overlap; contrast; popovers off the viewport; font or size that differs from the reference app.
 - **Tool output is not judgment.** A green doctor, analyzer, or evaluator proves the checks it encodes, not component-contract compliance, hierarchy, rhythm, density, or fit. After composing a component, re-read its parent and children contract and pin it with a real-parent browser assertion. A passing DOM or computed-style assertion does not establish that content is readable, centered, unclipped, or aligned.
 - **Compare to the reference.** Typography, toolbar density, search affordances, settings layout, and the demo route match the named reference app before any customization; a visible difference from the reference is a defect unless the ticket asked for it.
 - **Measure performance** against the user's baseline (for example the CLI the product wraps) before shipping a first render; no per-item subprocess loops; keep local interactions within the project's latency budget.
-- **Review loop.** Prefer annotated real-browser captures reviewed by the human over prose; derive one ticket per annotation carrying its exact nouns; the after capture matches the before's component, state, and viewport.
+- **Review loop.** Prefer annotated real-browser captures reviewed by the human over prose; derive one ticket per annotation carrying its exact nouns.
 
 <!-- hotsheet:end section=ui-evaluation -->
 

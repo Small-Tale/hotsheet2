@@ -1015,6 +1015,9 @@ compares apply's materialized Rulesync inputs with the check script's byte for b
 pins the script's section discovery, and
 `scripts/check-rulesync-generation.test.mjs # HS2-6FSJCV bundled sections reach the generated file`
 runs the real generator.
+HS2-SZA1KH checks the v1.8.0 snapshot and Rulesync lock against the published
+commit, then exercises v65 workflow migration and preservation of customized
+guidance in `crates/hotsheet-plugins/src/setup.rs` and the CLI setup tests.
 HS2-2KNVV0 pins the launched MCP child's machine home and actor identity in
 Codex's isolated config and Claude's temporary config. The real-process CLI
 regression `hs2_2knvv0_mcp_child_cli_registers_only_in_its_pinned_home` runs with

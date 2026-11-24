@@ -617,13 +617,26 @@ fn hs2_38saet_reprice_cli_previews_and_applies_without_rewriting_raw() {
 
 fn rendered_instruction(raw: &str) -> String {
     raw.replace(
-        "<!-- hotsheet-instructions-version: 64 -->",
         "<!-- hotsheet-instructions-version: 65 -->",
+        "<!-- hotsheet-instructions-version: 66 -->",
     )
     .replace(
         "**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project\nalready uses; this default guidance does not require or forbid pushing on its own.",
         "<!-- hotsheet:push-policy:begin -->\nPush policy: `push-per-ticket`. The maintainer authorizes routine fast-forward\npushes of verified ticket commits to the shipping branch. Push each ticket\ncommit immediately, confirm it succeeded, then begin the next ticket.\n<!-- hotsheet:push-policy:end -->",
     )
+}
+
+fn rendered_previous_instruction() -> String {
+    include_str!("../../../plugins/shared/legacy-workflow-v64.md")
+        .trim_end()
+        .replace(
+            "<!-- hotsheet-instructions-version: 64 -->",
+            "<!-- hotsheet-instructions-version: 65 -->",
+        )
+        .replace(
+            "**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project\nalready uses; this default guidance does not require or forbid pushing on its own.",
+            "<!-- hotsheet:push-policy:begin -->\nPush policy: `push-per-ticket`. The maintainer authorizes routine fast-forward\npushes of verified ticket commits to the shipping branch. Push each ticket\ncommit immediately, confirm it succeeded, then begin the next ticket.\n<!-- hotsheet:push-policy:end -->",
+        )
 }
 
 fn rendered_skill(raw: &str) -> String {
@@ -1615,7 +1628,7 @@ fn setup_claude_migrates_to_agents_and_refresh_keeps_one_native_import() {
         r#"{"enabled_plugins":["claude"]}"#,
     )
     .unwrap();
-    let body = include_str!("../../../plugins/claude/instructions.md").trim_end();
+    let body = rendered_previous_instruction();
     std::fs::write(project.join("CLAUDE.md"), format!(
         "Claude-local policy.\n\n<!-- BEGIN hotsheet:claude -->\n{body}\n<!-- END hotsheet:claude -->\n\n{}",
         include_str!("../../../plugins/shared/testing-philosophy.md"))).unwrap();
@@ -1631,7 +1644,9 @@ fn setup_claude_migrates_to_agents_and_refresh_keeps_one_native_import() {
     run(&["setup", "claude"]);
     let canonical = std::fs::read_to_string(project.join("AGENTS.md")).unwrap();
     let native = std::fs::read_to_string(project.join("CLAUDE.md")).unwrap();
-    assert!(canonical.contains(&rendered_instruction(body)));
+    assert!(canonical.contains(&rendered_instruction(
+        include_str!("../../../plugins/claude/instructions.md").trim_end()
+    )));
     assert_eq!(
         canonical.matches("section=testing-philosophy v=").count(),
         1
@@ -4279,7 +4294,8 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
     std::fs::write(
         project.join("CLAUDE.md"),
         format!(
-            "# Project rules\n\n<!-- BEGIN hotsheet:claude -->\n{claude_body}\n<!-- END hotsheet:claude -->\n\nMore rules.\n"
+            "# Project rules\n\n<!-- BEGIN hotsheet:claude -->\n{}\n<!-- END hotsheet:claude -->\n\nMore rules.\n",
+            rendered_instruction(claude_body)
         ),
     )
     .unwrap();
@@ -4605,7 +4621,7 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 66 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 67 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
@@ -4649,7 +4665,7 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 65 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 66 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();

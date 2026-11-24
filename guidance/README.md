@@ -11,7 +11,7 @@ and SHA-256 hashes. The files in `plugins/shared/` and the four first-party
 existing paths, so installed setup and refresh stay headless and offline. They do
 not invoke Rulesync, fetch source, or need a local playbook checkout.
 
-The v1.2.0 source catalog offers 18 selectable rules. The built-in offline bundle
+The v1.8.0 source catalog offers 23 selectable rules. The built-in offline bundle
 still contains its five established Hot Sheet rules; the other rules are selected
 per project from a registered pinned source. The snapshot updater reads those five
 entries from the larger manifest and keeps the previous exact bodies as migration
@@ -43,7 +43,8 @@ node scripts/sync-ai-playbook.mjs --write --source ../ai-playbook \
 The script reads committed files at that SHA, so uncommitted source edits cannot
 leak into a snapshot. Review the lock and all destination diffs. When a section body
 changes, retain its previous exact body as a `plugins/shared/legacy-*.md` migration
-fixture and register it in `crates/hotsheet-plugins/src/setup.rs`. Bump the upstream
+fixture and register it in `crates/hotsheet-plugins/src/setup.rs`. Keep a previous
+workflow body when its project-rendered version needs exact-body migration. Bump the upstream
 section version; workflow changes also bump the common instruction version. Update
 product docs and setup/refresh tests in the same ticket. Never change snapshot prose
 independently in Hot Sheet 2.

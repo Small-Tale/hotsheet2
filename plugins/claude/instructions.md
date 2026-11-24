@@ -1,4 +1,4 @@
-<!-- hotsheet-instructions-version: 64 -->
+<!-- hotsheet-instructions-version: 65 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -141,37 +141,6 @@ look for changes.
 developer-specific home directory, username, or absolute clone path. Use repository-relative
 paths, a stable repo name/URL, or a placeholder such as `<repo-root>/path`. Keep an exact
 local path only as clearly labeled machine-local diagnostic evidence.
-
-## Testing
-
-- **Double coverage:** cover each feature with both unit tests (logic in isolation, external
-  dependencies mocked) **and** end-to-end tests (real user flows through the running system,
-  minimal mocking). Keep test fakes faithful to the real contract — same shapes, fields, and
-  status codes.
-- **Coverage is a floor, not a ceiling.** 100% lines means every line *ran*, not that every
-  *behavior* — or every *sequence* of behaviors — is *asserted*. It is blind to missing state
-  transitions.
-- **Stateful code gets transition-matrix + adversarial tests.** For anything with modes, a
-  cache, or a state machine, enumerate the states *and* the transitions, then walk realistic
-  multi-step sequences that cross boundaries. Deliberately try to break it with out-of-order,
-  interleaved, repeated, and empty-then-refill sequences; pin any bug you find as a permanent
-  regression test.
-- **Keep test output quiet.** Run suites with failure-only reporters (the project's quiet
-  test wrapper when it has one) and read the summary and failure excerpts, not the full log.
-  A cheaper background agent may run the tests and report only pass/fail and the failures.
-- **Rerun only what failed.** After a failure, rerun just the failing tests (for example
-  `cargo nextest run -E 'test(<name>)'`, `vitest run <file> -t '<name>'`, or
-  `playwright test -g '<title>'`) until they pass, then run the ticket's affected set once.
-  A rebase onto commits that do not touch the ticket's area needs no rerun; an overlapping
-  one reruns only the overlap's affected tests. Never rerun a passing suite to double-check.
-- **Fix lint and type errors before finishing** — as you go, not batched.
-
-## Requirements & docs
-
-Keep human-readable requirements/docs as the source of truth for what the project does, and
-update them **in the same change as the code**: add, remove, or modify a behavior → update
-its doc in the same commit. Create a new doc for a major new functional area and cross-link
-related docs.
 
 ## Commit hygiene
 

@@ -172,8 +172,8 @@ mod tests {
         // The default guidance must ticket direct-terminal work and carry testing, docs, and
         // commit-hygiene sections while leaving the push decision to each repo (HS2-3JMMAZ).
         assert!(agents_md.contains("Create tickets by default for real work"));
-        assert!(agents_md.contains("Double coverage"));
-        assert!(agents_md.contains("update them **in the same change as the code**"));
+        assert!(agents_md.contains("Cover each feature with unit tests of its logic"));
+        assert!(agents_md.contains("Update them in the same change"));
         assert!(agents_md.contains("commit per ticket"));
         assert!(agents_md.contains("Push policy: `push-per-ticket`"));
 
@@ -337,7 +337,7 @@ mod tests {
         assert!(agents.contains("`FEEDBACK NEEDED` is only"));
         // Same expanded default guidance reaches Codex's AGENTS.md block (HS2-3JMMAZ).
         assert!(agents.contains("Create tickets by default for real work"));
-        assert!(agents.contains("Double coverage"));
+        assert!(agents.contains("Cover each feature with unit tests of its logic"));
         assert!(agents.contains("Push policy: `push-per-ticket`"));
         assert!(!d.path().join(".claude").exists());
         assert!(

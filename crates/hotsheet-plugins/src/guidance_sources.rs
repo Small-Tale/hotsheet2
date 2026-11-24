@@ -1689,7 +1689,8 @@ mod tests {
         .unwrap();
         crate::setup::apply_selected_guidance_in(project.path()).unwrap();
         let per_tool = fs::read_to_string(project.path().join("AGENTS.md")).unwrap();
-        assert!(per_tool.contains("## Hot Sheet workflow"));
+        assert!(per_tool.contains("## Hot Sheet — ticket workflow"));
+        assert!(!per_tool.contains("## Hot Sheet workflow"));
         assert!(!per_tool.contains("<!-- BEGIN hotsheet:agents-md -->"));
     }
 

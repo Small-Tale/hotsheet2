@@ -868,6 +868,10 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v5.md"),
         ),
         (
+            "legacy-testing-philosophy-v6.md",
+            include_str!("../../../plugins/shared/legacy-testing-philosophy-v6.md"),
+        ),
+        (
             "legacy-testing-philosophy.md",
             include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
         ),
@@ -880,12 +884,20 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
             include_str!("../../../plugins/shared/legacy-ticket-driven-work-v5.md"),
         ),
         (
+            "legacy-ticket-driven-work-v6.md",
+            include_str!("../../../plugins/shared/legacy-ticket-driven-work-v6.md"),
+        ),
+        (
             "legacy-ticket-driven-work.md",
             include_str!("../../../plugins/shared/legacy-ticket-driven-work.md"),
         ),
         (
             "legacy-visual-qa-v1.md",
             include_str!("../../../plugins/shared/legacy-visual-qa-v1.md"),
+        ),
+        (
+            "legacy-workflow-v64.md",
+            include_str!("../../../plugins/shared/legacy-workflow-v64.md"),
         ),
         (
             "requirements-documentation.md",

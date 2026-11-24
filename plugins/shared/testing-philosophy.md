@@ -1,4 +1,4 @@
-<!-- hotsheet:begin section=testing-philosophy v=6 -->
+<!-- hotsheet:begin section=testing-philosophy v=7 -->
 
 ## Testing Philosophy
 
@@ -10,6 +10,8 @@
 - Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated.
 - Give every code package a working local lint command and configuration when it is added. Keep lint warning-free, fix lint and type errors before finishing, and document justified suppressions.
 - When a reviewer corrects a convention, pin it in the same change as a source-level policy test or lint rule named with the ticket slug; prose alone does not hold.
+- Keep test output quiet: run suites with failure-only reporters (the project's quiet test wrapper when it has one) and read the summary and failure excerpts, not the full log. A cheaper background agent may run the tests and report only pass/fail and the failures.
+- Rerun only what failed. After a failure, rerun just the failing tests (for example `cargo nextest run -E 'test(<name>)'`, `vitest run <file> -t '<name>'`, or `playwright test -g '<title>'`) until they pass, then run the ticket's affected set once. A rebase onto commits that do not touch the ticket's area needs no rerun; an overlapping one reruns only the overlap's affected tests. Never rerun a passing suite to double-check.
 - Verify on the rebuilt instance and reproduce the user's actual steps or command before claiming a fix; never test against the user's running host or a stale build. Isolation, build-once, and flake policy live in the `test-operations` rule when a project installs it.
 
 <!-- hotsheet:end section=testing-philosophy -->

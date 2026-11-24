@@ -37,7 +37,7 @@ authenticated, non-retained route. The diff is labelled as current state, not th
 historical edit. See [activity narration](15-activity-narration-interface.md) §15.6.
 
 **Shipped guidance provenance:** reusable rules are maintained in `Small-Tale/ai-playbook`;
-Hot Sheet embeds pinned offline snapshots with upstream drift checks. See
+Hot Sheet embeds v1.8.0 pinned offline snapshots with upstream drift checks. See
 [snapshot maintenance](../guidance/README.md) and [plugin setup](05-ai-tool-plugins.md).
 **Shipped instruction consolidation:** first-party setup writes common guidance to
 `AGENTS.md` and makes `CLAUDE.md` import it, preserving protected legacy layouts.

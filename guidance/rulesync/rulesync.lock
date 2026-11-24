@@ -3,15 +3,15 @@
   "sources": {
     "small-tale/ai-playbook": {
       "requestedRef": "main",
-      "resolvedRef": "02b66e656098ed5de7d2b042f37b862a8a057482",
-      "resolvedAt": "2026-10-23T06:39:35.971Z",
+      "resolvedRef": "d44c052ad133a8b1fbca750f78bad6b4b2e76693",
+      "resolvedAt": "2026-11-24T04:36:34.721Z",
       "skills": {},
       "rules": {
         "hotsheet-ticket-driven-work": {
-          "integrity": "sha256-13ceeb66a6d5d41ea65ffdc0fe6c70343fe6ea497418bc5c98dde46c013d922c"
+          "integrity": "sha256-4188c8c66997bda244a3f5aab84e1c0f5d935fe85b4177f80a162b81c347435c"
         },
         "hotsheet-testing-philosophy": {
-          "integrity": "sha256-049f429d997fb5a2a0797562bf9632c38c2fa8497974a5ad50a90261e2448d1c"
+          "integrity": "sha256-c0dde9175113e9d86ee1b61baea72156cf4d1b0f78d1e49769981fe9831086a5"
         },
         "hotsheet-requirements-documentation": {
           "integrity": "sha256-96e9069fd3377a2dc0c61d5712fbf23ebd2c65fd13ba692de5a161b7f0153393"
@@ -20,7 +20,7 @@
           "integrity": "sha256-b0be3c53b0b519eff3894bfb34c33ba3fc3fd4226acf59db72efe9e8248b0963"
         },
         "hotsheet-workflow": {
-          "integrity": "sha256-2029abb0d6214f21a19c18c4562071729b7380ce903e6c5bcc15c542d8c90f77"
+          "integrity": "sha256-8ff2b35f8eda966570f7103d3c6fad5b63eed8049c7fdd970b09c4c47eaeacfe"
         },
         "project-bootstrap": {
           "integrity": "sha256-3da9951b16ca3e0c411d47fc695e73bd8d9348c6b02b48473a898bf2a4228b61"
@@ -29,13 +29,13 @@
           "integrity": "sha256-2f8c69a84b6a2ecd732ffe5a2929c4d73a3948523618dd522ae136edaf1bb2bd"
         },
         "test-operations": {
-          "integrity": "sha256-c97d2a7e3ccdbd435e9d1a0081482690578e8918d0aa05ca5b0ea69f9ad844e6"
+          "integrity": "sha256-a6ba69bfdc21615292cd60c4153c1457627d4aa40c07a9246ea8b4dcd7a66352"
         },
         "ui-composition": {
-          "integrity": "sha256-d139fad36ef5ef2e9f51db12d24e049514c43a161d5b9b4a7f7da4f7b14eac17"
+          "integrity": "sha256-062ffc3441968c04f8a784a58f7b2bd7295ece2ac6df53b7b04b41f028943285"
         },
         "ui-evaluation": {
-          "integrity": "sha256-a74e3bec01f3928efbbb177b2afd10dfbdd90e1a62aa27f3bf543db0bcf4ef6f"
+          "integrity": "sha256-dcea3d618d00ec0809f915972140a32b02848df5ad0b5e25ac6a63ca8020b589"
         },
         "customer-data-hygiene": {
           "integrity": "sha256-b7fbd818a7ae306e58282a2b394b2792460d349b1eff0a63412d7b50cacc3921"
@@ -50,7 +50,7 @@
           "integrity": "sha256-00b9f2e45619fd8e46addb793d3f6a2bf51052059f3e6d76074baf16b6f84d7c"
         },
         "playwright-operations": {
-          "integrity": "sha256-93da4d3aec36d1bbd900d7adccf761e90d39e581f4e8a6fadbacc2be4f197262"
+          "integrity": "sha256-39f15e4709302c42521dc6d5b2676a949c38956c47e045e280a8333a67b70c08"
         },
         "kerf-ui-usage": {
           "integrity": "sha256-c74c324aaa981f3a42301df165b2c6a3c3a73b997175c0816a37c3f34b2c2613"
@@ -59,10 +59,10 @@
           "integrity": "sha256-20a29e8a03c16e62f362541eb3ae12421b3ffc53e411d110a8b42287c8796339"
         },
         "kerf-ui-catalog-demos": {
-          "integrity": "sha256-4c464df1118ba1e7b2aa68483007ba6bea96d5f23f9ae23e1db04a20eeec1b8a"
+          "integrity": "sha256-38347047855e63f300e5e65bb6f28b3165f3b594231edfb5a0f0ffbb6b1dba09"
         },
         "git-commit-and-push": {
-          "integrity": "sha256-e8aa6649d9a762c0565f58a9cb1d9678ce5bb6500358ce817476336e89df8bd6"
+          "integrity": "sha256-765a5a2c18e3974aefd686cb6aa4aab8981cbbe16f07e39d4844cb69838b66a9"
         },
         "release-scripts": {
           "integrity": "sha256-5ec2b340e95c4a20d373fd618b67ea401be2e2a193d93599c1e30297716620ea"

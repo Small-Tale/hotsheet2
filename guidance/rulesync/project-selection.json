@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/Small-Tale/ai-playbook.git",
-  "commit": "02b66e656098ed5de7d2b042f37b862a8a057482",
+  "commit": "d44c052ad133a8b1fbca750f78bad6b4b2e76693",
   "rules": [
     "hotsheet-ticket-driven-work",
     "hotsheet-testing-philosophy",

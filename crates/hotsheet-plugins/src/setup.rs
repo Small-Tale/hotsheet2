@@ -2127,6 +2127,7 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
             include_str!("../../../plugins/shared/legacy-ticket-driven-work.md"),
             include_str!("../../../plugins/shared/legacy-ticket-driven-work-v4.md"),
             include_str!("../../../plugins/shared/legacy-ticket-driven-work-v5.md"),
+            include_str!("../../../plugins/shared/legacy-ticket-driven-work-v6.md"),
         ],
     },
     GuidanceSection {
@@ -2137,6 +2138,7 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v3.md"),
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v4.md"),
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v5.md"),
+            include_str!("../../../plugins/shared/legacy-testing-philosophy-v6.md"),
         ],
     },
     GuidanceSection {
@@ -2634,6 +2636,10 @@ fn marked_artifact_requires_preservation(
             && bundled_version == 65
             && installed_version.checked_add(1) == Some(bundled_version)
             && !push_policy_only_diff(installed, bundled))
+            || (version_prefix == INSTRUCTIONS_VERSION_PREFIX
+                && bundled_version == 66
+                && installed_version == 65
+                && !known_previous_workflow(installed))
             || installed_version > bundled_version
             || (installed_version == bundled_version
                 && installed != bundled
@@ -2641,25 +2647,55 @@ fn marked_artifact_requires_preservation(
     })
 }
 
-/// A changed declared policy owns only this generated span. An edit anywhere else
-/// at the same artifact version is still a customization and must be preserved.
-fn push_policy_only_diff(installed: &str, bundled: &str) -> bool {
-    fn without_policy(contents: &str) -> Option<String> {
-        let mut normalized = contents.to_string();
-        if let Some(begin) = normalized.find(POLICY_BEGIN) {
-            let end = normalized[begin..].find(POLICY_END)? + begin + POLICY_END.len();
-            normalized.replace_range(begin..end, "{{HOTSHEET_PUSH_POLICY}}");
-        } else {
-            normalized = normalized.replace(LEGACY_POLICY, "{{HOTSHEET_PUSH_POLICY}}");
-        }
-        normalized = normalized.replace(
+/// Version 65 was the project-rendered v64 workflow. Upgrade only its exact managed body;
+/// a project customization at that version belongs to the project (HS2-SZA1KH).
+fn known_previous_workflow(installed: &str) -> bool {
+    let Some(normalized) = without_push_policy(installed) else {
+        return false;
+    };
+    let Some(start) = normalized.find(INSTRUCTIONS_VERSION_PREFIX) else {
+        return false;
+    };
+    let body = &normalized[start..];
+    let end = body.find("\n<!-- END hotsheet:").unwrap_or(body.len());
+    let previous = include_str!("../../../plugins/shared/legacy-workflow-v64.md")
+        .replacen(
             "<!-- hotsheet-instructions-version: 64 -->",
             "<!-- hotsheet-instructions-version: 65 -->",
-        );
-        Some(normalized)
+            1,
+        )
+        .replace(LEGACY_POLICY, "{{HOTSHEET_PUSH_POLICY}}");
+    body[..end].trim() == previous.trim()
+}
+
+/// A changed declared policy owns only this generated span. An edit anywhere else
+/// at the same artifact version is still a customization and must be preserved.
+fn without_push_policy(contents: &str) -> Option<String> {
+    let mut normalized = contents.to_string();
+    if let Some(begin) = normalized.find(POLICY_BEGIN) {
+        let end = normalized[begin..].find(POLICY_END)? + begin + POLICY_END.len();
+        normalized.replace_range(begin..end, "{{HOTSHEET_PUSH_POLICY}}");
+    } else {
+        normalized = normalized.replace(LEGACY_POLICY, "{{HOTSHEET_PUSH_POLICY}}");
     }
-    without_policy(installed)
-        .zip(without_policy(bundled))
+    Some(normalized)
+}
+
+fn push_policy_only_diff(installed: &str, bundled: &str) -> bool {
+    without_push_policy(installed)
+        .zip(without_push_policy(bundled))
+        .map(|(a, b)| {
+            (
+                a.replace(
+                    "<!-- hotsheet-instructions-version: 64 -->",
+                    "<!-- hotsheet-instructions-version: 65 -->",
+                ),
+                b.replace(
+                    "<!-- hotsheet-instructions-version: 64 -->",
+                    "<!-- hotsheet-instructions-version: 65 -->",
+                ),
+            )
+        })
         .is_some_and(|(a, b)| a == b)
 }
 
@@ -4068,7 +4104,7 @@ mod tests {
                 path,
                 section,
                 installed_version: 1,
-                bundled_version: 6,
+                bundled_version: 8,
             } if path == "AGENTS.md" && section == "ticket-driven-work"
         ));
         assert!(render_guidance_sections(&old, true).contains(&old));
@@ -4326,6 +4362,30 @@ args = ["--path", "{{store}}"]
         format!("<!-- BEGIN hotsheet:{id} -->\n{body}\n<!-- END hotsheet:{id} -->")
     }
 
+    fn rendered_previous_workflow() -> String {
+        include_str!("../../../plugins/shared/legacy-workflow-v64.md")
+            .replacen(
+                "<!-- hotsheet-instructions-version: 64 -->",
+                "<!-- hotsheet-instructions-version: 65 -->",
+                1,
+            )
+            .replace(
+                LEGACY_POLICY,
+                "<!-- hotsheet:push-policy:begin -->\nPush policy: `push-per-ticket`.\n<!-- hotsheet:push-policy:end -->",
+            )
+    }
+
+    #[test]
+    fn hs2_sza1kh_upgrades_only_the_exact_previous_workflow() {
+        let previous = rendered_previous_workflow();
+        let installed = per_tool("codex", previous.trim_end());
+        assert!(known_previous_workflow(&installed));
+        assert!(!known_previous_workflow(&installed.replace(
+            "## Hot Sheet — ticket workflow",
+            "## Customized Hot Sheet — ticket workflow",
+        )));
+    }
+
     #[test]
     fn shared_guidance_preserves_local_text_and_version_boundaries() {
         for section in GUIDANCE_SECTIONS {
@@ -4563,14 +4623,10 @@ args = ["--path", "{{store}}"]
         let project = tempfile::tempdir().unwrap();
         let root = project.path();
         run_setup_in(store.path(), root, Some("codex"), false, None, &[]).unwrap();
-        let claude = crate::builtin_plugins()
-            .into_iter()
-            .find(|plugin| plugin.id() == "claude")
-            .unwrap();
         let specifics = "<!-- hotsheet:begin specifics=testing-philosophy v=1 -->\nLocal runner.\n<!-- hotsheet:end specifics=testing-philosophy -->";
         let mut legacy = format!(
             "Claude-local preface.\n\n{}\n",
-            per_tool("claude", claude.instructions_body().trim_end())
+            per_tool("claude", rendered_previous_workflow().trim_end())
         );
         for section in GUIDANCE_SECTIONS {
             let body = section.legacy.first().copied().unwrap_or(section.current);
