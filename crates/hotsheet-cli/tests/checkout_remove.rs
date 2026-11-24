@@ -304,13 +304,22 @@ fn hs2_x4rz73_an_open_project_or_unreachable_server_refuses_removal() {
 }
 
 /// HS2-HM0Y6X headless E2E: `checkout prune` unregisters abandoned temporary checkouts and
-/// deletes only their generated worklist skeleton. The home sits under the crate
-/// source directory, independent of CARGO_TARGET_TMPDIR, so the prune treats it as
-/// a real machine registry even when Cargo's target is under an OS temporary root.
+/// deletes only their generated worklist skeleton. The home sits under the Git
+/// administrative directory, independent of both the Cargo target and a linked
+/// worktree's location, so it is not mistaken for an OS-temporary registry.
 #[test]
 fn hs2_hm0y6x_prune_unregisters_abandoned_temporary_checkouts() {
-    let home_root = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let git_dir = hotsheet_ticketing::git::absolute_git_dir(Path::new(env!("CARGO_MANIFEST_DIR")))
+        .unwrap()
+        .unwrap();
+    let home_root = tempfile::tempdir_in(git_dir).unwrap();
     let home = home_root.path().join("home");
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    assert!(
+        !hotsheet_ticketing::checkout_removal::registry_is_temporary(&registry),
+        "HS2-J6DJNH: the fixture registry must be outside OS temporary roots"
+    );
     let scratch = tempfile::tempdir().unwrap();
     let store = scratch.path().join("app.hs2");
     hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("AP"))
