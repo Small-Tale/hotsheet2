@@ -82,8 +82,13 @@ pub enum OccurrenceOutcome {
     Created,
     SkippedOpenTicket,
     DeliveryPending,
+    /// The exact ticket is claimed and the turn may have been sent. A restart must
+    /// reconcile this state rather than send the prompt again (HS2-NR0VRF).
+    DeliveryDispatching,
     Delivered,
     DeliveryFailed,
+    /// The host died before it could confirm whether the provider turn finished.
+    DeliveryUncertain,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,6 +100,10 @@ pub struct OccurrenceResult {
     pub ticket_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ticket_slug: Option<String>,
+    /// None is a pre-HS2-NR0VRF record, whose accepted turns cannot be audited
+    /// retroactively. New records use Some(false) until completion is observed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_completed: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1101,9 +1101,14 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   The configured command AI selection takes precedence over the project default.
   Before either auto-start handoff, the host claims the exact recorded ticket under
   the selected session worker identity. A claim held by another worker leaves the
-  ticket pending for retry. A failed handoff or failed provider turn is recorded in the occurrence history
-  and on that ticket, then retried using its existing identity after a later wake or
-  host restart. The schedule editor is tracked by HS2-17663F.
+  ticket pending for retry. A failed handoff or failed provider turn is recorded in the
+  occurrence history and on that ticket, then retried using its existing identity after
+  a later wake or host restart. Before sending a turn, the host durably records that
+  dispatch has begun. It records successful provider completion separately from handoff
+  acceptance. After a crash, a dispatch whose completion cannot be proven becomes
+  `delivery_uncertain` on the same qualified occurrence ticket; the scheduler does not
+  send it again. A person or agent inspects that ticket and the provider session before
+  resuming work (HS2-NR0VRF). The schedule editor is tracked by HS2-17663F.
   Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling. Press-and-hold
   remains reserved for output/history. A context or overflow menu will provide “Run in

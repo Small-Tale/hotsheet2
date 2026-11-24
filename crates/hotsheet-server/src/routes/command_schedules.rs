@@ -489,6 +489,8 @@ pub(crate) fn process_checkout(
                     outcome,
                     ticket_id: Some(ticket.qualified_id),
                     ticket_slug: Some(ticket.slug),
+                    turn_completed: (schedule.action != ScheduleAction::CreateTicket)
+                        .then_some(false),
                 });
                 if record.history.len() > command_schedules::HISTORY_LIMIT {
                     record.history.remove(0);
@@ -614,6 +616,7 @@ struct DeliveryTarget<'a> {
     action: ScheduleAction,
     ticket_id: &'a str,
     ticket_slug: &'a str,
+    occurrence_date: &'a str,
 }
 
 async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAttempt {
@@ -661,6 +664,24 @@ async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAt
             return DeliveryAttempt::AwaitClaim;
         }
         Err(_) => return DeliveryAttempt::Failed("ticket_claim_failed"),
+    }
+    // HS2-NR0VRF: commit the ambiguity boundary before sending a turn. If the
+    // host dies after this write, restart must not replay a possibly sent prompt.
+    if !matches!(
+        set_delivery_outcome(
+            target.settings,
+            &target.command.id,
+            target.occurrence_date,
+            target.ticket_id,
+            command_schedules::OccurrenceOutcome::DeliveryDispatching,
+            false,
+        ),
+        Ok(Some(_))
+    ) {
+        if let Ok(ticket) = ops::release(&entry.store, &ticket.id, crate::now(), &worker, false) {
+            state.changed_in(&entry, "released", &ticket);
+        }
+        return DeliveryAttempt::Failed("occurrence_changed");
     }
     let prompt = format!(
         "$hotsheet Work the exact ticket {} (qualified id {}) now. Read its full details and notes before acting. The ticket is already claimed by this AI session.",
@@ -717,13 +738,27 @@ fn set_delivery_outcome(
         else {
             return Ok(None);
         };
-        if !matches!(
-            item.outcome,
-            command_schedules::OccurrenceOutcome::DeliveryPending
-                | command_schedules::OccurrenceOutcome::DeliveryFailed
-        ) && !(allow_delivered
-            && item.outcome == command_schedules::OccurrenceOutcome::Delivered)
-        {
+        let allowed = match outcome {
+            command_schedules::OccurrenceOutcome::DeliveryDispatching => matches!(
+                item.outcome,
+                command_schedules::OccurrenceOutcome::DeliveryPending
+                    | command_schedules::OccurrenceOutcome::DeliveryFailed
+            ),
+            command_schedules::OccurrenceOutcome::Delivered => {
+                item.outcome == command_schedules::OccurrenceOutcome::DeliveryDispatching
+            }
+            command_schedules::OccurrenceOutcome::DeliveryFailed => {
+                matches!(
+                    item.outcome,
+                    command_schedules::OccurrenceOutcome::DeliveryPending
+                        | command_schedules::OccurrenceOutcome::DeliveryFailed
+                        | command_schedules::OccurrenceOutcome::DeliveryDispatching
+                ) || (allow_delivered
+                    && item.outcome == command_schedules::OccurrenceOutcome::Delivered)
+            }
+            _ => false,
+        };
+        if !allowed {
             return Ok(None);
         }
         let previous = item.outcome;
@@ -736,6 +771,132 @@ fn set_delivery_outcome(
         StatusCode::CONFLICT,
         "command delivery history changed; retry on next wake",
     ))
+}
+
+fn mark_turn_completed(
+    settings: &Settings,
+    command_id: &str,
+    occurrence_date: &str,
+    ticket_id: &str,
+) -> Result<bool, ApiError> {
+    for _ in 0..4 {
+        let prior = records(settings)?;
+        let mut next = prior.clone();
+        let Some(item) = next
+            .iter_mut()
+            .find(|record| record.schedule.command_id == command_id)
+            .and_then(|record| {
+                record.history.iter_mut().find(|item| {
+                    item.occurrence_date == occurrence_date
+                        && item.ticket_id.as_deref() == Some(ticket_id)
+                })
+            })
+        else {
+            return Ok(false);
+        };
+        if item.outcome != command_schedules::OccurrenceOutcome::Delivered
+            || item.turn_completed == Some(true)
+        {
+            return Ok(false);
+        }
+        item.turn_completed = Some(true);
+        if write_records(settings, &prior, &next).is_ok() {
+            return Ok(true);
+        }
+    }
+    Err(ApiError::new(
+        StatusCode::CONFLICT,
+        "command completion history changed",
+    ))
+}
+
+/// The prior process cannot prove whether an accepted provider turn finished.
+/// Keep the exact ticket visible for deliberate reconciliation instead of replaying it.
+fn reconcile_interrupted_checkout(state: &AppState, reference: &str) -> Result<(), ApiError> {
+    let (checkout, settings) = checkout_settings(state, reference)?;
+    for _ in 0..4 {
+        let prior = records(&settings)?;
+        let mut next = prior.clone();
+        let mut uncertain = Vec::new();
+        let mut changed_commands = Vec::new();
+        for record in &mut next {
+            for item in &mut record.history {
+                if item.outcome == command_schedules::OccurrenceOutcome::DeliveryDispatching
+                    || (item.outcome == command_schedules::OccurrenceOutcome::Delivered
+                        && item.turn_completed == Some(false))
+                {
+                    let completed = item.ticket_id.as_deref().is_some_and(|id| {
+                        claims::checkout_claim_entry(state, reference, id)
+                            .ok()
+                            .and_then(|(entry, native_id)| entry.resolve(&native_id).ok().flatten())
+                            .is_some_and(|ticket| {
+                                matches!(
+                                    ticket.status,
+                                    hotsheet_model::Status::Completed
+                                        | hotsheet_model::Status::Verified
+                                        | hotsheet_model::Status::Archive
+                                )
+                            })
+                    });
+                    if completed {
+                        item.outcome = command_schedules::OccurrenceOutcome::Delivered;
+                        item.turn_completed = Some(true);
+                    } else {
+                        item.outcome = command_schedules::OccurrenceOutcome::DeliveryUncertain;
+                    }
+                    if !completed {
+                        if let Some(id) = &item.ticket_id {
+                            uncertain.push(id.clone());
+                        }
+                    }
+                    changed_commands.push(record.schedule.command_id.clone());
+                }
+            }
+        }
+        if next == prior {
+            return Ok(());
+        }
+        if write_records(&settings, &prior, &next).is_ok() {
+            for command_id in changed_commands {
+                emit_changed(state, &checkout.id, &command_id);
+            }
+            for ticket_id in uncertain {
+                note_delivery_uncertain(state, reference, &ticket_id);
+            }
+            return Ok(());
+        }
+    }
+    Err(ApiError::new(
+        StatusCode::CONFLICT,
+        "command recovery history changed",
+    ))
+}
+
+fn note_delivery_uncertain(state: &AppState, reference: &str, ticket_id: &str) {
+    let Ok((entry, native_id)) = claims::checkout_claim_entry(state, reference, ticket_id) else {
+        return;
+    };
+    let Ok(Some(ticket)) = entry.resolve(&native_id) else {
+        return;
+    };
+    if let Ok(ticket) = ops::add_note_with_metadata(
+        &entry.store,
+        &ticket.id,
+        hotsheet_model::Ulid::new(),
+        crate::now(),
+        hotsheet_model::NoteKind::Regular,
+        ops::NoteMetadataInput {
+            summary: Some("Scheduled AI turn needs reconciliation".into()),
+            actor: Some(hotsheet_model::NoteActor {
+                role: hotsheet_model::AttachmentActorRole::System,
+                id: Some("hotsheet-command-scheduler".into()),
+            }),
+            ..ops::NoteMetadataInput::default()
+        },
+        "The host restarted while this scheduled AI turn may have been running. Inspect this exact ticket and the provider session before resuming; the scheduler will not send the prompt again automatically.".into(),
+    ) {
+        state.changed_in(&entry, "note_added", &ticket);
+    }
 }
 
 fn note_delivery_failure(state: &AppState, reference: &str, ticket_id: &str, reason: &str) {
@@ -801,6 +962,7 @@ async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiErr
                         action: record.schedule.action,
                         ticket_id,
                         ticket_slug,
+                        occurrence_date: &item.occurrence_date,
                     },
                 )
                 .await
@@ -843,7 +1005,18 @@ async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiErr
                 let occurrence_date = item.occurrence_date.clone();
                 let ticket_id = ticket_id.to_owned();
                 tokio::spawn(async move {
-                    if completed.await != Ok(true) {
+                    if completed.await == Ok(true) {
+                        if let Ok((checkout, settings)) = checkout_settings(&state, &reference) {
+                            if let Ok(true) = mark_turn_completed(
+                                &settings,
+                                &command_id,
+                                &occurrence_date,
+                                &ticket_id,
+                            ) {
+                                emit_changed(&state, &checkout.id, &command_id);
+                            }
+                        }
+                    } else {
                         if let Ok((checkout, settings)) = checkout_settings(&state, &reference) {
                             if let Ok(Some(previous)) = set_delivery_outcome(
                                 &settings,
@@ -894,6 +1067,7 @@ impl AppState {
     pub fn spawn_command_schedule_runner(&self) {
         let state = self.clone();
         tokio::spawn(async move {
+            let mut startup = true;
             loop {
                 if state.is_stopping() {
                     return;
@@ -902,7 +1076,14 @@ impl AppState {
                 let result = tokio::task::spawn_blocking(move || {
                     let mut next = None;
                     let mut checkouts = Vec::new();
+                    let mut recovery_failed = false;
                     for checkout in work.checkout_registry.list().map_err(invalid)? {
+                        if startup {
+                            if let Err(error) = reconcile_interrupted_checkout(&work, &checkout.id) {
+                                tracing::warn!(checkout = %checkout.id, error = %error.message, "scheduled AI recovery failed");
+                                recovery_failed = true;
+                            }
+                        }
                         match process_checkout(&work, &checkout.id, Timestamp::now()) {
                             Ok(Some(instant)) => next = Some(next.map_or(instant, |old: Timestamp| old.min(instant))),
                             Ok(None) => {},
@@ -910,19 +1091,20 @@ impl AppState {
                         }
                         checkouts.push(checkout.id);
                     }
-                    Ok::<_, ApiError>((next, checkouts))
+                    Ok::<_, ApiError>((next, checkouts, recovery_failed))
                 }).await;
-                let (next, checkouts) = match result {
+                let (next, checkouts, recovery_failed) = match result {
                     Ok(Ok(result)) => result,
                     Ok(Err(error)) => {
                         tracing::warn!(error = %error.message, "command schedule scan failed");
-                        (None, Vec::new())
+                        (None, Vec::new(), true)
                     }
                     Err(error) => {
                         tracing::warn!(%error, "command schedule worker failed");
-                        (None, Vec::new())
+                        (None, Vec::new(), true)
                     }
                 };
+                startup = recovery_failed;
                 for checkout in checkouts {
                     if let Err(error) = deliver_pending(&state, &checkout).await {
                         tracing::warn!(checkout, error = %error.message, "scheduled AI delivery failed");
@@ -1382,6 +1564,104 @@ mod tests {
             1
         );
         assert_eq!(backend.preparations.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn hs2_nr0vrf_restart_preserves_uncertain_exact_turn_without_replay() {
+        for accepted in [false, true] {
+            let (root, state, checkout, settings, store) = fixture();
+            let backend = ScheduledFakeDrive::default();
+            let state = with_scheduled_backend(state, backend.clone());
+            let (ticket_id, _) =
+                due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+            let date = records(&settings).unwrap()[0].history[0]
+                .occurrence_date
+                .clone();
+            let outcome = if accepted {
+                command_schedules::OccurrenceOutcome::Delivered
+            } else {
+                command_schedules::OccurrenceOutcome::DeliveryDispatching
+            };
+            let mut stored = records(&settings).unwrap();
+            stored[0].history[0].outcome = outcome;
+            settings
+                .set(command_schedules::SETTING, json!(stored), Scope::Local)
+                .unwrap();
+
+            let recovered = AppState::new(store.clone(), "synthetic-secret".into())
+                .unwrap()
+                .with_checkout_registry(root.path().join("checkouts.json"));
+            let recovered = with_scheduled_backend(recovered, backend.clone());
+            reconcile_interrupted_checkout(&recovered, &checkout).unwrap();
+            assert_eq!(
+                records(&settings).unwrap()[0].history[0].outcome,
+                command_schedules::OccurrenceOutcome::DeliveryUncertain,
+            );
+            deliver_pending(&recovered, &checkout).await.unwrap();
+            assert!(backend.preparations.lock().unwrap().is_empty());
+            assert!(backend.turns.lock().unwrap().is_empty());
+            assert_eq!(
+                records(&settings).unwrap()[0].history[0]
+                    .ticket_id
+                    .as_deref(),
+                Some(ticket_id.as_str())
+            );
+            assert_eq!(
+                records(&settings).unwrap()[0].history[0].occurrence_date,
+                date
+            );
+            assert_eq!(
+                ops::query(&store, &TicketQuery::default()).unwrap().len(),
+                1
+            );
+            let notes = &ops::query(&store, &TicketQuery::default()).unwrap()[0].notes;
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.text.contains("will not send the prompt again"))
+            );
+            // A second restart is idempotent, including its note history.
+            let note_count = notes.len();
+            reconcile_interrupted_checkout(&recovered, &checkout).unwrap();
+            assert_eq!(
+                ops::query(&store, &TicketQuery::default()).unwrap()[0]
+                    .notes
+                    .len(),
+                note_count
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn hs2_nr0vrf_confirmed_turn_stays_delivered_on_restart() {
+        let (_root, state, checkout, settings, _store) = fixture();
+        let (ticket_id, _) = due_ticket(&state, &checkout, &settings, ScheduleAction::NewAiSession);
+        let mut stored = records(&settings).unwrap();
+        stored[0].history[0].outcome = command_schedules::OccurrenceOutcome::Delivered;
+        stored[0].history[0].turn_completed = Some(true);
+        settings
+            .set(command_schedules::SETTING, json!(stored), Scope::Local)
+            .unwrap();
+        reconcile_interrupted_checkout(&state, &checkout).unwrap();
+        let item = &records(&settings).unwrap()[0].history[0];
+        assert_eq!(
+            item.outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
+        assert_eq!(item.turn_completed, Some(true));
+        assert_eq!(item.ticket_id.as_deref(), Some(ticket_id.as_str()));
+        // Older accepted records lacked completion evidence. Preserve their
+        // historical outcome rather than marking every prior run uncertain.
+        let mut legacy = records(&settings).unwrap();
+        legacy[0].history[0].turn_completed = None;
+        settings
+            .set(command_schedules::SETTING, json!(legacy), Scope::Local)
+            .unwrap();
+        reconcile_interrupted_checkout(&state, &checkout).unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
     }
 
     #[tokio::test]

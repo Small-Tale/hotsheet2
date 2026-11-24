@@ -34,9 +34,17 @@ export interface ScheduleView {
   next_runs: string[];
   history: Array<{
     occurrence_date: string;
-    outcome: 'created' | 'skipped_open_ticket' | 'delivery_pending' | 'delivered' | 'delivery_failed';
+    outcome:
+      | 'created'
+      | 'skipped_open_ticket'
+      | 'delivery_pending'
+      | 'delivery_dispatching'
+      | 'delivered'
+      | 'delivery_failed'
+      | 'delivery_uncertain';
     ticket_id?: string;
     ticket_slug?: string;
+    turn_completed?: boolean;
   }>;
   unavailable?: string;
 }
@@ -72,11 +80,18 @@ export function parseScheduleView(value: unknown): ScheduleView {
     const item = object(entry, 'command schedule history');
     if (
       typeof item.occurrence_date !== 'string' ||
-      !['created', 'skipped_open_ticket', 'delivery_pending', 'delivered', 'delivery_failed'].includes(
-        String(item.outcome),
-      ) ||
+      ![
+        'created',
+        'skipped_open_ticket',
+        'delivery_pending',
+        'delivery_dispatching',
+        'delivered',
+        'delivery_failed',
+        'delivery_uncertain',
+      ].includes(String(item.outcome)) ||
       (item.ticket_id !== undefined && typeof item.ticket_id !== 'string') ||
-      (item.ticket_slug !== undefined && typeof item.ticket_slug !== 'string')
+      (item.ticket_slug !== undefined && typeof item.ticket_slug !== 'string') ||
+      (item.turn_completed !== undefined && typeof item.turn_completed !== 'boolean')
     )
       throw new Error('Invalid command schedule history response');
   }

@@ -70,4 +70,28 @@ describe('HS2-17663F command schedule form', () => {
     expect(() => parseSchedulePreview({ next_runs: ['2027-02-15T01:00:00Z', 12] })).toThrow();
     expect(() => parseScheduleView({ schedule: { command_id: 'x' }, next_runs: [], history: [] })).toThrow();
   });
+
+  it('HS2-NR0VRF accepts a crash-uncertain occurrence without treating it as a retry', () => {
+    const view = parseScheduleView({
+      schedule: {
+        command_id: 'review',
+        time_zone: 'Asia/Manila',
+        local_time: '09:00',
+        action: 'new_ai_session',
+        paused: false,
+        recurrence: { kind: 'once', date: '2027-02-15' },
+      },
+      next_runs: [],
+      history: [
+        {
+          occurrence_date: '2027-02-15',
+          outcome: 'delivery_uncertain',
+          ticket_id: 'source:ticket',
+          turn_completed: false,
+        },
+      ],
+    });
+    expect(view.history[0]?.outcome).toBe('delivery_uncertain');
+    expect(() => parseScheduleView({ ...view, history: [{ ...view.history[0], turn_completed: 'yes' }] })).toThrow();
+  });
 });

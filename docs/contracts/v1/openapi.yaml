@@ -29465,12 +29465,24 @@ components:
           pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
         outcome:
           type: string
-          enum: [created, skipped_open_ticket, delivery_pending, delivered, delivery_failed]
+          enum:
+            [
+              created,
+              skipped_open_ticket,
+              delivery_pending,
+              delivery_dispatching,
+              delivered,
+              delivery_failed,
+              delivery_uncertain,
+            ]
         ticket_id:
           type: string
           description: Qualified ticket identity when an occurrence found or created a ticket.
         ticket_slug:
           type: string
+        turn_completed:
+          type: boolean
+          description: The host observed successful completion of the accepted provider turn.
       additionalProperties: false
     CommandScheduleView:
       type: object

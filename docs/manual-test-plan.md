@@ -1564,6 +1564,16 @@ vms/one --duration 30s --wait 60s` in the second; release the first and confirm 
 6. Record the date and the Upstash plan in the ticket. Flush the database when done: each run leaves
    its fencing counters and name sets (claim keys expire on their own).
 
+## Interrupted scheduled AI turn (HS2-NR0VRF)
+
+In an isolated project with a synthetic scheduled AI command, stop the host after it
+accepts the provider turn, then restart it. Confirm the same qualified occurrence
+ticket remains available, its history says `delivery_uncertain`, and its note asks
+for inspection of that ticket and the provider session. The scheduler must not send
+the prompt again. Inspect the session transcript and ticket activity before a person
+or agent deliberately resumes any unfinished work. A normally completed scheduled
+turn should retain `delivered` with `turn_completed: true` after restart.
+
 ## Ably remote-change connection against the real service (HS2-BWJWWX)
 
 CI uses a scripted fake of Ably Realtime on loopback. This checks the real TLS handshake, the
