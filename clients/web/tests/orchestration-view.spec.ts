@@ -1070,33 +1070,41 @@ test('HS2-N5BDE4 a planner that asked a question says so and opens the goal tick
     await asOrchestrationProject(server);
     const plan = await planAndDispatch(server);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openProject(page, server, 'Launch');
     // `plan show` as the server answers it while the goal holds the planner's unanswered question.
+    // HS2-Z19C1Y: installed before the page loads, as HS2-GYJHA3 did: an orchestration project opens
+    // straight in its Orchestration view and reads planning at once, so a mock installed after opening
+    // lost that first read to the real server (no question) under load, and nothing read it again.
     let asked = true;
-    await page.route(/\/orchestration\/planning\/show$/, (route) =>
-      route.fulfill({
-        json: {
-          state: 'planning',
-          goals: [],
-          goal_count: 1,
-          steps: 2,
-          placement_automatic: false,
-          ...(asked
-            ? {
-                questions: [
-                  {
-                    connection_id: plan.first.connection_id,
-                    native_id: plan.goal.id,
-                    slug: plan.goal.slug,
-                    steps: 2,
-                    question: '01M83N3G2NMF22HWJS0R203RH9',
-                  },
-                ],
-              }
-            : {}),
-        },
-      }),
-    );
+    let planningReads = 0;
+    const askedRoute = async () => {
+      await page.route(/\/orchestration\/planning\/show$/, (route) => {
+        planningReads += 1;
+        return route.fulfill({
+          json: {
+            state: 'planning',
+            goals: [],
+            goal_count: 1,
+            steps: 2,
+            placement_automatic: false,
+            ...(asked
+              ? {
+                  questions: [
+                    {
+                      connection_id: plan.first.connection_id,
+                      native_id: plan.goal.id,
+                      slug: plan.goal.slug,
+                      steps: 2,
+                      question: '01M83N3G2NMF22HWJS0R203RH9',
+                    },
+                  ],
+                }
+              : {}),
+          },
+        });
+      });
+    };
+    await openProject(page, server, 'Launch', askedRoute);
+    await expect.poll(() => planningReads).toBeGreaterThan(0);
     await page.locator('[data-segment-value="orchestration"]').first().click();
     const toolbar = page.locator('[data-orchestration-toolbar="proposed"]');
     await expect(toolbar).toContainText('· Planner asked a question');
