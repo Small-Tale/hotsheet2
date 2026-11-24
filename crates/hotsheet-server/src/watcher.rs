@@ -50,6 +50,41 @@ struct NativeWatcherState {
     stopped: bool,
 }
 
+/// A parent-directory signal survives deletion of the watched store directory.
+#[derive(Clone, Copy)]
+struct WatchRootSignal {
+    root_removed: bool,
+    tickets_removed: bool,
+}
+
+fn watch_root_signal(
+    event: &notify::Event,
+    root: &FsPath,
+    tickets: &FsPath,
+    canonical_root: Option<&FsPath>,
+    canonical_tickets: Option<&FsPath>,
+) -> Option<WatchRootSignal> {
+    let root_event = event
+        .paths
+        .iter()
+        .any(|path| path == root || canonical_root.is_some_and(|canonical| path == canonical));
+    let tickets_event = event.paths.iter().any(|path| {
+        path == tickets || canonical_tickets.is_some_and(|canonical| path == canonical)
+    });
+    if !root_event && !tickets_event {
+        return None;
+    }
+    let removed = matches!(
+        event.kind,
+        notify::EventKind::Remove(_)
+            | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
+    );
+    Some(WatchRootSignal {
+        root_removed: removed && root_event,
+        tickets_removed: removed && tickets_event,
+    })
+}
+
 type NativeWatcherSlot = Arc<Mutex<NativeWatcherState>>;
 
 /// Owns a started (or starting) native watcher; dropping it stops the watcher.
@@ -135,6 +170,8 @@ const STARTUP_RESYNC: &str = "hotsheet-startup-resync";
 /// Marks the resync after which the watcher is live: once it is applied, every write made
 /// before the stream started is in the index, so a slug miss can trust it (HS2-3R0C6G).
 const LIVE_RESYNC: &str = "hotsheet-live-resync";
+/// A replaced store can have removed tickets as well as new files (HS2-R6FZ54).
+const REARM_RESYNC: &str = "hotsheet-rearm-resync";
 /// When the startup resync runs; a native stream is live well within this (HS2-P3SSGR).
 const STARTUP_RESYNC_DELAY: Duration = Duration::from_millis(1500);
 
@@ -195,6 +232,10 @@ pub(crate) fn spawn_watcher_in_scope(
             // writes made before either watcher took its first look.
             let slot: NativeWatcherSlot = Arc::default();
             let started = slot.clone();
+            let store_root = tickets_dir
+                .parent()
+                .expect("tickets directory has a store root")
+                .to_path_buf();
             std::thread::spawn(move || {
                 let resync = tx.clone();
                 let request_resync = |dir: &FsPath, info: &str| {
@@ -220,24 +261,52 @@ pub(crate) fn spawn_watcher_in_scope(
                 }
                 request_resync(&tickets_dir, STARTUP_RESYNC);
                 let watch_dir = scope.watch_dir().to_path_buf();
-                let mut watcher = match notify::recommended_watcher(move |res| {
-                    if is_access_event(&res) {
-                        return;
-                    }
-                    if let Some(res) = scope.admit(res) {
-                        tx.send(res);
-                    }
-                }) {
-                    Ok(watcher) => watcher,
-                    Err(error) => {
-                        tracing::warn!(
-                            dir = %tickets_dir.display(),
-                            %error,
-                            "store watcher failed to start"
-                        );
-                        return;
-                    }
+                let Some(parent) = store_root.parent() else {
+                    tracing::warn!(dir = %store_root.display(), "store watcher has no parent to monitor for recreation");
+                    return;
                 };
+                let parent = parent.to_path_buf();
+                let (rearm_tx, rearm_rx) = std::sync::mpsc::channel();
+                let signal_root = store_root.clone();
+                let signal_tickets = tickets_dir.clone();
+                // FSEvents spells `/var` as `/private/var`; use the stable parent's
+                // canonical path because the store root may no longer exist.
+                let canonical_signal_root = hotsheet_sync::paths::canonicalize(&parent)
+                    .ok()
+                    .map(|canonical| canonical.join(store_root.file_name().expect("store name")));
+                let canonical_signal_tickets = canonical_signal_root
+                    .as_ref()
+                    .map(|root| root.join("tickets"));
+                let mut watcher =
+                    match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+                        if let Ok(event) = &res
+                            && let Some(signal) = watch_root_signal(
+                                event,
+                                &signal_root,
+                                &signal_tickets,
+                                canonical_signal_root.as_deref(),
+                                canonical_signal_tickets.as_deref(),
+                            )
+                        {
+                            let _ = rearm_tx.send(signal);
+                        }
+                        if is_access_event(&res) {
+                            return;
+                        }
+                        if let Some(res) = scope.admit(res) {
+                            tx.send(res);
+                        }
+                    }) {
+                        Ok(watcher) => watcher,
+                        Err(error) => {
+                            tracing::warn!(
+                                dir = %tickets_dir.display(),
+                                %error,
+                                "store watcher failed to start"
+                            );
+                            return;
+                        }
+                    };
                 if let Err(error) = watcher.watch(&watch_dir, RecursiveMode::Recursive) {
                     tracing::warn!(
                         dir = %watch_dir.display(),
@@ -245,6 +314,20 @@ pub(crate) fn spawn_watcher_in_scope(
                         "store watcher failed to start"
                     );
                     return;
+                }
+                // The parent survives deletion of the store. On Linux/macOS, a shallow
+                // root watch also sees `tickets/` return after the new root is created.
+                if let Err(error) = watcher.watch(&parent, RecursiveMode::NonRecursive) {
+                    tracing::warn!(dir = %parent.display(), %error, "store watcher parent monitor failed");
+                    return;
+                }
+                let mut root_watched = watch_dir == store_root;
+                if !root_watched {
+                    if let Err(error) = watcher.watch(&store_root, RecursiveMode::NonRecursive) {
+                        tracing::warn!(dir = %store_root.display(), %error, "store watcher root monitor failed");
+                        return;
+                    }
+                    root_watched = true;
                 }
                 {
                     let mut slot = started.lock_or_recover();
@@ -259,6 +342,51 @@ pub(crate) fn spawn_watcher_in_scope(
                 let bridge = started.with_lock(|slot| slot.bridge.take());
                 drop(bridge);
                 request_resync(&tickets_dir, LIVE_RESYNC);
+                let mut watched_dir = true;
+                while let Ok(signal) = rearm_rx.recv() {
+                    let mut slot = started.lock_or_recover();
+                    if slot.stopped {
+                        return;
+                    }
+                    let Some(watcher) = slot.watcher.as_mut() else {
+                        return;
+                    };
+                    if signal.root_removed || !store_root.is_dir() {
+                        if watched_dir {
+                            let _ = watcher.unwatch(&watch_dir);
+                            watched_dir = false;
+                            if watch_dir == store_root {
+                                root_watched = false;
+                            }
+                        }
+                        if root_watched && watch_dir != store_root {
+                            let _ = watcher.unwatch(&store_root);
+                            root_watched = false;
+                        }
+                        resync.freshness.set_live(false);
+                    } else if signal.tickets_removed || !watch_dir.is_dir() {
+                        if watched_dir {
+                            let _ = watcher.unwatch(&watch_dir);
+                            watched_dir = false;
+                        }
+                        resync.freshness.set_live(false);
+                    }
+                    if store_root.is_dir() && !root_watched && watch_dir != store_root {
+                        root_watched = watcher
+                            .watch(&store_root, RecursiveMode::NonRecursive)
+                            .is_ok();
+                    }
+                    if watch_dir.is_dir()
+                        && !watched_dir
+                        && watcher.watch(&watch_dir, RecursiveMode::Recursive).is_ok()
+                    {
+                        watched_dir = true;
+                        if watch_dir == store_root {
+                            root_watched = true;
+                        }
+                        request_resync(&tickets_dir, REARM_RESYNC);
+                    }
+                }
             });
             HeldWatcher::Native {
                 _hold: NativeWatcherHold(slot),
@@ -878,15 +1006,54 @@ pub(crate) fn watch_loop(
             mut paths,
             events,
             goes_live,
+            reconcile,
         } = batch;
         paths.sort();
         paths.dedup();
         let mut index_changed = false;
+        let mut reconciled = true;
+        if reconcile {
+            match target
+                .entry
+                .index
+                .lock_or_recover()
+                .reconcile(&target.entry.store)
+            {
+                Ok((upserted, deleted)) => {
+                    index_changed = upserted + deleted > 0;
+                    if index_changed {
+                        // Files may have appeared before the replacement native watch.
+                        // An aggregate invalidation makes every client reread the index.
+                        emit_change(
+                            &target.event_log,
+                            &target.events,
+                            ChangeEvent {
+                                live: None,
+                                cursor: None,
+                                store: target.store_id.clone(),
+                                kind: "changed".into(),
+                                id: String::new(),
+                                slug: String::new(),
+                                message: None,
+                                activity: None,
+                                assignment: None,
+                                turn: None,
+                            },
+                        );
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(store = %target.store_id, %error, "rearmed store index reconciliation failed");
+                    reconciled = false;
+                    freshness.set_live(false);
+                }
+            }
+        }
         for path in &paths {
             index_changed |= handle_path_change(&target, path);
         }
         // Every event in the batch is now in the index (HS2-3R0C6G).
-        if goes_live {
+        if goes_live && reconciled {
             freshness.set_live(true);
         }
         freshness.events_applied(events);
@@ -904,6 +1071,7 @@ struct WatchBatch {
     paths: Vec<std::path::PathBuf>,
     events: usize,
     goes_live: bool,
+    reconcile: bool,
 }
 
 impl WatchBatch {
@@ -928,6 +1096,13 @@ impl WatchBatch {
             && event.info() == Some(LIVE_RESYNC)
         {
             self.goes_live = true;
+        }
+        if let Ok(event) = &res
+            && event.info() == Some(REARM_RESYNC)
+        {
+            self.reconcile = true;
+            self.goes_live = true;
+            return;
         }
         self.paths.extend(watch_event_paths(target, res));
     }
@@ -1153,9 +1328,60 @@ mod watcher_tests {
         EventLog, RepositoryEventFilter, RepositoryRefreshGate, WatcherBackend,
         expand_ticket_files, git_repository_fingerprint, registered_watcher_backend,
         repository_change_event, run_git_repository_monitor, run_native_repository_monitor,
-        spawn_repository_monitor,
+        spawn_repository_monitor, watch_root_signal,
     };
+    use notify::{Event, EventKind};
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn hs2_r6fz54_only_root_and_tickets_events_rearm_a_store() {
+        let root = std::path::Path::new("/synthetic/store");
+        let tickets = root.join("tickets");
+        let sibling = root.with_file_name("other");
+        assert!(
+            watch_root_signal(
+                &Event::new(EventKind::Create(notify::event::CreateKind::Folder)).add_path(sibling),
+                root,
+                &tickets,
+                None,
+                None,
+            )
+            .is_none()
+        );
+        let removed = watch_root_signal(
+            &Event::new(EventKind::Remove(notify::event::RemoveKind::Folder))
+                .add_path(root.to_path_buf()),
+            root,
+            &tickets,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(removed.root_removed);
+        assert!(!removed.tickets_removed);
+        let created = watch_root_signal(
+            &Event::new(EventKind::Create(notify::event::CreateKind::Folder))
+                .add_path(tickets.clone()),
+            root,
+            &tickets,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(!created.root_removed && !created.tickets_removed);
+        let canonical = std::path::Path::new("/private/synthetic/store");
+        assert!(
+            watch_root_signal(
+                &Event::new(EventKind::Create(notify::event::CreateKind::Folder))
+                    .add_path(canonical.to_path_buf()),
+                root,
+                &tickets,
+                Some(canonical),
+                Some(&canonical.join("tickets")),
+            )
+            .is_some()
+        );
+    }
     use std::time::Duration;
     use std::time::Instant;
 
@@ -1577,10 +1803,14 @@ mod watcher_tests {
 /// miss is final only while every queued event and repair has been applied.
 #[cfg(test)]
 mod freshness_tests {
-    use super::{LIVE_RESYNC, QueuedSender, WatcherBackend, resync_event, watch_loop};
+    use super::{
+        LIVE_RESYNC, QueuedSender, REARM_RESYNC, WatcherBackend, resync_event, watch_loop,
+    };
+    use crate::store_watch_scope::TicketsWatchScope;
     use hotsheet_index::IndexError;
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
 
     fn store() -> (tempfile::TempDir, FsStore) {
@@ -1744,6 +1974,146 @@ mod freshness_tests {
         );
         drop(handle);
         wait_for("the watcher to stop", || !entry.freshness.in_sync());
+    }
+
+    #[test]
+    fn hs2_r6fz54_rearm_resync_reconciles_removed_and_new_tickets() {
+        let (dir, store) = store();
+        let old = create(&store, "old store ticket");
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let mut events = target.events.subscribe();
+        let (raw, rx) = std::sync::mpsc::channel();
+        let tx = QueuedSender {
+            tx: raw,
+            freshness: entry.freshness.clone(),
+        };
+        let looping = std::thread::spawn(move || watch_loop(rx, target));
+        let tickets = dir.path().join("tickets");
+        tx.send(Ok(resync_event(&tickets, LIVE_RESYNC)));
+        wait_for("initial store to become live", || entry.freshness.in_sync());
+
+        let away = dir.path().with_file_name(format!(
+            "{}-away",
+            dir.path().file_name().unwrap().to_string_lossy()
+        ));
+        std::fs::rename(dir.path(), &away).unwrap();
+        entry.freshness.set_live(false);
+        let replacement = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let new = create(&replacement, "replacement store ticket");
+        tx.send(Ok(resync_event(&tickets, REARM_RESYNC)));
+        wait_for("replacement store to reconcile", || {
+            entry.freshness.in_sync()
+        });
+        assert!(
+            entry
+                .index
+                .lock()
+                .unwrap()
+                .slug_candidates(&old.slug)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            entry
+                .index
+                .lock()
+                .unwrap()
+                .slug_candidates(&new.slug)
+                .unwrap(),
+            vec![new.id]
+        );
+        wait_for("replacement store to announce an index change", || {
+            while let Ok(event) = events.try_recv() {
+                if event.kind == "changed" && event.id.is_empty() {
+                    return true;
+                }
+            }
+            false
+        });
+        drop(tx);
+        looping.join().unwrap();
+        std::fs::remove_dir_all(away).unwrap();
+    }
+
+    #[test]
+    fn hs2_r6fz54_native_watcher_rearms_after_store_recreation() {
+        for watch_root in [false, true] {
+            let parent = tempfile::tempdir().unwrap();
+            let root = parent.path().join("store");
+            let away = parent.path().join("away");
+            let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+            let old = create(&store, "old store ticket");
+            let state = crate::AppState::new(store, "secret".into()).unwrap();
+            let target = super::default_watch_target(&state);
+            let entry = target.entry.clone();
+            let scope = Arc::new(TicketsWatchScope::new(&root, watch_root));
+            let handle =
+                super::spawn_watcher_in_scope(target, WatcherBackend::Recommended, scope).unwrap();
+            wait_for("native watcher to become live", || {
+                entry.freshness.in_sync()
+            });
+
+            std::fs::rename(&root, &away).unwrap();
+            wait_for("deleted store to be marked out of sync", || {
+                !entry.freshness.in_sync()
+            });
+            let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+            let first = create(&replacement, "replacement ticket");
+            wait_for("recreated store to replace its index", || {
+                entry.freshness.in_sync()
+                    && entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&old.slug)
+                        .unwrap()
+                        .is_empty()
+                    && entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&first.slug)
+                        .unwrap()
+                        == vec![first.id]
+            });
+            let later = create(&replacement, "external write after rearm");
+            wait_for("rearmed native watch to index an external write", || {
+                entry
+                    .index
+                    .lock()
+                    .unwrap()
+                    .slug_candidates(&later.slug)
+                    .unwrap()
+                    == vec![later.id]
+            });
+
+            std::fs::rename(&root, parent.path().join("away-again")).unwrap();
+            wait_for("second removal to mark the store out of sync", || {
+                !entry.freshness.in_sync()
+            });
+            let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+            let second = create(&replacement, "second replacement ticket");
+            wait_for("second recreation to replace its index", || {
+                entry.freshness.in_sync()
+                    && entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&later.slug)
+                        .unwrap()
+                        .is_empty()
+                    && entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&second.slug)
+                        .unwrap()
+                        == vec![second.id]
+            });
+            drop(handle);
+        }
     }
 }
 

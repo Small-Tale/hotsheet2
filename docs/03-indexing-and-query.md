@@ -205,6 +205,14 @@ Git and other churn beside `tickets/` never reaches the watch loop, so an idle s
 A relinked store is watched again at its new path when it is hosted there. The target-feed watch of
 an unhosted linked store (HS2-G5FYP6) uses the same scope.
 
+If a hosted store is deleted and recreated at the same path, the server watches its stable parent
+for the store root to return (HS2-R6FZ54). On macOS and Linux it also watches the root without
+recursion for a new `tickets/` directory. It removes the invalid native watch, registers the
+replacement directory, and reconciles the entire store index before declaring the watch live.
+That reconciliation removes rows from the deleted store as well as indexing files in the new one.
+When rows change, it emits one store-scoped ticket invalidation so connected clients reread the index.
+These parent and root monitors respond to filesystem events; they do not rescan idle stores.
+
 On change:
 
 1. **Debounce** rapid bursts (an editor save, a git checkout touching many files).

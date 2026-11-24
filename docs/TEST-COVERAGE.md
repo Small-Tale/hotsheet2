@@ -4847,3 +4847,12 @@ checks durable sequential retry, ticket reuse, and stale completion rejection.
 `crates/hotsheet-server/tests/sync_ai.rs` exercises unavailable-primary selection and a
 later server pass after a typed limit; `crates/hotsheet-cli/tests/cli.rs` exercises the
 same ordered selection and a later headless `sync` retry with synthetic conflicts.
+
+### Recreated hosted store watcher (HS2-R6FZ54)
+
+`crates/hotsheet-server/src/watcher.rs` tests parent event filtering, re-arm index
+reconciliation that removes old rows and adds replacement rows, and the native watcher
+transition for both root and `tickets/` scopes. Reconciliation also asserts a client
+invalidation. The native case verifies that a later
+external write is indexed after the store is recreated. Windows and Linux platform CI
+must exercise their own native backends before the ticket completes.
