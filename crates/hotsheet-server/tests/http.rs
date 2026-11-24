@@ -17294,6 +17294,16 @@ async fn watcher_reindexes_an_external_write() {
         },
     )
     .unwrap();
+    // HS2-R6FZ54: startup re-arm may reconcile a concurrent write before its
+    // individual file event is handled. The resulting store-scoped invalidation
+    // has empty ticket identity, so each phase also checks authoritative state.
+    let ticket_id = created.id.to_string();
+    let ticket_slug = created.slug.clone();
+    let invalidates_ticket = |event: &serde_json::Value| {
+        event["kind"] == "changed"
+            && ((event["id"] == ticket_id.as_str() && event["slug"] == ticket_slug.as_str())
+                || (event["id"] == "" && event["slug"] == ""))
+    };
 
     // The watcher should reindex it and make its event replayable through long polling.
     let mut saw_create = false;
@@ -17303,7 +17313,8 @@ async fn watcher_reindexes_an_external_write() {
             .oneshot(authed("GET", "/tickets?text=external", None))
             .await
             .unwrap();
-        let indexed = body_json(resp).await.as_array().unwrap().len() == 1;
+        let rows = body_json(resp).await;
+        let indexed = rows.as_array().unwrap().len() == 1 && rows[0]["id"] == ticket_id.as_str();
         let polled = body_json(
             app.clone()
                 .oneshot(authed(
@@ -17319,7 +17330,7 @@ async fn watcher_reindexes_an_external_write() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|event| event["kind"] == "changed" && event["id"] == created.id.to_string())
+            .any(&invalidates_ticket)
         {
             saw_create = true;
             cursor = polled["cursor"].as_u64().unwrap();
@@ -17353,7 +17364,7 @@ async fn watcher_reindexes_an_external_write() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|event| event["kind"] == "changed" && event["id"] == created.id.to_string());
+            .any(&invalidates_ticket);
         if changed {
             assert!(polled["cursor"].as_u64().unwrap() > cursor);
             cursor = polled["cursor"].as_u64().unwrap();
@@ -17365,6 +17376,7 @@ async fn watcher_reindexes_an_external_write() {
             )
             .await;
             assert_eq!(rows.as_array().unwrap().len(), 1);
+            assert_eq!(rows[0]["id"], ticket_id.as_str());
             saw_edit = true;
             break;
         }
@@ -17398,11 +17410,11 @@ async fn watcher_reindexes_an_external_write() {
                 .unwrap(),
         )
         .await;
-        let invalidated = polled["events"].as_array().unwrap().iter().any(|event| {
-            event["kind"] == "changed"
-                && event["id"] == created.id.to_string()
-                && event["slug"] == created.slug
-        });
+        let invalidated = polled["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(&invalidates_ticket);
         if invalidated {
             let stale_rows = body_json(
                 app.clone()
@@ -17412,6 +17424,7 @@ async fn watcher_reindexes_an_external_write() {
             )
             .await;
             assert_eq!(stale_rows.as_array().unwrap().len(), 1);
+            assert_eq!(stale_rows[0]["id"], ticket_id.as_str());
             let health = body_json(
                 app.clone()
                     .oneshot(
@@ -17452,12 +17465,21 @@ async fn watcher_reindexes_an_external_write() {
                 .unwrap(),
         )
         .await;
-        let repaired = polled["events"].as_array().unwrap().iter().any(|event| {
-            event["kind"] == "changed"
-                && event["id"] == created.id.to_string()
-                && event["slug"] == created.slug
-        });
+        let repaired = polled["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(&invalidates_ticket);
         if repaired {
+            let rows = body_json(
+                app.clone()
+                    .oneshot(authed("GET", "/tickets?text=externally%20edited", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(rows.as_array().unwrap().len(), 1);
+            assert_eq!(rows[0]["id"], ticket_id.as_str());
             let health = body_json(
                 app.clone()
                     .oneshot(
