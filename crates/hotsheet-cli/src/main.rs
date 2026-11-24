@@ -1575,8 +1575,8 @@ fn saved_ai_defaults(
     tools: &[hotsheet_plugins::AiToolDescriptor],
 ) -> Result<Option<hotsheet_plugins::AiToolDefaults>> {
     Ok(stored_ai_defaults(settings, scope)?
-        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok())
-        .map(|defaults| hotsheet_plugins::sanitize_ai_defaults(tools, defaults)))
+        .map(|defaults| hotsheet_plugins::sanitize_ai_defaults(tools, defaults))
+        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok()))
 }
 
 /// The AI defaults stored in one scope, unvalidated.
@@ -1586,7 +1586,7 @@ fn stored_ai_defaults(
 ) -> Result<Option<hotsheet_plugins::AiToolDefaults>> {
     Ok(settings
         .get("ai.defaults", scope)?
-        .and_then(|value| serde_json::from_value(value).ok()))
+        .and_then(hotsheet_plugins::ai_defaults_from_storage))
 }
 
 /// The settings file and scope an `ai-settings` write targets.

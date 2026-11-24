@@ -4777,3 +4777,21 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
   real timeline with both tickets made remote and reads labels through the real gated
   route, one refused, at 1440, 1100 and 390 and back, in Chromium and WebKit, and checks
   each ticket was asked once across a new version.
+
+### Ordered default AI tool fallback (HS2-RWA8V6)
+
+Legacy scalar and canonical array storage, validation, provider-choice
+preservation, and unavailable-primary selection are covered in
+`crates/hotsheet-plugins/src/tests.rs`. The ordered setting reader is covered
+in `crates/hotsheet-ticketing/src/sync_ai/tests.rs`; automatic grouping's
+failed-primary/backup-success, unusable-reply fallback, and all-failed transitions are covered in
+`crates/hotsheet-server/src/auto_group.rs`. The real server settings roundtrip
+is in `crates/hotsheet-server/tests/http.rs`. Client parsing, provider-order
+mapping, settings rendering, and the shipped parent interaction are covered in
+`clients/web/src/server-response-parsers.test.ts`,
+`clients/web/src/ai-provider-defaults.test.ts`,
+`clients/web/src/components/ai-tool-settings.test.ts`, and
+`clients/web/tests/providers.spec.ts`. The live quota case remains in
+`docs/manual-test-plan.md` because a real subscription limit is not a
+deterministic fixture. The browser case waits for both overlay rails to settle
+before reviewing the backup controls at 760px in light and dark themes.

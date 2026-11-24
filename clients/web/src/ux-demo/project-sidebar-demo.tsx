@@ -373,13 +373,18 @@ export function DriveOptionsMenuDemo() {
 }
 export function AiToolSettingsDemo() {
   return (
-    <CatalogExample label="Interactive">
-      <AiToolSettings
-        tools={demoAiTools}
-        selection={{ tool: 'codex', model: 'gpt-5.6', effort: 'high' }}
-        message="Saved locally."
-      />
-    </CatalogExample>
+    <>
+      <CatalogExample label="Backup Configured">
+        <AiToolSettings
+          tools={demoAiTools}
+          selection={{ tool: 'codex', fallback_tools: ['claude'], model: 'gpt-5.6', effort: 'high' }}
+          message="Saved locally."
+        />
+      </CatalogExample>
+      <CatalogExample label="Add Backup">
+        <AiToolSettings tools={demoAiTools} selection={{ tool: 'codex', model: 'gpt-5.6' }} />
+      </CatalogExample>
+    </>
   );
 }
 export function GuidanceSettingsDemo() {

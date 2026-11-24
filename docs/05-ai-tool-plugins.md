@@ -3643,8 +3643,23 @@ machine-local `<project>/.hotsheet2/settings.local.json`, because the installed 
 models differ per machine. A project without its own choice inherits the machine-wide fallback,
 still served by the unscoped `GET`/`PUT /ai-settings` and `hotsheet-cli ai-settings get|set
 --global` from the global Hot Sheet 2 settings file, and then the discovered default tool. Every
-saved value is validated against the installed providers; one that names an uninstalled tool is
-ignored on read.
+saved value is validated against the installed providers; if its primary is unavailable, the
+first installed backup is selected on read when one exists.
+
+**Ordered automatic-tool preference (HS2-RWA8V6).** The stored
+`ai.defaults.tool` is an ordered array: the first id is the default for
+interactive Drive, shells, and chat; subsequent ids are backups for automatic
+ticket grouping. Existing settings with a single string
+remain readable. Every settings update, including a provider model or permission
+change, writes the array. Project Settings → AI tools and repeatable
+`hotsheet-cli ai-settings set --tool <id> [--tool <backup-id>…]` edit the order;
+the API retains a scalar `tool` for the primary and exposes `fallback_tools`
+for compatibility with existing clients. Uninstalled saved backups remain in
+storage for a later reinstall, but are skipped while unavailable. Automatic
+grouping tries the order within one bounded turn window and logs which
+candidate succeeded or that all failed, without copying ticket content.
+Sync-repair launches still use the primary only; HS2-ZX9CKC owns their
+fallback and safe asynchronous retry.
 
 Each provider also keeps **its own default model and effort** (HS2-EK24KF). The saved value's
 optional `providers` map (`{ "<tool>": { "model": …, "effort": … } }`) records one entry per

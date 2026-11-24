@@ -604,7 +604,7 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
         launch: { kind: 'ai', ticket_id: '01', ticket_slug: 'HS2-AAAAAA', tool: 'claude' },
       },
     ],
-    [parseAiToolDefaults, { tool: 'claude', providers: { claude: { model: 'opus' } } }],
+    [parseAiToolDefaults, { tool: 'claude', fallback_tools: ['codex'], providers: { claude: { model: 'opus' } } }],
     [parseGitHubAuthStatus, { state: 'pending' }],
     [parsePermissionDecision, { connection: 'c', decision: 'allow', persisted: false }],
     [

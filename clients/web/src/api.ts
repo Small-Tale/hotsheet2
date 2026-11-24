@@ -1412,6 +1412,8 @@ export interface AiProviderDefaults {
  */
 export interface AiToolDefaults {
   tool: string;
+  /** Automatic work tries these providers after `tool`, in order (HS2-RWA8V6). */
+  fallback_tools?: string[];
   model?: string;
   effort?: string;
   permission_mode?: string;

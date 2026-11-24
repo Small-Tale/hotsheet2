@@ -103,18 +103,33 @@ pub fn ask_ai_mode(settings: &Settings) -> AskAiMode {
         .unwrap_or_default()
 }
 
-/// The project's default AI tool id (`ai.defaults.tool`), if one is configured.
+/// The project's ordered AI tools. The historical scalar remains readable (HS2-RWA8V6).
+#[must_use]
+pub fn configured_ai_tools(settings: &Settings) -> Vec<String> {
+    let Some(value) = settings.get_effective(AI_DEFAULTS_SETTING).ok().flatten() else {
+        return Vec::new();
+    };
+    let Some(tool) = value.get("tool") else {
+        return Vec::new();
+    };
+    let entries: Vec<&str> = match tool {
+        serde_json::Value::String(id) => vec![id.as_str()],
+        serde_json::Value::Array(ids) => ids.iter().filter_map(serde_json::Value::as_str).collect(),
+        _ => return Vec::new(),
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    entries
+        .into_iter()
+        .map(str::trim)
+        .filter(|id| !id.is_empty() && seen.insert((*id).to_owned()))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The project's primary AI tool id (`ai.defaults.tool`), if one is configured.
 #[must_use]
 pub fn configured_ai_tool(settings: &Settings) -> Option<String> {
-    settings
-        .get_effective(AI_DEFAULTS_SETTING)
-        .ok()
-        .flatten()?
-        .get("tool")?
-        .as_str()
-        .map(str::trim)
-        .filter(|tool| !tool.is_empty())
-        .map(str::to_string)
+    configured_ai_tools(settings).into_iter().next()
 }
 
 /// A stall sync cannot finish alone.

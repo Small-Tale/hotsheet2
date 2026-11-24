@@ -1,7 +1,7 @@
 //! Group new tickets automatically (HS2-FN018Q, `docs/35-ticket-groups.md` §35.6).
 //!
 //! When a project's shared `auto_group_new_tickets` setting is on (the default), every new
-//! ungrouped ticket in one of its Git stores is offered to the project's default AI tool in a
+//! ungrouped ticket in one of its Git stores is offered to the project's ordered AI tools in a
 //! private one-shot turn, however it was created: in this server, by the CLI or MCP, in another
 //! window, or by a clone whose write the watcher reports. New tickets are coalesced per store for
 //! [`COALESCE`] and described together (at most [`AUTO_GROUP_BATCH_LIMIT`] per turn), so an agent
@@ -44,6 +44,8 @@ pub struct AskRequest<'a> {
     pub store_root: &'a Path,
     pub settings: &'a Settings,
     pub prompt: &'a str,
+    pub tickets: &'a [AutoGroupTicket],
+    pub groups: &'a BTreeMap<String, String>,
 }
 
 /// Runs one private turn and returns the assistant's text; injectable for tests.
@@ -223,6 +225,8 @@ fn group_batch(state: &AppState, store_id: &str, ids: &[Ulid], ask: &Ask) {
             store_root: &store_root,
             settings: &settings,
             prompt: &prompt,
+            tickets: &batch,
+            groups: &groups,
         }) {
             Ok(reply) => reply,
             Err(error) => {
@@ -283,16 +287,79 @@ fn apply(
     }
 }
 
-/// Run one private turn of the project's default AI tool and return its text.
+/// Try configured tools in order within one overall turn budget (HS2-RWA8V6).
 fn ask_default_tool(state: &AppState, request: &AskRequest<'_>) -> Result<String, String> {
-    let tool = hotsheet_ticketing::sync_ai::configured_ai_tool(request.settings)
-        .ok_or_else(|| "no default AI tool is configured for this project".to_string())?;
-    let drivable = hotsheet_plugins::detected_drivable_plugins(&state.plugin_dirs)
-        .iter()
-        .any(|candidate| candidate.id() == tool);
-    if !drivable {
-        return Err(format!("the default AI tool {tool} cannot be driven here"));
+    let order = hotsheet_ticketing::sync_ai::configured_ai_tools(request.settings);
+    if order.is_empty() {
+        return Err("no default AI tool is configured for this project".into());
     }
+    let available = hotsheet_plugins::detected_drivable_plugins(&state.plugin_dirs)
+        .iter()
+        .map(|plugin| plugin.id().to_owned())
+        .collect::<Vec<_>>();
+    let deadline = Instant::now() + TURN_LIMIT;
+    try_ordered_tools(&order, &available, |tool| {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("turn budget exhausted".into());
+        }
+        let reply = ask_tool(state, request, tool, remaining)?;
+        validate_reply(reply, request.tickets, request.groups)
+    })
+}
+
+/// A completed but unusable turn must leave room for the next configured tool.
+fn validate_reply(
+    reply: String,
+    tickets: &[AutoGroupTicket],
+    groups: &BTreeMap<String, String>,
+) -> Result<String, String> {
+    parse_auto_group_reply(&reply, tickets, groups)
+        .map_err(|error| format!("unusable automatic-grouping reply: {error}"))?;
+    Ok(reply)
+}
+
+/// One successful reply ends the search; a failed primary never consumes the batch.
+fn try_ordered_tools(
+    order: &[String],
+    available: &[String],
+    mut attempt: impl FnMut(&str) -> Result<String, String>,
+) -> Result<String, String> {
+    let mut failures = Vec::new();
+    for tool in order {
+        if !available.contains(tool) {
+            failures.push(format!("{tool}: unavailable"));
+            continue;
+        }
+        match attempt(tool) {
+            Ok(reply) => {
+                if failures.is_empty() {
+                    tracing::debug!(%tool, "automatic grouping used the primary AI tool");
+                } else {
+                    tracing::info!(%tool, skipped = ?failures, "automatic grouping used a backup AI tool");
+                }
+                return Ok(reply);
+            }
+            Err(error) if error == "turn budget exhausted" => {
+                failures.push(format!("{tool}: turn budget exhausted"));
+                break;
+            }
+            Err(_) => failures.push(format!("{tool}: turn failed")),
+        }
+    }
+    Err(format!(
+        "all configured AI tools failed: {}",
+        failures.join(", ")
+    ))
+}
+
+/// Run one private turn of one installed AI tool.
+fn ask_tool(
+    state: &AppState,
+    request: &AskRequest<'_>,
+    tool: &str,
+    remaining: Duration,
+) -> Result<String, String> {
     let mut envs = vec![format!(
         "HOTSHEET_PROJECT={}",
         request.project_root.display()
@@ -303,7 +370,7 @@ fn ask_default_tool(state: &AppState, request: &AskRequest<'_>) -> Result<String
     }
     let trigger = hotsheet_aitools::prepare_trigger_with_home(
         request.store_root,
-        &tool,
+        tool,
         hotsheet_aitools::TriggerOptions {
             project: Some(request.project_root.to_path_buf()),
             envs,
@@ -319,7 +386,7 @@ fn ask_default_tool(state: &AppState, request: &AskRequest<'_>) -> Result<String
     let (finished, timer_done) = mpsc::channel::<()>();
     let timeout = control.clone();
     std::thread::spawn(move || {
-        if timer_done.recv_timeout(TURN_LIMIT) == Err(RecvTimeoutError::Timeout) {
+        if timer_done.recv_timeout(remaining) == Err(RecvTimeoutError::Timeout) {
             timeout.request_interrupt();
         }
     });
@@ -358,6 +425,59 @@ fn ask_default_tool(state: &AppState, request: &AskRequest<'_>) -> Result<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_rwa8v6_failed_primary_uses_backup_once_in_order() {
+        let order = vec!["claude".into(), "codex".into(), "opencode".into()];
+        let mut attempted = Vec::new();
+        let reply = try_ordered_tools(&order, &order, |tool| {
+            attempted.push(tool.to_owned());
+            if tool == "claude" {
+                Err("subscription exhausted".into())
+            } else {
+                Ok("reply".into())
+            }
+        });
+        assert_eq!(reply.as_deref(), Ok("reply"));
+        assert_eq!(attempted, ["claude", "codex"]);
+    }
+
+    #[test]
+    fn hs2_rwa8v6_unavailable_primary_and_all_fail_report_candidates() {
+        let order = vec!["claude".into(), "codex".into()];
+        let mut attempted = Vec::new();
+        let error = try_ordered_tools(&order, &["codex".into()], |tool| {
+            attempted.push(tool.to_owned());
+            Err("failed".into())
+        })
+        .unwrap_err();
+        assert_eq!(attempted, ["codex"]);
+        assert!(error.contains("claude: unavailable"));
+        assert!(error.contains("codex: turn failed"));
+    }
+
+    #[test]
+    fn hs2_rwa8v6_empty_or_malformed_reply_advances_to_backup() {
+        let order = vec!["claude".into(), "codex".into(), "opencode".into()];
+        let tickets = vec![AutoGroupTicket {
+            slug: "HS2-1".into(),
+            title: "Synthetic ticket".into(),
+            category: "task".into(),
+        }];
+        let groups = BTreeMap::new();
+        let mut attempted = Vec::new();
+        let reply = try_ordered_tools(&order, &order, |tool| {
+            attempted.push(tool.to_owned());
+            let text = match tool {
+                "claude" => "",
+                "codex" => "not JSON",
+                _ => r#"{"assignments":[]}"#,
+            };
+            validate_reply(text.into(), &tickets, &groups)
+        });
+        assert_eq!(reply.as_deref(), Ok(r#"{"assignments":[]}"#));
+        assert_eq!(attempted, order);
+    }
 
     fn ticket(minutes_old: i64, group: Option<&str>, status: Status) -> hotsheet_model::Ticket {
         hotsheet_model::Ticket {

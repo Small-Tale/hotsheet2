@@ -25786,6 +25786,60 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await page.screenshot({ path: 'target/visual-captures/hs2-8xrcyx-haiku-without-effort-narrow.png', fullPage: true });
 });
 
+test('HS2-RWA8V6 adds, promotes, and removes a backup provider in Project Settings', async ({ page }) => {
+  const saves: Array<{ tool: string; fallback_tools?: string[] }> = [];
+  await mockProject(page);
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/ai-settings'))
+      saves.push(request.postDataJSON());
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: /AI tools/ }).click();
+  const settings = page.locator('[data-component="ai-tool-settings"]');
+  const shell = page.locator('[data-component="app-shell"]');
+  const leftContent = page.locator('.kui-workbench__rail--left .kui-workbench__panel-content');
+  const rightContent = page.locator('.kui-workbench__rail--right .kui-workbench__panel-content');
+  const add = settings.locator('kui-select[name="ai-add-backup-tool"]');
+  await add.click();
+  await add.locator('.kui-select__option[data-value="claude"]').click();
+  await expect.poll(() => saves.at(-1)).toMatchObject({ tool: 'codex', fallback_tools: ['claude'] });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(settings.getByRole('button', { name: 'Move Claude Up' })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hs2-rwa8v6-backup-wide.png') });
+  await page.setViewportSize({ width: 760, height: 800 });
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  await expect.poll(() => leftContent.evaluate((panel) => panel.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
+  await expect
+    .poll(() => rightContent.evaluate((panel) => panel.getBoundingClientRect().left))
+    .toBeGreaterThanOrEqual(759);
+  await expect(settings.getByRole('button', { name: 'Move Claude Up' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show Settings Sidebar' })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hs2-rwa8v6-backup-medium.png') });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.evaluate(async () => {
+    const transitions = document.getAnimations().filter((animation) => animation.playState === 'running');
+    await Promise.all(transitions.map((animation) => animation.finished.catch(() => undefined)));
+  });
+  await page.screenshot({ path: test.info().outputPath('hs2-rwa8v6-backup-medium-dark.png') });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  await expect.poll(() => leftContent.evaluate((panel) => panel.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
+  await expect
+    .poll(() => rightContent.evaluate((panel) => panel.getBoundingClientRect().left))
+    .toBeGreaterThanOrEqual(389);
+  await expect(settings.getByRole('button', { name: 'Move Claude Up' })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hs2-rwa8v6-backup-narrow.png') });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await settings.getByRole('button', { name: 'Move Claude Up' }).click();
+  await expect.poll(() => saves.at(-1)).toMatchObject({ tool: 'claude', fallback_tools: ['codex'] });
+  await settings.getByRole('button', { name: 'Remove Codex Backup' }).click();
+  await expect.poll(() => saves.at(-1)).toMatchObject({ tool: 'claude', fallback_tools: [] });
+  await expect(settings.getByRole('button', { name: 'Remove Codex Backup' })).toHaveCount(0);
+});
+
 test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-EK24KF)', async ({ page }) => {
   const saves: unknown[] = [];
   await mockProject(page);
@@ -25853,6 +25907,7 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
     .poll(() => saves.at(-1))
     .toEqual({
       tool: 'claude',
+      fallback_tools: ['codex'],
       model: 'fable',
       effort: 'high',
       providers: { claude: { model: 'fable', effort: 'high' }, codex: { model: 'gpt-6-astra', effort: 'medium' } },
@@ -25876,7 +25931,14 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   await page.setViewportSize({ width: 1280, height: 800 });
   await tool.locator('.kui-select__trigger').click();
   await tool.locator('.kui-select__option[data-value="codex"]').click();
-  await expect.poll(() => saves.at(-1)).toMatchObject({ tool: 'codex', model: 'gpt-6-astra', effort: 'medium' });
+  await expect
+    .poll(() => saves.at(-1))
+    .toMatchObject({
+      tool: 'codex',
+      fallback_tools: ['claude'],
+      model: 'gpt-6-astra',
+      effort: 'medium',
+    });
   await expect(model('claude')).toHaveAttribute('value', 'fable');
   await expect(settings.locator('[role="status"]')).toHaveText('');
 });

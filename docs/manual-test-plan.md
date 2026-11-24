@@ -1483,6 +1483,15 @@ Automated tests drive the grouping turn with a scripted reply; this checks a rea
 4. Create ten tickets in quick succession with the CLI. They are grouped by one turn (one usage
    entry), not ten.
 5. Uncheck the setting, create a ticket, and confirm it stays ungrouped.
+6. In Project Settings › AI tools, add a second installed provider as a backup,
+   move it up and down, and remove it. Repeat at wide, medium, and narrow widths,
+   then return to wide. Confirm the primary and each provider's saved model,
+   effort, and permission mode survive every reorder.
+7. With automatic grouping on, make the first configured tool unavailable
+   (for example, use an account whose subscription limit is reached) while the
+   backup can answer. Create one synthetic ticket. Confirm the backup groups it
+   once and the server log names the backup without ticket content. Restore the
+   first tool afterward.
 
 ## Machine-wide WebKit slots across sessions (HS2-M6TZB5)
 

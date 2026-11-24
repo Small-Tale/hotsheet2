@@ -129,7 +129,7 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
     { control: 'Ticket groups list', server: '/checkouts/{project}/groups' },
     { control: 'Rename, merge, and delete a group', server: '/checkouts/{project}/groups' },
   ],
-  ai: [{ control: 'Default tool, model, and effort', server: '/ai-settings' }],
+  ai: [{ control: 'Ordered AI tools, model, and effort', server: '/ai-settings' }],
   guidance: [{ control: 'Pinned rule sources and selected guidance', server: '/checkouts/{project}/guidance' }],
   commands: [
     { control: 'Command definitions', server: '/commands' },

@@ -1401,6 +1401,9 @@ pub(crate) fn cmd_ai_settings(store: &Path, cwd: &Path, cmd: AiSettingsCmd) -> R
                 println!("{}", serde_json::to_string(&defaults)?);
             } else {
                 println!("{}", defaults.tool);
+                for backup in &defaults.fallback_tools {
+                    println!("backup\t{backup}");
+                }
                 if let Some(model) = defaults.model {
                     println!("model\t{model}");
                 }
@@ -1421,8 +1424,12 @@ pub(crate) fn cmd_ai_settings(store: &Path, cwd: &Path, cmd: AiSettingsCmd) -> R
         } => {
             // Keep every other provider's choices; only the default provider changes.
             let current = effective_ai_defaults(store, cwd, global).ok();
+            let mut order = tool.into_iter();
             let defaults = hotsheet_plugins::AiToolDefaults {
-                tool,
+                tool: order
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("at least one --tool is required"))?,
+                fallback_tools: order.collect(),
                 model,
                 effort,
                 permission_mode,
@@ -1899,8 +1906,9 @@ pub(crate) enum AiSettingsCmd {
     /// Save this project's default provider with its model and effort (machine-local project
     /// settings), or the machine-wide fallback.
     Set {
-        #[arg(long)]
-        tool: String,
+        /// Repeat in preference order: first is primary, later values are backups.
+        #[arg(long, required = true)]
+        tool: Vec<String>,
         #[arg(long)]
         model: Option<String>,
         #[arg(long)]
@@ -2203,7 +2211,11 @@ pub(crate) fn save_ai_defaults(
     let prepared =
         hotsheet_plugins::prepare_ai_defaults_for_save(&tools, defaults, previous.as_ref())
             .map_err(anyhow::Error::msg)?;
-    settings.set("ai.defaults", serde_json::to_value(&prepared)?, scope)?;
+    settings.set(
+        "ai.defaults",
+        hotsheet_plugins::ai_defaults_for_storage(&prepared),
+        scope,
+    )?;
     Ok(hotsheet_plugins::sanitize_ai_defaults(&tools, prepared))
 }
 

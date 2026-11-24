@@ -1494,7 +1494,13 @@ export const parseAiToolDescriptor = shape<AiToolDescriptor>(
 export const parseAiToolDefaults = shape<AiToolDefaults>(
   'AI settings',
   { tool: isString },
-  { model: isString, effort: isString, permission_mode: isString, providers: valuesOf(isObject) },
+  {
+    fallback_tools: isStringArray,
+    model: isString,
+    effort: isString,
+    permission_mode: isString,
+    providers: valuesOf(isObject),
+  },
 );
 
 export const parseToolSession = shape<ToolSession>('tool session', {

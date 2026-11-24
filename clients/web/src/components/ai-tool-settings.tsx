@@ -1,14 +1,17 @@
+import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
 import { Bot, Brain, Pencil, ShieldAlert, ShieldCheck } from 'lucide';
 
 import { providerSelection } from '../ai-provider-defaults';
 import type { AiToolDefaults } from '../api';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import type { AiToolDescriptor } from './drive-options-menu';
 import { effortGaugeIcon } from './effort-gauge-icon';
 
@@ -124,6 +127,8 @@ export function AiToolSettings({
       </section>
     );
   const active = tools.find((tool) => tool.id === selection.tool) ?? tools.at(0)!,
+    backups = (selection.fallback_tools ?? []).filter((id) => id !== active.id && tools.some((tool) => tool.id === id)),
+    unused = tools.filter((tool) => tool.id !== active.id && !backups.includes(tool.id)),
     // A default provider that is no longer installed contributes neither its model nor its effort.
     base: AiToolDefaults =
       active.id === selection.tool ? selection : { tool: active.id, providers: selection.providers };
@@ -142,6 +147,61 @@ export function AiToolSettings({
             choices={tools.map((tool) => ({ value: tool.id, label: tool.display_name, icon: Bot, iconName: 'bot' }))}
           />
         </Grid>
+        <section aria-label="Backup AI Providers">
+          <List gap="xs">
+            <Text variant="h3" size="compact">
+              Backup AI Providers
+            </Text>
+            <Text tone="quiet">Automatic grouping tries these in order if an earlier provider cannot finish.</Text>
+            {backups.map((id, index) => {
+              const label = tools.find((tool) => tool.id === id)?.display_name ?? id;
+              return (
+                <Row gap="xs" wrap vAlign="middle" ariaLabel={`${label} backup controls`}>
+                  <Text>{label}</Text>
+                  <Button
+                    action={COMMANDS_AND_AI_ACTIONS.moveAiBackupUp.value}
+                    rootAttributes={{ 'data-tool': id }}
+                    ariaLabel={`Move ${label} Up`}
+                    size="compact"
+                    emphasis="plain"
+                  >
+                    Up
+                  </Button>
+                  <Button
+                    action={COMMANDS_AND_AI_ACTIONS.moveAiBackupDown.value}
+                    rootAttributes={{ 'data-tool': id }}
+                    ariaLabel={`Move ${label} Down`}
+                    size="compact"
+                    emphasis="plain"
+                    disabled={index === backups.length - 1}
+                  >
+                    Down
+                  </Button>
+                  <Button
+                    action={COMMANDS_AND_AI_ACTIONS.removeAiBackup.value}
+                    rootAttributes={{ 'data-tool': id }}
+                    ariaLabel={`Remove ${label} Backup`}
+                    size="compact"
+                    emphasis="plain"
+                  >
+                    Remove
+                  </Button>
+                </Row>
+              );
+            })}
+            {unused.length > 0 && (
+              <Select
+                name="ai-add-backup-tool"
+                label="Add Backup Provider"
+                value=""
+                choices={[
+                  { value: '', label: 'Choose a Provider…' },
+                  ...unused.map((tool) => ({ value: tool.id, label: tool.display_name, icon: Bot, iconName: 'bot' })),
+                ]}
+              />
+            )}
+          </List>
+        </section>
         {tools.map((tool) => (
           <ProviderDefaults
             tool={tool}

@@ -854,8 +854,8 @@ fn saved_ai_defaults(
     tools: &[hotsheet_plugins::AiToolDescriptor],
 ) -> Result<Option<hotsheet_plugins::AiToolDefaults>, ApiError> {
     Ok(stored_ai_defaults(settings, scope)?
-        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok())
-        .map(|defaults| hotsheet_plugins::sanitize_ai_defaults(tools, defaults)))
+        .map(|defaults| hotsheet_plugins::sanitize_ai_defaults(tools, defaults))
+        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(tools, defaults).is_ok()))
 }
 
 /// The AI defaults stored in one scope, unvalidated.
@@ -866,7 +866,7 @@ fn stored_ai_defaults(
     Ok(settings
         .get(AI_DEFAULTS_SETTING, scope)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
-        .and_then(|value| serde_json::from_value(value).ok()))
+        .and_then(hotsheet_plugins::ai_defaults_from_storage))
 }
 
 /// The permission mode saved for `tool` in one settings scope (HS2-NHRDMW): its provider entry,
@@ -975,8 +975,7 @@ async fn save_ai_settings(
     settings
         .set(
             AI_DEFAULTS_SETTING,
-            serde_json::to_value(&prepared)
-                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
+            hotsheet_plugins::ai_defaults_for_storage(&prepared),
             scope,
         )
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;

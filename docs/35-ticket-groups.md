@@ -279,8 +279,11 @@ writes it.
   the watcher reports for a ticket created in the last 10 minutes, as new. A ticket created with
   a group, a trashed or moved ticket, and an older ticket that is merely edited are never offered.
 - **One turn per burst.** New tickets are coalesced per store for 3 seconds and described together
-  (at most 40 per turn) in one private turn of the project's default AI tool, so an agent fan-out
-  spends one turn. The turn is never shown as a conversation and is interrupted after 3 minutes.
+  (at most 40 per turn) in one private turn of the project's first available AI tool, so an agent fan-out
+  spends one successful turn. When a preferred tool is unavailable or its turn fails, the server
+  tries the next configured backup, including after an empty or malformed reply (HS2-RWA8V6).
+  The turn is never shown as a conversation;
+  all attempts share a three-minute limit.
 - **The reply.** The prompt asks for JSON only, one assignment per ticket:
   `{"assignments":[{"slug":…,"group_id":…} | {"slug":…,"new_group":…}]}`, leaving out a ticket
   that fits no group. The rules match Add to Group › Automatic (§35.4): an id must name a listed
@@ -288,8 +291,8 @@ writes it.
   group. Each usable assignment is written only if the ticket is still ungrouped, as an ordinary
   group change by the system actor `hotsheet-auto-group`; a new name is created in the registry
   first.
-- **Failures.** No drivable default AI tool, a failed or timed-out turn, or an unusable reply
-  writes nothing and is logged. A ticket is considered at most once per server run; tickets
+- **Failures.** If every configured tool is unavailable, fails, or times out, or the reply is unusable,
+  the server writes nothing and logs the skipped candidates. A ticket is considered at most once per server run; tickets
   created while no server runs are grouped only if the server sees them within the 10-minute
   window after it starts.
 

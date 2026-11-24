@@ -7,8 +7,8 @@ import { createAiLaunchDialog } from '../ai-launch-dialog';
 import {
   compatiblePermissionMode,
   providerSelection,
-  withDefaultProvider,
   withProviderSelection,
+  withToolOrder,
 } from '../ai-provider-defaults';
 import {
   type AiPermissionMode,
@@ -189,7 +189,35 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
 
   /** Make `tool` the project's default provider, carrying its own saved model and effort. */
   function selectDefaultProvider(tool: string) {
-    void saveAiDefaults(withDefaultProvider(aiDefaults.value, aiTools.value, tool));
+    const order = [tool, aiDefaults.value.tool, ...(aiDefaults.value.fallback_tools ?? [])].filter(
+      (id, index, ids) => ids.indexOf(id) === index,
+    );
+    void saveAiDefaults(withToolOrder(aiDefaults.value, aiTools.value, order));
+  }
+
+  function addBackupProvider(tool: string) {
+    const order = [aiDefaults.value.tool, ...(aiDefaults.value.fallback_tools ?? [])];
+    if (!tool || order.includes(tool) || !aiTools.value.some((candidate) => candidate.id === tool)) return;
+    void saveAiDefaults(withToolOrder(aiDefaults.value, aiTools.value, [...order, tool]));
+  }
+
+  function moveBackupProvider(tool: string, direction: -1 | 1) {
+    const order = [aiDefaults.value.tool, ...(aiDefaults.value.fallback_tools ?? [])],
+      index = order.indexOf(tool),
+      next = index + direction;
+    if (index < 1 || next < 0 || next >= order.length) return;
+    [order[index], order[next]] = [order[next], order[index]];
+    void saveAiDefaults(withToolOrder(aiDefaults.value, aiTools.value, order));
+  }
+
+  function removeBackupProvider(tool: string) {
+    if (!aiDefaults.value.fallback_tools?.includes(tool)) return;
+    void saveAiDefaults(
+      withToolOrder(aiDefaults.value, aiTools.value, [
+        aiDefaults.value.tool,
+        ...aiDefaults.value.fallback_tools.filter((id) => id !== tool),
+      ]),
+    );
   }
 
   function selectConversationModel(model: string) {
@@ -577,6 +605,9 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     selectDefaultEffort,
     selectDefaultPermissionMode,
     selectDefaultProvider,
+    addBackupProvider,
+    moveBackupProvider,
+    removeBackupProvider,
     selectConversationModel,
     selectConversationEffort,
     selectConversationPermissionMode,

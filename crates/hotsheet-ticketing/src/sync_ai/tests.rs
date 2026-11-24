@@ -536,6 +536,15 @@ fn hs2_qr1k8r_the_ask_setting_parses_validates_and_defaults_to_start() {
         )
         .unwrap();
     assert_eq!(configured_ai_tool(&settings).as_deref(), Some("codex"));
+    settings
+        .set(
+            AI_DEFAULTS_SETTING,
+            json!({ "tool": ["claude", "codex", "claude", ""] }),
+            crate::Scope::Shared,
+        )
+        .unwrap();
+    assert_eq!(configured_ai_tools(&settings), ["claude", "codex"]);
+    assert_eq!(configured_ai_tool(&settings).as_deref(), Some("claude"));
 }
 
 #[test]

@@ -229,7 +229,7 @@ export function SettingsWorkspace({
                   <Switch
                     action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleAutoGroupNewTickets.value}
                     checked={columns.autoGroupNewTickets ?? true}
-                    hint="Each new ticket, however it is created, is offered to this project's default AI tool, which picks a group or names a new one. This uses one AI turn per batch of new tickets."
+                    hint="Each new ticket is offered to this project's preferred AI tools in order. A failed provider gives the next one a turn to pick or name a group."
                     label="Group new tickets automatically"
                     rootAttributes={{ 'data-feature': 'auto-grouping' }}
                   />

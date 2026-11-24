@@ -616,7 +616,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['permission-rules-settings', 6],
     ['project-sidebar', 1],
     ['command-settings-editor', 3], // HS2-BZKTDC adds the loading and failed-load examples
-    ['ai-tool-settings', 1],
+    ['ai-tool-settings', 2], // HS2-RWA8V6 adds the ordered-backup specimen.
     ['permission-request', 1],
     ['notification-center', 1],
     ['project-dialog', 1],

@@ -1098,6 +1098,14 @@ session_options = ["model", "effort"]
         .unwrap();
     assert_eq!(manual.status(), StatusCode::OK);
     assert_eq!(body_json(manual).await["model"], "fixture-model");
+    let stored = hotsheet_ticketing::Settings::with_global_home(
+        _dir.path(),
+        _dir.path().join("machine-home"),
+    )
+    .get("ai.defaults", hotsheet_ticketing::Scope::Global)
+    .unwrap()
+    .unwrap();
+    assert_eq!(stored["tool"], serde_json::json!(["ci-fixture"]));
 
     let saved = router
         .clone()

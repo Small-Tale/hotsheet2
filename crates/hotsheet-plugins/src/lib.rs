@@ -400,6 +400,9 @@ pub struct AiToolDescriptor {
 #[derive(Debug, Clone, Default, serde::Serialize, Deserialize, PartialEq, Eq)]
 pub struct AiToolDefaults {
     pub tool: String,
+    /// Ordered backups for automatic work. Persisted with `tool` as one array (HS2-RWA8V6).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fallback_tools: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -412,6 +415,45 @@ pub struct AiToolDefaults {
     /// top-level `model`/`effort`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub providers: BTreeMap<String, AiProviderDefaults>,
+}
+
+impl AiToolDefaults {
+    /// The configured priority, including the primary tool.
+    pub fn ordered_tools(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.tool.as_str()).chain(self.fallback_tools.iter().map(String::as_str))
+    }
+}
+
+/// Read the historical scalar or the canonical array from `ai.defaults` storage.
+pub fn ai_defaults_from_storage(mut value: serde_json::Value) -> Option<AiToolDefaults> {
+    let object = value.as_object_mut()?;
+    if let Some(serde_json::Value::Array(order)) = object.get("tool") {
+        let order = order
+            .iter()
+            .map(|entry| entry.as_str().map(str::to_owned))
+            .collect::<Option<Vec<_>>>()?;
+        let (first, rest) = order.split_first()?;
+        object.insert("tool".into(), serde_json::Value::String(first.clone()));
+        object.insert("fallback_tools".into(), serde_json::to_value(rest).ok()?);
+    }
+    serde_json::from_value(value).ok()
+}
+
+/// Every settings write uses an ordered array, including edits to only a model or mode.
+pub fn ai_defaults_for_storage(defaults: &AiToolDefaults) -> serde_json::Value {
+    let mut value = serde_json::to_value(defaults).expect("AI defaults serialize");
+    let object = value.as_object_mut().expect("AI defaults are an object");
+    object.insert(
+        "tool".into(),
+        serde_json::Value::Array(
+            defaults
+                .ordered_tools()
+                .map(|id| serde_json::Value::String(id.to_owned()))
+                .collect(),
+        ),
+    );
+    object.remove("fallback_tools");
+    value
 }
 
 /// One provider's default model, effort, and permission mode.
@@ -1062,6 +1104,18 @@ pub fn validate_ai_defaults(
     tools: &[AiToolDescriptor],
     defaults: &AiToolDefaults,
 ) -> Result<(), String> {
+    let mut seen = std::collections::BTreeSet::new();
+    for id in defaults.ordered_tools() {
+        if id.trim().is_empty() {
+            return Err("AI tool order must not contain a blank id".into());
+        }
+        if !seen.insert(id) {
+            return Err(format!("AI tool '{id}' occurs more than once"));
+        }
+        if !tools.iter().any(|candidate| candidate.id == id) {
+            return Err(format!("AI tool '{id}' is not installed or drivable"));
+        }
+    }
     let tool = tools
         .iter()
         .find(|candidate| candidate.id == defaults.tool)
@@ -1193,7 +1247,19 @@ pub fn prepare_ai_defaults_for_save(
             permission_mode: submitted.permission_mode.clone(),
         },
     );
+    let mut fallback_tools = submitted.fallback_tools.clone();
+    if let Some(previous) = previous {
+        for id in previous.ordered_tools() {
+            if !installed(id)
+                && id != submitted.tool
+                && !fallback_tools.iter().any(|candidate| candidate == id)
+            {
+                fallback_tools.push(id.to_owned());
+            }
+        }
+    }
     Ok(AiToolDefaults {
+        fallback_tools,
         providers,
         ..submitted.clone()
     })
@@ -1205,15 +1271,46 @@ pub fn sanitize_ai_defaults(
     tools: &[AiToolDescriptor],
     defaults: AiToolDefaults,
 ) -> AiToolDefaults {
+    let mut available = defaults
+        .ordered_tools()
+        .filter(|id| tools.iter().any(|tool| tool.id == *id));
+    let primary = available
+        .next()
+        .unwrap_or(defaults.tool.as_str())
+        .to_owned();
+    let fallback_tools = available.map(str::to_owned).collect();
     let providers = defaults
         .providers
         .iter()
         .filter(|(id, entry)| validate_provider_defaults(tools, id, entry).is_ok())
         .map(|(id, entry)| (id.clone(), entry.clone()))
-        .collect();
+        .collect::<BTreeMap<_, _>>();
+    let (model, effort, permission_mode) = if primary == defaults.tool {
+        (
+            defaults.model.clone(),
+            defaults.effort.clone(),
+            defaults.permission_mode.clone(),
+        )
+    } else {
+        let saved = providers.get(&primary);
+        let descriptor = tools.iter().find(|tool| tool.id == primary);
+        (
+            saved
+                .and_then(|entry| entry.model.clone())
+                .or_else(|| descriptor.and_then(|tool| tool.default_model.clone())),
+            saved
+                .and_then(|entry| entry.effort.clone())
+                .or_else(|| descriptor.and_then(|tool| tool.default_effort.clone())),
+            saved.and_then(|entry| entry.permission_mode.clone()),
+        )
+    };
     AiToolDefaults {
+        tool: primary,
+        fallback_tools,
+        model,
+        effort,
+        permission_mode,
         providers,
-        ..defaults
     }
 }
 

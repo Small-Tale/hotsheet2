@@ -83,7 +83,7 @@ export function withProviderSelection(
     },
     providers = { ...defaults.providers, [tool]: entry };
   if (tool !== defaults.tool) return { ...defaults, providers };
-  return { tool, ...entry, providers };
+  return { tool, ...entry, ...(defaults.fallback_tools ? { fallback_tools: defaults.fallback_tools } : {}), providers };
 }
 
 /** Make `tool` the default provider, carrying its own saved model and effort to the top level. */
@@ -112,4 +112,15 @@ export function withDefaultProvider(
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
   });
+}
+
+/** Replace the ordered automatic-provider preference while keeping each provider's choices. */
+export function withToolOrder(
+  defaults: AiToolDefaults,
+  tools: readonly AiToolDescriptor[],
+  order: readonly string[],
+): AiToolDefaults {
+  const [primary, ...fallback_tools] = order;
+  if (!primary) return defaults;
+  return { ...withDefaultProvider(defaults, tools, primary), fallback_tools };
 }

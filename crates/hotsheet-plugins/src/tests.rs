@@ -1308,6 +1308,73 @@ fn plugin_model_catalog_suggests_models_without_rejecting_manual_ids() {
 }
 
 #[test]
+fn hs2_rwa8v6_legacy_ai_default_becomes_ordered_storage_on_any_save() {
+    let old = serde_json::json!({"tool":"claude","model":"sonnet"});
+    let mut defaults = ai_defaults_from_storage(old).unwrap();
+    assert_eq!(defaults.ordered_tools().collect::<Vec<_>>(), ["claude"]);
+    defaults.fallback_tools.push("codex".into());
+    let stored = ai_defaults_for_storage(&defaults);
+    assert_eq!(stored["tool"], serde_json::json!(["claude", "codex"]));
+    assert!(stored.get("fallback_tools").is_none());
+    let reparsed = ai_defaults_from_storage(stored).unwrap();
+    assert_eq!(reparsed, defaults);
+}
+
+#[test]
+fn hs2_rwa8v6_rejects_duplicate_or_unavailable_priority_entries() {
+    let tools = ["claude", "codex"]
+        .iter()
+        .map(|id| ai_tool_descriptor(&find_in(id, &[]).unwrap()).unwrap())
+        .collect::<Vec<_>>();
+    let valid = AiToolDefaults {
+        tool: "claude".into(),
+        fallback_tools: vec!["codex".into()],
+        ..Default::default()
+    };
+    validate_ai_defaults(&tools, &valid).unwrap();
+    assert!(
+        validate_ai_defaults(
+            &tools,
+            &AiToolDefaults {
+                fallback_tools: vec!["claude".into()],
+                ..valid.clone()
+            }
+        )
+        .unwrap_err()
+        .contains("more than once")
+    );
+    assert!(
+        validate_ai_defaults(
+            &tools,
+            &AiToolDefaults {
+                fallback_tools: vec!["missing".into()],
+                ..valid
+            }
+        )
+        .unwrap_err()
+        .contains("not installed")
+    );
+    let available = sanitize_ai_defaults(
+        &tools,
+        AiToolDefaults {
+            tool: "missing".into(),
+            fallback_tools: vec!["codex".into(), "claude".into()],
+            providers: BTreeMap::from([(
+                "codex".into(),
+                AiProviderDefaults {
+                    model: Some("gpt".into()),
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        },
+    );
+    assert_eq!(available.tool, "codex");
+    assert_eq!(available.fallback_tools, ["claude"]);
+    assert_eq!(available.model.as_deref(), Some("gpt"));
+}
+
+#[test]
 fn opencode_declares_acp_setup_drive_and_metrics() {
     let p = find_in("opencode", &[]).expect("OpenCode plugin present");
     assert!(

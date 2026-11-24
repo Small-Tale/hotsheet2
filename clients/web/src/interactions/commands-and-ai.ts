@@ -220,6 +220,9 @@ export interface CommandAndAiInteractionsDependencies {
   /** Resolves false when the mode was not saved (unknown, or a warned mode the user declined). */
   readonly selectDefaultPermissionMode: (mode: string, tool?: string) => Promise<boolean>;
   readonly selectDefaultProvider: (tool: string) => void;
+  readonly addBackupProvider: (tool: string) => void;
+  readonly moveBackupProvider: (tool: string, direction: -1 | 1) => void;
+  readonly removeBackupProvider: (tool: string) => void;
   readonly restoreCommandEditorAfterManualModel: (state: ManualModelDialogState | undefined) => void;
   readonly aiDefaults: Signal<AiToolDefaults>;
   readonly ticketSourceSetupProject: Signal<Project | undefined>;
@@ -384,6 +387,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     selectDefaultEffort,
     selectDefaultPermissionMode,
     selectDefaultProvider,
+    addBackupProvider,
+    moveBackupProvider,
+    removeBackupProvider,
     restoreCommandEditorAfterManualModel,
     ticketSourceSetupProject,
     providerSetupKind,
@@ -1490,6 +1496,26 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'change', 'kui-select[name="ai-default-tool"]', (_event, target) => {
       selectDefaultProvider((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', 'kui-select[name="ai-add-backup-tool"]', (_event, target) => {
+      addBackupProvider((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.moveAiBackupUp.selector, (_event, target) => {
+      moveBackupProvider(data(target).tool ?? '', -1);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.moveAiBackupDown.selector, (_event, target) => {
+      moveBackupProvider(data(target).tool ?? '', 1);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.removeAiBackup.selector, (_event, target) => {
+      removeBackupProvider(data(target).tool ?? '');
     }),
   );
   lifetime.add(

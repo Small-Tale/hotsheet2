@@ -7,6 +7,9 @@ import { action } from 'kerfjs/actions';
  * `interactions/commands-and-ai.ts` register `.selector`.
  */
 export const COMMANDS_AND_AI_ACTIONS = {
+  moveAiBackupUp: action('move-ai-backup-up'),
+  moveAiBackupDown: action('move-ai-backup-down'),
+  removeAiBackup: action('remove-ai-backup'),
   toggleCommandGroup: action('toggle-command-group'),
   toggleCommandSection: action('toggle-command-section'),
   /** The project sidebar Live section's compact/detail switch (HS2-F788GW). */

@@ -28,6 +28,16 @@ const selectValue = (markup: string, name: string) =>
   new RegExp(`name="${name}"[^>]*value="([^"]*)"`).exec(markup)?.[1];
 
 describe('AiToolSettings (HS2-SW5S13, HS2-EK24KF)', () => {
+  it('HS2-RWA8V6 renders ordered backup actions and add choices', () => {
+    const withBackup = String(AiToolSettings({ tools, selection: { tool: 'claude', fallback_tools: ['codex'] } }));
+    expect(withBackup).toContain('Backup AI Providers');
+    expect(withBackup).toContain('data-action="move-ai-backup-up"');
+    expect(withBackup).toContain('data-action="remove-ai-backup"');
+    expect(withBackup).toContain('data-tool="codex"');
+    expect(withBackup).not.toContain('name="ai-add-backup-tool"');
+    const withoutBackup = String(AiToolSettings({ tools, selection: { tool: 'claude' } }));
+    expect(selectValue(withoutBackup, 'ai-add-backup-tool')).toBe('');
+  });
   it('renders the default provider, then each provider with its own model, efforts, and Other', () => {
     const markup = String(
       AiToolSettings({

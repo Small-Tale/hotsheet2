@@ -5,6 +5,7 @@ import {
   providerSelection,
   withDefaultProvider,
   withProviderSelection,
+  withToolOrder,
 } from './ai-provider-defaults';
 import type { AiToolDefaults } from './api';
 import type { AiToolDescriptor } from './components/drive-options-menu';
@@ -30,6 +31,22 @@ const tools: AiToolDescriptor[] = [
 ];
 
 describe('per-provider AI defaults (HS2-EK24KF)', () => {
+  it('HS2-RWA8V6 reorders backups without losing provider model choices', () => {
+    const base: AiToolDefaults = {
+      tool: 'claude',
+      model: 'opus',
+      effort: 'high',
+      fallback_tools: ['codex'],
+      providers: { codex: { model: 'gpt', effort: 'xhigh' } },
+    };
+    const promoted = withToolOrder(base, tools, ['codex', 'claude']);
+    expect(promoted.tool).toBe('codex');
+    expect(promoted.fallback_tools).toEqual(['claude']);
+    expect(promoted.model).toBe('gpt');
+    expect(promoted.effort).toBe('xhigh');
+    expect(promoted.providers?.claude).toEqual({ model: 'opus', effort: 'high' });
+    expect(withToolOrder(promoted, tools, ['claude']).fallback_tools).toEqual([]);
+  });
   it('resolves each provider from its own entry, the default selection, then the manifest', () => {
     const defaults: AiToolDefaults = {
       tool: 'claude',
