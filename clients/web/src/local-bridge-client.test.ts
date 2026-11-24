@@ -29,9 +29,10 @@ const manifest = {
 describe('local bridge adapter (HS2-313JET)', () => {
   it('sends JSON bodies and returns parsed responses', async () => {
     const request = respond(200, JSON.stringify({ ticketStore: '/t', connectionId: 'git-1' }));
-    await expect(localBridge.setupGit('/root', undefined, request)).resolves.toEqual({
+    await expect(localBridge.setupGit('/root', undefined, false, request)).resolves.toEqual({
       ticketStore: '/t',
       connectionId: 'git-1',
+      existing: false,
       error: undefined,
     });
     expect(request).toHaveBeenCalledWith('/__hotsheet/projects/setup-git', {

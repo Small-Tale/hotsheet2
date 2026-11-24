@@ -192,7 +192,7 @@ export function TicketSourceSetupDialog({
           ),
           <LucideIcon icon={GitBranch} name="git-branch" />,
           undefined,
-          defaultExists || !hostActionsAvailable,
+          defaultExists || !hostActionsAvailable || providerBusy,
           defaultExists
             ? 'The recommended ticket repository is already connected.'
             : hostOnlyDisabledReason('git-source-link', hostActionsAvailable),
@@ -204,8 +204,17 @@ export function TicketSourceSetupDialog({
           'Choose another folder; multiple git ticket repositories are supported.',
           <LucideIcon icon={GitBranch} name="git-branch" />,
           undefined,
-          !hostActionsAvailable,
+          !hostActionsAvailable || providerBusy,
           hostOnlyDisabledReason('choose-folder', hostActionsAvailable),
+        )}
+        {option(
+          PROJECT_LIFECYCLE_ACTIONS.linkExistingProjectGitSource.value,
+          'Link an existing Hot Sheet 2 git ticket repository',
+          'Choose a local checkout of a ticket repository.',
+          <LucideIcon icon={GitBranch} name="git-branch" />,
+          undefined,
+          !hostActionsAvailable || providerBusy,
+          hostOnlyDisabledReason('git-source-link', hostActionsAvailable),
         )}
         {option(
           'select-provider-kind',

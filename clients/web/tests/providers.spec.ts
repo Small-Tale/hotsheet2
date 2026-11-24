@@ -4899,17 +4899,18 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     sourceOptions = setup.locator('.ticket-source-setup__options .kui-list-item');
   await expect(setup).toHaveAttribute('open', '');
   await expect(setup).toHaveAttribute('data-component', 'ticket-source-setup-dialog');
-  await expect(sourceOptions).toHaveCount(5);
+  await expect(sourceOptions).toHaveCount(6);
   await expect(
     setup.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository', exact: true }),
   ).toBeVisible();
   await expect(
     setup.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository in a custom location' }),
   ).toBeVisible();
+  await expect(setup.getByRole('button', { name: 'Link an existing Hot Sheet 2 git ticket repository' })).toBeVisible();
   await expect(setup.getByRole('button', { name: 'Connect GitHub Issues' })).toBeVisible();
   await expect(setup.getByRole('button', { name: 'Connect GitLab Issues' })).toBeVisible();
   await expect(setup.getByRole('button', { name: 'Connect Jira Cloud' })).toBeVisible();
-  await expect(sourceOptions.locator('[data-lucide="chevron-right"]')).toHaveCount(5);
+  await expect(sourceOptions.locator('[data-lucide="chevron-right"]')).toHaveCount(6);
   await expect(sourceOptions.locator('[data-provider-icon="github"]')).toBeVisible();
   await expect(sourceOptions.locator('[data-provider-icon="gitlab"]')).toBeVisible();
   await expect(sourceOptions.locator('[data-provider-icon="jira"]')).toBeVisible();
@@ -4978,7 +4979,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await providerForm.getByRole('button', { name: 'Ticket source types' }).click();
   await expect(setup).toHaveAttribute('data-navigation', 'pop');
   await expect(transition).toHaveAttribute('data-active-side', 'a');
-  await expect(sourceOptions).toHaveCount(5);
+  await expect(sourceOptions).toHaveCount(6);
   await expect
     .poll(() => transition.locator('[data-side="a"]').evaluate((node) => getComputedStyle(node).animationName))
     .toBe('content-transition-push-in-start');
@@ -5970,6 +5971,79 @@ test('HS2-VKNA12 invalid sign-in origins open no popup and issue no auth request
     }
   }
 });
+
+for (const choice of ['Link', 'Create', 'Create in a custom location'] as const) {
+  test(`HS2-7VB81E ${choice} uses an existing ticket repository only after the person chooses it`, async ({
+    page,
+  }, testInfo) => {
+    await mockProject(page, true, false, 0, 0, 0, true);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const location = choice === 'Create' ? '/work/demo.hs2' : '/chosen/tickets.hs2';
+    const linkRequests: unknown[] = [];
+    let folder = choice === 'Link' ? '/chosen/not-a-store' : location;
+    await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: folder } }));
+    await page.route('**/__hotsheet/projects/setup-git', (route) => {
+      const body = route.request().postDataJSON();
+      if (choice === 'Link') {
+        expect(body).toMatchObject({ location: folder, existingOnly: true });
+        if (folder !== location)
+          return route.fulfill({ status: 400, json: { error: 'No Hot Sheet 2 ticket repository was found.' } });
+      } else {
+        expect(body).not.toHaveProperty('existingOnly');
+        expect(body.location).toBe(choice === 'Create' ? undefined : location);
+      }
+      return route.fulfill({ json: { ticketStore: location, connectionId: 'git-existing', existing: true } });
+    });
+    await page.route('**/__hotsheet/project-api/*/checkouts/*/sources/git-existing', (route) => {
+      expect(route.request().method()).toBe('PUT');
+      linkRequests.push(route.request().postDataJSON());
+      return route.fallback();
+    });
+    await page.goto('/');
+    await openMockedProject(page);
+    const setup = page.locator('[data-ticket-source-setup-dialog]');
+    await expect(setup).toHaveAttribute('open', '');
+    const link = setup.getByRole('button', { name: 'Link an existing Hot Sheet 2 git ticket repository' });
+    const create = setup.getByRole('button', {
+      name:
+        choice === 'Create'
+          ? 'Create a Hot Sheet 2 git ticket repository'
+          : 'Create a Hot Sheet 2 git ticket repository in a custom location',
+      exact: true,
+    });
+    const confirm = page.getByRole('alertdialog', { name: 'Use this existing ticket repository?' });
+    if (choice === 'Link') {
+      await expect(link).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath('hs2-7vb81e-source-choices-1280.png'),
+        animations: 'disabled',
+      });
+      await link.click();
+      await expect(setup.getByRole('alert')).toHaveText('No Hot Sheet 2 ticket repository was found.');
+      expect(linkRequests).toEqual([]);
+      folder = location;
+      await link.click();
+    } else {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await create.click();
+      await expect(confirm).toContainText(location);
+      expect(linkRequests).toEqual([]);
+      await page.screenshot({
+        path: testInfo.outputPath('hs2-7vb81e-existing-confirm-390.png'),
+        animations: 'disabled',
+      });
+      await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(confirm).toBeHidden();
+      expect(linkRequests).toEqual([]);
+      await create.click();
+      await confirm.getByRole('button', { name: 'Link Repository' }).click();
+    }
+    await expect(setup).toBeHidden();
+    await expect(confirm).toBeHidden();
+    await expect(page.locator('wa-toast-item').getByText('Ticket repository linked.', { exact: true })).toBeVisible();
+    expect(linkRequests).toEqual([{ provider: 'git', locator: location, make_default: true }]);
+  });
+}
 
 test('blocks a new ticket store before an older project server can accept it', async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 960 });

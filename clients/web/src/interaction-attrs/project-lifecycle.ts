@@ -50,6 +50,7 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
   backTicketStoreRemote: action('back-ticket-store-remote'),
   createProjectGitSource: action('create-project-git-source'),
   createProjectGitSourceCustom: action('create-project-git-source-custom'),
+  linkExistingProjectGitSource: action('link-existing-project-git-source'),
   browseProjectPath: action('browse-project-path'),
   recoverUnhealthyServer: action('recover-unhealthy-server'),
   reloadClient: action('reload-client'),

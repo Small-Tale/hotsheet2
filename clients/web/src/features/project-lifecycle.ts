@@ -475,23 +475,37 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
   }
 
-  async function createProjectGitSource(custom = false) {
+  async function createProjectGitSource(mode: 'default' | 'custom' | 'existing' = 'default') {
     const target = ticketSourceSetupProject.value;
-    if (!target) return;
+    if (!target || providerSettingsBusy.peek()) return;
     ticketSourceSetupError.value = '';
+    providerSettingsBusy.value = true;
     loading.value = true;
     try {
       // Linking the new store names a host path, which needs host access (HS2-CGXGWY).
       assertHostAction('git-source-link');
       let location: string | undefined;
-      if (custom) {
+      if (mode !== 'default') {
         const chosen = await localBridge.chooseFolder('Could not choose a ticket repository folder.');
         if (!chosen.path) return;
         location = chosen.path;
       }
-      const result = await localBridge.setupGit(target.root, location);
+      const result = await localBridge.setupGit(target.root, location, mode === 'existing');
       if (!result.ticketStore || !result.connectionId)
-        throw new Error(result.error ?? 'Could not create the git ticket store.');
+        throw new Error(result.error ?? 'Could not prepare the git ticket repository.');
+      if (mode === 'existing' && !result.existing)
+        throw new Error(
+          'The local bridge did not confirm an existing ticket repository. Reopen the project and try again.',
+        );
+      if (ticketSourceSetupProject.peek() !== target) return;
+      if (result.existing && mode !== 'existing') {
+        const useExisting = await dependencies.confirm({
+          title: 'Use this existing ticket repository?',
+          message: `A Hot Sheet 2 ticket repository already exists at ${result.ticketStore}.`,
+          confirmLabel: 'Link Repository',
+        });
+        if (!useExisting || ticketSourceSetupProject.peek() !== target) return;
+      }
       const client = new Api(target.apiPath),
         checkout = await client.addCheckoutSource(
           target.id,
@@ -506,11 +520,20 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
           Boolean(target.needsTicketSetup),
         ),
         updated = { ...target, stores: checkout.stores, needsTicketSetup: false };
-      projects.value = projects.value.map((item) => (item.id === target.id ? updated : item));
-      ticketSourceSetupProject.value = updated;
-      createdGitTicketStore.value = result.ticketStore;
-      ticketSourceSetupNavigation.value = 'push';
-      requestAnimationFrame(() => document.querySelector<HTMLElement>('[name="ticket-store-remote"]')?.focus());
+      projects.value = projects.value.map((item) =>
+        item.id === target.id ? { ...item, stores: checkout.stores, needsTicketSetup: false } : item,
+      );
+      if (ticketSourceSetupProject.peek() === target) {
+        if (result.existing) {
+          ticketSourceSetupProject.value = undefined;
+        } else {
+          ticketSourceSetupProject.value = updated;
+          createdGitTicketStore.value = result.ticketStore;
+          ticketSourceSetupNavigation.value = 'push';
+          requestAnimationFrame(() => document.querySelector<HTMLElement>('[name="ticket-store-remote"]')?.focus());
+        }
+      }
+      if (result.existing) dependencies.showToast('Ticket repository linked.');
       const descriptors = await client.providers();
       defaultProviders.value = {
         ...defaultProviders.value,
@@ -524,6 +547,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     } catch (reason) {
       ticketSourceSetupError.value = reason instanceof Error ? reason.message : String(reason);
     } finally {
+      providerSettingsBusy.value = false;
       loading.value = false;
     }
   }

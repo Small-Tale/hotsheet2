@@ -927,25 +927,54 @@ async function bootstrapStore(): Promise<string> {
   return realpath(path);
 }
 
+async function localGitStorePaths(rootInput: string, locationInput?: string) {
+  const root = await realpath(rootInput.trim());
+  return { root, path: locationInput?.trim() ? resolve(locationInput.trim()) : `${root}.hs2` };
+}
+
+async function requireGitStoreServerCompatibility(root: string, cli: CliCompatibility, mode: 'open' | 'create') {
+  const target = sessionForRoot(root);
+  if (!target) return;
+  const server = await serverRequest(target, '/compatibility', parseServerCompatibility).catch(() => undefined);
+  requireStoreSchemaCompatibility(server, cli, mode);
+}
+
 export async function createLocalGitTicketStore(
   rootInput: string,
   locationInput?: string,
   runner: ProcessRunner = runProcess,
 ): Promise<string> {
-  const root = await realpath(rootInput.trim()),
-    path = locationInput?.trim() ? resolve(locationInput.trim()) : `${root}.hs2`,
-    binary = toolBinary();
+  const { root, path } = await localGitStorePaths(rootInput, locationInput);
+  const binary = toolBinary();
   if (!(await executableExists(binary)))
     throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
-  const cli = await requireCurrentSetupCli((await exists(path)) ? path : undefined, runner),
-    target = sessionForRoot(root);
-  if (target) {
-    const existing = await exists(resolve(path, 'hotsheet-store.json'));
-    const server = await serverRequest(target, '/compatibility', parseServerCompatibility).catch(() => undefined);
-    requireStoreSchemaCompatibility(server, cli, existing ? 'open' : 'create');
-  }
+  const cli = await requireCurrentSetupCli((await exists(path)) ? path : undefined, runner);
+  await requireGitStoreServerCompatibility(
+    root,
+    cli,
+    (await exists(resolve(path, 'hotsheet-store.json'))) ? 'open' : 'create',
+  );
   await runner(binary, projectBootstrapArgs(root, path), developmentRepositoryRoot());
   return realpath(path);
+}
+
+/** HS2-7VB81E: returning an existing candidate leaves both the project and the store untouched. */
+export async function prepareLocalGitTicketStore(
+  rootInput: string,
+  locationInput?: string,
+  existingOnly = false,
+  runner: ProcessRunner = runProcess,
+): Promise<{ ticketStore: string; existing: boolean }> {
+  const { root, path } = await localGitStorePaths(rootInput, locationInput);
+  if (await exists(resolve(path, 'hotsheet-store.json'))) {
+    const ticketStore = await realpath(path);
+    const cli = await cliCompatibility(ticketStore, runner);
+    if (cli.selected_store_schema == null) throw new Error(`No Hot Sheet 2 ticket repository was found at ${path}.`);
+    await requireGitStoreServerCompatibility(root, cli, 'open');
+    return { ticketStore, existing: true };
+  }
+  if (existingOnly) throw new Error(`No Hot Sheet 2 ticket repository was found at ${path}.`);
+  return { ticketStore: await createLocalGitTicketStore(root, path, runner), existing: false };
 }
 
 export const runGitCommand: GitRunner = (command, args) =>

@@ -7,7 +7,7 @@ import { TicketSourceSetupDialog } from './ticket-source-setup-dialog';
 import { AccountsSettings, TicketSourcesSettings } from './ticket-sources-settings';
 
 describe('ticket source surfaces', () => {
-  it('renders the setup root and preserves all five delegated actions', () => {
+  it('renders all ticket-source choices including an existing Git repository (HS2-7VB81E)', () => {
     const markup = String(
       TicketSourceSetupDialog({
         project: { root: '/work/demo', name: 'Demo', stores: [], needsTicketSetup: true },
@@ -17,10 +17,16 @@ describe('ticket source surfaces', () => {
     );
     expect(markup).toContain('data-component="ticket-source-setup-dialog"');
     expect(markup).toContain('Demo</strong> is open');
-    for (const action of ['create-project-git-source', 'create-project-git-source-custom', 'select-provider-kind'])
+    for (const action of [
+      'create-project-git-source',
+      'create-project-git-source-custom',
+      'link-existing-project-git-source',
+      'select-provider-kind',
+    ])
       expect(markup).toContain(`data-action="${action}"`);
     for (const label of [
       'Create a Hot Sheet 2 git ticket repository',
+      'Link an existing Hot Sheet 2 git ticket repository',
       'Connect GitHub Issues',
       'Connect GitLab Issues',
       'Connect Jira Cloud',

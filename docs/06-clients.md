@@ -302,12 +302,20 @@ preview/download, server directory browser) are separate design work.
 
 Linking a Git ticket repository by path and changing a Git source's location are
 host-only too, because the server refuses them to a session without host access
-(HS2-S8R3PD). Ticket source setup disables **Create a Hot Sheet 2 git ticket
-repository**, and the Git source editor disables **Location**, its unverified-recovery
+(HS2-S8R3PD). Ticket source setup disables the Git repository create and link choices
+on a remote device. The Git source editor disables **Location**, its unverified-recovery
 checkbox and **Save location**, with the explanation as the field hint and the button
 tooltip. The source's color, ticket prefix, Remove and provider sources stay available.
 A `host_access_required` refusal that still arrives for any host-only action shows the
 same explanation (HS2-CGXGWY).
+
+On the host, **Link an existing Hot Sheet 2 git ticket repository** opens a folder
+picker for a local checkout of the repository. When either Create choice finds a
+Hot Sheet 2 store at its destination, the app offers **Link Repository** and
+shows that path before linking. Cancel leaves the project and the existing
+repository alone. The confirmed link uses checkout source admission, as does
+`hotsheet-cli checkout add-source`, and preserves the existing repository's remote.
+Newly created repositories still open the backup and push step (HS2-7VB81E).
 
 ## 6.3 Web client and Tauri desktop host
 

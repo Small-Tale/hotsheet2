@@ -154,10 +154,13 @@ describe('host-only controls on remote clients', () => {
     );
     expect(option(remoteRoot, 'create-project-git-source')).toContain('disabled');
     expect(option(remoteRoot, 'create-project-git-source')).toContain(`title="${reason('git-source-link')}"`);
+    expect(option(remoteRoot, 'link-existing-project-git-source')).toContain('disabled');
+    expect(option(remoteRoot, 'link-existing-project-git-source')).toContain(`title="${reason('git-source-link')}"`);
     const localRoot = String(
       TicketSourceSetupDialog({ project, providerConnections: [], navigation: 'none', hostActionsAvailable: true }),
     );
     expect(option(localRoot, 'create-project-git-source')).not.toContain('disabled');
+    expect(option(localRoot, 'link-existing-project-git-source')).not.toContain('disabled');
     expect(localRoot).not.toContain(reason('git-source-link'));
 
     const source = {

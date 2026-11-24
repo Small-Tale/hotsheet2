@@ -55,7 +55,7 @@ export interface ProjectLifecycleInteractionsDependencies {
   readonly relinkProjectGitSource: (form: HTMLFormElement) => Promise<void>;
   /** Save the edited Git source's ticket prefix (HS2-8QJ6W3). */
   readonly setProjectGitTicketPrefix: (form: HTMLFormElement) => Promise<void>;
-  readonly createProjectGitSource: (custom?: boolean) => Promise<void>;
+  readonly createProjectGitSource: (mode?: 'default' | 'custom' | 'existing') => Promise<void>;
   readonly chooseProjectPath: (button: Element) => Promise<void>;
   readonly recoverUnhealthyProjectServer: () => Promise<void>;
   readonly previewRepositoryCompaction: (source: string) => Promise<void>;
@@ -476,7 +476,12 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
   );
   lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.createProjectGitSourceCustom.selector, () => {
-      void createProjectGitSource(true);
+      void createProjectGitSource('custom');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.linkExistingProjectGitSource.selector, () => {
+      void createProjectGitSource('existing');
     }),
   );
   lifetime.add(

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { Checkout, ProviderConnection, SourceDetach } from './api';
 import { createDevApp } from './dev-server';
+import { parseGitSetup } from './local-bridge-client';
 import { createLocalGitTicketStore, listServerCheckouts, openLocalProject } from './project-bridge';
 import { parseRegisteredProjects, REGISTERED_PROJECTS_PATH } from './registered-projects-model';
 import { parseProviderAccount } from './server-response-parsers';
@@ -121,6 +122,40 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     const afterDeletion = await createDevApp().request('/__hotsheet/checkouts');
     expect(afterDeletion.status).toBe(200);
     expect((await afterDeletion.json()) as Checkout[]).not.toContainEqual(expect.objectContaining({ id: session.id }));
+  }, 120_000);
+
+  it('HS2-7VB81E leaves a checked-out ticket repository untouched until source admission', async () => {
+    const app = createDevApp();
+    const project = await openLocalProject(await mkdtemp(join(workspace, 'link-target-')));
+    const owner = await mkdtemp(join(workspace, 'link-store-owner-'));
+    const store = await createLocalGitTicketStore(owner, `${project.root}.hs2`);
+    const config = join(store, '.git', 'config');
+    const originalConfig = await readFile(config, 'utf8');
+    const headers = { 'content-type': 'application/json' };
+
+    const inspected = await app.request('/__hotsheet/projects/setup-git', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ root: project.root }),
+    });
+    expect(inspected.status).toBe(200);
+    const candidate = parseGitSetup(await inspected.json());
+    expect(candidate).toMatchObject({ ticketStore: store, existing: true });
+    expect(candidate.connectionId).toBeTruthy();
+    expect((await listServerCheckouts()).find((checkout) => checkout.id === project.id)?.stores).toEqual([]);
+    expect(await readFile(config, 'utf8')).toBe(originalConfig);
+
+    const linked = await app.request(
+      `${project.apiPath}/checkouts/${encodeURIComponent(project.id)}/sources/${encodeURIComponent(candidate.connectionId!)}`,
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ provider: 'git', locator: candidate.ticketStore, make_default: true }),
+      },
+    );
+    expect(linked.status).toBe(200);
+    expect(await linked.json()).toMatchObject({ id: project.id, stores: [store] });
+    expect(await readFile(config, 'utf8')).toBe(originalConfig);
   }, 120_000);
 
   it('lists registered projects with missing folders and removes one through the real server (HS2-R806FZ)', async () => {

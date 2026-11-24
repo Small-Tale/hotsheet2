@@ -36,6 +36,7 @@ import {
   migratorScript,
   openServerLog,
   PINNED_SERVER_LAUNCHER,
+  prepareLocalGitTicketStore,
   preserveHs1Entry,
   projectBootstrapArgs,
   projectChangeStoreIds,
@@ -790,8 +791,46 @@ describe('native folder chooser', () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+  it('HS2-7VB81E inspects existing repositories without bootstrapping or creating missing folders', async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), 'hs2-7vb81e-')),
+      project = resolve(directory, 'project'),
+      store = `${project}.hs2`,
+      other = resolve(directory, 'not-a-store');
+    await mkdir(project);
+    await mkdir(store);
+    await mkdir(other);
+    await writeFile(resolve(store, 'hotsheet-store.json'), '{}');
+    const runner = vi
+      .fn()
+      .mockResolvedValue(
+        JSON.stringify({ generation: 'hs2', store_schema: { min: 1, max: 3, creates: 3 }, selected_store_schema: 3 }),
+      );
+    try {
+      const canonicalStore = await realpath(store);
+      await expect(prepareLocalGitTicketStore(project, undefined, false, runner)).resolves.toEqual({
+        ticketStore: canonicalStore,
+        existing: true,
+      });
+      expect(runner.mock.calls.map(([, args]) => args)).toEqual([['-C', canonicalStore, 'compatibility', '--json']]);
+      await expect(prepareLocalGitTicketStore(project, other, true, runner)).rejects.toThrow(
+        'No Hot Sheet 2 ticket repository was found',
+      );
+      await expect(prepareLocalGitTicketStore(project, resolve(other, 'missing'), true, runner)).rejects.toThrow(
+        'No Hot Sheet 2 ticket repository was found',
+      );
+      expect(runner).toHaveBeenCalledOnce();
+      expect(await readdir(project)).toEqual([]);
+      expect(await readdir(other)).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
   it('exposes git ticket-store setup only through the local development bridge', async () => {
-    const setup = vi.fn().mockResolvedValueOnce('/work/demo.hs2').mockResolvedValueOnce('/chosen/tickets'),
+    const setup = vi
+        .fn()
+        .mockResolvedValueOnce({ ticketStore: '/work/demo.hs2', existing: false })
+        .mockResolvedValueOnce({ ticketStore: '/chosen/tickets', existing: false })
+        .mockResolvedValueOnce({ ticketStore: '/chosen/existing', existing: true }),
       app = createDevApp(true, undefined, undefined, setup);
     const response = await app.request('/__hotsheet/projects/setup-git', {
       method: 'POST',
@@ -799,19 +838,31 @@ describe('native folder chooser', () => {
       body: '{"root":"/work/demo"}',
     });
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({ ticketStore: '/work/demo.hs2', connectionId: '719abfebc935ba14' });
-    expect(setup).toHaveBeenCalledWith('/work/demo', undefined);
+    expect(await response.json()).toEqual({
+      ticketStore: '/work/demo.hs2',
+      connectionId: '719abfebc935ba14',
+      existing: false,
+    });
+    expect(setup).toHaveBeenCalledWith('/work/demo', undefined, undefined);
     const custom = await app.request('/__hotsheet/projects/setup-git', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: '{"root":"/work/demo","location":"/chosen/tickets"}',
     });
     expect(custom.status).toBe(201);
-    expect(setup).toHaveBeenLastCalledWith('/work/demo', '/chosen/tickets');
+    expect(setup).toHaveBeenLastCalledWith('/work/demo', '/chosen/tickets', undefined);
     expect(await custom.json()).toMatchObject({
       ticketStore: '/chosen/tickets',
       connectionId: expect.stringMatching(/^[a-f0-9]{16}$/),
     });
+    const existing = await app.request('/__hotsheet/projects/setup-git', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"root":"/work/demo","location":"/chosen/existing","existingOnly":true}',
+    });
+    expect(existing.status).toBe(200);
+    expect(await existing.json()).toMatchObject({ ticketStore: '/chosen/existing', existing: true });
+    expect(setup).toHaveBeenLastCalledWith('/work/demo', '/chosen/existing', true);
     expect(
       (
         await createDevApp(false, undefined, undefined, setup).request('/__hotsheet/projects/setup-git', {

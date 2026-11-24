@@ -20,7 +20,6 @@ import {
   chooseLocalFolder,
   closeRemoteServerSessions,
   connectGitTicketStoreRemote,
-  createLocalGitTicketStore,
   gitTicketStoreConnectionId,
   listRegisteredProjects,
   listServerCheckouts,
@@ -28,6 +27,7 @@ import {
   openLocalProject,
   openRegisteredProject,
   openReviewedRemoteProject,
+  prepareLocalGitTicketStore,
   proxyProjectRequest,
   recoverUnhealthyServer,
   remoteBrowserAuthRequired,
@@ -125,7 +125,7 @@ export function createDevApp(
   dev = true,
   reveal = revealCorruptTicket,
   chooseFolder: () => Promise<string | undefined> = () => chooseLocalFolder(),
-  setupGit: (root: string, location?: string) => Promise<string> = createLocalGitTicketStore,
+  setupGit = prepareLocalGitTicketStore,
   connectRemote: (store: string, remote: string) => Promise<void> = connectGitTicketStoreRemote,
   migrate: (root: string, location?: string) => Promise<unknown> = migrateHs1Project,
   removeHs1: (project: string) => Promise<string[]> = removeImportedHs1Data,
@@ -450,9 +450,14 @@ export function createDevApp(
   app.post('/__hotsheet/projects/setup-git', async (context) => {
     if (!dev) return context.notFound();
     try {
-      const body = await context.req.json<{ root: string; location?: string }>(),
-        ticketStore = await setupGit(body.root, body.location);
-      return context.json({ ticketStore, connectionId: gitTicketStoreConnectionId(ticketStore) }, 201);
+      const body = await context.req.json<{ root: string; location?: string; existingOnly?: boolean }>();
+      if (body.existingOnly !== undefined && typeof body.existingOnly !== 'boolean')
+        throw new Error('Invalid ticket repository setup mode.');
+      const { ticketStore, existing } = await setupGit(body.root, body.location, body.existingOnly);
+      return context.json(
+        { ticketStore, connectionId: gitTicketStoreConnectionId(ticketStore), existing },
+        existing ? 200 : 201,
+      );
     } catch (error) {
       return context.json(
         { error: error instanceof Error ? error.message : 'Could not create the git ticket store.' },

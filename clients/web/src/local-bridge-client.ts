@@ -158,12 +158,18 @@ export function parseRemovedHs1Data(value: unknown): { removed: string[] } {
   return { removed };
 }
 
-export function parseGitSetup(value: unknown): { ticketStore?: string; connectionId?: string; error?: string } {
+export function parseGitSetup(value: unknown): {
+  ticketStore?: string;
+  connectionId?: string;
+  existing: boolean;
+  error?: string;
+} {
   if (!isRecord(value)) invalid('git setup');
   return {
     error: bridgeErrorMessage(value),
     ticketStore: optionalString(value, 'ticketStore', 'git setup') || undefined,
     connectionId: optionalString(value, 'connectionId', 'git setup') || undefined,
+    existing: value.existing === true,
   };
 }
 
@@ -287,12 +293,14 @@ export const localBridge = {
       fallbackError: 'Could not remove the old Hot Sheet 1 files.',
       request,
     }),
-  setupGit: (root: string, location: string | undefined, request?: typeof fetch) =>
+  setupGit: (root: string, location: string | undefined, existingOnly = false, request?: typeof fetch) =>
     localBridgeRequest('/__hotsheet/projects/setup-git', {
       method: 'POST',
-      body: { root, location },
+      body: { root, location, ...(existingOnly ? { existingOnly } : {}) },
       parse: parseGitSetup,
-      fallbackError: 'Could not create the git ticket store.',
+      fallbackError: existingOnly
+        ? 'Could not find the git ticket repository.'
+        : 'Could not create the git ticket store.',
       request,
     }),
   setupGitRemote: (store: string, remote: string, request?: typeof fetch) =>

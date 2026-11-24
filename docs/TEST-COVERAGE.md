@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-7VB81E: `clients/web/tests/providers.spec.ts` covers explicit Git ticket-repository
+linking, rejection of a non-store folder, and both canceling and confirming a
+Create collision. `clients/web/src/project-bridge.test.ts` verifies read-only
+discovery and no bootstrap when the folder is missing or already holds a store.
+The opt-in checkout server integration verifies that discovery leaves the checkout
+and Git configuration untouched, then links the store through the real server.
+
 HS2-RJRRSF: `clients/web/tests/terminal-clipboard.spec.ts` selects text with a mouse in a
 remote project tab, copies via the keyboard and the right-click menu, checks the viewing
 browser's clipboard with the async API unavailable, and verifies shell Ctrl-C with no selection.

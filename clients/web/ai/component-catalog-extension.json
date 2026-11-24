@@ -3643,9 +3643,9 @@
       "id": "ticket-source-setup-dialog",
       "name": "TicketSourceSetupDialog",
       "kind": "component",
-      "purpose": "Choose and configure a git or external ticket source, including first-source and existing-default choices.",
+      "purpose": "Configure a ticket source by creating a Git repository, linking an existing checkout, or connecting an external provider.",
       "useWhen": [
-        "Hot Sheet needs choose and configure a git or external ticket source, including first-source and existing-default choices."
+        "Hot Sheet needs to create or link a Git ticket repository or configure an external ticket source."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketSourceSetupDialog behavior."
