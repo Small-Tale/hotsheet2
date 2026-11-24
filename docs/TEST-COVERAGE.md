@@ -230,7 +230,10 @@ each tab attaches with its own session, a reconnect re-resolves, removing one bi
 closes only its terminal streams, a revoked registry entry is refused before any
 upgrade, a launch reaches the server with the checkout root, another tab's id is
 refused, and two checkouts on one server and equal checkout ids on two servers list
-disjoint terminals. Unit and integration only; the remote drawer browser E2E is HS2-NHB2XF.
+disjoint terminals. `clients/web/tests/remote-drawer-create.spec.ts` opens two
+read-write remote tabs through the shipped drawer and checks native launch cwd,
+live terminal output, tab selection, and isolation (HS2-72HT9Y). Read-only
+remote approval and attach remain HS2-NHB2XF.
 No customer content was copied into fixtures.
 
 HS2-TCJQHX (remote AI connection ownership):
@@ -245,8 +248,10 @@ owning tab's records with its composite project id.
 It excludes peers from an older binding revision or changed server identity.
 `clients/web/src/remote-projects/connections.transport.test.ts` repeats the
 cross-checkout and cross-host requests through two real localhost remote servers.
-The remote drawer browser
-flow remains in HS2-72HT9Y; no customer content was copied into fixtures.
+`clients/web/tests/remote-drawer-create.spec.ts` creates a Claude chat through
+the shipped remote drawer, checks its native checkout and live turn reply,
+and verifies that the second remote tab sees none of its sessions
+(HS2-72HT9Y). No customer content was copied into fixtures.
 
 HS2-85W6BE / HS2-DXM0YN: `hotsheet-server/src/remote_auth.rs` tests the 15-minute
 boundary, admin and local grants through approve, redeem, reopen and change, reject,
