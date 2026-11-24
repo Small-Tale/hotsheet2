@@ -446,6 +446,19 @@ test('keeps background import failure and retry owned by its project across navi
   await page.locator('[data-project-id="legacy"]').click();
   const banner = page.locator('[data-component="hs1-job-banner"]');
   await expect(banner).toContainText('destination is full');
+  // HS2-GXJTSE: inset like every shell banner, 8px from the slot's sides, top, and bottom.
+  for (const width of [1100, 420, 1100]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect
+      .poll(() =>
+        banner.evaluate((host) => {
+          const slot = host.closest('.app-shell__banner')!.getBoundingClientRect(),
+            box = host.querySelector('[data-component="state-banner"]')!.getBoundingClientRect();
+          return [box.left - slot.left, slot.right - box.right, box.top - slot.top].map(Math.round);
+        }),
+      )
+      .toEqual([8, 8, 8]);
+  }
   await page.screenshot({
     path: testInfo.outputPath('hs1-background-retry-wide.png'),
     fullPage: true,

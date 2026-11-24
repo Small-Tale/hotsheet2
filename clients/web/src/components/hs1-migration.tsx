@@ -223,7 +223,8 @@ export function Hs1JobBanner({
           : 'Hot Sheet 1 import complete';
   return (
     <div data-component="hs1-job-banner" data-status={job.status} data-attempt={job.attempt}>
-      <List gap="2xs" controlInsets="tb">
+      {/* Inset like every application banner (ShellBanner): 8px around and between (HS2-GXJTSE). */}
+      <List gap="2xs" controlInsets="t">
         <StateBanner
           title={title}
           detail={

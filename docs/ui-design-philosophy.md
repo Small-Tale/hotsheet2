@@ -77,8 +77,11 @@ does not fork Kerf's guidance.
 - Application banners above the workspace (setup warnings, Codex hook review, update and
   source notices, repository size, paused notifications, Hot Sheet 1 migration, and the
   connection banner) use one inset treatment: Kerf's rounded `StateBanner` inset by a
-  Kerf `List` (`controlInsets="trl"`) on the header surface, through `ShellBanner`
-  (HS2-YCB15Z). No banner is a flush full-width strip.
+  Kerf `List` (`controlInsets="t"`) on the header surface, through `ShellBanner`
+  (HS2-YCB15Z). Every banner sits 8 px from the slot's sides and top, stacked banners are
+  8 px apart, and the slot ends 8 px below the last one (HS2-GXJTSE); a policy test in
+  `eslint-policy.test.ts` keeps every banner in the slot on that inset. No banner is a flush
+  full-width strip.
 
 - A `StateBanner` whose detail is computed (a server or validation message, or an
   interpolated sentence) sets Kerf's `copyLayout="stacked"`, so the detail wraps

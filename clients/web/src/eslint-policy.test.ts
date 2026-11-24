@@ -386,6 +386,44 @@ describe('web ESLint policy', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('HS2-GXJTSE insets every shell banner like ShellBanner: 8px around and between', () => {
+    // The shell's banner slot (hot-sheet-shell.tsx `banner={…}`) stacks banners 8px from its sides,
+    // top, and bottom and 8px apart: each banner takes only the Kerf List's top control inset, and the
+    // slot's bottom padding ends the stack. Side insets on some banners and top+bottom insets on
+    // another left the stack with two side insets and a doubled gap (HS2-GXJTSE).
+    const shell = readFileSync(join(import.meta.dirname, 'features/hot-sheet-shell.tsx'), 'utf8'),
+      slot = /\n\s+banner=\{([\s\S]*?)\n\s+pageHeader=/.exec(shell)?.[1] ?? '',
+      names = [
+        ...new Set(
+          [...slot.matchAll(/<([A-Z]\w*Banner\w*)\b|\{([A-Z]\w*Banner)\(/g)].map((m) => m.slice(1).find(Boolean) ?? ''),
+        ),
+      ];
+    expect(names.length).toBeGreaterThan(10);
+    const components = join(import.meta.dirname, 'components'),
+      sources = readdirSync(components)
+        .filter((name) => name.endsWith('.tsx'))
+        .map((name) => readFileSync(join(components, name), 'utf8')),
+      offenders: string[] = [];
+    for (const name of names) {
+      const source = sources.find((text) => new RegExp(`export function ${name}\\b`).test(text));
+      if (!source) {
+        offenders.push(`${name}: not found`);
+        continue;
+      }
+      const body = source.slice(source.search(new RegExp(`export function ${name}\\b`)));
+      const end = body.indexOf('\nexport function ', 1);
+      const own = end > 0 ? body.slice(0, end) : body;
+      // Composes ShellBanner, delegates to another banner component, or insets only the top.
+      const insets = [...own.matchAll(/controlInsets="(\w+)"/g)].map((m) => m[1]);
+      const ok =
+        /<ShellBanner\b/.test(own) ||
+        (insets.length > 0 && insets.every((value) => value === 't')) ||
+        (!/<StateBanner\b/.test(own) && /<[A-Z]\w*Banner\b/.test(own));
+      if (!ok) offenders.push(name);
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('HS2-N2HB7G reads the machine homes only through the shared blank-as-unset helper', () => {
     // `??` resolved `HOTSHEET_HOME=""` against the working directory and `||` kept whitespace-only
     // values; `machine-home.ts` applies the Rust `machine_home` rule (HS2-1D4DQF) for every bridge.
