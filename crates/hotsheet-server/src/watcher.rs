@@ -57,6 +57,24 @@ struct WatchRootSignal {
     tickets_removed: bool,
 }
 
+/// Identifies the directory object, not just its path, across startup races.
+#[cfg(unix)]
+fn watched_directory_identity(path: &FsPath) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = std::fs::metadata(path).ok()?;
+    Some((metadata.dev(), metadata.ino()))
+}
+
+#[cfg(windows)]
+fn watched_directory_identity(path: &FsPath) -> Option<(u64, u64)> {
+    use std::os::windows::fs::MetadataExt;
+    let metadata = std::fs::metadata(path).ok()?;
+    Some((
+        u64::from(metadata.volume_serial_number()?),
+        metadata.file_index()?,
+    ))
+}
+
 fn watch_root_signal(
     event: &notify::Event,
     root: &FsPath,
@@ -209,6 +227,18 @@ pub(crate) fn spawn_watcher_in_scope(
     backend: WatcherBackend,
     scope: Arc<TicketsWatchScope>,
 ) -> anyhow::Result<WatchHandle> {
+    spawn_watcher_in_scope_with_startup_hook(target, backend, scope, None, None)
+}
+
+type StartupHook = Box<dyn FnOnce() + Send>;
+
+fn spawn_watcher_in_scope_with_startup_hook(
+    target: WatchTarget,
+    backend: WatcherBackend,
+    scope: Arc<TicketsWatchScope>,
+    before_children: Option<StartupHook>,
+    after_children: Option<StartupHook>,
+) -> anyhow::Result<WatchHandle> {
     use notify::{RecursiveMode, Watcher};
 
     let tickets_dir = target.entry.store.root().join("tickets");
@@ -307,27 +337,29 @@ pub(crate) fn spawn_watcher_in_scope(
                             return;
                         }
                     };
-                if let Err(error) = watcher.watch(&watch_dir, RecursiveMode::Recursive) {
-                    tracing::warn!(
-                        dir = %watch_dir.display(),
-                        %error,
-                        "store watcher failed to start"
-                    );
-                    return;
-                }
-                // The parent survives deletion of the store. On Linux/macOS, a shallow
-                // root watch also sees `tickets/` return after the new root is created.
+                // Register the stable parent first. If the store vanishes during
+                // startup, a failed child registration must not discard this signal.
                 if let Err(error) = watcher.watch(&parent, RecursiveMode::NonRecursive) {
                     tracing::warn!(dir = %parent.display(), %error, "store watcher parent monitor failed");
                     return;
                 }
-                let mut root_watched = watch_dir == store_root;
-                if !root_watched {
-                    if let Err(error) = watcher.watch(&store_root, RecursiveMode::NonRecursive) {
-                        tracing::warn!(dir = %store_root.display(), %error, "store watcher root monitor failed");
-                        return;
-                    }
-                    root_watched = true;
+                if let Some(hook) = before_children {
+                    hook();
+                }
+                // On Linux/macOS, a shallow root watch sees `tickets/` return.
+                let mut root_watched = watch_dir != store_root
+                    && store_root.is_dir()
+                    && watcher
+                        .watch(&store_root, RecursiveMode::NonRecursive)
+                        .is_ok();
+                let mut watched_dir = watch_dir.is_dir()
+                    && watcher.watch(&watch_dir, RecursiveMode::Recursive).is_ok();
+                if watch_dir == store_root {
+                    root_watched = watched_dir;
+                }
+                let watched_identity = watched_directory_identity(&watch_dir);
+                if let Some(hook) = after_children {
+                    hook();
                 }
                 {
                     let mut slot = started.lock_or_recover();
@@ -338,11 +370,52 @@ pub(crate) fn spawn_watcher_in_scope(
                     slot.watcher = Some(watcher);
                 }
                 std::thread::sleep(STARTUP_RESYNC_DELAY);
+                // A child may have disappeared and returned while the native stream
+                // started. Re-register its current path before trusting the index.
+                let changed_during_startup = rearm_rx.try_iter().fold(false, |changed, signal| {
+                    changed || signal.root_removed || signal.tickets_removed
+                }) || watched_identity
+                    != watched_directory_identity(&watch_dir);
+                let missing_during_startup = !watched_dir;
+                if changed_during_startup || missing_during_startup {
+                    let mut slot = started.lock_or_recover();
+                    if slot.stopped {
+                        return;
+                    }
+                    let Some(watcher) = slot.watcher.as_mut() else {
+                        return;
+                    };
+                    if watched_dir {
+                        let _ = watcher.unwatch(&watch_dir);
+                        watched_dir = false;
+                    }
+                    if root_watched && watch_dir != store_root {
+                        let _ = watcher.unwatch(&store_root);
+                        root_watched = false;
+                    }
+                    if store_root.is_dir() && watch_dir != store_root {
+                        root_watched = watcher
+                            .watch(&store_root, RecursiveMode::NonRecursive)
+                            .is_ok();
+                    }
+                    if watch_dir.is_dir() {
+                        watched_dir = watcher.watch(&watch_dir, RecursiveMode::Recursive).is_ok();
+                        if watch_dir == store_root {
+                            root_watched = watched_dir;
+                        }
+                    }
+                }
+                if watched_dir && (changed_during_startup || missing_during_startup) {
+                    std::thread::sleep(STARTUP_RESYNC_DELAY);
+                }
                 // The native stream is live: retire the bridge and re-check once more.
                 let bridge = started.with_lock(|slot| slot.bridge.take());
                 drop(bridge);
-                request_resync(&tickets_dir, LIVE_RESYNC);
-                let mut watched_dir = true;
+                if watched_dir {
+                    request_resync(&tickets_dir, REARM_RESYNC);
+                } else {
+                    resync.freshness.set_live(false);
+                }
                 while let Ok(signal) = rearm_rx.recv() {
                     let mut slot = started.lock_or_recover();
                     if slot.stopped {
@@ -2111,6 +2184,107 @@ mod freshness_tests {
                         .slug_candidates(&second.slug)
                         .unwrap()
                         == vec![second.id]
+            });
+            drop(handle);
+        }
+    }
+
+    #[test]
+    fn hs2_r6fz54_recreation_during_native_startup_replaces_the_watched_directory() {
+        for watch_root in [false, true] {
+            let parent = tempfile::tempdir().unwrap();
+            let root = parent.path().join("store");
+            let away = parent.path().join("old-store");
+            let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+            let old = create(&store, "old startup ticket");
+            let state = crate::AppState::new(store, "secret".into()).unwrap();
+            let target = super::default_watch_target(&state);
+            let entry = target.entry.clone();
+            let scope = Arc::new(TicketsWatchScope::new(&root, watch_root));
+            let (ready, replaced) = std::sync::mpsc::channel();
+            let replacement_root = root.clone();
+            let hook = Box::new(move || {
+                std::fs::rename(&replacement_root, &away).unwrap();
+                let store = FsStore::init(&replacement_root, &StoreMetadata::new("HS")).unwrap();
+                let new = create(&store, "replacement during startup");
+                ready.send((new.slug, new.id)).unwrap();
+            });
+            let handle = super::spawn_watcher_in_scope_with_startup_hook(
+                target,
+                WatcherBackend::Recommended,
+                scope,
+                None,
+                Some(hook),
+            )
+            .unwrap();
+            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(10)).unwrap();
+            wait_for("startup replacement to reconcile", || {
+                entry.freshness.in_sync()
+                    && entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&old.slug)
+                        .unwrap()
+                        .is_empty()
+                    && entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&new_slug)
+                        .unwrap()
+                        == vec![new_id]
+            });
+            drop(handle);
+        }
+    }
+
+    #[test]
+    fn hs2_r6fz54_missing_child_during_native_startup_waits_for_recreation() {
+        for watch_root in [false, true] {
+            let parent = tempfile::tempdir().unwrap();
+            let root = parent.path().join("store");
+            let away = parent.path().join("old-store");
+            let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+            let old = create(&store, "old startup ticket");
+            let state = crate::AppState::new(store, "secret".into()).unwrap();
+            let target = super::default_watch_target(&state);
+            let entry = target.entry.clone();
+            let scope = Arc::new(TicketsWatchScope::new(&root, watch_root));
+            let removed_root = root.clone();
+            let before = Box::new(move || std::fs::rename(&removed_root, &away).unwrap());
+            let (ready, replaced) = std::sync::mpsc::channel();
+            let replacement_root = root.clone();
+            let after = Box::new(move || {
+                let store = FsStore::init(&replacement_root, &StoreMetadata::new("HS")).unwrap();
+                let new = create(&store, "replacement after missing child");
+                ready.send((new.slug, new.id)).unwrap();
+            });
+            let handle = super::spawn_watcher_in_scope_with_startup_hook(
+                target,
+                WatcherBackend::Recommended,
+                scope,
+                Some(before),
+                Some(after),
+            )
+            .unwrap();
+            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(10)).unwrap();
+            wait_for("missing startup child to reconcile", || {
+                entry.freshness.in_sync()
+                    && entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&old.slug)
+                        .unwrap()
+                        .is_empty()
+                    && entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&new_slug)
+                        .unwrap()
+                        == vec![new_id]
             });
             drop(handle);
         }

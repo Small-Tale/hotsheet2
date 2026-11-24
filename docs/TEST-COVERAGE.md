@@ -4856,3 +4856,6 @@ transition for both root and `tickets/` scopes. Reconciliation also asserts a cl
 invalidation. The native case verifies that a later
 external write is indexed after the store is recreated. Windows and Linux platform CI
 must exercise their own native backends before the ticket completes.
+Startup-race tests replace the watched directory after initial registration and remove it
+before child registration, then recreate it. Both transitions run under root and `tickets/`
+scopes before the native watch becomes live.
