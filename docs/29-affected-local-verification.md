@@ -314,8 +314,10 @@ without an analyzed T2 selection or a reviewed test plan. Unlike the T0/T1 plann
 target, this budget is also enforced while the gate runs: once it has elapsed, no further
 stage starts, and each unstarted stage is deferred to CI rather than failed. The output
 lists every deferred check, and the receipt's `bestEffort` block records what ran, what
-the plan deferred and what the clock deferred. A failing stage still fails the gate. A
-rerun on the same inputs reuses passed stage receipts and spends a fresh budget on the
+the plan deferred and what the clock deferred. Feature coverage matrix validation
+runs before broad affected suites (HS2-PQVRR1), so an unrelated suite failure cannot
+hide malformed coverage evidence from the local check. A failing stage still fails
+the gate. A rerun on the same inputs reuses passed stage receipts and spends a fresh budget on the
 deferred stages. Under CI First `scripts/push.sh` does not require the receipt at all;
 the covering main CI run is the gate.
 
