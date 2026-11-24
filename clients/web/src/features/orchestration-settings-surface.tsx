@@ -147,10 +147,15 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     };
   }
 
+  /** HS2-DXAB4K: the server a project open from another server is served by, as + Add Project names it. */
+  function servedBy(current: Project): string | undefined {
+    return isRemoteProjectId(current.id) ? (current.remoteHost ?? 'the server') : undefined;
+  }
+
   function orchestration(current: Project): OrchestrationSettingsProps {
     const state = settings.settings.value[current.id],
       labels = settings.remoteLabels.value,
-      rows = projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites),
+      rows = projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites, servedBy(current)),
       choices = addChoices(
         projects.value.map((item) => ({ id: item.id, name: item.name })),
         current.id,
@@ -206,7 +211,13 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     const target = settings.selected.value[current.id];
     if (!target) return undefined;
     const state = settings.settings.value[current.id],
-      rows = projectRows(state?.manifest, state?.bindings ?? {}, settings.remoteLabels.value),
+      rows = projectRows(
+        state?.manifest,
+        state?.bindings ?? {},
+        settings.remoteLabels.value,
+        undefined,
+        servedBy(current),
+      ),
       row = rows.find((item) => item.targetId === target),
       // HS2-D4G81Q: every site of the target's project, with what each machine is.
       siteProject = state?.sites?.projects.find((item) => item.sites.some((site) => site.target_id === target)),

@@ -60,8 +60,9 @@ export function OrchestrationSettingsDemo() {
         <OrchestrationSettings loading />
       </CatalogExample>
       <CatalogExample label="Open From Another Server" viewport={{ width: 'full' }}>
-        {/* HS2-92FJXM: + Add Project offers the projects open on that server. */}
+        {/* HS2-92FJXM: + Add Project offers the projects open on that server. HS2-DXAB4K: rows name that server. */}
         <OrchestrationSettings
+          rows={projectRows(state?.manifest, state?.bindings ?? {}, labels, undefined, 'Build Host')}
           hostedChoices={DEMO_HOSTED_CHECKOUTS.map((choice, index) => ({
             checkoutId: choice.checkout_id,
             name: choice.name,

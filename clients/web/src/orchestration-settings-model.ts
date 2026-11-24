@@ -98,7 +98,10 @@ export interface OrchestrationProjectRow {
   targetId: string;
   label: string;
   location: 'local' | 'remote' | 'unbound';
-  /** "Local on This Computer", "Remote on Build host", or "Not bound on this computer". */
+  /**
+   * "Local on This Computer", "Remote on Build host", or "Not bound on this computer"; for a project served by
+   * another server "On build.example" or "Not bound on build.example" (HS2-DXAB4K).
+   */
   where: string;
   /** HS2-D4G81Q: the machine part of `where` alone: "Remote on Build host", or empty when unknown. */
   place: string;
@@ -114,12 +117,16 @@ export interface OrchestrationProjectRow {
 /**
  * The orchestrated projects: active declarations with this machine's binding, by label. HS2-SHH7WW: a
  * project with several sites lists its own row first and then each other site, labelled with its project.
+ * HS2-DXAB4K: `servedBy` names the server an orchestration project open from another server is served by
+ * (the tab's remote host). Its bindings are that server's, so a checkout local to it is "On <server>",
+ * never "Local on This Computer".
  */
 export function projectRows(
   manifest: OrchestrationManifest | undefined,
   bindings: Readonly<Record<string, OrchestrationBinding | undefined>>,
   remoteLabels: Readonly<Record<string, string>>,
   sites?: OrchestrationSitesView,
+  servedBy?: string,
 ): OrchestrationProjectRow[] {
   // HS2-D4G81Q: a site's OS shows on the rows of a project with several sites.
   const capabilities = new Map(
@@ -139,14 +146,25 @@ export function projectRows(
       machine = capabilities.get(target.target_id),
       destination = binding?.destination ?? undefined,
       place = destination
-        ? `${destination.kind === 'local' ? 'Local' : 'Remote'} on ${machineOf(destination, remoteLabels)}`
+        ? servedBy !== undefined && destination.kind === 'local'
+          ? `On ${servedBy}`
+          : `${destination.kind === 'local' ? 'Local' : 'Remote'} on ${machineOf(destination, remoteLabels)}`
         : binding
-          ? 'Not bound on this computer'
+          ? `Not bound on ${servedBy ?? 'this computer'}`
           : '';
     return {
       targetId: target.target_id,
       label: target.label,
-      location: destination ? destination.kind : binding ? 'unbound' : 'local',
+      // HS2-DXAB4K: a checkout of the serving server is remote from here, as its + Add Project choice shows.
+      location: destination
+        ? servedBy !== undefined
+          ? 'remote'
+          : destination.kind
+        : binding
+          ? 'unbound'
+          : servedBy !== undefined
+            ? 'remote'
+            : 'local',
       where: [prefix, place].filter(Boolean).join(' · '),
       place,
       connection: connectionStatus(binding),

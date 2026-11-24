@@ -1004,14 +1004,21 @@ test('HS2-0G80WD a remote orchestration project stops orchestrating a project af
     const settings = page.locator('[data-component="orchestration-settings"]');
     const webRow = settings.locator('[data-orchestration-project]').filter({ hasText: 'Web' });
     await expect(webRow).toBeVisible();
-    await webRow.getByRole('button', { name: /Actions for Web/ }).click();
-    await page.getByRole('menuitem', { name: 'Stop Orchestrating…' }).click();
-    const dialog = page.getByRole('alertdialog');
-    await expect(dialog).toContainText('Stop orchestrating Web?');
     const directory = join('target', 'visual-captures', 'hs2-0g80wd');
     await mkdir(directory, { recursive: true });
     const capture = (name: string) =>
       page.screenshot({ path: join(directory, `hs2-0g80wd-${name}-${browserName}.png`), animations: 'disabled' });
+    // HS2-DXAB4K: the checkout is on the serving machine, so the row names that server, never this computer.
+    await expect(webRow).toContainText('On Build host');
+    await expect(webRow).not.toContainText('This Computer');
+    await capture('row-1440');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('row-1440-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await webRow.getByRole('button', { name: /Actions for Web/ }).click();
+    await page.getByRole('menuitem', { name: 'Stop Orchestrating…' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Stop orchestrating Web?');
     await capture('confirm-1440');
     // Cancelled: nothing is sent.
     await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -1022,6 +1029,8 @@ test('HS2-0G80WD a remote orchestration project stops orchestrating a project af
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
         if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
       }
+      await expect(webRow).toContainText('On Build host');
+      await capture(`row-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
       await webRow.getByRole('button', { name: /Actions for Web/ }).click();
       await page.getByRole('menuitem', { name: 'Stop Orchestrating…' }).click();
       await expect(dialog).toBeVisible();
@@ -1616,6 +1625,17 @@ test('HS2-W27N1D catalog demos render the production components and run their co
   // HS2-E9VVQF: Mobile reaches API's ticket store, so the demo's duplicate question adds it as a site.
   await expect(interactive.getByRole('status')).toHaveText('Mobile added as a site of API.');
   await expect(interactive.locator('[data-orchestration-project]').filter({ hasText: 'Site of API' })).toHaveCount(1);
+  // HS2-DXAB4K: a project open from another server names that server on its rows.
+  const hosted = page
+    .getByRole('region', { name: 'OrchestrationSettings Examples' })
+    .getByRole('region', { name: 'Open From Another Server' });
+  await expect(
+    hosted
+      .locator('[data-orchestration-project]')
+      .filter({ hasText: /On Build Host/ })
+      .first(),
+  ).toBeVisible();
+  await expect(hosted).not.toContainText('This Computer');
   await page.screenshot({ path: test.info().outputPath('orchestration-settings-demo.png'), fullPage: true });
   expect(errors).toEqual([]);
 });

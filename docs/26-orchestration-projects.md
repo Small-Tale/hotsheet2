@@ -5959,6 +5959,10 @@ through `/checkouts/{owner}/orchestration/hosted-projects`:
   write fence. For a project opened from another server, a row's and the detail's Stop
   Orchestrating… ask with the same shared confirmation and then use this route.
 - If the list cannot be read, + Add Project is disabled and the category says why.
+- **Rows name the serving machine (HS2-DXAB4K).** The bindings such a project shows are
+  the serving machine's, so a project bound to a checkout there reads _On <server>_
+  (the tab's server name, as _Open on <server>_ names it) with the remote icon, and an
+  unbound one _Not bound on <server>_; never _Local on This Computer_.
 - Headless, on the serving machine: `hotsheet-cli ... orchestration project hosted
 --project <owner>` and `project add-hosted <checkout> [--label] [--target-id]
 --project <owner>`, and `project remove-hosted <target> --project <owner>` (HS2-0G80WD), through the same route.
