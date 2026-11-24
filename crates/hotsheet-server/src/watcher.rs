@@ -67,11 +67,28 @@ fn watched_directory_identity(path: &FsPath) -> Option<(u64, u64)> {
 
 #[cfg(windows)]
 fn watched_directory_identity(path: &FsPath) -> Option<(u64, u64)> {
-    use std::os::windows::fs::MetadataExt;
-    let metadata = std::fs::metadata(path).ok()?;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_DELETE, FILE_SHARE_READ,
+        FILE_SHARE_WRITE, GetFileInformationByHandle,
+    };
+
+    // A directory needs BACKUP_SEMANTICS to open on Windows. Share deletion so
+    // this short-lived identity probe does not block a store move (HS2-R6FZ54).
+    let directory = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+        .ok()?;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    if unsafe { GetFileInformationByHandle(directory.as_raw_handle(), &mut info) } == 0 {
+        return None;
+    }
     Some((
-        u64::from(metadata.volume_serial_number()?),
-        metadata.file_index()?,
+        u64::from(info.dwVolumeSerialNumber),
+        (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
     ))
 }
 
@@ -1413,6 +1430,18 @@ mod watcher_tests {
     };
     use notify::{Event, EventKind};
     use std::sync::{Arc, Mutex};
+
+    #[cfg(windows)]
+    #[test]
+    fn hs2_r6fz54_windows_directory_identity_changes_after_recreation() {
+        let parent = tempfile::tempdir().unwrap();
+        let root = parent.path().join("store");
+        std::fs::create_dir(&root).unwrap();
+        let original = super::watched_directory_identity(&root).unwrap();
+        std::fs::rename(&root, parent.path().join("old-store")).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        assert_ne!(super::watched_directory_identity(&root), Some(original));
+    }
 
     #[test]
     fn hs2_r6fz54_only_root_and_tickets_events_rearm_a_store() {
