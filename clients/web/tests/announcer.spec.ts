@@ -647,7 +647,7 @@ test('HS2-R5Q2GY speaks a summary instead of the literal command', async ({ page
   await overlay.getByRole('button', { name: 'Play Narration' }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
-    .toEqual(['claude wrote a file.']);
+    .toEqual(['claude wrote ft.md.']);
 });
 
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {

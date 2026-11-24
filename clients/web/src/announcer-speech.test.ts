@@ -20,12 +20,14 @@ describe('announcer speech never reads a literal command (HS2-R5Q2GY)', () => {
 
   it.each(commands)('summarizes %s without its text', (text) => {
     const spoken = command(text);
-    expect(spoken).toMatch(/^claude [a-z ]+\.$/i);
+    // Words, and at most a bare file name such as `notes.md` (HS2-RKYCTP), never code.
+    expect(spoken).toMatch(/^claude [a-z]+(?: [\w.-]+)*\.$/i);
     expect(spoken).not.toContain('`');
     expect(spoken).not.toContain(text);
-    // No path, flag, quoted argument, or other non-word fragment of the command is spoken.
-    for (const fragment of text.split(/\s+/).filter((word) => /[^A-Za-z]/.test(word) && word.length > 1))
+    // No path, flag, quoted argument, variable, or other code fragment of the command is spoken.
+    for (const fragment of text.split(/\s+/).filter((word) => /[/'"$=-]/.test(word) && word.length > 1))
       expect(spoken).not.toContain(fragment);
+    expect(spoken).not.toMatch(/[/'"$=]| -/);
   });
 
   it('falls back to the summary code span when the detail has no command', () => {
@@ -36,31 +38,82 @@ describe('announcer speech never reads a literal command (HS2-R5Q2GY)', () => {
         summary: 'codex ran `git push origin main`',
         detail: null,
       }),
-    ).toBe('codex pushed changes.');
+    ).toBe('codex pushed changes to main.');
     expect(announcerSpokenText({ tool: 'codex', kind: 'command', summary: 'codex ran a command', detail: {} })).toBe(
       'codex ran a command.',
     );
   });
 
   it('names what common commands do', () => {
-    expect(commandPhrase('git status --short')).toBe('checked the repository');
+    expect(commandPhrase('git status --short')).toBe('checked what changed');
+    expect(commandPhrase('git diff --cached')).toBe('reviewed the staged changes');
+    expect(commandPhrase('git -C ../repo log --oneline -5')).toBe('read the commit history');
     expect(commandPhrase('git commit -m x')).toBe('committed changes');
+    expect(commandPhrase('git push')).toBe('pushed changes');
     expect(commandPhrase('git pull --rebase')).toBe('updated from the remote');
     expect(commandPhrase('git rebase origin/main')).toBe('integrated changes');
-    expect(commandPhrase('git stash list')).toBe('used Git');
-    expect(commandPhrase('scripts/check.sh --plan')).toBe('ran tests');
-    expect(commandPhrase('npx vitest run')).toBe('ran tests');
-    expect(commandPhrase('npm run lint')).toBe('checked formatting and lint');
-    expect(commandPhrase('cargo build --release')).toBe('built the project');
+    expect(commandPhrase('git stash list')).toBe('stashed changes');
+    expect(commandPhrase('git bisect start')).toBe('used Git');
+    expect(commandPhrase('scripts/check.sh --plan')).toBe('ran the project checks');
+    expect(commandPhrase('npx vitest run')).toBe('ran the unit tests');
+    expect(commandPhrase('npx playwright test tests/a.spec.ts')).toBe('ran the browser tests');
+    expect(commandPhrase('cargo nextest run -p sample')).toBe('ran the Rust tests');
+    expect(commandPhrase('cargo test')).toBe('ran the Rust tests');
+    expect(commandPhrase('cargo clippy --workspace')).toBe('linted the Rust code');
+    expect(commandPhrase('npm run lint')).toBe('linted the code');
+    expect(commandPhrase('npm run catalog:generate')).toBe('ran a project script');
+    expect(commandPhrase('npm run dev')).toBe('ran the dev script');
+    expect(commandPhrase('cargo build --release')).toBe('built the Rust code');
+    expect(commandPhrase('npx tsc --noEmit')).toBe('type-checked the code');
     expect(commandPhrase('npm install')).toBe('installed dependencies');
-    expect(commandPhrase('rg -n sample src')).toBe('searched the code');
-    expect(commandPhrase('cat > notes.md')).toBe('wrote a file');
-    expect(commandPhrase('sed -n 1,20p a.ts')).toBe('read files');
-    expect(commandPhrase('mkdir -p out')).toBe('rearranged files');
+    expect(commandPhrase('rg -n sample src')).toBe('searched the code for sample');
+    expect(commandPhrase('rg -n "a|b(c)" src')).toBe('searched the code');
+    expect(commandPhrase('cat > notes.md')).toBe('wrote notes.md');
+    expect(commandPhrase('sed -n 1,20p src/a.ts')).toBe('read a.ts');
+    expect(commandPhrase('head -40 a.ts b.ts')).toBe('read 2 files');
+    expect(commandPhrase('mkdir -p out')).toBe('created a folder');
+    expect(commandPhrase('rm -f build/out.log')).toBe('deleted out.log');
     expect(commandPhrase('curl -s https://example.test')).toBe('made a network request');
-    expect(commandPhrase('hotsheet-cli ls --up-next')).toBe('updated Hot Sheet tickets');
-    expect(commandPhrase('sudo env A=1 make')).toBe('ran a command');
+    expect(commandPhrase('gh run view 123')).toBe('checked CI');
+    expect(commandPhrase('hotsheet-cli ls --up-next')).toBe('listed tickets');
+    expect(commandPhrase('python3 -I scripts/x.py')).toBe('ran a Python script');
+    expect(commandPhrase('./scripts/sync-docs.sh')).toBe('ran the sync docs script');
+    expect(commandPhrase('sudo env A=1 make')).toBe('ran make');
     expect(commandPhrase('')).toBe('ran a command');
+    expect(commandPhrase('"unterminated')).toBe('ran a command');
+  });
+
+  it('is specific about compound commands and ticket work (HS2-RKYCTP)', () => {
+    // Housekeeping and pipe filters say nothing; the work does.
+    expect(commandPhrase('cd clients/web && npx vitest run src/a.test.ts')).toBe('ran the unit tests');
+    expect(commandPhrase("rg --files -g '!node_modules' | head -250")).toBe('looked for files');
+    expect(commandPhrase('git log --oneline | head -5')).toBe('read the commit history');
+    expect(commandPhrase('npm ci && npm run build; echo done')).toBe('installed dependencies and built the project');
+    // At most two distinct phrases.
+    expect(commandPhrase('git add a.ts && git commit -m x && git push origin main')).toBe(
+      'staged changes and committed changes',
+    );
+    expect(commandPhrase('cargo test || cargo test')).toBe('ran the Rust tests');
+    expect(commandPhrase('cd x; export A=1')).toBe('ran a command');
+    // A separator inside quotes is part of the argument.
+    expect(commandPhrase('git commit -m "a && b | c"')).toBe('committed changes');
+    // Ticket actions by what they do.
+    expect(commandPhrase('hotsheet-cli -C ../store claim HS2-AAAAAA --worker w')).toBe('claimed a ticket');
+    expect(commandPhrase('hotsheet-cli edit HS2-AAAAAA --status completed --note-file n.md')).toBe(
+      'completed a ticket',
+    );
+    expect(commandPhrase('hotsheet-cli edit HS2-AAAAAA --note x')).toBe('added a ticket note');
+    expect(commandPhrase('hotsheet-cli edit HS2-AAAAAA --priority high')).toBe('updated a ticket');
+    expect(commandPhrase('hotsheet-cli new --title x')).toBe('created a ticket');
+    expect(commandPhrase('hotsheet-cli frobnicate')).toBe('updated Hot Sheet tickets');
+    expect(
+      announcerSpokenText({
+        tool: 'claude',
+        kind: 'command',
+        summary: 'claude ran a command',
+        detail: { command: "/bin/zsh -lc 'cd /work/repo && git diff -- src | head -80'" },
+      }),
+    ).toBe('claude reviewed the changes.');
   });
 });
 
@@ -113,6 +166,6 @@ describe('announcer speech for other events (HS2-R5Q2GY)', () => {
       importance: 'normal',
     });
     expect(item.narration).toBe('claude ran `cat > notes.md`');
-    expect(item.spoken).toBe('claude wrote a file.');
+    expect(item.spoken).toBe('claude wrote notes.md.');
   });
 });

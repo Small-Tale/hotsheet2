@@ -111,8 +111,16 @@ The `activity` capability turns native signals → events; the host owns the str
   to the current item, HS2-7YD7S9). The shown item renders as Markdown through the
   shared note renderer, so commands and code are monospaced (HS2-YJK0G9). Speech
   never reads a literal command (HS2-R5Q2GY): the client derives a deterministic spoken
-  summary. A command event becomes what its program does ("claude ran tests", "codex
-  committed changes", "wrote a file", or "ran a command"). Other events keep their prose,
+  summary. A command event becomes what it does, as specifically as can be said without reading
+  the command (HS2-RKYCTP): a compound line is split at unquoted `&&`, `||`, `;` and `|`, shell
+  housekeeping (`cd`, `export`, `echo`) and pipe filters are dropped, and at most two distinct
+  phrases are said ("codex installed dependencies and built the project"). Phrases name the test
+  runner ("ran the Rust tests", "ran the browser tests"), the Git operation ("reviewed the
+  changes", "pushed changes to main"), the ticket action ("claimed a ticket", "completed a
+  ticket"), a file read, written, or deleted by its base name ("read notes.md"), and a search by
+  its word when the pattern is a plain word. An unknown program is "ran <program>"; only an empty
+  or unreadable line is "ran a command". Paths, flags, quoted arguments, and code are never
+  spoken. Other events keep their prose,
   with inline code read as a short name or "a command", and code blocks and links
   replaced by plain words. A default edit summary is read by file name,
   browser speech or a configured server provider. The macOS server offers a local
