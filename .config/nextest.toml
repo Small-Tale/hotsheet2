@@ -8,15 +8,12 @@
 slow-timeout = { period = "60s", terminate-after = 10 }
 
 # HS2-R6FZ54: native filesystem streams compete with process-heavy integration tests
-# on macOS. Keep one native watcher test active and give it the runner while it
-# starts, so a loaded suite does not mistake stream startup latency for a lost event.
-[test-groups]
-native-watchers = { max-threads = 1 }
+# on macOS. Reserve the full global runner for each native watcher test while its
+# stream starts, so load cannot make startup latency look like a lost event.
 
 [[profile.default.overrides]]
-filter = '(package(hotsheet-server) & (test(watcher::freshness_tests::hs2_r6fz54_) | test(watcher::store_root_scope_tests::hs2_vn96j5_))) | (package(hotsheet-jobs) & test(watch::tests::))'
+filter = '(package(hotsheet-server) & (test(watcher::freshness_tests::hs2_r6fz54_) | test(watcher::store_root_scope_tests::hs2_vn96j5_) | test(target_store_watch::tests::hs2_g5fyp6_follow_records_) | test(target_store_watch::tests::hs2_vn96j5_) | test(code_ref_watch::tests::hs2_xa9dza_a_push_))) | (package(hotsheet-jobs) & (test(watch::tests::) | binary(waiter) | test(an_idle_monitor_step_wakes_no_watcher) | test(hs2_ecwg50_a_waiter_over_several_directories_wakes_on_each)))'
 platform = 'cfg(target_os = "macos")'
-test-group = 'native-watchers'
 threads-required = "num-test-threads"
 
 # HS2-3PX1E4: keep a JUnit report of every run so slow tests are found from data:
