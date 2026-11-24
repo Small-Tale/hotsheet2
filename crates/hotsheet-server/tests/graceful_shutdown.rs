@@ -666,27 +666,23 @@ fn owner_death_stops_the_server_even_when_its_output_pipes_died_too() {
     // Regression (HS2-VQ8ZWT): a real runner also owns the server's stdout/stderr pipes.
     // Once it dies, writing a shutdown diagnostic must not panic the watchdog before it
     // begins stopping (the first web E2E caught exactly that).
+    // HS2-D1C06G: one owner holds both pipe ends. Killing separate stand-ins in
+    // sequence left a load-dependent window with dead output but a live owner.
     let mut owner = Command::new("sleep")
         .arg("300")
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
     let pipe = owner.stdout.take().unwrap();
-    let mut sink = Command::new("cat")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .spawn()
-        .unwrap();
-    let sink_in = sink.stdin.take().unwrap();
-    let err_in = std::os::fd::AsFd::as_fd(&sink_in)
+    let output_in = owner.stdin.take().unwrap();
+    let err_in = std::os::fd::AsFd::as_fd(&output_in)
         .try_clone_to_owned()
         .unwrap();
-    let output = (Stdio::from(sink_in), Stdio::from(err_in));
+    let output = (Stdio::from(output_in), Stdio::from(err_in));
     let mut server = Server::start_with(60_000, true, Stdio::from(pipe), Some(output));
     server.ready();
-    // The owner dies: its stdin write end and the output reader both go away.
-    sink.kill().unwrap();
-    sink.wait().unwrap();
+    // The owner dies: its stdin write end and both output readers close together.
     owner.kill().unwrap();
     owner.wait().unwrap();
     let status = server.exits_within(Duration::from_secs(5));
