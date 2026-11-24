@@ -1413,6 +1413,9 @@ narrowed pass with recorded flakes, receipt verification, and whole-stage reruns
 after an unprovable failure or changed inputs. The Playwright and Vitest selector
 shapes were also checked against the real runners; nextest is not installed
 locally, so its filter is covered by unit tests and CI only.
+For HS2-7KCRKQ, the retry parser distinguishes legitimate Playwright skips from
+interrupted and unrun cases. The gate regression covers whole-stage reruns
+after cancellation in both the original and the narrowed attempt.
 HS2-RS0SYH: `scripts/local-gate.test.mjs` pins `instrumentedCommand`, which adds
 `--no-fail-fast` to every full and narrowed nextest stage (never twice, before a `--`
 passthrough) while keeping the Playwright and Vitest reporter arguments.
