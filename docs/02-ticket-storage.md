@@ -1482,8 +1482,12 @@ cycle the server's sync loop and `hotsheet-cli sync` run one shared workflow
 (`hotsheet_ticketing::sync_ai::ask_for_help`):
 
 1. **One ask per stall.** A stall is asked about once. Every later cycle that still
-   stalls, even after the upstream moved, reuses that ask, so a second session never
-   starts while the first is unresolved. The ask resolves at the first cycle that
+   stalls, even after the upstream moved, reuses that ask. A structured provider usage
+   limit can start the next unattempted configured tool on a later sync pass, only after
+   the previous session ends and only while the same stall persists. The server retries
+   on its next pass; headless CLI retries on the next `sync` invocation. This reuses the
+   repair ticket and asks the new session to inspect current sync state before acting.
+   Other failures do not trigger another session. The ask resolves at the first cycle that
    publishes (`synced` or `up_to_date`); an offline or rejected cycle does not resolve
    it. A stall after that is a new stall. The record lives in
    `<git-dir>/hotsheet-sync-ai.json` beside the sync health record, and a file lock
@@ -1496,18 +1500,19 @@ cycle the server's sync loop and `hotsheet-cli sync` run one shared workflow
    (§2.12.3). When the store publishes again, an open repair ticket gets a note saying so.
 3. **Ask by the project's `ticket_store_sync.ask_ai` setting** (`off`, `session`, or
    `start`; default `start`; values are validated):
-   - `start` always starts a new background session of the project's default AI tool
-     (`ai.defaults.tool`), even when another AI session already runs in the project; it
+   - `start` starts a new background session of the first configured, installed, drivable
+     AI tool (`ai.defaults.tool` is an ordered list or historical scalar), even when
+     another AI session already runs in the project; it
      never pushes into a running session. The maintainer asked twice for exactly this:
      _"silently run a new ai session in the background"_.
    - `session` pushes the prompt into the project's primary push-capable AI session (the
      oldest live Hot Sheet-launched terminal, as for human feedback, HS2-DB2FQ2) and
      otherwise leaves the ticket; a failed push also leaves the ticket, with its reason.
    - `off` does nothing: no ticket, no record.
-4. **No tool, no silent failure.** When no default tool is configured, its plugin is
-   missing or not drivable, it is not installed, the project was never set up for it, or
-   the launch fails, the ask falls back to the ticket. The health `reason` says why and
-   the next step points at the ticket.
+4. **No tool, no silent failure.** An unavailable or undrivable candidate is skipped;
+   a launch failure tries the next configured candidate before leaving the ticket.
+   When no candidate can start, the ask falls back to the ticket. The health `reason`
+   says why and the next step points at the ticket.
 
 The prompt holds the store name, the state, a fixed reason sentence, the unpublished
 count, and the ticket slug, never ticket content. It tells the AI that the message is

@@ -12,8 +12,8 @@ use hotsheet_aitools::session_push::PushMessage;
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::Settings;
 use hotsheet_ticketing::sync_ai::{
-    AiReach, AskContext, AskOutcome, SessionDone, ask_ai_mode, ask_for_help, configured_ai_tool,
-    store_reference,
+    AiReach, AskContext, AskOutcome, SessionDone, ask_ai_mode, ask_for_help, configured_ai_tools,
+    start_allowed, store_reference,
 };
 
 use crate::AppState;
@@ -119,26 +119,25 @@ impl AiReach for ServerReach {
     }
 
     fn drivable_tool(&self) -> Result<String, String> {
-        let tool = configured_ai_tool(&self.project.settings).ok_or_else(|| {
-            "no default AI tool is configured for this project (choose one in the AI settings)"
-                .to_string()
-        })?;
-        let plugin = hotsheet_plugins::find_in(&tool, &self.state.plugin_dirs)
-            .ok_or_else(|| format!("the default AI tool {tool} has no Hot Sheet plugin"))?;
-        if plugin.manifest.drive.is_none() {
-            return Err(format!(
-                "the default AI tool {tool} cannot be driven by Hot Sheet"
-            ));
+        self.drivable_tool_after(&[])?
+            .ok_or_else(|| "no configured AI tool is installed and drivable on this machine".into())
+    }
+
+    fn drivable_tool_after(&self, attempted: &[String]) -> Result<Option<String>, String> {
+        let order = configured_ai_tools(&self.project.settings);
+        if order.is_empty() {
+            return Err(
+                "no default AI tool is configured for this project (choose one in the AI settings)"
+                    .into(),
+            );
         }
-        let detected = hotsheet_plugins::detected_drivable_plugins(&self.state.plugin_dirs)
-            .iter()
-            .any(|candidate| candidate.id() == tool);
-        if !detected {
-            return Err(format!(
-                "the default AI tool {tool} is not installed on this machine"
-            ));
-        }
-        Ok(tool)
+        let allowed = std::env::var(hotsheet_ticketing::sync_ai::ALLOWED_TOOLS_ENV).ok();
+        let available = hotsheet_plugins::detected_drivable_plugins(&self.state.plugin_dirs);
+        Ok(order.into_iter().find(|tool| {
+            !attempted.contains(tool)
+                && start_allowed(tool, allowed.as_deref())
+                && available.iter().any(|plugin| plugin.id() == tool)
+        }))
     }
 
     fn start_session(&self, tool: &str, prompt: &str, done: SessionDone) -> Result<String, String> {
@@ -193,11 +192,18 @@ impl AiReach for ServerReach {
                 let result =
                     trigger.run_turn(&prompt, None, true, id.clone(), &mut turns, &mut |_| {});
                 state.drive_registry.lock_or_recover().unregister(&id);
+                let usage_limited = result.as_ref().is_ok_and(|done| {
+                    matches!(
+                        &done.reason,
+                        hotsheet_aitools::DoneReason::Failed { error_type: Some(kind), .. }
+                            if crate::stuck_causes::is_usage_limit(kind)
+                    )
+                });
                 let result = match result {
                     Ok(done) => done.reason.session_result(),
                     Err(error) => Err(error.to_string()),
                 };
-                done(result);
+                done(result, usage_limited);
                 announce(&state, &store_id, &store_root);
             })
             .map_err(|error| error.to_string())?;

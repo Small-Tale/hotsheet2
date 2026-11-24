@@ -20,7 +20,8 @@ use std::process::Stdio;
 use hotsheet_ticketing::Settings;
 use hotsheet_ticketing::sync_ai::{
     AiHelpOutcome, AiReach, AskContext, AskOutcome, SessionDone, ask_ai_mode, ask_for_help,
-    configured_ai_tool, read_ai_record, record_session_end, store_reference,
+    configured_ai_tools, is_usage_limit_error_type, read_ai_record, record_session_end_for_tool,
+    start_allowed, store_reference,
 };
 
 /// What `hotsheet-cli sync` did about a stall.
@@ -104,35 +105,32 @@ impl AiReach for CliReach {
     }
 
     fn drivable_tool(&self) -> Result<String, String> {
-        let tool = configured_ai_tool(&self.project.settings).ok_or_else(|| {
-            "no default AI tool is configured for this project (choose one in the AI settings)"
-                .to_string()
-        })?;
-        let plugin = hotsheet_plugins::find_in(&tool, &self.plugin_dirs)
-            .ok_or_else(|| format!("the default AI tool {tool} has no Hot Sheet plugin"))?;
-        let Some(drive) = plugin.manifest.drive.as_ref() else {
-            return Err(format!(
-                "the default AI tool {tool} cannot be driven by Hot Sheet"
-            ));
-        };
-        if !hotsheet_plugins::detected_drivable_plugins(&self.plugin_dirs)
-            .iter()
-            .any(|candidate| candidate.id() == tool)
-        {
-            return Err(format!(
-                "the default AI tool {tool} is not installed on this machine"
-            ));
+        self.drivable_tool_after(&[])?
+            .ok_or_else(|| "no configured AI tool is installed, set up, and drivable here".into())
+    }
+
+    fn drivable_tool_after(&self, attempted: &[String]) -> Result<Option<String>, String> {
+        let order = configured_ai_tools(&self.project.settings);
+        if order.is_empty() {
+            return Err(
+                "no default AI tool is configured for this project (choose one in the AI settings)"
+                    .into(),
+            );
         }
-        // The trigger refuses a project the tool was never set up in; say so now rather
-        // than from a detached process nobody reads.
-        if drive.transport != "app-server"
-            && !self.project.root.join(&plugin.manifest.mcp.target).exists()
-        {
-            return Err(format!(
-                "{tool} is not set up in this project; run `hotsheet-cli setup {tool}` there"
-            ));
-        }
-        Ok(tool)
+        let allowed = std::env::var(hotsheet_ticketing::sync_ai::ALLOWED_TOOLS_ENV).ok();
+        let available = hotsheet_plugins::detected_drivable_plugins(&self.plugin_dirs);
+        Ok(order.into_iter().find(|tool| {
+            if attempted.contains(tool) || !start_allowed(tool, allowed.as_deref()) {
+                return false;
+            }
+            let Some(plugin) = available.iter().find(|plugin| plugin.id() == tool) else {
+                return false;
+            };
+            plugin.manifest.drive.as_ref().is_some_and(|drive| {
+                drive.transport == "app-server"
+                    || self.project.root.join(&plugin.manifest.mcp.target).exists()
+            })
+        }))
     }
 
     /// The detached `sync --run-repair` records the end itself, so `done` (which would run
@@ -229,8 +227,15 @@ pub fn run_repair(
             on_event,
         )
     })
-    .map_err(|error| error.to_string())
-    .and_then(|done| done.reason.session_result());
-    record_session_end(store, stall, result.clone());
+    .map_err(|error| error.to_string());
+    let usage_limited = result.as_ref().is_ok_and(|done| {
+        matches!(
+            &done.reason,
+            hotsheet_aitools::DoneReason::Failed { error_type: Some(kind), .. }
+                if is_usage_limit_error_type(kind)
+        )
+    });
+    let result = result.and_then(|done| done.reason.session_result());
+    record_session_end_for_tool(store, stall, &tool, result.clone(), usage_limited);
     result
 }

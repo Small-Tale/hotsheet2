@@ -15,6 +15,7 @@ struct FakeReach {
     session: Option<&'static str>,
     push_error: Option<&'static str>,
     tool: Result<&'static str, &'static str>,
+    backup_tool: Option<&'static str>,
     start_error: Option<&'static str>,
     pushes: RefCell<Vec<String>>,
     starts: RefCell<Vec<(String, String)>>,
@@ -28,6 +29,7 @@ impl Default for FakeReach {
             push_error: None,
             // The tool `.cargo/config.toml` allows a stall to start in tests.
             tool: Ok("repair-fixture"),
+            backup_tool: None,
             start_error: None,
             pushes: RefCell::default(),
             starts: RefCell::default(),
@@ -49,6 +51,16 @@ impl AiReach for FakeReach {
 
     fn drivable_tool(&self) -> Result<String, String> {
         self.tool.map(str::to_string).map_err(str::to_string)
+    }
+
+    fn drivable_tool_after(&self, attempted: &[String]) -> Result<Option<String>, String> {
+        if attempted.is_empty() {
+            return self.drivable_tool().map(Some);
+        }
+        Ok(self
+            .backup_tool
+            .filter(|tool| !attempted.iter().any(|prior| prior == tool))
+            .map(str::to_string))
     }
 
     fn start_session(&self, tool: &str, prompt: &str, done: SessionDone) -> Result<String, String> {
@@ -361,7 +373,7 @@ fn hs2_qr1k8r_the_session_end_is_recorded_once_and_only_for_its_stall() {
         AiHelpOutcome::Started
     );
     let done = reach.done.borrow_mut().pop().unwrap();
-    done(Err("the tool exited with status 1".into()));
+    done(Err("the tool exited with status 1".into()), false);
     let ended = read_ai_record(&root).unwrap();
     assert_eq!(ended.outcome, AiHelpOutcome::Failed);
     assert!(ended.finished_at.is_some());
@@ -393,12 +405,65 @@ fn hs2_qr1k8r_the_session_end_is_recorded_once_and_only_for_its_stall() {
         &reach2,
     ));
     let done = reach2.done.borrow_mut().pop().unwrap();
-    done(Ok(()));
+    done(Ok(()), false);
     assert_eq!(
         read_ai_record(&root2).unwrap().outcome,
         AiHelpOutcome::Finished
     );
     assert!(health(&root2).next_action.unwrap().contains("has ended"));
+}
+
+#[test]
+fn hs2_zx9ckc_a_typed_limit_retries_one_backup_after_the_prior_session_ends() {
+    let (_dir, root, peer) = store_with_peer();
+    conflict(&root, &peer, 1);
+    let reach = FakeReach {
+        backup_tool: Some("repair-fixture"),
+        ..FakeReach::default()
+    };
+    let first = asked(ask_for_help(
+        &root,
+        &context(&root, AskAiMode::Start),
+        &reach,
+    ));
+    let ticket = first.ticket.clone();
+    let done = reach.done.borrow_mut().pop().unwrap();
+    done(Err("limit reached".into()), true);
+    let mut failed = read_ai_record(&root).unwrap();
+    assert_eq!(failed.outcome, AiHelpOutcome::Failed);
+    assert!(failed.usage_limited);
+    // Model an earlier configured tool whose typed limit was recorded before this process
+    // observed the backup; the fixture allowlist permits only repair-fixture in Rust tests.
+    failed.tool = Some("earlier-fixture".into());
+    failed.attempted_tools = vec!["earlier-fixture".into()];
+    write_ai_record(&root, &failed);
+
+    let retry = asked(ask_for_help(
+        &root,
+        &context(&root, AskAiMode::Start),
+        &reach,
+    ));
+    assert_eq!(retry.outcome, AiHelpOutcome::Started);
+    assert_eq!(retry.tool.as_deref(), Some("repair-fixture"));
+    assert_eq!(retry.attempted_tools, ["earlier-fixture", "repair-fixture"]);
+    assert_eq!(retry.ticket, ticket, "the same repair ticket is reused");
+    assert_eq!(repair_tickets(&root).len(), 1);
+    assert_eq!(reach.starts.borrow().len(), 2);
+    assert_eq!(
+        ask_for_help(&root, &context(&root, AskAiMode::Start), &reach),
+        AskOutcome::AlreadyAsked,
+        "the retry is already running"
+    );
+    record_session_end_for_tool(&root, &retry.stall, "earlier-fixture", Ok(()), false);
+    assert_eq!(
+        read_ai_record(&root).unwrap().outcome,
+        AiHelpOutcome::Started
+    );
+    reach.done.borrow_mut().pop().unwrap()(Ok(()), false);
+    assert_eq!(
+        read_ai_record(&root).unwrap().outcome,
+        AiHelpOutcome::Finished
+    );
 }
 
 /// Resolved then recurring: a stall after a publishing cycle is a new stall; a failing

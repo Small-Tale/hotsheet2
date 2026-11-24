@@ -4810,3 +4810,10 @@ mapping, settings rendering, and the shipped parent interaction are covered in
 `docs/manual-test-plan.md` because a real subscription limit is not a
 deterministic fixture. The browser case waits for both overlay rails to settle
 before reviewing the backup controls at 760px in light and dark themes.
+
+HS2-ZX9CKC extends ordered fallback to sync repair. The shared
+`sync_ai::tests::hs2_zx9ckc_a_typed_limit_retries_one_backup_after_the_prior_session_ends`
+checks durable sequential retry, ticket reuse, and stale completion rejection.
+`crates/hotsheet-server/tests/sync_ai.rs` exercises unavailable-primary selection and a
+later server pass after a typed limit; `crates/hotsheet-cli/tests/cli.rs` exercises the
+same ordered selection and a later headless `sync` retry with synthetic conflicts.

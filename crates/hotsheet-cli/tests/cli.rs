@@ -10764,7 +10764,7 @@ impl HeadlessRepairFixture {
         git(a, &["config", "user.email", "a@example.com"]);
         git(a, &["config", "user.name", "A"]);
         git(a, &["remote", "add", "origin", &bare_url]);
-        // The store is its own project here: set up for the tool, which is its default.
+        // The store is its own project; only the second configured tool is available.
         std::fs::write(
             a.join(".mcp.json"),
             r#"{"mcpServers":{"hotsheet":{"command":"hotsheet-mcp","args":[]}}}"#,
@@ -10773,7 +10773,7 @@ impl HeadlessRepairFixture {
         hotsheet_ticketing::Settings::for_project(a)
             .set(
                 "ai.defaults",
-                serde_json::json!({ "tool": "repair-fixture" }),
+                serde_json::json!({ "tool": ["missing-fixture", "repair-fixture"] }),
                 hotsheet_ticketing::Scope::Shared,
             )
             .unwrap();
@@ -10887,6 +10887,50 @@ fn hs2_spvt6w_headless_sync_records_a_failed_repair_session() {
         .stderr(predicate::str::contains("Hot Sheet started").not());
     let prompts = std::fs::read_to_string(fixture.received()).unwrap();
     assert_eq!(prompts.matches("\n----\n").count(), 1, "{prompts}");
+}
+
+/// HS2-ZX9CKC: a later headless sync resumes a typed usage-limited ask with the
+/// next configured tool, retaining the repair ticket instead of creating another.
+#[cfg(unix)]
+#[test]
+fn hs2_zx9ckc_headless_sync_retries_a_limited_repair_with_one_backup() {
+    let fixture = HeadlessRepairFixture::new("exit 3");
+    fixture.cli().arg("sync").assert().failure();
+    fixture.status_after_session();
+    let record_path = fixture.a.path().join(".git/hotsheet-sync-ai.json");
+    let mut record: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&record_path).unwrap()).unwrap();
+    let ticket = record["ticket_id"].clone();
+    let stall = record["stall"].clone();
+    // Simulate the prior configured tool ending with a structured provider limit.
+    // The fixture environment permits only repair-fixture to actually launch.
+    record["tool"] = serde_json::json!("missing-fixture");
+    record["attempted_tools"] = serde_json::json!(["missing-fixture"]);
+    record["usage_limited"] = serde_json::json!(true);
+    std::fs::write(&record_path, serde_json::to_vec_pretty(&record).unwrap()).unwrap();
+
+    fixture
+        .cli()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Hot Sheet started repair-fixture"));
+    fixture.status_after_session();
+    let next: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&record_path).unwrap()).unwrap();
+    assert_eq!(next["stall"], stall);
+    assert_eq!(next["ticket_id"], ticket);
+    assert_eq!(
+        next["attempted_tools"],
+        serde_json::json!(["missing-fixture", "repair-fixture"])
+    );
+    assert_eq!(next["outcome"], "failed");
+    assert!(
+        next.get("usage_limited").is_none(),
+        "a non-limit failure clears the retry flag"
+    );
+    let prompts = std::fs::read_to_string(fixture.received()).unwrap();
+    assert_eq!(prompts.matches("\n----\n").count(), 2, "{prompts}");
 }
 
 /// HS2-SPVT6W: the hidden `--run-repair` runs only the store's current started ask, so a

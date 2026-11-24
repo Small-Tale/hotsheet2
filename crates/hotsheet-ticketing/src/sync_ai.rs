@@ -7,7 +7,7 @@
 //! deduplicated high-priority Up Next repair ticket in the stalled store holding the state
 //! and the safe procedure, and then, by the project's `ticket_store_sync.ask_ai` setting:
 //!
-//! - `start` (default): starts a new AI session of the project's default AI tool in the
+//! - `start` (default): starts a new AI session of the first drivable configured tool in the
 //!   background, even when another AI session already runs in the project (the
 //!   maintainer's "start a new AI session and ask the AI to fix it");
 //! - `session`: pushes the prompt into an AI session already running in the project, or
@@ -15,8 +15,9 @@
 //! - `off`: does nothing.
 //!
 //! A store is asked at most once until it publishes again: every later stall before a
-//! successful cycle reuses the first ask, so no second session starts while the first is
-//! unresolved. A stall after a successful cycle is a new stall. The caller supplies how an
+//! successful cycle reuses the first ask, so no second session starts while one is working.
+//! A typed usage limit permits one sequential backup on a later pass while the same stall
+//! persists. A stall after a successful cycle is a new stall. The caller supplies how an
 //! AI is reached ([`AiReach`]): the server pushes into its terminals and drives a session
 //! through its permission bridge; the headless CLI starts a detached
 //! `hotsheet-cli sync --run-repair` that records the end itself (HS2-SPVT6W).
@@ -50,12 +51,24 @@ pub const REPAIR_TAG: &str = "sync-repair";
 pub const ALLOWED_TOOLS_ENV: &str = "HOTSHEET_SYNC_AI_ALLOWED_TOOLS";
 
 /// Whether this environment may start `tool` for a stall.
-fn start_allowed(tool: &str, allowed: Option<&str>) -> bool {
+pub fn start_allowed(tool: &str, allowed: Option<&str>) -> bool {
     allowed.is_none_or(|list| list.split(',').map(str::trim).any(|name| name == tool))
+}
+
+/// Structured provider limits that permit a sequential backup, never message-text guesses.
+#[must_use]
+pub fn is_usage_limit_error_type(error_type: &str) -> bool {
+    matches!(
+        error_type.trim().to_ascii_lowercase().as_str(),
+        "rate_limit" | "usage_limit_exceeded" | "rate_limit_exceeded"
+    )
 }
 
 const RECORD_FILE: &str = "hotsheet-sync-ai.json";
 const RECORD_SCHEMA: u32 = 1;
+fn is_false(value: &bool) -> bool {
+    !*value
+}
 
 /// How Hot Sheet asks an AI when sync cannot finish alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -237,6 +250,12 @@ pub struct AiHelpRecord {
     pub outcome: AiHelpOutcome,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
+    /// Ordered tools already started for this stall; a reordered preference cannot repeat one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attempted_tools: Vec<String>,
+    /// A typed provider limit permits one later, sequential backup attempt.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub usage_limited: bool,
     /// The connection id of the session that received the prompt or was started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
@@ -305,15 +324,23 @@ fn write_ai_record(store: &Path, record: &AiHelpRecord) {
 }
 
 /// Called once when a started session ends.
-pub type SessionDone = Box<dyn FnOnce(Result<(), String>) + Send + 'static>;
+pub type SessionDone = Box<dyn FnOnce(Result<(), String>, bool) + Send + 'static>;
 
 /// How the caller reaches an AI. Implementations never block on an AI turn.
 pub trait AiReach {
     /// Push the prompt into an AI session already running in the project. `Ok(Some(id))`
     /// names the session that received it; `Ok(None)` means none is running.
     fn push_to_session(&self, prompt: &str) -> Result<Option<String>, String>;
-    /// The project's default AI tool, when it is configured and can be started here.
+    /// The first configured AI tool that can be started here.
     fn drivable_tool(&self) -> Result<String, String>;
+    /// The next configured, drivable tool not already started for this stall.
+    fn drivable_tool_after(&self, attempted: &[String]) -> Result<Option<String>, String> {
+        if attempted.is_empty() {
+            self.drivable_tool().map(Some)
+        } else {
+            Ok(None)
+        }
+    }
     /// Start a new AI session with `tool` and give it the prompt. Returns once the session
     /// is launched, with its connection id; `done` runs when it ends. `done` must run after
     /// this call returns (on another thread), never inside it.
@@ -554,6 +581,72 @@ fn resolve(store: &Path, mut record: AiHelpRecord) {
     }
 }
 
+/// Try only candidates not already started for this stall. A failed launch has no running
+/// session, so another candidate may start immediately; a typed limit waits for a later pass.
+fn start_candidates(
+    store: &Path,
+    stall: &str,
+    prompt: &str,
+    record: &mut AiHelpRecord,
+    reach: &dyn AiReach,
+) {
+    let allowed = std::env::var(ALLOWED_TOOLS_ENV).ok();
+    loop {
+        let tool = match reach.drivable_tool_after(&record.attempted_tools) {
+            Ok(Some(tool)) => tool,
+            Ok(None) => {
+                if record.reason.is_none() {
+                    record.reason = Some("no further configured AI tool is drivable here".into());
+                }
+                return;
+            }
+            Err(reason) => {
+                record.reason = Some(reason);
+                return;
+            }
+        };
+        if !start_allowed(&tool, allowed.as_deref()) {
+            record.reason = Some(format!(
+                "starting {tool} is disabled in this environment ({ALLOWED_TOOLS_ENV})"
+            ));
+            return;
+        }
+        record.tool = Some(tool.clone());
+        record.attempted_tools.push(tool.clone());
+        record.outcome = AiHelpOutcome::Started;
+        record.session = None;
+        record.reason = None;
+        record.finished_at = None;
+        record.usage_limited = false;
+        // The detached CLI child reads this before it starts; the store lock keeps its
+        // completion from racing this transition.
+        write_ai_record(store, record);
+        let done_store = store.to_path_buf();
+        let done_stall = stall.to_string();
+        let done_tool = tool.clone();
+        let done: SessionDone = Box::new(move |result, usage_limited| {
+            record_session_end_for_tool(
+                &done_store,
+                &done_stall,
+                &done_tool,
+                result,
+                usage_limited,
+            );
+        });
+        match reach.start_session(&tool, prompt, done) {
+            Ok(session) => {
+                record.session = Some(session);
+                return;
+            }
+            Err(error) => {
+                record.outcome = AiHelpOutcome::TicketOnly;
+                record.reason = Some(format!("{tool} could not be started: {error}"));
+                write_ai_record(store, record);
+            }
+        }
+    }
+}
+
 /// Ask an AI to finish the store's stall, once per stall period. See the module docs.
 pub fn ask_for_help(store: &Path, context: &AskContext, reach: &dyn AiReach) -> AskOutcome {
     let Ok(_lock) = crate::store::lock_sync_ai(store) else {
@@ -566,7 +659,31 @@ pub fn ask_for_help(store: &Path, context: &AskContext, reach: &dyn AiReach) -> 
         }
         return AskOutcome::NoStall;
     };
-    if previous.is_some() {
+    if let Some(mut previous) = previous {
+        if context.mode == AskAiMode::Start
+            && previous.mode == AskAiMode::Start
+            && previous.stall == stall.id
+            && previous.outcome == AiHelpOutcome::Failed
+            && previous.usage_limited
+        {
+            if previous.attempted_tools.is_empty() {
+                if let Some(tool) = &previous.tool {
+                    previous.attempted_tools.push(tool.clone());
+                }
+            }
+            let prompt = build_prompt(
+                context,
+                stall.state,
+                crate::sync::local_divergence(store).1,
+                previous.ticket.as_deref().unwrap_or("(no ticket)"),
+            );
+            let before = previous.attempted_tools.len();
+            start_candidates(store, &stall.id, &prompt, &mut previous, reach);
+            if previous.attempted_tools.len() > before {
+                write_ai_record(store, &previous);
+                return AskOutcome::Asked(Box::new(previous));
+            }
+        }
         return AskOutcome::AlreadyAsked;
     }
     if context.mode == AskAiMode::Off {
@@ -580,6 +697,8 @@ pub fn ask_for_help(store: &Path, context: &AskContext, reach: &dyn AiReach) -> 
         mode: context.mode,
         outcome: AiHelpOutcome::TicketOnly,
         tool: None,
+        attempted_tools: Vec::new(),
+        usage_limited: false,
         session: None,
         ticket: None,
         ticket_id: None,
@@ -619,35 +738,7 @@ pub fn ask_for_help(store: &Path, context: &AskContext, reach: &dyn AiReach) -> 
         }
     } else {
         // `start` always starts a new background session, whatever already runs.
-        let allowed = std::env::var(ALLOWED_TOOLS_ENV).ok();
-        match reach.drivable_tool() {
-            Err(why) => record.reason = Some(why),
-            Ok(tool) if !start_allowed(&tool, allowed.as_deref()) => {
-                record.reason = Some(format!(
-                    "starting {tool} is disabled in this environment ({ALLOWED_TOOLS_ENV})"
-                ));
-            }
-            Ok(tool) => {
-                record.tool = Some(tool.clone());
-                record.outcome = AiHelpOutcome::Started;
-                // Recorded before the launch, so the end can never arrive first.
-                write_ai_record(store, &record);
-                let done_store = store.to_path_buf();
-                let done_stall = stall.id.clone();
-                let done: SessionDone =
-                    Box::new(move |result| record_session_end(&done_store, &done_stall, result));
-                match reach.start_session(&tool, &prompt, done) {
-                    Ok(session) => {
-                        record.session = Some(session);
-                        record.reason = None;
-                    }
-                    Err(error) => {
-                        record.outcome = AiHelpOutcome::TicketOnly;
-                        record.reason = Some(format!("{tool} could not be started: {error}"));
-                    }
-                }
-            }
-        }
+        start_candidates(store, &stall.id, &prompt, &mut record, reach);
     }
     write_ai_record(store, &record);
     AskOutcome::Asked(Box::new(record))
@@ -655,16 +746,41 @@ pub fn ask_for_help(store: &Path, context: &AskContext, reach: &dyn AiReach) -> 
 
 /// Record how a started session ended, if it is still the store's current ask.
 pub fn record_session_end(store: &Path, stall: &str, result: Result<(), String>) {
+    record_session_end_inner(store, stall, None, result, false);
+}
+
+/// Record a specific tool's typed result; an old completion cannot end a later backup.
+pub fn record_session_end_for_tool(
+    store: &Path,
+    stall: &str,
+    tool: &str,
+    result: Result<(), String>,
+    usage_limited: bool,
+) {
+    record_session_end_inner(store, stall, Some(tool), result, usage_limited);
+}
+
+fn record_session_end_inner(
+    store: &Path,
+    stall: &str,
+    tool: Option<&str>,
+    result: Result<(), String>,
+    usage_limited: bool,
+) {
     let Ok(_lock) = crate::store::lock_sync_ai(store) else {
         return;
     };
     let Some(mut record) = read_ai_record(store) else {
         return;
     };
-    if record.stall != stall || record.outcome != AiHelpOutcome::Started {
+    if record.stall != stall
+        || record.outcome != AiHelpOutcome::Started
+        || tool.is_some_and(|tool| record.tool.as_deref() != Some(tool))
+    {
         return;
     }
     record.finished_at = Some(now());
+    record.usage_limited = usage_limited && result.is_err();
     match result {
         Ok(()) => record.outcome = AiHelpOutcome::Finished,
         Err(error) => {

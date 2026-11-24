@@ -1,5 +1,5 @@
 //! HS2-QR1K8R end to end through the server: a genuine ticket-store conflict found by the
-//! background sync loop starts exactly one AI session, of the project's default tool,
+//! background sync loop starts exactly one AI session, of the first drivable configured tool,
 //! which receives the repair prompt; repeated passes start nothing more, and the health
 //! contract says the AI was asked. The AI is the `repair-fixture` plugin, a real spawn
 //! drive of `/bin/sh` that records the prompt it is given; no AI tool runs.
@@ -94,8 +94,8 @@ fn hs2_qr1k8r_a_conflict_starts_exactly_one_session_that_receives_the_prompt() {
         &["remote", "add", "origin", remote.to_str().unwrap()],
     );
 
-    // The project checkout links the store, is set up for the tool, and names it as its
-    // default AI tool.
+    // The project checkout links the store and sets up the backup tool. The first
+    // configured candidate is absent, so the server must start the backup.
     let code = dir.path().join("code");
     std::fs::create_dir_all(&code).unwrap();
     std::fs::write(
@@ -112,7 +112,7 @@ fn hs2_qr1k8r_a_conflict_starts_exactly_one_session_that_receives_the_prompt() {
         .settings()
         .set(
             "ai.defaults",
-            serde_json::json!({ "tool": "repair-fixture" }),
+            serde_json::json!({ "tool": ["missing-fixture", "repair-fixture"] }),
             hotsheet_ticketing::Scope::Shared,
         )
         .unwrap();
@@ -156,6 +156,7 @@ fn hs2_qr1k8r_a_conflict_starts_exactly_one_session_that_receives_the_prompt() {
     assert_eq!(sync_all(&state)[0].1, SyncReport::Conflict);
     let record = read_ai_record(&store_root).unwrap();
     assert_eq!(record.tool.as_deref(), Some("repair-fixture"));
+    assert_eq!(record.attempted_tools, ["repair-fixture"]);
     let slug = record.ticket.clone().unwrap();
     // Repeated passes while the stall lasts start nothing more.
     for _ in 0..3 {
@@ -210,4 +211,27 @@ fn hs2_qr1k8r_a_conflict_starts_exactly_one_session_that_receives_the_prompt() {
             .iter()
             .all(|connection| !connection.id.starts_with("sync-repair-"))
     );
+
+    // HS2-ZX9CKC: simulate a previous configured provider ending with its
+    // structured usage-limit type. A later server pass reuses the repair ticket
+    // and starts only the unattempted backup; no second pass overlaps it.
+    let mut limited = read_ai_record(&store_root).unwrap();
+    limited.outcome = AiHelpOutcome::Failed;
+    limited.tool = Some("missing-fixture".into());
+    limited.attempted_tools = vec!["missing-fixture".into()];
+    limited.usage_limited = true;
+    std::fs::write(
+        store_root.join(".git/hotsheet-sync-ai.json"),
+        serde_json::to_vec_pretty(&limited).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(sync_all(&state)[0].1, SyncReport::Conflict);
+    let retry = read_ai_record(&store_root).unwrap();
+    assert_eq!(retry.tool.as_deref(), Some("repair-fixture"));
+    assert_eq!(retry.ticket, limited.ticket);
+    assert_eq!(retry.attempted_tools, ["missing-fixture", "repair-fixture"]);
+    assert_eq!(sync_all(&state)[0].1, SyncReport::Conflict);
+    assert_eq!(wait_for_session_end(&store_root), AiHelpOutcome::Finished);
+    let prompts = std::fs::read_to_string(&received).unwrap();
+    assert_eq!(prompts.matches("\n----\n").count(), 2, "{prompts}");
 }

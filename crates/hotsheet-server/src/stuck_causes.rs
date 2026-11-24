@@ -25,10 +25,7 @@ const EARLIEST_RESET: Duration = Duration::minutes(5);
 /// variant of the request-rate limit. Other halts (`overloaded`, `billing_error`, …) are
 /// not pauses.
 pub fn is_usage_limit(error_type: &str) -> bool {
-    matches!(
-        error_type.trim().to_ascii_lowercase().as_str(),
-        "rate_limit" | "usage_limit_exceeded" | "rate_limit_exceeded"
-    )
+    hotsheet_ticketing::sync_ai::is_usage_limit_error_type(error_type)
 }
 
 /// The reset time a usage-limit message states:
