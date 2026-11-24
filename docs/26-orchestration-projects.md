@@ -3682,6 +3682,10 @@ with why it was passed over: its own blocker code and detail (`requirement_unmet
 Work placed nowhere is `not_placed` with the reason of the site the step names, and
 `sites` gives every other site's reason. `scheduler explain`, the decision log
 records and the Orchestration view's Why It Is Not Running rows carry the same list.
+The view words each reason and each known detail (a policy limit such as
+`policy_target_not_permitted` reads "the site is not one the policy lists"); a
+requirement or resource detail keeps the name the step gives, and a detail code the
+view cannot word is left out rather than shown (HS2-MFS7FY).
 A resource another site was waiting on is listed in `contention` only when the work
 was placed nowhere, and a retry time counts only from the chosen site or, unplaced,
 from every site.

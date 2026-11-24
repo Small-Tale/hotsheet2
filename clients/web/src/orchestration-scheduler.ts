@@ -90,7 +90,41 @@ const NOT_CHOSEN: Readonly<Record<string, string>> = {
 export function sitePassText(pass: SchedulerSitePass): string {
   if (pass.reason === 'not_chosen') return (pass.detail && NOT_CHOSEN[pass.detail]) || 'another site was chosen';
   const reason = schedulerReasonText(pass.reason);
-  return pass.detail ? `${reason} (${pass.detail})` : reason;
+  const detail = sitePassDetail(pass);
+  return detail ? `${reason} (${detail})` : reason;
+}
+
+/**
+ * HS2-MFS7FY: the policy limit behind a `policy_denied` pass (`PolicyDenial::code`) and the other detail codes
+ * a passed-over site can carry, in words. Row copy never shows an internal code (Kerf "Lists and selection").
+ */
+const SITE_PASS_DETAILS: Readonly<Record<string, string>> = {
+  policy_absent: 'there is no policy',
+  policy_target_not_permitted: 'the site is not one the policy lists',
+  policy_target_disabled: 'the site is turned off in the policy',
+  policy_tool_not_permitted: 'no AI tool it may use is allowed there',
+  policy_model_not_permitted: 'its model is not allowed there',
+  policy_load_unknown: 'the sessions already running could not be counted',
+  policy_target_cap: 'the site’s session limit is reached',
+  policy_machine_cap: 'the machine’s session limit is reached',
+  policy_tool_cap: 'the AI tool’s session limit is reached',
+  policy_account_not_permitted: 'no AI tool account it may use is allowed there',
+  policy_account_cap: 'the AI tool account’s session limit is reached',
+  policy_speculation_not_allowed: 'provisional work is not allowed there',
+  policy_project_software: 'the project is a Software project',
+  capacity_not_read: 'its machine has not been read yet',
+};
+
+/**
+ * HS2-MFS7FY: a pass's detail as words, or nothing. A requirement or resource reason's detail is the name the
+ * step itself gives (such as `os:windows`), so it stays; any other code the view cannot word is left out.
+ */
+export function sitePassDetail(pass: SchedulerSitePass): string | undefined {
+  if (!pass.detail) return undefined;
+  const worded = SITE_PASS_DETAILS[pass.detail];
+  if (worded) return worded;
+  if (pass.reason.startsWith('requirement_') || pass.reason.startsWith('resource_')) return pass.detail;
+  return undefined;
 }
 
 /** A site by its project label on the timeline; a short id when the timeline does not show it. */

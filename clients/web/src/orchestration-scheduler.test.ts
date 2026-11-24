@@ -10,6 +10,7 @@ import {
   type SchedulerDecision,
   schedulerReasonText,
   siteLabel,
+  sitePassDetail,
   sitePassText,
   stepLabel,
 } from './orchestration-scheduler';
@@ -158,5 +159,48 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
     );
     expect(sitePassText({ target_id: 'x', reason: 'target_cap' })).toBe('the project’s session limit is reached');
     expect(siteLabel('api', undefined)).toBe('site api');
+  });
+
+  it('words a passed-over site’s policy detail and leaves out a code it cannot word (HS2-MFS7FY)', () => {
+    expect(sitePassText({ target_id: 'x', reason: 'policy_denied', detail: 'policy_target_not_permitted' })).toBe(
+      'the policy does not allow it (the site is not one the policy lists)',
+    );
+    expect(sitePassText({ target_id: 'x', reason: 'policy_denied', detail: 'policy_machine_cap' })).toBe(
+      'the policy does not allow it (the machine’s session limit is reached)',
+    );
+    expect(sitePassText({ target_id: 'x', reason: 'target_unavailable', detail: 'capacity_not_read' })).toBe(
+      'its project could not be reached (its machine has not been read yet)',
+    );
+    // A requirement or resource names what the step itself asks for.
+    expect(sitePassText({ target_id: 'x', reason: 'resource_held', detail: 'gpu' })).toBe(
+      'a resource it needs is held (gpu)',
+    );
+    // Unknown codes never reach row copy.
+    expect(sitePassText({ target_id: 'x', reason: 'policy_denied', detail: 'policy_future_rule' })).toBe(
+      'the policy does not allow it',
+    );
+    expect(sitePassText({ target_id: 'x', reason: 'machine_refused', detail: 'capacity_unknown' })).toBe(
+      'its machine has no room',
+    );
+    expect(sitePassDetail({ target_id: 'x', reason: 'no_tool_available' })).toBeUndefined();
+    for (const code of [
+      'policy_absent',
+      'policy_target_not_permitted',
+      'policy_target_disabled',
+      'policy_tool_not_permitted',
+      'policy_model_not_permitted',
+      'policy_load_unknown',
+      'policy_target_cap',
+      'policy_machine_cap',
+      'policy_tool_cap',
+      'policy_account_not_permitted',
+      'policy_account_cap',
+      'policy_speculation_not_allowed',
+      'policy_project_software',
+    ]) {
+      const text = sitePassText({ target_id: 'x', reason: 'policy_denied', detail: code });
+      expect(text).not.toContain('_');
+      expect(text).toMatch(/^the policy does not allow it \(.+\)$/);
+    }
   });
 });
