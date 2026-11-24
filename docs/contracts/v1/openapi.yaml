@@ -22139,7 +22139,10 @@ components:
     StepRequirements:
       description:
         What a plan step's target machine must be (HS2-ZY4Z4G, docs/26 §26.15). `os` and `arch` are alternatives;
-        every tool and toolchain is needed. The scheduler places the work only where all are met.
+        every tool and toolchain is needed. The scheduler places the work only where all are met. Since HS2-ZH9C6W a tool or
+        toolchain entry may name a minimum version, `name>=version` (1 to 4 dotted whole numbers, such as `node>=20` or
+        `codex>=0.40`), compared part by part with the version the machine reports; no reported version is
+        `requirement_unknown`.
       type: object
       properties:
         os:
@@ -22167,7 +22170,7 @@ components:
           maxItems: 8
           items:
             type: string
-            maxLength: 32
+            maxLength: 72
         min_memory_gb:
           type: integer
           minimum: 1

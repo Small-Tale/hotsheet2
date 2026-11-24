@@ -3744,6 +3744,18 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   # HS2-TK9ADC` turns both roles on and off through the real policy route in Chromium
   and WebKit with captures at 1440, 1100, 390 and 1440 again, and dark.
 
+### Minimum tool and toolchain versions (HS2-ZH9C6W)
+
+- `capabilities_tests.rs # hs2_zh9c6w` (core) pins a minimum version met, unmet and
+  unknown for toolchains and AI tools (equal, higher in a later or earlier part,
+  lower, prefixed and suffixed reports, no version, no number, a tool that is not
+  usable, no `ai_tools` report, no capabilities), the canonical form (leading zeros
+  and trailing `.0` dropped, one entry per name keeping the highest minimum in any
+  order, a bare name lowest, idempotent, the same JSON strings), malformed versions
+  and names refused, and part-by-part comparison.
+- `orchestration_readiness.rs # hs2_zh9c6w` (CLI) sends `--require toolchain=node>=20`
+  and `tool=codex>=0.40` as those strings.
+
 ### Requirements on a manual dispatch (HS2-061YTB)
 
 - `tests/readiness.rs # hs2_061ytb` dispatches a planned ticket whose step needs

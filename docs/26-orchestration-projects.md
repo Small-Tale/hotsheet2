@@ -2847,6 +2847,7 @@ below).
 | `arch[]`        | Any listed architecture, normalized (`amd64` is `x86_64`, `aarch64` is `arm64`)                   |
 | `tools[]`       | Every listed AI tool installed and enabled for the checkout (the snapshot's `tools[]`)            |
 | `toolchains[]`  | Every listed toolchain installed. One the machine's owner did not declare is unknown, not missing |
+| `name>=version` | A tool or toolchain entry with a minimum version: also at least that version (HS2-ZH9C6W)         |
 | `min_memory_gb` | `memory.total_mb` at least fifteen sixteenths of that many GiB, because every OS reserves some    |
 | `gpu`           | `any` GPU, or one of the vendor `amd`, `apple`, `intel`, `nvidia`, `qualcomm`, `other`            |
 
@@ -2859,6 +2860,18 @@ the machine does not meet it answers `unmet`, and for one the machine did not re
 `<kind>:<value>` (`os:windows`, `arch:arm64`, `tool:codex`, `toolchain:cargo`,
 `min_memory_gb:32`, `gpu:nvidia`). Choosing among several machines for one step is
 HS2-9FKTB3.
+
+**Minimum versions (HS2-ZH9C6W).** A `tools[]` or `toolchains[]` entry may name a
+minimum version as `name>=version`: `toolchain=node>=20`, `tool=codex>=0.40` with
+`--require`, or the same strings in the JSON lists. A version is 1 to 4 dotted whole
+numbers. It is stored without leading zeros or trailing `.0` parts (`node>=20.0` is
+`node>=20`), and one entry per name keeps the highest minimum, a bare name being the
+lowest. The machine's reported version (`capabilities.ai_tools[].version`,
+`capabilities.toolchains[].version`) is read as its first run of dotted digits, so
+`v20.11.1` and `codex-cli 0.41.0` compare as numbers, part by part with missing parts
+as 0. A lower version is `unmet`; no reported version, or one without a number, is
+`unknown`; a tool that is not usable, or a toolchain not installed, is `unmet` whatever
+its version. The miss names the whole entry (`toolchain:node>=20`).
 
 ### Levels
 

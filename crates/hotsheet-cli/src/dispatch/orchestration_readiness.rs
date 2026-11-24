@@ -76,7 +76,9 @@ enum ReadinessCmd {
         /// `toolchain=<name>`, `min_memory_gb=<n>` or `gpu=<any|vendor>`. Repeatable;
         /// several `os` or `arch` values are alternatives, several tools or
         /// toolchains are all needed. The scheduler places the work only where every
-        /// requirement is met.
+        /// requirement is met. HS2-ZH9C6W: `tool=` and `toolchain=` take a minimum
+        /// version as `name>=version`, such as `toolchain=node>=20` or
+        /// `tool=codex>=0.40`.
         #[arg(long = "require")]
         require: Vec<String>,
         /// HS2-YDY5HJ: the revision of this ticket's step you read (0 when none is
@@ -355,5 +357,22 @@ mod tests {
         for bad in ["os=beos", "cpu=fast", "min_memory_gb=lots", "os"] {
             assert!(define(&["--require", bad]).is_err(), "{bad} refused");
         }
+    }
+
+    /// HS2-ZH9C6W: `--require` takes a minimum version for a tool or toolchain, sent as
+    /// the same `name>=version` strings.
+    #[test]
+    fn hs2_zh9c6w_define_requires_a_minimum_version() {
+        let body = define(&[
+            "--require",
+            "toolchain=node>=20",
+            "--require",
+            "tool=codex>=0.40",
+        ])
+        .unwrap();
+        assert_eq!(
+            body["requirements"],
+            json!({"tools": ["codex>=0.40"], "toolchains": ["node>=20"]})
+        );
     }
 }
