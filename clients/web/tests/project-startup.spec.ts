@@ -1065,6 +1065,39 @@ test('shows remembered remote tabs before any open resolves and opens each host 
   );
 });
 
+test('keeps a dragged mix of local and remote project tabs in order across reloads (HS2-NRBWGF)', async ({ page }) => {
+  await startupFixture(page, ['alpha', 'beta'], 'alpha', false);
+  await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const studio = remoteProjectId(STUDIO, 'one'),
+    tab = (id: string) => page.locator(`[data-tab-kind="project"][data-project-id="${id}"]`);
+  await expect(tab(studio)).toBeVisible();
+  await expect(tab('beta')).toBeVisible();
+  // Before any drag, remote tabs follow the local ones.
+  await expect.poll(() => projectTabIds(page)).toEqual(['alpha', 'beta', studio]);
+  // Drag the remote tab between the two local ones.
+  const bounds = (await tab('alpha').boundingBox())!,
+    dataTransfer = await page.evaluateHandle(() => new DataTransfer()),
+    event = { dataTransfer, clientX: bounds.x + bounds.width - 1, clientY: bounds.y + bounds.height / 2 };
+  await tab(studio).dispatchEvent('dragstart', event);
+  await tab('alpha').dispatchEvent('dragover', event);
+  await tab('alpha').dispatchEvent('drop', event);
+  await tab(studio).dispatchEvent('dragend', event);
+  await expect.poll(() => projectTabIds(page)).toEqual(['alpha', studio, 'beta']);
+  for (const round of [1, 2]) {
+    await page.reload();
+    await expect(tab(studio), `reload ${round}`).toBeVisible();
+    await expect(tab('beta'), `reload ${round}`).toBeVisible();
+    await expect.poll(() => projectTabIds(page), `reload ${round}`).toEqual(['alpha', studio, 'beta']);
+  }
+  // The local reopen list stays local-only.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.open-projects') ?? '[]'))).toEqual([
+    '/work/alpha',
+    '/work/beta',
+  ]);
+});
+
 test('keeps an unreachable remote tab reconnecting and opens it in place once the host answers (HS2-WNK73S)', async ({
   page,
 }) => {

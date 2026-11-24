@@ -1532,7 +1532,10 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   Remembered **remote** projects (the checkouts this machine's registry lists under
   `hotsheet-cli remote selected-projects`) get their tabs at once, before any remote open and
   alongside the local restore, named `<binding label> · <last confirmed checkout name>` from the
-  registry alone and ranked after the local tabs in the registry's saved order. Every host opens
+  registry alone and ranked after the local tabs in the registry's saved order, unless the user
+  dragged the strip into a mixed order: a drag also saves the combined local-and-remote order
+  (`hotsheet.project-tab-order.v1`, local roots and remote project ids), and startup ranks both
+  kinds of tab by it, with tabs it does not name after it in the old order (HS2-NRBWGF). Every host opens
   in parallel; each tab becomes the real project in the same position as soon as its own open
   succeeds, so a slow or unreachable host only keeps its own tab loading (HS2-EJ5K09). A tab whose
   first open is still running is Kerf's named `pending` tab and shows "Opening <name>…". A tab

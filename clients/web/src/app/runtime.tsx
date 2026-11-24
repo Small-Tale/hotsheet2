@@ -259,6 +259,7 @@ import {
 } from '../project-minimization';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { projectTabActionFit } from '../project-tab-action-fit';
+import { loadProjectTabOrder, projectTabRanks } from '../project-tab-order';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
   appendUniqueTicketRows,
@@ -739,8 +740,13 @@ export async function startHotSheetWebClient() {
     initialProjectRestorePending = signal(rememberedRoots.length > 0),
     // Remembered roots still opening in the background after the active project was revealed (HS2-2BEJXD).
     projectRestorePendingRoots = signal<readonly string[]>(rememberedRoots);
+  // The combined local-and-remote tab order a drag saved; ranks both kinds of tab on reload (HS2-NRBWGF).
+  const projectTabRank = projectTabRanks(loadProjectTabOrder(localStorage));
   const pendingRestoreEntries = <T,>(item: (root: string) => T) =>
-    projectRestorePendingRoots.value.map((root) => ({ rank: rememberedRoots.indexOf(root), item: item(root) }));
+    projectRestorePendingRoots.value.map((root) => ({
+      rank: projectTabRank(root, rememberedRoots.indexOf(root)),
+      item: item(root),
+    }));
   const initialTerminalDrawerVisible = localStorage.getItem('hotsheet.terminals.drawer-open') === 'true';
   const terminalDrawerVisible = signal(initialTerminalDrawerVisible),
     terminalDrawerMounted = signal(initialTerminalDrawerVisible),
@@ -1660,7 +1666,12 @@ export async function startHotSheetWebClient() {
       desktopRemoteSelected().catch(() => []),
     ]);
     desktopRemoteServers.value = servers;
-    const restoring = remoteReconnect.restore(remoteTabPlaceholders(selected, servers));
+    const restoring = remoteReconnect.restore(
+      remoteTabPlaceholders(selected, servers).map((placeholder) => ({
+        ...placeholder,
+        rank: projectTabRank(placeholder.id, placeholder.rank),
+      })),
+    );
     revealRemoteTabWhenIdle();
     await restoring;
   }
@@ -2004,6 +2015,24 @@ export async function startHotSheetWebClient() {
   });
   const ticketStoreSyncReport = ticketStoreSync.report;
   // Still-opening remembered roots stay remembered, in place, if the set is saved mid-restore (HS2-2BEJXD).
+  /**
+   * Every tab of the project strip in its shown order, local tabs by root and remote tabs by project
+   * id, including still-opening local roots and not-yet-open remote placeholders (HS2-NRBWGF).
+   */
+  const currentProjectTabOrder = () =>
+    interleaveByRank<string>(
+      projects.value.map((item) => (parseRemoteProjectId(item.root) ? item.id : item.root)),
+      (key) => {
+        const item = projects.value.find((candidate) => candidate.root === key || candidate.id === key);
+        return item && projectRestoreRank(item.id);
+      },
+      [
+        ...pendingRestoreEntries((root) => root),
+        ...remoteReconnect.placeholders.value
+          .filter((placeholder) => !projects.value.some((item) => item.id === placeholder.id))
+          .map((placeholder) => ({ rank: placeholder.rank, item: placeholder.id })),
+      ],
+    );
   const currentRememberedProjectRoots = () => [
     ...new Set([
       ...interleaveByRank(
@@ -7210,6 +7239,7 @@ export async function startHotSheetWebClient() {
     ticketBlockers: ticketBlockersController,
     openProject,
     currentRememberedProjectRoots,
+    currentProjectTabOrder,
     persistDrawerTabOrder,
     currentDrawerTabIds,
     focusDrawerTab,
@@ -8004,7 +8034,7 @@ export async function startHotSheetWebClient() {
         roots: rememberedRoots,
         activeRoot: rememberedActiveRoot,
         fetch: (root) => openProjectFetch(root),
-        wire: wireOpenedProject,
+        wire: (root, opened, index) => wireOpenedProject(root, opened, projectTabRank(root, index)),
         retainFailure: (root, failure) => {
           retainProjectRestoreFailure(root, failure.error, failure.recovery?.expected.pid);
         },
