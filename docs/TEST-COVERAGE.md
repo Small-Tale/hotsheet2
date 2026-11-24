@@ -4858,6 +4858,15 @@ checks durable sequential retry, ticket reuse, and stale completion rejection.
 later server pass after a typed limit; `crates/hotsheet-cli/tests/cli.rs` exercises the
 same ordered selection and a later headless `sync` retry with synthetic conflicts.
 
+### Project Settings resize transition (HS2-B67JCN)
+
+`clients/web/tests/providers.spec.ts` verifies the real Project Settings
+composition at 1280 → 760 → 390 → 1280, waits for the Workbench's overlay
+panel content to finish sliding before checking the AI tools region, and
+opens and closes the Settings Sidebar at 760. Chromium and WebKit captures
+confirm the settled pane is readable; the original clipped capture was taken
+while the rails were transitioning.
+
 ### Recreated hosted store watcher (HS2-R6FZ54)
 
 `crates/hotsheet-server/src/watcher.rs` tests parent event filtering, re-arm index

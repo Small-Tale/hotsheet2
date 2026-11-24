@@ -26163,6 +26163,63 @@ test('HS2-RWA8V6 adds, promotes, and removes a backup provider in Project Settin
   await expect(settings.getByRole('button', { name: 'Remove Codex Backup' })).toHaveCount(0);
 });
 
+test('HS2-B67JCN keeps Project Settings readable through the medium overlay layout', async ({ page }) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: /AI tools/ }).click();
+  const shell = page.locator('[data-component="app-shell"]');
+  const settings = page.locator('[data-component="ai-tool-settings"]');
+  const leftContent = page.locator('.kui-workbench__rail--left .kui-workbench__panel-content');
+  const rightContent = page.locator('.kui-workbench__rail--right .kui-workbench__panel-content');
+  await expect(shell).toHaveAttribute('data-mobile', 'false');
+  for (const width of [760, 390, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect(shell).toHaveAttribute('data-mobile', String(width < 1024));
+    if (width < 1024) {
+      await expect(page.getByRole('button', { name: 'Show Settings Sidebar' })).toBeVisible();
+      await expect
+        .poll(() => leftContent.evaluate((panel) => panel.getBoundingClientRect().right))
+        .toBeLessThanOrEqual(1);
+      await expect
+        .poll(() => rightContent.evaluate((panel) => panel.getBoundingClientRect().left))
+        .toBeGreaterThanOrEqual(width - 1);
+    } else {
+      await expect
+        .poll(() => leftContent.evaluate((panel) => panel.getBoundingClientRect().left))
+        .toBeGreaterThanOrEqual(0);
+      await expect
+        .poll(() => rightContent.evaluate((panel) => panel.getBoundingClientRect().right))
+        .toBeLessThanOrEqual(width);
+    }
+    await expect(settings).toBeVisible();
+    const bounds = await settings.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, viewport: window.innerWidth };
+    });
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(bounds.viewport);
+    await page.screenshot({ path: test.info().outputPath(`hs2-b67jcn-settings-${width}.png`) });
+    if (width === 760) {
+      await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+      await expect(page.getByRole('button', { name: 'Hide Settings Sidebar' })).toBeVisible();
+      await expect
+        .poll(() => leftContent.evaluate((panel) => panel.getBoundingClientRect().left))
+        .toBeGreaterThanOrEqual(0);
+      await page.screenshot({ path: test.info().outputPath('hs2-b67jcn-settings-760-sidebar-open.png') });
+      await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+      await expect
+        .poll(() => leftContent.evaluate((panel) => panel.getBoundingClientRect().right))
+        .toBeLessThanOrEqual(1);
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await page.screenshot({ path: test.info().outputPath('hs2-b67jcn-settings-760-dark.png') });
+      await page.emulateMedia({ colorScheme: 'light' });
+    }
+  }
+});
+
 test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-EK24KF)', async ({ page }) => {
   const saves: unknown[] = [];
   await mockProject(page);
