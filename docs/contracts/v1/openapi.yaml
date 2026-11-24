@@ -7027,6 +7027,106 @@ paths:
         required: true
         schema:
           type: string
+  /checkouts/{reference}/command-schedules:
+    get:
+      operationId: listCheckoutCommandSchedules
+      summary: List checkout-local AI command schedules, previews, and recent outcomes.
+      responses:
+        '200':
+          description: The saved schedules, including unavailable commands and delivery history.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommandScheduleView'
+        default:
+          description: The schedule list could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/command-schedules/preview:
+    post:
+      operationId: previewCheckoutCommandSchedule
+      summary: Preview the next three instants for an unsaved AI command schedule.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandScheduleInput'
+      responses:
+        '200':
+          description: The next three run instants in RFC 3339 form.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandSchedulePreview'
+        default:
+          description: The draft schedule is invalid or the checkout is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+  /checkouts/{reference}/command-schedules/{command_id}:
+    put:
+      operationId: saveCheckoutCommandSchedule
+      summary: Save one checkout-local AI command schedule.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandScheduleInput'
+      responses:
+        '200':
+          description: The saved schedule and its next run instants.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandScheduleView'
+        default:
+          description: The command or schedule is invalid, unavailable, or changed concurrently.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: deleteCheckoutCommandSchedule
+      summary: Delete one checkout-local AI command schedule.
+      responses:
+        '204':
+          description: The schedule was removed or did not exist.
+        default:
+          description: The checkout is unavailable or its schedules changed concurrently.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: command_id
+        in: path
+        required: true
+        schema:
+          type: string
   /checkouts/{reference}/command-groups:
     get:
       operationId: list_checkout_command_groups
@@ -29237,6 +29337,169 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/CommandDefinition'
+    CommandScheduleDayRule:
+      oneOf:
+        - type: object
+          required: [kind, day]
+          properties:
+            kind:
+              const: day_of_month
+            day:
+              type: integer
+              minimum: 1
+              maximum: 31
+          additionalProperties: false
+        - type: object
+          required: [kind]
+          properties:
+            kind:
+              const: last_day
+          additionalProperties: false
+        - type: object
+          required: [kind, ordinal, weekday]
+          properties:
+            kind:
+              const: weekday_ordinal
+            ordinal:
+              type: integer
+              enum: [-1, 1, 2, 3, 4, 5]
+            weekday:
+              type: integer
+              minimum: 1
+              maximum: 7
+          additionalProperties: false
+    CommandScheduleRecurrence:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [once, daily, weekly, monthly, yearly, selected_dates]
+        date:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        start_date:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        every:
+          type: integer
+          minimum: 1
+          maximum: 365
+        weekdays:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 7
+        on:
+          $ref: '#/components/schemas/CommandScheduleDayRule'
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        dates:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        end_date:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        count:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        include_dates:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        exclude_dates:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      additionalProperties: false
+    CommandScheduleInput:
+      type: object
+      required: [time_zone, local_time, action, recurrence]
+      properties:
+        time_zone:
+          type: string
+        local_time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+        action:
+          type: string
+          enum: [create_ticket, new_ai_session, reuse_or_new_ai_session]
+        paused:
+          type: boolean
+        recurrence:
+          $ref: '#/components/schemas/CommandScheduleRecurrence'
+      additionalProperties: false
+    CommandSchedule:
+      type: object
+      required: [command_id, time_zone, local_time, action, paused, recurrence]
+      properties:
+        command_id:
+          type: string
+        time_zone:
+          type: string
+        local_time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+        action:
+          type: string
+          enum: [create_ticket, new_ai_session, reuse_or_new_ai_session]
+        paused:
+          type: boolean
+        recurrence:
+          $ref: '#/components/schemas/CommandScheduleRecurrence'
+      additionalProperties: false
+    CommandScheduleOccurrence:
+      type: object
+      required: [occurrence_date, outcome]
+      properties:
+        occurrence_date:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        outcome:
+          type: string
+          enum: [created, skipped_open_ticket, delivery_pending, delivered, delivery_failed]
+        ticket_id:
+          type: string
+          description: Qualified ticket identity when an occurrence found or created a ticket.
+        ticket_slug:
+          type: string
+      additionalProperties: false
+    CommandScheduleView:
+      type: object
+      required: [schedule, next_runs, history]
+      properties:
+        schedule:
+          $ref: '#/components/schemas/CommandSchedule'
+        next_runs:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandScheduleOccurrence'
+        unavailable:
+          type: string
+      additionalProperties: false
+    CommandSchedulePreview:
+      type: object
+      required: [next_runs]
+      properties:
+        next_runs:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
+      additionalProperties: false
     CommandGroups:
       type: array
       items:
