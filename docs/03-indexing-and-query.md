@@ -213,7 +213,8 @@ That reconciliation removes rows from the deleted store as well as indexing file
 When rows change, it emits one store-scoped ticket invalidation so connected clients reread the index.
 These parent and root monitors respond to filesystem events; they do not rescan idle stores.
 The parent is registered before its child watches. During startup, a missing child leaves the
-parent monitor running, and a changed directory identity triggers a fresh child registration
+parent monitor running, and a directory identity sampled before and after child registration
+detects replacement during that call and triggers a fresh child registration
 and full reconcile before the watcher becomes live.
 
 On change:

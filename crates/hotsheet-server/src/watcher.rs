@@ -227,7 +227,7 @@ pub(crate) fn spawn_watcher_in_scope(
     backend: WatcherBackend,
     scope: Arc<TicketsWatchScope>,
 ) -> anyhow::Result<WatchHandle> {
-    spawn_watcher_in_scope_with_startup_hook(target, backend, scope, None, None)
+    spawn_watcher_in_scope_with_startup_hook(target, backend, scope, None, None, None)
 }
 
 type StartupHook = Box<dyn FnOnce() + Send>;
@@ -237,6 +237,7 @@ fn spawn_watcher_in_scope_with_startup_hook(
     backend: WatcherBackend,
     scope: Arc<TicketsWatchScope>,
     before_children: Option<StartupHook>,
+    after_watch_before_identity: Option<StartupHook>,
     after_children: Option<StartupHook>,
 ) -> anyhow::Result<WatchHandle> {
     use notify::{RecursiveMode, Watcher};
@@ -346,6 +347,10 @@ fn spawn_watcher_in_scope_with_startup_hook(
                 if let Some(hook) = before_children {
                     hook();
                 }
+                // Sample before registration too: replacing the directory between
+                // watch() and the later sample would otherwise make a stale handle
+                // appear to own the current path.
+                let identity_before_watch = watched_directory_identity(&watch_dir);
                 // On Linux/macOS, a shallow root watch sees `tickets/` return.
                 let mut root_watched = watch_dir != store_root
                     && store_root.is_dir()
@@ -356,6 +361,9 @@ fn spawn_watcher_in_scope_with_startup_hook(
                     && watcher.watch(&watch_dir, RecursiveMode::Recursive).is_ok();
                 if watch_dir == store_root {
                     root_watched = watched_dir;
+                }
+                if let Some(hook) = after_watch_before_identity {
+                    hook();
                 }
                 let watched_identity = watched_directory_identity(&watch_dir);
                 if let Some(hook) = after_children {
@@ -374,8 +382,8 @@ fn spawn_watcher_in_scope_with_startup_hook(
                 // started. Re-register its current path before trusting the index.
                 let changed_during_startup = rearm_rx.try_iter().fold(false, |changed, signal| {
                     changed || signal.root_removed || signal.tickets_removed
-                }) || watched_identity
-                    != watched_directory_identity(&watch_dir);
+                }) || identity_before_watch != watched_identity
+                    || watched_identity != watched_directory_identity(&watch_dir);
                 let missing_during_startup = !watched_dir;
                 if changed_during_startup || missing_during_startup {
                     let mut slot = started.lock_or_recover();
@@ -2191,7 +2199,9 @@ mod freshness_tests {
 
     #[test]
     fn hs2_r6fz54_recreation_during_native_startup_replaces_the_watched_directory() {
-        for watch_root in [false, true] {
+        for (watch_root, before_identity_sample) in
+            [(false, false), (false, true), (true, false), (true, true)]
+        {
             let parent = tempfile::tempdir().unwrap();
             let root = parent.path().join("store");
             let away = parent.path().join("old-store");
@@ -2203,21 +2213,27 @@ mod freshness_tests {
             let scope = Arc::new(TicketsWatchScope::new(&root, watch_root));
             let (ready, replaced) = std::sync::mpsc::channel();
             let replacement_root = root.clone();
-            let hook = Box::new(move || {
+            let hook: super::StartupHook = Box::new(move || {
                 std::fs::rename(&replacement_root, &away).unwrap();
                 let store = FsStore::init(&replacement_root, &StoreMetadata::new("HS")).unwrap();
                 let new = create(&store, "replacement during startup");
                 ready.send((new.slug, new.id)).unwrap();
             });
+            let (between_watch_and_identity, after_children) = if before_identity_sample {
+                (Some(hook), None)
+            } else {
+                (None, Some(hook))
+            };
             let handle = super::spawn_watcher_in_scope_with_startup_hook(
                 target,
                 WatcherBackend::Recommended,
                 scope,
                 None,
-                Some(hook),
+                between_watch_and_identity,
+                after_children,
             )
             .unwrap();
-            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(10)).unwrap();
+            let (new_slug, new_id) = replaced.recv_timeout(Duration::from_secs(30)).unwrap();
             wait_for("startup replacement to reconcile", || {
                 entry.freshness.in_sync()
                     && entry
@@ -2234,6 +2250,17 @@ mod freshness_tests {
                         .slug_candidates(&new_slug)
                         .unwrap()
                         == vec![new_id]
+            });
+            let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+            let later = create(&replacement, "write after startup rearm");
+            wait_for("startup rearm to index a later external write", || {
+                entry
+                    .index
+                    .lock()
+                    .unwrap()
+                    .slug_candidates(&later.slug)
+                    .unwrap()
+                    == vec![later.id]
             });
             drop(handle);
         }
@@ -2265,6 +2292,7 @@ mod freshness_tests {
                 WatcherBackend::Recommended,
                 scope,
                 Some(before),
+                None,
                 Some(after),
             )
             .unwrap();

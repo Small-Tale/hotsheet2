@@ -4859,3 +4859,5 @@ must exercise their own native backends before the ticket completes.
 Startup-race tests replace the watched directory after initial registration and remove it
 before child registration, then recreate it. Both transitions run under root and `tickets/`
 scopes before the native watch becomes live.
+The replacement test covers both sides of the post-registration identity sample and checks
+that a subsequent external write reaches the rearmed index.
