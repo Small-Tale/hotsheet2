@@ -95,22 +95,31 @@ const TOP_MENU_ITEMS =
  * reopen it first and steps that press the stage close it first (HS2-HMVBZW).
  */
 async function setDemoSettingsOpen(page: Page, open: boolean): Promise<void> {
-  const toggle = (expanded: boolean) =>
-    page.locator(`[data-action="toggle-settings"][aria-expanded="${String(expanded)}"]`);
-  // A resize into the narrow layout collapses the pane asynchronously, so retry until the state settles.
+  const catalog = page.locator('[data-component="catalog"]');
+  const rail = catalog.locator('#kui-catalog-right-rail');
+  const collapsed = String(!open);
+  // HS2-NX63VM: a resize or demo reset can replace the toggle while the rail moves.
+  // Click the actionable visible control, then wait for the catalog and rail state.
   await expect(async () => {
-    if (await toggle(open).count()) return;
-    await toggle(!open)
-      .first()
-      .evaluate(
-        (node) => {
+    if ((await rail.getAttribute('data-collapsed')) !== collapsed) {
+      const toggle = catalog
+        .locator(
+          `[data-action="toggle-settings"][aria-controls="kui-catalog-right-rail"][aria-expanded="${String(!open)}"]:visible`,
+        )
+        .first();
+      if (await page.locator('dialog:modal, wa-dialog[open]').count()) {
+        // HS2-CWWX7S/HS2-SZZGC6/HS2-NWWF1Z: an open demo dialog intercepts pointer
+        // input to the catalog rail. Activate this test-only settings control directly.
+        await toggle.evaluate((node) => {
           (node as HTMLElement).click();
-        },
-        undefined,
-        { timeout: 1000 },
-      );
-    expect(await toggle(open).count()).toBeGreaterThan(0);
-  }).toPass({ timeout: 10_000 });
+        });
+      } else {
+        await toggle.click({ timeout: 5_000 });
+      }
+    }
+    await expect(catalog).toHaveAttribute('data-settings-collapsed', collapsed);
+    await expect(rail).toHaveAttribute('data-collapsed', collapsed);
+  }).toPass({ timeout: 20_000 });
 }
 
 test('offers one UX Review capture link for the active entry on the dev server (HS2-41YZSB)', async ({
