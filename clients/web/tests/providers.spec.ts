@@ -20084,6 +20084,8 @@ test('previews three recent permission answers and searches the scrollable full 
 test('loads remembered answers in 100-row batches while search and selection cross batch boundaries (HS2-988X4X)', async ({
   page,
 }) => {
+  // HS2-25XDRG: this 205-row, multi-viewport flow can exceed the default budget under full-suite load.
+  test.setTimeout(120_000);
   await mockProject(page);
   const rules = Array.from({ length: 205 }, (_, index) => ({
     project: '/work/demo.hs2',
@@ -20103,6 +20105,7 @@ test('loads remembered answers in 100-row batches while search and selection cro
   const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
     list = dialog.getByRole('list', { name: 'All Remembered Answers' }),
     scroll = dialog.getByLabel('Scrollable Remembered Answers');
+  await expect(dialog).toBeVisible();
   await expect(list.locator('[data-permission-rule]')).toHaveCount(100);
   expect(await scroll.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
   await expect(dialog.getByRole('button', { name: 'Load 100 more answers' })).toBeVisible();
