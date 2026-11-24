@@ -616,10 +616,12 @@ fn hs2_2sjpch_role_skills_keep_provisional_work_opt_in_event_driven_and_never_di
     // The project rule is the one place that states the `final_testing` refinement.
     let rule = flatten(include_str!("../../../.rulesync/rules/project-local.md"));
     for phrase in [
-        "## Provisional dependents of a `final_testing` ticket (HS2-2SJPCH)",
-        "Only when the maintainer enables the committed `speculation` policy",
-        "never by polling",
+        "A `final_testing` prerequisite normally blocks dependents",
+        "Provisional work requires the committed speculation policy",
+        "do not complete unconfirmed provisional work",
+        "Use the CI watch and `speculation-sync --wait-ms`, never polling",
         "Automatic `claim-next` and `plan-dispatch` remain confirmed-only",
+        "HS2-2SJPCH",
     ] {
         assert!(rule.contains(phrase), "project rule missing {phrase}");
     }

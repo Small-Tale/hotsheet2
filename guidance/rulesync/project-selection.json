@@ -6,23 +6,7 @@
     "hotsheet-testing-philosophy",
     "hotsheet-requirements-documentation",
     "hotsheet-visual-qa",
-    "hotsheet-workflow",
     "conventions-as-code",
-    "test-operations",
-    "ui-composition",
-    "ui-evaluation",
-    "customer-data-hygiene",
-    "web-client-organization",
-    "typescript-lint-and-format",
-    "rust-lint-and-format",
-    "playwright-operations",
-    "kerf-ui-usage",
-    "kerf-ui-upgrades",
-    "kerf-ui-catalog-demos",
-    "git-commit-and-push",
-    "release-scripts",
-    "gitgist-release-notes",
-    "deployment-scripts",
-    "kerf-ui-interaction-defaults"
+    "customer-data-hygiene"
   ]
 }

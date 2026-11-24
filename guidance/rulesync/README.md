@@ -44,17 +44,17 @@ target out of this configuration so the reusable bodies have one output owner.
 In a fresh project create `CLAUDE.md` containing that import. Preserve existing
 Claude-local text beside its import in an existing project.
 
-Hot Sheet 2 itself selects the five new v1.3.0 rules through its project guidance
-picker: `git-commit-and-push`, `release-scripts`, `gitgist-release-notes`,
-`deployment-scripts`, and `kerf-ui-interaction-defaults` (HS2-Y84WA5). The declared
-`push-per-ticket` policy and standing authorization live in the local Rulesync
-rule; the release, notes, and deploy rules set the target workflows for
-`HS2-7MGYJQ` and `HS2-51HMCC`; `HS2-CD3D2T` will finish the push tooling. The
-Kerf interaction rule now owns the shared UI defaults. The picker keeps these
-rules opt-in for other projects because their release, deployment, Git, and UI
-workflows may differ. Hot Sheet 2's selection is kept in its project guidance
-state; the public example intentionally selects every available rule to exercise
-the frozen source lock.
+Hot Sheet 2's committed `project-selection.json` selects six rules that apply
+across the whole repository: four general Hot Sheet rules, conventions as code,
+and customer data hygiene (HS2-S2FZFM). The installed Hot Sheet skill owns the
+full ticket workflow. The local Rulesync rule keeps binding project deviations
+and points to task-specific skills, installed Kerf guidance, and project docs.
+This keeps generated `AGENTS.md` below 28,000 bytes, leaving room under Codex's
+default 32,768-byte project instruction budget. The structural
+`scripts/instruction-policy.test.mjs` checks that budget and the essential
+pointers; `scripts/check-rulesync-generation.mjs` checks exact output bytes.
+The public example still selects every available rule to exercise the frozen
+source lock; its selection is not this repository's runtime selection.
 
 ## Choose the writer first
 

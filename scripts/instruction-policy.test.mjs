@@ -18,8 +18,22 @@ test('HS2-A47SCQ keeps one generated instruction owner and the local rule', () =
   for (const [, name] of sections) {
     assert.equal(agents.split(`<!-- hotsheet:end section=${name} -->`).length - 1, 1);
   }
-  assert.equal((agents.match(/<!-- hotsheet-instructions-version: \d+ -->/g) ?? []).length, 1);
+  assert.equal((agents.match(/<!-- hotsheet-instructions-version: \d+ -->/g) ?? []).length, 0);
   assert.match(agents, /Push policy: `push-per-ticket`/);
+  assert.match(agents, /\.agents\/skills\/hotsheet\/SKILL\.md/);
+});
+
+test('HS2-S2FZFM keeps all root guidance inside a measured instruction budget', () => {
+  const agents = read('AGENTS.md');
+  const selection = JSON.parse(read('guidance/rulesync/project-selection.json'));
+  const bytes = Buffer.byteLength(agents, 'utf8');
+  assert.ok(bytes < 28_000, `root AGENTS.md is ${bytes} bytes; target is below 28,000`);
+  assert.ok(32_768 - bytes > 4_768, 'leave room for global and nested project instructions');
+  assert.ok(!selection.rules.includes('hotsheet-workflow'), 'the installed skill owns ticket workflow detail');
+  assert.match(agents, /docs\/29-affected-local-verification\.md/);
+  assert.match(agents, /docs\/ui-design-philosophy\.md/);
+  assert.match(agents, /docs\/34-development-strategies\.md/);
+  assert.match(agents, /<!-- hotsheet:end section=visual-qa -->\s*$/);
 });
 
 test('HS2-XJRJ9Z keeps the reviewed local guidance once in generated instructions', () => {
@@ -39,11 +53,11 @@ test('HS2-EJ8JTG pins authoritative tier tags and analyzed T2 testing', () => {
     assert.match(source, /Set exactly one\s+`tier:T0`, `tier:T1`, or `tier:T2` ticket tag/);
     assert.match(source, /T2 has no time cap:/);
     // HS2-6PZCD9: the configured development strategy makes the gate require a reviewed test plan.
-    assert.match(source, /`scripts\/check\.sh` refuses to run without `--test-plan <reviewed\.json>`/);
+    assert.match(source, /`scripts\/check\.sh` requires\s+`--test-plan <reviewed\.json>`/);
     // HS2-ZGS7JP: CI First is the one strategy whose best-effort run needs neither.
-    assert.match(source, /Outside CI First, a T2 ticket also runs `--full` or an explicit analyzed selection with\s+`--t2-stage`/);
-    assert.match(source, /except under CI First, whose best-effort run is its own budgeted plan/);
-    assert.match(source, /completion note names deferred-to-CI checks and the successful\s+covering main CI run/);
+    assert.match(source, /T2 also\s+requires `--full` or an analyzed `--t2-stage` selection/);
+    assert.match(source, /CI First's\s+budgeted run needs neither flag/);
+    assert.match(source, /name deferred\s+checks and the green covering main CI run in the completion note/);
   }
   assert.match(worker, /set the ticket's tier\s+tag when declaring risk/);
   assert.match(worker, /normal gate without profile flags/);
@@ -53,10 +67,16 @@ test('HS2-EJ8JTG pins authoritative tier tags and analyzed T2 testing', () => {
 
 test('HS2-ZGS7JP the CI First deviation keeps the push protections and attributes red CI', () => {
   for (const source of [read('.rulesync/rules/project-local.md'), read('AGENTS.md')]) {
-    assert.match(source, /CI First deviation \(HS2-ZGS7JP\): only while the effective development strategy\s+resolves to `ci-first`/);
-    assert.match(source, /without a full-gate receipt, keeping the clean-checkout, fast-forward,\s+main-writer and remote-confirmation checks/);
-    assert.match(source, /A red run is attributed to the tickets pushed since\s+the last green run/);
-    assert.match(source, /Under every other strategy\s+this deviation does not apply and `scripts\/push\.sh` still refuses without a receipt/);
+    assert.match(
+      source,
+      /CI First \(HS2-ZGS7JP\) applies only when the resolver reports `ci-first` and\s+`push_without_receipt: true`/,
+    );
+    assert.match(
+      source,
+      /without a full-gate receipt but retains a clean\s+checkout, main-writer reservation, fast-forward, and remote confirmation/,
+    );
+    assert.match(source, /Attribute red CI to tickets since the last\s+green run/);
+    assert.match(source, /Other strategies still require the receipt/);
   }
 });
 
@@ -102,11 +122,11 @@ test('HS2-F9062F makes effective strategy resolution and precedence executable g
   for (const text of [local, agents]) {
     assert.match(text, /development-strategies/);
     assert.match(text, /development-strategy-resolve/);
-    assert.match(text, /user instruction takes precedence over a ticket strategy, then a\s+session strategy/);
-    assert.match(text, /ticket and integration\s+gates, exact-tree verification, and green-main promotion remain mandatory unless/);
-    assert.match(text, /unset\s+project setting preserves the\s+existing integration default and risk-selected/);
-    assert.match(text, /next safe boundary/);
-    assert.match(text, /user-selected\s+strategy as the highest-priority `--ticket` override/);
+    assert.match(text, /User-selected strategy overrides ticket,\s+session, then project strategy/);
+    assert.match(text, /never silently waive\s+ticket\/integration verification or green-main promotion/);
+    assert.match(text, /An unset project retains the default\s+integration mode and risk-selected checks/);
+    assert.match(text, /safe\s+boundary/);
+    assert.match(text, /highest-priority `--ticket`\s+override/);
   }
   const roles = ['worker', 'dispatcher', 'integrator'];
   for (const role of roles) {
@@ -124,7 +144,12 @@ test('HS2-F9062F makes effective strategy resolution and precedence executable g
     assert.match(source, /safe (ticket |integration )?boundary/);
     assert.match(source, /If (the selected CLI|this CLI|the CLI) lacks the\s+resolver/);
   }
-  for (const skill of ['.agents/skills/hotsheet/SKILL.md', '.claude/skills/hotsheet/SKILL.md', 'plugins/codex/SKILL.md', 'plugins/claude/SKILL.md']) {
+  for (const skill of [
+    '.agents/skills/hotsheet/SKILL.md',
+    '.claude/skills/hotsheet/SKILL.md',
+    'plugins/codex/SKILL.md',
+    'plugins/claude/SKILL.md',
+  ]) {
     const text = read(skill);
     assert.match(text, /development-strategy-resolve/);
     assert.match(text, /ticket, session, then project/);
@@ -134,8 +159,11 @@ test('HS2-F9062F makes effective strategy resolution and precedence executable g
 
 test('HS2-Q390N2 pins the explicit standalone fast-push deviation', () => {
   for (const source of [read('.rulesync/rules/project-local.md'), read('AGENTS.md')]) {
-    assert.match(source, /scripts\/push\.sh --standalone --skip-tests/);
-    assert.match(source, /still requires a clean checkout, the main-writer\s+reservation, a fast-forward update, remote SHA confirmation/);
-    assert.match(source, /The override\s+is not available to a ticket integrator/);
+    assert.match(source, /scripts\/push\.sh --standalone\s+--skip-tests/);
+    assert.match(
+      source,
+      /still requires a clean checkout, main-writer reservation,\s+fast-forward, remote SHA confirmation/,
+    );
+    assert.match(source, /override is unavailable to integrators/);
   }
 });

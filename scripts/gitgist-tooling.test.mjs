@@ -35,7 +35,10 @@ async function gitgist() {
 function guidanceTable(text) {
   const section = text.slice(text.indexOf('## gitgist commit drafting (HS2-VA97HW)'));
   const body = section.slice(0, section.indexOf('\n## ', 1));
-  return [...body.matchAll(/^\| `([^`]+)` \| (.+) \|$/gm)].map(([, pattern, why]) => ({ pattern, why: why.trim() }));
+  return [...body.matchAll(/^\|\s+`([^`]+)`\s+\|\s+(.+?)\s+\|$/gm)].map(([, pattern, why]) => ({
+    pattern,
+    why: why.trim(),
+  }));
 }
 
 // Git's default pathspec wildcard, which gitgist's `:(exclude)` patterns use: `*` also crosses `/`.
