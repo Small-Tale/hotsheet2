@@ -31,6 +31,7 @@ import { GroupRegistrySyncBanner } from '../components/group-registry-sync-banne
 import {
   Hs1CleanupBanner,
   Hs1JobBanner,
+  Hs1JobDetailsDialog,
   Hs1MigrationBanner,
   Hs1RegistrationRepairBanner,
 } from '../components/hs1-migration';
@@ -801,10 +802,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
                 <Hs1JobBanner
                   job={currentJob}
                   backupVerified={!currentBackupUnverified}
-                  details={migrationJobDetails.value[current.root]}
                   connectionError={migrationConnectionErrors.value[current.root]}
                 />
               )}
+            {/* Details open in a modal, not inline below the banner (HS2-EEBM4W). */}
+            <Hs1JobDetailsDialog job={migrationJobDetails.value[current.root] ? currentJob : undefined} />
             {current.needsHs1Migration && !currentJob && hs1MigrationProject.value?.id !== current.id && (
               <Hs1MigrationBanner databasePath={current.hs1DatabasePath ?? `${current.root}/.hotsheet/db`} />
             )}{' '}

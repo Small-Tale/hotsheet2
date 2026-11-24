@@ -379,8 +379,10 @@ the checkpointed child is alive. Retry resumes the existing idempotent import an
 attachment checkpoints. Terminal success is persisted before watchers see it. A
 persistence error becomes a failure, never a premature success announcement.
 Source registration, checkout linking, tool setup, and backup validation belong to
-the captured server job, so closing a tab cannot skip finalization. Tool-setup warnings
-remain available in Details and expose Retry; completed import stays separate from
+the captured server job, so closing a tab cannot skip finalization. The job banner's
+Details button opens a modal dialog (the destination, the current phase, the error, and any
+warnings) instead of expanding text below the banner; its close button and Escape close it
+(HS2-EEBM4W). Tool-setup warnings remain available in Details and expose Retry; completed import stays separate from
 verified backup and source cleanup. A failed backup offers Retry for its captured remote
 or Change backup to correct a URL before a new attempt. A successful historical backup
 whose proof no longer matches the current repository offers the same recovery actions

@@ -459,6 +459,35 @@ test('keeps background import failure and retry owned by its project across navi
       )
       .toEqual([8, 8, 8]);
   }
+  // HS2-EEBM4W: Details opens a modal dialog instead of expanding text under the banner.
+  const details = page.locator('[data-hs1-job-details="true"]');
+  for (const [width, close] of [
+    [1100, 'escape'],
+    [390, 'button'],
+  ] as const) {
+    await page.setViewportSize({ width, height: 800 });
+    await banner.getByRole('button', { name: 'Details' }).click();
+    await expect(details).toBeVisible();
+    await expect(details).toHaveJSProperty('open', true);
+    expect(await details.evaluate((node) => node.matches(':modal'))).toBe(true);
+    await expect(details).toContainText('Import destination');
+    await expect(details).toContainText('destination is full');
+    await expect(banner).not.toContainText('Import destination');
+    // Let the viewport change and the dialog's enter motion finish so the capture shows the settled state.
+    await page.evaluate(async () => {
+      const finite = document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity);
+      await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `target/visual-captures/hs2-eebm4w-details-${width}.png` });
+    if (close === 'escape') await page.keyboard.press('Escape');
+    else await details.getByRole('button', { name: 'Close' }).click();
+    await expect(details).toHaveCount(0);
+  }
+  await page.setViewportSize({ width: 1100, height: 800 });
   await page.screenshot({
     path: testInfo.outputPath('hs1-background-retry-wide.png'),
     fullPage: true,
@@ -466,14 +495,15 @@ test('keeps background import failure and retry owned by its project across navi
   });
   await page.setViewportSize({ width: 520, height: 720 });
   await banner.getByRole('button', { name: 'Details', exact: true }).click();
-  await expect(banner).toContainText('/work/legacy.hs2');
+  await expect(details).toContainText('/work/legacy.hs2');
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({
     path: testInfo.outputPath('hs1-background-retry-details-narrow.png'),
     fullPage: true,
     animations: 'disabled',
   });
-  await banner.getByRole('button', { name: 'Details', exact: true }).click();
+  await details.getByRole('button', { name: 'Close' }).click();
+  await expect(details).toHaveCount(0);
   await page.setViewportSize({ width: 1100, height: 800 });
   await banner.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(banner).toHaveAttribute('data-status', 'running');

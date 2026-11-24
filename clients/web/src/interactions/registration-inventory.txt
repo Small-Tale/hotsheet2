@@ -25,6 +25,7 @@ project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-hs1-migr
 project-lifecycle	delegate	document.body	'wa-hide'	'[data-component="hs1-migration-dialog"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="open-hs1-migration"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="migration-job-details"]'
+project-lifecycle	delegateCapture	document.body	'kui-request-close'	'[data-hs1-job-details="true"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="reconnect-migration-job"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="retry-migration-job"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="backup-migration-job"]'
