@@ -5,7 +5,7 @@
  * as their words. Identifiers and codes only, as the decision log holds.
  */
 import { parseRequiredResources, type ResourceStandingView } from './orchestration-resources';
-import type { OrchestrationTimeline } from './orchestration-timeline';
+import type { OrchestrationTimeline, TimelineItem } from './orchestration-timeline';
 import { type ClockFormat, toolLabel } from './orchestration-timeline-board';
 
 /** One decision log record (`DecisionRecord`), as much of it as the view shows. */
@@ -272,5 +272,36 @@ export function parseExplanation(value: Record<string, unknown> | undefined): Sc
           ]
         : [],
     ),
+  };
+}
+
+/** HS2-PR984R: the site Where It Runs names, and the step's own site when the scheduler chose another. */
+export interface WhereItRunsSite {
+  label: string;
+  location: TimelineItem['location'];
+  machine_label?: string;
+  own?: { label: string; location: TimelineItem['location'] };
+}
+
+/**
+ * HS2-PR984R: the site the card's Where It Runs names. Once the scheduler placed or would place the step on another
+ * site of its project than the one the card shows (`scheduler explain`'s `site`), that chosen site and its machine
+ * lead, and `own` keeps the step's own site for a secondary row. Otherwise the card's own site, unchanged.
+ */
+export function chosenSite(
+  item: Pick<TimelineItem, 'site_id' | 'target' | 'project_label' | 'location' | 'machine_label'>,
+  timeline: OrchestrationTimeline | undefined,
+  explanation: SchedulerExplanation | undefined,
+): WhereItRunsSite {
+  const shown = { label: item.project_label, location: item.location, machine_label: item.machine_label };
+  const site = explanation?.site;
+  if (!site || site === (item.site_id ?? item.target.target_id)) return shown;
+  const chosen = timeline?.targets.find((target) => target.target_id === site);
+  if (!chosen) return shown;
+  return {
+    label: chosen.label,
+    location: chosen.location,
+    machine_label: chosen.machine_label,
+    own: { label: item.project_label, location: item.location },
   };
 }

@@ -5701,7 +5701,11 @@ A read on the server also starts the target followers of §26.9.
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
   §26.14, each a person's act with a confirmation where undo cannot help), then the
-  run's gates, validation steps and latest events.
+  run's gates, validation steps and latest events. The maintainer's default decision
+  (HS2-PR984R): once the scheduler has placed or would place the step on another site of
+  its project (`scheduler explain`'s `site`), Where It Runs names that chosen site and its
+  machine, with a **Step's site** row naming the site the step itself names, so it agrees
+  with Why It Is Not Running.
 - **Show Request** (HS2-DBQSWB) opens the request the step waits on where every
   permission request is answered: the project's Notifications, Pending, with keyboard
   focus on that exact card (found by the orchestrator request id the card carries). The

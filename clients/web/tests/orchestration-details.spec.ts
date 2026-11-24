@@ -528,6 +528,13 @@ test('HS2-QDARNW Why It Is Not Running names the chosen site and each site passe
       labels.findIndex((label) => label.trim() === 'Not on Self'),
     );
     await expect(rows.filter({ hasText: 'Site' }).first()).toContainText('Self second site');
+    // HS2-PR984R: Where It Runs agrees: the chosen site and its machine lead, the step's own site follows.
+    const where = page.locator('[data-orchestration-inspector] [data-orchestration-section="Where It Runs"]');
+    const whereRow = (label: string) =>
+      where.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    await expect(whereRow('Project').locator('dd')).toHaveText('Self second site (local)');
+    await expect(whereRow("Step's site").locator('dd')).toHaveText('Self (local)');
+    await expect(whereRow('Machine').locator('dd')).toHaveText('This machine');
     // HS2-MFS7FY: the passed-over site's reason is words, never the scheduler's detail code.
     const passedOver = rows.filter({ has: page.locator('dt', { hasText: 'Not on Self' }) });
     await expect(passedOver).toHaveCount(1);

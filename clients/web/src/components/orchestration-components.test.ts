@@ -271,6 +271,22 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(paused).toContain('data-control="resume"');
   });
 
+  it('HS2-PR984R Where It Runs names the site the scheduler chose and its machine', () => {
+    const own = item('step-3');
+    const other = demoTimeline('running').targets.find((target) => target.target_id !== (own.site_id ?? ''))!;
+    const markup = inspector('step-3', {
+      details: { loading: false, explanation: { standing: 'start', reason: 'ready_work', site: other.target_id } },
+    });
+    const where = markup.slice(
+      markup.indexOf('data-orchestration-section="Where It Runs"'),
+      markup.indexOf('data-orchestration-section=', markup.indexOf('data-orchestration-section="Where It Runs"') + 1),
+    );
+    expect(where).toContain(`${other.label} (${other.location})`);
+    expect(where).toContain("Step's site");
+    expect(where).toContain(`${own.project_label} (${own.location})`);
+    expect(inspector('step-3')).not.toContain("Step's site");
+  });
+
   it('links a waiting card to its request or its goal decision, and names prerequisites', () => {
     const permission = inspector('step-6');
     expect(permission).toContain('data-orchestration-section="Waits for Permission"');

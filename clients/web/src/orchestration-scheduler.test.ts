@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  chosenSite,
   decisionText,
   explanationRows,
   lastPassText,
@@ -202,5 +203,25 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
       expect(text).not.toContain('_');
       expect(text).toMatch(/^the policy does not allow it \(.+\)$/);
     }
+  });
+
+  it('names the site the scheduler chose in Where It Runs, with the step’s own site after it (HS2-PR984R)', () => {
+    const step = timeline.waves.flatMap((wave) => wave.items).find((item) => item.site_id === 'web')!;
+    // Placed on its own site, or no explanation yet: the card's site, with no second row.
+    expect(chosenSite(step, timeline, undefined)).toEqual({
+      label: 'Web',
+      location: 'local',
+      machine_label: undefined,
+    });
+    expect(chosenSite(step, timeline, { standing: 'start', reason: 'ready_work', site: 'web' }).own).toBeUndefined();
+    // Placed on another site of the project: that site and its machine lead.
+    expect(chosenSite(step, timeline, { standing: 'start', reason: 'ready_work', site: 'api' })).toEqual({
+      label: 'API',
+      location: 'remote',
+      machine_label: 'Build host',
+      own: { label: 'Web', location: 'local' },
+    });
+    // A site the timeline does not list cannot be named, so the card's own site stays.
+    expect(chosenSite(step, timeline, { standing: 'start', reason: 'ready_work', site: 'gone' }).label).toBe('Web');
   });
 });
