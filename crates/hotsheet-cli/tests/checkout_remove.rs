@@ -304,11 +304,12 @@ fn hs2_x4rz73_an_open_project_or_unreachable_server_refuses_removal() {
 }
 
 /// HS2-HM0Y6X headless E2E: `checkout prune` unregisters abandoned temporary checkouts and
-/// deletes only their generated worklist skeleton. The home sits under Cargo's target
-/// tmp dir (not an OS temp dir) so the prune treats it as a real machine registry.
+/// deletes only their generated worklist skeleton. The home sits under the crate
+/// source directory, independent of CARGO_TARGET_TMPDIR, so the prune treats it as
+/// a real machine registry even when Cargo's target is under an OS temporary root.
 #[test]
 fn hs2_hm0y6x_prune_unregisters_abandoned_temporary_checkouts() {
-    let home_root = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let home_root = tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap();
     let home = home_root.path().join("home");
     let scratch = tempfile::tempdir().unwrap();
     let store = scratch.path().join("app.hs2");
@@ -342,6 +343,8 @@ fn hs2_hm0y6x_prune_unregisters_abandoned_temporary_checkouts() {
     std::fs::write(live.join("README.md"), "real project\n").unwrap();
 
     let plan = json(&mut run(&["checkout", "prune", "--dry-run", "--json"]));
+    // HS2-V9G7CA: this fixture registry is outside the OS temporary roots.
+    assert_eq!(plan["skipped"], Value::Null, "{plan}");
     assert_eq!(plan["removed"].as_array().unwrap().len(), 2, "{plan}");
     assert!(skeleton.join(".hotsheet2/worklist.md").is_file());
 
@@ -372,7 +375,11 @@ fn hs2_hm0y6x_prune_unregisters_abandoned_temporary_checkouts() {
 fn hs2_hm0y6x_prune_leaves_a_temporary_test_home_alone() {
     let f = fixture();
     let report = json(&mut f.run(&["checkout", "prune", "--json"]));
-    assert!(report["skipped"].is_string(), "{report}");
+    // HS2-V9G7CA: a true OS-temp registry still skips prune.
+    assert_eq!(
+        report["skipped"], "the checkout registry is itself temporary",
+        "{report}"
+    );
     f.run(&["checkout", "prune"])
         .assert()
         .success()
