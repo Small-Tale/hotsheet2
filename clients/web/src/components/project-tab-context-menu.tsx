@@ -25,6 +25,8 @@ export interface AppTabMenuState {
   kind: AppTabKind;
   id: string;
   direction: 'left' | 'right';
+  /** A remembered project that could not open has no live project to minimize (HS2-TGYKHQ). */
+  restoreFailure?: boolean;
   /** HS2-6MNMVB: the orchestrator session in a terminal tab, when one started it here. */
   orchestrator?: Pick<TerminalOrchestrator, 'owner'>;
 }
@@ -35,6 +37,7 @@ export function AppTabContextMenu({
   y,
   direction = 'right',
   orchestrator,
+  restoreFailure = false,
 }: {
   kind: AppTabKind;
   id: string;
@@ -42,6 +45,7 @@ export function AppTabContextMenu({
   y: number;
   direction?: 'left' | 'right';
   orchestrator?: Pick<TerminalOrchestrator, 'owner'>;
+  restoreFailure?: boolean;
 }) {
   const directional =
     direction === 'left'
@@ -68,11 +72,18 @@ export function AppTabContextMenu({
           },
         ]
       : []),
-    ...(kind === 'project' ? [{ id: 'minimize', label: 'Minimize Tab', icon: Minus, iconName: 'minus' }] : []),
+    ...(kind === 'project' && !restoreFailure
+      ? [{ id: 'minimize', label: 'Minimize Tab', icon: Minus, iconName: 'minus' }]
+      : []),
     { id: 'close', label: 'Close Tab', icon: X, iconName: 'x' },
-    { id: 'close-others', label: 'Close Other Tabs', icon: CircleX, iconName: 'circle-x' },
-    directional,
-    { id: 'close-all', label: 'Close All Tabs', icon: Trash2, iconName: 'trash-2', danger: true },
+    // HS2-TGYKHQ: Close Tab is the one actionable command for an unavailable project.
+    ...(!(kind === 'project' && restoreFailure)
+      ? [
+          { id: 'close-others', label: 'Close Other Tabs', icon: CircleX, iconName: 'circle-x' },
+          directional,
+          { id: 'close-all', label: 'Close All Tabs', icon: Trash2, iconName: 'trash-2', danger: true },
+        ]
+      : []),
   ];
   const { legacyId, label, action } = (() => {
     switch (kind) {
@@ -105,7 +116,7 @@ export function AppTabContextMenu({
       label={`${label} Tab Actions`}
       rootAttributes={{ 'data-context-menu': 'app-tab', 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId }}
       items={actions.flatMap((item): PopupMenuEntry[] => [
-        ...(item.id === 'close-all' || (kind === 'project' && item.id === 'close')
+        ...(item.id === 'close-all' || (kind === 'project' && !restoreFailure && item.id === 'close')
           ? [{ kind: 'divider' } as const]
           : []),
         {
@@ -125,11 +136,22 @@ export function ProjectTabContextMenu({
   x,
   y,
   direction = 'right',
+  restoreFailure = false,
 }: {
   projectId: string;
   x: number;
   y: number;
   direction?: 'left' | 'right';
+  restoreFailure?: boolean;
 }) {
-  return <AppTabContextMenu kind="project" id={projectId} x={x} y={y} direction={direction} />;
+  return (
+    <AppTabContextMenu
+      kind="project"
+      id={projectId}
+      x={x}
+      y={y}
+      direction={direction}
+      restoreFailure={restoreFailure}
+    />
+  );
 }

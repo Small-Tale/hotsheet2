@@ -466,14 +466,13 @@ describe('application shell components', () => {
         location: 'local',
         attention: true,
         restoreFailure: true,
-        closable: false,
         draggable: false,
       }),
     );
     expect(restoreFailure).toContain('data-restore-failure="true"');
     expect(restoreFailure).toContain('draggable="false"');
     expect(restoreFailure).toContain('data-lucide="circle-alert"');
-    expect(restoreFailure).not.toContain('data-action="close-project-tab"');
+    expect(restoreFailure).toContain('data-action="close-project-tab"');
     // A still-opening remembered project is a dormant Kerf placeholder with an opening spinner that
     // names it; it cannot be selected, closed, or dragged (HS2-2BEJXD).
     const pendingTab = String(
@@ -776,6 +775,15 @@ describe('application shell components', () => {
     expect(project).toContain('aria-label="Project Tab Actions"');
     expect(project).toContain('data-action="project-tab-context-action"');
     expect(project).not.toContain('Rename…');
+    const unavailable = String(
+      AppTabContextMenu({ kind: 'project', id: 'failed', x: 10, y: 20, restoreFailure: true }),
+    );
+    expect(unavailable).toContain('Close Tab');
+    expect(unavailable).not.toContain('Minimize Tab');
+    expect(unavailable).not.toContain('Close Other Tabs');
+    expect(unavailable).not.toContain('Close Tabs to the Right');
+    expect(unavailable).not.toContain('Close All Tabs');
+    expect(unavailable.match(/role="menuitem"/g)).toHaveLength(1);
     expect(terminal).toContain('aria-label="Terminal Tab Actions"');
     expect(terminal).toContain('Rename…');
     expect(terminal).toContain('data-tab-action="rename"');

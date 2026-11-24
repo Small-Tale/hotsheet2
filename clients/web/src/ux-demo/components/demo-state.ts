@@ -52,7 +52,9 @@ export function applyDisplayPreferences(root: HTMLElement = document.documentEle
 
 /** The ticket-row context menu and the project-tab context menu the shell renders above every demo. */
 export const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
-export const tabContextMenu = signal<{ x: number; y: number; projectId: string } | undefined>(undefined);
+export const tabContextMenu = signal<{ x: number; y: number; projectId: string; restoreFailure?: boolean } | undefined>(
+  undefined,
+);
 
 const selectionListeners = new Set<(id: string) => void>();
 

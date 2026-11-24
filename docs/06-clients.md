@@ -1549,10 +1549,12 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   when the stream (which retries on its own bounded backoff) is live again (HS2-WNK73S).
   A project that remains unavailable stays in the tab bar with a red title and error icon;
   selecting it presents the exact failure, known stale-server context, its remembered root,
-  likely recovery steps, and an in-place retry action. Failed tabs are not draggable or
-  closable as live projects, and every tab-persistence path retains their roots for the next
-  launch. Restore failures must never leave stale compatibility or connection diagnostics
-  over a different project that reopened successfully.
+  likely recovery steps, and an in-place retry action. Failed tabs are not draggable. They are
+  closable through the tab's close control or context menu. The unavailable tab's menu offers only
+  Close Tab because it has no live project to minimize (HS2-TGYKHQ); closing confirms the choice and
+  forgets its remembered root without requiring the project to open (HS2-TGYKHQ). Until then,
+  every tab-persistence path retains failed roots for the next launch. Restore failures must never
+  leave stale compatibility or connection diagnostics over a different project that reopened successfully.
   A checkout with existing sources opens directly regardless of its default source;
   project setup refresh runs for source-free checkouts too (HS2-TSXSH6). Source-less project setup uses a
   bounded dialog with shared multiline menu items whose title and explanation remain

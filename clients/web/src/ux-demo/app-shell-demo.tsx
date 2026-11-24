@@ -98,6 +98,14 @@ const initialTabs: ProjectTabProps[] = [
     upNextCount: 128,
   },
   { id: 'archive', name: 'Legacy Archive', location: 'local', disconnected: true },
+  {
+    id: 'unavailable',
+    name: 'Unavailable project',
+    location: 'local',
+    attention: true,
+    restoreFailure: true,
+    draggable: false,
+  },
 ];
 
 export const projectTabs = signal<ProjectTabProps[]>(initialTabs.map((tab) => ({ ...tab })));
@@ -280,7 +288,7 @@ export function ProjectTabDemo() {
     <CatalogExample
       label="States"
       viewport={{ width: 'full', frame: 'solid', surface: 'lowered' }}
-      note="Selected, remote, busy, still opening, active queue, active work, attention, disconnected, and fixed states."
+      note="Selected, remote, busy, still opening, active queue, active work, attention, unavailable, disconnected, and fixed states."
     >
       <div role="tablist" aria-label="ProjectTab states">
         <Grid minColumnWidth={px(240)} gap="xs" controlInsets="trbl">
@@ -319,6 +327,14 @@ export function ProjectTabDemo() {
             operation={{ label: 'Import complete, connect backup', state: 'succeeded' }}
           />
           <ProjectTab id="attention" name="Needs attention" location="remote" attention />
+          <ProjectTab
+            id="unavailable"
+            name="Unavailable project"
+            location="local"
+            attention
+            restoreFailure
+            draggable={false}
+          />
           <ProjectTab id="offline" name="Disconnected" location="remote" disconnected />
           <ProjectTab id="fixed" name="Not closable" location="local" closable={false} upNextCount={100} />
         </Grid>
@@ -746,6 +762,7 @@ function wireAppShellDemo(root: HTMLElement): () => void {
         x: pointer.clientX,
         y: pointer.clientY,
         projectId: (target as HTMLElement).dataset.projectId!,
+        restoreFailure: (target as HTMLElement).dataset.restoreFailure === 'true',
       };
     }),
   );

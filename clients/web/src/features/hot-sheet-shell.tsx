@@ -474,7 +474,6 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         selected: item.root === restoreFailure?.root,
         attention: true,
         restoreFailure: true,
-        closable: false,
         draggable: false,
       })),
     ];

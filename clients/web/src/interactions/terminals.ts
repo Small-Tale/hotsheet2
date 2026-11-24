@@ -6,6 +6,7 @@ import { createScope } from 'kerfjs/scope';
 import { type AiToolDefaults, Api } from '../api';
 import { browserRandomId } from '../browser-id';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
+import { type ProjectRestoreFailure, projectRestoreTabId } from '../components/project-restore-error';
 import { type AppTabKind, type AppTabMenuState } from '../components/project-tab-context-menu';
 import {
   type TerminalCopyState,
@@ -164,6 +165,7 @@ export interface TerminalInteractionsDependencies {
   readonly closeDrawerAIChat: (id: string) => void;
   readonly appTabContextMenu: Signal<AppTabMenuState | undefined>;
   readonly projects: Signal<Project[]>;
+  readonly projectRestoreFailures: Signal<ProjectRestoreFailure[]>;
   readonly currentDrawerTabIds: (projectId: string) => string[];
   readonly project: () => Project | undefined;
   readonly terminalGroups: Signal<TerminalDashboardGroup[]>;
@@ -246,6 +248,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     closeDrawerAIChat,
     appTabContextMenu,
     projects,
+    projectRestoreFailures,
     currentDrawerTabIds,
     project,
     terminalGroups,
@@ -1101,7 +1104,6 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   lifetime.add(
     delegate(document.body, 'contextmenu', '[data-tab-kind]', (event, target) => {
       event.preventDefault();
-      if (data(target).restoreFailure === 'true') return;
       const pointer = event as MouseEvent,
         kind = data(target).tabKind as AppTabKind,
         id =
@@ -1121,6 +1123,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         kind,
         id,
         direction: pointer.altKey ? 'left' : 'right',
+        ...(kind === 'project' ? { restoreFailure: data(target).restoreFailure === 'true' } : {}),
         ...(orchestrator ? { orchestrator: { owner: orchestrator.owner } } : {}),
         ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
           width: 256,
@@ -1139,7 +1142,10 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         if (!menu) return;
         const ordered =
             menu.kind === 'project'
-              ? projects.value.map((item) => item.id).filter((id) => !minimizedProjectIds.value.includes(id))
+              ? [
+                  ...projects.value.map((item) => item.id).filter((id) => !minimizedProjectIds.value.includes(id)),
+                  ...projectRestoreFailures.value.map((item) => projectRestoreTabId(item.root)),
+                ]
               : currentDrawerTabIds(project()?.id ?? ''),
           action = data(target).tabAction;
         if (action === 'minimize' && menu.kind === 'project') {

@@ -7143,6 +7143,7 @@ export async function startHotSheetWebClient() {
     ticketSourceSetupNavigation,
     removeOldHs1Data,
     projects,
+    projectRestoreFailures,
     providerSetupKind,
     providerEditingId,
     requestProjectSourceRemoval,
