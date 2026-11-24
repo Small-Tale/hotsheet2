@@ -4777,6 +4777,11 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
 - Unit: `crates/hotsheet-terminals/src/terminal.rs` keeps the immutable launch directory after OSC 7 changes the current directory; `clients/web/src/features/terminal-dashboard.test.ts` keeps the tab in its launch project, attributes an external launch by its reported directory, and excludes a terminal outside every open project.
 - End to end: `crates/hotsheet-server/tests/terminal_ws.rs` runs `git status` in a synthetic sibling checkout through a live shell and checks that the server reports both directories while the shell remains alive; `clients/web/tests/terminal-project-switch.spec.ts` checks the real drawer composition with the moved shell response.
 
+### Magnified terminal focus after a render (HS2-PSV7BG)
+
+- Unit: `clients/web/src/features/terminal-viewports.dom.test.ts` covers a focused parent replacement, a magnified popover re-presentation without remounting, and a deliberate focus move to another control.
+- End to end: `clients/web/tests/terminal-size-authority.spec.ts` checks the phone input remains focused and writable after taking PTY size, then types through the real server and verifies the echo. The macOS Platforms target checks this behavior under its native browser runner.
+
 ### The Orchestration view and its timeline (HS2-J89JC7)
 
 - `timeline_tests.rs` tables the phase (undeclared, no targets, no plan, proposed,
