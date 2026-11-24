@@ -106,6 +106,12 @@ does not fork Kerf's guidance.
   `core:window:allow-set-theme` for this; a browser or a debug desktop build
   without that capability skips the call.
 
+- A drawer tab whose orchestrator-started session may wait on a first-run question
+  (`tool_ready: false`) carries the glance surfaces' waiting-on-you glyph (Lucide `hand`,
+  `pop` tone) as its trailing status, below a halt or exit and above the Hot Sheet
+  connection mark (HS2-G2X7RT). It reuses that state's icon instead of adding one; see
+  [26-orchestration-projects.md](26-orchestration-projects.md) §26.16.
+
 - Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) follow Kerf's Lists
   and selection defaults with no deviation: the group header's commands open from
   a `ListHeader` `overflowAction` button and from its context menu, and the title

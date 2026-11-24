@@ -146,3 +146,16 @@ function agentName(agent?: string): string | undefined {
   if (agent === 'claude') return 'Claude';
   return agent;
 }
+
+/** HS2-G2X7RT: what a drawer tab says while its session's tool may wait on a person. */
+export const TOOL_WAITING_LABEL = 'Waiting for an answer in this terminal';
+
+/**
+ * HS2-G2X7RT: whether a terminal tab marks its orchestrator-started session as waiting: it runs, and its
+ * tool, which reports its session start, has not, so it may be on a first-run question (trust, an MCP or
+ * hook approval, an update notice) that only a person answers in that terminal. The Orchestration header
+ * says the same of a waiting planner.
+ */
+export function toolWaiting(session: { alive: boolean; tool_ready?: boolean }): boolean {
+  return session.alive && session.tool_ready === false;
+}

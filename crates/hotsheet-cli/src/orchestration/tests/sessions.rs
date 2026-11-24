@@ -3733,3 +3733,61 @@ fn hs2_62099g_a_headless_launch_carries_a_fence_inside_its_wait() {
         Err(SessionHostError::Refused)
     );
 }
+
+/// HS2-G2X7RT: the orchestrator's session answer carries the host's `tool_ready` on
+/// every sync, through waiting, answered, a host that cannot say and a lost session,
+/// and the machine-local record never keeps it.
+#[test]
+fn hs2_g2x7rt_a_synced_session_carries_the_hosts_tool_ready() {
+    let mut rng = Rng(170);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1], &mut tx);
+    let owner = f.m.owner.id.clone();
+    f.git(&["init", "-q"]);
+    let started = f.started("op-1", 1, "codex", &mut tx);
+    let sid = started.session.session_id.clone();
+    let terminal = started.session.hosted.as_ref().unwrap().session_id.clone();
+    let sync = |tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .session_sync(&owner, &sid, Some(&worker()), tx)
+            .unwrap()
+    };
+    // A host that does not say says nothing.
+    assert_eq!(sync(&mut tx).tool_ready, None);
+    // Launched and its tool has not reported its start: it may wait on a person.
+    f.host.report(&terminal, Some(false));
+    let waiting = sync(&mut tx);
+    assert_eq!(waiting.tool_ready, Some(false));
+    assert!(
+        serde_json::to_value(&waiting).unwrap()["tool_ready"] == false,
+        "the answer serializes it"
+    );
+    // The safe-point read carries it as well.
+    assert_eq!(
+        f.m.runtime
+            .session_safe_point(&owner, &sid, Some(&worker()), &mut tx)
+            .unwrap()
+            .tool_ready,
+        Some(false)
+    );
+    // Never in the stored record, nor in the record-only list.
+    let record = serde_json::to_value(f.m.runtime.session(&owner, &sid).unwrap()).unwrap();
+    assert!(record.get("tool_ready").is_none(), "{record}");
+    // A person answered and the tool reported its start.
+    f.host.report(&terminal, Some(true));
+    assert_eq!(sync(&mut tx).tool_ready, Some(true));
+    // Waiting again, then a host that cannot be asked cannot say.
+    f.host.report(&terminal, Some(false));
+    assert_eq!(sync(&mut tx).tool_ready, Some(false));
+    f.host.down.store(true, Ordering::SeqCst);
+    assert_eq!(sync(&mut tx).tool_ready, None);
+    f.host.down.store(false, Ordering::SeqCst);
+    // Its terminal is gone: the session is lost and nothing waits.
+    f.host.crash(&terminal);
+    let lost = sync(&mut tx);
+    assert_eq!(lost.session.state, SessionState::Lost);
+    assert_eq!(lost.tool_ready, None);
+}

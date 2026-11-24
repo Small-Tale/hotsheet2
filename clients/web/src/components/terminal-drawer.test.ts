@@ -931,6 +931,46 @@ describe('halted AI sessions (HS2-HJ4D1H)', () => {
   });
 });
 
+describe('an orchestrator session waiting on its tool (HS2-G2X7RT)', () => {
+  const orchestrator = {
+    checkout_id: 'checkout',
+    operation_id: 'op-1',
+    project: 'Release train',
+    owner: 'orchestrator' as const,
+    paused: false,
+  };
+  const markup = (session: Partial<TerminalDashboardSession>) =>
+    String(
+      TerminalDrawer({
+        projectId: 'project',
+        projectName: 'Project',
+        sessions: [{ ...sessions[0], kind: 'ai', busy: false, orchestrator, ...session }],
+        width: 900,
+        height: 320,
+        fitAcross: 2,
+        fitHigh: 2,
+        selectedId: 'grid',
+      }),
+    );
+  it('marks the tab while its tool has not reported its start, and clears once it has', () => {
+    const waiting = markup({ tool_ready: false });
+    expect(waiting).toContain('class="terminal-drawer__tool-waiting"');
+    expect(waiting).toContain('data-lucide="hand"');
+    expect(waiting).toContain('<title>Waiting for an answer in this terminal</title>');
+    for (const ready of [markup({ tool_ready: true }), markup({}), markup({ tool_ready: false, alive: false })]) {
+      expect(ready).not.toContain('terminal-drawer__tool-waiting');
+    }
+  });
+  it('yields to a halt, which also waits on the person', () => {
+    const halted = markup({
+      tool_ready: false,
+      halt: { error_type: 'overloaded', message: 'Synthetic halt', agent: 'claude', at: '2026-11-24T00:00:00Z' },
+    });
+    expect(halted).toContain('terminal-drawer__halt');
+    expect(halted).not.toContain('terminal-drawer__tool-waiting');
+  });
+});
+
 describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
   const markup = (session: Partial<TerminalDashboardSession>) =>
     String(

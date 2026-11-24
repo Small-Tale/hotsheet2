@@ -23957,6 +23957,12 @@ components:
           $ref: '#/components/schemas/OrchestrationSessionToolSetup'
         safe_point:
           $ref: '#/components/schemas/OrchestrationSessionSafePoint'
+        tool_ready:
+          description:
+            HS2-G2X7RT. The host's answer on a sync, safe-point read or start, never stored in the record. false while the
+            session's terminal runs and its tool, which reports its session start, has not, so it may wait on a first-run
+            question a person answers in that terminal. Absent when not known.
+          type: boolean
         unverified:
           description: Names of external state this answer could not verify, such as target_session.
           type: array
@@ -33667,6 +33673,11 @@ components:
             paused:
               type: boolean
           additionalProperties: false
+        tool_ready:
+          description:
+            HS2-G2X7RT. For an orchestrator's live session whose tool reports its session start, whether it has; false while
+            it may wait on a first-run question a person answers in this terminal. Absent otherwise.
+          type: boolean
       additionalProperties: false
     TerminalRead:
       type: object

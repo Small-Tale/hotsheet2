@@ -883,6 +883,12 @@ pub struct SessionView {
     pub tool_setup: Option<ToolSetup>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_point: Option<SafePoint>,
+    /// HS2-G2X7RT: the host's answer for whether the session's tool is ready (see
+    /// [`HostedSessionView::tool_ready`]), as of this answer. `false` while its terminal
+    /// runs and its tool has not reported its session start, so it may wait on a
+    /// first-run question only a person answers there. Never stored in the record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_ready: Option<bool>,
     /// Names of external state this answer could not verify, such as `target_session`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unverified: Vec<&'static str>,
@@ -897,6 +903,7 @@ impl From<OrchestratedSession> for SessionView {
             request_prompt: None,
             tool_setup: None,
             safe_point: None,
+            tool_ready: None,
             unverified: Vec::new(),
         }
     }
@@ -2568,6 +2575,7 @@ impl OrchestrationRuntime {
                 tx,
             )?;
             Ok(SessionView {
+                tool_ready: hosted.tool_ready,
                 label: Some(hosted.label),
                 role_prompt: reply.role_prompt,
                 tool_setup: reply.tool_setup,
@@ -2802,6 +2810,8 @@ impl OrchestrationRuntime {
             let after = self.session_observe(&session, hosted.as_ref(), tx)?;
             Ok(SessionView {
                 label: hosted.as_ref().map(|hosted| hosted.label.clone()),
+                // HS2-G2X7RT: carried from the host's answer; the record never keeps it.
+                tool_ready: hosted.as_ref().and_then(|hosted| hosted.tool_ready),
                 safe_point: match &hosted {
                     Some(hosted) => hosted.safe_point.clone(),
                     None => with_safe_point.then(|| {

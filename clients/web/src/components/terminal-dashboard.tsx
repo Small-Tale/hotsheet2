@@ -83,6 +83,8 @@ export interface TerminalDashboardSession {
   canMessage?: boolean;
   /** HS2-6MNMVB: an orchestrator started this session here; a person may take it over. */
   orchestrator?: TerminalOrchestrator;
+  /** HS2-G2X7RT: `false` while the session's tool may wait on a first-run question in this terminal. */
+  tool_ready?: boolean;
   scrollback: string;
 }
 

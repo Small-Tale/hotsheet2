@@ -6,6 +6,7 @@ import {
   aiConnectionLabel,
   aiConnectionState,
   deriveAiConnectionStates,
+  toolWaiting,
 } from './terminal-ai-connection';
 
 const connection = { agent: 'codex', at: '2026-10-05T08:00:00Z' };
@@ -196,5 +197,14 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
     deriveAiConnectionStates([], firstSeen, 22_000);
     expect(firstSeen.size).toBe(0);
     expect(states(false, false, false, 23_000)).toEqual([undefined, undefined]);
+  });
+});
+
+describe('toolWaiting (HS2-G2X7RT)', () => {
+  it('is true only for a live session whose tool has not reported its start', () => {
+    expect(toolWaiting({ alive: true, tool_ready: false })).toBe(true);
+    expect(toolWaiting({ alive: true, tool_ready: true })).toBe(false);
+    expect(toolWaiting({ alive: true })).toBe(false);
+    expect(toolWaiting({ alive: false, tool_ready: false })).toBe(false);
   });
 });

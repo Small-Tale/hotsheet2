@@ -3228,6 +3228,22 @@ this: Codex's bootstrap paste reads `delivered` while Codex is still stuck. A ho
 report on a hosted terminal also publishes `orchestration_session`, so views read the
 session again without polling. Answering the question stays a person's act.
 
+The orchestrating machine carries the same answer (HS2-G2X7RT). A session start, sync
+or safe-point read copies the host's `tool_ready` into its answer
+(`orchestration session sync|safe-point|start`, MCP `session_sync` and
+`session_safe_point`), so a placed worker, dispatcher or integrator stuck on a
+first-run question says so where it was placed from. It is never stored in the
+machine-local record, so `session list` and `show`, which ask no host, omit it. On the
+hosting machine the terminal listing (`GET /terminals`) carries `tool_ready` for an
+orchestrator's live session whose tool reports its start, and the drawer tab of one
+with `tool_ready: false` shows the glance surfaces' waiting-on-you glyph (Lucide
+`hand`, `pop` tone) titled "Waiting for an answer in this terminal", the tab's form of
+the Orchestration header's "Planner waiting in its terminal". A halt or an exited tool
+outranks it, and it clears live when the hook reports in. Decision: the tab reuses the
+existing waiting-on-you state glyph rather than a new mark, so one state keeps one icon
+(docs/34 §34.10); it is limited to orchestrator-started sessions, whose launch nobody
+watched.
+
 ### Safe points and winding down
 
 Only the hosting machine can say whether a session is at a safe point. It establishes

@@ -179,7 +179,11 @@ export const SYNTHETIC_TOOL = 'hs-synthetic-agent';
  * A synthetic AI tool in the fixture server's own plugin directory: it launches the Node binary
  * that runs this spec and holds, so no real AI tool is started or probed.
  */
-export async function syntheticTool(home: string) {
+/**
+ * The synthetic tool. HS2-G2X7RT: `reportsStart` declares a `SessionStart` hook, so a session of it is
+ * `tool_ready: false` until that hook reports in, as a real tool on a first-run question is.
+ */
+export async function syntheticTool(home: string, { reportsStart = false }: { reportsStart?: boolean } = {}) {
   const plugin = join(home, 'plugins', SYNTHETIC_TOOL);
   await mkdir(plugin, { recursive: true });
   await writeFile(join(plugin, 'instructions.md'), 'Synthetic agent\n');
@@ -210,6 +214,16 @@ export async function syntheticTool(home: string) {
       '[launch]',
       `program = ${JSON.stringify(process.execPath)}`,
       `args = ["-e", "process.stdout.write('ready\\\\n'); setInterval(() => {}, 1000000)"]`,
+      ...(reportsStart
+        ? [
+            '[hooks]',
+            'target = ".synthetic/hooks.json"',
+            'machine_local = true',
+            'event = "PermissionRequest"',
+            'additional_events = ["SessionStart"]',
+            'command = "hotsheet-cli permission-hook --agent synthetic"',
+          ]
+        : []),
       '',
     ].join('\n'),
   );

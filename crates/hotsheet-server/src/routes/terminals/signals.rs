@@ -110,6 +110,24 @@ fn with_terminal_names(
         info.last_hook_report = last_reports.get(&info.id).cloned();
         info.mcp_connected = info.alive && mcp.terminal_connected(&info.id);
         info.feedback_primary = info.alive && primaries.contains(&info.id);
+        // HS2-G2X7RT: the hosted answer's `tool_ready`, for the drawer tab.
+        info.tool_ready = (info.orchestrator.is_some()
+            && info.kind == hotsheet_terminals::TerminalKind::Ai
+            && info.tool.as_deref().is_some_and(|tool| {
+                hotsheet_cli::orchestration::plugin_reports_start(tool, &state.plugin_dirs)
+            }))
+        .then(|| {
+            hotsheet_cli::orchestration::tool_ready(
+                Some(info.alive),
+                Some(&hotsheet_cli::orchestration::HostSessionState {
+                    session_id: info.id.clone(),
+                    busy: info.busy,
+                    idle_since_ms: info.idle_since_ms,
+                    reported: Some(info.ai_connection.is_some() || info.last_hook_report.is_some()),
+                }),
+            )
+        })
+        .flatten();
     }
     infos
 }

@@ -44,10 +44,12 @@ import {
   visiblePendingDrawerTabs,
 } from '../drawer-tab-order';
 import { featureOn } from '../feature-areas';
+import { liveWordColor } from '../grid-sidebar-live';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
+import { LIVE_STATE_ICONS } from '../live-state-icons';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import { aiConnectionIcon, aiConnectionLabel } from '../terminal-ai-connection';
+import { aiConnectionIcon, aiConnectionLabel, TOOL_WAITING_LABEL, toolWaiting } from '../terminal-ai-connection';
 import { TERMINAL_GRID_PHONE_BREAKPOINT, terminalGridContentSize } from '../terminal-grid-layout';
 import { orchestratorTabNameKeep } from '../terminal-names';
 import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
@@ -311,6 +313,18 @@ export function TerminalDrawer({
                     color={uiColor('danger-on-quiet')}
                     label={`Exited with status ${session.exit_code}`}
                     title={`Exited with status ${session.exit_code}`}
+                  />
+                ) : toolWaiting(session) ? (
+                  // HS2-G2X7RT: an orchestrator's session whose tool may be on a first-run question
+                  // waits on a person, with the glance surfaces' waiting-on-you glyph.
+                  <LucideIcon
+                    className="terminal-drawer__tool-waiting"
+                    size="s"
+                    icon={LIVE_STATE_ICONS.waiting_on_you.icon}
+                    name={LIVE_STATE_ICONS.waiting_on_you.name}
+                    color={liveWordColor('waiting_on_you')}
+                    label={TOOL_WAITING_LABEL}
+                    title={TOOL_WAITING_LABEL}
                   />
                 ) : session.aiConnection ? (
                   <Row vAlign="middle" gap="2xs">

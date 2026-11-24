@@ -1524,6 +1524,8 @@ const terminalOptional: Record<string, Check> = {
   last_hook_report: isObject,
   mcp_connected: isBoolean,
   feedback_primary: isBoolean,
+  // HS2-G2X7RT: an orchestrator's session whose tool has not reported its start.
+  tool_ready: isBoolean,
   // HS2-6MNMVB: the hosted orchestrator session behind the tab.
   orchestrator: (value) =>
     isRecord(value) &&

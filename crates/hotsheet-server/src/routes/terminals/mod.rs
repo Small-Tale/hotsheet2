@@ -593,6 +593,11 @@ pub(crate) struct TerminalInfo {
     /// launch), in milliseconds since the epoch; absent while busy.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) idle_since_ms: Option<u64>,
+    /// HS2-G2X7RT: for an orchestrator's live session whose tool reports its session
+    /// start, whether it has: `false` while it may wait on a first-run question a
+    /// person answers in this terminal. Absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) tool_ready: Option<bool>,
 }
 
 /// HS2-6MNMVB: the orchestrator-owned session in a terminal, by identifiers and labels.
@@ -909,6 +914,7 @@ pub(crate) fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> Termin
         mcp_connected: false,
         feedback_primary: false,
         orchestrator: None,
+        tool_ready: None,
     }
 }
 
@@ -935,6 +941,7 @@ pub(crate) fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInf
         mcp_connected: false,
         feedback_primary: false,
         orchestrator: None,
+        tool_ready: None,
     }
 }
 
