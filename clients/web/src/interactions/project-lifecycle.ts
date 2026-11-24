@@ -391,7 +391,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     ),
   );
   lifetime.add(
-    // The newer-source notice is dismissed for every project at once, keyed on its build pair (HS2-B84P1S).
+    // The newer-source notice remembers each dismissed build/source pair across project tabs (HS2-P54NS2).
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissSourceStaleNotice.selector, () => {
       const compatibility = project()?.compatibility;
       if (compatibility) dismissStaleSourceNotice(compatibility);

@@ -1609,9 +1609,10 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   build lags the workspace source, and no client build contradicts the running pair (no client
   revision, or one equal to the server's build), the shell shows an informational, dismissible
   `SourceStaleNoticeBanner` ("Newer local source is available") instead of the alert-toned
-  "Different server build is running" banner. Dismissing it is global: one dismissal hides it in
-  every open project. The dismissal is keyed on the build and source revision pair, so a later
-  rebuild or source change announces again. Protocol mismatches, unknown compatibility, and a
+  "Different server build is running" banner. Dismissals are shared across project tabs and
+  remember the 32 most recent build/source revision pairs (HS2-P54NS2), so switching tabs does
+  not re-announce a dismissed difference. A later rebuild or source change is a new pair and
+  announces once. Protocol mismatches, unknown compatibility, and a
   server running a build other than the client's keep the alert banner.
   A long-lived page learns when the host serves a newer web client (HS2-KPJWBK). The build stamps
   a client build id into `index.html` as `<meta name="hotsheet-client-build">`: a production

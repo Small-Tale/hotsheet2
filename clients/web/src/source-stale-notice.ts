@@ -26,12 +26,24 @@ export function staleSourceNoticeKey(assessment: CompatibilityAssessment): strin
 }
 
 const STORAGE_KEY = 'hotsheet.source-stale-notice.dismissed';
+const MAX_DISMISSED_PAIRS = 32;
 
-function readDismissed(storage: Pick<Storage, 'getItem'> | undefined): string | undefined {
+function readDismissed(storage: Pick<Storage, 'getItem'> | undefined): string[] {
   try {
-    return storage?.getItem(STORAGE_KEY) ?? undefined;
+    const saved = storage?.getItem(STORAGE_KEY);
+    if (!saved) return [];
+    try {
+      const parsed: unknown = JSON.parse(saved);
+      if (Array.isArray(parsed))
+        return [...new Set(parsed.filter((value): value is string => typeof value === 'string'))].slice(
+          -MAX_DISMISSED_PAIRS,
+        );
+    } catch {
+      // The original HS2-B84P1S format stored one pair as plain text.
+    }
+    return [saved];
   } catch {
-    return undefined;
+    return [];
   }
 }
 
@@ -43,17 +55,20 @@ function browserStorage(): Storage | undefined {
   }
 }
 
-/** The dismissed pair, shared by every open project: one dismissal hides the notice everywhere. */
-export const staleSourceNoticeDismissed = signal<string | undefined>(readDismissed(browserStorage()));
+/** Recent dismissed pairs, shared by every open project (HS2-P54NS2). */
+export const staleSourceNoticeDismissed = signal<readonly string[]>(readDismissed(browserStorage()));
 
 export function dismissStaleSourceNotice(
   assessment: CompatibilityAssessment,
   storage: Pick<Storage, 'setItem'> | undefined = browserStorage(),
 ) {
   const key = staleSourceNoticeKey(assessment);
-  staleSourceNoticeDismissed.value = key;
+  const dismissed = staleSourceNoticeDismissed.value;
+  if (dismissed.includes(key)) return;
+  const next = [...dismissed, key].slice(-MAX_DISMISSED_PAIRS);
+  staleSourceNoticeDismissed.value = next;
   try {
-    storage?.setItem(STORAGE_KEY, key);
+    storage?.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
     // Storage is a convenience: the dismissal still holds for this page.
   }
@@ -62,7 +77,7 @@ export function dismissStaleSourceNotice(
 /** Whether the informational notice should show for this assessment. */
 export function showsStaleSourceNotice(
   assessment: CompatibilityAssessment | undefined,
-  dismissed: string | undefined = staleSourceNoticeDismissed.value,
+  dismissed: readonly string[] = staleSourceNoticeDismissed.value,
 ): assessment is CompatibilityAssessment {
-  return isStaleSourceOnly(assessment) && staleSourceNoticeKey(assessment!) !== dismissed;
+  return isStaleSourceOnly(assessment) && !dismissed.includes(staleSourceNoticeKey(assessment!));
 }

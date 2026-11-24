@@ -430,7 +430,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/draft-input-coalescing.ts # Typing-pause publication of editor draft signals (keyed per linked reader frame, HS2-WV0VPE) plus flushDraftInputs() for every reader of drafts (HS2-EQTXTJ)
     src/search-projection-coalescing.ts # Typing-pause projection of the workspace search model into searchQuery/searchTokens; chips and empty/non-empty publish at once (HS2-X72PD6)
     src/feedback-prompt-edits.ts # Note ids of FEEDBACK NEEDED prompts the user explicitly opened with Edit Note; only their saves carry edit_feedback_prompt (HS2-ZXGEFE)
-    src/source-stale-notice.ts # Stale-local-source-only detection plus the global, build-pair-keyed dismissal of its info notice (HS2-B84P1S)
+    src/source-stale-notice.ts # Stale-local-source-only detection plus bounded, persisted build-pair dismissals shared across project tabs (HS2-B84P1S, HS2-P54NS2)
     src/client-build.ts # Web client build id: the index.html meta tag name, validation, and reading the loaded/served id (HS2-KPJWBK); src/client-build-host.ts reads it from the host's pinned dist/index.html
     src/client-update-notice.ts # Host-announced client build signal, loaded/served comparison, and the global pair-keyed dismissal of the newer-client notice (HS2-KPJWBK)
     src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap labels and the per-model plus total usage breakdown (HS2-ZA7W6E, HS2-J14225)

@@ -231,6 +231,92 @@ test('presents newer local source as a globally dismissible info notice, not an 
   await expect(notice).toContainText('Newer local source is available');
 });
 
+test('keeps dismissed source differences quiet across project tabs (HS2-P54NS2)', async ({ page }) => {
+  const projects = [
+    { id: 'first', compatibility: staleOnly('build-one', 'source-one') },
+    { id: 'second', compatibility: staleOnly('build-two', 'source-two') },
+  ];
+  await page.addInitScript(() => {
+    if (localStorage.getItem('hs2-p54ns2-seeded')) return;
+    localStorage.setItem('hs2-p54ns2-seeded', 'true');
+    localStorage.setItem('hotsheet.open-projects', JSON.stringify(['/work/first', '/work/second']));
+    localStorage.setItem('hotsheet.workspace.active-project-root.v1', '/work/first');
+  });
+  await page.route(appRequests, (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
+      const root = (route.request().postDataJSON() as { root: string }).root;
+      const project = projects.find((entry) => root === `/work/${entry.id}`);
+      if (!project) return route.fulfill({ status: 404, json: { error: 'Unknown synthetic project' } });
+      return route.fulfill({
+        status: 201,
+        json: {
+          id: project.id,
+          root,
+          name: project.id,
+          stores: [`${root}.hs2`],
+          apiPath: `/__hotsheet/project-api/${project.id}`,
+          compatibility: project.compatibility,
+        },
+      });
+    }
+    if (path.endsWith('/providers')) return route.fulfill({ json: [] });
+    if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(route.request(), []) });
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({ json: { ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 } });
+    return route.continue();
+  });
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto('/');
+  const desktopTabs = page.locator('.project-tab-bar:not(.project-tab-bar--mobile)'),
+    first = desktopTabs.locator('[role="tab"][data-tab-id="first"]'),
+    second = desktopTabs.locator('[role="tab"][data-tab-id="second"]'),
+    notice = page.locator('[data-component="source-stale-notice-banner"]');
+  await expect(first).toHaveAttribute('aria-selected', 'true');
+  await expect(second).toBeVisible();
+  await expect(notice).toContainText('Newer local source is available');
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-p54ns2-first-notice-1280.png',
+    animations: 'disabled',
+    clip: { x: 0, y: 0, width: 1280, height: 230 },
+  });
+  await notice.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(notice).toHaveCount(0);
+  await second.click();
+  await expect(notice).toContainText('Newer local source is available');
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-p54ns2-second-notice-1280.png',
+    animations: 'disabled',
+    clip: { x: 0, y: 0, width: 1280, height: 230 },
+  });
+  await notice.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(notice).toHaveCount(0);
+  await first.click();
+  await expect(notice).toHaveCount(0);
+  await second.click();
+  await expect(notice).toHaveCount(0);
+  await page.reload();
+  await expect(second).toHaveAttribute('aria-selected', 'true');
+  await expect(first).toHaveCount(1);
+  await expect(notice).toHaveCount(0);
+  await first.click();
+  await expect(notice).toHaveCount(0);
+  for (const width of [960, 390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(notice).toHaveCount(0);
+    await page.screenshot({
+      path: `target/visual-captures/hs2-p54ns2-dismissed-${width}.png`,
+      animations: 'disabled',
+      clip: { x: 0, y: 0, width, height: 230 },
+    });
+  }
+  // A genuinely new source/build pair is announced once after reopening that project.
+  projects[1].compatibility = staleOnly('build-two', 'source-three');
+  await page.reload();
+  await second.click();
+  await expect(notice).toContainText('Newer local source is available');
+});
+
 test('wraps stacked alert and shell banners inside a phone-width viewport (HS2-TM2D7J)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openWithCompatibility(
