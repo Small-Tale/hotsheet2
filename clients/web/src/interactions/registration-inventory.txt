@@ -142,6 +142,8 @@ terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-drawer"]
 terminals	delegate	document.body	'dblclick'	'[data-action="toggle-terminal-drawer-maximize"]'
 terminals	delegate	document.body	'dblclick'	'[data-tab-kind="terminal"], [data-action="select-drawer-item"]'
 terminals	delegate	document.body	'click'	'[data-action="select-drawer-item"]'
+terminals	delegate	document.body	'click'	'[data-action="retry-failed-drawer-tab"]'
+terminals	delegate	document.body	'click'	'[data-action="close-failed-drawer-tab"]'
 terminals	delegate	document.body	'click'	'[data-action="create-terminal-drawer-item"]'
 terminals	delegate	document.body	'click'	'[data-action="open-saved-conversation"]'
 terminals	delegate	document.body	'click'	'[data-action="create-project-terminal"]'

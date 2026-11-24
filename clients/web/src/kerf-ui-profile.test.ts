@@ -29,17 +29,17 @@ function sourceFiles(directory: URL): URL[] {
 
 type JsxElementLike = ts.JsxSelfClosingElement | ts.JsxOpeningElement;
 
-function stateBannerElements(): Array<{ file: string; line: number; element: JsxElementLike }> {
+function stateBannerElements(includeShell = false): Array<{ file: string; line: number; element: JsxElementLike }> {
   return sourceFiles(new URL('./', import.meta.url)).flatMap((url) => {
     const source = readFileSync(url, 'utf8');
-    if (!source.includes('<StateBanner')) return [];
+    if (!source.includes('<StateBanner') && !(includeShell && source.includes('<ShellBanner'))) return [];
     const file = url.pathname.split('/src/')[1] ?? url.pathname;
     const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const found: Array<{ file: string; line: number; element: JsxElementLike }> = [];
     const visit = (node: ts.Node): void => {
       if (
         (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
-        node.tagName.getText(tree) === 'StateBanner'
+        (node.tagName.getText(tree) === 'StateBanner' || (includeShell && node.tagName.getText(tree) === 'ShellBanner'))
       ) {
         found.push({ file, line: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1, element: node });
       }
@@ -195,24 +195,21 @@ describe('Kerf application UI profile', () => {
   });
 
   it('HS2-W77711 passes StateBanner action controls directly, never wrapped in a Row (KF-8TF7Y8)', () => {
-    const root = new URL('./', import.meta.url);
-    const files = (directory: URL): URL[] =>
-      readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-        const path = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, directory);
-        return entry.isDirectory()
-          ? files(path)
-          : entry.name.endsWith('.tsx') && !entry.name.includes('.test.')
-            ? [path]
-            : [];
-      });
     // The banner's action zone lays several controls out itself; a Row there duplicates that layout.
-    const wrapped = files(root)
-      .filter((file) => /<(?:StateBanner|ShellBanner)\b/.test(readFileSync(file, 'utf8')))
-      .flatMap((file) =>
-        [...readFileSync(file, 'utf8').matchAll(/\baction=\{\s*(?:\/\/[^\n]*\n\s*)*(?:[^<{}]*\?\s*\(\s*)?<Row\b/g)].map(
-          () => file.pathname.split('/src/')[1],
-        ),
-      );
+    // HS2-S2T4VJ: inspect only StateBanner action trees; another component in the same file may
+    // legitimately use a Row in its action, as the drawer's EmptyState does.
+    const wrapped = stateBannerElements(true).flatMap(({ file, line, element }) => {
+      const action = jsxAttribute(element, 'action')?.initializer;
+      if (!action || !ts.isJsxExpression(action) || !action.expression) return [];
+      const rows: string[] = [];
+      const visit = (node: ts.Node): void => {
+        if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText() === 'Row')
+          rows.push(`${file}:${line}`);
+        ts.forEachChild(node, visit);
+      };
+      visit(action.expression);
+      return rows;
+    });
     expect(wrapped).toEqual([]);
   });
 
