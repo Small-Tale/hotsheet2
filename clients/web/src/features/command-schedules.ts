@@ -29,11 +29,11 @@ export function createCommandSchedulesController(project: () => Project | undefi
       ? viewsByProject.value[current.id]?.find((item) => item.schedule.command_id === openCommandId.value)
       : undefined;
   };
-  async function refresh(current = project()) {
+  async function refresh(current = project(), quiet = false) {
     if (!current) return;
     const request = ++generation;
     try {
-      const views = await new Api(current.apiPath).commandSchedules(current.id);
+      const views = await new Api(current.apiPath, '', { trackBusy: !quiet }).commandSchedules(current.id);
       if (request !== generation || project()?.id !== current.id) return;
       viewsByProject.value = { ...viewsByProject.value, [current.id]: views };
     } catch (reason) {

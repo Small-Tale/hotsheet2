@@ -4676,7 +4676,8 @@ export async function startHotSheetWebClient() {
   async function refreshCommands(current = project(), quiet = false) {
     const generation = ++commandRefreshGeneration;
     if (!current) return;
-    void commandSchedules.refresh(current);
+    // HS2-X66412: warm project activation refreshes schedule metadata without a global loading cue.
+    void commandSchedules.refresh(current, quiet);
     const active = () => generation === commandRefreshGeneration && project()?.id === current.id;
     try {
       const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
