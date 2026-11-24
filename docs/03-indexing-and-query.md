@@ -192,14 +192,15 @@ gap, not a second stream, is what made the old macOS registered-store test fail 
 permanent 250ms polling fallback it replaces re-walked each registered store four times a second and
 kept an idle server busy. Steady-state detection takes tens of milliseconds plus the 150ms debounce.
 
-**Which directory the native stream holds (HS2-VN96J5).** On macOS and Linux the stream watches the
-store's `tickets/` directory. On Windows it watches the store root and admits only events under
+**Which directory the native stream holds (HS2-VN96J5, HS2-C3REQ1).** On macOS and Linux the stream
+watches the store's `tickets/` directory. On Windows it watches the store root and admits only events under
 `tickets/`, because NTFS refuses to rename a directory while any handle is open beneath it: a
 `tickets/` watch kept a hosted store from being moved or renamed (os error 5), so the relink flow
-for a moved store could not be reached. A handle on the root itself does not block the move. The
-handle follows the directory, and notify keeps reporting the old path, so events that arrive while
-the root is missing from its path are dropped rather than applied as deletions; the first ticket
-event after the store returns asks for a full re-check, which indexes writes made while it was away.
+for a moved store could not be reached. A handle on the root itself does not block the move.
+Windows directory handles and Linux inotify watches follow the directory, and notify keeps reporting
+the old path. On those platforms, events that arrive while the root is missing from its path are
+dropped rather than applied as deletions; the first ticket event after the store returns asks for
+a full re-check, which indexes writes made while it was away.
 Git and other churn beside `tickets/` never reaches the watch loop, so an idle store stays silent.
 A relinked store is watched again at its new path when it is hosted there. The target-feed watch of
 an unhosted linked store (HS2-G5FYP6) uses the same scope.

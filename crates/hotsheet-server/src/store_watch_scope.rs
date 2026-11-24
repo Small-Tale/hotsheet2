@@ -6,10 +6,10 @@
 //! use; `std::fs::rename` failed with os error 5). A handle on the store root itself does
 //! not block the rename, as measured on Windows 11 ARM64. On Windows the watcher therefore
 //! watches the store root and admits only events under `tickets/`; on macOS and Linux it
-//! keeps watching `tickets/` and admits every event unchanged.
+//! keeps watching `tickets/`. Linux also guards against old-path events when the store moves.
 //!
-//! A Windows directory handle follows the directory when it moves, and notify keeps
-//! spelling the events with the path it was given. While the store root is missing from
+//! A Windows directory handle and a Linux inotify watch follow the directory when it moves,
+//! and notify keeps spelling the events with the path it was given. While the root is missing from
 //! that path (moved away), its events describe files somewhere else, so they are dropped:
 //! applying them would delete every touched ticket from the index. The next event admitted
 //! once the store is back carries a rescan flag, so the watch loop re-reads every ticket
@@ -26,9 +26,10 @@ pub(crate) struct TicketsWatchScope {
     /// `tickets` in every spelling an event may use (macOS reports `/private/var`).
     ticket_spellings: Vec<PathBuf>,
     watch_root: bool,
+    guard_missing_root: bool,
     /// Events were dropped while the store root was missing.
     missed: AtomicBool,
-    /// How many events the root scope delivered (the idle-rate tests read it).
+    /// How many events the guarded scope delivered (the idle-rate tests read it).
     delivered: AtomicUsize,
 }
 
@@ -41,6 +42,11 @@ impl TicketsWatchScope {
     /// A scope that watches the store root (`watch_root`) or its `tickets/` directory.
     /// Tests use it to exercise the Windows scope on every platform.
     pub(crate) fn new(root: &Path, watch_root: bool) -> Self {
+        Self::new_with_guard(root, watch_root, watch_root || cfg!(target_os = "linux"))
+    }
+
+    /// Tests force Linux's tickets-scope guard on every platform.
+    fn new_with_guard(root: &Path, watch_root: bool, guard_missing_root: bool) -> Self {
         let tickets = root.join("tickets");
         let mut ticket_spellings = vec![tickets.clone()];
         if let Ok(canonical) = hotsheet_sync::paths::canonicalize(root) {
@@ -54,6 +60,7 @@ impl TicketsWatchScope {
             tickets,
             ticket_spellings,
             watch_root,
+            guard_missing_root,
             missed: AtomicBool::new(false),
             delivered: AtomicUsize::new(0),
         }
@@ -76,14 +83,17 @@ impl TicketsWatchScope {
 
     /// Narrow one native event's `paths` to the store's ticket paths. `None` drops the
     /// event; `Some(rescan)` delivers it, asking for a full rescan when events were dropped
-    /// while the store was away. Outside the root scope every event passes unchanged.
+    /// while the store was away. Linux's tickets scope keeps every path when present,
+    /// but applies the same missing-root guard.
     pub(crate) fn admit_paths(&self, paths: &mut Vec<PathBuf>) -> Option<bool> {
-        if !self.watch_root {
+        if !self.guard_missing_root {
             return Some(false);
         }
-        paths.retain(|path| self.is_ticket_path(path));
-        if paths.is_empty() {
-            return None;
+        if self.watch_root {
+            paths.retain(|path| self.is_ticket_path(path));
+            if paths.is_empty() {
+                return None;
+            }
         }
         if !self.root.is_dir() {
             // The store moved away: these paths name files that are no longer here.
@@ -94,10 +104,15 @@ impl TicketsWatchScope {
         Some(self.missed.swap(false, Ordering::SeqCst))
     }
 
-    /// How many events the root scope has delivered so far.
+    /// How many events the guarded scope has delivered so far.
     #[cfg(test)]
     pub(crate) fn delivered(&self) -> usize {
         self.delivered.load(Ordering::SeqCst)
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn missed(&self) -> bool {
+        self.missed.load(Ordering::SeqCst)
     }
 
     /// [`Self::admit_paths`] for the store watcher's events. Watcher errors and rescan
@@ -148,15 +163,42 @@ mod tests {
     }
 
     #[test]
-    fn hs2_vn96j5_the_tickets_scope_admits_every_event_unchanged() {
+    fn hs2_vn96j5_the_unguarded_tickets_scope_admits_every_event_unchanged() {
         let dir = tempfile::tempdir().unwrap();
-        let scope = TicketsWatchScope::new(dir.path(), false);
+        let scope = TicketsWatchScope::new_with_guard(dir.path(), false, false);
         let outside = dir.path().join(".git/index");
         assert_eq!(paths(scope.admit(event(&[&outside]))), [outside]);
-        // Even a missing root changes nothing: macOS and Linux behave as before.
-        let gone = TicketsWatchScope::new(&dir.path().join("gone"), false);
+        // macOS retains this behavior; Linux applies the missing-root guard (HS2-C3REQ1).
+        let gone = TicketsWatchScope::new_with_guard(&dir.path().join("gone"), false, false);
         let ticket = dir.path().join("gone/tickets/AB/x.md");
         assert_eq!(paths(gone.admit(event(&[&ticket]))), [ticket]);
+    }
+
+    #[test]
+    fn hs2_c3req1_linux_tickets_scope_drops_old_path_events_and_rescans_on_return() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("store");
+        let away = dir.path().join("away");
+        std::fs::create_dir_all(root.join("tickets/AB")).unwrap();
+        let scope = TicketsWatchScope::new_with_guard(&root, false, true);
+        assert_eq!(scope.watch_dir(), root.join("tickets"));
+        let ticket = root.join("tickets/AB/01ABC.md");
+        let initial = scope.admit(event(&[&ticket])).unwrap().unwrap();
+        assert!(!initial.need_rescan());
+        for _round in 0..2 {
+            std::fs::rename(&root, &away).unwrap();
+            assert!(scope.admit(event(&[&ticket])).is_none());
+            assert!(scope.admit(event(&[&ticket])).is_none());
+            std::fs::rename(&away, &root).unwrap();
+            let first = scope.admit(event(&[&ticket])).unwrap().unwrap();
+            assert!(
+                first.need_rescan(),
+                "the first event back rescans the store"
+            );
+            assert_eq!(first.paths, std::slice::from_ref(&ticket));
+            let next = scope.admit(event(&[&ticket])).unwrap().unwrap();
+            assert!(!next.need_rescan(), "the rescan is requested only once");
+        }
     }
 
     #[test]

@@ -1840,11 +1840,11 @@ mod store_root_scope_tests {
         events: broadcast::Receiver<ChangeEvent>,
     }
 
-    fn watch_root(root: &Path) -> Watched {
+    fn watch_store(root: &Path, watch_root: bool) -> Watched {
         let store = FsStore::open(root).unwrap();
         let state = crate::AppState::new(store, "secret".into()).unwrap();
         let events = state.events.subscribe();
-        let scope = Arc::new(TicketsWatchScope::new(root, true));
+        let scope = Arc::new(TicketsWatchScope::new(root, watch_root));
         let handle = spawn_watcher_in_scope(
             super::default_watch_target(&state),
             WatcherBackend::Recommended,
@@ -1859,6 +1859,61 @@ mod store_root_scope_tests {
             handle,
             events,
         }
+    }
+
+    fn watch_root(root: &Path) -> Watched {
+        watch_store(root, true)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn hs2_c3req1_linux_inotify_drops_moved_store_events_and_rescans_on_return() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("store");
+        let away = dir.path().join("away");
+        let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+        let original = create(&store, "present before the move");
+        let mut watched = watch_store(&root, false);
+        assert_eq!(watched.scope.watch_dir(), root.join("tickets"));
+        let entry = watched.state.default_entry();
+
+        std::fs::rename(&root, &away).unwrap();
+        let moved = FsStore::open(&away).unwrap();
+        let while_away = create(&moved, "written while away");
+        wait_for("the old-path event to be dropped", || {
+            watched.scope.missed()
+        });
+        assert_eq!(
+            entry
+                .index
+                .lock()
+                .unwrap()
+                .slug_candidates(&original.slug)
+                .unwrap(),
+            vec![original.id],
+            "moving the store must not delete an indexed ticket"
+        );
+        assert!(
+            drain(&mut watched.events)
+                .iter()
+                .all(|(kind, _)| kind != "deleted"),
+            "old-path events must not announce deletion"
+        );
+
+        std::fs::rename(&away, &root).unwrap();
+        let after = create(&store, "written after return");
+        wait_for_change(&mut watched.events, after.id);
+        wait_for("the rescan to index the write made while away", || {
+            entry
+                .index
+                .lock()
+                .unwrap()
+                .slug_candidates(&while_away.slug)
+                .unwrap()
+                == vec![while_away.id]
+        });
+        drop(watched.handle);
+        drop(watched.state);
     }
 
     /// An idle store and Git churn beside `tickets/` deliver nothing to the watch loop;
