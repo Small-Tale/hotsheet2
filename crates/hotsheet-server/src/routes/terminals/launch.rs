@@ -291,7 +291,12 @@ fn terminal_launch(
     }
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-    let opencode_v2 = tool == "opencode" && opencode_major_version(&program)? == 2;
+    let opencode_v2 = plugin
+        .manifest
+        .session_push
+        .as_ref()
+        .is_some_and(|spec| spec.mechanism == hotsheet_aitools::session_push::OPENCODE_HTTP)
+        && opencode_major_version(&program)? == 2;
     let mut env = terminal_permission_route_env(state, req, terminal_id);
     env.push(("HOTSHEET_AGENT".to_string(), tool.to_string()));
     // The session's worker id: its claims are released when the terminal exits (HS2-1VAW1C).
