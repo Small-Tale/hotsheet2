@@ -43,10 +43,12 @@ fn hs2_m7ev18_a_detached_step_outlives_its_host_process_and_runs_once() {
     };
     let checkout = m.target.id.clone();
     let root = Path::new(&m.target.root).to_path_buf();
+    let run_marker = root.join("runs");
     let registry = HostedValidationRegistry::new(&m.home);
     let held = "echo x >> runs; while [ ! -f go ]; do sleep 0.05; done; printf ok";
 
-    // It runs in another process than this host.
+    // It runs in another process than this host. Its recorded PID can precede the shell's
+    // first write, so wait for both under the same deadline (HS2-J4GCHP).
     let running = runtime
         .hosted_validation_start(&checkout, start(80, held, 0), &mut tx)
         .unwrap();
@@ -56,13 +58,13 @@ fn hs2_m7ev18_a_detached_step_outlives_its_host_process_and_runs_once() {
         let record = registry.record(&checkout, &id(80)).unwrap().unwrap();
         if let Some(process) = record
             .process
-            .filter(|process| process.pid != process.host_pid)
+            .filter(|process| process.pid != process.host_pid && lines(&run_marker) > 0)
         {
             break process;
         }
         assert!(
             Instant::now() < deadline,
-            "the runner never launched the step: {record:?}"
+            "the step did not publish its process and run marker: {record:?}"
         );
         std::thread::sleep(Duration::from_millis(20));
     };
@@ -71,7 +73,7 @@ fn hs2_m7ev18_a_detached_step_outlives_its_host_process_and_runs_once() {
         std::process::id(),
         "a runner process hosts it"
     );
-    assert_eq!(lines(&root.join("runs")), 1);
+    assert_eq!(lines(&run_marker), 1);
 
     // The hosting process restarts: a new host still sees it running, not lost.
     forget_executions();
@@ -100,7 +102,7 @@ fn hs2_m7ev18_a_detached_step_outlives_its_host_process_and_runs_once() {
     let outcome = finished.outcome.unwrap();
     assert_eq!(outcome.exit_code, Some(0));
     assert_eq!(outcome.stdout.unwrap().sha256, OK_SHA256);
-    assert_eq!(lines(&root.join("runs")), 1, "it ran once");
+    assert_eq!(lines(&run_marker), 1, "it ran once");
     std::fs::remove_file(root.join("go")).unwrap();
 
     // A host process that restarted cancels a step its runner still runs.
