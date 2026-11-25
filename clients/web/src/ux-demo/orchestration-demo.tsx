@@ -38,6 +38,8 @@ export const orchestrationDemoSettings = {
   defaultGoal: signal(false),
   /** HS2-R2N33M: placement runs because the policy leaves it Auto and a plan exists. */
   autoPlacement: signal(false),
+  /** HS2-1DC8X1: no policy is saved, so Start Orchestration says why and offers the settings. */
+  policyAbsent: signal(false),
   /** HS2-65AD6J: how the project's integrator stands for a card with a run; '' shows no Integration section. */
   integrator: signal('keep'),
   /** HS2-747WQA: what the ready DOC-9 waits for: a held resource, or a Models pattern that resolves to no model. */
@@ -102,6 +104,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.busy.value = false;
   settings.defaultGoal.value = false;
   settings.autoPlacement.value = false;
+  settings.policyAbsent.value = false;
   settings.integrator.value = 'keep';
   settings.docWait.value = 'resource_held';
   settings.collapsed.value = [];
@@ -119,6 +122,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
         busy: settings.busy.value,
         'default-goal': settings.defaultGoal.value,
         'auto-placement': settings.autoPlacement.value,
+        'policy-absent': settings.policyAbsent.value,
       },
     });
 }
@@ -207,6 +211,15 @@ export function OrchestrationToolbarDemo() {
             timeline={{
               ...demoTimeline(value),
               automatic_by_default: value === 'running' && orchestrationDemoSettings.autoPlacement.value,
+              ...((value === 'proposed' || value === 'paused') && orchestrationDemoSettings.policyAbsent.value
+                ? {
+                    kick_off: {
+                      ...demoTimeline(value).kick_off,
+                      can_start: false,
+                      start_blocked: 'policy_absent' as const,
+                    },
+                  }
+                : {}),
             }}
             propose={propose()}
             update={propose()}
@@ -366,6 +379,7 @@ export function OrchestrationDemoSettings() {
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />
+      <Checkbox name="policy-absent" checked={settings.policyAbsent.value} label="No Policy Saved" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
@@ -390,6 +404,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'busy') settings.busy.value = control.checked;
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
       if (name === 'auto-placement') settings.autoPlacement.value = control.checked;
+      if (name === 'policy-absent') settings.policyAbsent.value = control.checked;
     }),
   );
   scope.add(

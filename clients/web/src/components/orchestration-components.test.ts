@@ -150,9 +150,40 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
         },
       }),
     );
-    expect(blocked).toContain('Set the orchestration limits in Orchestration settings first');
+    expect(blocked).toContain('No policy is saved yet. Apply one in Orchestration settings first');
     expect(blocked).toMatch(
       /data-action="start-orchestration"[^>]*disabled|disabled[^>]*data-action="start-orchestration"/,
+    );
+    // HS2-1DC8X1: the dry-run banner offers the way to the setting.
+    expect(blocked).toContain('data-action="open-orchestration-settings"');
+    expect(blocked).toContain('Open Orchestration Settings');
+  });
+
+  it('HS2-1DC8X1 says why a paused plan cannot start, with the way to the setting', () => {
+    const paused = (start_blocked?: 'policy_absent' | 'project_software') =>
+      String(
+        OrchestrationToolbar({
+          timeline: {
+            ...demoTimeline('paused'),
+            kick_off: { can_start: start_blocked === undefined, can_pause: false, start_blocked },
+          },
+        }),
+      );
+    const absent = paused('policy_absent');
+    expect(absent).toContain('Start Orchestration Is Unavailable');
+    expect(absent).toContain(
+      'No policy is saved yet. Apply one in Orchestration settings first. Work already running continues.',
+    );
+    expect(absent).toContain('data-orchestration-start-blocked="policy_absent"');
+    expect(absent).toContain('data-action="open-orchestration-settings"');
+    // A reason changed elsewhere names it, with no Settings action.
+    const software = paused('project_software');
+    expect(software).toContain('Start Orchestration Is Unavailable');
+    expect(software).not.toContain('open-orchestration-settings');
+    // Nothing blocks: no banner, and a proposed plan with a policy has no settings action.
+    expect(paused()).not.toContain('Start Orchestration Is Unavailable');
+    expect(String(OrchestrationToolbar({ timeline: demoTimeline('proposed') }))).not.toContain(
+      'open-orchestration-settings',
     );
   });
 });

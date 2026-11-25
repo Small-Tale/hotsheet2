@@ -179,6 +179,11 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
     }),
   );
   lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.openOrchestrationSettings.selector, () => {
+      bindings.chooseProjects();
+    }),
+  );
+  lifetime.add(
     delegate(root, 'click', ORCHESTRATION_ACTIONS.orchestrationRunControl.selector, (_event, target) => {
       const { control, runState } = (target as HTMLElement).dataset;
       if (control) bindings.runControl(control, runState);

@@ -6,6 +6,7 @@ import {
   findTimelineItem,
   machineLabel,
   orchestrationLine,
+  startBlockedInSettings,
   startBlockedReason,
   startColumnId,
   stateWords,
@@ -192,6 +193,18 @@ describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
     expect(blocked('no_plan')).toMatch(/no plan/);
     expect(blocked('no_projects')).toMatch(/Add projects/);
     expect(blocked('running')).toBeUndefined();
+    // HS2-1DC8X1: named after the Policy section, and fixed in Orchestration settings.
+    expect(blocked('policy_absent')).toBe('No policy is saved yet. Apply one in Orchestration settings first');
+    const inSettings = (start_blocked?: Parameters<typeof blocked>[0]) =>
+      startBlockedInSettings({
+        ...demoTimeline('proposed'),
+        kick_off: { can_start: false, can_pause: false, start_blocked },
+      });
+    expect(
+      ['policy_absent', 'no_projects', 'project_software', 'no_plan', 'running', undefined].map((code) =>
+        inSettings(code as never),
+      ),
+    ).toEqual([true, true, false, false, false, false]);
     expect(startBlockedReason(demoTimeline('proposed'))).toBeUndefined();
     expect(findTimelineItem(undefined, 'step-1')).toBeUndefined();
     expect(findTimelineItem(demoTimeline('running'), 'step-404')).toBeUndefined();

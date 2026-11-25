@@ -323,12 +323,18 @@ export function startBlockedReason(timeline: OrchestrationTimeline): string | un
     case 'no_plan':
       return 'There is no plan to start yet';
     case 'policy_absent':
-      return 'Set the orchestration limits in Orchestration settings first';
+      // HS2-1DC8X1: named after the Policy section and its Apply Policy, not the per-project Limits.
+      return 'No policy is saved yet. Apply one in Orchestration settings first';
     case 'project_software':
       return 'Change the Project Type to Orchestration in General settings first';
     default:
       return timeline.kick_off.start_blocked satisfies never;
   }
+}
+
+/** HS2-1DC8X1: whether what blocks Start Orchestration is changed in Settings › Orchestration. */
+export function startBlockedInSettings(timeline: OrchestrationTimeline): boolean {
+  return timeline.kick_off.start_blocked === 'policy_absent' || timeline.kick_off.start_blocked === 'no_projects';
 }
 
 /**

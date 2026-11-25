@@ -5958,7 +5958,11 @@ A read on the server also starts the target followers of §26.9.
   the tool the person drives with in this project. A proposed or paused plan has
   **Start Orchestration**, which turns `placement.automatic` on through the policy route
   of §26.8; it is disabled, with the reason, while there is no policy or the project's
-  type is Software (`project_software`, HS2-J3ZF27). No placement actor is needed: the
+  type is Software (`project_software`, HS2-J3ZF27). The reason is never only the disabled
+  button's title (HS2-1DC8X1): a proposed plan's dry-run banner ends with it, and a paused
+  plan that cannot start shows a **Start Orchestration Is Unavailable** banner with it.
+  When the fix is in Settings › Orchestration (no policy saved, no project added) the banner
+  offers **Open Orchestration Settings**. No placement actor is needed: the
   orchestrator acts as the orchestration project (HS2-XYAHB4). A Software project's kept
   automatic policy does not read as running. While running, **Pause** turns it off; running work
   continues. A policy that leaves placement Auto runs once the plan has a step, and the header
