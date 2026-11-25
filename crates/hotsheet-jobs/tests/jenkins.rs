@@ -6,8 +6,12 @@
 //! `lastBuiltRevision.SHA1` and `branch[].name`
 //! (<https://plugins.jenkins.io/git/#plugin-content-remote-api>); a multibranch project's
 //! branch job is `job/<project>/job/<branch>`; a build is stopped with
-//! `POST <build>/stop`, answered with a redirect). No test makes a network call.
-//! Synthetic data only.
+//! `POST <build>/stop`, answered with a redirect). HS2-SSKBRB: a Pipeline build's
+//! stages come from the Pipeline: REST API plugin's `GET <build>/wfapi/describe`
+//! (<https://github.com/jenkinsci/pipeline-stage-view-plugin/blob/master/rest-api/README.md>:
+//! the run's `id`, `name`, `status`, times and `stages[]` with `id`, `name`, `status`,
+//! `startTimeMillis` and `durationMillis`); a Jenkins without the plugin answers 404.
+//! No test makes a network call. Synthetic data only.
 
 mod common;
 
@@ -18,7 +22,7 @@ use common::{CHECKOUT, Fixture, fixture};
 use hotsheet_jobs::{
     ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiProvider, CiRun, CiTarget,
     CiWatchOptions, GateState, GithubApi, JENKINS_KIND, JenkinsSource, Monitor, MonitorConfig,
-    Status, ci_outcome, ensure_ci_watch, gate_state, rewatch_ci,
+    Status, StepStatus, ci_outcome, ensure_ci_watch, gate_state, rewatch_ci,
 };
 use serde_json::{Value, json};
 
@@ -107,6 +111,42 @@ fn build(number: u64, commit: &str, branch: &str, result: Option<&str>, building
     })
 }
 
+/// What `GET <build>/wfapi/describe` answers, in the README's shape.
+fn describe(number: u64, status: &str, stages: &[(&str, &str, &str)]) -> Value {
+    let stages: Vec<Value> = stages
+        .iter()
+        .map(|(id, name, status)| {
+            json!({
+                "_links": {"self": {"href": format!(
+                    "/jenkins/job/widgets/{number}/execution/node/{id}/wfapi/describe")}},
+                "id": id, "name": name, "status": status,
+                "startTimeMillis": 1_413_461_275_770_u64, "durationMillis": 5228
+            })
+        })
+        .collect();
+    json!({
+        "_links": {"self": {"href": format!("/jenkins/job/widgets/{number}/wfapi/describe")}},
+        "id": "2026-11-01_10-00-00", "name": format!("#{number}"), "status": status,
+        "startTimeMillis": 1_413_461_275_770_u64, "endTimeMillis": 1_413_461_285_999_u64,
+        "durationMillis": 10229, "stages": stages
+    })
+}
+
+fn steps_seen(fx: &Fixture, id: &str) -> Vec<(String, String, StepStatus)> {
+    fx.get(id)
+        .steps
+        .into_iter()
+        .map(|step| (step.id, step.label, step.status))
+        .collect()
+}
+
+fn describes(api: &FakeJenkins) -> usize {
+    api.requests(ApiMethod::Get)
+        .iter()
+        .filter(|path| path.ends_with("/wfapi/describe"))
+        .count()
+}
+
 fn target() -> CiTarget {
     CiTarget::jenkins("widgets", SHA, "*", "main").unwrap()
 }
@@ -128,6 +168,12 @@ fn watcher(fx: &Fixture, api: &FakeJenkins) -> Monitor {
 
 fn step(fx: &Fixture, monitor: &mut Monitor) {
     fx.clock.advance(400);
+    monitor.tick().unwrap();
+}
+
+/// A tick after any error backoff, including the fake's 429 `Retry-After`.
+fn after_backoff(fx: &Fixture, monitor: &mut Monitor) {
+    fx.clock.advance(30_000);
     monitor.tick().unwrap();
 }
 
@@ -432,4 +478,222 @@ fn hs2_7h0s8r_credentials_and_rate_limits_keep_the_last_observation_and_404_ends
     let mut monitor = watcher(&fx, &api);
     monitor.tick().unwrap();
     assert_eq!(gate(&fx), GateState::Unknown);
+}
+
+#[test]
+fn hs2_sskbrb_a_pipeline_builds_stages_are_its_steps_until_the_build_finishes() {
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job(
+        "job/widgets",
+        "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+        vec![build(41, SHA, "origin/main", None, true)],
+    );
+    api.serve(
+        "job/widgets/41/wfapi/describe",
+        200,
+        describe(
+            41,
+            "IN_PROGRESS",
+            &[("5", "Build", "SUCCESS"), ("8", "Test", "IN_PROGRESS")],
+        ),
+    );
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    let running = fx.get(&job.id);
+    assert_eq!(running.status, Status::Running);
+    assert_eq!(running.latest["current_step"], "Test");
+    assert_eq!(
+        steps_seen(&fx, &job.id),
+        [
+            (
+                "stage-5".to_owned(),
+                "Build".to_owned(),
+                StepStatus::Succeeded
+            ),
+            ("stage-8".to_owned(), "Test".to_owned(), StepStatus::Active),
+        ]
+    );
+    // The same builds and stages again rewrite nothing; a running build is read again.
+    let revision = running.revision;
+    let read = describes(&api);
+    fx.clock.advance(100);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).revision, revision);
+    assert!(describes(&api) > read);
+
+    // A new stage while the build list is unchanged is a new observation.
+    api.serve(
+        "job/widgets/41/wfapi/describe",
+        200,
+        describe(
+            41,
+            "PAUSED_PENDING_INPUT",
+            &[
+                ("5", "Build", "SUCCESS"),
+                ("8", "Test", "SUCCESS"),
+                ("10", "Deploy", "PAUSED_PENDING_INPUT"),
+            ],
+        ),
+    );
+    step(&fx, &mut monitor);
+    let paused = fx.get(&job.id);
+    assert!(paused.revision > revision);
+    assert_eq!(paused.latest["current_step"], "Deploy");
+    assert_eq!(paused.steps[2].status, StepStatus::Active);
+
+    // Finished: the final stages are reported with the verdict, then not read again.
+    api.job(
+        "job/widgets",
+        "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+        vec![build(41, SHA, "origin/main", Some("FAILURE"), false)],
+    );
+    api.serve(
+        "job/widgets/41/wfapi/describe",
+        200,
+        describe(
+            41,
+            "FAILED",
+            &[
+                ("5", "Build", "SUCCESS"),
+                ("8", "Test", "UNSTABLE"),
+                ("10", "Deploy", "ABORTED"),
+                ("12", "Publish", "NOT_EXECUTED"),
+            ],
+        ),
+    );
+    step(&fx, &mut monitor);
+    let done = fx.get(&job.id);
+    assert_eq!(done.status, Status::Failed);
+    let statuses: Vec<StepStatus> = done.steps.iter().map(|s| s.status).collect();
+    assert_eq!(
+        statuses,
+        [
+            StepStatus::Succeeded,
+            StepStatus::Failed,
+            StepStatus::Cancelled,
+            StepStatus::Skipped
+        ]
+    );
+    let before = describes(&api);
+    rewatch_ci(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    step(&fx, &mut monitor);
+    step(&fx, &mut monitor);
+    assert_eq!(
+        describes(&api),
+        before,
+        "a finished build's stages are kept"
+    );
+}
+
+#[test]
+fn hs2_sskbrb_without_the_rest_api_plugin_the_watch_reports_no_steps_and_stops_asking() {
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job(
+        "job/widgets",
+        FREESTYLE,
+        vec![build(41, SHA, "origin/main", None, true)],
+    );
+    // No route: the fake answers Jenkins' HTML 404.
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    let running = fx.get(&job.id);
+    assert_eq!(running.status, Status::Running);
+    assert!(running.steps.is_empty());
+    assert!(!running.latest.contains_key("current_step"));
+    assert_eq!(describes(&api), 1);
+    // A newer build of the same job is not described either; the gate still judges.
+    api.job(
+        "job/widgets",
+        FREESTYLE,
+        vec![
+            build(42, SHA, "origin/main", Some("SUCCESS"), false),
+            build(41, SHA, "origin/main", Some("ABORTED"), false),
+        ],
+    );
+    step(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 42));
+    assert_eq!(describes(&api), 1);
+    assert!(fx.get(&job.id).steps.is_empty());
+}
+
+#[test]
+fn hs2_sskbrb_describe_errors_retry_or_drop_the_steps_and_empty_stages_are_an_empty_list() {
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job(
+        "job/widgets",
+        "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+        vec![build(41, SHA, "origin/main", None, true)],
+    );
+    // A run that has not reached its first stage yet has no stages.
+    api.serve(
+        "job/widgets/41/wfapi/describe",
+        200,
+        describe(41, "IN_PROGRESS", &[]),
+    );
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert!(steps_seen(&fx, &job.id).is_empty());
+    assert_eq!(fx.get(&job.id).status, Status::Running);
+    api.serve(
+        "job/widgets/41/wfapi/describe",
+        200,
+        describe(41, "IN_PROGRESS", &[("5", "Build", "IN_PROGRESS")]),
+    );
+    step(&fx, &mut monitor);
+    assert_eq!(fx.get(&job.id).latest["current_step"], "Build");
+    // A spent limit or a server error is retried: the last observation stays.
+    for status in [429, 500, 503] {
+        api.serve(
+            "job/widgets/41/wfapi/describe",
+            status,
+            json!({"message": "synthetic"}),
+        );
+        let read = describes(&api);
+        after_backoff(&fx, &mut monitor);
+        assert!(describes(&api) > read, "{status} was read");
+        let seen = fx.get(&job.id);
+        assert_eq!(seen.status, Status::Running, "{status}");
+        assert_eq!(seen.latest["current_step"], "Build", "{status}");
+        assert_eq!(seen.steps.len(), 1, "{status}");
+    }
+    // A describe the credentials may not read, or an unreadable body: no new steps (the
+    // last tree stays), and the gate is still judged from the build list.
+    for (status, body) in [
+        (403, json!({"message": "synthetic"})),
+        (200, json!("not a run")),
+    ] {
+        api.serve("job/widgets/41/wfapi/describe", status, body);
+        let revision = fx.get(&job.id).revision;
+        after_backoff(&fx, &mut monitor);
+        let seen = fx.get(&job.id);
+        assert!(seen.revision > revision, "{status} was observed");
+        assert_eq!(seen.status, Status::Running, "{status}");
+        assert_eq!(seen.steps.len(), 1, "{status}");
+    }
+    // The describe answers again: the new stages replace the tree, and the build's
+    // verdict arrives with them.
+    api.job(
+        "job/widgets",
+        "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+        vec![build(41, SHA, "origin/main", Some("SUCCESS"), false)],
+    );
+    api.serve(
+        "job/widgets/41/wfapi/describe",
+        200,
+        describe(
+            41,
+            "SUCCESS",
+            &[("5", "Build", "SUCCESS"), ("7", "Test", "SUCCESS")],
+        ),
+    );
+    after_backoff(&fx, &mut monitor);
+    let done = fx.get(&job.id);
+    assert_eq!(done.status, Status::Succeeded);
+    assert_eq!(done.steps.len(), 2);
 }

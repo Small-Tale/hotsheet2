@@ -424,8 +424,18 @@ build-list-by-commit filter and exposes no repository ancestry.
 - **Verdict.** A `SUCCESS` build of the commit is green; otherwise the newest build
   decides: `FAILURE` and `UNSTABLE` are red, `ABORTED` is cancelled, and `building`,
   `NOT_BUILT` or an unknown result wait. A rebuild is a new build number, so a rewatch
-  ignores a judged build by number. No steps are reported: Jenkins core exposes no
-  stage data (HS2-SSKBRB).
+  ignores a judged build by number.
+- **Steps (HS2-SSKBRB).** Jenkins core exposes no stage data. A Pipeline build's stages
+  come from the [Pipeline: REST API plugin](https://github.com/jenkinsci/pipeline-stage-view-plugin/blob/master/rest-api/README.md):
+  each poll reads `<job>/<number>/wfapi/describe` for the judged build only, and its
+  `stages[]` become the steps (`stage-<id>`, labelled with the stage name).
+  `SUCCESS` succeeded; `FAILED` and `UNSTABLE` failed; `ABORTED` cancelled;
+  `NOT_EXECUTED` skipped; `IN_PROGRESS` and `PAUSED_PENDING_INPUT` active, and the
+  first of those is `current_step`; anything else pending. A 404 (the plugin is not
+  installed, or the job is not a Pipeline) means no steps, and that job is not asked
+  again during the watch. 429 and server errors are retried like a job read; 401, 403
+  or an unreadable body leave the last step tree. A finished build's stages are read
+  once.
 - **Cancel** is `POST <job>/<number>/stop` (a redirect counts as accepted), sent only
   for the commit's own unfinished build.
 - **Errors.** 404 for the job ends the watch without a verdict (`unknown`); 401, 403,
