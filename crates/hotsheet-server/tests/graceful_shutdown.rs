@@ -113,7 +113,7 @@ impl Server {
         stdin: Stdio,
         output: Option<(Stdio, Stdio)>,
     ) -> Self {
-        Self::start_inner(drain_ms, watch_stdin, stdin, output, None, None)
+        Self::start_inner(drain_ms, watch_stdin, stdin, output, None, None, None)
     }
 
     /// Start with a drivable AI tool on `PATH` whose every invocation hangs, so the
@@ -131,6 +131,7 @@ impl Server {
             None,
             Some((probe_timeout_ms, tool)),
             None,
+            None,
         )
     }
 
@@ -141,6 +142,7 @@ impl Server {
         output: Option<(Stdio, Stdio)>,
         slow_discovery: Option<(u64, SlowTool)>,
         test_owner_pid: Option<u32>,
+        rust_log: Option<&str>,
     ) -> Self {
         let fixture = tempfile::tempdir().unwrap();
         // Keep locally installed AI tools out of startup catalog discovery; a slow-discovery
@@ -185,6 +187,7 @@ impl Server {
             .arg(drain_ms.to_string())
             .env("HOTSHEET_HOME", &home)
             .envs(test_owner_pid.map(|pid| ("HOTSHEET_TEST_SERVER_OWNER_PID", pid.to_string())))
+            .envs(rust_log.map(|filter| ("RUST_LOG", filter)))
             .env("PATH", path)
             .args(slow_discovery.map(|(ms, _)| format!("--ai-probe-timeout-ms={ms}")))
             // Piped and held by the fixture: the server stops if this test process dies
@@ -359,8 +362,15 @@ impl Drop for Server {
 fn hs2_bnghkm_interrupted_test_owner_reaps_repeated_detached_servers() {
     for _ in 0..3 {
         let mut owner = Command::new("sleep").arg("30").spawn().unwrap();
-        let mut server =
-            Server::start_inner(250, false, Stdio::null(), None, None, Some(owner.id()));
+        let mut server = Server::start_inner(
+            250,
+            false,
+            Stdio::null(),
+            None,
+            None,
+            Some(owner.id()),
+            None,
+        );
         let _ = server.ready();
         owner.kill().unwrap();
         owner.wait().unwrap();
@@ -666,6 +676,23 @@ fn owner_death_stops_the_server_even_when_its_output_pipes_died_too() {
     // Regression (HS2-VQ8ZWT): a real runner also owns the server's stdout/stderr pipes.
     // Once it dies, writing a shutdown diagnostic must not panic the watchdog before it
     // begins stopping (the first web E2E caught exactly that).
+    assert_owner_death_with_dead_output_exits_cleanly(None);
+}
+
+#[test]
+fn hs2_r9ajw5_owner_death_exits_cleanly_while_every_diagnostic_hits_the_dead_stderr() {
+    // HS2-R9AJW5: at the default `info` level, an event logged on the main thread during
+    // the shutdown sequence was rare (56 of 200 runs under parallel CPU load). Each one made
+    // `tracing-subscriber` report its failed stderr write with `eprintln!`, which panicked
+    // `main` (exit 101). `trace` emits such events on every shutdown, so this failed every
+    // time without the fix instead of only under load.
+    assert_owner_death_with_dead_output_exits_cleanly(Some("trace"));
+}
+
+/// The owner holds the server's stdin write end and both output readers, then dies. The
+/// server must notice, stop, and exit 0 with its registration released. `rust_log`
+/// overrides the server's diagnostics filter.
+fn assert_owner_death_with_dead_output_exits_cleanly(rust_log: Option<&str>) {
     // HS2-D1C06G: one owner holds both pipe ends. Killing separate stand-ins in
     // sequence left a load-dependent window with dead output but a live owner.
     let mut owner = Command::new("sleep")
@@ -680,13 +707,26 @@ fn owner_death_stops_the_server_even_when_its_output_pipes_died_too() {
         .try_clone_to_owned()
         .unwrap();
     let output = (Stdio::from(output_in), Stdio::from(err_in));
-    let mut server = Server::start_with(60_000, true, Stdio::from(pipe), Some(output));
+    let mut server = Server::start_inner(
+        60_000,
+        true,
+        Stdio::from(pipe),
+        Some(output),
+        None,
+        None,
+        rust_log,
+    );
     server.ready();
     // The owner dies: its stdin write end and both output readers close together.
     owner.kill().unwrap();
     owner.wait().unwrap();
-    let status = server.exits_within(Duration::from_secs(5));
-    assert!(status.success(), "unclean exit {status}");
+    // The 60 s drain means an exit inside this bound comes from the stdin watcher, not a
+    // deadline. The bound only catches a hang; the load-only failure was the exit status.
+    let status = server.exits_within(Duration::from_secs(30));
+    assert!(
+        status.success(),
+        "unclean exit {status} (101 is a panic, such as one on the dead stderr)"
+    );
     server.assert_registration_released();
 }
 
