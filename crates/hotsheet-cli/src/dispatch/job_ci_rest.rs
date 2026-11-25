@@ -18,6 +18,12 @@
 //!   self-hosted, so there is no default root; `HOTSHEET_JENKINS_URL` names it. The user
 //!   `JENKINS_USER` and API token `JENKINS_API_TOKEN` are sent as HTTP Basic, which
 //!   Jenkins accepts without a CSRF crumb.
+//! - HS2-JZ1DD2: Azure DevOps Build REST 7.1
+//!   (<https://learn.microsoft.com/en-us/rest/api/azure/devops/build/?view=azure-devops-rest-7.1>):
+//!   root `https://dev.azure.com` (`HOTSHEET_AZURE_DEVOPS_API_URL`), personal access token
+//!   `AZURE_DEVOPS_EXT_PAT` (the Azure CLI's variable) as HTTP Basic with an empty user
+//!   (<https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate>).
+//!   A spent limit answers 429 with `Retry-After`.
 
 use base64::Engine;
 use hotsheet_extsync::github::{GitHubTransport, UreqGitHubTransport};
@@ -87,6 +93,18 @@ pub(super) const JENKINS: RestProvider = RestProvider {
         scheme: Scheme::Basic {
             user_env: Some("JENKINS_USER"),
         },
+    }],
+};
+
+/// HS2-JZ1DD2: Azure DevOps Services, or a server named by
+/// `HOTSHEET_AZURE_DEVOPS_API_URL`.
+pub(super) const AZURE_PIPELINES: RestProvider = RestProvider {
+    default_api: Some("https://dev.azure.com"),
+    url_env: "HOTSHEET_AZURE_DEVOPS_API_URL",
+    credentials: &[Credential {
+        token_env: "AZURE_DEVOPS_EXT_PAT",
+        header: "Authorization",
+        scheme: Scheme::Basic { user_env: None },
     }],
 };
 
@@ -196,11 +214,12 @@ impl GithubApi for UreqCiRestApi {
             ApiMethod::Get => "GET",
             ApiMethod::Post => "POST",
             ApiMethod::Put => "PUT",
+            ApiMethod::Patch => "PATCH",
         };
         let url = format!("{base}/{}", request.path);
         let response = self
             .transport
-            .request(method, &url, &headers, None)
+            .request(method, &url, &headers, request.body.as_ref())
             .map_err(|_| ApiUnavailable {
                 retry_after_ms: None,
             })?;
@@ -220,7 +239,7 @@ mod tests {
 
     #[test]
     fn hs2_17hvnp_a_token_is_only_ever_sent_over_https_or_to_this_machine() {
-        for provider in [BUILDKITE, CIRCLECI, JENKINS] {
+        for provider in [BUILDKITE, CIRCLECI, JENKINS, AZURE_PIPELINES] {
             assert_eq!(api_base(provider, None).as_deref(), provider.default_api);
             assert_eq!(
                 api_base(provider, Some("http://127.0.0.1:9/v2/")).as_deref(),
@@ -250,6 +269,25 @@ mod tests {
                 "value-of-CIRCLECI_TOKEN".to_owned(),
                 "CIRCLECI_TOKEN"
             ))
+        );
+    }
+
+    #[test]
+    fn hs2_jz1dd2_an_azure_pat_goes_as_basic_with_an_empty_user() {
+        let pat = |name: &str| (name == "AZURE_DEVOPS_EXT_PAT").then(|| "p4t".to_owned());
+        assert_eq!(
+            AZURE_PIPELINES.authorization(pat),
+            Some((
+                "Authorization",
+                // base64(":p4t")
+                "Basic OnA0dA==".to_owned(),
+                "AZURE_DEVOPS_EXT_PAT"
+            ))
+        );
+        assert_eq!(AZURE_PIPELINES.authorization(|_| None), None);
+        assert_eq!(
+            api_base(AZURE_PIPELINES, None).as_deref(),
+            Some("https://dev.azure.com")
         );
     }
 

@@ -232,6 +232,7 @@ impl<A: GithubApi> JenkinsSource<A> {
             method: ApiMethod::Get,
             path: format!("{path}/api/json?tree={}", query_value(&tree())),
             if_none_match: None,
+            body: None,
         };
         self.api
             .send(&request)
@@ -369,6 +370,7 @@ impl<A: GithubApi> WatchSource for JenkinsSource<A> {
             method: ApiMethod::Post,
             path: format!("{path}/{number}/stop"),
             if_none_match: None,
+            body: None,
         };
         match self.api.send(&request) {
             // Jenkins answers the stop with a redirect to the build.

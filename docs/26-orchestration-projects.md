@@ -2171,8 +2171,9 @@ repository check refuses a Buildkite or CircleCI watch of a target on another ma
 (`gate_repository_mismatch`); HS2-56MTYN covers that case and ancestor coverage.
 HS2-7H0S8R adds `jenkins` (`repository` is the job's full name, `folder/job`, workflow
 `*`; §33.11b), watched, read and refused on another machine the same way, with exact
-coverage. Azure Pipelines (HS2-JZ1DD2) and Bitbucket Pipelines (HS2-BWF72S) are
-follow-ups.
+coverage. HS2-JZ1DD2 adds `azure-pipelines` (`repository` is
+`organization/project/definition-id`, workflow `*`; §33.11c) likewise. Bitbucket
+Pipelines (HS2-BWF72S) is a follow-up.
 
 ### Coverage
 

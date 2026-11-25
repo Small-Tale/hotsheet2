@@ -1648,6 +1648,19 @@ fn hs2_7h0s8r_a_jenkins_gate_is_watched_and_read_like_github() {
     exact_coverage_gate("jenkins", "team/widgets", "wid gets", 'c', 43);
 }
 
+/// HS2-JZ1DD2: an Azure Pipelines gate likewise, its repository
+/// `organization/project/definition-id`.
+#[test]
+fn hs2_jz1dd2_an_azure_pipelines_gate_is_watched_and_read_like_github() {
+    exact_coverage_gate(
+        "azure-pipelines",
+        "acme/Widget Team/12",
+        "acme/widgets",
+        'c',
+        44,
+    );
+}
+
 /// Link a gate of an exact-coverage provider, judge its watch Job green, and read the
 /// evidence back; a repository the provider cannot address (`odd`) is refused.
 fn exact_coverage_gate(provider: &str, repository: &str, odd: &str, commit_char: char, run: u64) {

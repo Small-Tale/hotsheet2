@@ -120,6 +120,11 @@ impl GithubActionsGates {
         Self::for_provider(home, CiProvider::Jenkins)
     }
 
+    /// HS2-JZ1DD2: the Azure Pipelines adapter.
+    pub fn azure_pipelines(home: &Path) -> Self {
+        Self::for_provider(home, CiProvider::AzurePipelines)
+    }
+
     pub(crate) fn for_provider(home: &Path, ci: CiProvider) -> Self {
         Self {
             ci,
@@ -639,8 +644,12 @@ impl OrchestrationRuntime {
                 CiProvider::GithubActions => github_repository(&identity),
                 CiProvider::GitlabCi => gitlab_project(&identity),
                 // HS2-17HVNP: a Buildkite pipeline or CircleCI project slug is not a
-                // repository identity, nor (HS2-7H0S8R) a Jenkins job; the link names it.
-                CiProvider::Buildkite | CiProvider::Circleci | CiProvider::Jenkins => None,
+                // repository identity, nor (HS2-7H0S8R) a Jenkins job or (HS2-JZ1DD2) an
+                // Azure Pipelines definition; the link names it.
+                CiProvider::Buildkite
+                | CiProvider::Circleci
+                | CiProvider::Jenkins
+                | CiProvider::AzurePipelines => None,
             });
         match (requested, declared) {
             (Some(requested), Some(declared)) if !requested.eq_ignore_ascii_case(&declared) => {
@@ -692,7 +701,8 @@ impl OrchestrationRuntime {
                 CiProvider::GitlabCi
                 | CiProvider::Buildkite
                 | CiProvider::Circleci
-                | CiProvider::Jenkins => "*",
+                | CiProvider::Jenkins
+                | CiProvider::AzurePipelines => "*",
             };
             let linked = self.gate_registry().link(
                 owner_id,

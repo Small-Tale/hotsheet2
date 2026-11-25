@@ -24,6 +24,7 @@
 //! Nothing in the Job core reads the wall clock or a random source except through [`Clock`] and
 //! [`IdSource`].
 
+mod azure;
 mod buildkite;
 mod ci;
 mod circleci;
@@ -45,6 +46,7 @@ mod steps;
 mod store;
 pub mod watch;
 
+pub use azure::AzurePipelinesSource;
 pub use buildkite::BuildkiteSource;
 pub use ci::{
     CiArtifact, CiOutcome, CiRun, CiWatchOptions, GateReading, GateState, ci_outcome,
@@ -58,9 +60,9 @@ pub use feed::{
 };
 pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
 pub use github::{
-    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, BUILDKITE_KIND, CIRCLECI_KIND, CiProvider,
-    CiTarget, GITHUB_ACTIONS_KIND, GITLAB_CI_KIND, GithubActionsSource, GithubApi, JENKINS_KIND,
-    RunFloor, UNKNOWN_COMMIT_LIMIT_MS, repo_from_remote,
+    AZURE_PIPELINES_KIND, ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, BUILDKITE_KIND,
+    CIRCLECI_KIND, CiProvider, CiTarget, GITHUB_ACTIONS_KIND, GITLAB_CI_KIND, GithubActionsSource,
+    GithubApi, JENKINS_KIND, RunFloor, UNKNOWN_COMMIT_LIMIT_MS, repo_from_remote,
 };
 pub use gitlab::GitlabCiSource;
 pub use jenkins::JenkinsSource;

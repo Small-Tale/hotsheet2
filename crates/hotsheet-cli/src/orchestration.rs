@@ -253,6 +253,8 @@ impl OrchestrationRuntime {
                 Arc::new(GithubActionsGates::circleci(&home)),
                 // HS2-7H0S8R: Jenkins builds, likewise.
                 Arc::new(GithubActionsGates::jenkins(&home)),
+                // HS2-JZ1DD2: Azure Pipelines builds, likewise.
+                Arc::new(GithubActionsGates::azure_pipelines(&home)),
             ],
             sessions: Arc::new(NoSessionHost),
             session_executor: Arc::new(ExecutorUnavailable),

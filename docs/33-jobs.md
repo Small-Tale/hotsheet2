@@ -436,6 +436,42 @@ build-list-by-commit filter and exposes no repository ancestry.
   They are kept in memory only; `job watch status` reports `jenkins_token` as
   `JENKINS_API_TOKEN` when both are set, otherwise `null`.
 
+## 33.11c Azure Pipelines watch as shipped (HS2-JZ1DD2)
+
+`azure-pipelines` watch Jobs follow one commit's CI gate like §33.11a, through the same
+machine monitor, CI gate API and REST port, with **exact coverage only**: the Build
+REST API exposes no repository ancestry.
+
+- **Target.** `repository` is `organization/project/definition-id`: the organization
+  name, the project name (letters, digits, spaces, `-`, `_`, `.`) and the pipeline
+  definition's numeric id. The workflow is always `*`.
+- **Reads** ([Builds - List](https://learn.microsoft.com/en-us/rest/api/azure/devops/build/builds/list?view=azure-devops-rest-7.1)).
+  Each poll lists `{org}/{project}/_apis/build/builds?definitions=<id>&branchName=refs/heads/<branch>`
+  newest first (`queryOrder=queueTimeDescending`, `$top=30`, `api-version=7.1`) and
+  keeps the builds whose `sourceVersion` is the commit on that `sourceBranch`; a
+  `pullRequest` build never counts. The current build's
+  [timeline](https://learn.microsoft.com/en-us/rest/api/azure/devops/build/timeline/get?view=azure-devops-rest-7.1)
+  gives the steps (its `Stage` records, or its `Job` records when it has no stages)
+  and the current step.
+- **Verdict.** A `completed` + `succeeded` build of the commit is green; otherwise the
+  newest decides: `failed` and `partiallySucceeded` are red, `canceled` is cancelled,
+  `inProgress` and `cancelling` run, and `notStarted`, `postponed`, `none` or an
+  unknown value wait. A result is read only once the build is `completed`.
+- **Retries.** Rerunning failed stages keeps the build id, so `run_attempt` is the
+  timeline's highest record `attempt`. A rewatch ignores the judged build until it is
+  retried (a higher attempt) and judges any newer build.
+- **Cancel** is `PATCH …/_apis/build/builds/<id>` with `{"status": "cancelling"}`
+  ([Update Build](https://learn.microsoft.com/en-us/rest/api/azure/devops/build/builds/update-build?view=azure-devops-rest-7.1)),
+  sent only for the commit's own unfinished build.
+- **Errors.** 404 ends the watch without a verdict (`unknown`). 203 (Azure DevOps'
+  sign-in page for a credential it does not accept), 401, 403, 429 and server errors
+  are retried with backoff and keep the last observation.
+- **Credentials.** The personal access token `AZURE_DEVOPS_EXT_PAT` (the Azure CLI's
+  variable; Build read, and Build read and execute to cancel) goes as HTTP Basic with
+  an empty user, kept in memory only. The root is `HOTSHEET_AZURE_DEVOPS_API_URL`
+  (default `https://dev.azure.com`), HTTPS except loopback HTTP. `job watch status`
+  reports `azure_pipelines_token`.
+
 ## 33.12 Validation and deployment runners (HS2-BWAPSX)
 
 A hosted validation step or deployment that runs in a detached runner
