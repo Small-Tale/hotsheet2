@@ -283,6 +283,7 @@ import {
   desktopRemoteServers as listDesktopRemoteServers,
   desktopRemoteSession,
 } from '../remote-projects/client';
+import { loadRemoteHostNames, rememberRemoteHostNames, saveRemoteHostNames } from '../remote-projects/host-names';
 import { isRemoteProjectId, parseRemoteProjectId } from '../remote-projects/identity';
 import {
   createRemoteReconnect,
@@ -1661,6 +1662,15 @@ export async function startHotSheetWebClient() {
     if (opened) void activateOpenedProject(opened);
     else if (placeholder) selectProjectTab(remotePlaceholderTabId(placeholder.id));
   }
+  // Each opened remote tab's machine name, kept per device so its placeholder is named the same way
+  // next time, before the host answers (HS2-GN0WKS).
+  let remoteHostNames = loadRemoteHostNames(localStorage);
+  const disposeRemoteHostNames = effect(() => {
+    const next = rememberRemoteHostNames(remoteHostNames, projects.value);
+    if (next === remoteHostNames) return;
+    remoteHostNames = next;
+    saveRemoteHostNames(localStorage, next);
+  });
   async function restoreRemoteProjectTabs() {
     if (isRemoteClient()) return;
     const [servers, selected] = await Promise.all([
@@ -1669,7 +1679,7 @@ export async function startHotSheetWebClient() {
     ]);
     desktopRemoteServers.value = servers;
     const restoring = remoteReconnect.restore(
-      remoteTabPlaceholders(selected, servers).map((placeholder) => ({
+      remoteTabPlaceholders(selected, servers, loadRemoteHostNames(localStorage)).map((placeholder) => ({
         ...placeholder,
         rank: projectTabRank(placeholder.id, placeholder.rank),
       })),
@@ -8158,6 +8168,7 @@ export async function startHotSheetWebClient() {
       orchestrationView.dispose();
       orchestrationTargetLines.dispose();
       window.removeEventListener('online', wakeChangeStreamsOnline);
+      disposeRemoteHostNames();
       wakeChangeStreamRef.current = undefined;
       disposeProjectChangeStreams();
       statsGlance.dispose();

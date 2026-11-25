@@ -1032,8 +1032,9 @@ test('shows remembered remote tabs before any open resolves and opens each host 
     );
   await expect(studio).toHaveAttribute('data-project-pending', 'true');
   await expect(laptop).toHaveAttribute('data-project-pending', 'true');
-  await expect(page.getByRole('tab', { name: /Studio · one-name/ })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Laptop · two-name/ })).toBeVisible();
+  // Named like the opened tab: the origin's host until the peer has reported a name (HS2-GN0WKS).
+  await expect(page.getByRole('tab', { name: /studio\.test · one-name/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /laptop\.test · two-name/ })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-ej5k09-loading-tabs-wide.png', animations: 'disabled' });
   await page.setViewportSize({ width: 900, height: 700 });
   await page.screenshot({ path: 'target/visual-captures/hs2-ej5k09-loading-tabs-medium.png', animations: 'disabled' });
@@ -1063,6 +1064,26 @@ test('shows remembered remote tabs before any open resolves and opens each host 
     'data-selected',
     'true',
   );
+});
+
+test('names an unreachable remote tab with the host name its opened tab last showed (HS2-GN0WKS)', async ({ page }) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  const remote = await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const opened = page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(STUDIO, 'one')}"]`),
+    placeholder = page.locator(
+      `[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`,
+    );
+  // The opened tab names the peer's machine (the fixture's peer reports "Studio").
+  await expect(opened).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Studio · one-name/ })).toBeVisible();
+  // The host goes away; after a reload its tab waits as a placeholder under the same name.
+  remote.up.set(STUDIO, false);
+  await page.reload();
+  await expect(placeholder).toBeVisible();
+  await expect(placeholder.getByRole('tab', { name: /Studio · one-name/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /studio\.test/ })).toHaveCount(0);
 });
 
 test('keeps a dragged mix of local and remote project tabs in order across reloads (HS2-NRBWGF)', async ({ page }) => {
@@ -1120,7 +1141,7 @@ test('keeps an unreachable remote tab reconnecting and opens it in place once th
   expect(await projectTabIds(page)).toEqual(['alpha', placeholderId, remoteProjectId(LAPTOP, 'two')]);
   await studio.click();
   const panel = page.locator('[data-remote-project-placeholder="reconnecting"]');
-  await expect(panel).toContainText('Reconnecting to Studio · one-name');
+  await expect(panel).toContainText('Reconnecting to studio.test · one-name');
   for (const [scheme, width, height] of [
     ['light', 1440, 900],
     ['light', 900, 700],
@@ -1266,7 +1287,7 @@ test('an expired remote approval offers Renew, never reconnecting, and opens onc
   );
   await studio.click();
   const panel = page.locator('[data-remote-project-placeholder="expired"]');
-  await expect(panel).toContainText('Renew Access to Studio · one-name');
+  await expect(panel).toContainText('Renew Access to studio.test · one-name');
   await expect(page.locator('[data-remote-project-placeholder="reconnecting"]')).toHaveCount(0);
   for (const [scheme, width, height] of [
     ['light', 1440, 900],
@@ -1314,7 +1335,7 @@ test('a revoked remote approval says so and offers pairing again (HS2-4B0KSD)', 
     .locator(`[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`)
     .click();
   const panel = page.locator('[data-remote-project-placeholder="revoked"]');
-  await expect(panel).toContainText('Access Revoked by Studio · one-name');
+  await expect(panel).toContainText('Access Revoked by studio.test · one-name');
   await expect(panel.getByRole('button', { name: 'Pair Again' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Renew' })).toHaveCount(0);
 });

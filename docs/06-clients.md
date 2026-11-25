@@ -1541,8 +1541,12 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   reopening the saved composer while retaining its draft.
   Remembered **remote** projects (the checkouts this machine's registry lists under
   `hotsheet-cli remote selected-projects`) get their tabs at once, before any remote open and
-  alongside the local restore, named `<binding label> · <last confirmed checkout name>` from the
-  registry alone and ranked after the local tabs in the registry's saved order, unless the user
+  alongside the local restore, named exactly as the opened tab will be: `<host> · <last confirmed
+checkout name>`, where the host is the machine name the peer last reported on this device (a
+  per-device `hotsheet.remote-host-names.v1` cache by binding, written whenever a remote tab is
+  open), else the reviewed origin's host, never the pairing label (HS2-GN0WKS; the cache stays in
+  browser storage because the registry's strict schema would refuse a new field in older builds),
+  and ranked after the local tabs in the registry's saved order, unless the user
   dragged the strip into a mixed order: a drag also saves the combined local-and-remote order
   (`hotsheet.project-tab-order.v1`, local roots and remote project ids), and startup ranks both
   kinds of tab by it, with tabs it does not name after it in the old order (HS2-NRBWGF). Every host opens

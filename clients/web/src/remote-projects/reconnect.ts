@@ -2,7 +2,7 @@ import { signal } from 'kerfjs';
 
 import type { Project } from '../interactions/types';
 import { remoteFailureKind, remoteFailureText } from '../remote-session-lifetime';
-import { remoteProjectId } from './identity';
+import { remoteProjectId, remoteProjectTabName } from './identity';
 
 /**
  * Remembered remote project tabs that are not open yet (HS2-EJ5K09, HS2-WNK73S).
@@ -54,6 +54,8 @@ export interface RemoteTabSelection {
 export interface RemoteTabBinding {
   id: string;
   label: string;
+  /** The reviewed origin; with it, a placeholder is named like the opened tab (HS2-GN0WKS). */
+  origin?: string;
   last_confirmed_checkouts?: ReadonlyArray<{ id: string; name: string }>;
 }
 
@@ -67,12 +69,16 @@ export const remotePlaceholderProjectId = (tabId: string) =>
 export const REMOTE_TAB_RANK_BASE = 1_000_000;
 
 /**
- * The placeholder seeds from this machine's registry alone: the binding's label and the checkout name
- * the host last confirmed. An unknown checkout falls back to its id; an invalid identity is skipped.
+ * The placeholder seeds from this machine's registry and this device's host-name cache: named
+ * `<host> · <project>` exactly like the opened tab (HS2-HGG426, HS2-GN0WKS), with the host the peer last
+ * reported (`hostNames`, by binding id), else the origin's host, and the checkout name the host last
+ * confirmed. A binding without an origin keeps its label. An unknown checkout falls back to its id;
+ * an invalid identity is skipped.
  */
 export function remoteTabPlaceholders(
   selected: readonly RemoteTabSelection[],
   bindings: readonly RemoteTabBinding[],
+  hostNames: Readonly<Record<string, string>> = {},
 ): Array<Pick<RemoteTabPlaceholder, 'id' | 'bindingId' | 'checkoutId' | 'name' | 'rank'>> {
   const seen = new Set<string>();
   return selected.flatMap((item, index) => {
@@ -92,7 +98,11 @@ export function remoteTabPlaceholders(
         id,
         bindingId: item.binding_id,
         checkoutId: item.checkout_id,
-        name: binding?.label ? `${binding.label} · ${project}` : project,
+        name: binding?.origin
+          ? remoteProjectTabName(hostNames[item.binding_id], binding.origin, project)
+          : binding?.label
+            ? `${binding.label} · ${project}`
+            : project,
         rank: REMOTE_TAB_RANK_BASE + index,
       },
     ];
