@@ -436,6 +436,14 @@ gives each tab only the terminals launched in its checkout (the most specific op
 checkout on that server), so tabs on one server and equal checkout ids on two
 servers stay separate. See [06](06-clients.md) §6.2.
 
+**Remote AI prompts (HS2-HSFVHC).** A question or permission prompt raised by an AI
+session in a remote tab's terminal is answered through that tab's project API on the
+hosting server, so the waiting hook there receives it exactly as it would from a local
+tab. The bridge relabels the host's pending permission requests with the open tab that
+owns their checkout, so a request appears only in its own project. A real-server parity
+suite runs every prompt step for a local and a remote tab of the same server
+(`clients/web/src/remote-project-parity.test.ts`).
+
 ## 8.3 Mobile (iOS) configuration & connection
 
 The ticket asks how mobile devices connect to one or more servers. Directions:

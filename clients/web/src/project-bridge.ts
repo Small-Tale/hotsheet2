@@ -36,6 +36,7 @@ import {
   requireCurrentRemoteBinding,
 } from './remote-projects/host';
 import { remoteHostLabel, remoteProjectId, remoteProjectTabName } from './remote-projects/identity';
+import { remotePermissionList, type RemotePermissionScope } from './remote-projects/permissions';
 import {
   remoteTerminalItem,
   remoteTerminalLaunchCwd,
@@ -2094,6 +2095,45 @@ async function remoteConnectionScopes(target: SessionTarget): Promise<RemoteConn
   });
 }
 
+/** Every open tab on the same reviewed server, in the host's checkout terms, for permission
+ * ownership (HS2-HSFVHC). Like {@link remoteConnectionScopes}, only the current binding counts. */
+async function remotePermissionScopes(target: SessionTarget): Promise<RemotePermissionScope[]> {
+  const current = target.remote;
+  if (!current) return [];
+  const peers = [...sessions.entries()].filter(
+    ([, session]) =>
+      session.remote?.bindingId === current.bindingId &&
+      session.remote.bindingRevision === current.bindingRevision &&
+      session.remote.connection.binding.identity.server_id === current.connection.binding.identity.server_id,
+  );
+  const roots = await Promise.all(peers.map(([id, session]) => remoteCheckoutRoot(id, session).catch(() => undefined)));
+  return peers.flatMap(([id, session], index) => {
+    const root = roots[index];
+    return root === undefined || !session.remote
+      ? []
+      : [{ id, checkoutId: session.remote.checkoutId, root, stores: session.remote.stores ?? [] }];
+  });
+}
+
+/** A remote host's pending permission requests, each labelled with the open tab that owns it. */
+async function remotePermissionResponse(response: Response, target: SessionTarget): Promise<Response> {
+  const text = await response.text();
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return new Response(text, { status: response.status, headers: response.headers });
+  }
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  headers.delete('content-encoding');
+  headers.set('content-type', 'application/json');
+  return new Response(JSON.stringify(remotePermissionList(value, await remotePermissionScopes(target))), {
+    status: response.status,
+    headers,
+  });
+}
+
 function remoteConnectionCreateBody(body: ArrayBuffer | undefined, projectId: string, checkoutId: string): ArrayBuffer {
   const text = body ? Buffer.from(body).toString('utf8') : '';
   const value: unknown = text.trim() ? JSON.parse(text) : {};
@@ -2205,8 +2245,9 @@ export async function proxyProjectRequest(
       const connectionList =
         request.method === 'GET' && (pathname === '/connections' || pathname === '/drive/sessions');
       const connectionCreate = pathname === '/drive/connections' && request.method === 'POST';
+      const permissionList = request.method === 'GET' && pathname === '/permissions';
       // Terminal answers are rewritten for ownership, so they must arrive uncompressed (HS2-JJKVJJ).
-      if (terminalPath || connectionList || connectionCreate) headers.delete('accept-encoding');
+      if (terminalPath || connectionList || connectionCreate || permissionList) headers.delete('accept-encoding');
       let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
       if (pathname === '/terminals' && request.method === 'POST') {
         const root = await remoteCheckoutRoot(projectId, target);
@@ -2259,6 +2300,7 @@ export async function proxyProjectRequest(
         );
       if ((connectionList || connectionCreate) && response.ok)
         return await remoteConnectionResponse(response, projectId, target, connectionList);
+      if (permissionList && response.ok) return await remotePermissionResponse(response, target);
       return new Response(response.body, { status: response.status, headers: response.headers });
     } catch {
       return Response.json({ error: 'Remote server is unavailable or its approval changed.' }, { status: 503 });
