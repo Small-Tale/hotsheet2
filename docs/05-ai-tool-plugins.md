@@ -705,6 +705,31 @@ Rules are role-specific, and their feedback is written for the reader:
   same text. The message is machine-actionable: it gives the exact retry for each surface,
   the `## Confidence` section shape, and the rubric bands, so one retry succeeds.
 - **Humans:** human and `system` actors are never required to score.
+- **Remote-commit rule (HS2-R8ZH4K):** an `ai` completion through CLI `edit`/`close`,
+  MCP `hotsheet_update`/`hotsheet_close`, or the git-backed server routes must have its
+  commits on the remote, as the workflow requires (HS2-8HCBA1). The engine is
+  `hotsheet_ticketing::completion_remote`, called beside the confidence rule:
+  - **Code checkout:** the request's checkout, else a registered checkout linked to the
+    ticket's store (the CLI prefers the one containing its working directory). The ticket
+    store's own repository never counts. With no checkout the check is skipped and the
+    response warns.
+  - **Commits:** those named with `--commit <sha>` (MCP/HTTP `commits`), else every commit
+    whose subject leads with the slug (`HS2-A HS2-B …` names both).
+  - **Check:** after a best-effort `git fetch --all`, each commit must be reachable from a
+    remote-tracking ref, or be patch-equivalent (`git patch-id --stable`) to a remote commit
+    naming the slug, so a rebased or cherry-picked commit passes.
+  - **Refusals (422, nothing changes):** `commit_not_on_remote` lists each missing SHA, its
+    local branches, and the exact `git push origin <branch>:merge-pending/<SLUG>`;
+    `commits_not_found` explains how to name commits or opt out;
+    `commit_remote_unverified` means the fetch failed and a commit is not on the last
+    fetched refs: offline completions are refused rather than passed silently;
+    `commit_invalid` covers an unknown named commit or commits combined with the opt-out.
+  - **Opt-out:** `--no-commit` (MCP/HTTP `no_commit: true`) is for tickets with no code
+    (docs in the store, investigations, decisions). The completion appends an activity
+    note, "Completed without code commits", to the history.
+  - **Pinned by** `crates/hotsheet-ticketing/tests/completion_remote_policy.rs`: every
+    completion-rule site also checks remote commits. Provider-backed routes are exempt
+    until HS2-Z0VYZ5.
 
 The actor is also recorded (HS2-32QDZ3):
 

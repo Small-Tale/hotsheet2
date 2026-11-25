@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 75 -->
+<!-- hotsheet-skill-version: 76 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -150,6 +150,11 @@ generated MCP configs declare it for the `hotsheet-mcp` shim; otherwise pass
 `--actor-role ai --actor-id <worker>` on CLI writes (MCP `actor_role: "ai"`, `actor_id`).
 An AI completion without a confidence score is rejected with `confidence_required` and
 changes nothing; retry the same call with the score.
+An AI completion whose commits are not on the remote is rejected with
+`commit_not_on_remote` (or `commits_not_found` / `commit_remote_unverified`) and changes
+nothing: push the slug-first commits to the shipping branch or `merge-pending/<SLUG>`,
+name them with `--commit <sha>` (MCP `commits`), or pass `--no-commit` (MCP
+`no_commit: true`) for a ticket with no code (HS2-R8ZH4K).
 
 Format AI-authored notes for human scanning. Lead with the outcome or decision, not a
 chronological transcript. For a substantial note, use short Markdown sections such as

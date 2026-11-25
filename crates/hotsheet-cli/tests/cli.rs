@@ -16043,3 +16043,150 @@ fn hs2_ztg8fd_merge_pending_prune_cli_uses_store_ticket_status() {
         "the open ticket's integrated branch stays"
     );
 }
+
+/// HS2-R8ZH4K: the CLI refuses an AI completion whose slug-first commit is only local,
+/// names the push to run, and completes once the commit is on `merge-pending/<SLUG>`;
+/// `--no-commit` records the opt-out, and a human completion is never checked.
+#[test]
+fn hs2_r8zh4k_cli_ai_completion_requires_commits_on_the_remote() {
+    fn git(dir: &Path, args: &[&str]) {
+        let ok = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(dir)
+            .args(["-c", "user.name=T", "-c", "user.email=t@example.invalid"])
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "init.defaultBranch=main",
+            ])
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    }
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("store");
+    let remote = root.path().join("remote.git");
+    let code = root.path().join("code");
+    for dir in [&home, &store, &remote] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    let cli = || {
+        let mut cmd = hs(&store);
+        cmd.env("HOTSHEET_HOME", &home);
+        cmd
+    };
+    cli().args(["init", "--prefix", "HS"]).assert().success();
+    git(&remote, &["init", "--quiet", "--bare"]);
+    git(
+        root.path(),
+        &["clone", "--quiet", remote.to_str().unwrap(), "code"],
+    );
+    std::fs::write(code.join("base.txt"), "base").unwrap();
+    git(&code, &["add", "."]);
+    git(&code, &["commit", "--quiet", "-m", "base"]);
+    git(&code, &["push", "--quiet", "origin", "HEAD:main"]);
+    cli()
+        .args(["checkout", "register"])
+        .arg(&code)
+        .arg("--store")
+        .arg(&store)
+        .assert()
+        .success();
+    let slug = {
+        let out = cli().args(["new", "--title", "Coded"]).assert().success();
+        String::from_utf8(out.get_output().stdout.clone())
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_owned()
+    };
+    let complete = |extra: &[&str]| {
+        let mut cmd = cli();
+        cmd.args(["--actor-role", "ai", "--actor-id", "worker"])
+            .args(["edit", &slug, "--status", "completed"])
+            .args(["--note", "## Confidence\n80", "--note-confidence", "80"])
+            .args(extra);
+        cmd.assert()
+    };
+    complete(&[])
+        .failure()
+        .stderr(predicates::str::contains("commits_not_found"));
+    std::fs::write(code.join("work.txt"), "work").unwrap();
+    git(&code, &["add", "."]);
+    git(&code, &["checkout", "--quiet", "-b", "worker-branch"]);
+    git(
+        &code,
+        &["commit", "--quiet", "-m", &format!("{slug} the work")],
+    );
+    complete(&[])
+        .failure()
+        .stderr(predicates::str::contains("commit_not_on_remote"))
+        .stderr(predicates::str::contains(format!(
+            "git push origin worker-branch:merge-pending/{slug}"
+        )));
+    let shown = cli().args(["show", &slug]).assert().success();
+    assert!(
+        String::from_utf8_lossy(&shown.get_output().stdout).contains("not_started")
+            || String::from_utf8_lossy(&shown.get_output().stdout).contains("Not Started"),
+        "a refused completion changes nothing"
+    );
+    git(
+        &code,
+        &[
+            "push",
+            "--quiet",
+            "origin",
+            &format!("worker-branch:merge-pending/{slug}"),
+        ],
+    );
+    complete(&[]).success();
+
+    let docs = {
+        let out = cli()
+            .args(["new", "--title", "Decision"])
+            .assert()
+            .success();
+        String::from_utf8(out.get_output().stdout.clone())
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_owned()
+    };
+    cli()
+        .args(["--actor-role", "ai", "edit", &docs, "--status", "completed"])
+        .args([
+            "--note",
+            "## Confidence\n90",
+            "--note-confidence",
+            "90",
+            "--no-commit",
+        ])
+        .assert()
+        .success();
+    let shown = cli().args(["show", &docs]).assert().success();
+    assert!(
+        String::from_utf8_lossy(&shown.get_output().stdout).contains("no-commit opt-out"),
+        "the opt-out is recorded in history"
+    );
+    let human = {
+        let out = cli().args(["new", "--title", "Human"]).assert().success();
+        String::from_utf8(out.get_output().stdout.clone())
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_owned()
+    };
+    cli()
+        .args(["edit", &human, "--status", "completed"])
+        .assert()
+        .success();
+}

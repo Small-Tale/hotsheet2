@@ -23,6 +23,7 @@ pub mod claim_backends;
 pub mod claim_codec;
 pub mod claim_gate;
 pub mod claim_host;
+pub mod completion_remote;
 pub mod corrupt_cache;
 pub mod distclaim;
 pub mod distwork;

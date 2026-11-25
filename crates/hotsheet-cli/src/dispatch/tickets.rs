@@ -73,7 +73,16 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             id,
             reason,
             duplicate_of,
-        } => cmd_close(actor, path, &id, &reason, duplicate_of),
+            commits,
+            no_commit,
+        } => cmd_close(
+            actor,
+            path,
+            &id,
+            &reason,
+            duplicate_of,
+            &hotsheet_ticketing::completion_remote::CommitClaim { commits, no_commit },
+        ),
         Cmd::Restore { id } => cmd_restore(path, &id),
         Cmd::Copy { id, to } => cmd_copy(path, &id, &to),
         Cmd::Move { id, to, yes } => cmd_move(path, &id, &to, yes),
@@ -996,6 +1005,7 @@ pub(crate) fn cmd_edit(
         response_to,
         note_confidence,
         edit_note,
+        commit_claim,
     } = edit;
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
@@ -1079,13 +1089,24 @@ pub(crate) fn cmd_edit(
         Some(_) => matches!(note_confidence, Some(Some(_))),
         None => note.is_some() && note_confidence.flatten().is_some(),
     };
+    let completes = hotsheet_ticketing::actor::completes(ticket.status, patch.status);
     hotsheet_ticketing::actor::check_completion(
         actor,
         &ticket.slug,
-        hotsheet_ticketing::actor::completes(ticket.status, patch.status),
+        completes,
         scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
     )?;
+    let remote = check_remote_commits(actor, completes, &ticket.slug, path, &commit_claim)?;
     let mut updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
+    if let Some(recorded) = hotsheet_ticketing::completion_remote::record(
+        &store,
+        &updated.id,
+        now_ts(),
+        actor,
+        &remote,
+    )? {
+        updated = recorded;
+    }
     let mut warnings = note
         .as_deref()
         .map(|text| ops::attachment_reference_warnings(&store, &updated, text))
@@ -1307,16 +1328,19 @@ pub(crate) fn cmd_close(
     id: &str,
     reason: &str,
     duplicate_of: Option<String>,
+    commit_claim: &hotsheet_ticketing::completion_remote::CommitClaim,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
     let reason_enum = parse_close_reason(reason)?;
+    let completes = hotsheet_ticketing::actor::close_completes(ticket.status, reason_enum);
     hotsheet_ticketing::actor::check_completion(
         actor,
         &ticket.slug,
-        hotsheet_ticketing::actor::close_completes(ticket.status, reason_enum),
+        completes,
         hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
     )?;
+    let remote = check_remote_commits(actor, completes, &ticket.slug, path, commit_claim)?;
     let dup = match duplicate_of {
         Some(d) => Some(resolve(&store, &d)?.id.to_string()),
         None => None,
@@ -1329,6 +1353,7 @@ pub(crate) fn cmd_close(
         dup,
         hotsheet_ticketing::actor::note_actor(actor).as_ref(),
     )?;
+    hotsheet_ticketing::completion_remote::record(&store, &closed.id, now_ts(), actor, &remote)?;
     println!("Closed {} ({reason})", closed.slug);
     if let Some(nudge) = completion_phase_nudge(ticket.status, &closed) {
         eprintln!("{nudge}");
@@ -1498,6 +1523,14 @@ pub(crate) struct TicketEditArgs {
     /// Edit this existing note ULID instead of appending a note.
     #[arg(long)]
     edit_note: Option<String>,
+    /// A commit holding this ticket's work; repeatable. An AI completion verifies these
+    /// are on the remote instead of searching for slug-first commits (HS2-R8ZH4K).
+    #[arg(long = "commit", value_name = "SHA")]
+    commits: Vec<String>,
+    /// The ticket has no code commits: an AI completion skips the remote-commit check
+    /// and records the opt-out in the ticket history (HS2-R8ZH4K).
+    #[arg(long, conflicts_with = "commits")]
+    no_commit: bool,
     /// Explicit appended kind, or correction with --edit-note: regular | activity | feedback_needed | status.
     #[arg(long)]
     note_kind: Option<String>,
@@ -1662,6 +1695,8 @@ pub(crate) struct TicketEdit {
     response_to: Option<Option<String>>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
+    /// What an AI completion claims about the ticket's commits (HS2-R8ZH4K).
+    commit_claim: hotsheet_ticketing::completion_remote::CommitClaim,
 }
 
 impl TicketEdit {
@@ -1722,8 +1757,44 @@ impl TicketEdit {
             response_to,
             note_confidence,
             edit_note: args.edit_note,
+            commit_claim: hotsheet_ticketing::completion_remote::CommitClaim {
+                commits: args.commits,
+                no_commit: args.no_commit,
+            },
         })
     }
+}
+
+/// HS2-R8ZH4K: an AI completion's commits must be on the remote. The code checkout is
+/// the registered checkout containing the working directory, else any checkout linked to
+/// this store; without one the check is skipped with a warning.
+fn check_remote_commits(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    completes: bool,
+    slug: &str,
+    store_path: &std::path::Path,
+    claim: &hotsheet_ticketing::completion_remote::CommitClaim,
+) -> Result<hotsheet_ticketing::completion_remote::Outcome> {
+    use hotsheet_ticketing::completion_remote as remote;
+    if !completes || !actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai) {
+        return Ok(remote::Outcome::NotApplicable);
+    }
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_ticketing::machine_home::hotsheet_home().join("checkouts.json"),
+    );
+    let mut candidates = remote::checkout_candidates(&registry, store_path, None);
+    if let Ok(cwd) = std::env::current_dir() {
+        let cwd = hotsheet_sync::paths::canonicalize(&cwd).unwrap_or(cwd);
+        candidates.sort_by_key(|root| {
+            !hotsheet_sync::paths::canonicalize(root).is_ok_and(|root| cwd.starts_with(root))
+        });
+    }
+    let repo = remote::code_checkout(&candidates, store_path);
+    let outcome = remote::check(actor, completes, slug, repo.as_deref(), claim, true)?;
+    if let Some(warning) = outcome.warning() {
+        eprintln!("warning: {warning}");
+    }
+    Ok(outcome)
 }
 
 pub(crate) fn parse_started_phase(s: &str) -> Result<StartedPhase> {
