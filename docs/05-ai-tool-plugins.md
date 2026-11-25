@@ -2635,6 +2635,7 @@ Use the same prefix, with `--project` before the subcommand:
 | `recover --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                                                                     | Fence a stale reservation only after inspecting and preserving its ticket/worktree/commit. The selected local source must have no live claim and must contain the inspection note. |
 | `review-return --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                                                               | Preserve a reviewed handoff and fence its integration, permitting a new stable correction assignment (HS2-65ETRJ).                                                                 |
 | `retire-finished --id <integrator> --session <generation> [--dry-run]`                                                                                                                                                                                         | Retire every non-done assignment whose selected-source ticket is closed, including review returns and findings handoffs, with an inspection note on each ticket (HS2-V9BXWF).      |
+| `merge-pending-prune [--remote <name>] [--shipping <ref>] [--apply] [--no-fetch]`                                                                                                                                                                              | Report, and with `--apply` delete, integrated `merge-pending/<SLUG>` branches of closed tickets; no pool (HS2-ZTG8FD).                                                             |
 | `finish --id <integrator> --session <generation> --reason <reason>`                                                                                                                                                                                            | End the run only when no work/handoff/CI remains in flight; waiting workers receive the outcome.                                                                                   |
 | `leave --role <role> --id <id> --session <generation>`                                                                                                                                                                                                         | Withdraw availability on final exit without erasing assignments or handoffs. `setup --resume` explicitly reopens a stopped run.                                                    |
 
@@ -2964,6 +2965,22 @@ reports their count as `past_workers`; `coordination workers --include-past`, th
 route's `include_past=true`, and MCP `hotsheet_workers` with `include_past: true`
 (HS2-7R945V) list them too. An assignment on another source keeps its
 phase, because its ticket status is not read here.
+
+`merge-pending-prune` cleans up the remote `merge-pending/<SLUG>[-<label>]` branches
+that the workflow requires for completed work not yet on the shipping branch
+(HS2-8HCBA1, HS2-ZTG8FD). It runs `git fetch --prune <remote>` (skipped with
+`--no-fetch`; a failed fetch is reported as `fetch_error` and the last fetched refs are
+used), then evaluates every `<remote>/merge-pending/*` branch against the shipping ref
+(`--shipping`, else `<remote>/HEAD`, else `<remote>/main`). `git cherry` counts commits
+that are neither on the shipping branch nor patch-equivalent there, so merged and
+cherry-picked branches both count as integrated. A branch is eligible only when that
+count is zero and its slug resolves to a completed, verified, archived or deleted
+ticket in the selected store. Otherwise it is kept with a reason:
+`malformed_name`, `unknown_slug`, `unintegrated_commits` (with the count), `ticket_open`
+or `ticket_moved`. The default is a dry run (`would_delete`); `--apply` runs
+`git push <remote> --delete` and reports `deleted` or `delete_failed` with the Git
+error. A rerun is a no-op. The integration ticket runs it for its own branch before
+completion; an integrator or maintainer can run it for every branch.
 
 `retire-finished` is the one supported step that retires these records, so an
 integrator never edits the pool file. It needs the exact live integrator session. For

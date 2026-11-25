@@ -1360,6 +1360,8 @@ HS2-HAHX20); batch modes (HS2-9G0M3V, HS2-GT57BQ) call it.
 `review_return.rs` preserves rejected code/findings handoffs and enables structured
 correction assignments using existing fields and a schema-three semantic fence
 (HS2-65ETRJ/HS2-AEBJYN),
+`crates/hotsheet-cli/src/merge_pending.rs` backs `coordination merge-pending-prune`,
+pruning integrated `merge-pending/<SLUG>` remote branches of closed tickets (HS2-ZTG8FD),
 `retire.rs` backs `coordination retire-finished`, retiring records whose ticket is
 closed with a ticket inspection note and an additive `retirement_note` (HS2-V9BXWF),
 `snapshot.rs` source-scoped queue facts/cursors (including `finished_assignments`), and `wait.rs` filesystem-event waits

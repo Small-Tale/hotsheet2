@@ -3190,6 +3190,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-cli/tests/coordination.rs # hs2_xcmavt_real_cli_plan_revision_and_dispatch_replay`, `crates/hotsheet-server/tests/http.rs # hs2_xcmavt_authenticated_plan_replays_and_promotes_without_claim`, and `crates/hotsheet-mcp/src/lib.rs # hs2_dbecd0_worker_tool_matches_registered_headless_projection` exercise the real CLI, authenticated server and MCP surfaces.
 - Manual: connected multi-session Codex/Claude pilot and app UI remain HS2-K1QNGC, HS2-E9SR7R and HS2-1Z3T0Z.
 
+### Pruning merge-pending branches (HS2-ZTG8FD)
+
+- Behavior: `coordination merge-pending-prune` reports, and with `--apply` deletes, `<remote>/merge-pending/<SLUG>[-<label>]` branches whose commits `git cherry` finds on the shipping ref (merged or patch-equivalent) and whose ticket is completed, verified, archived or deleted; others are kept with a reason. Dry run by default, idempotent, never opens the pool.
+- Unit: `crates/hotsheet-cli/src/merge_pending_tests.rs # hs2_ztg8fd_*` drives a temp clone and bare remote through merged, cherry-picked, partially integrated, open-ticket, moved-ticket, unknown-slug and malformed branches, a dry run, an apply, an idempotent rerun, a later close-and-finish that prunes the rest, an unreachable remote (`fetch_error` plus `delete_failed`), and an unresolvable shipping ref; slug and label parsing covers malformed names.
+- E2E: `crates/hotsheet-cli/tests/cli.rs # hs2_ztg8fd_merge_pending_prune_cli_uses_store_ticket_status` runs the real CLI against an initialized store and a bare remote.
+- Manual: none.
+
 ### Retiring stale coordination state for finished tickets (HS2-V9BXWF)
 
 - Behavior: a non-done assignment on a closed selected-source ticket is terminal for the Workers view and `finish` (snapshot `finished_assignments`, included in the cursor). Expired sessions holding no non-terminal work are past workers: hidden by default, counted in `past_workers`, listed with `coordination workers --include-past`, `include_past=true`, or MCP `hotsheet_workers` `include_past: true` (HS2-7R945V; `crates/hotsheet-mcp/src/lib.rs # hs2_7r945v_worker_tool_lists_past_workers_on_request`). `coordination retire-finished [--dry-run]` writes or reuses one regular `## Coordination retirement` note per ticket and moves each record to `done` with `retirement_note`, skipping live claims, other sources and records that changed during the run. Findings `mark --phase done` accepts any closed ticket.

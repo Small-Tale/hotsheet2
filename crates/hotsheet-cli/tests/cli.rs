@@ -15942,3 +15942,104 @@ fn machine_providers(home: &std::path::Path, store: &std::path::Path) -> std::pa
         .path()
         .to_path_buf()
 }
+
+/// HS2-ZTG8FD: the headless prune reads ticket status from the selected store and only
+/// deletes an integrated branch whose ticket is closed; a rerun changes nothing.
+#[test]
+fn hs2_ztg8fd_merge_pending_prune_cli_uses_store_ticket_status() {
+    fn git(dir: &Path, args: &[&str]) {
+        let status = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(dir)
+            .args([
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    }
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let remote = root.path().join("remote.git");
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(&remote).unwrap();
+    hs(&store)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let done = new_ticket(&store, "Integrated and completed");
+    let open = new_ticket(&store, "Integrated but open");
+    hs(&store)
+        .args(["edit", &done, "--status", "completed"])
+        .assert()
+        .success();
+    git(
+        &remote,
+        &["init", "--quiet", "--bare", "--initial-branch=main"],
+    );
+    git(
+        root.path(),
+        &["clone", "--quiet", remote.to_str().unwrap(), "project"],
+    );
+    std::fs::write(project.join("base.txt"), "base").unwrap();
+    git(&project, &["add", "base.txt"]);
+    git(&project, &["commit", "--quiet", "-m", "base"]);
+    git(&project, &["push", "--quiet", "origin", "HEAD:main"]);
+    for slug in [&done, &open] {
+        std::fs::write(project.join(format!("{slug}.txt")), slug).unwrap();
+        git(&project, &["add", "."]);
+        git(&project, &["commit", "--quiet", "-m", slug]);
+        git(
+            &project,
+            &[
+                "push",
+                "--quiet",
+                "origin",
+                &format!("HEAD:refs/heads/merge-pending/{slug}"),
+            ],
+        );
+    }
+    git(&project, &["push", "--quiet", "origin", "HEAD:main"]);
+    let prune = |apply: bool| -> serde_json::Value {
+        let mut cmd = hs(&store);
+        cmd.args(["coordination", "--project"])
+            .arg(&project)
+            .arg("merge-pending-prune");
+        if apply {
+            cmd.arg("--apply");
+        }
+        let output = cmd.assert().success().get_output().stdout.clone();
+        serde_json::from_slice(&output).unwrap()
+    };
+    let action = |report: &serde_json::Value, slug: &str| -> String {
+        report["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|branch| branch["slug"] == *slug)
+            .map(|branch| branch["action"].as_str().unwrap().to_owned())
+            .unwrap_or_else(|| "absent".into())
+    };
+    let dry = prune(false);
+    assert_eq!(dry["shipping"], "origin/main");
+    assert_eq!(action(&dry, &done), "would_delete");
+    assert_eq!(action(&dry, &open), "kept");
+    let applied = prune(true);
+    assert_eq!(action(&applied, &done), "deleted");
+    assert_eq!(action(&applied, &open), "kept");
+    let rerun = prune(true);
+    assert_eq!(action(&rerun, &done), "absent");
+    assert_eq!(
+        rerun["branches"][0]["reason"], "ticket_open",
+        "the open ticket's integrated branch stays"
+    );
+}
