@@ -1827,7 +1827,9 @@ instance, exact and symlink-alias project/MCP-channel matching, malformed files,
 reconciliation. The opt-in real-server migration flow in
 `clients/web/src/migration-server-integration.test.ts` checks that backup proof gates
 the removal, an unrelated saved project and HS2 MCP entry survive, and the migrated
-project is absent from the legacy app's restart list.
+project is absent from the legacy app's restart list. The HS2 entry uses the documented
+shared form `hotsheet-mcp --project .`, which the setup refresh on every open keeps as is
+(HS2-ZZQZPR).
 
 HS2-J9X3JK covers registration repair after an older cleanup removed the database
 marker: bridge unit tests detect saved-list-only and channel-only leftovers without
