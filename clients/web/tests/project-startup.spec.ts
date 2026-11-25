@@ -1490,6 +1490,59 @@ test('a revoked remote approval says so and offers pairing again (HS2-4B0KSD)', 
   await expect(panel.getByRole('button', { name: 'Renew' })).toHaveCount(0);
 });
 
+for (const [phase, failure, first] of [
+  ['expired', 'session_expired', 'Renew'],
+  ['revoked', 'session_revoked', 'Pair Again'],
+] as const)
+  test(`the ${phase} remote placeholder's two buttons keep the Row gap at every width (HS2-2N2F4Y)`, async ({
+    page,
+  }) => {
+    await startupFixture(page, ['alpha'], 'alpha', false);
+    const remote = await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+    remote.up.set(STUDIO, false);
+    remote.failures.set(STUDIO, failure);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page
+      .locator(`[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`)
+      .click();
+    const panel = page.locator(`[data-remote-project-placeholder="${phase}"]`);
+    const buttons = [panel.getByRole('button', { name: first }), panel.getByRole('button', { name: 'Check Again' })];
+    await expect(buttons[1]).toBeVisible();
+    // The Row's `xs` gap, resolved from the public Kerf token in this theme.
+    const gap = await page.evaluate(() => {
+      const probe = document.createElement('div');
+      probe.style.width = 'var(--kui-space-xs)';
+      document.body.append(probe);
+      const width = probe.getBoundingClientRect().width;
+      probe.remove();
+      return width;
+    });
+    expect(gap).toBeGreaterThan(0);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [step, width, height] of [
+        ['wide', 1440, 900],
+        ['medium', 900, 700],
+        ['narrow', 390, 844],
+        ['wide-again', 1440, 900],
+      ] as const) {
+        await page.setViewportSize({ width, height });
+        await expect(buttons[0]).toBeInViewport();
+        await expect(buttons[1]).toBeInViewport();
+        await page.screenshot({
+          path: `target/visual-captures/hs2-2n2f4y-${phase}-${scheme}-${step}.png`,
+          animations: 'disabled',
+        });
+        const [a, b] = await Promise.all(buttons.map((button) => button.boundingBox()));
+        if (!a || !b) throw new Error('A placeholder button has no box.');
+        // Side by side on one line, separated by exactly the Row gap, never touching.
+        expect(Math.abs(a.y - b.y), `${scheme} ${step}`).toBeLessThan(1);
+        expect(b.x - (a.x + a.width), `${scheme} ${step}`).toBeCloseTo(gap, 0);
+      }
+    }
+  });
+
 test('an open remote tab reminds before its approval expires, with Renew and Dismiss (HS2-4B0KSD)', async ({
   page,
 }) => {

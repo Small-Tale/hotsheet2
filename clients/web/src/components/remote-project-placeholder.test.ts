@@ -72,6 +72,20 @@ describe('HS2-4B0KSD expired, revoked and failing remote tabs', () => {
     expect(requested).not.toContain('data-action="renew-remote-approval"');
   });
 
+  it('keeps paired actions in one gapped Kerf Row, never side by side in a bare fragment (HS2-2N2F4Y)', () => {
+    for (const [markup, first] of [
+      [render({}), 'renew-remote-approval'],
+      [render({ phase: 'revoked' }), 'review-remote-server'],
+    ] as const) {
+      const action = markup.slice(markup.indexOf('kui-empty-state__action'));
+      expect(action).toMatch(/^[^>]*>\s*<div class="kui-row" data-component="row"[^>]*data-h-align="center"/);
+      expect(action).toContain('data-wrap="true"');
+      const row = action.slice(action.indexOf('data-component="row"'));
+      expect(row.indexOf(`data-action="${first}"`)).toBeGreaterThan(0);
+      expect(row.indexOf('data-action="retry-remote-project"')).toBeGreaterThan(row.indexOf(`data-action="${first}"`));
+    }
+  });
+
   it('says a revoked approval was revoked and offers pairing again', () => {
     const markup = render({ phase: 'revoked' });
     expect(markup).toContain('Access Revoked by Studio · alpha');
