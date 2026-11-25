@@ -50,6 +50,7 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
     const tab = drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${terminal}"]`);
     await expect(tab).toBeVisible();
     await expect(tab).toContainText(label);
+    const caption = drawer.locator('[data-component="terminal-tile"] .terminal-tile__identity').first();
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       for (const width of [1440, 1100, 390, 1440]) {
@@ -74,6 +75,24 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
                 tail: tail.textContent,
                 tailClipped: tail.scrollWidth > tail.clientWidth + 1,
                 tailInside: tailRect.left >= nameRect.left - 1 && tailRect.right <= nameRect.right + 1,
+              };
+            }),
+          )
+          .toEqual({ tail: `run ${RUN.slice(-8)}`, tailClipped: false, tailInside: true });
+        // HS2-3RBYJK: the Project Grid tile's `project › terminal` caption keeps the same suffix whole.
+        await expect(caption).toBeVisible();
+        await expect
+          .poll(() =>
+            caption.evaluate((element) => {
+              const text = element.querySelector<HTMLElement>('.kui-text')!;
+              const tail = element.querySelector<HTMLElement>('.kui-text__truncate-tail');
+              if (!tail) return { tail: null };
+              const box = text.getBoundingClientRect(),
+                tailBox = tail.getBoundingClientRect();
+              return {
+                tail: tail.textContent,
+                tailClipped: tail.scrollWidth > tail.clientWidth + 1,
+                tailInside: tailBox.left >= box.left - 1 && tailBox.right <= box.right + 1,
               };
             }),
           )

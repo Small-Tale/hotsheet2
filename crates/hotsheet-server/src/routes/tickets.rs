@@ -289,9 +289,12 @@ pub(crate) fn list_entry_tickets(
     let contexts = auto_context::effective(&Settings::new(entry.store.root()))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let settings_read = started.elapsed();
+    // HS2-ZR8B4N: provisional and lost claims, read once for the page.
+    let standings = hotsheet_ticketing::claim_gate::ClaimStandings::read(&entry.store);
     for row in &mut rows {
         row.add_auto_context(&contexts);
         hotsheet_ticketing::phase_timing::apply_phase_estimate(row, &typical_phases);
+        standings.apply_row(row);
     }
     let mut response = Json(rows_to_json(rows, &fields)).into_response();
     // Where a slow list spends its time (HS2-P867K1): waiting for the index mutex, the SQLite
@@ -381,7 +384,13 @@ pub(crate) fn api_ticket_with_settings(
         &contexts,
     );
     apply_detail_phase_estimate(entry, ticket, &mut api)?;
+    apply_detail_claim_standing(entry, &mut api);
     Ok(api)
+}
+
+/// HS2-ZR8B4N: a git ticket detail's provisional or lost claim, as its list row shows it.
+pub(crate) fn apply_detail_claim_standing(entry: &StoreEntry, api: &mut ApiTicket) {
+    hotsheet_ticketing::claim_gate::ClaimStandings::read(&entry.store).apply_ticket(api);
 }
 
 /// Give a git ticket detail the same testing-phase estimate as its list row (HS2-YDGM04).

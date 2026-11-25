@@ -289,6 +289,8 @@ fn merge_checkout_page(
                     let index = entry.index.lock_or_recover();
                     (index.query(&query)?, index.typical_phase_durations()?)
                 };
+                // HS2-ZR8B4N: provisional and lost claims, read once for the batch.
+                let standings = hotsheet_ticketing::claim_gate::ClaimStandings::read(&entry.store);
                 let exhausted = rows.len() < request.want;
                 let matches = commit_filter(rows.iter().map(|row| row.slug.clone()).collect())?;
                 let mut batch = Vec::with_capacity(rows.len());
@@ -311,6 +313,7 @@ fn merge_checkout_page(
                         &mut row,
                         &typical_phases,
                     );
+                    standings.apply_row(&mut row);
                     let mut value = serde_json::to_value(row).map_err(|error| {
                         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
                     })?;

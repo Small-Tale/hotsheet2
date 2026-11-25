@@ -2285,6 +2285,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/targets/{target}",
             axum::routing::patch(routes::orchestration::write).delete(routes::orchestration::write),
         )
+        // HS2-NAA3HV: make a site the home of its project.
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/make-home",
+            post(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{owner}/orchestration/targets/{target}/binding",
             get(routes::orchestration::read)

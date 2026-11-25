@@ -321,6 +321,37 @@ describe('TicketRow', () => {
     }
   });
 
+  it('marks a provisional claim and a lost claim distinctly from an exclusive one (HS2-ZR8B4N)', () => {
+    const ticket: TicketRowProps = {
+      slug: 'HS2-CLAIMS',
+      title: 'Claimed work',
+      status: 'started',
+      priority: 'default',
+      category: 'task',
+      tags: [],
+      busy: true,
+      agentName: 'Worktree 2',
+    };
+    for (const presentation of ['list', 'column'] as const) {
+      const exclusive = String(TicketRow({ ...ticket, presentation }));
+      expect(exclusive).not.toContain('data-claim-standing');
+      expect(exclusive).toContain('Worktree 2 is actively working on this ticket');
+      const provisional = String(TicketRow({ ...ticket, presentation, claimStanding: 'provisional' }));
+      expect(provisional).toContain('data-claim-standing="provisional"');
+      expect(provisional).toContain('Provisional');
+      expect(provisional).toContain('Worktree 2 is working on this ticket under a provisional claim');
+      expect(provisional).not.toContain('is actively working');
+      // A lost claim shows even when the new holder's claim is not active here.
+      const lost = String(TicketRow({ ...ticket, presentation, busy: false, claimStanding: 'lost' }));
+      expect(lost).toContain('data-claim-standing="lost"');
+      expect(lost).toContain('Claim lost');
+      // Without a live claim a provisional record shows nothing.
+      expect(String(TicketRow({ ...ticket, presentation, busy: false, claimStanding: 'provisional' }))).not.toContain(
+        'data-claim-standing',
+      );
+    }
+  });
+
   it('keeps the full worker identity available when its visible row label is clipped (HS2-3H4Y31)', () => {
     const worker = 'codex-01M44ZE2BPEZKWTW49DCTATTPW';
     const row = String(

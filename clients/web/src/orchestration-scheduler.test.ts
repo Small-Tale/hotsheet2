@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  chosenSite,
   decisionText,
   explanationRows,
   lastPassText,
@@ -10,6 +11,7 @@ import {
   type SchedulerDecision,
   schedulerReasonText,
   siteLabel,
+  sitePassDetail,
   sitePassText,
   stepLabel,
 } from './orchestration-scheduler';
@@ -158,5 +160,68 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
     );
     expect(sitePassText({ target_id: 'x', reason: 'target_cap' })).toBe('the project’s session limit is reached');
     expect(siteLabel('api', undefined)).toBe('site api');
+  });
+
+  it('words a passed-over site’s policy detail and leaves out a code it cannot word (HS2-MFS7FY)', () => {
+    expect(sitePassText({ target_id: 'x', reason: 'policy_denied', detail: 'policy_target_not_permitted' })).toBe(
+      'the policy does not allow it (the site is not one the policy lists)',
+    );
+    expect(sitePassText({ target_id: 'x', reason: 'policy_denied', detail: 'policy_machine_cap' })).toBe(
+      'the policy does not allow it (the machine’s session limit is reached)',
+    );
+    expect(sitePassText({ target_id: 'x', reason: 'target_unavailable', detail: 'capacity_not_read' })).toBe(
+      'its project could not be reached (its machine has not been read yet)',
+    );
+    // A requirement or resource names what the step itself asks for.
+    expect(sitePassText({ target_id: 'x', reason: 'resource_held', detail: 'gpu' })).toBe(
+      'a resource it needs is held (gpu)',
+    );
+    // Unknown codes never reach row copy.
+    expect(sitePassText({ target_id: 'x', reason: 'policy_denied', detail: 'policy_future_rule' })).toBe(
+      'the policy does not allow it',
+    );
+    expect(sitePassText({ target_id: 'x', reason: 'machine_refused', detail: 'capacity_unknown' })).toBe(
+      'its machine has no room',
+    );
+    expect(sitePassDetail({ target_id: 'x', reason: 'no_tool_available' })).toBeUndefined();
+    for (const code of [
+      'policy_absent',
+      'policy_target_not_permitted',
+      'policy_target_disabled',
+      'policy_tool_not_permitted',
+      'policy_model_not_permitted',
+      'policy_load_unknown',
+      'policy_target_cap',
+      'policy_machine_cap',
+      'policy_tool_cap',
+      'policy_account_not_permitted',
+      'policy_account_cap',
+      'policy_speculation_not_allowed',
+      'policy_project_software',
+    ]) {
+      const text = sitePassText({ target_id: 'x', reason: 'policy_denied', detail: code });
+      expect(text).not.toContain('_');
+      expect(text).toMatch(/^the policy does not allow it \(.+\)$/);
+    }
+  });
+
+  it('names the site the scheduler chose in Where It Runs, with the step’s own site after it (HS2-PR984R)', () => {
+    const step = timeline.waves.flatMap((wave) => wave.items).find((item) => item.site_id === 'web')!;
+    // Placed on its own site, or no explanation yet: the card's site, with no second row.
+    expect(chosenSite(step, timeline, undefined)).toEqual({
+      label: 'Web',
+      location: 'local',
+      machine_label: undefined,
+    });
+    expect(chosenSite(step, timeline, { standing: 'start', reason: 'ready_work', site: 'web' }).own).toBeUndefined();
+    // Placed on another site of the project: that site and its machine lead.
+    expect(chosenSite(step, timeline, { standing: 'start', reason: 'ready_work', site: 'api' })).toEqual({
+      label: 'API',
+      location: 'remote',
+      machine_label: 'Build host',
+      own: { label: 'Web', location: 'local' },
+    });
+    // A site the timeline does not list cannot be named, so the card's own site stays.
+    expect(chosenSite(step, timeline, { standing: 'start', reason: 'ready_work', site: 'gone' }).label).toBe('Web');
   });
 });

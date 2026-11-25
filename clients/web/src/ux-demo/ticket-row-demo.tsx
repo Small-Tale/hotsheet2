@@ -64,6 +64,8 @@ export const ticketRowSettings = {
   selected: signal(false),
   busy: signal(true),
   remoteClaim: signal(false),
+  /** HS2-ZR8B4N: an exclusive, provisional or lost claim. */
+  claimStanding: signal<'exclusive' | 'provisional' | 'lost'>('exclusive'),
   claimEta: signal<TicketRowClaimEta>('estimate'),
   phaseEstimate: signal<TicketRowPhaseEstimate>('estimate'),
   /** Derived completion confidence; shown only for completed/verified rows (HS2-A0Q6G6). */
@@ -91,6 +93,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.selected.value = false;
   ticketRowSettings.busy.value = true;
   ticketRowSettings.remoteClaim.value = false;
+  ticketRowSettings.claimStanding.value = 'exclusive';
   ticketRowSettings.claimEta.value = 'estimate';
   ticketRowSettings.phaseEstimate.value = 'estimate';
   ticketRowSettings.confidence.value = 'none';
@@ -112,6 +115,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
         tags: ticketRowSettings.tags.value,
         'category-icon': ticketRowSettings.categoryIcon.value,
         'claim-eta': ticketRowSettings.claimEta.value,
+        'claim-standing': ticketRowSettings.claimStanding.value,
         'phase-estimate': ticketRowSettings.phaseEstimate.value,
         confidence: ticketRowSettings.confidence.value,
         creator: ticketRowSettings.creator.value,
@@ -169,6 +173,8 @@ export function TicketRowDemo() {
             selected: ticketRowSettings.selected.value,
             busy: ticketRowSettings.busy.value,
             remoteClaim: ticketRowSettings.remoteClaim.value,
+            claimStanding:
+              ticketRowSettings.claimStanding.value === 'exclusive' ? undefined : ticketRowSettings.claimStanding.value,
             claimEta:
               ticketRowSettings.claimEta.value === 'none'
                 ? undefined
@@ -264,6 +270,16 @@ export function TicketRowSettings() {
         name="show-source-icon"
         checked={ticketRowSettings.showSourceIcon.value}
         label="Multiple ticket sources"
+      />
+      <Select
+        name="claim-standing"
+        label="Claim Standing"
+        value={ticketRowSettings.claimStanding.value}
+        choices={[
+          { value: 'exclusive', label: 'Exclusive' },
+          { value: 'provisional', label: 'Provisional (Taken Offline)' },
+          { value: 'lost', label: 'Lost to Another Machine' },
+        ]}
       />
       <Select
         name="claim-eta"
@@ -383,6 +399,9 @@ function wireTicketRowDemo(root: HTMLElement): () => void {
           break;
         case 'show-source-icon':
           ticketRowSettings.showSourceIcon.value = control.checked;
+          break;
+        case 'claim-standing':
+          ticketRowSettings.claimStanding.value = control.value as typeof ticketRowSettings.claimStanding.value;
           break;
         case 'claim-eta':
           ticketRowSettings.claimEta.value = control.value as typeof ticketRowSettings.claimEta.value;

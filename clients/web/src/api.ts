@@ -855,6 +855,11 @@ export interface TicketRow {
   /** Whether a live claim's worker belongs to this Hot Sheet server or a separate one seen through
    * the synced store (HS2-DQJPW0); absent without a claim or when the claim predates host records. */
   claim_origin?: 'local' | 'remote';
+  /**
+   * HS2-ZR8B4N: how this server's store sees the live claim beside it: provisional (taken offline, not confirmed,
+   * never exclusive) or lost to another machine while the losing session has not been told. Absent otherwise.
+   */
+  claim_standing?: ClaimStanding;
   legacy_number?: string;
   claim_count: number;
   /** Derived completion confidence of a completed/verified ticket (HS2-RD4M29). */
@@ -871,6 +876,9 @@ export interface TicketRow {
   details?: string;
   notes?: Note[];
 }
+/** HS2-ZR8B4N: a ticket's claim standing (`ClaimStanding` in the contract). */
+export type ClaimStanding =
+  { kind: 'provisional' } | { kind: 'lost'; worker: string; holder: string; detected_at: string };
 export interface ClaimEvent {
   id: string;
   kind: 'claim' | 'renew' | 'release';
@@ -1179,6 +1187,8 @@ export interface HostedOrchestrationProjectChoice {
   name: string;
   added: boolean;
   target_id?: string;
+  /** HS2-89YNGN: the ticket store it reaches (non-secret digest), absent when the server could not read it. */
+  checkout_authority?: string;
 }
 /** `DELETE /checkouts/{owner}/orchestration/projects/{target}` (HS2-W27N1D). */
 export interface RemovedOrchestrationProject {
@@ -3293,6 +3303,16 @@ export class Api {
         body: JSON.stringify({ expected_revision: expectedRevision, label, clear_site_of: true }),
       },
     );
+  /** HS2-NAA3HV: make a site the home of its project; the old home and the other sites become its sites. */
+  makeOrchestrationHomeSite = (owner: string, target: string, expectedRevision: string) =>
+    this.parsed(
+      parseOrchestrationManifest,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/make-home`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ expected_revision: expectedRevision, actor: { role: 'human' } }),
+      },
+    );
   /** HS2-92FJXM: the serving machine's open checkouts, which a client on another machine may add. */
   hostedOrchestrationProjects = (owner: string) =>
     this.parsed(
@@ -3300,7 +3320,11 @@ export class Api {
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,
     );
   /** HS2-92FJXM: add one of them; the serving machine binds it, and a repeat is the same project. */
-  addHostedOrchestrationProject = (owner: string, request: { checkout_id: string; label: string; target_id: string }) =>
+  addHostedOrchestrationProject = (
+    owner: string,
+    // HS2-89YNGN: `site_of` adds it as another site of that project.
+    request: { checkout_id: string; label: string; target_id: string; site_of?: string },
+  ) =>
     this.parsed(
       parseOrchestrationProjectView,
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,

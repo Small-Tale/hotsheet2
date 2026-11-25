@@ -11,6 +11,7 @@ import {
   Cloud,
   FolderOpen,
   Group,
+  House,
   Laptop,
   MoreHorizontal,
   Plus,
@@ -62,6 +63,11 @@ export interface OrchestrationSettingsProps {
   siteChoices?: Readonly<Record<string, readonly SiteChoice[]>>;
   /** Add a Site lists every open project, not only those of the same ticket store. */
   showAllSites?: boolean;
+  /**
+   * HS2-89YNGN: the site choices are another server's open checkouts, so Add a Site has no Open Another
+   * Project…: nothing new is opened on that server.
+   */
+  hostedSites?: boolean;
 }
 
 const menuIcon = <LucideIcon icon={MoreHorizontal} name="more-horizontal" />;
@@ -111,6 +117,7 @@ function siteMenuItems(
   choices: readonly SiteChoice[],
   showAll: boolean,
   busy: boolean,
+  hosted = false,
 ): PopupMenuEntry[] {
   const attributes = { 'data-target-id': row.targetId };
   return [
@@ -150,13 +157,17 @@ function siteMenuItems(
       checked: showAll,
       attributes,
     },
-    {
-      label: 'Open Another Project…',
-      action: ACTIONS.openAnotherSite.value,
-      icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
-      disabled: busy,
-      attributes,
-    },
+    ...(hosted
+      ? []
+      : [
+          {
+            label: 'Open Another Project…',
+            action: ACTIONS.openAnotherSite.value,
+            icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
+            disabled: busy,
+            attributes,
+          },
+        ]),
   ];
 }
 
@@ -196,6 +207,7 @@ export function OrchestrationSettings({
   policy = {},
   siteChoices,
   showAllSites = false,
+  hostedSites = false,
 }: OrchestrationSettingsProps) {
   const adding = busy.includes('add');
   const labels = new Map(rows.map((row) => [row.targetId, row.label]));
@@ -296,6 +308,14 @@ export function OrchestrationSettings({
                           // HS2-E9VVQF: a project adds a site; a site separates from its project.
                           ...(row.siteOf
                             ? [
+                                // HS2-NAA3HV: the site becomes the project's home; the old home becomes its site.
+                                {
+                                  label: `Make ${row.label} the Home Site`,
+                                  action: ACTIONS.makeHomeSite.value,
+                                  icon: <LucideIcon icon={House} name="house" />,
+                                  disabled: busy.includes(row.targetId),
+                                  attributes,
+                                },
                                 {
                                   label: `Separate from ${labels.get(row.siteOf) ?? 'Project'}`,
                                   action: ACTIONS.separateSite.value,
@@ -310,7 +330,13 @@ export function OrchestrationSettings({
                                     label: 'Add a Site',
                                     icon: <LucideIcon icon={Group} name="group" />,
                                     attributes,
-                                    submenu: siteMenuItems(row, siteChoices[row.targetId] ?? [], showAllSites, adding),
+                                    submenu: siteMenuItems(
+                                      row,
+                                      siteChoices[row.targetId] ?? [],
+                                      showAllSites,
+                                      adding,
+                                      hostedSites,
+                                    ),
                                   },
                                 ]
                               : []),

@@ -579,11 +579,22 @@ export function QuickTicketComposerDemo() {
 }
 
 /** Live-claim header states the TicketInspector demo exposes (HS2-QKNQXC). */
-export type InspectorLiveClaimDemo = 'none' | 'estimate' | 'overrun' | 'no-eta' | 'generated-id';
+export type InspectorLiveClaimDemo =
+  | 'none'
+  | 'estimate'
+  | 'overrun'
+  | 'no-eta'
+  | 'generated-id'
+  // HS2-ZR8B4N: a provisional claim and a claim lost to another machine.
+  | 'provisional'
+  | 'lost';
 export const inspectorLiveClaim = signal<InspectorLiveClaimDemo>('none');
 function demoLiveClaim(): LiveClaimNoticeProps | undefined {
   const state = inspectorLiveClaim.value;
   if (state === 'none') return undefined;
+  if (state === 'provisional')
+    return { agentName: 'Claude', eta: TICKET_ROW_CLAIM_ETA.estimate, standing: { kind: 'provisional' } };
+  if (state === 'lost') return { agentName: 'Claude', standing: { kind: 'lost', holder: 'Build host worker' } };
   return {
     agentName: state === 'generated-id' ? 'codex-01M44ZE2BPEZKWTW49DCTATTPW' : 'Claude',
     eta: state === 'no-eta' ? undefined : TICKET_ROW_CLAIM_ETA[state === 'generated-id' ? 'estimate' : state],
@@ -680,6 +691,8 @@ export function TicketInspectorSettings() {
           { value: 'overrun', label: 'Past Its ETA (Soon)' },
           { value: 'no-eta', label: 'Without an ETA' },
           { value: 'generated-id', label: 'Generated Worker Id with ETA' },
+          { value: 'provisional', label: 'Provisional Claim' },
+          { value: 'lost', label: 'Claim Lost to Another Machine' },
         ]}
       />
       <Select

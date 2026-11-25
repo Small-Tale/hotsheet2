@@ -636,6 +636,17 @@ fn changed_owner(method: &Method, path: &str) -> Option<String> {
             ],
         )
         | ("PATCH" | "DELETE", ["checkouts", owner, "orchestration", "targets", _])
+        | (
+            "POST",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "targets",
+                _,
+                "make-home",
+            ],
+        )
         | ("PUT" | "DELETE", ["checkouts", owner, "orchestration", "targets", _, "binding"])
         | ("POST", ["checkouts", owner, "orchestration", "session-sync"])
         | (

@@ -1265,6 +1265,14 @@ enum TargetCmd {
         #[arg(long)]
         clear_site_of: bool,
     },
+    /// HS2-NAA3HV: make a site the home of its project at the expected manifest
+    /// revision; the old home and every other site become its sites, and the policy's
+    /// per-target entries move with the home.
+    MakeHome {
+        id: String,
+        #[arg(long)]
+        expected_revision: String,
+    },
     /// HS2-SHH7WW: each project with its sites and this machine's binding of each.
     Sites {
         /// HS2-D4G81Q: also read what each bound site's machine is (OS, architecture,
@@ -1359,6 +1367,14 @@ fn route(project: &str, command: TargetCmd) -> Result<(&'static str, String, Val
             "PATCH",
             format!("{prefix}/{id}"),
             json!({"expected_revision":expected_revision,"label":label,"expected_repository_identity":expected_repository_identity,"clear_expected_repository_identity":clear_expected_repository_identity,"site_of":site_of,"clear_site_of":clear_site_of}),
+        ),
+        TargetCmd::MakeHome {
+            id,
+            expected_revision,
+        } => (
+            "POST",
+            format!("{prefix}/{id}/make-home"),
+            json!({"expected_revision":expected_revision}),
         ),
         // HS2-D4G81Q: reading the machines passes the gate, so the actor rides in a body.
         TargetCmd::Sites { capabilities } => {

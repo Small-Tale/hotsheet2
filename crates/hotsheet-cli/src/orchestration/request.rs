@@ -541,6 +541,22 @@ impl OrchestrationRuntime {
             ("DELETE", ["checkouts", owner, "orchestration", "targets", id]) => {
                 value(self.remove(&reference(owner, id)?, decode(body)?, tx)?)
             }
+            // HS2-NAA3HV: make a site the home of its project.
+            (
+                "POST",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "targets",
+                    id,
+                    "make-home",
+                ],
+            ) => {
+                let actor = actor(body)?;
+                let request: super::policy::MakeHome = decode(body)?;
+                value(self.make_home(&reference(owner, id)?, request, actor.as_ref(), tx)?)
+            }
             (
                 "PUT",
                 [

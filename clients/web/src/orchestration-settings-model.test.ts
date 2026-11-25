@@ -96,6 +96,26 @@ describe('orchestration settings model (HS2-W27N1D)', () => {
     expect(projectRows(undefined, {}, {})).toEqual([]);
   });
 
+  it('names the serving server on the rows of a project open from another server (HS2-DXAB4K)', () => {
+    const bindings = { T1: local('api-1'), T4: { ...local('x'), destination: null } };
+    const rows = projectRows(manifest, bindings, {}, undefined, 'build.example');
+    expect(rows.map((row) => [row.label, row.where])).toEqual([
+      ['API', 'On build.example'],
+      ['Unbound', 'Not bound on build.example'],
+      ['Web', ''],
+    ]);
+    expect(rows[0].place).toBe('On build.example');
+    // Its icon is the remote one + Add Project's Open on <server> choices use.
+    expect(rows.map((row) => row.location)).toEqual(['remote', 'unbound', 'remote']);
+    expect(rows.map((row) => row.where).join()).not.toContain('This Computer');
+    // Served here, the same bindings read as this computer's.
+    expect(projectRows(manifest, bindings, {}).map((row) => row.where)).toEqual([
+      'Local on This Computer',
+      'Not bound on this computer',
+      '',
+    ]);
+  });
+
   it('lists each project with its other sites after it (HS2-SHH7WW)', () => {
     const sites: OrchestrationManifest = {
       enabled: true,

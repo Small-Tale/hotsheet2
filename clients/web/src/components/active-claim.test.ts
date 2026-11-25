@@ -107,4 +107,23 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     expect(rowCss).not.toContain('.ticket-list-row__eta');
   });
+
+  it('shows a provisional claim and a lost claim distinctly, never as exclusive work (HS2-ZR8B4N)', () => {
+    const provisional = String(LiveClaimNotice({ agentName: 'Worktree 2', standing: { kind: 'provisional' } }));
+    expect(provisional).toContain('data-claim-standing="provisional"');
+    expect(provisional).toContain('data-tone="warning"');
+    expect(provisional).toContain('Worktree 2 is working on this provisionally.');
+    expect(provisional).toContain('another machine may hold it');
+    expect(provisional).not.toContain('is working on this.</strong>');
+    expect(provisional).not.toContain('actively working');
+    const lost = String(
+      LiveClaimNotice({ agentName: 'Worktree 2', standing: { kind: 'lost', holder: 'Build host worker' } }),
+    );
+    expect(lost).toContain('data-claim-standing="lost"');
+    expect(lost).toContain('data-tone="danger"');
+    expect(lost).toContain('Worktree 2 lost this claim.');
+    expect(lost).toContain('Another machine holds it now (Build host worker).');
+    expect(lost).not.toContain('loading-spinner');
+    expect(String(LiveClaimNotice({ agentName: 'Worktree 2' }))).not.toContain('data-claim-standing');
+  });
 });

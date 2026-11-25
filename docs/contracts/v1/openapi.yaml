@@ -874,6 +874,53 @@ paths:
         schema:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/targets/{target}/make-home:
+    post:
+      operationId: makeTargetHomeSite
+      description:
+        HS2-NAA3HV. Make a site the home of its project at one manifest revision; the old home and every other active
+        site become its sites. The policy's per-target entries keyed by the old and the new home swap in one policy
+        write (an AI actor is refused when the policy names either). Refused with the site codes of any grouping
+        change (site_chain, site_plan_conflict, site_run_conflict, site_store_mismatch, site_repository_mismatch).
+      responses:
+        '200':
+          description: The manifest after the re-home, the previous home and the policy revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetMadeHome'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MakeTargetHome'
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /checkouts/{owner}/orchestration/targets/{target}/binding:
     description: Serving-machine literal-loopback administration. GET/DELETE support orphan cleanup before
       runtime/identity/provider construction.
@@ -19512,6 +19559,46 @@ components:
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false
+    MakeTargetHome:
+      type: object
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    TargetMadeHome:
+      type: object
+      required:
+        - enabled
+        - revision
+        - targets
+        - previous_home
+        - policy_revision
+      properties:
+        enabled:
+          type: boolean
+        revision:
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetDeclaration'
+          maxItems: 256
+        previous_home:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        policy_revision:
+          anyOf:
+            - type: string
+            - type: 'null'
+      additionalProperties: false
     RenameTarget:
       type: object
       required:
@@ -27364,6 +27451,11 @@ components:
           type: boolean
         target_id:
           type: string
+        checkout_authority:
+          description:
+            HS2-89YNGN. The ticket store the checkout reaches, as the non-secret digest a binding records; absent when
+            this server could not read the checkout's sources.
+          type: string
       additionalProperties: false
     AddHostedOrchestrationProject:
       type: object
@@ -27378,6 +27470,13 @@ components:
             - string
             - 'null'
         target_id:
+          type:
+            - string
+            - 'null'
+        site_of:
+          description:
+            HS2-89YNGN. Add it as another site of this active project target; a checkout of another ticket store is
+            refused with site_store_mismatch before anything is declared.
           type:
             - string
             - 'null'
@@ -27804,6 +27903,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -28011,6 +28112,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -28335,6 +28438,36 @@ components:
         eta:
           type: string
       additionalProperties: false
+    ClaimStanding:
+      description:
+        HS2-ZR8B4N. How this server's ticket store sees the claim beside its frontmatter, from its bound claim backend
+        (docs/36 §36.14). `provisional` while the live claim was taken offline and is not confirmed (advisory, never
+        exclusive); `lost` while a claim this host's `worker` held was given to another machine and the losing session
+        has not been told yet; `holder` is the readable holder label or the unreadable-holder marker. Absent otherwise.
+      oneOf:
+        - type: object
+          required:
+            - kind
+          additionalProperties: false
+          properties:
+            kind:
+              const: provisional
+        - type: object
+          required:
+            - kind
+            - worker
+            - holder
+            - detected_at
+          additionalProperties: false
+          properties:
+            kind:
+              const: lost
+            worker:
+              type: string
+            holder:
+              type: string
+            detected_at:
+              type: string
     ClaimEvent:
       type: object
       required:
@@ -28687,6 +28820,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -28890,6 +29025,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -29202,6 +29339,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:

@@ -81,6 +81,23 @@ pub struct DryRun {
     pub targets: Vec<DryRunTarget>,
 }
 
+/// HS2-NAA3HV: `POST …/targets/{target}/make-home`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MakeHome {
+    pub expected_revision: String,
+}
+
+/// HS2-NAA3HV: the manifest after a re-home, the project's previous home, and the
+/// policy revision (rotated only when entries moved).
+#[derive(Debug, Serialize)]
+pub struct MadeHome {
+    #[serde(flatten)]
+    pub manifest: ManifestView,
+    pub previous_home: String,
+    pub policy_revision: Option<String>,
+}
+
 /// The policy's limits for one action.
 pub(super) enum PolicyAnswer {
     Allowed,
@@ -142,6 +159,89 @@ impl OrchestrationRuntime {
             )?;
         }
         Ok(view)
+    }
+
+    /// HS2-NAA3HV: make a site the home of its project at one manifest revision, and
+    /// move the policy's per-target entries with the home (the maintainer's default):
+    /// those keyed by the old home and by the new one swap, in one policy write right
+    /// after. Changing the policy is a person's act, so an AI actor is refused when the
+    /// policy names either site; otherwise any actor that may rename a target may do
+    /// it. Should the policy write fail, the manifest is put back the same way (the old
+    /// home made home again), so neither half lands alone.
+    pub fn make_home(
+        &self,
+        target: &TargetRef,
+        request: MakeHome,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<MadeHome, OrchestrationError> {
+        let owner_id = target.owner_checkout_id.clone();
+        let declared = self.declarations(&owner_id)?;
+        let old_home = declared
+            .targets
+            .iter()
+            .find(|declared| declared.target_id == target.target_id)
+            .and_then(|declared| declared.site_of.clone());
+        let store = self.policy_store(&owner_id)?;
+        let policy = store.read()?;
+        let moved = old_home.as_deref().and_then(|old| {
+            policy
+                .policy
+                .as_ref()
+                .and_then(|body| body.with_home_moved(old, &target.target_id))
+        });
+        if moved.is_some() {
+            access::person(actor)?;
+        }
+        let owner = self.owner(&owner_id)?;
+        let flow = self.flow(&owner)?;
+        let observer = RuntimeObserver::new(self, &owner);
+        let (view, old_home) = flow.make_home(target, request.expected_revision, &observer, tx)?;
+        let mut policy_revision = policy.revision.clone();
+        if let Some(body) = moved {
+            let written = store.set(
+                SetPolicy {
+                    expected_revision: policy.revision,
+                    policy: body,
+                },
+                Some(&self.declared(&owner_id)?),
+                tx,
+            );
+            match written {
+                Ok(written) => policy_revision = written.revision,
+                Err(error) => {
+                    let back = TargetRef {
+                        owner_checkout_id: owner_id.clone(),
+                        target_id: old_home.clone(),
+                    };
+                    if let Some(revision) = view.revision.clone() {
+                        let _ = flow.make_home(&back, revision, &observer, tx);
+                    }
+                    return Err(error);
+                }
+            }
+            Self::scheduler_wake_at(&self.home);
+        }
+        self.audit_record(
+            &owner_id,
+            AuditRecord {
+                at_ms: tx.clock.now_ms(),
+                actor_role: access::role_code(actor),
+                actor_id: actor.and_then(|actor| actor.id.clone()),
+                target_id: Some(target.target_id.clone()),
+                action: "target_make_home".into(),
+                operation_id: None,
+                outcome: AuditOutcome::Changed,
+                reason: None,
+                permission_id: None,
+                requested_by: None,
+            },
+        )?;
+        Ok(MadeHome {
+            manifest: view,
+            previous_home: old_home,
+            policy_revision,
+        })
     }
 
     /// Every problem with a proposed policy, or with the stored one. Never writes.

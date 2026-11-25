@@ -42,6 +42,7 @@ import {
   terminalGridLayout,
   terminalPreviewText,
 } from '../terminal-grid-layout';
+import { orchestratorTabNameKeep } from '../terminal-names';
 import { terminalPhysicalScale } from '../terminal-viewport';
 import {
   TERMINAL_VISIBILITY_TYPES,
@@ -49,6 +50,26 @@ import {
   type TerminalVisibilityType,
 } from '../terminal-visibility';
 import { TerminalKeyBar, type TerminalKeyBarProps } from './terminal-key-bar';
+
+/** The grid tile's `project › terminal` caption, cut in the middle to keep a kept suffix (HS2-3RBYJK). */
+function TileCaption({ caption, keep }: { caption: string; keep: number | undefined }) {
+  return keep === undefined ? (
+    <Text variant="span" weight="strong" wrap="truncate" color={uiColor('neutral-on-normal')}>
+      {caption}
+    </Text>
+  ) : (
+    <Text
+      variant="span"
+      weight="strong"
+      wrap="truncate"
+      truncate="middle"
+      truncateKeep={keep}
+      color={uiColor('neutral-on-normal')}
+    >
+      {caption}
+    </Text>
+  );
+}
 
 export interface TerminalDashboardSession {
   id: string;
@@ -408,11 +429,12 @@ function TerminalCard({
                     <span class="terminal-tile__identity-project">{session.projectName}</span>
                   </>
                 ) : (
-                  <strong>
-                    {session.projectName}
-                    <span aria-hidden="true"> › </span>
-                    {session.title ?? session.id}
-                  </strong>
+                  // An orchestrator's sessions of one project differ only in their run suffix, so the caption
+                  // keeps it and ellipsizes the middle, as the drawer tab does (HS2-3RBYJK, HS2-8KZF59).
+                  <TileCaption
+                    caption={`${session.projectName} › ${session.title ?? session.id}`}
+                    keep={session.orchestrator ? orchestratorTabNameKeep(session.title ?? session.id) : undefined}
+                  />
                 )}
               </button>
               {/* Progress follows the identity in the shrinking leading zone, so the trailing zone holds

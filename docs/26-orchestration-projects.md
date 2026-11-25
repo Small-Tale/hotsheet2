@@ -172,6 +172,24 @@ several machines (HS2-ZKJX16). Each declaration is a **site** of one project:
   `target add --site-of`, `target rename --site-of` (also to move a site to another
   project) and `target rename --clear-site-of`. A removed site keeps its `site_of` in
   its tombstone, so its history still counts for its project.
+- **Making a site the home site (HS2-NAA3HV).** `POST …/targets/{site}/make-home` with
+  `{expected_revision}` (`target make-home <site>`, MCP `hotsheet_targets` action
+  `make_home`) re-homes a project at one manifest revision: the site loses `site_of`,
+  and the old home and every other active site of the project name it. It is refused
+  for a target that is already a home (`invalid_request`), a removed or unknown target,
+  a stale revision, and with the site codes of any grouping change (`site_chain`,
+  `site_plan_conflict`, `site_run_conflict`, `site_store_mismatch`,
+  `site_repository_mismatch`). Plan steps and runs keep the concrete site they name and
+  read through the new grouping. A removed site's tombstone still names the old home;
+  the project key follows `site_of` to the end of that chain, so its history stays with
+  the project. **Policy entries move with the home** (the maintainer's default
+  decision): the `targets[]`, `placement.resources` and `placement.role_sessions`
+  entries keyed by the old home and those keyed by the new home swap ids, in one policy
+  write right after the manifest write. Should that write fail, the manifest is put back
+  by re-homing the old home. Changing the policy is a person's act, so an AI actor is
+  refused when the policy names either site; otherwise any actor that may rename a
+  target may re-home. The answer is the manifest plus `previous_home` and
+  `policy_revision`, and the change is audited as `target_make_home`.
 - **Adding an open project as a site (HS2-E9VVQF)** declares and binds it in one step:
   `POST …/orchestration/projects` with `site_of` (`orchestration project add
 --site-of`), the same workflow as Settings › Orchestration's Add a Site. The candidate
@@ -316,6 +334,8 @@ hotsheet-cli -C <configured-host-source> orchestration target add --project <own
 hotsheet-cli -C <configured-host-source> orchestration target rename <target-id> --project <owner> \
   --label "Widgets on the build host" --site-of <project-target-id> | --clear-site-of \
   --expected-revision <revision>
+hotsheet-cli -C <configured-host-source> orchestration target make-home <site-target-id> \
+  --project <owner> --expected-revision <revision>
 hotsheet-cli -C <configured-host-source> orchestration target sites --project <owner> [--capabilities]
 ```
 
@@ -3213,6 +3233,8 @@ test reads it in the real drawer at wide and narrow widths, in both color scheme
 middle of its label and keeps everything after the last `: ` (the run suffix or role)
 visible, so two sessions of one project stay distinguishable; the full label is the tab's
 accessible name and its title while truncated (HS2-8KZF59, Kerf `nameTruncate="middle"`). The
+Project grid tile's `project › label` caption does the same through Kerf `Text`
+`truncate="middle"` with the same kept suffix (HS2-3RBYJK). The
 link from the orchestration workspace is HS2-HSMH2Q.
 
 **Roles.** A session joins the target's existing role model
@@ -3781,6 +3803,10 @@ with why it was passed over: its own blocker code and detail (`requirement_unmet
 Work placed nowhere is `not_placed` with the reason of the site the step names, and
 `sites` gives every other site's reason. `scheduler explain`, the decision log
 records and the Orchestration view's Why It Is Not Running rows carry the same list.
+The view words each reason and each known detail (a policy limit such as
+`policy_target_not_permitted` reads "the site is not one the policy lists"); a
+requirement or resource detail keeps the name the step gives, and a detail code the
+view cannot word is left out rather than shown (HS2-MFS7FY).
 A resource another site was waiting on is listed in `contention` only when the work
 was placed nowhere, and a retry time counts only from the chosen site or, unplaced,
 from every site.
@@ -5824,7 +5850,11 @@ A read on the server also starts the target followers of §26.9.
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
   §26.14, each a person's act with a confirmation where undo cannot help), then the
-  run's gates, validation steps and latest events.
+  run's gates, validation steps and latest events. The maintainer's default decision
+  (HS2-PR984R): once the scheduler has placed or would place the step on another site of
+  its project (`scheduler explain`'s `site`), Where It Runs names that chosen site and its
+  machine, with a **Step's site** row naming the site the step itself names, so it agrees
+  with Why It Is Not Running.
 - **Show Request** (HS2-DBQSWB) opens the request the step waits on where every
   permission request is answered: the project's Notifications, Pending, with keyboard
   focus on that exact card (found by the orchestrator request id the card carries). The
@@ -5969,11 +5999,17 @@ the type changes to Software while it shows.
   edge cases, each marked _Another ticket store_ or _Ticket store unknown_ where it
   applies; the server's refusal (`site_store_mismatch` and the other site codes) shows in
   the message line. **Open Another Project…** there runs the regular open flow and adds
-  the project it opens as a site. A site row's menu has **Separate from <project>**,
-  which clears `site_of` at the stored manifest revision without asking: adding it as a
-  site again undoes it. Both are offered only for an orchestration project served on this
-  machine; one open from another server adds through the hosted route, which cannot
-  inspect a store (HS2-89YNGN).
+  the project it opens as a site. A site row's menu has **Make <site> the Home Site**
+  (HS2-NAA3HV, a Lucide house), which re-homes the project at the stored manifest
+  revision without asking (the same action on the old home undoes it; the result shows
+  in the status line and a refusal with its site code in the message line), and
+  **Separate from <project>**, which clears `site_of` at the stored manifest revision
+  without asking: adding it as a site again undoes it. For an orchestration project open
+  from another server (HS2-89YNGN), Add a Site lists that server's open checkouts
+  (machine _Build host_), compared by the `checkout_authority` each hosted choice
+  reports, with no Open Another Project… (nothing new is opened on that server), and adds
+  through the hosted route with `site_of`; + Add Project there asks the same duplicate
+  question.
 - **+ Add Project.** The other open projects first, local and remote with their machine,
   checked when already added; then **Open Another Project…**, which runs the regular
   open-project flow (HS2-BT4KN6). The project it opens appears in its own tab, is added,
@@ -6067,7 +6103,12 @@ through `/checkouts/{owner}/orchestration/hosted-projects`:
 - `GET` lists the serving machine's open checkouts (registered, present and resolving,
   as `/remote-checkouts` reports them available), other than the orchestration project
   itself, each with `added` and its `target_id` when added.
-- `POST {checkout_id, label?, target_id?}` is the same workflow as adding a project
+- HS2-89YNGN: each listed choice also reports `checkout_authority`, the non-secret
+  digest of the ticket store it reaches (the one a binding records, from the same
+  machine-local inspection; absent when its sources cannot be read), so a client on
+  another machine can offer the open checkouts of one project's store as its sites and
+  ask about a duplicate, as a local client compares its own inspections.
+- `POST {checkout_id, label?, target_id?, site_of?}` is the same workflow as adding a project
   with a local destination on that server: a person's act (an AI actor is refused), a
   repeat returns the same project with `added: false`, and it is announced as
   `orchestration_changed`. A checkout the server does not have open is refused with 403
@@ -6084,9 +6125,13 @@ through `/checkouts/{owner}/orchestration/hosted-projects`:
   write fence. For a project opened from another server, a row's and the detail's Stop
   Orchestrating… ask with the same shared confirmation and then use this route.
 - If the list cannot be read, + Add Project is disabled and the category says why.
+- **Rows name the serving machine (HS2-DXAB4K).** The bindings such a project shows are
+  the serving machine's, so a project bound to a checkout there reads _On <server>_
+  (the tab's server name, as _Open on <server>_ names it) with the remote icon, and an
+  unbound one _Not bound on <server>_; never _Local on This Computer_.
 - Headless, on the serving machine: `hotsheet-cli ... orchestration project hosted
 --project <owner>` and `project add-hosted <checkout> [--label] [--target-id]
---project <owner>`, and `project remove-hosted <target> --project <owner>` (HS2-0G80WD), through the same route.
+--project <owner>` (with `--site-of <project-target>` to add it as a site, HS2-89YNGN; refused with `site_store_mismatch` before anything is declared when it reaches another store), and `project remove-hosted <target> --project <owner>` (HS2-0G80WD), through the same route.
 
 ### Live updates
 
