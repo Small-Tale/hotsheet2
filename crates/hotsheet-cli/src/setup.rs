@@ -163,18 +163,18 @@ mod tests {
         assert!(claude_md.contains("<!-- BEGIN hotsheet:claude -->"));
         assert!(claude_md.contains("<!-- END hotsheet:claude -->"));
         assert!(claude_md.contains("@AGENTS.md"));
-        assert!(!claude_md.contains("hotsheet-cli ls --up-next"));
+        assert!(!claude_md.contains("hotsheet-cli claim <slug> --worker <id>"));
         let agents_md = read(d.path(), "AGENTS.md");
-        assert!(agents_md.contains("hotsheet-cli ls --up-next"));
-        assert!(agents_md.contains("Create every follow-up immediately, without asking"));
-        assert!(agents_md.contains("Write portable durable references"));
+        assert!(agents_md.contains("hotsheet-cli claim <slug> --worker <id>"));
+        assert!(agents_md.contains("File follow-ups immediately, without asking"));
+        assert!(agents_md.contains("Use repository-relative paths or `<repo-root>`"));
         assert!(agents_md.contains("`FEEDBACK NEEDED` is only"));
         // The default guidance must ticket direct-terminal work and carry testing, docs, and
         // commit-hygiene sections while leaving the push decision to each repo (HS2-3JMMAZ).
-        assert!(agents_md.contains("Create tickets by default for real work"));
-        assert!(agents_md.contains("Cover each feature with unit tests of its logic"));
+        assert!(agents_md.contains("Create a ticket before features, bugs, refactors"));
+        assert!(agents_md.contains("Cover each feature with isolated unit tests"));
         assert!(agents_md.contains("Update them in the same change"));
-        assert!(agents_md.contains("commit per ticket"));
+        assert!(agents_md.contains("one commit per ticket"));
         assert!(agents_md.contains("Push policy: `push-per-ticket`"));
 
         let skill = read(d.path(), ".claude/skills/hotsheet/SKILL.md");
@@ -331,13 +331,13 @@ mod tests {
 
         let agents = read(d.path(), "AGENTS.md");
         assert!(agents.contains("<!-- BEGIN hotsheet:codex -->"));
-        assert!(agents.contains("hotsheet-cli ls --up-next"));
-        assert!(agents.contains("Create every follow-up immediately, without asking"));
-        assert!(agents.contains("Write portable durable references"));
+        assert!(agents.contains("hotsheet-cli claim <slug> --worker <id>"));
+        assert!(agents.contains("File follow-ups immediately, without asking"));
+        assert!(agents.contains("Use repository-relative paths or `<repo-root>`"));
         assert!(agents.contains("`FEEDBACK NEEDED` is only"));
         // Same expanded default guidance reaches Codex's AGENTS.md block (HS2-3JMMAZ).
-        assert!(agents.contains("Create tickets by default for real work"));
-        assert!(agents.contains("Cover each feature with unit tests of its logic"));
+        assert!(agents.contains("Create a ticket before features, bugs, refactors"));
+        assert!(agents.contains("Cover each feature with isolated unit tests"));
         assert!(agents.contains("Push policy: `push-per-ticket`"));
         assert!(!d.path().join(".claude").exists());
         assert!(

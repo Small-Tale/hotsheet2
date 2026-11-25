@@ -615,10 +615,25 @@ fn hs2_38saet_reprice_cli_previews_and_applies_without_rewriting_raw() {
     assert!(run(&["metrics"]).contains("$10.2500 total"));
 }
 
+/// The bundled workflow version a project renders with its declared push policy
+/// (source version + 1, crates/hotsheet-plugins `with_push_policy`).
+fn rendered_instruction_version() -> u64 {
+    include_str!("../../../plugins/codex/instructions.md")
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix("<!-- hotsheet-instructions-version: "))
+        .and_then(|line| line.strip_suffix(" -->"))
+        .and_then(|version| version.parse::<u64>().ok())
+        .expect("bundled workflow version marker")
+        + 1
+}
+
 fn rendered_instruction(raw: &str) -> String {
-    raw.replace(
-        "<!-- hotsheet-instructions-version: 65 -->",
-        "<!-- hotsheet-instructions-version: 66 -->",
+    let rendered = rendered_instruction_version();
+    raw.replacen(
+        &format!("<!-- hotsheet-instructions-version: {} -->", rendered - 1),
+        &format!("<!-- hotsheet-instructions-version: {rendered} -->"),
+        1,
     )
     .replace(
         "**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project\nalready uses; this default guidance does not require or forbid pushing on its own.",
@@ -4105,14 +4120,20 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let skill = std::fs::read(&stale_skill).unwrap();
     let mcp = std::fs::read(project.join(".codex/config.toml")).unwrap();
     assert!(String::from_utf8_lossy(&instructions).contains("User text."));
-    assert!(String::from_utf8_lossy(&instructions).contains("hotsheet-cli ls --up-next"));
+    assert!(
+        String::from_utf8_lossy(&instructions).contains("hotsheet-cli claim <slug> --worker <id>")
+    );
     // The installed workflow asks for preliminary thoughts on non-trivial tickets (HS2-C4X2MD).
     assert!(String::from_utf8_lossy(&instructions).contains("## Preliminary thoughts"));
-    assert!(String::from_utf8_lossy(&instructions).contains("**Estimate non-trivial work.**"));
+    assert!(
+        String::from_utf8_lossy(&instructions)
+            .contains("Add `--eta <duration>` for non-trivial work")
+    );
     // Worktree and background-agent work must be integrated before completion (HS2-YVV6A0).
-    assert!(String::from_utf8_lossy(&instructions).contains(
-        "**Integrate worktree and background-agent work before you complete its ticket.**"
-    ));
+    assert!(
+        String::from_utf8_lossy(&instructions)
+            .contains("Side-branch, worktree and delegated work must reach the shipping branch")
+    );
     assert_eq!(
         skill,
         rendered_skill(include_str!("../../../plugins/codex/SKILL.md")).as_bytes()
@@ -4262,7 +4283,7 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
         expected("antigravity, codex, opencode")
     );
     let migrated_text = String::from_utf8_lossy(&migrated);
-    assert!(migrated_text.contains("meaningful subtask starts and finishes"));
+    assert!(migrated_text.contains("Record `activity` at meaningful subtask start/finish"));
     assert!(migrated_text.contains("`note_summary`"));
     assert!(migrated_text.contains("`--note-file <path>`"));
     assert!(migrated_text.contains("repository-relative locations"));
@@ -4506,7 +4527,7 @@ fn setup_refresh_with_an_empty_enabled_list_disables_every_tool() {
         unset[0]
             .as_deref()
             .unwrap()
-            .contains("Release your claim the moment you stop working a ticket")
+            .contains("**Release whenever work stops.**")
     );
     assert!(
         unset[1]
@@ -4621,7 +4642,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 67 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = format!(
+        "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: {} -->\nnewer instructions\n<!-- END hotsheet:codex -->\n",
+        rendered_instruction_version() + 1
+    );
+    let instructions = instructions.as_str();
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
@@ -4665,7 +4690,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 66 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = format!(
+        "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: {} -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n",
+        rendered_instruction_version()
+    );
+    let instructions = instructions.as_str();
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();

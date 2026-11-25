@@ -35,7 +35,7 @@ test('HS2-Y84WA5 keeps the Rulesync example on the reviewed playbook commit', ()
   const bundled = JSON.parse(fs.readFileSync(path.join(root, 'guidance/ai-playbook.lock.json')));
   const example = JSON.parse(fs.readFileSync(path.join(root, 'guidance/rulesync/rulesync.lock')));
   const source = example.sources['small-tale/ai-playbook'];
-  assert.equal(bundled.release, 'v1.8.0');
+  assert.equal(bundled.release, 'v1.9.0');
   assert.equal(source.resolvedRef, bundled.commit);
   assert.deepEqual(source.ruleSelection, ['*']);
   assert.equal(source.resolvedRuleNames.length, 23);
