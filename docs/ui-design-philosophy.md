@@ -136,6 +136,11 @@ does not fork Kerf's guidance.
   a `ListHeader` `overflowAction` button and from its context menu, and the title
   aligns with the ticket rows through `leadingEdge="summary-row"` (HS2-HKXSB1).
 
+- Manage Workspace Visibility's **Show minimized** (HS2-W1XEH7) is a Kerf `Checkbox`, not
+  the `Switch` Kerf recommends for a setting that applies at once. The maintainer asked for
+  a checkbox beside Hide Listed / Show Listed. It applies immediately and is remembered per
+  workspace, like the rest of the dialog's visibility choices.
+
 ## Hot Sheet ticket lessons
 
 Kerf's house grammar carries the general rules. These ticket clusters explain

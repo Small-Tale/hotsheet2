@@ -74,6 +74,7 @@ import {
   renameTerminalVisibilityGroup,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
+  setShowMinimizedInGroup,
   setTerminalVisibleInGroup,
   type TerminalVisibilityState,
   type TerminalVisibilityType,
@@ -935,6 +936,22 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         visible = active.hiddenKeys.includes(key);
       persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, visible));
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'change',
+      TERMINALS_ACTIONS.toggleTerminalVisibilityShowMinimized.selector,
+      (_event, target) => {
+        const scope = terminalVisibilityDialogScope.value;
+        if (!scope) return;
+        // Remembered per workspace with its other visibility choices (HS2-W1XEH7).
+        const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope);
+        persistTerminalVisibility(
+          setShowMinimizedInGroup(terminalVisibility.value, active.id, (target as HTMLInputElement).checked),
+        );
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalVisibilityProject.selector, (_event, target) => {

@@ -18,6 +18,7 @@ import {
   activeTerminalVisibilityGroup,
   addTerminalVisibilityGroup,
   effectiveTerminalVisibleTypes,
+  includedTerminalProjectGroups,
   initialTerminalVisibilityState,
   projectVisibilityToggleTarget,
   removeTerminalVisibilityGroup,
@@ -25,6 +26,7 @@ import {
   scopeTerminalVisibilityTypes,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
+  setShowMinimizedInGroup,
   setTerminalVisibleInGroup,
   terminalVisibilityItems,
   type TerminalVisibilityType,
@@ -73,10 +75,33 @@ export const terminalVisibilityDemoState = signal(
 /** The demo's AI chat feature area; off, the chat-less project shows no AI Chats segment (HS2-4TKASN). */
 export const terminalVisibilityDemoChatFeature = signal(true);
 /** The demo's projects: the chat closes while the feature is off, as an empty workspace would be. */
+/** A minimized project, listed only while the workspace's Show minimized is on (HS2-W1XEH7). */
+export const terminalVisibilityDemoMinimizedGroup: TerminalDashboardGroup = {
+  projectId: 'archive',
+  projectName: 'Archived project',
+  sessions: [
+    {
+      id: 'release',
+      projectId: 'archive',
+      projectName: 'Archived project',
+      title: 'Release notes',
+      alive: true,
+      busy: false,
+      scrollback: '',
+    },
+  ],
+};
 export const terminalVisibilityDemoProjects = () =>
-  terminalVisibilityDemoChatFeature.value
-    ? terminalVisibilityDemoGroups
-    : terminalVisibilityDemoGroups.map((group) => ({ ...group, chats: [] }));
+  includedTerminalProjectGroups(
+    [
+      ...(terminalVisibilityDemoChatFeature.value
+        ? terminalVisibilityDemoGroups
+        : terminalVisibilityDemoGroups.map((group) => ({ ...group, chats: [] }))),
+      terminalVisibilityDemoMinimizedGroup,
+    ],
+    activeTerminalVisibilityGroup(terminalVisibilityDemoState.value, 'dashboard'),
+    [terminalVisibilityDemoMinimizedGroup.projectId],
+  );
 export const terminalVisibilityDemoOpen = signal(false),
   terminalVisibilityDemoContextMenu = signal<{ id: string; x: number; y: number } | undefined>(undefined),
   terminalVisibilityDemoNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
@@ -189,6 +214,9 @@ export function toggleTerminalVisibilityDemoType(type: TerminalVisibilityType) {
     demoAvailableTypes(),
   );
 }
+export function setTerminalVisibilityDemoShowMinimized(show: boolean) {
+  terminalVisibilityDemoState.value = setShowMinimizedInGroup(terminalVisibilityDemoState.value, active().id, show);
+}
 export function setTerminalVisibilityDemoChatFeature(on: boolean) {
   terminalVisibilityDemoChatFeature.value = on;
 }
@@ -239,6 +267,11 @@ function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
     delegate(root, 'click', DEMO_ACTIONS.toggleTerminalVisibilityType.selector, (_event, target) => {
       const type = (target as HTMLElement).dataset.visibilityType;
       if (type === 'shell' || type === 'ai' || type === 'chat') toggleTerminalVisibilityDemoType(type);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', DEMO_ACTIONS.toggleTerminalVisibilityShowMinimized.selector, (_event, target) => {
+      setTerminalVisibilityDemoShowMinimized((target as HTMLInputElement).checked);
     }),
   );
   demoListeners.add(

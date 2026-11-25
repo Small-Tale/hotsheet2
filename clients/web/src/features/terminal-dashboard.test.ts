@@ -57,6 +57,7 @@ function owner(projects = signal([project('a')])) {
     reconcileTerminalNames,
     workspaceTerminalGroups: () => terminalGroups.value,
     chatFeatureOn: () => true,
+    minimizedProjectIds: () => [],
     aiToolLabel: (tool) => tool,
     showToast,
     error,

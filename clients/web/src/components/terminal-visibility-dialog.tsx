@@ -1,6 +1,7 @@
 import './terminal-visibility-dialog.css';
 
 import { Button } from '@kerfjs/ui/button';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -34,6 +35,7 @@ export interface TerminalVisibilityDialogProps {
   open: boolean;
   state: TerminalVisibilityState;
   scope: string;
+  /** The projects the workspace lists: the caller leaves minimized ones out unless shown (HS2-W1XEH7). */
   groups: TerminalDashboardGroup[];
   /** Whether the AI chat feature area is on; off, AI Chats shows only while a chat is listed (HS2-4TKASN). */
   chatFeatureOn: boolean;
@@ -133,23 +135,31 @@ export function TerminalVisibilityDialog({
         }}
         footer={
           <List id={TERMINAL_VISIBILITY_SCROLL_TARGET.bottom} controlInsets="trbl" flex>
-            <Row hAlign="right" vAlign="middle" gap="xs">
-              <Button
-                emphasis="plain"
-                type="button"
-                action={'hide-all-terminals-in-group'}
-                disabled={visibleGroups.length === 0}
-              >
-                Hide Listed
-              </Button>
-              <Button
-                emphasis="plain"
-                type="button"
-                action={'show-all-terminals-in-group'}
-                disabled={visibleGroups.length === 0}
-              >
-                Show Listed
-              </Button>
+            <Row hAlign="space-between" vAlign="middle" gap="xs" wrap>
+              {/* Per workspace, off by default: minimized projects are left out unless shown (HS2-W1XEH7). */}
+              <Checkbox
+                label="Show minimized"
+                checked={Boolean(active.showMinimized)}
+                action={TERMINALS_ACTIONS.toggleTerminalVisibilityShowMinimized.value}
+              />
+              <Row hAlign="right" vAlign="middle" gap="xs">
+                <Button
+                  emphasis="plain"
+                  type="button"
+                  action={'hide-all-terminals-in-group'}
+                  disabled={visibleGroups.length === 0}
+                >
+                  Hide Listed
+                </Button>
+                <Button
+                  emphasis="plain"
+                  type="button"
+                  action={'show-all-terminals-in-group'}
+                  disabled={visibleGroups.length === 0}
+                >
+                  Show Listed
+                </Button>
+              </Row>
             </Row>
           </List>
         }

@@ -3829,7 +3829,13 @@ shows them all; if all are visible, it hides them all. It is Kerf `ListHeader`'s
 action: one keyboard stop named "Show All <project> <types>" or "Hide All …" (the noun is the
 single listed type, else Items). Like each row, its eye or eye-off icon reports state.
 Hide Listed and Show Listed stay in the footer. Making the project name itself the control
-waits on Kerf KF-J289N4 (HS2-DZH5GH). Terminal kind comes from the creation request:
+waits on Kerf KF-J289N4 (HS2-DZH5GH). A **Show minimized** checkbox in the dialog footer
+(HS2-W1XEH7) is off by default and remembered per workspace. Off, items of minimized
+project tabs are left out: they are not listed, not shown in that workspace's grid, and not
+counted by the eye badge. On, they are listed and follow their own visibility. Hide Listed,
+Show Listed and the heading toggles act only on listed items. The choice is stored as
+`showMinimized` on the workspace's group in `localStorage hotsheet.terminals.visibility-groups`
+(absent means off, so older saved groups read as off), and survives reload. Terminal kind comes from the creation request:
 `connect` marks AI, ordinary/default-shell launches remain shell, and the kind persists
 through PTY reattachment and broker-backed server restart. Legacy sessions without kind
 remain shell; titles, command output, and OSC8 hyperlinks never determine kind (HS2-SE3RVM).

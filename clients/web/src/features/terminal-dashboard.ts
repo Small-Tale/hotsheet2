@@ -14,6 +14,7 @@ import { sameTerminalDashboardSnapshot, TerminalSnapshotRefresh } from '../termi
 import {
   activeTerminalVisibilityGroup,
   effectiveTerminalVisibleTypes,
+  includedTerminalProjectGroups,
   type parseTerminalVisibilityState,
   scopeTerminalVisibilityTypes,
   TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
@@ -46,6 +47,8 @@ export interface TerminalDashboardDependencies {
   workspaceTerminalGroups: () => Parameters<typeof terminalVisibilityItems>[0];
   /** Whether the AI chat feature area is on (HS2-4TKASN). */
   chatFeatureOn: () => boolean;
+  /** Minimized project tabs, left out of a workspace unless it shows them (HS2-W1XEH7). */
+  minimizedProjectIds: () => readonly string[];
   aiToolLabel: (tool: string) => string;
   showToast: (message: string) => void;
   error: Signal<string>;
@@ -74,6 +77,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
     reconcileTerminalNames,
     workspaceTerminalGroups,
     chatFeatureOn,
+    minimizedProjectIds,
     aiToolLabel,
     showToast,
     error,
@@ -88,9 +92,17 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   function terminalHiddenKeys(scope: string) {
     return activeTerminalVisibilityGroup(terminalVisibility.value, scope).hiddenKeys;
   }
+  /** The projects a scope's workspace lists and shows: minimized ones only when it says so (HS2-W1XEH7). */
+  function terminalScopeGroups(scope: string) {
+    return includedTerminalProjectGroups(
+      workspaceTerminalGroups(),
+      activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+      minimizedProjectIds(),
+    );
+  }
   /** The types a scope's visibility dialog offers (HS2-4TKASN). */
   function terminalAvailableTypes(scope: string) {
-    return scopeTerminalVisibilityTypes(workspaceTerminalGroups(), scope, chatFeatureOn());
+    return scopeTerminalVisibilityTypes(terminalScopeGroups(scope), scope, chatFeatureOn());
   }
   function terminalVisibleTypes(scope: string) {
     return effectiveTerminalVisibleTypes(
@@ -103,7 +115,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
       visibleTypes = terminalVisibleTypes(scope),
       hiddenKeys = new Set(active.hiddenKeys);
     return terminalVisibilityItems(
-      workspaceTerminalGroups(),
+      terminalScopeGroups(scope),
       projectId ? terminalProjectVisibilityScope(projectId) : scope,
     )
       .flatMap((group) => group.items)
@@ -122,7 +134,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   /** The dialog's listed keys, or one project's (HS2-HC67SP). */
   function terminalKeysForVisibilityDialog(projectId?: string) {
     return terminalVisibilityItems(
-      workspaceTerminalGroups(),
+      terminalScopeGroups(terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
       terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
       terminalVisibleTypes(terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
     )
@@ -257,6 +269,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   return {
     terminalSession,
     terminalHiddenKeys,
+    terminalScopeGroups,
     terminalAvailableTypes,
     terminalVisibleTypes,
     terminalHiddenCount,

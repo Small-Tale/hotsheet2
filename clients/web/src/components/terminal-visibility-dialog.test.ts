@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   initialTerminalVisibilityState,
+  setShowMinimizedInGroup,
   setTerminalTypeVisibleInGroup,
   setTerminalVisibleInGroup,
 } from '../terminal-visibility';
@@ -216,5 +217,34 @@ describe('TerminalVisibilityDialog', () => {
     // The footer bulk actions stay.
     expect(mixed).toContain('hide-all-terminals-in-group');
     expect(mixed).toContain('show-all-terminals-in-group');
+  });
+  it('offers a per-workspace Show minimized checkbox, off by default (HS2-W1XEH7)', () => {
+    const off = String(
+      TerminalVisibilityDialog({
+        open: true,
+        state: initialTerminalVisibilityState(),
+        scope: 'dashboard',
+        groups,
+        chatFeatureOn: true,
+      }),
+    );
+    expect(off).toContain('data-component="checkbox"');
+    expect(off).toContain('Show minimized');
+    expect(off).toContain('data-action="toggle-terminal-visibility-show-minimized"');
+    expect(off).not.toMatch(/data-action="toggle-terminal-visibility-show-minimized"[^>]*checked/);
+    const on = String(
+      TerminalVisibilityDialog({
+        open: true,
+        state: setShowMinimizedInGroup(initialTerminalVisibilityState(), 'default', true),
+        scope: 'dashboard',
+        groups,
+        chatFeatureOn: true,
+      }),
+    );
+    expect(on).toMatch(
+      /<input[^>]*checked[^>]*data-action="toggle-terminal-visibility-show-minimized"|<input[^>]*data-action="toggle-terminal-visibility-show-minimized"[^>]*checked/,
+    );
+    // Show minimized sits in the footer beside the bulk actions.
+    expect(on.indexOf('Show minimized')).toBeLessThan(on.indexOf('hide-all-terminals-in-group'));
   });
 });

@@ -2962,6 +2962,7 @@ export async function startHotSheetWebClient() {
     reconcileTerminalNames,
     workspaceTerminalGroups: () => workspaceTerminalGroups(),
     chatFeatureOn: () => featureOn('ai-chat'),
+    minimizedProjectIds: () => minimizedProjectIds.value,
     aiToolLabel,
     showToast,
     error,
@@ -2969,6 +2970,7 @@ export async function startHotSheetWebClient() {
   const {
     terminalSession,
     terminalHiddenKeys,
+    terminalScopeGroups,
     terminalAvailableTypes,
     terminalVisibleTypes,
     terminalHiddenCount,
@@ -6405,6 +6407,7 @@ export async function startHotSheetWebClient() {
         magnifiedTerminalKey,
         terminalHiddenKeys,
         terminalVisibleTypes,
+        terminalScopeGroups,
         terminalDashboardLoading,
         terminalDashboardMessage,
         terminalContextMenu,
@@ -7075,7 +7078,7 @@ export async function startHotSheetWebClient() {
     unhealthyServerRecoveryBusy,
     viewMode,
     workspaceSearchActive,
-    workspaceTerminalGroups,
+    terminalScopeGroups,
   });
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
   wireDialogStack(appRoot);

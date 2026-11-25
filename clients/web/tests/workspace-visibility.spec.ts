@@ -164,3 +164,79 @@ test('HS2-HC67SP toggles every listed item of one project from its heading', asy
   await page.setViewportSize({ width: 1440, height: 900 });
   await dialog.screenshot({ path: `${capture}/heading-light-wide-return.png`, animations: 'disabled' });
 });
+
+test('HS2-W1XEH7 leaves minimized projects out of each workspace unless it shows them', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const strip = await openTwoProjects(page);
+  await strip.locator('[data-project-id="second"]').first().click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Minimize Tab' }).click();
+  await expect(strip.locator('[data-tab-kind="project"]')).toHaveCount(1);
+  const dialog = await openGridVisibility(page);
+  const grid = page.getByRole('region', { name: 'Workspace Grid' });
+  const tiles = grid.locator('[data-component="terminal-tile"]');
+  const secondTile = grid.locator('[data-terminal-key="second:second-agent"]');
+  const showMinimized = dialog.getByRole('checkbox', { name: 'Show minimized' });
+  const secondHeading = dialog.getByRole('heading', { name: 'second' });
+  // Off by default: the minimized project's items leave the dialog and the grid.
+  await expect(showMinimized).not.toBeChecked();
+  await expect(secondHeading).toHaveCount(0);
+  await expect(dialog.locator('[data-action="toggle-terminal-visibility"]')).toHaveCount(3);
+  await expect(tiles).toHaveCount(3);
+  await expect(secondTile).toHaveCount(0);
+  // Hide Listed acts only on listed items.
+  await dialog.getByRole('button', { name: 'Hide Listed' }).click();
+  await expect(tiles).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Show Listed' }).click();
+  await expect(tiles).toHaveCount(3);
+  const capture = 'target/visual-captures/hs2-w1xeh7';
+  await dialog.screenshot({ path: `${capture}/off-light-wide.png`, animations: 'disabled' });
+  // Checked: they return, following their own visibility.
+  await showMinimized.check();
+  await expect(secondHeading).toBeVisible();
+  await expect(dialog.locator('[data-action="toggle-terminal-visibility"]')).toHaveCount(4);
+  await expect(secondTile).toHaveCount(1);
+  await dialog.screenshot({ path: `${capture}/on-light-wide.png`, animations: 'disabled' });
+  // A second workspace keeps its own choice, off by default.
+  await dialog.getByRole('button', { name: 'Add Visibility Group' }).click();
+  const nameDialog = page.locator('[data-terminal-visibility-name-dialog]');
+  await nameDialog.getByRole('textbox', { name: 'Group Name' }).fill('AI');
+  await nameDialog.getByRole('button', { name: 'Add' }).click();
+  await expect(dialog.locator('[data-visibility-group-id]').filter({ hasText: 'AI' })).toHaveAttribute(
+    'data-selected',
+    'true',
+  );
+  await expect(showMinimized).not.toBeChecked();
+  await expect(secondHeading).toHaveCount(0);
+  // The grid follows the active workspace, which leaves the minimized project out.
+  await expect(secondTile).toHaveCount(0);
+  await dialog.locator('[data-visibility-group-id="default"]').click();
+  await expect(showMinimized).toBeChecked();
+  await expect(secondHeading).toBeVisible();
+  // Keyboard: Space toggles it off and on again.
+  await showMinimized.focus();
+  await page.keyboard.press('Space');
+  await expect(showMinimized).not.toBeChecked();
+  await expect(secondTile).toHaveCount(0);
+  await page.keyboard.press('Space');
+  await expect(showMinimized).toBeChecked();
+  await expect(secondTile).toHaveCount(1);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await dialog.screenshot({ path: `${capture}/on-dark-wide.png`, animations: 'disabled' });
+  await page.setViewportSize({ width: 960, height: 800 });
+  await dialog.screenshot({ path: `${capture}/on-dark-medium.png`, animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(showMinimized).toBeVisible();
+  await page.screenshot({ path: `${capture}/on-dark-narrow.png`, animations: 'disabled' });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.screenshot({ path: `${capture}/on-light-narrow.png`, animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await dialog.screenshot({ path: `${capture}/on-light-wide-return.png`, animations: 'disabled' });
+  // Reload: each workspace keeps its own choice.
+  await page.reload();
+  const stored = await page.evaluate(() => localStorage.getItem('hotsheet.terminals.visibility-groups'));
+  const groups = (JSON.parse(stored ?? '{}') as { groups: Array<{ name: string; showMinimized?: boolean }> }).groups;
+  expect(groups.map((group) => [group.name, Boolean(group.showMinimized)])).toEqual([
+    ['Default', true],
+    ['AI', false],
+  ]);
+});

@@ -13,6 +13,8 @@ export interface TerminalVisibilityGroup {
   name: string;
   hiddenKeys: string[];
   hiddenTypes?: TerminalVisibilityType[];
+  /** List and show minimized projects' items in this workspace; absent means off (HS2-W1XEH7). */
+  showMinimized?: boolean;
 }
 export interface TerminalVisibilityState {
   groups: TerminalVisibilityGroup[];
@@ -54,7 +56,13 @@ export function parseTerminalVisibilityState(raw: string | null): TerminalVisibi
       const hiddenTypes = Array.isArray(candidate.hiddenTypes)
         ? terminalVisibilityTypes(candidate.hiddenTypes.filter((type): type is string => typeof type === 'string'))
         : [];
-      groups.push({ id: candidate.id, name: candidate.name.trim(), hiddenKeys, hiddenTypes });
+      groups.push({
+        id: candidate.id,
+        name: candidate.name.trim(),
+        hiddenKeys,
+        hiddenTypes,
+        ...(candidate.showMinimized === true ? { showMinimized: true } : {}),
+      });
     }
     if (!groups.some((group) => group.id === DEFAULT_TERMINAL_VISIBILITY_GROUP_ID))
       groups.unshift({
@@ -151,6 +159,38 @@ export function setAllTerminalsVisibleInGroup(
   visible: boolean,
 ): TerminalVisibilityState {
   return keys.reduce((next, key) => setTerminalVisibleInGroup(next, groupId, key, visible), state);
+}
+
+/** Turn a workspace's Show minimized choice on or off (HS2-W1XEH7). */
+export function setShowMinimizedInGroup(
+  state: TerminalVisibilityState,
+  groupId: string,
+  show: boolean,
+): TerminalVisibilityState {
+  return {
+    ...state,
+    groups: state.groups.map((group) => {
+      if (group.id !== groupId || Boolean(group.showMinimized) === show) return group;
+      if (show) return { ...group, showMinimized: true };
+      const rest = { ...group };
+      delete rest.showMinimized;
+      return rest;
+    }),
+  };
+}
+
+/**
+ * The projects a workspace lists and shows (HS2-W1XEH7): minimized projects are left out unless the
+ * workspace shows them, so their items are neither listed in the dialog nor shown in the grid.
+ */
+export function includedTerminalProjectGroups<G extends { projectId: string }>(
+  groups: readonly G[],
+  group: Pick<TerminalVisibilityGroup, 'showMinimized'>,
+  minimizedProjectIds: readonly string[],
+): G[] {
+  if (group.showMinimized || minimizedProjectIds.length === 0) return [...groups];
+  const minimized = new Set(minimizedProjectIds);
+  return groups.filter((candidate) => !minimized.has(candidate.projectId));
 }
 
 /**

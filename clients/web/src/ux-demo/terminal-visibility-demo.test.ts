@@ -4,6 +4,7 @@ import {
   closeTerminalVisibilityDemo,
   setAllTerminalVisibilityDemo,
   setTerminalVisibilityDemoChatFeature,
+  setTerminalVisibilityDemoShowMinimized,
   showTerminalVisibilityDemo,
   terminalVisibilityDemoState,
   TerminalVisibilityDialogDemo,
@@ -73,6 +74,21 @@ describe('TerminalVisibilityDialog demo', () => {
       'demo:server',
       'demo:ai-chat:demo',
     ]);
+    closeTerminalVisibilityDemo();
+    terminalVisibilityDemoState.value = initial;
+  });
+  it('lists the minimized project only while Show minimized is on, per workspace (HS2-W1XEH7)', () => {
+    const initial = terminalVisibilityDemoState.value;
+    showTerminalVisibilityDemo();
+    expect(String(TerminalVisibilityDialogDemo())).not.toContain('Release notes');
+    setTerminalVisibilityDemoShowMinimized(true);
+    expect(String(TerminalVisibilityDialogDemo())).toContain('Release notes');
+    expect(terminalVisibilityDemoState.value.groups.map((group) => Boolean(group.showMinimized))).toEqual([
+      false,
+      true,
+    ]);
+    setTerminalVisibilityDemoShowMinimized(false);
+    expect(String(TerminalVisibilityDialogDemo())).not.toContain('Release notes');
     closeTerminalVisibilityDemo();
     terminalVisibilityDemoState.value = initial;
   });

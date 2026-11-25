@@ -57,6 +57,8 @@ export interface TerminalPresentationDependencies {
     magnifiedTerminalKey: Signal<string | undefined>;
     terminalHiddenKeys: (scope: string) => string[];
     terminalVisibleTypes: (scope: string) => readonly TerminalVisibilityType[];
+    /** The projects a scope's workspace shows: minimized ones only when it says so (HS2-W1XEH7). */
+    terminalScopeGroups?: (scope: string) => TerminalDashboardGroup[];
     terminalDashboardLoading: Signal<boolean>;
     terminalDashboardMessage: Signal<string>;
     terminalContextMenu: Signal<{ key: string; x: number; y: number } | undefined>;
@@ -130,6 +132,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     magnifiedTerminalKey,
     terminalHiddenKeys,
     terminalVisibleTypes,
+    terminalScopeGroups,
     terminalDashboardLoading,
     terminalDashboardMessage,
     terminalContextMenu,
@@ -206,7 +209,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
 
   function globalWorkspaceSurfaceProps(): GlobalWorkspaceSurfaceProps {
     if (shellMode.value === 'terminals') {
-      const groups = workspaceTerminalGroups();
+      const groups = terminalScopeGroups?.(TERMINAL_DASHBOARD_VISIBILITY_SCOPE) ?? workspaceTerminalGroups();
       return {
         kind: 'terminals',
         dashboard: {

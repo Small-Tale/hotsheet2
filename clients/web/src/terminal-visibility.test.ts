@@ -7,6 +7,7 @@ import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
   effectiveTerminalVisibleTypes,
   hideNewTerminalInNamedGroups,
+  includedTerminalProjectGroups,
   initialTerminalVisibilityState,
   parseTerminalVisibilityState,
   projectVisibilityToggleTarget,
@@ -15,6 +16,7 @@ import {
   scopeTerminalVisibilityTypes,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
+  setShowMinimizedInGroup,
   setTerminalTypeVisibleInGroup,
   setTerminalVisibleInGroup,
   TERMINAL_VISIBILITY_TYPES,
@@ -280,5 +282,52 @@ describe('project heading toggle (HS2-HC67SP)', () => {
     expect(terminalVisibilityItemsNoun(['chat'])).toBe('AI Chats');
     expect(terminalVisibilityItemsNoun(['shell', 'ai'])).toBe('Items');
     expect(terminalVisibilityItemsNoun([])).toBe('Items');
+  });
+});
+
+describe('Show minimized per workspace (HS2-W1XEH7)', () => {
+  const projects = [{ projectId: 'a' }, { projectId: 'b' }, { projectId: 'c' }];
+
+  it('leaves minimized projects out unless the workspace shows them', () => {
+    expect(includedTerminalProjectGroups(projects, {}, ['b'])).toEqual([{ projectId: 'a' }, { projectId: 'c' }]);
+    expect(includedTerminalProjectGroups(projects, { showMinimized: false }, ['b', 'c'])).toEqual([{ projectId: 'a' }]);
+    expect(includedTerminalProjectGroups(projects, { showMinimized: true }, ['b', 'c'])).toEqual(projects);
+    expect(includedTerminalProjectGroups(projects, {}, [])).toEqual(projects);
+    expect(includedTerminalProjectGroups(projects, {}, ['missing'])).toEqual(projects);
+    expect(includedTerminalProjectGroups(projects, {}, ['a', 'b', 'c'])).toEqual([]);
+    expect(includedTerminalProjectGroups([], {}, ['a'])).toEqual([]);
+  });
+
+  it('keeps each workspace its own choice, off by default, through persistence', () => {
+    let state = addTerminalVisibilityGroup(initialTerminalVisibilityState(), 'ai', 'AI').state;
+    expect(state.groups.map((group) => group.showMinimized)).toEqual([undefined, undefined]);
+    state = setShowMinimizedInGroup(state, 'ai', true);
+    expect(state.groups.map((group) => Boolean(group.showMinimized))).toEqual([false, true]);
+    // Repeating a choice changes nothing; a missing workspace changes nothing.
+    expect(setShowMinimizedInGroup(state, 'ai', true).groups).toEqual(state.groups);
+    expect(setShowMinimizedInGroup(state, 'missing', true)).toEqual(state);
+    const reloaded = parseTerminalVisibilityState(JSON.stringify(state));
+    expect(reloaded.groups.map((group) => Boolean(group.showMinimized))).toEqual([false, true]);
+    state = setShowMinimizedInGroup(setShowMinimizedInGroup(reloaded, 'default', true), 'ai', false);
+    expect(state.groups.map((group) => Boolean(group.showMinimized))).toEqual([true, false]);
+    // Off stores no field, so older saved groups and new ones read the same.
+    expect(Object.hasOwn(state.groups[1], 'showMinimized')).toBe(false);
+    expect(parseTerminalVisibilityState(JSON.stringify(state)).groups.map((group) => group.showMinimized)).toEqual([
+      true,
+      undefined,
+    ]);
+  });
+
+  it('ignores malformed persisted choices', () => {
+    const parsed = parseTerminalVisibilityState(
+      JSON.stringify({
+        groups: [
+          { id: 'default', name: 'Default', hiddenKeys: [], showMinimized: 'yes' },
+          { id: 'x', name: 'X', hiddenKeys: [], showMinimized: 1 },
+          { id: 'y', name: 'Y', hiddenKeys: [], showMinimized: true },
+        ],
+      }),
+    );
+    expect(parsed.groups.map((group) => group.showMinimized)).toEqual([undefined, undefined, true]);
   });
 });
