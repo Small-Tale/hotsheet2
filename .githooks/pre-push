@@ -14,6 +14,9 @@ last_remote_sha=''
 # itself. A fast-forward whose new commits touch only those data files, with no merge, skips the
 # gate and the main-integration window; anything else takes the normal path below.
 registry_only=1
+# HS2-6PA2DD: deleting integrated `merge-pending/<SLUG>` branches ships no code, so a push whose
+# every update is such a deletion (as `merge-pending-prune --apply` sends) skips the gate.
+merge_pending_deletes_only=1
 registry_only_update() {
   local local_sha="$1" remote_sha="$2" paths
   [[ ! "$local_sha" =~ ^0+$ && ! "$remote_sha" =~ ^0+$ ]] || return 1
@@ -27,6 +30,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   total_updates=$((total_updates + 1))
   if ! registry_only_update "$local_sha" "$remote_sha"; then
     registry_only=0
+  fi
+  if [[ ! "$local_sha" =~ ^0+$ || "$remote_ref" != refs/heads/merge-pending/* ]]; then
+    merge_pending_deletes_only=0
   fi
   last_remote_ref="$remote_ref"
   last_local_sha="$local_sha"
@@ -42,6 +48,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 done
 if [[ "$total_updates" -gt 0 && "$registry_only" -eq 1 && -z "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then
+  exit 0
+fi
+if [[ "$total_updates" -gt 0 && "$merge_pending_deletes_only" -eq 1 && -z "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then
   exit 0
 fi
 # HS2-GT57BQ: a reserved ci-staged push to the integration branch carries the window token;
