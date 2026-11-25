@@ -251,6 +251,11 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
         Verdict::Resolved,
     ),
     (
+        "hotsheet-aitools/src/usage_resets.rs",
+        "cwd=1",
+        Verdict::Resolved,
+    ),
+    (
         "hotsheet-cli/src/coordination/development_strategy.rs",
         "cwd=1",
         Verdict::Safe("bare `git` without a PATH change"),
