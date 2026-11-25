@@ -990,6 +990,12 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
     assert_eq!(orchestrated["checkout_id"], checkout.id.as_str());
     assert_eq!(orchestrated["owner"], "orchestrator");
     assert_eq!(orchestrated["paused"], false);
+    // HS2-G2X7RT: a tool that reports no session start says nothing about readiness.
+    assert!(
+        tab(&drawer(&router).await, &cli_terminal)
+            .get("tool_ready")
+            .is_none()
+    );
     let host_side = |role: &'static str| {
         [
             "--actor-role",

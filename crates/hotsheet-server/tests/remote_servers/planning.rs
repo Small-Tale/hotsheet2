@@ -242,6 +242,20 @@ command = "hotsheet-cli permission-hook --agent synthetic""#,
     let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
     assert_eq!(shown["state"], "planning", "{shown}");
     assert_eq!(shown["session"]["tool_ready"], false, "{shown}");
+    // HS2-G2X7RT: the drawer tab's listing carries the same answer.
+    let tab_ready = || async {
+        let (status, terminals) =
+            api(world.router.clone(), "GET", "/terminals", Value::Null, true).await;
+        assert_eq!(status, StatusCode::OK, "{terminals}");
+        terminals
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tab| tab["id"] == terminal.as_str())
+            .unwrap()["tool_ready"]
+            .clone()
+    };
+    assert_eq!(tab_ready().await, false);
 
     // The tool got past its questions: its SessionStart hook reports in.
     let (status, _) = api(
@@ -255,6 +269,7 @@ command = "hotsheet-cli permission-hook --agent synthetic""#,
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
     assert_eq!(shown["session"]["tool_ready"], true, "{shown}");
+    assert_eq!(tab_ready().await, true);
     // The hosted listing of the checkout says the same.
     let (status, listed) = api(
         world.router.clone(),

@@ -440,6 +440,24 @@ export function TerminalDrawerDemo() {
                 at: '2026-10-05T08:00:00Z',
               },
             },
+            {
+              // HS2-G2X7RT: an orchestrator's session whose tool may be on a first-run question.
+              ...shell,
+              id: 'tool-waiting',
+              projectId: 'demo-states',
+              title: 'Release train: run 69G5FB0',
+              kind: 'ai',
+              tool: 'claude',
+              busy: false,
+              tool_ready: false,
+              orchestrator: {
+                checkout_id: 'demo-checkout',
+                operation_id: 'demo-op',
+                project: 'Release train',
+                owner: 'orchestrator',
+                paused: false,
+              },
+            },
           ]}
           width={900}
           height={96}

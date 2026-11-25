@@ -1460,14 +1460,14 @@ async fn send_drive_turn_inner(
                 }
                 hotsheet_aitools::TurnEvent::Done(reason) => {
                     // HS2-86MK1Y: a typed limit failure is a limit signal for the tool's
-                    // capacity; a client drive has no terminal, so it is unattributed.
-                    crate::tool_capacity_signals::record(
+                    // capacity; HS2-WTSYQJ: a completed turn of a tool that reports limits
+                    // but no usage confirms its recovery. A client drive has no terminal,
+                    // so both are unattributed.
+                    // HS2-JM0GVB: a usage limit also reads the tool's reset time once.
+                    crate::tool_capacity_signals::record_driven_outcome(
                         &thread_state,
-                        crate::tool_capacity_signals::driven_failure_signal(
-                            &tool,
-                            reason,
-                            time::OffsetDateTime::now_utc(),
-                        ),
+                        &tool,
+                        reason,
                     );
                     event.clone()
                 }

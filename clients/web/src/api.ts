@@ -1501,6 +1501,11 @@ export interface TerminalInfo {
   feedback_primary?: boolean;
   /** HS2-6MNMVB: an orchestrator started this terminal's session on this machine. */
   orchestrator?: TerminalOrchestrator;
+  /**
+   * HS2-G2X7RT: for an orchestrator's live session whose tool reports its session start, whether it has;
+   * `false` while it may wait on a first-run question a person answers in this terminal. Absent otherwise.
+   */
+  tool_ready?: boolean;
 }
 /** HS2-6MNMVB: the hosted orchestrator session in a terminal, which a person may take over. */
 export interface TerminalOrchestrator {

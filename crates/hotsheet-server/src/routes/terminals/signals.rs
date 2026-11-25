@@ -38,21 +38,28 @@ pub(crate) async fn live_terminal_infos(state: &AppState) -> Vec<TerminalInfo> {
 /// Unlike the legacy terminal list, callers that report coverage must retain a
 /// broker failure as unavailable rather than converting it to zero sessions.
 pub(crate) async fn try_live_terminal_infos(state: &AppState) -> Result<Vec<TerminalInfo>, String> {
-    if let Some(tb) = &state.terminal_broker {
-        return match tb.call(hotsheet_terminals::BrokerRequest::List).await {
+    let mut infos = if let Some(tb) = &state.terminal_broker {
+        match tb.call(hotsheet_terminals::BrokerRequest::List).await {
             Ok(hotsheet_terminals::BrokerResponse::List { terminals }) => {
-                Ok(terminals.into_iter().map(broker_info).collect())
+                terminals.into_iter().map(broker_info).collect()
             }
-            Ok(response) => Err(format!("terminal broker list unavailable: {response:?}")),
-            Err(error) => Err(format!("terminal broker list unavailable: {error}")),
-        };
+            Ok(response) => return Err(format!("terminal broker list unavailable: {response:?}")),
+            Err(error) => return Err(format!("terminal broker list unavailable: {error}")),
+        }
+    } else {
+        state
+            .terminals
+            .list()
+            .into_iter()
+            .filter_map(|key| state.terminals.get(&key).map(|t| term_info(&t, &key.1)))
+            .collect::<Vec<_>>()
+    };
+    // HS2-2AN9C8: a Claude or Codex session's own turn reports are its busy state.
+    let turns = state.terminal_hook_turns.lock_or_recover();
+    for info in &mut infos {
+        turns.overlay(&info.id, &mut info.busy, &mut info.idle_since_ms);
     }
-    Ok(state
-        .terminals
-        .list()
-        .into_iter()
-        .filter_map(|key| state.terminals.get(&key).map(|t| term_info(&t, &key.1)))
-        .collect())
+    Ok(infos)
 }
 
 /// Apply the project's saved terminal names (HS2-89FPV1). An unreadable settings file leaves
@@ -103,6 +110,24 @@ fn with_terminal_names(
         info.last_hook_report = last_reports.get(&info.id).cloned();
         info.mcp_connected = info.alive && mcp.terminal_connected(&info.id);
         info.feedback_primary = info.alive && primaries.contains(&info.id);
+        // HS2-G2X7RT: the hosted answer's `tool_ready`, for the drawer tab.
+        info.tool_ready = (info.orchestrator.is_some()
+            && info.kind == hotsheet_terminals::TerminalKind::Ai
+            && info.tool.as_deref().is_some_and(|tool| {
+                hotsheet_cli::orchestration::plugin_reports_start(tool, &state.plugin_dirs)
+            }))
+        .then(|| {
+            hotsheet_cli::orchestration::tool_ready(
+                Some(info.alive),
+                Some(&hotsheet_cli::orchestration::HostSessionState {
+                    session_id: info.id.clone(),
+                    busy: info.busy,
+                    idle_since_ms: info.idle_since_ms,
+                    reported: Some(info.ai_connection.is_some() || info.last_hook_report.is_some()),
+                }),
+            )
+        })
+        .flatten();
     }
     infos
 }
@@ -905,6 +930,7 @@ fn watch_shell_ai_session_exit(state: &AppState, id: String, reported_at: String
             };
             if removed {
                 super::codex_watch::stop_codex_session_watch(&state, &id);
+                super::forget_hook_turn(&state, &id);
                 crate::routes::session_messages::unregister_reported(&state, &id);
                 if forget_terminal_halt(&state, &id) {
                     emit_terminal_halted(&state, &id, None);

@@ -533,6 +533,15 @@ pub(crate) async fn report_claude_turn(
             "Claude transcript unavailable",
         ));
     }
+    // HS2-2AN9C8: UserPromptSubmit opens the turn and Stop or StopFailure ends it.
+    super::note_hook_turn(
+        &state,
+        &terminal,
+        match body.event {
+            TurnEvent::Start => super::hook_turns::TurnBoundary::Started,
+            TurnEvent::Stop | TurnEvent::Failure => super::hook_turns::TurnBoundary::Ended,
+        },
+    );
     let blocking = state.clone();
     tokio::task::spawn_blocking(move || {
         let state = blocking;
@@ -622,6 +631,7 @@ fn stop_follow(follow: ClaudeUsageFollow) {
 /// record is removed only after the follow stopped, so an in-flight wake cannot write it
 /// back (HS2-2XHKMZ).
 pub(crate) fn forget_claude_turn(state: &AppState, terminal: &str) {
+    super::forget_hook_turn(state, terminal);
     let removed = state
         .claude_usage_follows
         .lock_or_recover()

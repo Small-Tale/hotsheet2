@@ -1516,7 +1516,7 @@ declare exactly what the existing detection observes:
 | Claude      | reported          | reported           | reported    | reported     | reported |
 | Codex       | reported          | reported           | reported    | reported     | reported |
 | OpenCode    | unknown           | unknown            | unknown     | reported     | unknown  |
-| Antigravity | reported          | reported           | unknown     | unknown      | unknown  |
+| Antigravity | reported          | reported           | reported    | unknown      | unknown  |
 
 Codex reports a request-rate limit as its own `CodexErrorInfo` variant,
 `rate_limit_exceeded`, beside `usage_limit_exceeded` (HS2-2BAVAM). The rollout halt path
@@ -1537,10 +1537,24 @@ turn carries that error type, and the dist work loop's limit sink and the client
 runner record it through the same halt path, unattributed like driven usage. **The real
 quota-hit payload is unconfirmed:** the observed line was a print timeout
 (`DEADLINE_EXCEEDED`), and the limit values are assumed until one is captured
-(HS2-GETFE4). Antigravity reports no reset time (agy's `/usage` buckets carry one,
-HS2-JM0GVB) and no usage events, so before anything is observed it is `unknown`
-(`not_observed`), and after a limit without a reset time it stays `degraded` until a
-`recovered` signal (HS2-WTSYQJ).
+(HS2-GETFE4). A usage limit's reset time comes from agy's own usage report (HS2-JM0GVB):
+when a driven turn fails on `usage_limit_exceeded`, the host runs the plugin's
+`usage_query_args` (`agy -p "/usage" --output-format json`, no agent turn or quota spend;
+observed on agy 1.5.10 with zero turns and zero tokens) once in the background and records
+the limit again with the latest `reset_time` of a bucket whose `remaining_fraction` is 0.
+The report does not say which bucket the failed turn drew on, so the latest reset is the
+one that cannot end the limit early. With no spent bucket, a failed or untrusted query, or
+AI-tool probes off, the registry's backoff stands; a rate limit asks nothing. **A spent
+bucket at a real limit is unconfirmed:** the observed report had none spent. Antigravity
+reports no usage events, so nothing observed is `unknown` (`not_observed`).
+A completed driven turn confirms it instead (HS2-WTSYQJ): the dist work loop's limit sink
+and the client-drive runner record a `recovered` signal, unattributed, when a turn of a
+tool whose plugin reports limits but no usage events completes. Its first completed turn
+makes it `available`. After a limit without a reset time it is `limited` for the backoff,
+then `degraded` (`recovery_unconfirmed`) until a probe turn completes and makes it
+`available` again, resetting the backoff sequence; a probe that hits the limit again
+backs off for the next, longer step. A tool that reports usage events confirms recovery
+through them and records nothing here.
 
 ### Signals
 
@@ -1559,7 +1573,8 @@ provider message a second way:
   reads from the message, or absent. This covers Claude's `StopFailure` hook and the
   Codex rollout watch, which share one halt path.
 - When a session halted on a limit takes a new turn (the tool's resume hook, or a new
-  Codex turn), a `recovered` signal is recorded. Ending the session, closing its
+  Codex turn), a `recovered` signal is recorded. A completed driven turn of a tool that
+  reports limits but no usage events records one too (HS2-WTSYQJ). Ending the session, closing its
   terminal, or a person dismissing the stopped state proves nothing and records
   nothing.
 - A halt that is not a limit, and a halt whose tool is not known, record nothing.
@@ -3290,6 +3305,22 @@ this: Codex's bootstrap paste reads `delivered` while Codex is still stuck. A ho
 report on a hosted terminal also publishes `orchestration_session`, so views read the
 session again without polling. Answering the question stays a person's act.
 
+The orchestrating machine carries the same answer (HS2-G2X7RT). A session start, sync
+or safe-point read copies the host's `tool_ready` into its answer
+(`orchestration session sync|safe-point|start`, MCP `session_sync` and
+`session_safe_point`), so a placed worker, dispatcher or integrator stuck on a
+first-run question says so where it was placed from. It is never stored in the
+machine-local record, so `session list` and `show`, which ask no host, omit it. On the
+hosting machine the terminal listing (`GET /terminals`) carries `tool_ready` for an
+orchestrator's live session whose tool reports its start, and the drawer tab of one
+with `tool_ready: false` shows the glance surfaces' waiting-on-you glyph (Lucide
+`hand`, `pop` tone) titled "Waiting for an answer in this terminal", the tab's form of
+the Orchestration header's "Planner waiting in its terminal". A halt or an exited tool
+outranks it, and it clears live when the hook reports in. Decision: the tab reuses the
+existing waiting-on-you state glyph rather than a new mark, so one state keeps one icon
+(docs/34 §34.10); it is limited to orchestrator-started sessions, whose launch nobody
+watched.
+
 ### Safe points and winding down
 
 Only the hosting machine can say whether a session is at a safe point. It establishes
@@ -3574,7 +3605,13 @@ A server that cannot be connected to within 5 seconds is no host
 (`session_host_unavailable`). A launch the server took is awaited for up to 10
 minutes. If its answer is lost, the server's terminal listing decides: a live
 terminal with the reserved id is the launch and is recorded as started, so it is
-never left running untracked. A real-process test proposes a plan with
+never left running untracked. The launch is also fenced on the server
+(HS2-62099G): its body carries `launch_within_ms`, 30 seconds shorter than the
+headless wait, and a server that reaches the spawn point after that window,
+measured from the request's arrival, refuses with 409 and starts nothing. A caller
+that exits drops its request before the spawn point. A terminal that does spawn is
+therefore always one the headless side still awaits or finds in the listing; a
+launch it gave up on never runs untracked. A real-process test proposes a plan with
 `hotsheet-cli` against a running `hotsheet-server` whose permission vault is held
 during the launch, and the planner starts on the first press.
 
@@ -4050,7 +4087,8 @@ scheduler decides anything.
   so nothing is interrupted. A start for a changed tool, model or account ends it at
   once instead (HS2-7VV79Q, below).
 - **Idle time (HS2-RG91SK).** A host says since when a session has been idle: its
-  terminal stamps the moment a turn finishes (the OSC 133 prompt after command output),
+  terminal stamps the moment a turn finishes (the OSC 133 prompt after command output,
+  or for Claude and Codex the turn end their hooks and rollouts report, HS2-2AN9C8),
   or its launch, and clears it while a turn runs. The time travels as `idle_since_ms` on
   the terminal listing (`GET /terminals`, the broker's terminal info) and in the safe
   point's facts, and the scheduler uses it, so a turn that began and ended between two
@@ -5388,8 +5426,9 @@ ends its turn but keeps its terminal open. A person who then adds a goal or answ
 `FEEDBACK NEEDED` question expects Propose Plan to plan again, so the press pushes the
 planner prompt, naming the new proposal id, into that planner through its session push
 (the role prompt's path, §26.16). It does not stop the planner and start a fresh one.
-The busy state both would rest on is inferred from OSC 133 markers, which Claude and
-Codex do not emit, so those tools always read as not busy. Winding the planner down
+The busy state both would rest on was inferred from OSC 133 markers, which Claude and
+Codex do not emit, so those tools always read as not busy; since HS2-2AN9C8 their turn
+reports supply it. Winding the planner down
 could then stop one that is still at work, while a push only gives it one more prompt.
 The push also keeps the planner's terminal and context for the person, and planning is
 idempotent by goal and target ticket. Only a delivered push is recorded: the hosted

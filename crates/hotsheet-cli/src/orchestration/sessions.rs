@@ -419,6 +419,31 @@ const HOST_ANSWER: std::time::Duration = std::time::Duration::from_secs(60);
 /// the headless path waits as well, within a bound.
 pub const LAUNCH_ANSWER: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
+/// HS2-62099G: how long before this side stops waiting the server must have spawned
+/// the terminal. The server measures the window from the request's arrival, which is
+/// later than this side's send; the margin keeps its fence inside this side's wait, so
+/// a terminal that spawns is always one this side can still see and record.
+pub const LAUNCH_FENCE_MARGIN: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// HS2-62099G: the `POST /terminals` body for a hosted launch. It carries the fence
+/// window, so a launch the server reaches only after this side gave up (or exited)
+/// starts nothing rather than a terminal no session records.
+pub fn launch_body(root: &str, launch: &HostLaunch) -> Value {
+    serde_json::json!({
+        "connect": launch.tool,
+        "id": launch.session_id,
+        "cwd": root,
+        "model": launch.model,
+        "effort": launch.effort,
+        "session_role": launch.role.code(),
+        "initial_prompt": launch.role_prompt,
+        "launch_within_ms": u64::try_from(
+            LAUNCH_ANSWER.saturating_sub(LAUNCH_FENCE_MARGIN).as_millis()
+        )
+        .unwrap_or(u64::MAX),
+    })
+}
+
 /// HS2-YWN8JT: why a request to a local server did not succeed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostCall {
@@ -476,15 +501,7 @@ impl SessionHost for LocalServerSessions {
         let prompt_at_launch = plugin_role_paths(&launch.tool, &hotsheet_plugins::default_dirs())
             .is_some_and(|(at_launch, _)| at_launch);
         for server in self.servers() {
-            let body = serde_json::json!({
-                "connect": launch.tool,
-                "id": launch.session_id,
-                "cwd": checkout.root,
-                "model": launch.model,
-                "effort": launch.effort,
-                "session_role": launch.role.code(),
-                "initial_prompt": launch.role_prompt,
-            });
+            let body = launch_body(&checkout.root, launch);
             let launched =
                 match Self::call_within(&server, "POST", "/terminals", Some(body), LAUNCH_ANSWER) {
                     Ok(_) => Ok(()),
@@ -891,6 +908,12 @@ pub struct SessionView {
     pub tool_setup: Option<ToolSetup>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_point: Option<SafePoint>,
+    /// HS2-G2X7RT: the host's answer for whether the session's tool is ready (see
+    /// [`HostedSessionView::tool_ready`]), as of this answer. `false` while its terminal
+    /// runs and its tool has not reported its session start, so it may wait on a
+    /// first-run question only a person answers there. Never stored in the record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_ready: Option<bool>,
     /// Names of external state this answer could not verify, such as `target_session`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unverified: Vec<&'static str>,
@@ -905,6 +928,7 @@ impl From<OrchestratedSession> for SessionView {
             request_prompt: None,
             tool_setup: None,
             safe_point: None,
+            tool_ready: None,
             unverified: Vec::new(),
         }
     }
@@ -2601,6 +2625,7 @@ impl OrchestrationRuntime {
                 tx,
             )?;
             Ok(SessionView {
+                tool_ready: hosted.tool_ready,
                 label: Some(hosted.label),
                 role_prompt: reply.role_prompt,
                 tool_setup: reply.tool_setup,
@@ -2835,6 +2860,8 @@ impl OrchestrationRuntime {
             let after = self.session_observe(&session, hosted.as_ref(), tx)?;
             Ok(SessionView {
                 label: hosted.as_ref().map(|hosted| hosted.label.clone()),
+                // HS2-G2X7RT: carried from the host's answer; the record never keeps it.
+                tool_ready: hosted.as_ref().and_then(|hosted| hosted.tool_ready),
                 safe_point: match &hosted {
                     Some(hosted) => hosted.safe_point.clone(),
                     None => with_safe_point.then(|| {
