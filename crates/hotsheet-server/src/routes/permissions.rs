@@ -517,6 +517,30 @@ pub(crate) struct AskBody {
     /// Identifies the reporting session so a late end from an earlier session cannot clear it.
     #[serde(default)]
     session_id: Option<String>,
+    /// The asking session's working directory, from the hook input. A hook under a shared host
+    /// (the Codex app-server daemon) cannot trust its inherited project, so it sends none and the
+    /// project is the registered checkout containing this directory (HS2-HSFVHC).
+    #[serde(default)]
+    cwd: Option<String>,
+}
+
+/// The project an ask belongs to: the hook's own, else the registered checkout containing its
+/// working directory (HS2-HSFVHC), else this server's primary store.
+fn ask_project(state: &AppState, project: String, cwd: Option<&str>) -> String {
+    if !project.is_empty() {
+        return project;
+    }
+    cwd.filter(|cwd| !cwd.trim().is_empty())
+        .and_then(|cwd| {
+            crate::routes::terminals::usage_store::checkout_containing(
+                state,
+                std::path::Path::new(cwd),
+            )
+        })
+        .map_or_else(
+            || state.store.root().display().to_string(),
+            |checkout| format!("checkout:{}", checkout.id),
+        )
 }
 
 /// A read-only authenticated probe for the exact route and secret a local hook would use.
@@ -564,11 +588,7 @@ pub(crate) async fn ask_permission(
         )
         .await;
     }
-    let project = if body.project.is_empty() {
-        state.store.root().display().to_string()
-    } else {
-        body.project
-    };
+    let project = ask_project(&state, body.project, body.cwd.as_deref());
     if project.starts_with("checkout:") {
         state.register_checkout_permission_rules(&project);
     }

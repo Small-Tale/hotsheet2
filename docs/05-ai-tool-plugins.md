@@ -2395,6 +2395,12 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 >   `codex app-server`, `hotsheet-cli permission-hook` ignores `HOTSHEET_TERMINAL_ID`.
 > - A PermissionRequest there still reaches Hot Sheet, with no `terminal_id`. SessionStart
 >   and SessionEnd report nothing.
+> - It also names no inherited project (`HOTSHEET_PERMISSION_PROJECT`/`HOTSHEET_PROJECT`), which
+>   belongs to whichever session started the daemon. The ask sends the hook input's `cwd`
+>   instead, and the server files it under the registered checkout containing that directory
+>   (`checkout:<id>`), falling back to the primary store when none contains it. That checkout's
+>   tab, a remote tab included, shows the prompt; before, a Codex ask could land in another
+>   project and never reach the remote tab it came from (HS2-HSFVHC).
 > - Codex runs hook commands through a shell. Arguments after a shell script flag (`-c`,
 >   `-lc`, `/C`) are therefore not program candidates, so the wrapper's `--agent codex` never
 >   hides the daemon above it.

@@ -295,3 +295,68 @@ async fn hs2_hba9z8_absent_or_stale_permission_attribution_does_not_guess_a_term
         assert_eq!(value(ask.await.unwrap()).await["decision"], "deny");
     }
 }
+
+/// HS2-HSFVHC: a hook under a shared host (the Codex app-server daemon) cannot trust its
+/// inherited project, so it names none and sends its session's working directory. The ask is
+/// filed under the registered checkout containing that directory, so the tab of that checkout
+/// (a remote tab included, through the bridge's projection) shows it; with no containing
+/// checkout it falls back to the primary store as before. Synthetic paths only.
+#[tokio::test]
+async fn hs2_hsfvhc_a_projectless_ask_is_filed_under_the_checkout_containing_its_cwd() {
+    let directory = tempfile::tempdir().unwrap();
+    let store_root = directory.path().join("synthetic.hs2");
+    FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(FsStore::open(&store_root).unwrap(), SECRET.into())
+        .unwrap()
+        .with_default_codex_home(directory.path().join("no-codex-home"))
+        .with_machine_home(directory.path().join("machine-home"));
+    let router = app(state);
+    let project = directory.path().join("synthetic-project");
+    std::fs::create_dir_all(project.join("src")).unwrap();
+    let registered = send(
+        &router,
+        "POST",
+        "/checkouts",
+        Some(json!({"root": project, "alias": "synthetic", "stores": [store_root]})),
+    )
+    .await;
+    assert!(registered.status().is_success(), "{}", registered.status());
+    let checkout: Value =
+        serde_json::from_slice(&registered.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
+    let checkout_id = checkout["id"].as_str().unwrap().to_owned();
+    let outside = directory.path().join("elsewhere");
+    std::fs::create_dir_all(&outside).unwrap();
+    for (cwd, expected) in [
+        (project.join("src"), format!("checkout:{checkout_id}")),
+        (outside, store_root.display().to_string()),
+    ] {
+        let asking = router.clone();
+        let ask = tokio::spawn(async move {
+            send(
+                &asking,
+                "POST",
+                "/permissions/ask",
+                Some(
+                    json!({"project": "", "connection": "synthetic-codex", "agent": "codex",
+                    "tool": "Bash", "action": "echo synthetic", "cwd": cwd}),
+                ),
+            )
+            .await
+        });
+        let id = pending_id(&router).await;
+        let pending = value(send(&router, "GET", "/permissions", None).await).await;
+        let listed = hotsheet_sync::paths::canonicalize(std::path::Path::new(
+            pending[0]["project"].as_str().unwrap(),
+        ))
+        .map_or_else(
+            |_| pending[0]["project"].as_str().unwrap().to_owned(),
+            |path| path.display().to_string(),
+        );
+        let expected = hotsheet_sync::paths::canonicalize(std::path::Path::new(&expected))
+            .map_or(expected.clone(), |path| path.display().to_string());
+        assert_eq!(listed, expected, "{pending}");
+        resolve(&router, id).await;
+        assert_eq!(ask.await.unwrap().status(), StatusCode::OK);
+    }
+}
