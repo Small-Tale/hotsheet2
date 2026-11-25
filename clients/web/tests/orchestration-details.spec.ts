@@ -9,6 +9,8 @@ import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { fakeGithubActions } from './fake-github-actions';
 import {
   capture,
+  gitCheckout,
+  handOffInPool,
   openOrchestration,
   orchestrateSelf,
   planTwoSteps,
@@ -746,9 +748,11 @@ test('HS2-5GRXFN a held resource shows on the deferred card and in the overview 
 
 /**
  * HS2-65AD6J: why integration is or is not running. The real server answers a running step's explanation with
- * its project's integrator (`none` here: nothing is handed off). A browser fixture cannot hand work off to a real
- * pool, so the not-started and unavailable states are the real responses with only the server's own documented
- * `integrator` and `roles_unplaced` shapes (docs/26 §26.30) put in: synthetic codes, no other field changed.
+ * its project's integrator (`none` here: nothing is handed off). HS2-6ES76F drives not_started, start and keep from
+ * a real handoff below. The unavailable states stay put into the real responses, with only the server's own
+ * documented `integrator` and `roles_unplaced` shapes (docs/26 §26.30): reaching them needs three role sessions in
+ * a row that never join their pool, each given `placement.join_minutes` (at least one minute) of real time, which a
+ * browser test cannot wait for (HS2-6ES76F, follow-up HS2-91AF8K).
  */
 test('HS2-65AD6J a running card says whether its integrator runs and the overview names role sessions not started', async ({
   page,
@@ -775,7 +779,7 @@ test('HS2-65AD6J a running card says whether its integrator runs and the overvie
 
     // What the server's pass would say once a handoff waits: put into the real responses.
     const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
-    let integrator: Record<string, unknown> | undefined;
+    const injected: { integrator?: Record<string, unknown> } = {};
     let explainedIntegrator: unknown;
     const augment =
       (change: (body: Record<string, unknown>) => Record<string, unknown>) =>
@@ -793,7 +797,7 @@ test('HS2-65AD6J a running card says whether its integrator runs and the overvie
       '**/orchestration/scheduler/explain',
       augment((body) => {
         explainedIntegrator = body.integrator;
-        return integrator && body.integrator ? { ...body, integrator } : body;
+        return injected.integrator && body.integrator ? { ...body, integrator: injected.integrator } : body;
       }),
     );
     await page.route(
@@ -862,40 +866,15 @@ test('HS2-65AD6J a running card says whether its integrator runs and the overvie
     await expect(page.locator('[data-orchestration-inspector]')).toContainText('Prerequisites');
     await expect(integration).toHaveCount(0);
 
-    // Each standing a fresh pass can give, read again when the card is selected again.
-    const reselect = async () => {
-      await waiting.click();
-      await expect(integration).toHaveCount(0);
-      await running.click();
-    };
-    integrator = {
-      target_id: TARGET,
-      standing: 'not_started',
-      reason: 'integrator_not_started',
-      detail: 'policy_opt_out',
-    };
-    await reselect();
-    await expect(integration).toContainText('Not started');
-    await expect(integration).toContainText('integrates by hand');
-    integrator = {
-      target_id: TARGET,
-      standing: 'keep',
-      reason: 'integrator_kept',
-      detail: 'ci_pending',
-      session_id: 'sched-role-integrator-synthetic',
-    };
-    await reselect();
-    await expect(integration).toContainText('Running');
-    await expect(integration).toContainText('An integrated commit waits on its CI gate');
-    await expect(integration).toContainText('sched-role-integrator-synthetic');
-    integrator = {
+    // An unavailable integrator, read again when the card is selected again.
+    injected.integrator = {
       target_id: TARGET,
       standing: 'not_started',
       reason: 'integrator_unavailable',
       detail: 'replacements_exhausted',
       retry_at_ms: Date.now() + 3_600_000,
     };
-    await reselect();
+    await running.click();
     await expect(integration).toContainText('Unavailable');
     await expect(integration).toContainText('did not take up their role');
     await expect(integration).toContainText('Looked at again by');
@@ -905,6 +884,178 @@ test('HS2-65AD6J a running card says whether its integrator runs and the overvie
       check: () => expect(integration).toContainText('Unavailable'),
       atPhone: () => running.click(),
     });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
+ * HS2-6ES76F: the integrator's standing from a real handoff. The project is a git checkout whose coordination pool
+ * has work handed off through the headless coordination CLI (`handOffInPool`), and every state is the real
+ * scheduler's pass over it: none before the handoff, not started while the policy's Coordination Sessions leave the
+ * integrator out, a dry-run start once they include it, then a real integrator session the scheduler started and
+ * keeps, first for the handoff's queue and then for the commit's CI gate. Nothing is put into the server's answers.
+ */
+test('HS2-6ES76F the integrator states come from a real handoff in the project’s coordination pool', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const server = await realTicketServer({
+    // The scheduler's integrator session launches in the project's resolved directory (HS2-KTHJN2).
+    canonicalRoot: true,
+    seed: async (fixture) => {
+      await gitCheckout(fixture);
+      await syntheticTool(fixture.env.HOTSHEET_HOME!);
+    },
+  });
+  try {
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const person = { role: 'human', id: 'maintainer' };
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: SYNTHETIC_TOOL,
+      actor: person,
+    });
+    const plan = await planTwoSteps(server);
+    const handed = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic audit log' });
+    // The policy's Coordination Sessions for Self; the machine limits never refuse on a busy test host.
+    const policy = async (roles: string[], automatic = false) => {
+      const current = (await send(server, 'GET', `${base}/policy`)) as { revision?: string | null };
+      await send(server, 'PUT', `${base}/policy`, {
+        expected_revision: current.revision ?? null,
+        policy: {
+          machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+          tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 2 }],
+          targets: [{ target_id: TARGET, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 2 }],
+          placement: {
+            automatic,
+            actor: 'scheduler-1',
+            cooldown_minutes: 0,
+            role_sessions: [{ target_id: TARGET, roles }],
+          },
+        },
+        actor: person,
+      });
+    };
+    const explain = async () =>
+      (
+        (await send(server, 'POST', `${base}/scheduler/explain`, {
+          target_id: TARGET,
+          connection_id: plan.first.connection_id,
+          native_id: plan.first.id,
+          actor: scheduler,
+        })) as { integrator?: Record<string, unknown> }
+      ).integrator;
+    await policy(['dispatcher']);
+    await plan.dispatch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const running = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const waiting = view.locator(`[data-ticket-slug="${plan.second.slug}"]`);
+    const integration = page.locator('[data-orchestration-inspector] [data-orchestration-section="Integration"]');
+    const roles = page.locator('[data-orchestration-overview] [data-orchestration-section="Coordination Sessions"]');
+    const row = (label: string) =>
+      integration.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    const reselect = async () => {
+      await waiting.click();
+      await expect(integration).toHaveCount(0);
+      await running.click();
+    };
+    // The overview reads the plan again when the view opens afresh with nothing selected.
+    const overviewAfresh = async () => {
+      await page.reload();
+      await expect(view).toBeVisible();
+    };
+
+    // Before any handoff: nothing to integrate, and no coordination session waits to start.
+    await expect(roles).toContainText('No integrator runs now');
+    await running.click();
+    await expect(row('Integrator').locator('dd')).toHaveText('Not running');
+    await expect(row('Why').locator('dd')).toHaveText('No handoff waits to be integrated');
+
+    // A worker hands its ticket off in the pool. Self's Coordination Sessions leave the integrator out.
+    const handoff = await handOffInPool(server, handed);
+    expect(await explain()).toEqual({
+      target_id: TARGET,
+      standing: 'not_started',
+      reason: 'integrator_not_started',
+      detail: 'policy_opt_out',
+    });
+    await reselect();
+    await expect(row('Integrator').locator('dd')).toHaveText('Not started');
+    await expect(row('Why').locator('dd')).toHaveText(
+      'The project’s Coordination Sessions leave the integrator out, so it integrates by hand',
+    );
+    await expect(row('Session')).toHaveCount(0);
+    await overviewAfresh();
+    await expect(roles.locator('dt')).toHaveText(['Self Integrator']);
+    await expect(roles.locator('dd')).toHaveText([
+      'Not started: the project’s Coordination Sessions leave the integrator out, so it integrates by hand',
+    ]);
+    await visualPass(page, 'hs2-6es76f', 'overview-opt-out', {
+      show: roles,
+      check: () => expect(roles).toContainText('integrates by hand'),
+      atPhone: () => openInspector(page),
+    });
+
+    // The person adds the integrator back: a dry-run pass would start one for the handoff.
+    await policy(['integrator']);
+    expect(await explain()).toMatchObject({
+      standing: 'start',
+      reason: 'integrator_started',
+      detail: 'handoff_pending',
+    });
+    await running.click();
+    await reselect();
+    await expect(row('Integrator').locator('dd')).toHaveText('Would start on the next pass (dry run)');
+    await expect(row('Why').locator('dd')).toHaveText('A handoff waits to be integrated');
+
+    // Automatic placement starts a real integrator session for the handoff; it is turned off again once the
+    // scheduler logged the start, so nothing else starts.
+    await policy(['integrator'], true);
+    type Decision = { kind: string; outcome: string; operation_id?: string; session_id?: string; reason?: string };
+    const integratorStart = async () => {
+      const page = (await send(server, 'POST', `${base}/scheduler/decisions`, { newest: true, limit: 50 })) as {
+        entries?: Decision[];
+      };
+      return page.entries?.find(
+        (entry) => entry.kind === 'start' && entry.operation_id === `sched-role-integrator-${TARGET}`,
+      );
+    };
+    await expect.poll(async () => (await integratorStart())?.outcome, { timeout: 60_000 }).toBe('started');
+    await policy(['integrator']);
+    const started = await integratorStart();
+    expect(started).toMatchObject({ reason: 'integrator_started' });
+    const session = started!.session_id!;
+    await expect.poll(async () => (await explain())?.standing, { timeout: 30_000 }).toBe('keep');
+    expect(await explain()).toMatchObject({ reason: 'integrator_kept', detail: 'queue', session_id: session });
+    await reselect();
+    await expect(row('Integrator').locator('dd')).toHaveText('Running');
+    await expect(row('Why').locator('dd')).toHaveText('Handoffs wait to be integrated');
+    await expect(row('Session').locator('dd')).toHaveText(session);
+
+    // The integrator pushes the handoff: it is kept while the commit waits on its CI gate.
+    await handoff.integrate();
+    expect(await explain()).toMatchObject({ standing: 'keep', reason: 'integrator_kept', detail: 'ci_pending' });
+    await reselect();
+    await expect(row('Why').locator('dd')).toHaveText('An integrated commit waits on its CI gate');
+    await expect(row('Session').locator('dd')).toHaveText(session);
+    await expect(integration).not.toContainText('_');
+    await visualPass(page, 'hs2-6es76f', 'integration-kept', {
+      show: integration,
+      check: () => expect(row('Why').locator('dd')).toHaveText('An integrated commit waits on its CI gate'),
+      atPhone: () => running.click(),
+    });
+    await overviewAfresh();
+    await expect(roles.locator('dt')).toHaveText(['Self Integrator']);
+    await expect(roles.locator('dd')).toHaveText(['Running: an integrated commit waits on its CI gate']);
+    // The scheduler's session counts include the integrator it started.
+    const scheduling = page.locator('[data-orchestration-overview] [data-orchestration-section="Scheduler"]');
+    await expect(scheduling.locator('dl > div').filter({ hasText: 'Sessions' }).locator('dd')).toHaveText('1 running');
+    await expect(page.getByText('Paused · 1 Session', { exact: true })).toBeVisible();
   } finally {
     await server.stop(page);
   }
