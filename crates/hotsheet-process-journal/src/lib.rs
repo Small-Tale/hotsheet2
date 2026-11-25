@@ -1056,6 +1056,26 @@ mod tests {
     #[test]
     fn hs2_etmkcw_detached_children_inherit_no_stray_descriptor() {
         use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+        // HS2-2CT6AT: the fixture leaves a pipe writer inheritable on purpose, so under a shared
+        // `cargo test` process a sibling test's child could inherit it and hold the pipe open. The
+        // body runs in a re-executed process that runs only this test.
+        const ROLE: &str = "HS2_2CT6AT_ISOLATED";
+        const NAME: &str = "tests::hs2_etmkcw_detached_children_inherit_no_stray_descriptor";
+        if std::env::var_os(ROLE).is_none() {
+            let output = Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", NAME, "--nocapture", "--test-threads=1"])
+                .env(ROLE, "1")
+                .stdin(std::process::Stdio::null())
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         let leaked = || {
             let mut fds = [0; 2];
             // SAFETY: pipe fills two new descriptors, which are owned below.
