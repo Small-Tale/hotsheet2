@@ -40005,6 +40005,9 @@ test('shows the testing-phase time-left estimate on list rows, column cards, and
 });
 
 test('coalesces Not Working note typing per pause and submits the latest draft (HS2-9CWDSB)', async ({ page }) => {
+  // HS2-37D3H8: the page clock is installed so typing can run with time paused. Under load a real
+  // 10 ms keystroke gap can outlast the 150 ms pause, and a render mid-typing is then correct.
+  await page.clock.install();
   await mockProject(page);
   const bodies: string[] = [];
   await page.route('**/not-working', async (route) => {
@@ -40041,10 +40044,12 @@ test('coalesces Not Working note typing per pause and submits the latest draft (
   });
   const mutations = () =>
     page.evaluate(() => (window as unknown as { __notWorkingMutations: number }).__notWorkingMutations);
+  await page.clock.pauseAt(new Date(Date.now() + 60_000));
   await note.pressSequentially('Still broken', { delay: 10 });
   expect(await mutations()).toBe(0);
   await expect(note).toHaveValue('Still broken');
   // The dialog render catches up once typing pauses.
+  await page.clock.resume();
   await expect.poll(mutations).toBeGreaterThan(0);
   // Typing more and submitting mid-debounce sends the complete draft.
   await note.press('End');
