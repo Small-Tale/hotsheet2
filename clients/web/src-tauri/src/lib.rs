@@ -13,6 +13,7 @@ use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 mod close_lifecycle;
 mod env_path;
+mod host_features;
 use close_lifecycle::{CloseLifecycle, caller_allowed};
 mod external_links;
 use external_links::{LinkRoute, navigation_route, new_window_route};
@@ -124,6 +125,12 @@ fn launch_bridge(
     let mut child = Command::new(node)
         .arg(script)
         .args(["--host", "127.0.0.1", "--port", "0"])
+        // HS2-ZF70Y9: `--feature ux-demo` on the app's command line reaches its local host.
+        .args(host_features::forwarded_feature_arguments(
+            std::env::args_os()
+                .skip(1)
+                .map(|argument| argument.to_string_lossy().into_owned()),
+        ))
         .env("HOTSHEET_REPO_ROOT", root)
         .env(env_path::STORAGE_DIRECTORY_ENV, storage)
         .env(

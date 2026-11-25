@@ -36,7 +36,9 @@ Hot Sheet will build the browser implementation first for rapid UX iteration, th
 host it in Tauri and implement a closely corresponding native macOS SwiftUI client.
 The browser exposes the real production components at `/ux-demo`, backed by a
 deterministic mock service. Demo interactions should communicate intent even before
-their server integration exists.
+their server integration exists. Development servers always serve the catalog. A production
+host serves it only when started with `--feature ux-demo` (or `HOTSHEET_FEATURES=ux-demo`),
+and then loads it as a separate on-demand chunk ([06](06-clients.md) §6.3, HS2-ZF70Y9).
 
 ## 1. Shared component architecture
 

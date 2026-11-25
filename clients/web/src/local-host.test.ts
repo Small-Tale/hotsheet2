@@ -67,10 +67,50 @@ describe('local production host (HS2-587N4D)', () => {
 
   it('never serves development-only surfaces, even when the bridge defines them', async () => {
     const host = app();
-    expect((await host.request('/ux-demo')).status).toBe(404);
-    expect((await host.request('/ux-demo?component=tag-chip')).status).toBe(404);
+    for (const path of ['/ux-demo', '/ux-demo?component=tag-chip', '/ux-demo/'])
+      expect((await host.request(path)).status).toBe(404);
     // A missing hashed asset is a 404, not the application document.
     expect((await host.request('/assets/missing.js')).status).not.toBe(200);
+  });
+
+  it('serves the catalog document only with the ux-demo feature (HS2-ZF70Y9)', async () => {
+    const bridge = new Hono();
+    bridge.get('/ux-demo', (context) => context.text('development catalog shell'));
+    // A built document has a head for the host to stamp.
+    const built = await mkdtemp(resolve(tmpdir(), 'hs-local-host-ux-demo-'));
+    await writeFile(resolve(built, 'index.html'), '<!doctype html><html><head><title>Hot Sheet</title></head></html>');
+    await mkdir(resolve(built, 'assets'));
+    await writeFile(resolve(built, 'assets', 'app-abc123.js'), 'console.log(1)');
+    const host = createLocalHostApp(built, bridge, undefined, undefined, new Set(['ux-demo']));
+    for (const path of ['/ux-demo', '/ux-demo?component=tag-chip', '/ux-demo/']) {
+      const response = await host.request(path);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('no-cache');
+      const html = await response.text();
+      // The production document, never the bridge's development shell.
+      expect(html).toContain('<title>Hot Sheet</title>');
+      expect(html).toContain('<meta name="hotsheet-features" content="ux-demo">');
+      expect(html).toContain('<meta name="hotsheet-browser-auth" content="local">');
+    }
+    expect((await host.request('/ux-demo', { method: 'HEAD' })).status).toBe(200);
+    expect((await host.request('/ux-demo', { method: 'POST' })).status).toBe(404);
+    // The ordinary app document carries no feature stamp, and the other routes are unchanged.
+    const document = await host.request('/');
+    expect(await document.text()).not.toContain('hotsheet-features');
+    expect((await host.request('/ux-demos')).status).toBe(200);
+    expect((await host.request('/assets/app-abc123.js')).status).toBe(200);
+    await rm(built, { recursive: true, force: true });
+  });
+
+  it('answers 404 when the feature is on but the build has no document (HS2-ZF70Y9)', async () => {
+    const host = createLocalHostApp(
+      '/nonexistent-synthetic-dist',
+      new Hono(),
+      undefined,
+      undefined,
+      new Set(['ux-demo']),
+    );
+    expect((await host.request('/ux-demo')).status).toBe(404);
   });
 });
 

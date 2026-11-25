@@ -727,8 +727,8 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   `/__hotsheet` project open, API proxy, folder picking, migration, and the terminal and
   change-stream WebSocket bridge. It never loads Vite. Hashed assets are immutable, the document
   revalidates (`Cache-Control: no-cache` on `/`, `/index.html`, and every client route; HS2-XXENE2),
-  and client routes fall back to `index.html`. Development-only surfaces (`/ux-demo`)
-  return 404. Maintainer shortcuts: `server:rebuild`
+  and client routes fall back to `index.html`. `/ux-demo` returns the host's ordinary 404 unless
+  the host was started with the `ux-demo` feature (below). Maintainer shortcuts: `server:rebuild`
   rebuilds the server and CLI, installs `hotsheet-cli` and `hotsheet-mcp` into Cargo's bin
   directory (`cargo install --path`), and stops the running machine server (found via the bridge's
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
@@ -793,6 +793,35 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   (HS2-4G2EA2), and stops the running machine server (refused while the production host owns it), and
   `prod:rebuild` runs it with `--force` before serving the production client on `127.0.0.1`.
 
+- **UX catalog in production (HS2-ZF70Y9).** A production host serves the `/ux-demo`
+  component catalog only when it is started with the `ux-demo` feature. Use
+  `node dist-host/local-host.js --feature ux-demo`, or `npm run prod -- --feature ux-demo`,
+  which npm passes to the host. The `--feature=ux-demo` and `--feature:ux-demo` spellings also
+  work, and the flag can be repeated. `HOTSHEET_FEATURES=ux-demo` is the environment
+  equivalent; it takes a comma- or space-separated list. The desktop app passes its own
+  `--feature` arguments to its bundled host (on macOS,
+  `open -a "Hot Sheet 2" --args --feature ux-demo`). The host also inherits the app's
+  environment when the app executable is started from a shell. An unknown feature
+  name stops the host at startup. The host prints the catalog URL next to its ready line.
+  Development servers (`npm run dev`, `dev:hot`, Playwright) always serve the catalog. The
+  Rust server and `hotsheet-cli` do not serve the web client, so they take no such flag.
+  - The decision belongs to the serving host, not to the built bundle, as with the browser
+    auth mode (HS2-7DBJMS). One `dist/` serves both cases. With the feature, `/ux-demo` (any
+    query string or subpath) returns the application document with
+    `<meta name="hotsheet-features" content="ux-demo">`. The entry (`src/main.tsx`) checks
+    the route and that meta tag (`src/host-features.ts`). It then replaces the app root with
+    the catalog root (`src/ux-demo-entry.ts`) and dynamically imports `src/ux-demo/main.tsx`
+    instead of starting the app. Without the feature, `/ux-demo` is a 404 for every method.
+    The development bridge's catalog shell, which loads source modules, is never served.
+  - The catalog is a separate chunk that loads on demand. `npm run build` fails if a
+    startup script contains a `src/ux-demo/` module, or if no chunk contains the catalog
+    entry (`scripts/production-bundle-policy.mjs`, using the build's source maps). The app
+    page never requests the chunk, even on a host with the feature on.
+  - Remote clients: the feature applies to every browser the host serves, including remote
+    browsers in `HOTSHEET_BROWSER_AUTH_MODE=remote`. The catalog renders deterministic
+    fixtures only. It reads no project, ticket or machine data, and it calls no
+    authenticated API, so it does not require the remote browser session. A host without
+    the feature serves the catalog to nobody.
 - **Project and ticket deep links (HS2-RVSPQ9, HS2-BQ0ECV, HS2-R4209F).** The local client accepts
   `/?project=<registered-checkout-id|alias|absolute-project-path|ticket-store-path>` with an optional
   `&ticket=<slug|qualified-id>`.

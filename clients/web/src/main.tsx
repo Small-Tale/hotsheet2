@@ -26,32 +26,41 @@ import { TERMINAL_VISIBILITY_SCROLL_TARGET } from './components/terminal-visibil
 import { installDesktopClose } from './desktop-close';
 import { initializeDesktopStorage } from './desktop-storage';
 import { installDocumentScrollRestore } from './document-scroll-restore';
+import { documentHostFeatures, shouldBootUxDemo } from './host-features';
 import { regionCommitRoutes } from './resizable-region-commits';
+import { bootUxDemo } from './ux-demo-entry';
 
-const remoteBrowser = await ensureRemoteBrowserSession();
-// The release shell marks this window; ordinary browser and Vite sessions keep their own storage.
-const desktopStorage =
-  !remoteBrowser && '__HOTSHEET_DESKTOP_STORAGE__' in window ? await initializeDesktopStorage() : undefined;
-const { appRoot } = await startHotSheetWebClient();
-if (desktopStorage) installDesktopClose(desktopStorage);
-// iOS keyboard scrolls of the clipped app root are not user-recoverable; undo them on dismissal (HS2-BCA512).
-installDocumentScrollRestore(window);
-// Kerf panes, NavStacks, TabScaffolds, and TabBar strips draw their chrome dividers only while content
-// scrolls beneath them; one page-lifetime instance at the application root (HS2-TAZJ0V, HS2-TF76Z2).
-void wireScrollDividers(appRoot, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] });
-// Opens the corner loading status in the top layer whenever it renders (KF-PZCPHQ, HS2-5C4Y5Q).
-void wireCornerStatus(appRoot);
-// SplitView's wiring contract (HS2-3B8345) and every standalone ResizableRegion, one delegated root
-// wiring that routes each commit to its owner by region id (the docked announcer, HS2-BS0XFK).
-void wireResizableRegions(appRoot, { onCommit: regionCommitRoutes.commit });
-// ChoiceChips' documented wiring (Kerf beta.106): a `multiple: true` group's listbox selection. The
-// app's multi-choice groups are `multiple: 'toggle'` checkboxes today, which need none (HS2-BH7NZ4).
-void wireChoiceChips(appRoot);
-// The clearable permission-rules search emits native input/change after Clear (HS2-CQ1TZN).
-void wireTextFields(appRoot);
-// Kerf Form's required wiring (beta.124, KF-JPE38T): a Form submission never navigates the page.
-void wireForms(appRoot);
-// Kerf's surface-scaffold wiring contract also covers resizable sheets and pinnable overlays.
-void wireOverlaySheets(appRoot);
-for (const surface of appRoot.querySelectorAll<HTMLElement>('[data-component="pinnable-popover-surface"]'))
-  void wirePinnablePopover(surface);
+// A host started with `--feature ux-demo` serves this document at `/ux-demo`; the catalog then loads
+// as its own chunk instead of the app (HS2-ZF70Y9). Every other page never downloads it. Not awaited:
+// the catalog chunk imports modules from this entry chunk, so awaiting it here, in the entry's
+// top-level await, would leave each module waiting on the other forever.
+if (shouldBootUxDemo(window.location.pathname, documentHostFeatures(document))) void bootUxDemo(document);
+else {
+  const remoteBrowser = await ensureRemoteBrowserSession();
+  // The release shell marks this window; ordinary browser and Vite sessions keep their own storage.
+  const desktopStorage =
+    !remoteBrowser && '__HOTSHEET_DESKTOP_STORAGE__' in window ? await initializeDesktopStorage() : undefined;
+  const { appRoot } = await startHotSheetWebClient();
+  if (desktopStorage) installDesktopClose(desktopStorage);
+  // iOS keyboard scrolls of the clipped app root are not user-recoverable; undo them on dismissal (HS2-BCA512).
+  installDocumentScrollRestore(window);
+  // Kerf panes, NavStacks, TabScaffolds, and TabBar strips draw their chrome dividers only while content
+  // scrolls beneath them; one page-lifetime instance at the application root (HS2-TAZJ0V, HS2-TF76Z2).
+  void wireScrollDividers(appRoot, { targets: [TERMINAL_VISIBILITY_SCROLL_TARGET] });
+  // Opens the corner loading status in the top layer whenever it renders (KF-PZCPHQ, HS2-5C4Y5Q).
+  void wireCornerStatus(appRoot);
+  // SplitView's wiring contract (HS2-3B8345) and every standalone ResizableRegion, one delegated root
+  // wiring that routes each commit to its owner by region id (the docked announcer, HS2-BS0XFK).
+  void wireResizableRegions(appRoot, { onCommit: regionCommitRoutes.commit });
+  // ChoiceChips' documented wiring (Kerf beta.106): a `multiple: true` group's listbox selection. The
+  // app's multi-choice groups are `multiple: 'toggle'` checkboxes today, which need none (HS2-BH7NZ4).
+  void wireChoiceChips(appRoot);
+  // The clearable permission-rules search emits native input/change after Clear (HS2-CQ1TZN).
+  void wireTextFields(appRoot);
+  // Kerf Form's required wiring (beta.124, KF-JPE38T): a Form submission never navigates the page.
+  void wireForms(appRoot);
+  // Kerf's surface-scaffold wiring contract also covers resizable sheets and pinnable overlays.
+  void wireOverlaySheets(appRoot);
+  for (const surface of appRoot.querySelectorAll<HTMLElement>('[data-component="pinnable-popover-surface"]'))
+    void wirePinnablePopover(surface);
+}

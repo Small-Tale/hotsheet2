@@ -1668,6 +1668,20 @@ isolated production-host browser flow in `clients/web/scripts/local-host.e2e.tes
 removes its original bundle and candidate binaries before opening a project at
 desktop and phone widths.
 
+HS2-ZF70Y9 covers the production `/ux-demo` feature. `clients/web/src/host-features.test.ts`
+covers `--feature` and `HOTSHEET_FEATURES` parsing (every spelling, merging, and the
+unknown-name and missing-name errors), the route match, the document meta stamp, and the
+boot decision. `clients/web/src/ux-demo-entry.dom.test.ts` covers the app-root to
+catalog-root swap. `clients/web/src/local-host.test.ts` covers the host: a 404 for every
+`/ux-demo` form without the feature, and with it a stamped `no-cache` production document
+for GET and HEAD, never the bridge's development shell. `clients/web/src-tauri/src/host_features.rs`
+covers how the desktop shell forwards its arguments. `clients/web/scripts/production-bundle-policy.test.mjs` and
+`npm run build` reject a startup script that contains catalog modules.
+`clients/web/scripts/ux-demo-feature.e2e.test.mjs` builds the production client and
+drives Chromium through hosts with and without the flag. Without it, `/ux-demo` is a 404
+that loads no script. With `--feature ux-demo` or `--feature:ux-demo`, the catalog renders
+from its own chunk without page errors. In both cases the app page never requests that chunk.
+
 HS2-K7FJVK adds opt-in desktop/narrow Chromium PTY load coverage in
 `clients/web/tests/providers.spec.ts` (`npm run profile:pty`). It exercises the
 real web UI and terminal WebSocket contract with binary output, input echo,

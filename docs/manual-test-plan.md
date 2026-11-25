@@ -490,6 +490,14 @@ behavior; this browser also needs pairing while remote auth mode is enabled. Sto
 with Ctrl-C and confirm the machine server keeps running. Automated coverage runs the real
 host on loopback only.
 
+HS2-ZF70Y9 — run `npm run prod -- --feature ux-demo` in `clients/web`. Open
+`http://127.0.0.1:4175/ux-demo` and confirm the catalog renders and its theme, contrast,
+and sidebar controls work. Then open `/` and confirm the app starts normally. Restart
+without the flag and confirm `/ux-demo` shows the plain 404 page. For the packaged app, quit
+it and run `open -a "Hot Sheet 2" --args --feature ux-demo`. Then open `/ux-demo` in a browser
+at the app's host URL, which the app's local host publishes for client discovery. Automated coverage drives a production build through an
+in-process host; the packaged desktop forwarding is unit-tested only.
+
 HS2-EFEWSC / HS2-6VQ5RV — after an explicit production rebuild and relaunch, keep the
 host and server running while editing a Rust source file in the disposable checkout
 where its binaries were built. Rebuild the web client and Rust executables in that

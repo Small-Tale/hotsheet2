@@ -210,7 +210,14 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
     // HS2-2055AY/HS2-7DBJMS: Kerf overlay wiring and remote approval remain in the bounded browser entry.
-    expect(main.split('\n')).toHaveLength(58);
+    // HS2-ZF70Y9 added the host-gated `/ux-demo` branch ahead of the app boot.
+    expect(main.split('\n')).toHaveLength(67);
+    // The catalog boot is not awaited: its chunk imports this entry chunk, and awaiting it from the
+    // entry's top-level await deadlocks both modules (HS2-ZF70Y9).
+    expect(main).toContain(
+      'if (shouldBootUxDemo(window.location.pathname, documentHostFeatures(document))) void bootUxDemo(document);',
+    );
+    expect(main).not.toContain('await bootUxDemo(');
     // Kerf DialogSurface's register touches the document, so only the browser entry loads it (HS2-BH7NZ4).
     expect(main).toContain("import '@kerfjs/ui/surface-scaffold/register';");
     // Page-lifetime iOS keyboard root-scroll restore (HS2-BCA512).
