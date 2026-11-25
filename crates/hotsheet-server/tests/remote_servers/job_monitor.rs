@@ -17,11 +17,12 @@ const NOW: &str = "2026-10-15T00:00:00Z";
 const TOKEN: &str = "synthetic-token-for-tests";
 pub(super) const RUNS: &str = "/repos/acme/widgets/actions/runs?branch=main&event=push&per_page=30";
 
-/// The etag version, the routes by path (etag, body), and the number of requests.
-type Routes = (u64, HashMap<String, (String, String)>, usize);
+/// The etag version, the routes by path (etag, body), the number of requests, and a
+/// status every request is answered with instead (HS2-YADH9C: a provider outage).
+type Routes = (u64, HashMap<String, (String, String)>, usize, Option<u16>);
 /// A loopback provider answering the REST shapes the watch source reads.
 #[derive(Clone, Default)]
-pub(super) struct Provider(Arc<std::sync::Mutex<Routes>>);
+pub(super) struct Provider(Arc<(std::sync::Mutex<Routes>, std::sync::Condvar)>);
 impl Provider {
     pub(super) fn start(&self) -> String {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -48,14 +49,18 @@ impl Provider {
                     }
                 }
                 let path = line.split_whitespace().nth(1).unwrap_or("").to_owned();
-                let mut provider = state.lock_or_recover();
+                let mut provider = state.0.lock_or_recover();
                 provider.2 += 1;
-                let (status, etag, body) = match provider.1.get(&path) {
-                    Some((etag, _)) if matched_etag.as_ref() == Some(etag) => {
+                state.1.notify_all();
+                let (status, etag, body) = match (provider.3, provider.1.get(&path)) {
+                    (Some(status), _) => {
+                        (status, None, json!({"message": "Unavailable"}).to_string())
+                    }
+                    (None, Some((etag, _))) if matched_etag.as_ref() == Some(etag) => {
                         (304, Some(etag.clone()), String::new())
                     }
-                    Some((etag, body)) => (200, Some(etag.clone()), body.clone()),
-                    None => (404, None, json!({"message": "Not Found"}).to_string()),
+                    (None, Some((etag, body))) => (200, Some(etag.clone()), body.clone()),
+                    (None, None) => (404, None, json!({"message": "Not Found"}).to_string()),
                 };
                 drop(provider);
                 let etag = etag.map_or(String::new(), |etag| format!("ETag: {etag}\r\n"));
@@ -70,7 +75,7 @@ impl Provider {
         url
     }
     pub(super) fn serve(&self, path: &str, body: Value) {
-        let mut provider = self.0.lock_or_recover();
+        let mut provider = self.0.0.lock_or_recover();
         provider.0 += 1;
         let etag = format!("W/\"v{}\"", provider.0);
         provider.1.insert(path.to_owned(), (etag, body.to_string()));
@@ -94,7 +99,24 @@ impl Provider {
         );
     }
     pub(super) fn requests(&self) -> usize {
-        self.0.lock_or_recover().2
+        self.0.0.lock_or_recover().2
+    }
+    /// Answer every request with `status` (a provider outage), or as routed again.
+    fn fail_with(&self, status: Option<u16>) {
+        self.0.0.lock_or_recover().3 = status;
+    }
+    /// Wait until the provider has answered more than `count` requests in all.
+    fn requested_beyond(&self, count: usize) -> bool {
+        let (provider, signal) = &*self.0;
+        let (provider, timeout) = signal
+            .wait_timeout_while(
+                provider.lock_or_recover(),
+                std::time::Duration::from_secs(60),
+                |provider| provider.2 <= count,
+            )
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        drop(provider);
+        !timeout.timed_out()
     }
 }
 
@@ -166,12 +188,20 @@ async fn until_gate(
     false
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_after_a_restart() {
-    assert!(hotsheet_aitools::test_permission_vault_available());
-    hotsheet_aitools::enable_test_permission_vault();
-    let provider = Provider::default();
-    let url = provider.start();
+/// A bound self-target, a run dispatched on it and remembered rules, served by a
+/// router whose runtime starts monitors pointed at `url`.
+struct Watched {
+    root: tempfile::TempDir,
+    home: std::path::PathBuf,
+    source: std::path::PathBuf,
+    checkout: hotsheet_ticketing::checkouts::Checkout,
+    router: axum::Router,
+    base: String,
+    run_id: String,
+    ai: Value,
+}
+
+async fn watched_run(url: &str) -> Watched {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let source = root.path().join("store");
@@ -185,7 +215,7 @@ async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_afte
     let store = FsStore::open(&source).unwrap();
     let orchestration = ticket(&store, "Coordinate the watched release");
     let work = ticket(&store, "Work whose commit is watched");
-    let router = app(host.with_orchestration_runtime(with_monitor(&source, &home, &url)));
+    let router = app(host.with_orchestration_runtime(with_monitor(&source, &home, url)));
     let base = format!("/checkouts/{}/orchestration", checkout.id);
     let added = api(
         router.clone(),
@@ -241,6 +271,34 @@ async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_afte
     .await;
     assert_eq!(status, StatusCode::OK, "{run}");
     let run_id = run["run_id"].as_str().unwrap().to_owned();
+    Watched {
+        root,
+        home,
+        source,
+        checkout,
+        router,
+        base,
+        run_id,
+        ai,
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_after_a_restart() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let provider = Provider::default();
+    let url = provider.start();
+    let Watched {
+        root: _root,
+        home,
+        source,
+        checkout,
+        router,
+        base,
+        run_id,
+        ai,
+    } = watched_run(&url).await;
     let slot = MonitorSlot::at(&home);
     assert_eq!(slot.state().unwrap(), SlotState::Free);
     let (a, b) = ("1".repeat(40), "2".repeat(40));
@@ -363,5 +421,167 @@ async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_afte
         assert!(!record.contains(TOKEN));
     }
     restarted.begin_stopping();
+    cli_named(&home, &["job", "watch"], &["stop"]);
+}
+
+/// Wait, by cursor replay on the run event stream, until the gate's events have
+/// reached `states` in that order (other events of it may come between).
+async fn until_gates(
+    waiter: &OrchestrationRuntime,
+    owner: &str,
+    gate_id: &str,
+    states: &[&str],
+) -> bool {
+    let (mut after, mut seen) = (0, 0);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while std::time::Instant::now() < deadline {
+        let (waiter, owner_id) = (waiter.clone(), owner.to_owned());
+        let page = tokio::task::spawn_blocking(move || {
+            waiter.run_events(&owner_id, after, 200, None, 10_000)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        after = page.cursor;
+        for entry in &page.entries {
+            let record = serde_json::to_value(&entry.record).unwrap();
+            if seen < states.len()
+                && record["kind"] == "gate"
+                && record["gate_id"] == gate_id
+                && record["gate_state"] == states[seen]
+            {
+                seen += 1;
+            }
+        }
+        if seen == states.len() {
+            return true;
+        }
+    }
+    false
+}
+
+/// The gate as this machine records it: `(state, reason)`.
+fn gate_record(
+    runtime: &OrchestrationRuntime,
+    owner: &str,
+    gate_id: &str,
+) -> (String, Option<String>) {
+    let gate = serde_json::to_value(runtime.gate(owner, gate_id).unwrap()).unwrap();
+    (
+        gate["state"].as_str().unwrap().to_owned(),
+        gate["reason"].as_str().map(str::to_owned),
+    )
+}
+
+/// HS2-YADH9C: a CI watch that fails on a real server. The provider cannot find the
+/// repository, so the watch ends and the gate reads `unknown` (`watch_lost`), never a
+/// verdict. Linking again watches again on the same gate. A later provider outage
+/// (server errors) is retried by the monitor while the gate stays `pending`, and once
+/// the provider answers again the verdict is recorded. No CLI call, no fixed wait:
+/// every step waits on the run event stream or on the provider's own requests.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_yadh9c_a_failed_ci_watch_is_unknown_until_relinked_and_an_outage_is_waited_out() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let provider = Provider::default();
+    let url = provider.start();
+    let Watched {
+        root: _root,
+        home,
+        source,
+        checkout,
+        router,
+        base,
+        run_id,
+        ai,
+    } = watched_run(&url).await;
+    let waiter = shared_runtime(&source, &home, &Arc::new(Memory::default()));
+    let commit = "3".repeat(40);
+    let path = format!("{base}/runs/{run_id}/gates");
+    let body = json!({"commit":commit,"repository":"acme/widgets","actor":ai});
+    let link = || api(router.clone(), "POST", &path, body.clone(), true);
+
+    // 1. The provider does not know the repository (404): the watch is gone. The gate
+    // says it knows nothing, and never turns that into a verdict.
+    let (status, linked) = link().await;
+    assert_eq!(status, StatusCode::OK, "{linked}");
+    assert_eq!(linked["watching"], true, "{linked}");
+    let gate_id = linked["gate"]["gate_id"].as_str().unwrap().to_owned();
+    // Linked as not yet watched, then watched, then lost.
+    assert!(
+        until_gates(
+            &waiter,
+            &checkout.id,
+            &gate_id,
+            &["unknown", "pending", "unknown"]
+        )
+        .await,
+        "a watch the provider refused never reached the gate"
+    );
+    assert_eq!(
+        gate_record(&waiter, &checkout.id, &gate_id),
+        ("unknown".into(), Some("watch_lost".into()))
+    );
+    let summary = waiter.run_gate_state(&checkout.id, &run_id).unwrap();
+    assert_eq!(
+        summary.ci,
+        hotsheet_ticketing::orchestration::GateState::Unknown
+    );
+
+    // 2. The repository is readable again and its run is in flight. Linking again is
+    // the same gate, watched again.
+    provider.run(21, &commit, None);
+    let (status, relinked) = link().await;
+    assert_eq!(status, StatusCode::OK, "{relinked}");
+    assert_eq!(relinked["gate"]["gate_id"], gate_id.as_str(), "{relinked}");
+    assert_eq!(relinked["watching"], true, "{relinked}");
+    assert!(
+        until_gates(
+            &waiter,
+            &checkout.id,
+            &gate_id,
+            &["unknown", "pending", "unknown", "pending"]
+        )
+        .await,
+        "a relinked gate was never watched again"
+    );
+
+    // 3. The provider fails with server errors. The monitor keeps asking, and the gate
+    // stays pending: an outage is neither a verdict nor a lost watch.
+    let before = provider.requests();
+    provider.fail_with(Some(503));
+    for asked in 0..3 {
+        assert!(
+            provider.requested_beyond(before + asked),
+            "the monitor stopped asking during the outage"
+        );
+    }
+    assert_eq!(
+        gate_record(&waiter, &checkout.id, &gate_id),
+        ("pending".into(), None)
+    );
+
+    // 4. The provider answers again with the finished run: the verdict is recorded.
+    provider.run(21, &commit, Some("success"));
+    provider.fail_with(None);
+    assert!(
+        until_gate(&waiter, &checkout.id, &gate_id, "passed").await,
+        "the gate never passed after the outage"
+    );
+    assert_eq!(
+        waiter.run_gate_state(&checkout.id, &run_id).unwrap().ci,
+        hotsheet_ticketing::orchestration::GateState::Passed
+    );
+    // The gate's history keeps each step of the way, in order.
+    let history: Vec<String> = serde_json::to_value(waiter.gate(&checkout.id, &gate_id).unwrap())
+        .unwrap()["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["to"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    let passed = history.iter().position(|state| state == "passed");
+    let lost = history.iter().position(|state| state == "unknown");
+    assert!(lost.is_some() && passed > lost, "{history:?}");
     cli_named(&home, &["job", "watch"], &["stop"]);
 }

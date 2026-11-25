@@ -283,3 +283,187 @@ fn hs2_65etrj_return_never_cancels_integration_ci_or_an_ordinary_blocker() {
         assert_eq!(c.state().unwrap(), before);
     }
 }
+
+/// HS2-YADH9C: a review loop that returns the correction too. The original and the
+/// first correction stay fenced in Blocked with their own evidence, each return needs
+/// a note naming its own assignment and commit, the earlier return still replays
+/// after the later one, and only the last correction integrates. No round loses a
+/// handoff or lets an earlier one reach integration.
+#[test]
+fn hs2_yadh9c_a_returned_correction_can_be_returned_again_and_only_the_last_integrates() {
+    const SECOND: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const THIRD: &str = "cccccccccccccccccccccccccccccccccccccccc";
+    let (root, c) = fixture();
+    let (store, t, first_note) = handoff(&c);
+    c.review_return("i", "generation-1", at(), "original", &first_note)
+        .unwrap();
+    let returned_original = c.state().unwrap().assignments["original"].clone();
+    let reassign = |id: &str, worker: &str| {
+        let mut next = assignment(id, worker, &t.id.to_string());
+        next.ticket.connection_id = git_connection_id(&store);
+        next.slug = t.slug.clone();
+        next
+    };
+
+    // Round one: the first correction is handed off with a new commit.
+    c.assign("i", "generation-1", NOW, reassign("correction-1", "a"))
+        .unwrap();
+    c.worker_transition("a", "generation-1", "correction-1", Phase::Accepted, None)
+        .unwrap();
+    c.worker_transition(
+        "a",
+        "generation-1",
+        "correction-1",
+        Phase::Handoff,
+        Some(SECOND.into()),
+    )
+    .unwrap();
+    // The first note names the original, not this correction: it cannot return it.
+    assert!(
+        c.review_return("i", "generation-1", at(), "correction-1", &first_note)
+            .is_err()
+    );
+    // Nor can a note that names the correction with the original's commit.
+    let stale = Ulid::new();
+    ops::add_note(
+        &store,
+        &t.id,
+        stale,
+        Timestamp::from_datetime(at()),
+        NoteKind::Regular,
+        format!("## Review return\ncorrection-1 {SHA}"),
+    )
+    .unwrap();
+    assert!(
+        c.review_return(
+            "i",
+            "generation-1",
+            at(),
+            "correction-1",
+            &stale.to_string()
+        )
+        .is_err()
+    );
+    assert_eq!(
+        c.state().unwrap().assignments["correction-1"].phase,
+        Phase::Handoff
+    );
+    let second_note = Ulid::new();
+    ops::add_note(
+        &store,
+        &t.id,
+        second_note,
+        Timestamp::from_datetime(at()),
+        NoteKind::Regular,
+        format!(
+            "## Review return\ncorrection-1 {SECOND}\nPreserve both commits; still incomplete."
+        ),
+    )
+    .unwrap();
+    c.review_return(
+        "i",
+        "generation-1",
+        at(),
+        "correction-1",
+        &second_note.to_string(),
+    )
+    .unwrap();
+    let returned_first = c.state().unwrap().assignments["correction-1"].clone();
+    assert_eq!(returned_first.phase, Phase::Blocked);
+    assert_eq!(returned_first.commit.as_deref(), Some(SECOND));
+    assert_eq!(
+        returned_first.recovery_note.as_deref(),
+        Some(second_note.to_string().as_str())
+    );
+    // Both earlier returns replay unchanged after the later one, from a reopened pool.
+    let reopened = Coordinator::open_with_registry_home(
+        &root.path().join("project"),
+        &c.source,
+        root.path().join("home"),
+    )
+    .unwrap();
+    let revision = reopened.state().unwrap().revision;
+    reopened
+        .review_return("i", "generation-1", at(), "original", &first_note)
+        .unwrap();
+    reopened
+        .review_return(
+            "i",
+            "generation-1",
+            at(),
+            "correction-1",
+            &second_note.to_string(),
+        )
+        .unwrap();
+    assert_eq!(reopened.state().unwrap().revision, revision);
+    assert_eq!(
+        reopened.state().unwrap().assignments["original"],
+        returned_original
+    );
+
+    // Round two goes to another worker, who hands off and is integrated.
+    register(&reopened, Role::Worker, "b", "generation-1", NOW);
+    reopened
+        .assign("i", "generation-1", NOW, reassign("correction-2", "b"))
+        .unwrap();
+    reopened
+        .worker_transition("b", "generation-1", "correction-2", Phase::Accepted, None)
+        .unwrap();
+    reopened
+        .worker_transition(
+            "b",
+            "generation-1",
+            "correction-2",
+            Phase::Handoff,
+            Some(THIRD.into()),
+        )
+        .unwrap();
+    // Neither returned record can be handed off again or integrated.
+    for (worker, id, commit) in [("a", "original", SHA), ("a", "correction-1", SECOND)] {
+        assert!(
+            reopened
+                .worker_transition(
+                    worker,
+                    "generation-1",
+                    id,
+                    Phase::Handoff,
+                    Some(commit.into())
+                )
+                .is_err()
+        );
+        for phase in [Phase::Integrating, Phase::Ci, Phase::Done] {
+            assert!(
+                reopened.mark("i", "generation-1", NOW, id, phase).is_err(),
+                "{id} reached {phase:?}"
+            );
+        }
+    }
+    for phase in [Phase::Integrating, Phase::Ci, Phase::Done] {
+        reopened
+            .mark("i", "generation-1", NOW, "correction-2", phase)
+            .unwrap();
+    }
+    let state = reopened.state().unwrap();
+    assert_eq!(state.assignments["correction-2"].phase, Phase::Done);
+    assert_eq!(
+        state.assignments["correction-2"].commit.as_deref(),
+        Some(THIRD)
+    );
+    assert_eq!(state.assignments["original"], returned_original);
+    assert_eq!(state.assignments["correction-1"], returned_first);
+    // Each record's history names its own return exactly once.
+    for id in ["original", "correction-1"] {
+        assert_eq!(
+            state.assignments[id]
+                .transitions
+                .iter()
+                .filter(|transition| transition.kind == TransitionKind::ReviewReturn)
+                .count(),
+            1,
+            "{id}"
+        );
+    }
+    // Both workers are free for new work: the loop left nothing active.
+    assert!(state.active_assignment("a").is_none());
+    assert!(state.active_assignment("b").is_none());
+}
