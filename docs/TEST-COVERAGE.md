@@ -893,6 +893,12 @@ HS2-Q8WF64 minimized ticket readers are covered at three layers:
 - `components/minimized-tickets-control.test.ts` pins the single and menu markup and AppShell's restore-corner and standalone placement.
 - `minimized-readers.spec.ts` drives the shipped app in Chromium and WebKit: the workspace reader and its reply, several tickets with draft badges, Restore All, Close All with Cancel and confirm, a tab switch, a reload, the keyboard chord, the motion stand-in with reduced motion, and no server write while typing or minimizing.
 
+HS2-3JR0ZH minimizing the new-ticket composer and the shared minimized dialog kinds are covered at three layers:
+
+- `minimized-dialogs.test.ts` pins the kind merge order per tab, the Restore All plan (newest on top), the Close All question, and the shared record persistence with failing storage; `minimized-composer.test.ts` pins the composer record's label, draft check, one-per-tab replacement, disposal, and parse/storage round trip.
+- `features/minimized-dialogs.test.ts` drives the controller over fake kinds: listing, routing Restore, Restore All order, Close All with confirm, cancel, no drafts, and an item minimized while the question is open, the keyboard restore-or-list, and disposal. `features/minimized-composer.test.ts` drives the composer kind: minimize keeps the draft and refuses while closed or creating, restore reopens only the current tab's draft after a closing composer hides, opening by another path delists it, Close All discards, tab disposal, and a reload round trip.
+- `minimized-readers.spec.ts` drives the shipped app: minimize the composer, change views, minimize a reader beside it, switch project tabs, restore it from the menu with its draft, and create the ticket; minimize by keyboard, reload, and restore; and Close All asking before discarding its draft. `components/minimized-tickets-control.test.ts` and the UX demo's New Ticket Composer setting cover the control's composer item.
+
 HS2-4Q9DVS minimized project tabs are covered by `project-minimization.test.ts`
 for selection fallback, stable ordering, persistence parsing, and duplicate-name
 labels; `components/project-tab-bar.test.ts` for desktop/phone controls and the

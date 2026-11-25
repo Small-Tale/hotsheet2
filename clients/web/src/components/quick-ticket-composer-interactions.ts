@@ -20,6 +20,8 @@ export interface QuickTicketComposerBindings {
   /** Open the composer from its collapsed trigger (or a drop on a collapsed composer). */
   readonly expand: (trigger: HTMLElement) => void;
   readonly expanded: () => boolean;
+  /** Minimize the open composer, keeping its draft (HS2-3JR0ZH); absent where nothing minimizes. */
+  readonly minimize?: () => void;
   /** False while a submission is in flight, so the popup refuses to hide. */
   readonly canHide: () => boolean;
   /** The composer popup finished hiding while expanded: reset the draft. */
@@ -49,6 +51,17 @@ export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicket
   lifetime.add(
     delegate(root, 'click', SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.selector, (_event, target) => {
       bindings.expand(target as HTMLElement);
+    }),
+  );
+  // Like the reader's Minimize, a press keeps focus where it was so no field commits on its way out.
+  lifetime.add(
+    delegate(root, 'mousedown', SEARCH_AND_COMPOSER_ACTIONS.minimizeTicketComposer.selector, (event) => {
+      event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', SEARCH_AND_COMPOSER_ACTIONS.minimizeTicketComposer.selector, () => {
+      bindings.minimize?.();
     }),
   );
   let dismissAfterHide = false;

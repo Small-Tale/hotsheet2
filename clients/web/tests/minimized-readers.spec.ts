@@ -130,6 +130,31 @@ async function mockProjects(page: Page, mutations: Record<string, unknown>[] = [
     }
     if (path.endsWith('/tickets') && call.method() === 'GET')
       return route.fulfill({ json: ticketsJson(call, tickets) });
+    if (path.endsWith('/tickets') && call.method() === 'POST' && projectId) {
+      // Creating from a restored composer (HS2-3JR0ZH): the new ticket joins the project's rows.
+      const body = call.postDataJSON() as { title: string; details?: string; category: string };
+      mutations.push({ create: body });
+      const created = ticket(
+        projectId,
+        `created-${tickets.length}`,
+        `HS2-NEW${tickets.length}`,
+        body.title,
+        body.category,
+      );
+      rows[projectId] = [...tickets, { ...created, details: body.details ?? '' }];
+      return route.fulfill({
+        status: 201,
+        json: {
+          store: created.connection_id,
+          ...created,
+          details: body.details ?? '',
+          blocked_reason: null,
+          concurrency_token: 'token-created',
+          notes: [],
+          attachments: [],
+        },
+      });
+    }
     const ticketId = path.match(/\/tickets\/([^/]+)$/)?.[1],
       found = tickets.find((item) => [item.id, item.native_id, item.qualified_id].includes(ticketId ?? ''));
     if (ticketId && call.method() === 'PATCH') {
@@ -162,6 +187,13 @@ async function mockProjects(page: Page, mutations: Record<string, unknown>[] = [
     if (!path.startsWith('/__hotsheet/')) return route.continue();
     return route.fulfill({ status: 404, json: { error: `Unhandled ${call.method()} ${path}` } });
   });
+}
+
+async function openComposer(page: Page) {
+  await page.getByRole('button', { name: 'New ticket…', exact: true }).first().click();
+  const composer = page.getByRole('dialog', { name: 'Create ticket' });
+  await expect(composer.getByRole('textbox', { name: 'Ticket Title' })).toBeVisible();
+  return composer;
 }
 
 async function openProjects(page: Page) {
@@ -396,4 +428,117 @@ test('HS2-Q8WF64 minimize and restore animate a stand-in, and cross-fade under r
     { kind: 'restore', transforms: true },
     { kind: 'minimize', transforms: false },
   ]);
+});
+
+test('HS2-3JR0ZH minimizes the new-ticket composer beside readers, keeps it across views and tabs, and creates from it', async ({
+  page,
+}) => {
+  const mutations: Record<string, unknown>[] = [];
+  await mockProjects(page, mutations);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openProjects(page);
+  let composer = await openComposer(page);
+  await composer.getByRole('textbox', { name: 'Ticket Title' }).fill('Synthetic minimized draft');
+  await composer.locator('textarea[name="new-ticket-details"]').fill('Synthetic details kept while minimized');
+  await composer.getByRole('button', { name: 'Minimize New Ticket' }).click();
+  await expect(page.getByRole('dialog', { name: 'Create ticket' })).toHaveCount(0);
+  expect(await anyModal(page)).toBe(false);
+  await expect(
+    page.getByRole('button', { name: 'Restore New ticket: Synthetic minimized draft (Unsaved ticket)' }),
+  ).toBeVisible();
+
+  // The workspace is usable while it waits: change views, then minimize a reader beside it.
+  const views = page.getByRole('navigation', { name: 'Ticket Views' });
+  await views.getByRole('button', { name: /^Backlog/ }).click();
+  await views.getByRole('button', { name: /^Queue/ }).click();
+  const reader = await openReader(page, 'HS2-DEMO01');
+  await reader.getByRole('button', { name: 'Minimize Ticket Reader' }).click();
+  await expect(page.getByRole('button', { name: '2 Minimized Tickets' })).toBeVisible();
+
+  // Another project tab lists neither; coming back lists both.
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await expect(projectTab(page, 'Beta Work')).toHaveAttribute('aria-selected', 'true');
+  await expect(minimizedControl(page)).toHaveCount(0);
+  await projectTab(page, 'Alpha Work').click();
+  await page.getByRole('button', { name: '2 Minimized Tickets' }).click();
+  const items = page.locator('[data-minimized-item-id]');
+  await expect(items).toHaveCount(2);
+  await expect(page.getByRole('menuitem', { name: /New ticket: Synthetic minimized draft/ })).toHaveAttribute(
+    'data-minimized-kind',
+    'new-ticket',
+  );
+  await page.getByRole('menuitem', { name: /New ticket: Synthetic minimized draft/ }).click();
+
+  composer = page.getByRole('dialog', { name: 'Create ticket' });
+  await expect(composer.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('Synthetic minimized draft');
+  await expect(composer.locator('textarea[name="new-ticket-details"]')).toHaveValue(
+    'Synthetic details kept while minimized',
+  );
+  // Only the reader is still minimized.
+  await expect(page.getByRole('button', { name: /^Restore HS2-DEMO01 / })).toHaveCount(1);
+  expect(mutations).toEqual([]);
+  await composer.getByRole('button', { name: 'Create ticket', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Create ticket' })).toHaveCount(0);
+  expect(mutations).toEqual([
+    {
+      create: expect.objectContaining({
+        title: 'Synthetic minimized draft',
+        details: 'Synthetic details kept while minimized',
+      }) as unknown,
+    },
+  ]);
+  await expect(page.getByRole('button', { name: /^Restore HS2-DEMO01 / })).toBeVisible();
+  // The created draft is gone: New ticket… opens empty.
+  composer = await openComposer(page);
+  await expect(composer.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('');
+});
+
+test('HS2-3JR0ZH keeps a minimized composer and its draft across a reload', async ({ page }) => {
+  await mockProjects(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openProjects(page);
+  const composer = await openComposer(page);
+  await composer.getByRole('textbox', { name: 'Ticket Title' }).fill('Survives a reload');
+  await composer.locator('textarea[name="new-ticket-details"]').fill('Reloaded synthetic details');
+  // The keyboard command minimizes the composer as it does a reader.
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+KeyM');
+  await expect(page.getByRole('dialog', { name: 'Create ticket' })).toHaveCount(0);
+  await expect(minimizedControl(page)).toBeVisible();
+
+  await page.reload();
+  await expect(projectTab(page, 'Alpha Work')).toBeVisible();
+  const restore = page.getByRole('button', { name: 'Restore New ticket: Survives a reload (Unsaved ticket)' });
+  await expect(restore).toBeVisible();
+  await restore.click();
+  const restored = page.getByRole('dialog', { name: 'Create ticket' });
+  await expect(restored.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('Survives a reload');
+  await expect(restored.locator('textarea[name="new-ticket-details"]')).toHaveValue('Reloaded synthetic details');
+  await expect(minimizedControl(page)).toHaveCount(0);
+  // The keyboard command restores it too.
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+KeyM');
+  await expect(page.getByRole('dialog', { name: 'Create ticket' })).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+Alt+Shift+KeyM');
+  await expect(
+    page.getByRole('dialog', { name: 'Create ticket' }).getByRole('textbox', { name: 'Ticket Title' }),
+  ).toHaveValue('Survives a reload');
+});
+
+test('HS2-3JR0ZH Close All asks before discarding a minimized composer draft', async ({ page }) => {
+  await mockProjects(page);
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await openProjects(page);
+  const composer = await openComposer(page);
+  await composer.getByRole('textbox', { name: 'Ticket Title' }).fill('Discard me');
+  await composer.getByRole('button', { name: 'Minimize New Ticket' }).click();
+  const reader = await openReader(page, 'HS2-NEXT01');
+  await reader.getByRole('button', { name: 'Minimize Ticket Reader' }).click();
+  await page.getByRole('button', { name: '2 Minimized Tickets' }).click();
+  await page.getByRole('menuitem', { name: 'Close All…' }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Close 2 minimized tickets?' });
+  await expect(confirmation).toContainText('One of them has unsent text that will be discarded.');
+  await confirmation.getByRole('button', { name: 'Close All' }).click();
+  await expect(minimizedControl(page)).toHaveCount(0);
+  const reopened = await openComposer(page);
+  await expect(reopened.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('');
 });

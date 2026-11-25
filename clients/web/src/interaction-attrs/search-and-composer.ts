@@ -8,6 +8,8 @@ import { action } from 'kerfjs/actions';
  */
 export const SEARCH_AND_COMPOSER_ACTIONS = {
   expandTicketComposer: action('expand-ticket-composer'),
+  /** Minimize the open composer into the Minimized Tickets control, keeping its draft (HS2-3JR0ZH). */
+  minimizeTicketComposer: action('minimize-ticket-composer'),
   toggleNewTicketUpNext: action('toggle-new-ticket-up-next'),
   removeNewTicketAttachment: action('remove-new-ticket-attachment'),
   clearNewTicketAttachments: action('clear-new-ticket-attachments'),

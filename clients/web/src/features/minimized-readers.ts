@@ -1,11 +1,13 @@
 import { batch, type Signal } from 'kerfjs';
+import { CircleAlert } from 'lucide';
 
 import type { Capabilities, FullTicket } from '../api';
-import type { MinimizedTicketSummary } from '../components/minimized-tickets-control';
+import { defaultCategoryPresentation } from '../components/category-presentation';
 import type { InspectorTab } from '../components/ticket-inspector';
 import type { Confirm } from '../confirmation';
 import type { FeedbackResponseDrafts, FeedbackResponseScope } from '../feedback-response-drafts';
 import type { Project } from '../interactions/types';
+import { closeAllConfirmation, type MinimizedDialogItem, type MinimizedDialogKind } from '../minimized-dialogs';
 import {
   addMinimizedReader,
   disposeMinimizedReaders,
@@ -15,27 +17,27 @@ import {
   type MinimizedReaderField,
   type MinimizedReaderResponse,
   minimizedReadersForTab,
-  minimizedReadersHaveDrafts,
   restoredReaderEditState,
   saveMinimizedReaders,
   takeMinimizedReader,
-  takeMinimizedReadersForTab,
 } from '../minimized-readers';
 import {
   animateReaderMinimize,
   animateReaderRestore,
-  MINIMIZED_TICKETS_CONTROL_SELECTOR,
   type MotionRect,
   readerDialogRect,
 } from '../reader-minimize-motion';
 import { clearTicketDraft, saveTicketDraft, ticketDraftKey } from '../ticket-draft-store';
 import { reconcileTicketReaderFrame, type TicketReaderEditState, type TicketReaderFrame } from '../ticket-reader-stack';
+import { focusMinimizedControl, nextFrames } from './minimized-dialogs';
 
 interface Cancelable {
   cancel(): void;
 }
 
 export const WORKSPACE_READER_ID = 'workspace-reader';
+/** The minimized dialog kind id of ticket readers (HS2-3JR0ZH). */
+export const MINIMIZED_READER_KIND = 'ticket-reader';
 
 /** Live application bindings the minimized-reader workflow reads and writes (HS2-Q8WF64). */
 export interface MinimizedReadersDependencies {
@@ -77,26 +79,6 @@ export interface MinimizedReadersDependencies {
   afterOpen?: (run: () => void) => void;
   /** Move focus to the minimized tickets control once a reader minimizes. */
   focusControl?: () => void;
-}
-
-/** Focus follows the reader into the minimized tickets control, unless something else took it. */
-function focusMinimizedControl() {
-  if (typeof document === 'undefined') return;
-  const active = document.activeElement;
-  if (active && active !== document.body && active.isConnected) return;
-  const control = document.querySelector<HTMLElement>(MINIMIZED_TICKETS_CONTROL_SELECTOR),
-    button = control?.matches('button') ? control : control?.querySelector<HTMLElement>('button');
-  button?.focus({ preventScroll: true });
-}
-
-function nextFrames(run: () => void) {
-  if (typeof requestAnimationFrame === 'function')
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        run();
-      }),
-    );
-  else queueMicrotask(run);
 }
 
 /**
@@ -391,34 +373,30 @@ export function createMinimizedReaders(dependencies: MinimizedReadersDependencie
     );
   }
 
-  /** Close every minimized reader of the current tab, asking first only when a draft would be lost. */
-  async function closeAll(): Promise<boolean> {
-    const tabProjectId = selectedProjectId.value,
-      entries = minimizedReadersForTab(minimizedReaders.value, tabProjectId);
-    if (entries.length === 0) return false;
-    if (minimizedReadersHaveDrafts(entries)) {
-      const drafted = entries.filter((entry) => minimizedDraftLabel(entry.drafts) !== undefined).length;
-      const confirmed = await confirm({
-        title: `Close ${entries.length} minimized tickets?`,
-        message: `${drafted === 1 ? 'One of them has' : `${drafted} of them have`} unsent text that will be discarded.`,
-        confirmLabel: 'Close All',
-        tone: 'danger',
-      });
-      if (!confirmed) return false;
-    }
-    const taken = takeMinimizedReadersForTab(minimizedReaders.value, tabProjectId),
-      closing = new Set(entries.map((entry) => entry.id));
-    for (const entry of taken.entries) {
-      if (!closing.has(entry.id)) continue;
+  /** Close these minimized readers and discard their drafts; the caller already confirmed (HS2-3JR0ZH). */
+  function discard(ids: readonly string[]) {
+    const closing = new Set(ids),
+      entries = minimizedReaders.value.filter((entry) => closing.has(entry.id));
+    if (entries.length === 0) return;
+    for (const entry of entries) {
       discardUnsavedFields(entry);
       feedbackResponseDrafts.clear(
         feedbackResponseDrafts.get({ projectId: entry.projectId, qualifiedId: entry.qualifiedId, surface: entry.id }),
       );
       lastRects.delete(entry.id);
     }
-    // Readers minimized while the question was open stay minimized.
     minimizedReaders.value = minimizedReaders.value.filter((entry) => !closing.has(entry.id));
     persist();
+  }
+
+  /** Close every minimized reader of the current tab, asking first only when a draft would be lost. */
+  async function closeAll(): Promise<boolean> {
+    const listed = items(selectedProjectId.value);
+    if (listed.length === 0) return false;
+    const question = closeAllConfirmation(listed);
+    if (question && !(await confirm(question))) return false;
+    // Readers minimized while the question was open stay minimized.
+    discard(listed.map((item) => item.id));
     return true;
   }
 
@@ -456,18 +434,50 @@ export function createMinimizedReaders(dependencies: MinimizedReadersDependencie
     }));
   }
 
-  /** The current tab's minimized tickets as the floating control lists them, oldest first. */
-  function summaries(): MinimizedTicketSummary[] {
-    return minimizedReadersForTab(minimizedReaders.value, selectedProjectId.value).map((entry) => ({
-      id: entry.id,
-      slug: entry.slug,
-      title: entry.title,
-      category: entry.category,
-      draft: minimizedDraftLabel(entry.drafts),
-    }));
+  /** A project tab's minimized readers as the Minimized Tickets control lists them, oldest first. */
+  function items(tabProjectId: string): MinimizedDialogItem[] {
+    return minimizedReadersForTab(minimizedReaders.value, tabProjectId).map((entry) => {
+      const presentation = defaultCategoryPresentation(entry.category);
+      return {
+        id: entry.id,
+        kind: MINIMIZED_READER_KIND,
+        label: `${entry.slug} ${entry.title}`.trim(),
+        shortLabel: entry.slug,
+        icon: presentation
+          ? { icon: presentation.icon, name: presentation.iconName }
+          : { icon: CircleAlert, name: 'circle-alert' },
+        draft: minimizedDraftLabel(entry.drafts),
+        minimizedAt: entry.minimizedAt,
+      };
+    });
   }
 
-  return { minimize, restore, restoreAll, closeAll, toggle, disposeProjects, retainedResponseScopes, summaries };
+  /** The current tab's minimized readers, oldest first. */
+  function summaries(): MinimizedDialogItem[] {
+    return items(selectedProjectId.value);
+  }
+
+  /** Ticket readers as one minimized dialog kind (HS2-3JR0ZH). */
+  const kind: MinimizedDialogKind = {
+    kind: MINIMIZED_READER_KIND,
+    items,
+    restore: restoreEntries,
+    discard,
+    dispose: disposeProjects,
+  };
+
+  return {
+    minimize,
+    restore,
+    restoreAll,
+    closeAll,
+    discard,
+    toggle,
+    disposeProjects,
+    retainedResponseScopes,
+    summaries,
+    kind,
+  };
 }
 
 export type MinimizedReadersController = ReturnType<typeof createMinimizedReaders>;

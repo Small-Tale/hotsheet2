@@ -66,6 +66,9 @@ note and a feedback reply, and press Minimize; confirm ⌘M still minimizes the 
 ⌥⇧⌘M minimizes the reader. Quit and relaunch the app, then restore the ticket from the
 floating control and confirm the note and reply text return. Repeat with VoiceOver to hear
 the control's name, its draft indicator, and the list's Restore All and Close All.
+For HS2-3JR0ZH, start a synthetic new ticket with a title, details, and a staged file, press
+the composer's Minimize, then quit and relaunch; restore _New ticket: <title>_ from the same
+control and confirm every field and the staged file return before creating it.
 
 For the macOS Tauri host (HS2-5R706Q), build the `.app` with
 `npm run desktop:build` from `clients/web` using a Developer ID identity.

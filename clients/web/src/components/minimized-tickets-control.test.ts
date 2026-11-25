@@ -1,13 +1,37 @@
+import { Bug, ListChecks, Plus, Sparkles } from 'lucide';
 import { describe, expect, it } from 'vitest';
 
 import { AppShell } from './app-shell';
 import { MinimizedTicketsControl, type MinimizedTicketSummary } from './minimized-tickets-control';
 
+const reader = (
+  id: string,
+  slug: string,
+  title: string,
+  icon: MinimizedTicketSummary['icon'],
+  draft?: string,
+): MinimizedTicketSummary => ({
+  id,
+  kind: 'ticket-reader',
+  label: `${slug} ${title}`,
+  shortLabel: slug,
+  icon,
+  draft,
+});
+
 const tickets: MinimizedTicketSummary[] = [
-  { id: 'frame-1', slug: 'HS2-DEMO01', title: 'Keep reader drafts', category: 'feature', draft: 'Unsent note' },
-  { id: 'frame-2', slug: 'HS2-START02', title: 'Retry a failed upload', category: 'bug', draft: 'Reply in progress' },
-  { id: 'frame-3', slug: 'HS2-NEXT01', title: 'Show CI run duration', category: 'task' },
+  reader('frame-1', 'HS2-DEMO01', 'Keep reader drafts', { icon: Sparkles, name: 'sparkles' }, 'Unsent note'),
+  reader('frame-2', 'HS2-START02', 'Retry a failed upload', { icon: Bug, name: 'bug' }, 'Reply in progress'),
+  reader('frame-3', 'HS2-NEXT01', 'Show CI run duration', { icon: ListChecks, name: 'list-checks' }),
 ];
+const composer: MinimizedTicketSummary = {
+  id: 'new-ticket:project-a',
+  kind: 'new-ticket',
+  label: 'New ticket: Draft a release note',
+  shortLabel: 'new ticket',
+  icon: { icon: Plus, name: 'plus' },
+  draft: 'Unsaved ticket',
+};
 
 describe('MinimizedTicketsControl (HS2-Q8WF64)', () => {
   it('renders nothing while no ticket is minimized', () => {
@@ -18,7 +42,7 @@ describe('MinimizedTicketsControl (HS2-Q8WF64)', () => {
     const markup = String(MinimizedTicketsControl({ tickets: [tickets[0]] }));
     expect(markup).toContain('data-component="toolbar-control-group"');
     expect(markup).toContain('data-action="restore-minimized-ticket"');
-    expect(markup).toContain('data-minimized-reader-id="frame-1"');
+    expect(markup).toContain('data-minimized-item-id="frame-1"');
     expect(markup).toContain('data-minimized-tickets-control="single"');
     expect(markup).toContain('aria-label="Restore HS2-DEMO01 Keep reader drafts (Unsent note)"');
     expect(markup).toContain('data-lucide="layers-2"');
@@ -34,8 +58,8 @@ describe('MinimizedTicketsControl (HS2-Q8WF64)', () => {
     expect(markup).toContain('data-placement="corner" aria-hidden="true">3</span>');
     expect(markup).toContain('Minimized Tickets');
     for (const ticket of tickets) {
-      expect(markup).toContain(`data-minimized-reader-id="${ticket.id}"`);
-      expect(markup).toContain(`${ticket.slug} ${ticket.title}`);
+      expect(markup).toContain(`data-minimized-item-id="${ticket.id}"`);
+      expect(markup).toContain(ticket.label);
     }
     expect(markup.match(/data-action="restore-minimized-ticket"/g)).toHaveLength(3);
     expect(markup).toContain('>Unsent note</span>');
@@ -47,6 +71,24 @@ describe('MinimizedTicketsControl (HS2-Q8WF64)', () => {
     expect(markup).toContain('data-lucide="sparkles"');
     expect(markup).toContain('data-lucide="bug"');
     expect(markup).toContain('data-lucide="list-checks"');
+  });
+
+  it('restores a lone minimized composer by its own name (HS2-3JR0ZH)', () => {
+    const markup = String(MinimizedTicketsControl({ tickets: [composer] }));
+    expect(markup).toContain('data-minimized-item-id="new-ticket:project-a"');
+    expect(markup).toContain('data-minimized-kind="new-ticket"');
+    expect(markup).toContain('aria-label="Restore New ticket: Draft a release note (Unsaved ticket)"');
+    expect(markup).toContain('title="Restore new ticket"');
+  });
+
+  it('lists a minimized composer beside minimized readers with its plus icon and draft (HS2-3JR0ZH)', () => {
+    const markup = String(MinimizedTicketsControl({ tickets: [tickets[0], composer] }));
+    expect(markup).toContain('2 Minimized Tickets');
+    expect(markup).toContain('New ticket: Draft a release note');
+    expect(markup).toContain('data-minimized-kind="new-ticket"');
+    expect(markup).toContain('data-minimized-kind="ticket-reader"');
+    expect(markup).toContain('data-lucide="plus"');
+    expect(markup).toContain('>Unsaved ticket</span>');
   });
 
   it('drops the ellipsis from Close All when no draft would be lost', () => {

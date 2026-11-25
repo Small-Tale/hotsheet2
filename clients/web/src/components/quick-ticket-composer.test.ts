@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   focusQuickTicketComposerTitle,
   QuickTicketComposer,
+  quickTicketComposerHidden,
+  quickTicketComposerPanel,
   QuickTicketLauncher,
   showQuickTicketComposer,
   strandedNewTicketAttachments,
@@ -15,6 +17,38 @@ describe('QuickTicketComposer', () => {
     const markup = String(QuickTicketComposer({ expanded: true, followUpSource: 'HS2-SOURCE' }));
     expect(markup).toContain('Create follow-up to HS2-SOURCE');
     expect(markup).toContain('data-action="create-ticket-form"');
+  });
+  it('HS2-3JR0ZH offers Minimize beside Close only while open, and not while creating', () => {
+    const open = String(QuickTicketComposer({ expanded: true }));
+    expect(open).toContain('slot="header-actions"');
+    expect(open).toContain('data-action="minimize-ticket-composer"');
+    expect(open).toContain('aria-label="Minimize New Ticket"');
+    expect(open).toContain('data-lucide="minus"');
+    expect(String(QuickTicketComposer({ expanded: false }))).not.toContain('minimize-ticket-composer');
+    const creating = String(QuickTicketComposer({ expanded: true, submitting: true }));
+    expect(creating.slice(creating.indexOf('minimize-ticket-composer') - 300)).toMatch(/disabled/);
+  });
+  it('HS2-3JR0ZH finds the open composer panel and waits only for a closing composer', async () => {
+    const panel = { open: true },
+      host = { open: false, shadowRoot: { querySelector: () => panel }, addEventListener: vi.fn() },
+      root = { querySelector: () => host } as unknown as ParentNode;
+    expect(quickTicketComposerPanel(root)).toBe(panel);
+    expect(quickTicketComposerPanel({ querySelector: () => null } as unknown as ParentNode)).toBeNull();
+    let settled = false;
+    void quickTicketComposerHidden(root).then(() => {
+      settled = true;
+    });
+    expect(host.addEventListener).toHaveBeenCalledWith('wa-after-hide', expect.any(Function), { once: true });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    (host.addEventListener.mock.calls[0][1] as () => void)();
+    await Promise.resolve();
+    expect(settled).toBe(true);
+    host.open = true;
+    await expect(quickTicketComposerHidden(root)).resolves.toBeUndefined();
+    await expect(
+      quickTicketComposerHidden({ querySelector: () => null } as unknown as ParentNode),
+    ).resolves.toBeUndefined();
   });
   it('HS2-Y4Y7V6 renders a follow-up with the standard new-ticket form and only a different title', () => {
     const form = (markup: string) =>

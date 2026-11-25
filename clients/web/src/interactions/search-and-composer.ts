@@ -71,6 +71,8 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly composerSubmitting: Signal<boolean>;
   readonly composerExpanded: Signal<boolean>;
   readonly resetTicketComposer: (clearStored?: boolean) => void;
+  /** Minimize the open composer into the Minimized Tickets control (HS2-3JR0ZH). */
+  readonly minimizeTicketComposer: () => void;
   readonly composerTitle: Signal<string>;
   readonly scheduleProjectSessionPersistence: () => void;
   readonly composerDetails: Signal<string>;
@@ -126,6 +128,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     composerSubmitting,
     composerExpanded,
     resetTicketComposer,
+    minimizeTicketComposer,
     composerTitle,
     scheduleProjectSessionPersistence,
     composerDetails,
@@ -360,6 +363,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       expanded: () => composerExpanded.value,
       canHide: () => !composerSubmitting.value,
       dismissed: resetTicketComposer,
+      minimize: minimizeTicketComposer,
       setTitle: (title) => {
         composerTitle.value = title;
         scheduleProjectSessionPersistence();

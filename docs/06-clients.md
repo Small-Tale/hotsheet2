@@ -1400,8 +1400,9 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   adds rebindable chords to toggle the left sidebar (⌘/Ctrl+B), right sidebar/inspector
   (⌘/Ctrl+⌥+⇧+B), and bottom terminal drawer (⌘/Ctrl+J); switch the workspace to the list
   (⌘/Ctrl+⇧+L), column (⌘/Ctrl+⇧+B), notifications (⌘/Ctrl+⇧+M), and settings (⌘/Ctrl+⌥+S)
-  views; minimize the open ticket reader or restore the minimized one (⌘/Ctrl+⌥+⇧+M, since ⌘M is
-  the OS window's minimize and ⌘⇧M is the notifications view; HS2-Q8WF64); and toggle the
+  views; minimize the open ticket reader or new-ticket composer, or restore the minimized one
+  (⌘/Ctrl+⌥+⇧+M, since ⌘M is the OS window's minimize and ⌘⇧M is the notifications view;
+  HS2-Q8WF64, HS2-3JR0ZH); and toggle the
   all-project terminal grid (⌘/Ctrl+⇧+G) or stats dashboard (⌘/Ctrl+⇧+D) against the last
   selected project. A **New ticket** chord (a bare `c`, in the
   spirit of GitHub/Linear "create") opens the composer, and **Navigation & tabs** adds
@@ -2242,6 +2243,43 @@ checkout name>`, where the host is the machine name the peer last reported on th
   dismissal and preserve the visible reader and its drafts. A title edit belongs to the
   surface that started it: while the reader edits the selected ticket's title, the sidebar
   inspector behind it keeps its static heading, and the reverse (HS2-2M5BBN).
+
+  **Minimized new-ticket composer (HS2-3JR0ZH).** The composer's dialog header has the same
+  Minimize control (Lucide `minus`, a Kerf `Button` in the `wa-dialog` `header-actions` slot) beside
+  Close, and the minimize chord minimizes it as it does a reader. Minimizing only hides the
+  composer: its title, details, category, Up Next, priority, Add to Backlog, and staged attachments
+  stay in the composer draft and the project session, so nothing is discarded and nothing is
+  created. It joins the same Minimized Tickets control as one item per project tab, labeled
+  _New ticket: <title>_ (or _New ticket: Untitled_) with the launcher's Lucide `plus` icon and an
+  _Unsaved ticket_ draft `Badge` when it holds a title, details, or staged files. Restoring it, or
+  opening the composer any other way (New ticket…, a dropped file, a follow-up), reopens it with
+  the draft intact and takes it off the list; Restore All restores it with the readers, the most
+  recently minimized on top; Close All discards its draft and staged files and asks first under
+  the same rule as readers. The record (`hotsheet.minimized-composers.v1`) is only a marker with its
+  title; the draft returns from the project session after a reload. Closing the project tab drops
+  it. The model is `minimized-composer.ts` and the workflow `features/minimized-composer.ts`.
+
+  **Minimized dialog kinds (HS2-3JR0ZH).** Readers and the composer each implement
+  `MinimizedDialogKind` (`minimized-dialogs.ts`): a kind id; its items for one project tab (id,
+  label, short label, Lucide icon, draft indicator, and minimize time); `restore(ids)`;
+  `discard(ids)`, which closes them after the caller confirmed; and `dispose(projectIds)` for
+  closed tabs. Each kind owns its records and persistence (`loadMinimizedRecords` /
+  `saveMinimizedRecords` with its own versioned key). `features/minimized-dialogs.ts` merges the
+  kinds' items per tab oldest first, routes Restore by item id, restores all kinds so the newest
+  item ends on top, and asks one Close All question across kinds. To nominate another dialog:
+  1. Keep its draft somewhere that survives hiding (signals plus the project session, or its own
+     record) and make sure hiding it is not treated as a dismissal that resets the draft.
+  2. Add a pure model module with its record, draft check, label, and versioned storage key, using
+     `loadMinimizedRecords` / `saveMinimizedRecords`, with sibling tests.
+  3. Add a `features/minimized-<dialog>.ts` controller exposing `minimize()` and a
+     `MinimizedDialogKind` (ids unique across kinds, such as `<kind>:<id>`); reuse
+     `reader-minimize-motion.ts`, `focusMinimizedControl`, and `nextFrames` for motion and focus.
+  4. Render a Minimize `Button` with Lucide `minus` beside the dialog's Close, wired through the
+     dialog's interaction module, and accept the minimize chord in `interactions/shell-and-global.ts`.
+  5. Add the kind to `createMinimizedDialogs({ kinds })` in `app/runtime.tsx`, and remove the item
+     whenever the dialog opens by another path.
+  6. Cover it with unit tests, an E2E through the real app (minimize, restore, reload, Close All),
+     and a `minimized-tickets-control` UX demo state.
 
   The MessageSquare action is available before Drive and opens the production
   `AIConversation` resizable bottom sheet after preparing the default tool without sending a workflow turn.

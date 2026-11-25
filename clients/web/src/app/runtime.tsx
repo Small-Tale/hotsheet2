@@ -100,7 +100,12 @@ import { type ProjectCloseDialogState } from '../components/project-close-dialog
 import { projectRestoreTabId } from '../components/project-restore-error';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabMenuState } from '../components/project-tab-context-menu';
-import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../components/quick-ticket-composer';
+import {
+  focusQuickTicketComposerTitle,
+  quickTicketComposerHidden,
+  quickTicketComposerPanel,
+  showQuickTicketComposer,
+} from '../components/quick-ticket-composer';
 import type { CompactionPreviewState, RepositorySizeState } from '../components/repository-size';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
 import { type SettingsCategory, settingsCategoryShown } from '../components/settings-navigation';
@@ -159,6 +164,8 @@ import { createHotSheetApp } from '../features/hot-sheet-app';
 import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
 import { createLinkedReaderSubjects } from '../features/linked-reader-subject';
+import { createMinimizedComposer } from '../features/minimized-composer';
+import { createMinimizedDialogs } from '../features/minimized-dialogs';
 import { createMinimizedReaders } from '../features/minimized-readers';
 import { createNotificationSettings } from '../features/notification-settings';
 import {
@@ -240,6 +247,7 @@ import { createLiveStateStore } from '../live-state';
 import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { machineSettingsKey, machineSettingsProject } from '../machine-settings-source';
+import { loadMinimizedComposers, type MinimizedComposer } from '../minimized-composer';
 import { loadMinimizedReaders, type MinimizedReader } from '../minimized-readers';
 import { isMobileViewport, isSidePanelPortal } from '../mobile-layout';
 import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
@@ -1100,6 +1108,8 @@ export async function startHotSheetWebClient() {
     linkedReaderStack = signal<TicketReaderFrame[]>([]),
     // Minimized ticket readers, per project tab, restored across reloads (HS2-Q8WF64).
     minimizedReaders = signal<MinimizedReader[]>(loadMinimizedReaders(localStorage)),
+    // A minimized new-ticket composer per project tab; its draft stays in the project session (HS2-3JR0ZH).
+    minimizedComposers = signal<MinimizedComposer[]>(loadMinimizedComposers(localStorage)),
     readerLargeText = signal(localStorage.getItem('hotsheet.reader.large-text') === 'true');
   const readerReturnFocus = new Map<string, HTMLElement>();
   const readerClosing = new Set<string>(),
@@ -5354,6 +5364,9 @@ export async function startHotSheetWebClient() {
     activeTicketSurface,
     draftScope,
     ago,
+    composerOpened: (projectId) => {
+      minimizedComposerControls.opened(projectId);
+    },
     beginBulkUpdateProgress: bulkUpdateActivities.begin,
   });
   // Minimizing ticket readers without closing them (HS2-Q8WF64).
@@ -5437,6 +5450,52 @@ export async function startHotSheetWebClient() {
       if (menu) openPopupMenu(menu);
     },
   });
+  // Minimizing the new-ticket composer into the same control (HS2-3JR0ZH).
+  const minimizedComposerControls = createMinimizedComposer({
+    minimizedComposers,
+    selectedProjectId,
+    composerExpanded,
+    submitting: () => composerSubmitting.value,
+    draft: () => ({
+      title: composerTitle.value,
+      details: composerDetails.value,
+      attachmentCount: composerAttachments.value.length + composerUnrestoredAttachments.value.length,
+    }),
+    flushDraftInputs,
+    openComposer: () => {
+      openTicketComposer();
+    },
+    discardComposer: () => {
+      resetTicketComposer();
+    },
+    persistSession: persistProjectSessionNow,
+    composerPanel: () => quickTicketComposerPanel(document),
+    composerHidden: () => quickTicketComposerHidden(document),
+    storage: () => (typeof localStorage === 'undefined' ? undefined : localStorage),
+  });
+  // Every minimized dialog kind behind the one Minimized Tickets control (HS2-3JR0ZH).
+  const minimizedDialogs = createMinimizedDialogs({
+    kinds: [minimizedReaderControls.kind, minimizedComposerControls.kind],
+    selectedProjectId,
+    confirm: (options) => confirmation.request(options),
+    openMinimizedMenu: () => {
+      const menu = document.querySelector<HTMLElement>('[data-minimized-tickets-control="menu"]');
+      if (menu) openPopupMenu(menu);
+    },
+  });
+  /** The Minimized Tickets control's commands and the minimize shortcut across every kind. */
+  const minimizedControls = {
+    minimize: minimizedReaderControls.minimize,
+    restore: minimizedDialogs.restore,
+    restoreAll: minimizedDialogs.restoreAll,
+    closeAll: minimizedDialogs.closeAll,
+    toggle: (activeReaderId: string | undefined, composerOpen = false) => {
+      if (activeReaderId) void minimizedReaderControls.minimize(activeReaderId);
+      // A composer still animating closed after a minimize is not open; the command restores it.
+      else if (composerOpen && composerExpanded.value) void minimizedComposerControls.minimize();
+      else minimizedDialogs.restoreOrList();
+    },
+  };
   // A linked reader frame's own ticket, project, and Code Review for reader edits (HS2-NXSMC7).
   const linkedReaderSubject = createLinkedReaderSubjects({
     linkedReaderStack: () => linkedReaderStack.value,
@@ -5520,7 +5579,7 @@ export async function startHotSheetWebClient() {
     readerOpen,
     linkedReaderStack,
     disposeMinimizedReaders: (ids) => {
-      minimizedReaderControls.disposeProjects(ids);
+      minimizedDialogs.disposeProjects(ids);
     },
     projectRecords: [
       ticketRowsByProject,
@@ -6669,7 +6728,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
-    minimizedTickets: () => minimizedReaderControls.summaries(),
+    minimizedTickets: () => minimizedDialogs.items(),
     settingsInspector: (current) => orchestrationSurfaceRef.current?.inspector(current),
     desktopRemoteServers,
     announcerTrigger: announcerController.trigger,
@@ -7702,6 +7761,9 @@ export async function startHotSheetWebClient() {
     composerSubmitting,
     composerExpanded,
     resetTicketComposer,
+    minimizeTicketComposer: () => {
+      void minimizedComposerControls.minimize();
+    },
     composerTitle,
     composerDetails,
     composerCategory,
@@ -7813,7 +7875,7 @@ export async function startHotSheetWebClient() {
     approveTicketReaderClose,
     finishTicketReaderClose,
     readerLargeText,
-    minimizedReaderControls,
+    minimizedReaderControls: minimizedControls,
     linkedReaderStack,
     inspectorTab,
     setSidebarVisible,

@@ -12,7 +12,7 @@ import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
-import { Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
+import { Minus, Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
 
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
@@ -91,6 +91,31 @@ export function showQuickTicketComposer(root: ParentNode): boolean {
   if (dialog.open && (!nativeDialog || nativeDialog.open)) return false;
   void dialog.show();
   return true;
+}
+
+/** The open composer's visible panel, which minimize and restore motion fly from and to (HS2-3JR0ZH). */
+export function quickTicketComposerPanel(root: ParentNode): Element | null {
+  const dialog = root.querySelector('[data-component="quick-ticket-composer"]');
+  return dialog?.shadowRoot?.querySelector('dialog') ?? null;
+}
+
+/**
+ * Settles once the composer has finished closing, so a restore right after a minimize does not ask
+ * Web Awesome to show a dialog that is still running its hide (HS2-3JR0ZH).
+ */
+export function quickTicketComposerHidden(root: ParentNode): Promise<void> {
+  const host = root.querySelector('[data-component="quick-ticket-composer"]'),
+    closing = host?.shadowRoot?.querySelector('dialog')?.open === true && !(host as { open?: boolean }).open;
+  if (!host || !closing) return Promise.resolve();
+  return new Promise((resolve) => {
+    host.addEventListener(
+      'wa-after-hide',
+      () => {
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }
 
 export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
@@ -187,6 +212,19 @@ export function QuickTicketComposer({
       open={expanded || undefined}
       data-controlled-open={String(expanded)}
     >
+      {/* Minimize keeps the draft and lists it in the Minimized Tickets control, with the reader's
+          Minimize icon beside the dialog's Close (HS2-3JR0ZH). */}
+      {expanded && (
+        <Button
+          slot="header-actions"
+          emphasis="plain"
+          action={SEARCH_AND_COMPOSER_ACTIONS.minimizeTicketComposer.value}
+          disabled={submitting}
+          ariaLabel="Minimize New Ticket"
+          title="Minimize"
+          icon={<LucideIcon icon={Minus} name="minus" />}
+        />
+      )}
       {expanded && (
         <form
           class="quick-ticket-composer"
