@@ -904,6 +904,10 @@ for selection fallback, stable ordering, persistence parsing, and duplicate-name
 labels; `components/project-tab-bar.test.ts` for desktop/phone controls and the
 all-minimized strip; and `project-minimization.spec.ts` for the shipped desktop
 context menu, phone actions, restore, reload, and wide-to-phone-to-wide layout.
+HS2-7DWS3S pins the Restore Project menu to Kerf's default popup inset:
+`project-tab-bar.test.ts` checks the restore group's `menuInset` in the desktop,
+all-minimized, and phone strips, and `project-minimization.spec.ts` measures the
+open menu's computed padding and its first row's inset from the menu border.
 
 HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
 the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the

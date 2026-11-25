@@ -79,10 +79,13 @@ export function AddProjectAction({
   minimizedProjects = [],
 }: { minimizedProjects?: readonly MinimizedProjectChoice[] } = {}) {
   return (
+    // The Restore Project menu keeps Kerf's default PopupMenu inset (the shared popup-choice inset,
+    // row padding, and current-row fill) like the app's other menus; `menuInset="none"` ran its rows
+    // and highlight edge to edge (HS2-7DWS3S).
     <ToolbarControlGroup
       single={minimizedProjects.length === 0}
       nestedDropdown={minimizedProjects.length > 0}
-      menuInset="none"
+      menuInset="default"
       appearance="borderless"
       size="compact"
       content="icon"

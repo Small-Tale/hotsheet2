@@ -174,4 +174,17 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
     expect(empty).toContain('aria-label="Add Project"');
     expect(String(ProjectTabBar({ tabs: [] }))).not.toContain('aria-label="Minimized Projects"');
   });
+
+  it('HS2-7DWS3S keeps the Restore Project menu on the default popup inset in every strip layout', () => {
+    const minimizedProjects = [{ id: 'docs', name: 'Docs Portal' }];
+    for (const markup of [
+      String(ProjectTabBar({ tabs: [{ id: 'studio', name: 'Studio', location: 'local' }], minimizedProjects })),
+      String(ProjectTabBar({ tabs: [], minimizedProjects })),
+      String(ProjectTabBar({ mobile: true, tabs: [], minimizedProjects })),
+    ]) {
+      const restoreGroup = /<div class="kui-toolbar-control-group"[^>]*data-nested-dropdown="true"[^>]*>/.exec(markup);
+      expect(restoreGroup?.[0]).toContain('data-menu-inset="default"');
+      expect(markup).toContain('data-minimized-projects="true"');
+    }
+  });
 });

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 import { openDemoProject, project } from './mobile-project-fixture';
 import { openMockedProject } from './open-mocked-project';
@@ -9,6 +9,30 @@ import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { printThenEcho } from './terminal-fixture-command';
 
 const execute = promisify(execFile);
+
+/**
+ * HS2-7DWS3S: the open Restore Project menu keeps the popup inset, so its heading and rows (and the
+ * current-row highlight) sit inside the border instead of running edge to edge.
+ */
+async function expectRestoreMenuInset(page: Page) {
+  const menu = page.locator('[data-minimized-projects="true"] [role="menu"]');
+  await expect(menu).toBeVisible();
+  const inset = await menu.evaluate((element) => {
+    const style = getComputedStyle(element),
+      box = element.getBoundingClientRect(),
+      item = element.querySelector('[role="menuitem"]')!.getBoundingClientRect();
+    return {
+      paddingTop: parseFloat(style.paddingTop),
+      paddingInline: Math.min(parseFloat(style.paddingLeft), parseFloat(style.paddingRight)),
+      itemStart: item.left - box.left,
+      itemEnd: box.right - item.right,
+    };
+  });
+  expect(inset.paddingTop).toBeGreaterThanOrEqual(4);
+  expect(inset.paddingInline).toBeGreaterThanOrEqual(4);
+  expect(inset.itemStart).toBeGreaterThanOrEqual(4);
+  expect(inset.itemEnd).toBeGreaterThanOrEqual(4);
+}
 
 test('HS2-4Q9DVS minimizes selected and background desktop tabs, then restores in place', async ({
   page,
@@ -36,6 +60,7 @@ test('HS2-4Q9DVS minimizes selected and background desktop tabs, then restores i
   await expect(strip.locator('[data-project-id="second"]')).toHaveCount(1);
   await strip.getByRole('button', { name: 'Minimized Projects' }).click();
   await expect(page.getByRole('menuitem', { name: 'demo' })).toBeVisible();
+  await expectRestoreMenuInset(page);
   await page.screenshot({ path: testInfo.outputPath('HS2-4Q9DVS-restore-menu-wide.png'), animations: 'disabled' });
   await page.getByRole('menuitem', { name: 'demo' }).click();
   await expect(strip.locator('[data-tab-kind="project"]')).toHaveCount(2);
