@@ -34793,6 +34793,69 @@ test('keeps an inspector tab chosen during a held activation refresh when the se
   await expect(inspector.locator('[data-inspector-tab="attachments"]')).toHaveAttribute('data-selected', 'true');
 });
 
+test('keeps a ticket view chosen during a held activation refresh when the session restore lands (HS2-123CV9)', async ({
+  page,
+}) => {
+  let holdRefreshes = false;
+  const pending = new Map<string, import('@playwright/test').Route>();
+  await mockProject(page);
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
+    const root = route.request().postDataJSON().root as string;
+    if (root === '/work/other')
+      return route.fulfill({
+        status: 201,
+        json: {
+          ...project,
+          id: 'other-checkout',
+          root,
+          name: 'other',
+          apiPath: '/__hotsheet/project-api/other-checkout',
+        },
+      });
+    return route.fulfill({ status: 201, json: project });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  await page.route(/\/tickets(?:\?.*)?$/, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const other = new URL(route.request().url()).pathname.includes('/other-checkout/');
+    if (holdRefreshes && !other) {
+      pending.set('demo', route);
+      return;
+    }
+    return route.fulfill({ json: ticketsJson(route.request(), other ? [] : [row, notStartedRow]) });
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  // Park the demo project on the Queue view, then switch away.
+  const queue = page.getByRole('button', { name: /^Queue/ }).first(),
+    backlog = page.getByRole('button', { name: /^Backlog/ }).first();
+  await expect(queue).toHaveAttribute('aria-current', 'page');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).some((key) => (localStorage.getItem(key) ?? '').includes('"selectedView":"all"')),
+      ),
+    )
+    .toBe(true);
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+  // Switch back with the activation refresh (and so the delayed session restore) held.
+  holdRefreshes = true;
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await expect.poll(() => pending.has('demo')).toBe(true);
+  holdRefreshes = false;
+  // The user picks Backlog before the held refresh lands.
+  await backlog.click();
+  await expect(backlog).toHaveAttribute('aria-current', 'page');
+  // Releasing the refresh runs the restore of the parked Queue view; it must keep the user's choice.
+  const network = trackNetworkQuietExceptChangePolls(page);
+  await pending.get('demo')!.fulfill({ json: ticketsJson(pending.get('demo')!.request(), [row, notStartedRow]) });
+  await network.quiet();
+  await expect(backlog).toHaveAttribute('aria-current', 'page');
+  await expect(queue).not.toHaveAttribute('aria-current', 'page');
+});
+
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus', async ({
   page,
 }) => {

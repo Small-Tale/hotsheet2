@@ -1088,8 +1088,9 @@ export async function startHotSheetWebClient() {
     projectSessionInteractionVersion = 0,
     // The selection an activation applied; a different array later means the user selected since (HS2-VDJJEY).
     activationTicketSelection: string[] | undefined,
-    // The section tabs when an activation began; a different tab later means the user chose one (HS2-KBM5QK).
-    activationSectionTabs: { inspector: InspectorTab; reader: InspectorTab } | undefined;
+    // The section tabs and ticket view when an activation began; a different value later means the user
+    // chose one (HS2-KBM5QK, HS2-123CV9).
+    activationSectionTabs: { inspector: InspectorTab; reader: InspectorTab; view: TicketView } | undefined;
   const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-left-rail')),
     inspectorSize = signal(loadAppRegionSize(localStorage, 'app-right-rail'));
   const detailsMode = signal<MarkdownEditorMode>('preview'),
@@ -3500,7 +3501,7 @@ export async function startHotSheetWebClient() {
         selectedTicket.value = null;
         selectedTicketSlugs.value = selection;
         activationTicketSelection = selection;
-        activationSectionTabs = { inspector: inspectorTab.value, reader: readerTab.value };
+        activationSectionTabs = { inspector: inspectorTab.value, reader: readerTab.value, view: selectedView.value };
         ticketSelectionAnchor = selection[0];
         error.value = '';
         refreshError.value = '';
@@ -3635,14 +3636,16 @@ export async function startHotSheetWebClient() {
       // If the user opened the new-ticket composer during this activation's async refresh window, leave it
       // alone — a delayed session restore must not close a composer the user just opened (HS2-T1F2VT).
       const composerOpenedByUser = composerExpanded.value;
-      selectedView.value =
-        stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
-      // Search was restored during activation; a delayed network refresh must not undo a new edit.
-      searchMatchKeys.value = undefined;
-      // A section tab the user chose during the activation's async refresh window wins over the parked
-      // session too; resetting it left the clicked tab focused but unselected (HS2-KBM5QK).
+      // A section tab or ticket view the user chose during the activation's async refresh window wins
+      // over the parked session; resetting it left the clicked tab focused but unselected (HS2-KBM5QK),
+      // and reverted a view switch to Queue under load (HS2-123CV9).
       const tabsAtActivation = activationSectionTabs;
       activationSectionTabs = undefined;
+      if (!tabsAtActivation || selectedView.value === tabsAtActivation.view)
+        selectedView.value =
+          stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
+      // Search was restored during activation; a delayed network refresh must not undo a new edit.
+      searchMatchKeys.value = undefined;
       if (!tabsAtActivation || inspectorTab.value === tabsAtActivation.inspector)
         inspectorTab.value = stored.inspectorTab;
       if (!tabsAtActivation || readerTab.value === tabsAtActivation.reader) readerTab.value = stored.readerTab;
