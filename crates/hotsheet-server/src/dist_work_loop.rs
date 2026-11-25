@@ -245,16 +245,18 @@ pub type LimitSink =
     std::sync::Arc<dyn Fn(&str, &hotsheet_aitools::DoneReason) + Send + Sync + 'static>;
 
 /// The server host's [`LimitSink`]: a driven turn that failed with a typed limit is a
-/// limit signal for its tool's capacity (HS2-86MK1Y), unattributed like driven usage,
-/// because a driven turn has no terminal or hosted session.
+/// limit signal for its tool's capacity (HS2-86MK1Y), and a completed turn of a tool that
+/// reports limits but no usage confirms its recovery (HS2-WTSYQJ); both unattributed like
+/// driven usage, because a driven turn has no terminal or hosted session.
 pub fn live_state_limit_sink(state: &crate::AppState) -> LimitSink {
     let state = state.clone();
     std::sync::Arc::new(move |tool, done| {
         crate::tool_capacity_signals::record(
             &state,
-            crate::tool_capacity_signals::driven_failure_signal(
+            crate::tool_capacity_signals::driven_outcome_signal(
                 tool,
                 done,
+                hotsheet_plugins::capacity_signals(tool, &state.plugin_dirs),
                 time::OffsetDateTime::now_utc(),
             ),
         );
@@ -847,7 +849,8 @@ mod tests {
                 .entries()
                 .unwrap()
         };
-        sink("antigravity", &DoneReason::Completed);
+        // A tool that reports usage confirms recovery through it, not here.
+        sink("claude", &DoneReason::Completed);
         sink(
             "antigravity",
             &DoneReason::Failed {
@@ -872,6 +875,18 @@ mod tests {
             .expect("the limit reached tool capacity");
         assert_eq!(antigravity.account, None);
         assert!(antigravity.limit.is_some());
+        // HS2-WTSYQJ: Antigravity reports limits but no usage, so its next completed
+        // driven turn is the recovery that ends the backoff.
+        sink("antigravity", &DoneReason::Completed);
+        let recovered = hotsheet_ticketing::orchestration::ToolCapacityRegistry::new(&home)
+            .entries()
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.tool == "antigravity")
+            .unwrap();
+        assert!(recovered.limit.is_none(), "{recovered:?}");
+        assert!(recovered.last_ok_at_ms.is_some());
+        assert_eq!(recovered.consecutive_limits, 0);
         let stored = std::fs::read_dir(&home)
             .unwrap()
             .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default())

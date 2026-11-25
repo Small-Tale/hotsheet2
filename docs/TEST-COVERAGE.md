@@ -4387,6 +4387,12 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   `tool_capacity_signals.rs # hs2_ahg7hw` maps it to a `rate_limit` signal with and
   without a reset time; `codex_rollout_watch.rs # hs2_cyhawb` reads the variant from a
   failed turn; the plugin table pins Codex's new declaration.
+- HS2-WTSYQJ: `tool_capacity_tests.rs # hs2_wtsyqj` walks a limits-only tool through
+  limit, backoff end, completed probe (available, sequence reset) and a failed probe
+  (longer backoff, then a completed one); `tool_capacity_signals.rs # hs2_wtsyqj` maps a
+  completed driven turn to `recovered` only for a tool reporting limits but no usage;
+  `dist_work_loop.rs # hs2_86mk1y` shows the host's limit sink clearing an Antigravity
+  limit on its next completed turn. The client-drive runner uses the same mapping.
 - HS2-86MK1Y: `structured_failure.rs # hs2_86mk1y` reads the observed print-timeout
   line as no limit, maps limit statuses and codes by retryability, never counts text, and
   is strict about the prefix and JSON shape (last valid line wins); `tests.rs #

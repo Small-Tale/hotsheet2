@@ -1515,9 +1515,15 @@ runner record it through the same halt path, unattributed like driven usage. **T
 quota-hit payload is unconfirmed:** the observed line was a print timeout
 (`DEADLINE_EXCEEDED`), and the limit values are assumed until one is captured
 (HS2-GETFE4). Antigravity reports no reset time (agy's `/usage` buckets carry one,
-HS2-JM0GVB) and no usage events, so before anything is observed it is `unknown`
-(`not_observed`), and after a limit without a reset time it stays `degraded` until a
-`recovered` signal (HS2-WTSYQJ).
+HS2-JM0GVB) and no usage events, so nothing observed is `unknown` (`not_observed`).
+A completed driven turn confirms it instead (HS2-WTSYQJ): the dist work loop's limit sink
+and the client-drive runner record a `recovered` signal, unattributed, when a turn of a
+tool whose plugin reports limits but no usage events completes. Its first completed turn
+makes it `available`. After a limit without a reset time it is `limited` for the backoff,
+then `degraded` (`recovery_unconfirmed`) until a probe turn completes and makes it
+`available` again, resetting the backoff sequence; a probe that hits the limit again
+backs off for the next, longer step. A tool that reports usage events confirms recovery
+through them and records nothing here.
 
 ### Signals
 
@@ -1536,7 +1542,8 @@ provider message a second way:
   reads from the message, or absent. This covers Claude's `StopFailure` hook and the
   Codex rollout watch, which share one halt path.
 - When a session halted on a limit takes a new turn (the tool's resume hook, or a new
-  Codex turn), a `recovered` signal is recorded. Ending the session, closing its
+  Codex turn), a `recovered` signal is recorded. A completed driven turn of a tool that
+  reports limits but no usage events records one too (HS2-WTSYQJ). Ending the session, closing its
   terminal, or a person dismissing the stopped state proves nothing and records
   nothing.
 - A halt that is not a limit, and a halt whose tool is not known, record nothing.

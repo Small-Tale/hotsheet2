@@ -84,6 +84,28 @@ pub fn driven_failure_signal(
     halt_signal(tool, error_type, message.as_deref().unwrap_or(""), at)
 }
 
+/// HS2-WTSYQJ: the capacity signal for how a driven turn ended. A typed limit failure is
+/// its limit signal ([`driven_failure_signal`]). A completed turn of a tool whose plugin
+/// reports limits but no usage events is a `recovered` signal: nothing else would ever
+/// confirm that tool's recovery after a limit without a reset time. A tool that reports
+/// usage events confirms recovery through them instead, so its completed turn records
+/// nothing here. Any other ending records nothing.
+pub fn driven_outcome_signal(
+    tool: &str,
+    done: &hotsheet_aitools::DoneReason,
+    declared: hotsheet_plugins::CapacitySpec,
+    at: OffsetDateTime,
+) -> Option<LimitSignal> {
+    match done {
+        hotsheet_aitools::DoneReason::Completed
+            if declared.reports_limits() && !declared.usage_events.is_reported() =>
+        {
+            recovered_signal(tool, at)
+        }
+        _ => driven_failure_signal(tool, done, at),
+    }
+}
+
 /// The limit signal for a live-state usage-limit cause. The cause no longer says which
 /// limit it was, so it maps to a usage limit.
 pub fn cause_signal(tool: &str, cause: &LiveCause) -> Option<LimitSignal> {
@@ -398,6 +420,68 @@ mod tests {
         // A tool id that is not a bounded identifier yields no signal.
         assert_eq!(halt_signal("two words", "rate_limit", "x", halted()), None);
         assert_eq!(halt_signal("", "rate_limit", "x", halted()), None);
+    }
+
+    /// HS2-WTSYQJ: a completed driven turn is a `recovered` signal exactly for a tool that
+    /// reports limits but no usage; a typed limit failure stays its limit signal, and every
+    /// other ending, or a tool that reports usage or no limits, records nothing.
+    #[test]
+    fn hs2_wtsyqj_a_completed_turn_confirms_recovery_only_for_a_limits_only_tool() {
+        use hotsheet_aitools::DoneReason;
+        use hotsheet_plugins::{CapacitySpec, SignalReport};
+        let spec = |limits: bool, usage: bool| {
+            let report = |reported| {
+                if reported {
+                    SignalReport::Reported
+                } else {
+                    SignalReport::Unknown
+                }
+            };
+            CapacitySpec {
+                rate_limit_errors: report(limits),
+                usage_limit_errors: report(limits),
+                usage_events: report(usage),
+                ..CapacitySpec::default()
+            }
+        };
+        let limits_only = spec(true, false);
+        let recovered =
+            driven_outcome_signal("antigravity", &DoneReason::Completed, limits_only, halted())
+                .unwrap();
+        assert_eq!(
+            serde_json::to_value(&recovered).unwrap(),
+            serde_json::json!({"tool":"antigravity","kind":"recovered","at_ms":AT_MS})
+        );
+        recovered.validate(AT_MS).unwrap();
+        for declared in [spec(true, true), spec(false, false), spec(false, true)] {
+            assert_eq!(
+                driven_outcome_signal("tool", &DoneReason::Completed, declared, halted()),
+                None,
+                "{declared:?}"
+            );
+        }
+        let failed = |error_type: Option<&str>| DoneReason::Failed {
+            exit_code: 3,
+            message: Some("Synthetic.".into()),
+            error_type: error_type.map(Into::into),
+        };
+        assert_eq!(
+            driven_outcome_signal(
+                "antigravity",
+                &failed(Some("rate_limit")),
+                limits_only,
+                halted()
+            )
+            .unwrap()
+            .kind,
+            SignalKind::RateLimit
+        );
+        for done in [failed(None), DoneReason::Interrupted] {
+            assert_eq!(
+                driven_outcome_signal("antigravity", &done, limits_only, halted()),
+                None
+            );
+        }
     }
 
     #[test]

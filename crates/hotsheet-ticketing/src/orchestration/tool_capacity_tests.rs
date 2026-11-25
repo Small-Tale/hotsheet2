@@ -167,6 +167,95 @@ fn hs2_ahg7hw_transition_table_covers_available_limited_degraded_and_recovered()
     );
 }
 
+/// HS2-WTSYQJ: a tool that reports limits but no reset times and no usage events (as
+/// Antigravity declares) confirms recovery only through a `recovered` signal from a
+/// completed driven turn: limit, backoff end, probe completes, available; and a probe
+/// that fails again backs off longer, while one that completes resets the sequence.
+#[test]
+fn hs2_wtsyqj_a_completed_probe_turn_confirms_recovery_for_a_limits_only_tool() {
+    use CapacityReason as R;
+    const LIMITS_ONLY: SignalSupport = SignalSupport {
+        limits: true,
+        reset_times: false,
+        usage: false,
+        cost: false,
+    };
+    let at = |entry: &CapacityEntry, now| describe(state_at(Some(entry), LIMITS_ONLY, None, now));
+    let backoff = BACKOFF_BASE_MS;
+    // Nothing observed yet: unknown, never available.
+    assert_eq!(
+        describe(state_at(None, LIMITS_ONLY, None, T0)),
+        ("unknown", Some(R::NotObserved), None)
+    );
+    // A completed driven turn alone confirms the account works.
+    assert_eq!(
+        at(&fold(&[recovered(T0)]), T0 + MIN),
+        ("available", None, None)
+    );
+
+    // Limit without a reset: backoff, then degraded until a turn confirms it.
+    let limited = fold(&[limit(T0)]);
+    assert_eq!(
+        at(&limited, T0 + MIN),
+        ("limited", Some(R::UsageLimit), Some(T0 + backoff))
+    );
+    assert_eq!(
+        at(&limited, T0 + backoff),
+        ("degraded", Some(R::RecoveryUnconfirmed), None)
+    );
+    // The probe turn completes: available, and the sequence starts over.
+    let probe_ok = fold(&[limit(T0), recovered(T0 + backoff + MIN)]);
+    assert_eq!(
+        at(&probe_ok, T0 + backoff + 2 * MIN),
+        ("available", None, None)
+    );
+    let again = fold(&[
+        limit(T0),
+        recovered(T0 + backoff + MIN),
+        limit(T0 + backoff + 2 * MIN),
+    ]);
+    assert_eq!(
+        at(&again, T0 + backoff + 3 * MIN),
+        (
+            "limited",
+            Some(R::UsageLimit),
+            Some(T0 + backoff + 2 * MIN + backoff)
+        ),
+        "a confirmed recovery resets the backoff"
+    );
+
+    // The probe fails again on the limit: the next, longer backoff.
+    let probe_failed = fold(&[limit(T0), limit(T0 + backoff + MIN)]);
+    assert_eq!(
+        at(&probe_failed, T0 + backoff + 2 * MIN),
+        (
+            "limited",
+            Some(R::UsageLimit),
+            Some(T0 + backoff + MIN + 2 * backoff)
+        )
+    );
+    assert_eq!(
+        at(&probe_failed, T0 + backoff + MIN + 2 * backoff),
+        ("degraded", Some(R::RecoveryUnconfirmed), None)
+    );
+    // Then a probe completes: available again.
+    let recovered_late = fold(&[
+        limit(T0),
+        limit(T0 + backoff + MIN),
+        recovered(T0 + 3 * backoff + 2 * MIN),
+    ]);
+    assert_eq!(
+        at(&recovered_late, T0 + 3 * backoff + 3 * MIN),
+        ("available", None, None)
+    );
+    // A completed turn reported again changes nothing.
+    let (_, applied) = apply_signal(
+        Some(recovered_late.clone()),
+        &recovered(T0 + 3 * backoff + 2 * MIN),
+    );
+    assert_eq!(applied, Applied::Duplicate);
+}
+
 #[test]
 fn hs2_ahg7hw_repeated_limits_lengthen_the_backoff_up_to_the_cap() {
     assert_eq!(BACKOFF_BASE_MS, 5 * MIN);
