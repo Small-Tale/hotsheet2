@@ -104,7 +104,8 @@ function detailRow(kind: string, icon: { icon: IconNode; name: string }, label: 
  * The project sidebar's Live section (HS2-F788GW, docs/34-glance-surfaces.md §34.6). Compact (the
  * default) is one line of two bare gauges and glyph chips that appear only when they have something
  * to say; expanded shows the `m1` detail rows. Explanations live only in titles and accessible names
- * (§34.4); host conditions past a threshold keep a full-width callout in both modes (§34.1).
+ * (§34.4), except that the CI chip names itself and its elapsed time (`CI · 1:05`, HS2-505PHC); host
+ * conditions past a threshold keep a full-width callout in both modes (§34.1).
  */
 export function ProjectLiveSection({ summary, callouts = [], expanded = false }: ProjectLiveSectionProps) {
   const chips = summary ? liveChips(summary) : [];

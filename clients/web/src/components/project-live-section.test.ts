@@ -161,11 +161,32 @@ describe('ProjectLiveSection main CI (HS2-57BYEA)', () => {
     DEMO_LIVE_NOW_MS,
   );
 
-  it('shows a glyph-only danger chip for a failing run in compact mode, titled with the run', () => {
+  it('shows a labelled danger chip for a failing run in compact mode, titled with the run (HS2-505PHC)', () => {
     const markup = String(ProjectLiveSection({ summary: failing }));
     expect(markup).toContain('data-live-chip="ci"');
     expect(markup).toContain('title="main CI failed · 9f8e7d6"');
     expect(markup).toContain('data-lucide="circle-x"');
+    expect(markup).toContain('CI failed');
+  });
+
+  it('labels running and queued chips, the running one with its elapsed time (HS2-505PHC)', () => {
+    const at = (status: 'in_progress' | 'queued') =>
+      projectLiveSummary(
+        [
+          {
+            ...demoLiveState('quiet'),
+            ci: { ...ci, status, started_at_ms: DEMO_LIVE_NOW_MS - 65_000, finished_at_ms: null },
+          },
+        ],
+        DEMO_LIVE_NOW_MS,
+      );
+    const running = String(ProjectLiveSection({ summary: at('in_progress') }));
+    expect(running).toContain('CI · 1:05');
+    expect(running).toContain('title="main CI running for 1:05 · 9f8e7d6"');
+    expect(running).toContain('data-lucide="loader-circle"');
+    const queued = String(ProjectLiveSection({ summary: at('queued') }));
+    expect(queued).toContain('CI · queued');
+    expect(queued).toContain('data-lucide="clock"');
   });
 
   it('shows no chip for a passing run, but an expanded row for any reported run', () => {

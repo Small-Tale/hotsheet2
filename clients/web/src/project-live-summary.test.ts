@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LiveStoreState } from './api';
 import {
@@ -6,11 +6,13 @@ import {
   hostCallouts,
   lastProgressDescription,
   liveChips,
+  liveCiClockRunning,
   liveStateDescription,
   projectLiveSummary,
   workersLive,
   workersLiveTitle,
 } from './project-live-summary';
+import { createTurnClock } from './turn-clock';
 import { DEMO_LIVE_NOW_MS, demoHostHealth, demoLiveState } from './ux-demo/live-section-fixtures';
 
 const NOW = DEMO_LIVE_NOW_MS;
@@ -259,21 +261,119 @@ describe('main CI chip and row model (HS2-57BYEA)', () => {
     expect(withCi(run('failure')).ci).toMatchObject({ status: 'failure', shortSha: '9f8e7d6', ageMs: 12 * MINUTE });
   });
 
-  it('adds a CI chip only when the run fails, runs, or waits', () => {
+  it('adds a labelled CI chip only when the run fails, runs, or waits (HS2-505PHC)', () => {
     expect(liveChips(withCi(run('failure')))).toEqual([
-      { kind: 'ci', text: '', title: 'main CI failed · 9f8e7d6', tone: 'danger' },
+      { kind: 'ci', text: 'CI failed', title: 'main CI failed · 9f8e7d6', tone: 'danger' },
     ]);
+    // Started 18 minutes before the display clock.
     expect(liveChips(withCi(run('in_progress')))).toEqual([
-      { kind: 'ci', text: '', title: 'main CI running · 9f8e7d6', tone: 'neutral' },
+      { kind: 'ci', text: 'CI · 18:00', title: 'main CI running for 18:00 · 9f8e7d6', tone: 'neutral' },
     ]);
-    expect(liveChips(withCi(run('queued')))[0]?.title).toBe('main CI queued · 9f8e7d6');
+    expect(liveChips(withCi(run('queued')))).toEqual([
+      { kind: 'ci', text: 'CI · queued', title: 'main CI queued · 9f8e7d6', tone: 'neutral' },
+    ]);
     for (const status of ['success', 'cancelled', 'unavailable'] as const)
       expect(liveChips(withCi(run(status)))).toEqual([]);
     expect(liveChips(withCi())).toEqual([]);
   });
 
+  it('counts a running chip from the reported start, clamps clock skew, and words a missing start', () => {
+    const at = (startedAtMs: number | null, nowMs: number) =>
+      projectLiveSummary(
+        [{ ...demoLiveState('quiet'), ci: { ...run('in_progress'), started_at_ms: startedAtMs } }],
+        nowMs,
+      );
+    const chipAt = (startedAtMs: number | null, nowMs: number) => {
+      const result = at(startedAtMs, nowMs);
+      return result ? liveChips(result).find((chip) => chip.kind === 'ci') : undefined;
+    };
+    expect(chipAt(NOW - 5_000, NOW)?.text).toBe('CI · 0:05');
+    expect(chipAt(NOW - 65_000, NOW)?.text).toBe('CI · 1:05');
+    expect(chipAt(NOW - (3_600_000 + 123_000), NOW)?.text).toBe('CI · 1:02:03');
+    // A start ahead of this machine's clock reads 0:00 rather than a negative time.
+    expect(chipAt(NOW + 90_000, NOW)).toMatchObject({ text: 'CI · 0:00', title: 'main CI running for 0:00 · 9f8e7d6' });
+    expect(chipAt(null, NOW)).toMatchObject({ text: 'CI · running', title: 'main CI running · 9f8e7d6' });
+  });
+
   it('puts the CI chip after Needs you and the ETA overrun', () => {
     const chips = liveChips(summary({ ...demoLiveState('attention'), ci: run('failure') }));
     expect(chips.map((chip) => chip.kind)).toEqual(['waiting', 'overrun', 'ci']);
+  });
+});
+
+describe('Live CI chip display clock (HS2-505PHC)', () => {
+  const running = {
+    ...demoLiveState('quiet'),
+    ci: {
+      status: 'in_progress' as const,
+      checkout: 'demo-ab12',
+      branch: 'main',
+      sha: '9f8e7d6c5b4a',
+      run_url: null,
+      workflow: 'CI',
+      started_at_ms: NOW - 65_000,
+      finished_at_ms: null,
+      reported_at_ms: NOW - 60_000,
+    },
+  };
+  const shown = { visible: true, expanded: false };
+
+  it('runs only while the page shows, the section is compact, and a run with a start is running', () => {
+    expect(liveCiClockRunning([running], shown)).toBe(true);
+    expect(liveCiClockRunning([running], { visible: false, expanded: false })).toBe(false);
+    expect(liveCiClockRunning([running], { visible: true, expanded: true })).toBe(false);
+    expect(liveCiClockRunning([{ ...running, ci: { ...running.ci, started_at_ms: null } }], shown)).toBe(false);
+    for (const status of ['queued', 'failure', 'success', 'cancelled', 'unavailable'] as const)
+      expect(liveCiClockRunning([{ ...running, ci: { ...running.ci, status } }], shown)).toBe(false);
+    expect(liveCiClockRunning([demoLiveState('quiet')], shown)).toBe(false);
+    expect(liveCiClockRunning([], shown)).toBe(false);
+  });
+
+  it('follows the newest reported run across the project stores', () => {
+    const olderFailure = {
+      ...running,
+      store: 'older',
+      ci: { ...running.ci, status: 'failure' as const, reported_at_ms: NOW - 600_000, finished_at_ms: NOW - 600_000 },
+    };
+    expect(liveCiClockRunning([olderFailure, running], shown)).toBe(true);
+    const newerFailure = { ...olderFailure, ci: { ...olderFailure.ci, reported_at_ms: NOW } };
+    expect(liveCiClockRunning([newerFailure, running], shown)).toBe(false);
+  });
+
+  describe('with fake timers', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('advances the chip face each second from a render-only clock, and stops with the run', () => {
+      let states: LiveStoreState[] = [running],
+        clock = Date.now();
+      const face = () => liveChips(projectLiveSummary(states, clock)!).find((chip) => chip.kind === 'ci')?.text;
+      const timer = createTurnClock(
+        () => liveCiClockRunning(states, shown),
+        () => {
+          clock = Date.now();
+        },
+        1_000,
+      );
+      timer.sync();
+      expect(face()).toBe('CI · 1:05');
+      vi.advanceTimersByTime(1_000);
+      expect(face()).toBe('CI · 1:06');
+      vi.advanceTimersByTime(54_000);
+      expect(face()).toBe('CI · 2:00');
+      // The run finishes: the next interval stops the clock and the chip says it failed.
+      states = [{ ...running, ci: { ...running.ci, status: 'failure', finished_at_ms: Date.now() } }];
+      vi.advanceTimersByTime(1_000);
+      expect(timer.running()).toBe(false);
+      expect(face()).toBe('CI failed');
+      const frozen = clock;
+      vi.advanceTimersByTime(10_000);
+      expect(clock).toBe(frozen);
+    });
   });
 });

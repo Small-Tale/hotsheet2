@@ -110,7 +110,10 @@ falling back to what the tickets record themselves (HS2-MHW3SX, [32-notifier-plu
 Compact glance surfaces show **glyphs, gauges, and raw numbers only**. Every explanation, unit, and
 duration goes in the hover title and the accessible name, never on the face. For example, "no progress for
 34 minutes" is the title of a May be stuck glyph, not visible text. Chips and rows appear only when they
-have something to say. The full-width callout for likely-critical conditions (§34.1) is the one exception.
+have something to say. The full-width callout for likely-critical conditions (§34.1) is one exception. The
+`main` CI chip is the other (HS2-505PHC): a bare spinner glyph read as an unexplained countdown, so its face
+names it in a word or two plus a clock while it runs (`CI · 1:05`, `CI · queued`, `CI failed`; §34.6). A
+Jobs sidebar chip that shows progress follows the same labelled-chip rule when it is built.
 
 ## 34.5 Standby (HS2-EQVZTZ, shipped)
 
@@ -191,10 +194,19 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   live state exists and never issues a request. The compact problem-state chip (May be stuck, Stalled,
   Halted) is a glyph whose title gives the state and the last-progress age. `main` CI (HS2-57BYEA) comes
   from the newest run the project's stores reported in their live `ci` (HS2-M8HHEA,
-  [32](32-notifier-plugins.md) §32.8.5): the compact chip is a glyph shown only while that run failed
-  (danger), runs, or waits to run (neutral), titled with the branch, word, and short sha; the expanded row
-  names any reported run (passed, failed, running, queued, cancelled) with its short sha and age. Glyphs
-  match the Stats tile (HS2-E16ZEK).
+  [32](32-notifier-plugins.md) §32.8.5): the compact chip shows only while that run failed (danger), runs,
+  or waits to run (neutral), titled with the branch, word, and short sha; the expanded row names any
+  reported run (passed, failed, running, queued, cancelled) with its short sha and age. Glyphs match the
+  Stats tile (HS2-E16ZEK).
+- **Labelled CI chip (HS2-505PHC, shipped).** The compact CI chip keeps its status glyph as the Kerf
+  `Badge` icon and adds text: `CI · 1:05` while the run runs, counted from the run's reported
+  `started_at_ms` (`m:ss`, then `h:mm:ss` from an hour; a start ahead of this machine's clock reads
+  `0:00`), `CI · running` before a start is reported, `CI · queued` while it waits, and `CI failed`. A
+  running chip's title adds the elapsed time (`main CI running for 1:05 · 9f8e7d6`). The clock face moves
+  each second from a second render-only display clock that runs only while the page and the project
+  sidebar show, the section is compact, and the selected project's newest run is running with a known
+  start; it writes the same render clock and never issues a request. Queued and failed chips carry no
+  clock.
 - **Remote project tabs (HS2-4R99XY).** A cross-server tab shows the same gauges and chips, from the remote
   server's own live state. The browser's `remote:<binding>:<checkout>` id never equals the remote server's
   checkout id, and the remote server may host a store whose id the local server also uses, so each remote

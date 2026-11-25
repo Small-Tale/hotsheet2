@@ -1,4 +1,5 @@
 import type { LiveStoreState, LiveWord } from './api';
+import { ciChipText, ciChipTicks, formatCiElapsed } from './ci-presentation';
 import type { HostHealthSignalId, HostHealthSnapshot } from './host-health';
 import { hostHealthCallouts } from './host-health';
 import {
@@ -118,7 +119,10 @@ export function lastProgressDescription(summary: ProjectLiveSummary): string {
     : `last progress ${formatGlanceDuration(summary.progressAgeMs)} ago`;
 }
 
-/** One compact chip: a glyph and a raw number, with its explanation only in `title` and `label`. */
+/**
+ * One compact chip: a glyph and a raw number, with its explanation only in `title` and `label`. The CI
+ * chip is the deliberate exception that names itself (`CI · 1:05`, HS2-505PHC, §34.4).
+ */
 export interface LiveChip {
   kind: 'state' | 'waiting' | 'overrun' | 'ci';
   /** The raw number or short value on the chip's face; empty for a glyph-only chip. */
@@ -157,17 +161,30 @@ export function liveChips(summary: ProjectLiveSummary): LiveChip[] {
       }`,
       tone: 'warning',
     });
-  // `main` CI only when it is non-trivial (§34.6): failing, running, or waiting to run (HS2-57BYEA).
+  // `main` CI only when it is non-trivial (§34.6): failing, running, or waiting to run (HS2-57BYEA). Its
+  // face names it and, while it runs, the elapsed time (HS2-505PHC): `CI · 1:05`, `CI · queued`, `CI failed`.
   if (summary.ci.status === 'failure' || summary.ci.status === 'in_progress' || summary.ci.status === 'queued')
     chips.push({
       kind: 'ci',
-      text: '',
+      text: ciChipText(summary.ci) ?? '',
       title: `${summary.ci.branch} CI ${CI_STATUS_TITLES[summary.ci.status]}${
-        summary.ci.shortSha ? ` · ${summary.ci.shortSha}` : ''
-      }`,
+        ciChipTicks(summary.ci) ? ` for ${formatCiElapsed(summary.ci.ageMs ?? 0)}` : ''
+      }${summary.ci.shortSha ? ` · ${summary.ci.shortSha}` : ''}`,
       tone: summary.ci.status === 'failure' ? 'danger' : 'neutral',
     });
   return chips;
+}
+
+/**
+ * Whether the Live section needs its one-second display clock (HS2-505PHC): only while the page shows,
+ * the section is compact, and the project's newest `main` run is running with a known start, so the
+ * chip's `CI · 1:05` face moves. The clock only re-renders; it never issues a request.
+ */
+export function liveCiClockRunning(
+  states: readonly LiveStoreState[],
+  view: { visible: boolean; expanded: boolean },
+): boolean {
+  return view.visible && !view.expanded && ciChipTicks(newestCi(states, 0));
 }
 
 /** One host condition past its threshold: always a full-width callout, even in compact mode (§34.1). */

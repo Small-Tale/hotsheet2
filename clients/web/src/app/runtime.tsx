@@ -265,7 +265,7 @@ import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRo
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
 import { type DrawerAIChat } from '../project-drive';
-import { projectLiveSummary, workersLive } from '../project-live-summary';
+import { liveCiClockRunning, projectLiveSummary, workersLive } from '../project-live-summary';
 import {
   loadMinimizedProjects,
   minimizeProject,
@@ -4984,6 +4984,25 @@ export async function startHotSheetWebClient() {
   effect(() => {
     if (liveStates.states.value.size > 0 || liveClockTimer.running()) liveClockTimer.sync();
   });
+  // The compact CI chip's `CI · 1:05` face moves each second (HS2-505PHC): a second render-only clock,
+  // running only while the page and sidebar show, the section is compact, and the selected project's
+  // newest `main` run is running with a known start. It writes the same clock and never issues a request.
+  const ciChipClockRunning = () =>
+    liveCiClockRunning(sidebarLiveStates.forProject(selectedProjectId.value), {
+      visible: pageVisible.value && sidebarVisible.value,
+      expanded: liveSectionExpanded.value,
+    });
+  const ciChipClockTimer = createTurnClock(
+    ciChipClockRunning,
+    () => {
+      liveClock.value = Date.now();
+    },
+    1_000,
+  );
+  // Tracks the same signals, so the clock starts and stops as soon as any of them changes.
+  effect(() => {
+    if (ciChipClockRunning() || ciChipClockTimer.running()) ciChipClockTimer.sync();
+  });
   // Standby (HS2-EQVZTZ): the idle-entered night display over the same live state; its settings are
   // machine-wide on the server the active project talks to.
   /** Set once the Stats glance exists: a stream resync re-reads the Overnight history while Stats shows. */
@@ -8310,6 +8329,7 @@ export async function startHotSheetWebClient() {
       liveStates.reset();
       remoteLiveStates.reset();
       liveClockTimer.stop();
+      ciChipClockTimer.stop();
       disposeStandby();
       announcerController.dispose();
       terminalDashboardController.dispose();
