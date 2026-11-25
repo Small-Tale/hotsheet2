@@ -19,6 +19,7 @@ import {
   addTerminalVisibilityGroup,
   effectiveTerminalVisibleTypes,
   initialTerminalVisibilityState,
+  projectVisibilityToggleTarget,
   removeTerminalVisibilityGroup,
   renameTerminalVisibilityGroup,
   scopeTerminalVisibilityTypes,
@@ -191,15 +192,27 @@ export function toggleTerminalVisibilityDemoType(type: TerminalVisibilityType) {
 export function setTerminalVisibilityDemoChatFeature(on: boolean) {
   terminalVisibilityDemoChatFeature.value = on;
 }
+/** A project heading's toggle (HS2-HC67SP): any hidden listed item shows all, otherwise all hide. */
+export function toggleTerminalVisibilityDemoProject(projectId: string) {
+  const keys = demoListedKeys().filter((key) => key.startsWith(`${projectId}:`));
+  terminalVisibilityDemoState.value = setAllTerminalsVisibleInGroup(
+    terminalVisibilityDemoState.value,
+    active().id,
+    keys,
+    projectVisibilityToggleTarget(keys, active().hiddenKeys),
+  );
+}
+const demoListedKeys = () =>
+  terminalVisibilityItems(
+    terminalVisibilityDemoProjects(),
+    'dashboard',
+    effectiveTerminalVisibleTypes(active(), demoAvailableTypes()),
+  ).flatMap((group) => group.items.map((item) => item.key));
 export function setAllTerminalVisibilityDemo(visible: boolean) {
   terminalVisibilityDemoState.value = setAllTerminalsVisibleInGroup(
     terminalVisibilityDemoState.value,
     active().id,
-    terminalVisibilityItems(
-      terminalVisibilityDemoProjects(),
-      'dashboard',
-      effectiveTerminalVisibleTypes(active(), demoAvailableTypes()),
-    ).flatMap((group) => group.items.map((item) => item.key)),
+    demoListedKeys(),
     visible,
   );
 }
@@ -292,6 +305,11 @@ function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.toggleTerminalVisibility.selector, (_event, target) => {
       toggleTerminalVisibilityDemo((target as HTMLElement).dataset.itemId ?? '');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleTerminalVisibilityProject.selector, (_event, target) => {
+      toggleTerminalVisibilityDemoProject((target as HTMLElement).dataset.projectId ?? '');
     }),
   );
   demoListeners.add(

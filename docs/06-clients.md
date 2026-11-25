@@ -3823,7 +3823,13 @@ Terminals and AI Shells, and the two share the row. Under the feature-area conve
 listed scope still has an open chat, so that chat stays controllable. An unavailable type is
 never pressed or applied to the grid; when a workspace's stored choice held only AI Chats,
 Terminals stands in until the person changes the selection, and the stored chat choice
-returns with the segment. Terminal kind comes from the creation request:
+returns with the segment. Each project heading carries a show-all or hide-all action
+(HS2-HC67SP) that acts on that project's listed rows only. If any listed row is hidden, it
+shows them all; if all are visible, it hides them all. It is Kerf `ListHeader`'s trailing
+action: one keyboard stop named "Show All <project> <types>" or "Hide All …" (the noun is the
+single listed type, else Items). Like each row, its eye or eye-off icon reports state.
+Hide Listed and Show Listed stay in the footer. Making the project name itself the control
+waits on Kerf KF-J289N4 (HS2-DZH5GH). Terminal kind comes from the creation request:
 `connect` marks AI, ordinary/default-shell launches remain shell, and the kind persists
 through PTY reattachment and broker-backed server restart. Legacy sessions without kind
 remain shell; titles, command output, and OSC8 hyperlinks never determine kind (HS2-SE3RVM).

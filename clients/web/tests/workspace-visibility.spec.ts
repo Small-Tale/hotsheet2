@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { allFeaturesOn, featureSettingsView } from '../src/feature-areas';
-import { openDemoProject } from './mobile-project-fixture';
+import { openDemoProject, project } from './mobile-project-fixture';
 
 /**
  * Manage Workspace Visibility through the shipped Workspace Grid toolbar, with mocked projects and
@@ -13,6 +13,30 @@ const DEMO_TERMINALS: FixtureTerminal[] = [
   { id: 'demo-shell', alive: true, busy: false, cwd: '/work/demo' },
   { id: 'demo-agent', alive: true, busy: false, cwd: '/work/demo', kind: 'ai' },
 ];
+
+const TWO_PROJECT_TERMINALS: FixtureTerminal[] = [
+  ...DEMO_TERMINALS,
+  { id: 'demo-reviewer', alive: true, busy: false, cwd: '/work/demo', kind: 'ai' },
+  { id: 'second-agent', alive: true, busy: false, cwd: '/work/second', kind: 'ai' },
+];
+
+/** Open `demo` and a second project, `second`, whose terminals the shared fixture owns by folder. */
+async function openTwoProjects(page: Page) {
+  await openDemoProject(page, true, 1, TWO_PROJECT_TERMINALS, undefined, { featureSettings: features(false) });
+  const strip = page.locator('.project-tab-bar:not(.project-tab-bar--mobile)');
+  await expect(strip.locator('[data-tab-kind="project"]')).toHaveCount(1);
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/second' } }));
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({
+      status: 201,
+      json: { ...project('second', '/work/second'), apiPath: '/__hotsheet/project-api/demo-checkout' },
+    }),
+  );
+  await strip.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await expect(strip.locator('[data-tab-kind="project"]')).toHaveCount(2);
+  return strip;
+}
 
 const features = (chat: boolean) => (chat ? allFeaturesOn() : featureSettingsView({ 'ai-chat': false }));
 
@@ -86,4 +110,57 @@ test('HS2-4TKASN shows AI Chats while the AI chat feature is on', async ({ page 
   await expect(typeButton(dialog, 'chat')).toHaveAccessibleName('AI Chats');
   await expect(typeButton(dialog, 'chat')).toHaveAttribute('aria-pressed', 'true');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-4tkasn/chat-on-light-wide.png', animations: 'disabled' });
+});
+
+test('HS2-HC67SP toggles every listed item of one project from its heading', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openTwoProjects(page);
+  const dialog = await openGridVisibility(page);
+  const grid = page.getByRole('region', { name: 'Workspace Grid' });
+  const tiles = grid.locator('[data-component="terminal-tile"]');
+  await expect(tiles).toHaveCount(4);
+  // Only AI shells are listed, so the heading names them.
+  await typeButton(dialog, 'shell').click();
+  const row = (name: string) => dialog.locator('[data-action="toggle-terminal-visibility"]', { hasText: name });
+  await expect(dialog.locator('[data-action="toggle-terminal-visibility"]')).toHaveCount(3);
+  const demoHeading = dialog.getByRole('button', { name: 'Hide All demo AI Shells' });
+  await expect(demoHeading).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Hide All second AI Shells' })).toBeVisible();
+  // All visible: the heading hides all of demo's listed items, and only those.
+  await demoHeading.click();
+  await expect(row('Demo Agent')).toHaveAttribute('data-state', 'hidden');
+  await expect(row('Demo Reviewer')).toHaveAttribute('data-state', 'hidden');
+  await expect(row('Second Agent')).toHaveAttribute('data-state', 'visible');
+  await expect(tiles).toHaveCount(1);
+  // All hidden: the heading shows all.
+  const showDemo = dialog.getByRole('button', { name: 'Show All demo AI Shells' });
+  await showDemo.click();
+  await expect(row('Demo Agent')).toHaveAttribute('data-state', 'visible');
+  await expect(row('Demo Reviewer')).toHaveAttribute('data-state', 'visible');
+  // Mixed: one hidden row makes the heading show all again. Keyboard activation reaches it.
+  await row('Demo Reviewer').click();
+  await expect(row('Demo Reviewer')).toHaveAttribute('data-state', 'hidden');
+  await showDemo.focus();
+  await page.keyboard.press('Enter');
+  await expect(row('Demo Reviewer')).toHaveAttribute('data-state', 'visible');
+  await expect(dialog.getByRole('button', { name: 'Hide All demo AI Shells' })).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(row('Demo Agent')).toHaveAttribute('data-state', 'hidden');
+  // Terminals are not applied, so demo's shell is not in the grid until the segment returns.
+  await expect(grid.locator('[data-terminal-key="demo-checkout:demo-shell"]')).toHaveCount(0);
+  await typeButton(dialog, 'shell').click();
+  await expect(dialog.getByRole('button', { name: 'Show All demo Items' })).toBeVisible();
+  await expect(row('Demo Shell')).toHaveAttribute('data-state', 'visible');
+  const capture = 'target/visual-captures/hs2-hc67sp';
+  await dialog.screenshot({ path: `${capture}/heading-light-wide.png`, animations: 'disabled' });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await dialog.screenshot({ path: `${capture}/heading-dark-wide.png`, animations: 'disabled' });
+  await page.setViewportSize({ width: 960, height: 800 });
+  await dialog.screenshot({ path: `${capture}/heading-dark-medium.png`, animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: `${capture}/heading-dark-narrow.png`, animations: 'disabled' });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.screenshot({ path: `${capture}/heading-light-narrow.png`, animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await dialog.screenshot({ path: `${capture}/heading-light-wide-return.png`, animations: 'disabled' });
 });

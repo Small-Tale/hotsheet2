@@ -7,6 +7,7 @@ import {
   showTerminalVisibilityDemo,
   terminalVisibilityDemoState,
   TerminalVisibilityDialogDemo,
+  toggleTerminalVisibilityDemoProject,
   toggleTerminalVisibilityDemoType,
 } from './terminal-visibility-demo';
 
@@ -57,5 +58,22 @@ describe('TerminalVisibilityDialog demo', () => {
     markup = String(TerminalVisibilityDialogDemo());
     expect(markup).toContain('data-visibility-type="chat"');
     closeTerminalVisibilityDemo();
+  });
+  it('toggles a project heading between show-all and hide-all (HS2-HC67SP)', () => {
+    const initial = terminalVisibilityDemoState.value;
+    showTerminalVisibilityDemo();
+    // The seeded Focus group hides the development server, so the heading shows all.
+    expect(String(TerminalVisibilityDialogDemo())).toContain('aria-label="Show All Demo project Items"');
+    toggleTerminalVisibilityDemoProject('demo');
+    expect(terminalVisibilityDemoState.value.groups[1].hiddenKeys).toEqual([]);
+    expect(String(TerminalVisibilityDialogDemo())).toContain('aria-label="Hide All Demo project Items"');
+    toggleTerminalVisibilityDemoProject('demo');
+    expect(terminalVisibilityDemoState.value.groups[1].hiddenKeys).toEqual([
+      'demo:ai',
+      'demo:server',
+      'demo:ai-chat:demo',
+    ]);
+    closeTerminalVisibilityDemo();
+    terminalVisibilityDemoState.value = initial;
   });
 });

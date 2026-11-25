@@ -153,6 +153,27 @@ export function setAllTerminalsVisibleInGroup(
   return keys.reduce((next, key) => setTerminalVisibleInGroup(next, groupId, key, visible), state);
 }
 
+/**
+ * A project heading's toggle (HS2-HC67SP): show every listed item when any is hidden, otherwise
+ * hide them all. Returns the visibility the action applies.
+ */
+export function projectVisibilityToggleTarget(keys: readonly string[], hiddenKeys: readonly string[]): boolean {
+  const hidden = new Set(hiddenKeys);
+  return keys.some((key) => hidden.has(key));
+}
+
+const TYPE_NOUNS: Readonly<Record<TerminalVisibilityType, string>> = {
+  shell: 'Terminals',
+  ai: 'AI Shells',
+  chat: 'AI Chats',
+};
+
+/** The title-style noun for the listed item types: one type's name, or Items for several (HS2-HC67SP). */
+export function terminalVisibilityItemsNoun(kinds: readonly TerminalVisibilityType[]): string {
+  const distinct = [...new Set(kinds)];
+  return distinct.length === 1 ? TYPE_NOUNS[distinct[0]] : 'Items';
+}
+
 export function hideNewTerminalInNamedGroups(state: TerminalVisibilityState, key: string): TerminalVisibilityState {
   return {
     ...state,

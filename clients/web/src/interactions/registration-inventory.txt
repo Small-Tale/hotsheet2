@@ -135,6 +135,7 @@ terminals	delegate	document.body	'submit'	'[data-action="submit-terminal-visibil
 terminals	delegate	document.body	'click'	'[data-action="cancel-terminal-visibility-name"]'
 terminals	delegate	document.body	'kui-request-close'	'[data-terminal-visibility-name-dialog]'
 terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-visibility"]'
+terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-visibility-project"]'
 terminals	delegate	document.body	'click'	'[data-action="show-all-terminals-in-group"], [data-action="hide-all-terminals-in-group"]'
 terminals	delegate	document.body	'click'	'[data-action="open-terminal-project"]'
 terminals	delegate	document.body	'click'	'[data-action="open-grid-ai-chat"]'

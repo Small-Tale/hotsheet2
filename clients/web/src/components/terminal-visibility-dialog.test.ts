@@ -3,7 +3,11 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { initialTerminalVisibilityState, setTerminalTypeVisibleInGroup } from '../terminal-visibility';
+import {
+  initialTerminalVisibilityState,
+  setTerminalTypeVisibleInGroup,
+  setTerminalVisibleInGroup,
+} from '../terminal-visibility';
 import { TerminalVisibilityDialog, TerminalVisibilityNameDialog } from './terminal-visibility-dialog';
 
 const groups = [
@@ -184,5 +188,33 @@ describe('TerminalVisibilityDialog', () => {
     expect(withChat).toContain('data-visibility-type="chat"');
     expect(withChat).toContain('data-type-count="3"');
     expect(withChat).toContain('aria-label="Hide Chat"');
+  });
+  it('makes each project heading a named show-all or hide-all action (HS2-HC67SP)', () => {
+    const twoAgents = [
+      {
+        ...groups[0],
+        sessions: [
+          { ...groups[0].sessions[0], kind: 'ai' as const },
+          { ...groups[0].sessions[0], id: 'two', kind: 'ai' as const, title: 'Second' },
+        ],
+      },
+    ];
+    const render = (state = initialTerminalVisibilityState()) =>
+      String(
+        TerminalVisibilityDialog({ open: true, state, scope: 'dashboard', groups: twoAgents, chatFeatureOn: true }),
+      );
+    const visible = render();
+    expect(visible).toContain('data-action="toggle-terminal-visibility-project"');
+    expect(visible).toContain('data-project-id="project"');
+    expect(visible).toContain('aria-label="Hide All Project AI Shells"');
+    expect(visible).toMatch(/aria-label="Hide All Project AI Shells"[^>]*>[^]*?data-lucide="eye"/);
+    const mixed = render(setTerminalVisibleInGroup(initialTerminalVisibilityState(), 'default', 'project:two', false));
+    expect(mixed).toContain('aria-label="Show All Project AI Shells"');
+    expect(mixed).toMatch(/aria-label="Show All Project AI Shells"[^>]*>[^]*?data-lucide="eye-off"/);
+    // The heading still names the project for the outline.
+    expect(mixed).toContain('>Project</');
+    // The footer bulk actions stay.
+    expect(mixed).toContain('hide-all-terminals-in-group');
+    expect(mixed).toContain('show-all-terminals-in-group');
   });
 });

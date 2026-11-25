@@ -119,12 +119,15 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
       TERMINAL_DASHBOARD_VISIBILITY_SCOPE
     );
   }
-  function terminalKeysForVisibilityDialog() {
+  /** The dialog's listed keys, or one project's (HS2-HC67SP). */
+  function terminalKeysForVisibilityDialog(projectId?: string) {
     return terminalVisibilityItems(
       workspaceTerminalGroups(),
       terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
       terminalVisibleTypes(terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
-    ).flatMap((group) => group.items.map((item) => item.key));
+    )
+      .filter((group) => projectId === undefined || group.projectId === projectId)
+      .flatMap((group) => group.items.map((item) => item.key));
   }
   function drawerTabOrder(projectId: string) {
     return terminalDrawerOrderByProject.value[projectId] ?? loadDrawerTabOrder(localStorage, projectId);

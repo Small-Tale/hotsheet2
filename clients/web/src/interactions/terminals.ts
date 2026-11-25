@@ -69,6 +69,7 @@ import { type TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
   addTerminalVisibilityGroup,
+  projectVisibilityToggleTarget,
   removeTerminalVisibilityGroup,
   renameTerminalVisibilityGroup,
   selectTerminalVisibilityGroup,
@@ -106,7 +107,7 @@ export interface TerminalInteractionsDependencies {
   readonly terminalVisibilityContextMenu: Signal<{ id: string; x: number; y: number } | undefined>;
   readonly terminalVisibilityDialogScope: Signal<string | undefined>;
   readonly terminalVisibilityNamePrompt: Signal<TerminalVisibilityNamePrompt | undefined>;
-  readonly terminalKeysForVisibilityDialog: () => string[];
+  readonly terminalKeysForVisibilityDialog: (projectId?: string) => string[];
   /** The item types a scope's visibility dialog offers (HS2-4TKASN). */
   readonly terminalAvailableTypes: (scope: string) => readonly TerminalVisibilityType[];
   readonly terminalVisibleTypes: (scope: string) => readonly TerminalVisibilityType[];
@@ -933,6 +934,24 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
         visible = active.hiddenKeys.includes(key);
       persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, visible));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalVisibilityProject.selector, (_event, target) => {
+      const scope = terminalVisibilityDialogScope.value,
+        projectId = data(target).projectId;
+      if (!scope || !projectId) return;
+      // Any hidden listed item shows the project's listed items; otherwise all hide (HS2-HC67SP).
+      const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+        keys = terminalKeysForVisibilityDialog(projectId);
+      persistTerminalVisibility(
+        setAllTerminalsVisibleInGroup(
+          terminalVisibility.value,
+          active.id,
+          keys,
+          projectVisibilityToggleTarget(keys, active.hiddenKeys),
+        ),
+      );
     }),
   );
   lifetime.add(

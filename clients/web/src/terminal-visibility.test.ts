@@ -9,6 +9,7 @@ import {
   hideNewTerminalInNamedGroups,
   initialTerminalVisibilityState,
   parseTerminalVisibilityState,
+  projectVisibilityToggleTarget,
   removeTerminalVisibilityGroup,
   renameTerminalVisibilityGroup,
   scopeTerminalVisibilityTypes,
@@ -18,6 +19,7 @@ import {
   setTerminalVisibleInGroup,
   TERMINAL_VISIBILITY_TYPES,
   terminalVisibilityItems,
+  terminalVisibilityItemsNoun,
   type TerminalVisibilityState,
   type TerminalVisibilityType,
   terminalVisibilityTypes,
@@ -234,5 +236,49 @@ describe('workspace visibility segment availability (HS2-4TKASN)', () => {
     expect(applied()).toEqual(['shell', 'ai']);
     state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'chat', TERMINAL_VISIBILITY_TYPES);
     expect(effectiveTerminalVisibleTypes(state.groups[0])).toEqual(['shell', 'ai', 'chat']);
+  });
+});
+
+describe('project heading toggle (HS2-HC67SP)', () => {
+  it('shows all when any listed item is hidden and hides all when all are visible', () => {
+    // Mixed: one hidden shows all.
+    expect(projectVisibilityToggleTarget(['p:a', 'p:b'], ['p:b'])).toBe(true);
+    // All hidden shows all.
+    expect(projectVisibilityToggleTarget(['p:a', 'p:b'], ['p:a', 'p:b'])).toBe(true);
+    // All visible hides all; hidden keys outside the listed set do not count.
+    expect(projectVisibilityToggleTarget(['p:a', 'p:b'], [])).toBe(false);
+    expect(projectVisibilityToggleTarget(['p:a', 'p:b'], ['q:c'])).toBe(false);
+    expect(projectVisibilityToggleTarget([], ['p:a'])).toBe(false);
+  });
+
+  it('applies the rule through repeated, interleaved, and refill sequences', () => {
+    const keys = ['p:a', 'p:b', 'p:c'];
+    let state = addTerminalVisibilityGroup(initialTerminalVisibilityState(), 'focus').state;
+    const toggle = () =>
+      (state = setAllTerminalsVisibleInGroup(
+        state,
+        'focus',
+        keys,
+        projectVisibilityToggleTarget(keys, state.groups[1].hiddenKeys),
+      ));
+    toggle();
+    expect(state.groups[1].hiddenKeys).toEqual(keys);
+    toggle();
+    expect(state.groups[1].hiddenKeys).toEqual([]);
+    state = setTerminalVisibleInGroup(state, 'focus', 'p:b', false);
+    state = setTerminalVisibleInGroup(state, 'focus', 'q:other', false);
+    toggle();
+    expect(state.groups[1].hiddenKeys).toEqual(['q:other']);
+    toggle();
+    expect(state.groups[1].hiddenKeys).toEqual(['q:other', ...keys]);
+    expect(state.groups[0].hiddenKeys).toEqual([]);
+  });
+
+  it('names the listed types in title style', () => {
+    expect(terminalVisibilityItemsNoun(['ai', 'ai'])).toBe('AI Shells');
+    expect(terminalVisibilityItemsNoun(['shell'])).toBe('Terminals');
+    expect(terminalVisibilityItemsNoun(['chat'])).toBe('AI Chats');
+    expect(terminalVisibilityItemsNoun(['shell', 'ai'])).toBe('Items');
+    expect(terminalVisibilityItemsNoun([])).toBe('Items');
   });
 });

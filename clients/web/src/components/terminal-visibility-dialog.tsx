@@ -21,8 +21,10 @@ import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
   effectiveTerminalVisibleTypes,
+  projectVisibilityToggleTarget,
   scopeTerminalVisibilityTypes,
   terminalVisibilityItems,
+  terminalVisibilityItemsNoun,
   type TerminalVisibilityState,
   type TerminalVisibilityType,
 } from '../terminal-visibility';
@@ -207,40 +209,57 @@ export function TerminalVisibilityDialog({
           {visibleGroups.length === 0 ? (
             <Text tone="quiet">No workspace items match the selected types.</Text>
           ) : (
-            visibleGroups.map((group) => (
-              <section data-key={group.projectId}>
-                <ListHeader label={group.projectName} />
-                <List className="terminal-visibility-dialog__rows">
-                  {group.items.map((item) => {
-                    const { key, label } = item;
-                    const visible = !hidden.has(key);
-                    return (
-                      <ListItem
-                        action="toggle-terminal-visibility"
-                        itemId={key}
-                        accessibleLabel={`${visible ? 'Hide' : 'Show'} ${label}`}
-                        state={visible ? 'visible' : 'hidden'}
-                        icon={<LucideIcon icon={visible ? Eye : EyeOff} name={visible ? 'eye' : 'eye-off'} />}
-                        label={
-                          visible ? (
-                            label
-                          ) : (
-                            <Text variant="span" tone="quiet">
-                              {label}
+            visibleGroups.map((group) => {
+              const show = projectVisibilityToggleTarget(
+                group.items.map((item) => item.key),
+                active.hiddenKeys,
+              );
+              return (
+                <section data-key={group.projectId}>
+                  {/* The heading acts on the project's listed items (HS2-HC67SP): any hidden shows all,
+                    otherwise it hides all. Kerf ListHeader's action mode keeps it one named stop. */}
+                  <ListHeader
+                    label={group.projectName}
+                    action={TERMINALS_ACTIONS.toggleTerminalVisibilityProject.value}
+                    actionLabel={`${show ? 'Show' : 'Hide'} All ${group.projectName} ${terminalVisibilityItemsNoun(
+                      group.items.map((item) => item.kind),
+                    )}`}
+                    // Like each row, the icon reports state (any hidden: eye-off) and the label the action.
+                    actionIcon={<LucideIcon icon={show ? EyeOff : Eye} name={show ? 'eye-off' : 'eye'} />}
+                    triggerAttributes={{ 'data-project-id': group.projectId }}
+                  />
+                  <List className="terminal-visibility-dialog__rows">
+                    {group.items.map((item) => {
+                      const { key, label } = item;
+                      const visible = !hidden.has(key);
+                      return (
+                        <ListItem
+                          action="toggle-terminal-visibility"
+                          itemId={key}
+                          accessibleLabel={`${visible ? 'Hide' : 'Show'} ${label}`}
+                          state={visible ? 'visible' : 'hidden'}
+                          icon={<LucideIcon icon={visible ? Eye : EyeOff} name={visible ? 'eye' : 'eye-off'} />}
+                          label={
+                            visible ? (
+                              label
+                            ) : (
+                              <Text variant="span" tone="quiet">
+                                {label}
+                              </Text>
+                            )
+                          }
+                          trailing={
+                            <Text variant="span" size="compact" tone="quiet">
+                              {visible ? 'Visible' : 'Hidden'}
                             </Text>
-                          )
-                        }
-                        trailing={
-                          <Text variant="span" size="compact" tone="quiet">
-                            {visible ? 'Visible' : 'Hidden'}
-                          </Text>
-                        }
-                      />
-                    );
-                  })}
-                </List>
-              </section>
-            ))
+                          }
+                        />
+                      );
+                    })}
+                  </List>
+                </section>
+              );
+            })
           )}
         </List>
         {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (
