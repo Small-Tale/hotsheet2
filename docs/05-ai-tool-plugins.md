@@ -3012,7 +3012,9 @@ ticket in the selected store. Otherwise it is kept with a reason:
 `malformed_name`, `unknown_slug`, `unintegrated_commits` (with the count), `ticket_open`
 or `ticket_moved`. The default is a dry run (`would_delete`); `--apply` runs
 `git push <remote> --delete` and reports `deleted` or `delete_failed` with the Git
-error. A rerun is a no-op. The integration ticket runs it for its own branch before
+error. The repository's `pre-push` hook lets a delete-only push of non-main branches
+skip the local gate, because it sends no code (HS2-12K3FN). A rerun is a no-op. The
+integration ticket runs it for its own branch before
 completion; an integrator or maintainer can run it for every branch.
 
 `retire-finished` is the one supported step that retires these records, so an

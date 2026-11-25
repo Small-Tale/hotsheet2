@@ -36,6 +36,12 @@ field name them as deferred. The completion note must then cite the green Linux 
 Rust job rather than claim they ran locally. The maintainer chose this over an opt-in
 Docker probe on 2026-11-25.
 
+HS2-12K3FN lets a push whose updates all delete non-main branches skip the gate in
+`.githooks/pre-push`, because such a push sends no commits or tree. Deleting
+integrated `merge-pending/<SLUG>` branches with `coordination merge-pending-prune
+--apply` is the main use. A push that also sends commits, and any update to `main`,
+keeps the normal path.
+
 ## Read-only dependency edge preview (HS2-55MWQ9)
 
 `scripts/check.sh --plan` also reports an `edgePreview`. This is a candidate
