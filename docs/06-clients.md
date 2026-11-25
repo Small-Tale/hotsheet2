@@ -1623,7 +1623,13 @@ checkout name>`, where the host is the machine name the peer last reported on th
   wake, so a wake never adds a request or timer of its own (HS2-ZTAJ1R).
   A project that remains unavailable stays in the tab bar with a red title and error icon;
   selecting it presents the exact failure, known stale-server context, its remembered root,
-  likely recovery steps, and an in-place retry action. Failed tabs are not draggable. They are
+  likely recovery steps, and an in-place retry action. The shell never drops a region for a
+  selected tab that is not ready (unavailable, a remote project loading or reconnecting, or a
+  project still opening): the project sidebar, inspector, workspace toolbar, New Ticket action, and
+  terminal drawer keep the user's visibility and sizes, the rails and drawer show an empty state,
+  and every project control (view switcher, sort, selection actions, search, More, New Ticket,
+  Show Terminal Drawer) stays in place, disabled with the reason as its tooltip; rail toggles and
+  an open drawer's Hide action stay live (HS2-H0QGK7). Failed tabs are not draggable. They are
   closable through the tab's close control or context menu. The unavailable tab's menu offers only
   Close Tab because it has no live project to minimize (HS2-TGYKHQ); closing confirms the choice and
   forgets its remembered root without requiring the project to open (HS2-TGYKHQ). Until then,

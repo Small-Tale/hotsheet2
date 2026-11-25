@@ -81,6 +81,9 @@ import {
   statsSidebarPanel,
   terminalOperationsSurfacePanel,
   terminalRailSurfacePanel,
+  unavailableInspectorPanel,
+  unavailableSidebarPanel,
+  UnavailableTerminalDrawer,
   WorkspaceSurface,
 } from '../components/workspace-composition-surfaces';
 import type { TicketViewActionSpec } from '../components/workspace-controls';
@@ -103,6 +106,7 @@ import type { PermissionItem } from '../permission-notifications';
 import type { WorkersLive } from '../project-live-summary';
 import { minimizedProjectDescription } from '../project-minimization';
 import { projectTabDropKind } from '../project-tab-file-drop';
+import { unavailableProjectKind, unavailableProjectShell } from '../project-unavailable-shell';
 import type { DesktopRemoteServer } from '../remote-projects/client';
 import { parseRemoteProjectId } from '../remote-projects/identity';
 import { remotePlaceholderTabId, type RemoteTabPlaceholder } from '../remote-projects/reconnect';
@@ -538,7 +542,33 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         />
       );
     }
-    if (restoreFailure)
+    // A selected tab that is not ready (unavailable, remote loading or reconnecting, or still opening)
+    // keeps every shell region at the user's remembered visibility and size: the rails and terminal
+    // drawer render empty and every project control stays in place, disabled with the reason, so the
+    // layout never jumps between a working and a non-ready tab (HS2-H0QGK7).
+    const unavailableKind = unavailableProjectKind({
+      restoreFailure: Boolean(restoreFailure),
+      remotePhase: remotePlaceholder?.phase,
+      opening: Boolean(openingRoot),
+    });
+    if (unavailableKind) {
+      const unavailableName = restoreFailure?.name ?? remotePlaceholder?.name ?? pendingProjectName(openingRoot ?? ''),
+        unavailable = unavailableProjectShell(unavailableKind, unavailableName),
+        workspace = restoreFailure ? (
+          <ProjectRestoreError {...restoreFailure} />
+        ) : remotePlaceholder ? (
+          <RemoteProjectPlaceholder
+            projectId={remotePlaceholder.id}
+            name={remotePlaceholder.name}
+            phase={remotePlaceholder.phase}
+            connecting={remotePlaceholder.connecting}
+            bindingId={remotePlaceholder.bindingId}
+            {...(remotePlaceholder.error ? { error: remotePlaceholder.error } : {})}
+            renewalRequested={remotePlaceholder.renewalRequested ?? false}
+          />
+        ) : (
+          <ProjectOpeningState name={unavailableName} />
+        );
       return (
         <MainShell
           tabs={tabs}
@@ -546,51 +576,47 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           announcerTrigger={announcerTrigger()}
           announcer={announcerPanel()}
           mode="project"
-          header={<WorkspaceIdentity projectName="Project unavailable" id="workspace-page-title" headingLevel={1} />}
           mobile={viewportMobile.value}
-          workspace={<ProjectRestoreError {...restoreFailure} />}
-          inspectorVisible={false}
-          viewportOverlay={popup}
-        />
-      );
-    if (remotePlaceholder)
-      return (
-        <MainShell
-          tabs={tabs}
-          minimizedProjects={minimizedProjects}
-          announcerTrigger={announcerTrigger()}
-          announcer={announcerPanel()}
-          mode="project"
-          header={<WorkspaceIdentity projectName={remotePlaceholder.name} id="workspace-page-title" headingLevel={1} />}
-          mobile={viewportMobile.value}
-          workspace={
-            <RemoteProjectPlaceholder
-              projectId={remotePlaceholder.id}
-              name={remotePlaceholder.name}
-              phase={remotePlaceholder.phase}
-              connecting={remotePlaceholder.connecting}
-              bindingId={remotePlaceholder.bindingId}
-              {...(remotePlaceholder.error ? { error: remotePlaceholder.error } : {})}
-              renewalRequested={remotePlaceholder.renewalRequested ?? false}
+          sidebar={unavailableSidebarPanel(unavailable.sidebar)}
+          sidebarVisible={!sidebarCollapsed.value}
+          sidebarSize={sidebarSize.value}
+          header={
+            <WorkspaceIdentity
+              projectName={restoreFailure ? 'Project unavailable' : unavailableName}
+              id="workspace-page-title"
+              headingLevel={1}
             />
           }
-          inspectorVisible={false}
-          viewportOverlay={popup}
-        />
-      );
-    if (openingRoot) {
-      const openingName = pendingProjectName(openingRoot);
-      return (
-        <MainShell
-          tabs={tabs}
-          minimizedProjects={minimizedProjects}
-          announcerTrigger={announcerTrigger()}
-          announcer={announcerPanel()}
-          mode="project"
-          header={<WorkspaceIdentity projectName={openingName} id="workspace-page-title" headingLevel={1} />}
-          mobile={viewportMobile.value}
-          workspace={<ProjectOpeningState name={openingName} />}
-          inspectorVisible={false}
+          headerActions={
+            <WorkspaceControls
+              mode={viewMode.value}
+              sort={sort.value}
+              sortDirection={sortDirection.value}
+              unavailableReason={unavailable.reason}
+            />
+          }
+          projectTabAction={
+            viewportMobile.value
+              ? undefined
+              : {
+                  kind: 'new-ticket',
+                  disabledReason: unavailable.reason,
+                  ...(projectTabActionCompact.value ? { label: 'Ticket…', size: 'compact' as const } : {}),
+                }
+          }
+          workspace={workspace}
+          terminalDrawer={
+            terminalDrawerMounted.value ? <UnavailableTerminalDrawer message={unavailable.drawer} /> : <></>
+          }
+          terminalDrawerVisible={terminalDrawerVisible.value}
+          terminalDrawerSize={appRegionSize('app-bottom-drawer')}
+          terminalDrawerMax={terminalDrawerMax.value}
+          terminalDrawerMin={terminalDrawerMin.value}
+          terminalDrawerTransitioning={terminalDrawerTransitioning.value}
+          terminalDrawerDisabledReason={unavailable.reason}
+          inspector={unavailableInspectorPanel(unavailable.inspector)}
+          inspectorVisible={!inspectorCollapsed.value}
+          inspectorSize={inspectorSize.value}
           viewportOverlay={popup}
         />
       );

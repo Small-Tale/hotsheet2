@@ -142,6 +142,10 @@ tracks upstream gaps and Hot Sheet adoption work against a dated source snapshot
   the `Switch` Kerf recommends for a setting that applies at once. The maintainer asked for
   a checkbox beside Hide Listed / Show Listed. It applies immediately and is remembered per
   workspace, like the rest of the dialog's visibility choices.
+- The shell's regions never disappear with the selected project's state (HS2-H0QGK7). A tab
+  that is unavailable, still opening, or whose remote server is unreachable keeps the sidebar,
+  inspector, toolbar, and terminal drawer at the user's sizes: rails show a Kerf `EmptyState`,
+  and project controls are disabled with the reason as their tooltip rather than removed.
 
 ## Hot Sheet ticket lessons
 

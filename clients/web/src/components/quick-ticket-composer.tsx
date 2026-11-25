@@ -139,28 +139,43 @@ export function QuickTicketLauncher({
   label = 'New ticket…',
   size = 'default',
   dropTarget = false,
-}: { attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact'; dropTarget?: boolean } = {}) {
-  // The app-owned drop shell carries drag feedback without styling Kerf's Button root.
+  disabledReason,
+}: {
+  attachmentsEnabled?: boolean;
+  label?: string;
+  size?: 'default' | 'compact';
+  dropTarget?: boolean;
+  /** Disable the launcher and its drop target while the selected project is not ready (HS2-H0QGK7). */
+  disabledReason?: string;
+} = {}) {
+  // The app-owned drop shell carries drag feedback without styling Kerf's Button root. A disabled
+  // launcher keeps its place and size but carries neither the action nor the drop targets.
   return (
     <span
       class="quick-ticket-composer__launcher"
       data-size={size}
       data-component="quick-ticket-composer-launcher"
-      {...SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.attrs}
-      {...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs}
-      {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
-      data-ticket-drop-key={NEW_TICKET_LAUNCHER_DROP_KEY}
-      data-dragging-ticket={dropTarget ? 'true' : undefined}
+      {...(disabledReason
+        ? {}
+        : {
+            ...SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.attrs,
+            ...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs,
+            ...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs,
+            'data-ticket-drop-key': NEW_TICKET_LAUNCHER_DROP_KEY,
+          })}
+      data-dragging-ticket={dropTarget && !disabledReason ? 'true' : undefined}
     >
       <Button
         tone="brand"
         shape="pill"
         size={size}
+        disabled={Boolean(disabledReason)}
         icon={<LucideIcon size="s" icon={Plus} name="plus" />}
         title={
-          attachmentsEnabled
+          disabledReason ??
+          (attachmentsEnabled
             ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here'
-            : 'Create a new ticket or drop tickets to duplicate'
+            : 'Create a new ticket or drop tickets to duplicate')
         }
       >
         {label}

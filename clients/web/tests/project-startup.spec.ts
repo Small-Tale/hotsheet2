@@ -596,6 +596,115 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   await page.screenshot({ path: 'target/visual-captures/hs2-v9zvw0-partial-recovery-wide.png', fullPage: true });
 });
 
+test('HS2-H0QGK7 keeps the sidebars, toolbar, and drawer for an unavailable tab, with project controls disabled', async ({
+  page,
+}) => {
+  const fixture = await startupFixture(page, ['alpha', 'beta'], 'alpha', false);
+  fixture.unavailable.set('beta', {});
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  const sidebar = page.getByRole('complementary', { name: 'Sidebar rail' }),
+    inspector = page.getByRole('complementary', { name: 'Inspector rail' }),
+    toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
+    failure = page.locator('.project-restore-error'),
+    viewModes = toolbar.getByRole('group', { name: 'View mode' }).getByRole('button'),
+    sortSelect = toolbar.locator('kui-select[name="workspace-sort"]'),
+    newTicket = page.locator('[data-component="quick-ticket-composer-launcher"]'),
+    showDrawer = page.getByRole('button', { name: 'Show Terminal Drawer' }),
+    sidebarToggle = page.locator('[data-action="toggle-project-sidebar"]').first();
+  const geometry = async () => Promise.all([sidebar, inspector, toolbar].map(async (region) => region.boundingBox()));
+  const expectReady = async () => {
+    await expect(failure).toHaveCount(0);
+    await expect(viewModes.first()).toBeEnabled();
+    await expect(sortSelect).not.toHaveAttribute('disabled', /.*/u);
+    await expect(newTicket).toHaveAttribute('data-action', 'expand-ticket-composer');
+    await expect(showDrawer).toBeEnabled();
+  };
+  await expect(sidebar).toBeVisible();
+  await expect(toolbar).toBeVisible();
+  await expectReady();
+  const ready = await geometry();
+  expect(ready[0]).not.toBeNull();
+
+  // The unavailable tab keeps every region where it was; each renders empty and project controls are
+  // disabled with the reason, never removed.
+  const betaTab = page.locator('[data-tab-kind="project"][data-restore-failure="true"]');
+  await expect(page.locator('.project-tab-bar [data-project-pending="true"]')).toHaveCount(0);
+  await betaTab.getByRole('tab', { name: 'beta' }).click();
+  await expect(failure).toContainText('beta could not be reopened');
+  await expect(failure.getByRole('button', { name: 'Retry project' })).toBeEnabled();
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar.locator('[data-project-unavailable-region="sidebar"]')).toContainText('Project Unavailable');
+  await expect(toolbar).toBeVisible();
+  const reason = 'Unavailable because beta could not be opened';
+  await expect(viewModes).not.toHaveCount(0);
+  for (const mode of await viewModes.all()) await expect(mode).toBeDisabled();
+  await expect(sortSelect).toHaveAttribute('disabled', /.*/u);
+  await expect(toolbar.locator('[data-action="toggle-selected-up-next"]')).toBeDisabled();
+  await expect(toolbar.locator('[data-action="toggle-selected-up-next"]')).toHaveAttribute('title', reason);
+  await expect(newTicket).not.toHaveAttribute('data-action', /.*/u);
+  await expect(newTicket.locator('wa-button, button').first()).toHaveAttribute('disabled', /.*/u);
+  await expect(showDrawer).toBeDisabled();
+  await expect(showDrawer).toHaveAttribute('title', reason);
+  // Rail toggles stay live: they only change layout.
+  await expect(sidebarToggle).toBeEnabled();
+  expect(await geometry()).toEqual(ready);
+  // Clicking a disabled New Ticket opens no composer.
+  await newTicket.click({ force: true });
+  await expect(page.locator('[data-component="quick-ticket-composer"][data-expanded="true"]')).toHaveCount(0);
+
+  // Wide, medium, phone, and back to wide in both schemes: the unavailable shell follows the same
+  // breakpoints. HS2_H0QGK7_CAPTURE_DIR saves each state for visual review.
+  const captureDir = process.env.HS2_H0QGK7_CAPTURE_DIR;
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [name, width, height] of [
+      ['wide', 1440, 900],
+      ['medium', 940, 800],
+      ['narrow', 390, 844],
+      ['returned-wide', 1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect(failure).toBeVisible();
+      await expect(toolbar).toBeVisible();
+      if (captureDir) {
+        // The shell changes layout at the phone breakpoint; capture after its finite transition settles.
+        await page.waitForTimeout(250);
+        await page.screenshot({ path: `${captureDir}/hs2-h0qgk7-unavailable-${name}-${scheme}.png` });
+      }
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // Back on the working project every control is enabled again, with the same region geometry.
+  await projectTab(page, 'alpha').click();
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  await expectReady();
+  expect(await geometry()).toEqual(ready);
+  // An open terminal drawer stays open on the unavailable tab, empty, with its own Hide action.
+  await showDrawer.click();
+  const drawerRegion = page.locator('[data-project-unavailable-region="drawer"]');
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toHaveCount(0);
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-h0qgk7-working-drawer-open-wide-light.png` });
+  await betaTab.getByRole('tab', { name: 'beta' }).click();
+  await expect(drawerRegion).toContainText('Terminals appear here once beta opens again.');
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-h0qgk7-unavailable-drawer-open-wide-light.png` });
+  await drawerRegion.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await expect(drawerRegion).toBeHidden();
+  await expect(showDrawer).toBeDisabled();
+  await projectTab(page, 'alpha').click();
+  await expect(showDrawer).toBeEnabled();
+  if (captureDir) {
+    await page.screenshot({ path: `${captureDir}/hs2-h0qgk7-working-wide-light.png` });
+    await showDrawer.screenshot({ path: `${captureDir}/hs2-h0qgk7-drawer-control-enabled.png` });
+    await betaTab.getByRole('tab', { name: 'beta' }).click();
+    await expect(showDrawer).toBeDisabled();
+    await showDrawer.screenshot({ path: `${captureDir}/hs2-h0qgk7-drawer-control-disabled.png` });
+    await newTicket.screenshot({ path: `${captureDir}/hs2-h0qgk7-new-ticket-disabled.png` });
+  }
+});
+
 test('defers inactive setup and migration prompts until their tab is activated', async ({ page }) => {
   const fixture = await startupFixture(page, ['alpha', 'beta', 'gamma'], 'beta');
   const alphaOpening = gate();

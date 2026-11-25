@@ -20,6 +20,7 @@ import { PanelLeftClose, PanelLeftOpen } from 'lucide';
 import { AppShell } from '../components/app-shell';
 import { type ConnectionState, ConnectionStateBanner } from '../components/connection-state-banner';
 import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
+import { ProjectRestoreError } from '../components/project-restore-error';
 import { projectSidebarPanel } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
 import { PROJECT_TAB_BAR_ID } from '../components/project-tab-bar';
@@ -30,10 +31,16 @@ import { TicketBoard } from '../components/ticket-board';
 import { ticketInspectorPanel } from '../components/ticket-inspector';
 import { ticketInspectorPlaceholderPanel } from '../components/ticket-inspector-placeholder';
 import { TicketList } from '../components/ticket-list';
+import {
+  unavailableInspectorPanel,
+  unavailableSidebarPanel,
+  UnavailableTerminalDrawer,
+} from '../components/workspace-composition-surfaces';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { hostCallouts, projectLiveSummary } from '../project-live-summary';
+import { unavailableProjectShell } from '../project-unavailable-shell';
 import { DemoEvent } from './components/demo-event';
 import { tabContextMenu } from './components/demo-state';
 import {
@@ -131,6 +138,8 @@ export const appShellSettings = {
   /** The phone page header (`mobileView`): a ticket-view Select beside the view's action (HS2-T35VN7). */
   mobileView: signal(false),
   mobileViewValue: signal('all'),
+  /** The selected project is unavailable (HS2-H0QGK7): every region stays, empty, with controls disabled. */
+  projectUnavailable: signal(false),
 };
 
 const mobileViewChoices = [
@@ -145,6 +154,7 @@ export function resetAppShellDemo(root?: ParentNode): void {
   appShellSettings.overlayOpen.value = false;
   appShellSettings.mobileView.value = false;
   appShellSettings.mobileViewValue.value = 'all';
+  appShellSettings.projectUnavailable.value = false;
   shellLiveExpanded.value = false;
   if (root)
     syncSettingsControls(root, 'app-shell', {
@@ -152,6 +162,7 @@ export function resetAppShellDemo(root?: ParentNode): void {
       checked: {
         'overlay-open': appShellSettings.overlayOpen.value,
         'mobile-view-header': appShellSettings.mobileView.value,
+        'project-unavailable': appShellSettings.projectUnavailable.value,
       },
     });
 }
@@ -177,6 +188,11 @@ export function AppShellSettings() {
         name="mobile-view-header"
         checked={appShellSettings.mobileView.value}
         label="Phone view header (view Select and action)"
+      />
+      <Checkbox
+        name="project-unavailable"
+        checked={appShellSettings.projectUnavailable.value}
+        label="Selected project unavailable (empty regions, disabled controls)"
       />
       <Button type="button" action={'reset-settings'}>
         Reset
@@ -627,6 +643,51 @@ export function AppShellDemo() {
     }
   })();
   const toolbarTitle = globalMode ? projectName : projectSettings ? 'Project Settings' : viewName;
+  // The production non-ready shell (HS2-H0QGK7): the same regions, each empty, with controls disabled.
+  const unavailable =
+    appShellSettings.projectUnavailable.value && !globalMode
+      ? unavailableProjectShell('restore-failure', 'Hot Sheet 2')
+      : undefined;
+  if (unavailable)
+    return (
+      <CatalogExample label="Interactive" viewport={{ width: 'full' }} rootAttributes={{ 'data-app-shell-demo': '' }}>
+        <AppShell
+          presentation={appShellSettings.presentation.value}
+          workAreaFocusRing={!appShellSettings.overlayOpen.value}
+          mode="project"
+          tabs={projectTabs.value.filter((tab) => !minimizedProjectTabs.value.includes(tab.id))}
+          minimizedProjects={demoMinimizedProjects()}
+          sidebar={unavailableSidebarPanel(unavailable.sidebar)}
+          sidebarVisible={shellSidebarVisible.value}
+          sidebarSize={shellSidebarSize.value}
+          header={
+            <WorkspaceIdentity projectName="Project unavailable" id="app-shell-demo-page-title" headingLevel={1} />
+          }
+          headerActions={
+            <WorkspaceControls
+              mode={workspaceMode.value}
+              sort={workspaceSort.value}
+              unavailableReason={unavailable.reason}
+            />
+          }
+          projectTabAction={{ kind: 'new-ticket', disabledReason: unavailable.reason }}
+          workspace={
+            <ProjectRestoreError
+              root="/work/hot-sheet-2"
+              name="Hot Sheet 2"
+              error="The project folder was moved or deleted."
+            />
+          }
+          terminalDrawer={<UnavailableTerminalDrawer message={unavailable.drawer} />}
+          terminalDrawerVisible={shellTerminalDrawerVisible.value}
+          terminalDrawerDisabledReason={unavailable.reason}
+          inspector={unavailableInspectorPanel(unavailable.inspector)}
+          inspectorVisible={inspectorOpen.value}
+          inspectorSize={shellInspectorSize.value}
+        />
+        <DemoEvent>{shellEvent.value}</DemoEvent>
+      </CatalogExample>
+    );
   return (
     <CatalogExample label="Interactive" viewport={{ width: 'full' }} rootAttributes={{ 'data-app-shell-demo': '' }}>
       <AppShell
@@ -879,6 +940,8 @@ function wireAppShellDemo(root: HTMLElement): () => void {
         appShellSettings.presentation.value = control.value as typeof appShellSettings.presentation.value;
       if (control.getAttribute('name') === 'overlay-open') appShellSettings.overlayOpen.value = control.checked;
       if (control.getAttribute('name') === 'mobile-view-header') appShellSettings.mobileView.value = control.checked;
+      if (control.getAttribute('name') === 'project-unavailable')
+        appShellSettings.projectUnavailable.value = control.checked;
     }),
   );
   demoListeners.add(

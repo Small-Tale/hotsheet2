@@ -1,5 +1,6 @@
 import '@kerfjs/ui/layout.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { Pane } from '@kerfjs/ui/pane';
@@ -7,6 +8,8 @@ import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 import { featureOn } from '../feature-areas';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
+import type { UnavailableRegionMessage } from '../project-unavailable-shell';
 import { ConfidenceCalibration, type ConfidenceCalibrationState } from './confidence-calibration';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
@@ -170,18 +173,27 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
   );
 }
 
-function statsPlaceholderPanel(label: string, toggle: SidebarPanelParts['toggle'], message: string): SidebarPanelParts {
+function placeholderPanel(
+  label: string,
+  toggle: SidebarPanelParts['toggle'],
+  message: string,
+  { detail, rootAttributes }: { detail?: string; rootAttributes: Record<`data-${string}`, string> },
+): SidebarPanelParts {
   return {
     label,
     toolbar: { label: `${label} toolbar`, dividerSides: '' },
     toggle,
     content: (
-      <List fill hAlign="center" vAlign="middle" rootAttributes={{ 'data-stats-placeholder': 'true' }}>
-        <EmptyState title={message} />
+      <List fill hAlign="center" vAlign="middle" rootAttributes={rootAttributes}>
+        <EmptyState title={message} detail={detail} />
       </List>
     ),
     pane: {},
   };
+}
+
+function statsPlaceholderPanel(label: string, toggle: SidebarPanelParts['toggle'], message: string): SidebarPanelParts {
+  return placeholderPanel(label, toggle, message, { rootAttributes: { 'data-stats-placeholder': 'true' } });
 }
 
 /**
@@ -201,6 +213,49 @@ export function statsInspectorPanel(): SidebarPanelParts {
     'Stats details',
     inspectorToggle('stats details'),
     'Select a statistic to see its details',
+  );
+}
+
+/**
+ * A selected project that is not ready keeps the project sidebar's rail, empty, with the same toggle
+ * the working sidebar uses, so the layout never jumps between tabs (HS2-H0QGK7).
+ */
+export function unavailableSidebarPanel(message: UnavailableRegionMessage): SidebarPanelParts {
+  return placeholderPanel(
+    'Project Sidebar',
+    { action: 'toggle-project-sidebar', name: 'Project Sidebar' },
+    message.title,
+    {
+      detail: message.detail,
+      rootAttributes: { 'data-project-unavailable-region': 'sidebar' },
+    },
+  );
+}
+/** The inspector rail's empty state while the selected project is not ready (HS2-H0QGK7). */
+export function unavailableInspectorPanel(message: UnavailableRegionMessage): SidebarPanelParts {
+  return placeholderPanel('Ticket Inspector', inspectorToggle(), message.title, {
+    detail: message.detail,
+    rootAttributes: { 'data-project-unavailable-region': 'inspector' },
+  });
+}
+
+/**
+ * The terminal drawer's content while the selected project is not ready (HS2-H0QGK7): an empty state
+ * with the drawer's own Hide action, since the project's terminal toolbar is not available.
+ */
+export function UnavailableTerminalDrawer({ message }: { message: UnavailableRegionMessage }) {
+  return (
+    <List fill hAlign="center" vAlign="middle" rootAttributes={{ 'data-project-unavailable-region': 'drawer' }}>
+      <EmptyState
+        title={message.title}
+        detail={message.detail}
+        action={
+          <Button size="compact" action={TERMINALS_ACTIONS.toggleTerminalDrawer.value}>
+            Hide Terminal Drawer
+          </Button>
+        }
+      />
+    </List>
   );
 }
 

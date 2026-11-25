@@ -14,7 +14,7 @@ import {
   AIConversationSettings,
   resetAIConversationDemo,
 } from './ai-conversation-demo';
-import { AppShellSettings, appShellSettings, resetAppShellDemo } from './app-shell-demo';
+import { AppShellDemo, AppShellSettings, appShellSettings, resetAppShellDemo } from './app-shell-demo';
 import { demoCatalog, demoKind, demosUsing, findDemo, flattenCatalog, kerfCatalogSections } from './catalog';
 import {
   connectionDetailsAssessment,
@@ -700,6 +700,22 @@ describe('UX demo catalog', () => {
     appShellSettings.overlayOpen.value = true;
     resetAppShellDemo();
     expect([appShellSettings.presentation.value, appShellSettings.overlayOpen.value]).toEqual(['framed', false]);
+  });
+
+  it('HS2-H0QGK7 stages the unavailable-project shell with empty regions and disabled controls', () => {
+    expect(String(AppShellSettings())).toContain('name="project-unavailable"');
+    appShellSettings.projectUnavailable.value = true;
+    try {
+      const html = String(AppShellDemo());
+      for (const region of ['sidebar', 'inspector', 'drawer'])
+        expect(html).toContain(`data-project-unavailable-region="${region}"`);
+      expect(html).toContain('Hot Sheet 2 could not be reopened.');
+      expect(html).toContain('title="Unavailable because Hot Sheet 2 could not be opened"');
+      expect(html).not.toContain('data-action="expand-ticket-composer"');
+    } finally {
+      resetAppShellDemo();
+    }
+    expect(appShellSettings.projectUnavailable.value).toBe(false);
   });
 
   it('projects the reader demo title-editing state into TicketReader (HS2-0VFPD5)', () => {

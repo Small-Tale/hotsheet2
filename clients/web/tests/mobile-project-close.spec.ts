@@ -171,7 +171,15 @@ test('HS2-125F0X closes real unavailable desktop project tabs by right-click and
     ] as const) {
       await page.setViewportSize({ width, height: 844 });
       await expect(failure).toBeVisible();
-      if (width >= 1024) await expect(tabs).toHaveCount(2);
+      if (width >= 1024) {
+        await expect(tabs).toHaveCount(2);
+        // The shell keeps its regions for the unavailable tab, empty, with controls disabled (HS2-H0QGK7).
+        await expect(
+          page.getByRole('complementary', { name: 'Sidebar rail' }).locator('[data-project-unavailable-region]'),
+        ).toContainText('Project Unavailable');
+        await expect(page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeDisabled();
+      }
       if (captureDir) {
         // The shell changes layout at this breakpoint; capture after its finite transition settles.
         await page.waitForTimeout(250);
