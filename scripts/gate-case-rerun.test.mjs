@@ -16,15 +16,35 @@ import {
 
 export function playwrightReport(cases) {
   const files = new Map();
-  for (const { file = 'synthetic.spec.ts', line, title, status, project = 'chromium' } of cases) {
+  for (const {
+    file = 'synthetic.spec.ts',
+    line,
+    title,
+    status,
+    expectedStatus = status === 'skipped' ? 'skipped' : 'passed',
+    project = 'chromium',
+  } of cases) {
     const suite = files.get(file) ?? { title: file, file, specs: [], suites: [] };
     files.set(file, suite);
-    const outcome = { passed: 'expected', failed: 'unexpected', skipped: 'skipped', interrupted: 'unexpected' }[status];
+    const outcome = {
+      passed: 'expected',
+      failed: 'unexpected',
+      skipped: 'skipped',
+      interrupted: 'skipped',
+      unrun: 'skipped',
+    }[status];
     suite.specs.push({
       title,
       file,
       line,
-      tests: [{ projectName: project, status: outcome, results: [{ status, duration: 5 }] }],
+      tests: [
+        {
+          projectName: project,
+          status: outcome,
+          expectedStatus,
+          results: status === 'unrun' ? [] : [{ status, duration: 5 }],
+        },
+      ],
     });
   }
   return JSON.stringify({ suites: [...files.values()] });
@@ -296,6 +316,31 @@ test('HS2-5340N1 judges targeted reruns: pass, narrow again, extra failure, or f
     assert.equal(judgeNarrowedRun(partial, { root, ...value }).result, 'full', reason);
 });
 
+test('HS2-7KCRKQ rejects incomplete Playwright reports and wrapped signal exits', () => {
+  const failed = { line: 9, title: 'fails', status: 'failed' };
+  const skipped = { line: 10, title: 'intentionally skipped', status: 'skipped' };
+  const complete = playwrightReport([failed, skipped]);
+  const partial = partialFromRun(run({ body: complete }));
+  assert.equal(partial.total, 2);
+  assert.deepEqual(
+    partial.failed.map(({ selector }) => selector),
+    ['synthetic.spec.ts:9'],
+  );
+
+  for (const missing of [
+    { line: 11, title: 'interrupted', status: 'interrupted' },
+    { line: 12, title: 'never started', status: 'unrun' },
+    { line: 13, title: 'skipped by runner', status: 'skipped', expectedStatus: 'passed' },
+  ]) {
+    const body = playwrightReport([failed, skipped, missing]);
+    assert.equal(reportCases('playwright', body, '/synthetic/web').at(-1).outcome, 'interrupted', missing.title);
+    assert.equal(partialFromRun(run({ body })), null, missing.title);
+    assert.equal(judgeNarrowedRun(partial, { status: 1, body }).result, 'full', missing.title);
+  }
+  assert.equal(partialFromRun(run({ body: complete, status: 130 })), null);
+  assert.equal(judgeNarrowedRun(partial, { status: 130, body: complete }).result, 'full');
+});
+
 test('HS2-5340N1 a stored record is reused only for the same stage key and command', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'hs2-5340n1-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -310,7 +355,7 @@ test('HS2-5340N1 a stored record is reused only for the same stage key and comma
   writeFileSync(path, '{');
   assert.equal(readPartial(path, 'stage-key', PLAYWRIGHT), null);
   assert.equal(existsSync(path), false);
-  writeFileSync(path, JSON.stringify({ ...partial, version: 1 }));
+  writeFileSync(path, JSON.stringify({ ...partial, version: 2 }));
   assert.equal(readPartial(path, 'stage-key', PLAYWRIGHT), null);
   assert.equal(readPartial(join(directory, 'absent.json'), 'stage-key', PLAYWRIGHT), null);
 });

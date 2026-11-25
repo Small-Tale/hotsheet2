@@ -1832,6 +1832,73 @@ test('HS2-664XN4 an interrupted nextest report forces the next attempt to run th
   assert.deepEqual(attempts, [command, command]);
 });
 
+test('HS2-7KCRKQ interrupted full and narrowed Playwright runs force a full-stage rerun', (t) => {
+  const f = fixture(t);
+  const root = join(f.repo, 'clients/web');
+  const path = join(f.repo, '.git', 'synthetic-playwright.json');
+  const report = (cases) =>
+    JSON.stringify({
+      suites: [
+        {
+          title: 'contracts.spec.ts',
+          file: 'contracts.spec.ts',
+          specs: cases.map(([line, title, status, attempt]) => ({
+            title,
+            file: 'contracts.spec.ts',
+            line,
+            tests: [
+              {
+                projectName: 'chromium',
+                status,
+                expectedStatus: 'passed',
+                results: attempt ? [{ status: attempt, duration: 1 }] : [],
+              },
+            ],
+          })),
+        },
+      ],
+    });
+  const failed = [9, 'fails', 'unexpected', 'failed'];
+  const commands = [];
+  let status;
+  let cases;
+  const options = {
+    ...f.options,
+    reportFor: (stage) =>
+      stage.command.startsWith("npx playwright test 'tests/contracts.spec.ts'")
+        ? { kind: 'playwright', path, root }
+        : null,
+    runner: (stage, stageReport) => {
+      if (!stageReport) return { status: 0 };
+      commands.push(stage.command);
+      writeFileSync(path, report(cases));
+      return { status };
+    },
+  };
+
+  // The runner reports a real failure alongside work that was stopped or never started.
+  cases = [failed, [20, 'stopped', 'skipped', 'interrupted'], [21, 'unrun', 'skipped']];
+  status = 1;
+  assert.equal(runGate(options), 1);
+  const full = commands.at(-1);
+  assert.match(full, /^npx playwright test 'tests\/contracts\.spec\.ts'/);
+
+  // An ordinary complete failure still narrows the next attempt.
+  cases = [failed];
+  assert.equal(runGate(options), 1);
+  assert.equal(commands.at(-1), full);
+
+  // A shell can report the interruption as a numeric exit even with a complete-looking report.
+  status = 130;
+  assert.equal(runGate(options), 130);
+  assert.equal(commands.at(-1), "npx playwright test '/contracts.spec.ts:9'");
+
+  status = 0;
+  cases = [[9, 'fails', 'expected', 'passed']];
+  assert.equal(runGate(options), 0);
+  assert.equal(commands.at(-1), full);
+});
+
 test('HS2-5340N1 an unprovable failure or changed inputs rerun the whole suite stage', (t) => {
   const f = fixture(t);
   const reportPath = join(f.repo, '.git', 'synthetic-playwright.json');
