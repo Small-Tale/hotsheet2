@@ -1,4 +1,6 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
 
@@ -128,4 +130,94 @@ test('HS2-TGYKHQ right-click removes an unavailable desktop project tab', async 
   await page.reload();
   await expect(page.getByRole('button', { name: 'Open Project' })).toBeVisible();
   expect(opens).toBe(attempts);
+});
+
+test('HS2-125F0X closes real unavailable desktop project tabs by right-click and hover close', async ({ page }) => {
+  // Real bridge state, no route mocks: one remembered folder was deleted and the other path is a
+  // file, so the real `/__hotsheet/projects/open` refuses both and the app keeps them as failed tabs.
+  const parent = await mkdtemp(join(tmpdir(), 'hs2-125f0x-')),
+    missing = join(parent, 'deleted-project'),
+    notFolder = join(parent, 'file-project'),
+    captureDir = process.env.HS2_125F0X_CAPTURE_DIR;
+  await writeFile(notFolder, 'not a project folder\n');
+  let opens = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/__hotsheet/projects/open') opens += 1;
+  });
+  await page.addInitScript(
+    (remembered) => {
+      if (localStorage.getItem('hs2-125f0x-seeded')) return;
+      localStorage.setItem('hs2-125f0x-seeded', 'true');
+      localStorage.setItem('hotsheet.open-projects', JSON.stringify(remembered));
+      localStorage.setItem('hotsheet.workspace.active-project-root.v1', remembered[0]);
+    },
+    [missing, notFolder],
+  );
+  try {
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await page.goto('/');
+    const failure = page.locator('.project-restore-error'),
+      tabs = page.locator('[data-tab-kind="project"][data-restore-failure="true"]'),
+      deleted = tabs.filter({ hasText: 'deleted-project' }),
+      file = tabs.filter({ hasText: 'file-project' });
+    await expect(failure).toContainText('deleted-project could not be reopened');
+    await expect(tabs).toHaveCount(2);
+
+    for (const [name, width] of [
+      ['wide', 1280],
+      ['medium', 940],
+      ['narrow', 390],
+      ['returned-wide', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(failure).toBeVisible();
+      if (width >= 1024) await expect(tabs).toHaveCount(2);
+      if (captureDir) {
+        // The shell changes layout at this breakpoint; capture after its finite transition settles.
+        await page.waitForTimeout(250);
+        await mkdir(captureDir, { recursive: true });
+        await page.screenshot({ path: `${captureDir}/hs2-125f0x-${name}.png` });
+      }
+    }
+
+    // Right-click the unselected unavailable tab: the menu offers Close Tab alone.
+    await file.click({ button: 'right' });
+    const menu = page.getByRole('menu', { name: 'Project Tab Actions' });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem')).toHaveText(['Close Tab']);
+    if (captureDir) {
+      await page.screenshot({ path: `${captureDir}/hs2-125f0x-context-menu-wide.png` });
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await page.screenshot({ path: `${captureDir}/hs2-125f0x-context-menu-dark-wide.png` });
+      await page.emulateMedia({ colorScheme: 'light' });
+    }
+    await menu.getByRole('menuitem', { name: 'Close Tab', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'Close file-project?' })
+      .getByRole('button', { name: 'Close Project' })
+      .click();
+    await expect(file).toHaveCount(0);
+    await expect(deleted).toBeVisible();
+
+    // The selected unavailable tab reveals its own close control on hover, like any project tab.
+    await deleted.hover();
+    const close = deleted.getByRole('button', { name: 'Close deleted-project' });
+    await expect(close).toHaveCSS('opacity', '1');
+    await close.click();
+    await page
+      .getByRole('dialog', { name: 'Close deleted-project?' })
+      .getByRole('button', { name: 'Close Project' })
+      .click();
+    await expect(tabs).toHaveCount(0);
+    await expect(failure).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hotsheet.open-projects'))).toBe('[]');
+
+    const attempts = opens;
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Open Project' })).toBeVisible();
+    await expect(tabs).toHaveCount(0);
+    expect(opens).toBe(attempts);
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
 });
