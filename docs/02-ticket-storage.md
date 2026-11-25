@@ -919,7 +919,21 @@ standalone store with `hotsheet-cli link <store>`, which writes a **gitignored**
 `.hotsheet2/store` file (managed `.gitignore` block, [04](04-core-server-cli.md) §4.7.0) holding the store's absolute path. Any later `hotsheet-cli`
 run inside that repo resolves the store automatically: an explicit `-C` wins, else
 `$HOTSHEET_STORE`, else the nearest `.hotsheet2/store` walking up from the cwd, with
-read-only fallback to the legacy `.hotsheet/store` location. A
+read-only fallback to the legacy `.hotsheet/store` location.
+
+**Relinking a project** (HS2-FVWKJC): a checkout can link several stores, but its
+`.hotsheet2/store` link names exactly one of them. The machine checkout registry records,
+per checkout, which linked Git source the link named (`linkSources`, outside the checkout
+record like `sourceAliases`; an older reader ignores it). When any project open or
+`setup --refresh` sees the link name a different initialized ticket store, that one
+link-derived source is replaced by the newly linked store, and the default moves with it
+when it was the default. Explicitly linked extra stores and external providers stay.
+Relinking back to an earlier store replaces again, and repeated opens are idempotent.
+A missing, empty, or dangling link changes nothing. A registry written before the record
+existed treats a sole Git source as the link-derived one; with several Git sources nothing
+is guessed and the newly linked store is added. An explicit full source set is never
+rewritten by the link. The rule lives in the registry, so the headless CLI setup and the
+server open cannot disagree. A
 standalone store also wants **aggressive auto commit+push** so its independent churn
 propagates without manual git — the ticket write auto-commit + the server's
 background sync loop cover this (§2.12).

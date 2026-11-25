@@ -270,7 +270,7 @@ pub(crate) async fn open_project(
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     let root = FsPath::new(&body.root);
-    let requested_git_sources = sources
+    let mut requested_git_sources = sources
         .iter()
         .filter(|source| source.provider == "git")
         .cloned()
@@ -289,6 +289,21 @@ pub(crate) async fn open_project(
             },
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    // HS2-FVWKJC: a relinked `.hotsheet2/store` can add the newly linked store even when
+    // this request selected another one. Host every Git source the open newly linked.
+    for source in checkout.sources.iter().filter(|source| {
+        source.provider == "git"
+            && existing
+                .as_ref()
+                .is_none_or(|prior| prior.source(&source.connection_id).is_none())
+    }) {
+        if !requested_git_sources
+            .iter()
+            .any(|requested| requested.locator == source.locator)
+        {
+            requested_git_sources.push(source.clone());
+        }
+    }
     let hosting_state = state.clone();
     tokio::task::spawn_blocking(move || {
         for source in &requested_git_sources {

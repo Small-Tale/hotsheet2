@@ -14,6 +14,14 @@ test, broker and in-process HTTP launch tests, and drawer banner render test cov
 the core transitions. The real-browser drawer flow is reviewed manually at wide
 and phone widths before ticket completion.
 
+HS2-FVWKJC: `crates/hotsheet-ticketing/src/checkouts/link_relink_tests.rs` covers a
+`.hotsheet2/store` relink through setup refresh then the server-style open, relinking back,
+an explicit extra store that survives, missing, empty and dangling links, idempotent
+repeated refreshes, legacy registries with one or several Git sources, untouched explicit
+source sets, a selected-store open first after a relink that keeps the extra store,
+and six concurrent opens. The gated live
+`clients/web/src/migration-server-integration.test.ts` reopens a relinked migrated project.
+
 HS2-7VB81E: `clients/web/tests/providers.spec.ts` covers explicit Git ticket-repository
 linking, rejection of a non-store folder, and both canceling and confirming a
 Create collision. `clients/web/src/project-bridge.test.ts` verifies read-only
