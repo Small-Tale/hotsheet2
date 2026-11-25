@@ -678,8 +678,9 @@ test('keeps a scrolled terminal anchored while animated output and size heartbea
   });
   await expect.poll(async () => (await visibleRows()).join('\n'), { timeout: 15_000 }).toContain('history line 079');
   await terminal.hover();
-  // The first wheel after the pointer arrives can scroll nothing, so wheel until the newest line
-  // leaves the screen. A heartbeat redraw used to wipe it and hide this (HS2-6657ED).
+  // xterm 6 scrolls by the legacy `wheelDeltaY` on Chromium, and a synthetic 600px wheel reports only
+  // 60 there: about half a magnified row per event, so the first can scroll nothing. Wheel until the
+  // newest line leaves the screen (HS2-6657ED, HS2-W6TJXS).
   await expect(async () => {
     await page.mouse.wheel(0, -600);
     expect((await visibleRows()).join('\n')).not.toContain('history line 079');
