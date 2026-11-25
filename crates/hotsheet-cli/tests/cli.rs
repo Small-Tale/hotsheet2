@@ -8739,8 +8739,18 @@ fn provider_lifecycle_assign_restore_and_atomic_not_working_report() {
         r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/repo","settings":{"api_base":"http://127.0.0.1:9","credential":{"secret":"cli-provider-lifecycle-fixture"}}}]}"#,
     )
     .unwrap();
+    // GH-5: GitHub Issues has its own Trash, so restore reaches the provider (here an
+    // unreachable endpoint) instead of being refused by capability.
+    hs(path)
+        .env(
+            "HOTSHEET_API_KEY_CLI_PROVIDER_LIFECYCLE_FIXTURE",
+            "fixture-token",
+        )
+        .args(["provider-restore", "github-main", "42"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("does not support").not());
     for args in [
-        vec!["provider-restore", "github-main", "42"],
         vec![
             "provider-report-not-working",
             "github-main",

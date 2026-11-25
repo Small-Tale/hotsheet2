@@ -648,6 +648,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github_credential.rs #   shared account token resolution and HS2-6H8ZY6 owner-bound selected-source read context; read_tests.rs guards selected-source reads
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, 25-alias GraphQL crop-manifest detail batches with REST fallback, Contents-SHA CAS and comment repair, fake + opt-in live tests (HS2-JAXS4Z/HS2-X09EJ1/HS2-5MFV7Q)
+      src/github_trash.rs      #   GH-5 GitHub Trash: `status:deleted` / `deleted-from:<status>` / trash-only `closed:` labels, Restore to the prior status and reason, GraphQL `deleteIssue` with retained-on-refusal; stateful fake tests in github_trash_tests.rs, opt-in live test in github_live_tests.rs; tests/github_trash_http.rs in hotsheet-server covers the routes and sweep
       src/github_pagination.rs #   HS2-TAG2ZP selected-origin Link boundary, explicit ports, traversal rejection and per-walk cycle/request guards; independent fake/Ureq regressions in github_pagination_tests.rs
       src/gitlab.rs            #   GitLab Issues mapping, native IDs/URLs, pagination/incremental reads, typed errors/concurrency, fake + opt-in live drift tests (HS2-0RK4YC)
       src/gitlab/attachments.rs #  GitLab native attachments: multipart project uploads, marked upload notes (GitHub marker shape), uploads-API reads, rendition crop + note rewrite, stateful fake + opt-in live tests (HS2-ENHE8K)
@@ -682,6 +683,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/advisory_claim.rs #   provider-neutral best-effort claim event/projection, expiry skew, conflict and release tombstones (HS2-BPKM76)
       src/advisory_claim_v2.rs #   timestamped v2 operation IDs, 24-hour horizon and 60-second skew validation (HS2-0QEPRW)
       src/advisory_claim_ledger.rs #   bounded machine-local SQLite provisional Jira claim admission and replay states (HS2-BPKM76)
+      src/provider_trash.rs  #   GH-5 external-provider Trash: ProviderPurgeOutcome (Purged/Retained), purge_provider_trash shared by Empty Trash and the sync-loop retention sweep (TicketProvider::restore / purge_trashed default to Unsupported)
       src/provider_outbox.rs #   durable Jira write-behind admission, dispatch state, provisional projection, 30-day payload compaction, and v2 retry-floor pruning (HS2-056R8P/HS2-X5AJ7M/HS2-QA1VEF)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8/26M48F): ActivityEvent/Kind/Importance + deterministic per-session volume admission/coalescing + bounded rolling store/timeline + mappers; server persists then broadcasts the same admitted payloads on WS/poll

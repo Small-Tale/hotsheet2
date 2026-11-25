@@ -29683,6 +29683,37 @@ components:
           type: array
           items:
             type: string
+        retained:
+          description: External provider Trash tickets the provider kept, for example because the connection may not permanently delete issues (GH-5). Never counted in purged.
+          type: array
+          items:
+            type: object
+            required:
+              - qualified_id
+              - slug
+              - message
+            properties:
+              qualified_id:
+                type: string
+              slug:
+                type: string
+              message:
+                type: string
+            additionalProperties: false
+        unavailable:
+          description: External provider connections whose Trash could not be read or emptied (GH-5).
+          type: array
+          items:
+            type: object
+            required:
+              - connection_id
+              - message
+            properties:
+              connection_id:
+                type: string
+              message:
+                type: string
+            additionalProperties: false
       additionalProperties: false
     TrashPurgePreview:
       type: object

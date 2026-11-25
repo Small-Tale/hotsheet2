@@ -39,6 +39,10 @@ const API_VERSION: &str = "2022-11-28";
 #[path = "github_pagination_tests.rs"]
 mod pagination_tests;
 
+/// Trash labels, restore, and permission-checked permanent deletion (GH-5).
+#[path = "github_trash.rs"]
+mod trash;
+
 #[derive(Debug, Clone)]
 pub struct GitHubConfig {
     pub connection_id: String,
@@ -564,7 +568,8 @@ impl GitHubProvider {
                     retry_after_seconds: Some(seconds),
                 })
             }
-            404 => Err(ProviderError::NotFound {
+            // GitHub answers 410 Gone for an issue that was deleted (GH-5).
+            404 | 410 => Err(ProviderError::NotFound {
                 connection_id: self.config.connection_id.clone(),
                 native_id: url.rsplit('/').next().unwrap_or(url).into(),
             }),
@@ -713,7 +718,11 @@ impl GitHubProvider {
             })
             .collect::<Vec<_>>();
         let latest_confidence = note_trailer::latest_confidence(status, &notes, None);
-        let close_reason = if issue.state == "closed" {
+        let close_reason = if status == Status::Deleted {
+            // Trash closes every issue as `not_planned`; only the `closed:` label kept on
+            // delete says whether, and how, the ticket was closed before (GH-5).
+            close_reason_from_labels(&labels)
+        } else if issue.state == "closed" {
             Some(
                 close_reason_from_labels(&labels).unwrap_or(match issue.state_reason.as_deref() {
                     Some("not_planned") => CloseReason::NotPlanned,
@@ -1351,15 +1360,37 @@ impl TicketProvider for GitHubProvider {
         } else {
             None
         };
-        let labels = mapped_labels(
-            &category,
-            priority,
-            &tags,
-            Some(status),
-            up_next,
-            close_reason,
-            duplicate_of.as_deref(),
-        );
+        let labels = if status == Status::Deleted {
+            // Delete moves the issue to Trash and keeps what Restore needs (GH-5).
+            let current_labels = current
+                .labels
+                .iter()
+                .map(|label| label.name.clone())
+                .collect::<Vec<_>>();
+            let previous = if current_ticket.status == Status::Deleted {
+                trash::deleted_from(&current_labels)
+            } else {
+                Some(current_ticket.status)
+            };
+            trash::trashed_labels(
+                &category,
+                priority,
+                &tags,
+                previous,
+                current_ticket.close_reason,
+                duplicate_of.as_deref(),
+            )
+        } else {
+            mapped_labels(
+                &category,
+                priority,
+                &tags,
+                Some(status),
+                up_next,
+                close_reason,
+                duplicate_of.as_deref(),
+            )
+        };
         let mut body = patch
             .details
             .unwrap_or_else(|| current.body.clone().unwrap_or_default());
@@ -1374,7 +1405,9 @@ impl TicketProvider for GitHubProvider {
             "state": if closed { "closed" } else { "open" },
             "labels": labels,
         });
-        if let Some(reason) = close_reason {
+        if status == Status::Deleted {
+            payload["state_reason"] = json!(trash::TRASH_STATE_REASON);
+        } else if let Some(reason) = close_reason {
             payload["state_reason"] = json!(github_state_reason(reason));
         }
         let write_started = Instant::now();
@@ -1597,6 +1630,17 @@ impl TicketProvider for GitHubProvider {
         Ok(self.api_ticket(issue, vec![]))
     }
 
+    fn restore(&self, native_id: &str, _now: Timestamp) -> Result<ApiTicket, ProviderError> {
+        self.restore_from_trash(native_id)
+    }
+
+    fn purge_trashed(
+        &self,
+        native_id: &str,
+    ) -> Result<hotsheet_ticketing::ProviderPurgeOutcome, ProviderError> {
+        self.delete_trashed_issue(native_id)
+    }
+
     fn assign_current_user(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
         validate_number(native_id)?;
         let response = self.request(
@@ -1762,6 +1806,16 @@ impl GitHubProvider {
         Ok(manifests)
     }
 
+    /// GitHub's GraphQL endpoint; GitHub Enterprise serves it beside `/api/v3`.
+    fn graphql_endpoint(&self) -> String {
+        let base = self.config.api_base.trim_end_matches('/');
+        if let Some(root) = base.strip_suffix("/api/v3") {
+            format!("{root}/api/graphql")
+        } else {
+            format!("{base}/graphql")
+        }
+    }
+
     /// `None` means the GraphQL response cannot prove which manifests are absent. The caller
     /// then uses the existing REST path for the entire chunk, including partial responses.
     fn graphql_attachment_manifests(
@@ -1786,12 +1840,7 @@ impl GitHubProvider {
             ));
         }
         query.push_str(" } }");
-        let base = self.config.api_base.trim_end_matches('/');
-        let endpoint = if let Some(root) = base.strip_suffix("/api/v3") {
-            format!("{root}/api/graphql")
-        } else {
-            format!("{base}/graphql")
-        };
+        let endpoint = self.graphql_endpoint();
         let response = match self.request("POST", &endpoint, Some(&json!({"query": query}))) {
             Ok(response) => response,
             Err(_) => return Ok(None),
@@ -2095,6 +2144,9 @@ fn asset_repository_access_error(error: ProviderError, repository: &str) -> Prov
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct GitHubIssue {
     number: u64,
+    /// GraphQL id, needed only by `deleteIssue` (GH-5).
+    #[serde(default)]
+    node_id: Option<String>,
     title: String,
     body: Option<String>,
     state: String,
@@ -2263,12 +2315,13 @@ const DUPLICATE_OF_PREFIX: &str = "duplicate-of:";
 
 /// Prefixes of the labels the provider owns. They carry Hot Sheet state GitHub has no field
 /// for and are never surfaced as ordinary tags.
-const PROVIDER_LABEL_PREFIXES: [&str; 5] = [
+const PROVIDER_LABEL_PREFIXES: [&str; 6] = [
     "category:",
     "priority:",
     "status:",
     "closed:",
     DUPLICATE_OF_PREFIX,
+    trash::DELETED_FROM_PREFIX,
 ];
 
 fn is_provider_label(label: &str) -> bool {
@@ -2294,7 +2347,8 @@ fn status_label(status: Status) -> Option<&'static str> {
         Status::Backlog => Some("status:backlog"),
         Status::Verified => Some("status:verified"),
         Status::Archive => Some("status:archived"),
-        Status::NotStarted | Status::Completed | Status::Deleted | Status::Moved => None,
+        Status::Deleted => Some(trash::TRASH_LABEL),
+        Status::NotStarted | Status::Completed | Status::Moved => None,
     }
 }
 
@@ -2314,6 +2368,9 @@ fn close_reason_from_labels(labels: &[String]) -> Option<CloseReason> {
         "closed:duplicate" => Some(CloseReason::Duplicate),
         "closed:obsolete" => Some(CloseReason::Obsolete),
         "closed:works-as-designed" => Some(CloseReason::WorksAsDesigned),
+        // Only a Trash issue carries these: Trash overwrites GitHub's own reason (GH-5).
+        "closed:completed" => Some(CloseReason::Completed),
+        "closed:not-planned" => Some(CloseReason::NotPlanned),
         _ => None,
     })
 }
@@ -2323,7 +2380,9 @@ fn close_reason_from_labels(labels: &[String]) -> Option<CloseReason> {
 fn issue_status(state: &str, labels: &[String]) -> Status {
     let has = |name: &str| labels.iter().any(|label| label == name);
     if state == "closed" {
-        if has("status:verified") {
+        if has(trash::TRASH_LABEL) {
+            Status::Deleted
+        } else if has("status:verified") {
             Status::Verified
         } else if has("status:archived") {
             Status::Archive

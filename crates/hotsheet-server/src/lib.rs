@@ -1393,6 +1393,30 @@ impl AppState {
         configured.unwrap_or(hotsheet_ticketing::DEFAULT_TRASH_CLEANUP_DAYS)
     }
 
+    /// Every external provider connection a registered checkout links, with the longest
+    /// `trash_cleanup_days` among those checkouts, so a sweep never purges a provider's
+    /// Trash early on behalf of another project (GH-5).
+    fn provider_trash_retention(&self) -> std::collections::BTreeMap<String, u32> {
+        let mut retention = std::collections::BTreeMap::new();
+        for checkout in self.checkout_registry.list().unwrap_or_default() {
+            let days = checkout
+                .settings()
+                .trash_cleanup_days()
+                .unwrap_or(hotsheet_ticketing::DEFAULT_TRASH_CLEANUP_DAYS);
+            for source in checkout
+                .sources
+                .iter()
+                .filter(|source| source.provider != "git")
+            {
+                retention
+                    .entry(source.connection_id.clone())
+                    .and_modify(|current: &mut u32| *current = (*current).max(days))
+                    .or_insert(days);
+            }
+        }
+        retention
+    }
+
     /// The canonical root of every Git ticket store linked to a registered checkout,
     /// sorted and without duplicates (HS2-D9ZGAE). Read from the checkout registry alone,
     /// so it includes stores no client has opened since the host started. A source whose

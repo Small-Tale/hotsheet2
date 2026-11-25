@@ -100,6 +100,7 @@ import type {
   TicketUsage,
   ToolConnection,
   ToolSession,
+  TrashEmptyResult,
   TrashPurgePreview,
   TrashSettings,
   TtsVoice,
@@ -543,11 +544,27 @@ export const parseAccountIdentity: ResponseParser<{ identity: string }> = (value
   return body as { identity: string };
 };
 
-/** `POST /checkouts/{id}/trash/empty`. */
-export const parseTrashPurge: ResponseParser<{ purged: number; tickets: string[] }> = (value) => {
+/** `POST /checkouts/{id}/trash/empty`; provider tickets kept in Trash are listed, never counted (GH-5). */
+export const parseTrashPurge: ResponseParser<TrashEmptyResult> = (value) => {
   const body = record(value, 'trash purge');
   if (typeof body.purged !== 'number' || !isStringArray(body.tickets)) invalid('trash purge');
-  return body as { purged: number; tickets: string[] };
+  const entries = (field: string, keys: readonly string[]) => {
+    const list = body[field];
+    if (list === undefined) return;
+    if (
+      !Array.isArray(list) ||
+      !list.every(
+        (entry) =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          keys.every((key) => typeof (entry as Record<string, unknown>)[key] === 'string'),
+      )
+    )
+      invalid('trash purge');
+  };
+  entries('retained', ['qualified_id', 'slug', 'message']);
+  entries('unavailable', ['connection_id', 'message']);
+  return body as unknown as TrashEmptyResult;
 };
 
 /** One group a project's tickets store (HS2-9KZSD4): its stored value, display name, and flags. */

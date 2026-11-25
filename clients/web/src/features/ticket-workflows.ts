@@ -141,6 +141,7 @@ import {
   type TicketView,
 } from '../ticket-views';
 import { timelineStageEstimate, typicalPhaseDurations } from '../timeline-stage-estimate';
+import { trashEmptyLeftTickets, trashEmptySummary } from '../trash-empty-summary';
 import { ensureVideoPoster } from '../video-posters';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { reconcileWorkerTicketSelection } from '../worker-ticket-refresh';
@@ -1568,8 +1569,22 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     scheduleClaimLeaseExpiry();
     try {
       const result = await new Api(current.apiPath).emptyCheckoutTrash(current.id);
-      if (project()?.id === current.id) await refreshTicketCollection('all');
-      showToast(`Emptied Trash — ${result.purged} ticket${result.purged === 1 ? '' : 's'} permanently removed.`);
+      if (trashEmptyLeftTickets(result)) {
+        // A provider kept some Trash (GH-5): show what is still there instead of an empty Trash.
+        ticketCountsByProject.value = {
+          ...ticketCountsByProject.value,
+          [current.id]: {
+            ...beforeCounts,
+            total: Math.max(0, beforeCounts.total - result.purged),
+            trash: Math.max(0, (beforeCounts.trash ?? 0) - result.purged),
+          },
+        };
+        if (project()?.id === current.id) {
+          selectTicketView('trash', { refresh: false });
+          await refreshTicketCollection('trash');
+        }
+      } else if (project()?.id === current.id) await refreshTicketCollection('all');
+      showToast(trashEmptySummary(result));
     } catch (reason) {
       if (!projects.value.some((item) => item.id === current.id)) return;
       setProjectTicketRows(current.id, beforeRows);

@@ -1106,22 +1106,23 @@ pub(crate) async fn close_checkout_ticket(
         )?,
     }))
 }
-/// Restore a Trash ticket to its pre-deletion status (HS2-MWDR19). Trash is the git
-/// provider's soft-delete lifecycle; other providers own deletion natively.
+/// Restore a Trash ticket to its pre-deletion status (HS2-MWDR19). A provider with its own
+/// restorable Trash (GitHub Issues, GH-5) restores natively; any other provider refuses by
+/// capability name.
 pub(crate) async fn restore_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
     let (_, settings) = checkout_settings(&state, &reference)?;
-    let (source, _) = checkout_ticket_owner(&state, &reference, &id)?;
+    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
     if source.provider != "git" {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!(
-                "the {} provider has no Hot Sheet Trash to restore from",
-                source.provider
-            ),
-        ));
+        let ticket = provider_for(&state, &source.connection_id)?
+            .restore(&native_id, now())
+            .map_err(provider_transfer_error)?;
+        return Ok(Json(ResolvedTicket {
+            store: source.connection_id,
+            ticket: contextualize_api_ticket(ticket, &settings)?,
+        }));
     }
     let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
     Ok(Json(ResolvedTicket {
@@ -1140,12 +1141,21 @@ fn do_restore(state: &AppState, entry: &StoreEntry, id: &str) -> Result<ApiTicke
     api_ticket(entry, &restored)
 }
 
+/// Empty the checkout's Trash: git sources purge their files; an external provider
+/// permanently deletes each Trash ticket only where its credentials allow it (GH-5). A ticket
+/// the provider kept is listed under `retained` with the reason, never counted as purged.
 pub(crate) async fn empty_checkout_trash(
     State(state): State<AppState>,
     Path(reference): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let entries = checkout_entries(&state, &reference)?;
-    if entries.is_empty() {
+    let (checkout, _) = checkout_settings(&state, &reference)?;
+    let providers = checkout
+        .sources
+        .into_iter()
+        .filter(|source| source.provider != "git")
+        .collect::<Vec<_>>();
+    if entries.is_empty() && providers.is_empty() {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             "this checkout has no git-backed Hot Sheet Trash capability",
@@ -1158,9 +1168,34 @@ pub(crate) async fn empty_checkout_trash(
             purged.push(ticket.slug);
         }
     }
+    let mut retained = Vec::new();
+    let mut unavailable = Vec::new();
+    for source in providers {
+        // A disabled source is never contacted (HS2-SF6W34), so it has nothing to empty.
+        if connection_disabled(&state, &source.connection_id)? {
+            continue;
+        }
+        // One unreachable provider must not hide what the others already removed.
+        let report = provider_for(&state, &source.connection_id).and_then(|provider| {
+            hotsheet_ticketing::purge_provider_trash(provider.as_ref(), &now(), None)
+                .map_err(provider_transfer_error)
+        });
+        match report {
+            Ok(report) => {
+                purged.extend(report.purged);
+                retained.extend(report.retained);
+            }
+            Err(error) => unavailable.push(serde_json::json!({
+                "connection_id": source.connection_id,
+                "message": error.message,
+            })),
+        }
+    }
     Ok(Json(serde_json::json!({
         "purged": purged.len(),
         "tickets": purged,
+        "retained": retained,
+        "unavailable": unavailable,
     })))
 }
 

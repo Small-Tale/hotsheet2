@@ -1708,6 +1708,24 @@ export interface TrashPurgePreview {
   trash_cleanup_days: number;
   purge_count: number;
 }
+/** A Trash ticket an external provider kept on Empty Trash (GH-5). */
+export interface RetainedTrashTicket {
+  qualified_id: string;
+  slug: string;
+  message: string;
+}
+/** An external provider connection whose Trash could not be emptied (GH-5). */
+export interface UnavailableTrashSource {
+  connection_id: string;
+  message: string;
+}
+/** `POST /checkouts/{id}/trash/empty`. Older servers omit `retained` and `unavailable`. */
+export interface TrashEmptyResult {
+  purged: number;
+  tickets: string[];
+  retained?: RetainedTrashTicket[];
+  unavailable?: UnavailableTrashSource[];
+}
 export interface TerminalRead extends TerminalInfo {
   scrollback: string;
 }

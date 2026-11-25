@@ -555,3 +555,65 @@ fn github_live_batched_manifest_reads_scale_with_manifest_count() {
         }
     }
 }
+
+/// GH-5: Delete, Restore, and permanent deletion against the live ticket repository
+/// (`HOTSHEET_GITHUB_LIVE_REPO`; no assets repository needed). The token decides the last
+/// step: an account that may delete issues removes it; any other must see it retained in
+/// Trash, and the test then restores it so nothing is left in Trash.
+#[test]
+#[ignore = "writes to the live GitHub test repository; see module docs"]
+fn github_live_trash_delete_restore_and_permission_checked_purge() {
+    let Ok(repository) = std::env::var("HOTSHEET_GITHUB_LIVE_REPO") else {
+        eprintln!("skipped: set HOTSHEET_GITHUB_LIVE_REPO");
+        return;
+    };
+    let mut config = GitHubConfig::new("github-live", repository, live_token());
+    if let Ok(base) = std::env::var("HOTSHEET_GITHUB_LIVE_API_BASE") {
+        config.api_base = base;
+    }
+    let provider = GitHubProvider::new(config, Arc::new(UreqGitHubTransport));
+    let id = create_issue(&provider, "trash");
+    close_issue(&provider, &id);
+    let status = |status| ProviderPatch {
+        status: Some(status),
+        ..Default::default()
+    };
+    let now = Timestamp::new("2026-11-25T00:00:00Z");
+    let verified = provider
+        .update(&id, now.clone(), status(Status::Verified))
+        .unwrap();
+    assert_eq!(verified.status, Status::Verified);
+    let trashed = provider
+        .update(&id, now.clone(), status(Status::Deleted))
+        .unwrap();
+    assert_eq!(
+        trashed.status,
+        Status::Deleted,
+        "the reported bug read Completed"
+    );
+    assert_eq!(provider.get(&id).unwrap().status, Status::Deleted);
+    let restored = provider.restore(&id, now.clone()).unwrap();
+    assert_eq!(restored.status, Status::Verified);
+    assert_eq!(restored.close_reason, Some(CloseReason::Completed));
+    provider
+        .update(&id, now.clone(), status(Status::Deleted))
+        .unwrap();
+    match provider.purge_trashed(&id).unwrap() {
+        hotsheet_ticketing::ProviderPurgeOutcome::Purged => {
+            assert!(matches!(
+                provider.get(&id),
+                Err(ProviderError::NotFound { .. })
+            ));
+            eprintln!("deleted issue {id}: the token may delete issues");
+        }
+        hotsheet_ticketing::ProviderPurgeOutcome::Retained { message } => {
+            assert!(
+                message.starts_with(hotsheet_ticketing::provider_trash::PURGE_NOT_PERMITTED),
+                "{message}"
+            );
+            assert_eq!(provider.get(&id).unwrap().status, Status::Deleted);
+            eprintln!("issue {id} retained: {message}");
+            provider.restore(&id, now).unwrap();
+        }
+    }
+}

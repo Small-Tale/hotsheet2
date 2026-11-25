@@ -1248,10 +1248,11 @@ pub(crate) fn cmd_provider_restore(path: &Path, connection: &str, id: &str) -> R
     let store = FsStore::open(path)?;
     let git_id = git_connection_id(&store);
     if connection != git_id {
-        let _ = configured_provider(path, connection)?;
-        bail!(
-            "provider connection '{connection}' does not support git-backed Hot Sheet Trash restore"
-        );
+        // GitHub Issues restores from its own Trash (GH-5); other providers refuse by
+        // capability name.
+        let restored = configured_provider(path, connection)?.restore(id, now_ts())?;
+        println!("{}", serde_json::to_string_pretty(&restored)?);
+        return Ok(());
     }
     let ticket =
         ops::resolve(&store, id)?.ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;

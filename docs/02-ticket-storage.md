@@ -567,8 +567,12 @@ wins to prevent an earlier purge on behalf of another project. `hotsheet-cli pur
 uses the active project's setting by default; `--older-than-days N` explicitly overrides it
 for that run (including zero to empty Trash immediately). Purging only removes the
 working-tree files: git history retains them.
-Trash is the git provider's lifecycle; other providers own deletion natively and reject
-restore explicitly.
+Trash is the git provider's lifecycle. GitHub Issues maps it onto provider-owned labels
+(`status:deleted`, `deleted-from:<status>`) with the same restore, Empty Trash, and retention
+behavior, and permanently deletes an issue only when the connection's credentials allow it;
+otherwise the issue stays closed in Trash and Empty Trash reports it as retained
+([16](16-external-sync-interface.md), GH-5). Other providers reject restore and permanent
+deletion explicitly.
 
 Up Next and priority are ordering metadata rather than substantive ticket content. A patch
 whose only effective changes are `up_next` and/or `priority` preserves `updated_at`, so
