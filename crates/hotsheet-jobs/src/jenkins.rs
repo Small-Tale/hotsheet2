@@ -22,6 +22,13 @@
 //! All access goes through the shared REST port ([`GithubApi`]) rooted at the Jenkins
 //! URL, so tests run offline with fixtures. A rebuild is a new build with a new number,
 //! so the run floor is the build number.
+//!
+//! HS2-SSKBRB: a Pipeline job's stages are the watch's steps. Jenkins core exposes no
+//! stage data; the Pipeline: REST API plugin
+//! (<https://github.com/jenkinsci/pipeline-stage-view-plugin/blob/master/rest-api/README.md>)
+//! answers `GET <build>/wfapi/describe` with `stages[]` (`id`, `name`, `status`). Only
+//! the judged build is described. Without the plugin, or for a job that is not a
+//! Pipeline, the describe answers 404 and the watch reports no steps.
 
 use std::collections::BTreeMap;
 
@@ -33,6 +40,7 @@ use crate::github::{
 };
 use crate::model::{Job, Outcome};
 use crate::monitor::{CancelReply, Observation, Observed, Poll, WatchError, WatchSource};
+use crate::steps::{Step, StepStatus};
 
 /// How many of the job's newest builds one poll scans for the commit.
 const BUILDS_PER_POLL: usize = 30;
@@ -143,6 +151,97 @@ fn names_branch(name: &str, branch: &str) -> bool {
             .is_some_and(|(_, rest)| rest == branch)
 }
 
+/// `GET <build>/wfapi/describe` of the Pipeline: REST API plugin: the run and its stages.
+#[derive(Clone, Debug, Default, Deserialize)]
+struct Describe {
+    #[serde(default)]
+    stages: Vec<Stage>,
+}
+
+/// One stage. `status` is the plugin's `StatusExt`: `SUCCESS`, `FAILED`,
+/// `IN_PROGRESS`, `NOT_EXECUTED`, `ABORTED`, `UNSTABLE` or `PAUSED_PENDING_INPUT`.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+struct Stage {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    status: Option<String>,
+}
+
+impl Stage {
+    fn status(&self) -> StepStatus {
+        match self.status.as_deref() {
+            Some("SUCCESS") => StepStatus::Succeeded,
+            // An unstable stage finished with failed tests, as the gate reads the build.
+            Some("FAILED" | "UNSTABLE") => StepStatus::Failed,
+            Some("ABORTED") => StepStatus::Cancelled,
+            Some("NOT_EXECUTED") => StepStatus::Skipped,
+            // Waiting for a person's input is still the stage the build is on.
+            Some("IN_PROGRESS" | "PAUSED_PENDING_INPUT") => StepStatus::Active,
+            _ => StepStatus::Pending,
+        }
+    }
+}
+
+/// The stages as steps, in the plugin's order.
+fn steps_of(stages: &[Stage]) -> Vec<Step> {
+    let mut seen = std::collections::BTreeSet::new();
+    stages
+        .iter()
+        .take(crate::steps::MAX_STEPS)
+        .enumerate()
+        .map(|(index, stage)| {
+            // A stage id is a flow node id (digits); anything else is made a token, and
+            // a missing or repeated one falls back to the position.
+            let id: String = stage
+                .id
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || "-_.:".contains(c) {
+                        c
+                    } else {
+                        '-'
+                    }
+                })
+                .take(100)
+                .collect();
+            let mut id = format!("stage-{id}");
+            if id == "stage-" || !seen.insert(id.clone()) {
+                id = format!("stage-at-{index}");
+                seen.insert(id.clone());
+            }
+            Step {
+                id,
+                label: clean(stage.name.as_deref().unwrap_or("stage"), 200),
+                status: stage.status(),
+                done: None,
+                total: None,
+                unit: None,
+                weight: 1,
+                children: Vec::new(),
+            }
+        })
+        .collect()
+}
+
+/// The stage the build is on: the first one running or waiting for input.
+fn current_stage(stages: &[Stage]) -> Option<String> {
+    stages
+        .iter()
+        .find(|stage| {
+            matches!(
+                stage.status.as_deref(),
+                Some("IN_PROGRESS" | "PAUSED_PENDING_INPUT")
+            )
+        })
+        .and_then(|stage| stage.name.as_deref())
+        .map(|name| clean(name, 200))
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Decision {
     Pending { build: Option<usize> },
@@ -188,9 +287,14 @@ fn decide(floor: Option<RunFloor>, builds: &[Build]) -> Decision {
 struct Cached {
     /// Whether the target job is a multibranch project, once read.
     multibranch: Option<bool>,
-    reported: Option<Vec<Build>>,
+    reported: Option<(Vec<Build>, Option<Vec<Stage>>)>,
     /// The newest judged build, for cancel: (job path, number, finished).
     current: Option<(String, u64, bool)>,
+    /// HS2-SSKBRB: the job answered 404 to a describe: no Pipeline: REST API.
+    no_wfapi: bool,
+    /// The stages last read: (build number, whether the build had finished, stages).
+    /// A finished build's stages do not change, so they are not read again.
+    stages: Option<(u64, bool, Option<Vec<Stage>>)>,
 }
 
 /// Observes Jenkins CI gates through a [`GithubApi`] REST port rooted at the Jenkins URL.
@@ -269,6 +373,55 @@ impl<A: GithubApi> JenkinsSource<A> {
     }
 }
 
+impl<A: GithubApi> JenkinsSource<A> {
+    /// HS2-SSKBRB: the judged build's stages. `None` when the job has no Pipeline: REST
+    /// API (404) or the answer cannot be read; a spent limit or a server error is
+    /// retried.
+    fn stages(
+        &mut self,
+        job_id: &str,
+        path: &str,
+        build: &Build,
+    ) -> Result<Option<Vec<Stage>>, WatchError> {
+        let cached = self.jobs.entry(job_id.to_owned()).or_default();
+        if cached.no_wfapi {
+            return Ok(None);
+        }
+        if let Some((number, true, stages)) = &cached.stages
+            && *number == build.number
+        {
+            return Ok(stages.clone());
+        }
+        let request = ApiRequest {
+            method: ApiMethod::Get,
+            path: format!("{path}/{}/wfapi/describe", build.number),
+            if_none_match: None,
+            body: None,
+        };
+        let response = self
+            .api
+            .send(&request)
+            .map_err(|unavailable| WatchError::Transient {
+                retry_after_ms: unavailable.retry_after_ms,
+            })?;
+        let stages = match response.status {
+            200 => serde_json::from_str::<Describe>(&response.body)
+                .ok()
+                .map(|describe| describe.stages),
+            404 => {
+                self.jobs.entry(job_id.to_owned()).or_default().no_wfapi = true;
+                return Ok(None);
+            }
+            429 | 500.. => return Err(transient(&response)),
+            // 401 and 403 on the describe alone: the gate still reads; no steps.
+            _ => None,
+        };
+        self.jobs.entry(job_id.to_owned()).or_default().stages =
+            Some((build.number, build.finished(), stages.clone()));
+        Ok(stages)
+    }
+}
+
 fn parse(response: &ApiResponse) -> Result<JobPage, WatchError> {
     match response.status {
         200 => serde_json::from_str(&response.body).map_err(|_| transient(response)),
@@ -311,14 +464,20 @@ impl<A: GithubApi> WatchSource for JenkinsSource<A> {
             }
         }
         .map(|index| builds[index].clone());
+        let stages = match &current {
+            Some(build) => self.stages(&job.id, &path, build)?,
+            None => None,
+        };
         let cached = self.jobs.entry(job.id.clone()).or_default();
         cached.current = current
             .as_ref()
             .map(|build| (path.clone(), build.number, build.finished()));
-        if cached.reported.as_ref() == Some(&builds) {
+        let seen = (builds, stages);
+        if cached.reported.as_ref() == Some(&seen) {
             return Ok(Poll::NotModified);
         }
-        cached.reported = Some(builds);
+        let stages = seen.1.clone();
+        cached.reported = Some(seen);
         let state = match (decision, &current) {
             (Decision::Green { .. }, Some(build)) => {
                 Observed::Succeeded(outcome(&target, "green", build))
@@ -341,8 +500,12 @@ impl<A: GithubApi> WatchSource for JenkinsSource<A> {
                 build.result.as_deref().unwrap_or("unknown")
             };
             latest.insert("run_status".to_owned(), clean(status, 64));
+            if let Some(stage) = stages.as_deref().and_then(current_stage) {
+                latest.insert("current_step".to_owned(), stage);
+            }
         }
         Ok(Poll::Observed(Box::new(Observation {
+            steps: stages.as_deref().map(steps_of),
             latest,
             url: current
                 .as_ref()
@@ -521,5 +684,71 @@ mod tests {
             branch_job_path(&target),
             "job/team/job/widgets/job/release%252F1.0"
         );
+    }
+
+    fn stage(id: Option<&str>, name: Option<&str>, status: Option<&str>) -> Stage {
+        Stage {
+            id: id.map(str::to_owned),
+            name: name.map(str::to_owned),
+            status: status.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn hs2_sskbrb_every_documented_stage_status_maps_to_one_step_status() {
+        let stages: Vec<Stage> = [
+            ("SUCCESS", StepStatus::Succeeded),
+            ("FAILED", StepStatus::Failed),
+            ("UNSTABLE", StepStatus::Failed),
+            ("ABORTED", StepStatus::Cancelled),
+            ("NOT_EXECUTED", StepStatus::Skipped),
+            ("IN_PROGRESS", StepStatus::Active),
+            ("PAUSED_PENDING_INPUT", StepStatus::Active),
+            ("SOMETHING_NEW", StepStatus::Pending),
+        ]
+        .iter()
+        .enumerate()
+        .map(|(index, (status, expected))| {
+            let stage = stage(Some(&index.to_string()), Some(status), Some(status));
+            assert_eq!(stage.status(), *expected, "{status}");
+            stage
+        })
+        .collect();
+        assert_eq!(stage(Some("1"), None, None).status(), StepStatus::Pending);
+        let steps = steps_of(&stages);
+        assert_eq!(steps.len(), stages.len());
+        assert_eq!(steps[0].id, "stage-0");
+        assert!(crate::steps::validate_steps(&steps).is_ok());
+        // The first running or paused stage is the current one.
+        assert_eq!(current_stage(&stages).as_deref(), Some("IN_PROGRESS"));
+        let paused = [
+            stage(Some("5"), Some("Build"), Some("SUCCESS")),
+            stage(Some("10"), Some("Deploy"), Some("PAUSED_PENDING_INPUT")),
+        ];
+        assert_eq!(current_stage(&paused).as_deref(), Some("Deploy"));
+        assert_eq!(current_stage(&paused[..1]), None);
+        assert_eq!(current_stage(&[]), None);
+        assert!(steps_of(&[]).is_empty());
+    }
+
+    #[test]
+    fn hs2_sskbrb_stage_ids_become_unique_tokens_and_labels_are_cleaned() {
+        let steps = steps_of(&[
+            stage(Some("5"), Some("Build"), Some("SUCCESS")),
+            stage(Some("5"), Some("Again"), Some("SUCCESS")),
+            stage(None, None, Some("SUCCESS")),
+            stage(Some("a/b {c}"), Some("line\nbreak"), None),
+        ]);
+        let ids: Vec<&str> = steps.iter().map(|step| step.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["stage-5", "stage-at-1", "stage-at-2", "stage-a-b--c-"]
+        );
+        assert_eq!(steps[2].label, "stage");
+        assert!(crate::steps::validate_steps(&steps).is_ok());
+        let many: Vec<Stage> = (0..crate::steps::MAX_STEPS + 3)
+            .map(|index| stage(Some(&index.to_string()), Some("s"), Some("SUCCESS")))
+            .collect();
+        assert_eq!(steps_of(&many).len(), crate::steps::MAX_STEPS);
     }
 }

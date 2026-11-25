@@ -5,8 +5,10 @@
 //! pipelines" filtered by `target.ref_name` and sorted by `-created_on`, a paginated
 //! `values` of pipelines with `uuid`, `build_number`, `run_number`, `state` (`name`,
 //! `result.name`) and `target` (`type`, `ref_type`, `ref_name`, `commit.hash`,
-//! `selector`); "List steps for a pipeline"; "Stop a pipeline" answered 204). No test
-//! makes a network call. Synthetic data only.
+//! `selector`); "List steps for a pipeline"; "Stop a pipeline" answered 204). HS2-EFCEJG:
+//! the list's documented `target.commit.hash`, `page` and `pagelen` (at most 100)
+//! parameters, and a page's `size` and `next`. No test makes a network call. Synthetic
+//! data only.
 
 mod common;
 
@@ -66,6 +68,55 @@ impl FakeBitbucket {
             200,
             json!({"page": 1, "pagelen": 100, "size": steps.len(), "values": steps}),
         );
+    }
+
+    /// A full first page of the branch's listing with `size` pipelines in all.
+    fn first_page(&self, pipelines: Vec<Value>, size: u64) {
+        self.serve(
+            &format!("{REPO}/pipelines/?target.ref_name=main&sort=-created_on&pagelen=30"),
+            200,
+            json!({"page": 1, "pagelen": 30, "size": size, "values": pipelines}),
+        );
+    }
+
+    /// What the list answers with the commit filter.
+    fn filtered(&self, status: u16, body: Value) {
+        self.serve(&filter_path(), status, body);
+    }
+
+    /// Page `number` of the deeper search; `next` and `size` as given.
+    fn deep(&self, number: u32, pipelines: Vec<Value>, next: bool, size: Option<u64>) {
+        let mut body = json!({"page": number, "pagelen": 100, "values": pipelines});
+        if next {
+            body["next"] = json!(format!(
+                "https://api.bitbucket.org/2.0/{REPO}/pipelines/?page={}",
+                number + 1
+            ));
+        }
+        if let Some(size) = size {
+            body["size"] = json!(size);
+        }
+        self.serve(&deep_path(number), 200, body);
+    }
+
+    fn gets(&self, path: &str) -> usize {
+        self.0
+            .lock()
+            .unwrap()
+            .log
+            .iter()
+            .filter(|request| request.method == ApiMethod::Get && request.path == path)
+            .count()
+    }
+
+    fn all_gets(&self) -> usize {
+        self.0
+            .lock()
+            .unwrap()
+            .log
+            .iter()
+            .filter(|request| request.method == ApiMethod::Get)
+            .count()
     }
 
     fn posts(&self) -> Vec<String> {
@@ -137,6 +188,23 @@ fn pipeline_step(id: u64, name: &str, state: &str, result: Option<&str>) -> Valu
         state_value["result"] = json!({"name": result});
     }
     json!({"type": "pipeline_step", "uuid": uuid(id), "name": name, "state": state_value})
+}
+
+fn filter_path() -> String {
+    format!(
+        "{REPO}/pipelines/?target.ref_name=main&target.commit.hash={SHA}&sort=-created_on&pagelen=30"
+    )
+}
+
+fn deep_path(number: u32) -> String {
+    format!("{REPO}/pipelines/?target.ref_name=main&page={number}&sort=-created_on&pagelen=100")
+}
+
+/// `count` completed pipelines of another commit, numbered down from `from`.
+fn others(from: u64, count: u64) -> Vec<Value> {
+    (0..count)
+        .map(|offset| pipeline(from - offset, NEWER, "COMPLETED", Some("SUCCESSFUL")))
+        .collect()
 }
 
 fn target() -> CiTarget {
@@ -386,4 +454,249 @@ fn hs2_bwf72s_credentials_and_rate_limits_keep_the_last_observation_and_404_ends
     let mut monitor = watcher(&fx, &api);
     monitor.tick().unwrap();
     assert_eq!(gate(&fx), GateState::Unknown);
+}
+
+#[test]
+fn hs2_efcejg_a_full_first_page_without_the_commit_asks_the_documented_commit_filter() {
+    let fx = fixture();
+    let api = FakeBitbucket::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.first_page(others(500, 30), 400);
+    api.filtered(
+        200,
+        json!({"page": 1, "pagelen": 30, "size": 1,
+            "values": [pipeline(7, SHA, "IN_PROGRESS", None)]}),
+    );
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    let running = fx.get(&job.id);
+    assert_eq!(running.status, Status::Running);
+    assert_eq!(running.latest["run_id"], "7");
+    // An honoured filter is used again on the next poll; the listing is never paged.
+    api.filtered(
+        200,
+        json!({"page": 1, "pagelen": 30, "size": 1,
+            "values": [pipeline(7, SHA, "COMPLETED", Some("SUCCESSFUL"))]}),
+    );
+    step(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 7));
+    assert_eq!(api.gets(&filter_path()), 2);
+    assert_eq!(api.gets(&deep_path(1)), 0);
+
+    // An honoured filter with no pipeline of the commit yet: pending, not paged.
+    let fx = fixture();
+    let api = FakeBitbucket::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.first_page(others(500, 30), 400);
+    api.filtered(
+        200,
+        json!({"page": 1, "pagelen": 30, "size": 0, "values": []}),
+    );
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).status, Status::Waiting);
+    assert_eq!(gate(&fx), GateState::Pending);
+    assert_eq!(api.gets(&deep_path(1)), 0);
+}
+
+#[test]
+fn hs2_efcejg_no_deeper_read_when_the_first_page_is_short_or_holds_the_commit() {
+    let fx = fixture();
+    let api = FakeBitbucket::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    // Short: the whole branch fits, so the commit has no pipeline yet.
+    api.first_page(others(500, 3), 3);
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).status, Status::Waiting);
+    assert_eq!(api.all_gets(), 1);
+    // Full, with the commit's own pipeline on it: no filter, no paging.
+    let mut page = others(500, 29);
+    page.push(pipeline(400, SHA, "COMPLETED", Some("FAILED")));
+    api.first_page(page, 900);
+    step(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Red { run } if run.id == 400));
+    assert_eq!(api.gets(&filter_path()), 0);
+    assert_eq!(api.gets(&deep_path(1)), 0);
+}
+
+#[test]
+fn hs2_efcejg_an_ignored_filter_pages_the_listing_once_learned_and_skips_duplicates() {
+    let fx = fixture();
+    let api = FakeBitbucket::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.first_page(others(500, 30), 400);
+    // The filter answers other commits: it is not honoured.
+    api.filtered(
+        200,
+        json!({"page": 1, "pagelen": 30, "size": 400, "values": others(500, 30)}),
+    );
+    // A new pipeline arrived between reads: page 2 repeats page 1's last entries.
+    api.deep(1, others(500, 100), true, Some(400));
+    let mut second = others(402, 99);
+    second.push(pipeline(290, SHA, "IN_PROGRESS", None));
+    api.deep(2, second, true, Some(400));
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    let running = fx.get(&job.id);
+    assert_eq!(running.status, Status::Running);
+    assert_eq!(running.latest["run_id"], "290");
+    // Found on page 2: page 3 is not read.
+    assert_eq!(api.gets(&deep_path(3)), 0);
+
+    // The next poll pages straight away: the filter is not asked again.
+    let mut second = others(402, 99);
+    second.push(pipeline(290, SHA, "COMPLETED", Some("SUCCESSFUL")));
+    api.deep(2, second, true, Some(400));
+    step(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 290));
+    assert_eq!(api.gets(&filter_path()), 1);
+    assert_eq!(api.gets(&deep_path(1)), 2);
+
+    // A pipeline listed twice in one answer is read once: the first copy counts.
+    let fx = fixture();
+    let api = FakeBitbucket::default();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.first_page(others(500, 30), 400);
+    api.filtered(
+        400,
+        json!({"type": "error", "error": {"message": "synthetic"}}),
+    );
+    let mut page = others(500, 98);
+    page.push(pipeline(300, SHA, "COMPLETED", Some("FAILED")));
+    page.push(pipeline(300, SHA, "COMPLETED", Some("SUCCESSFUL")));
+    api.deep(1, page, true, Some(400));
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert!(matches!(gate(&fx), GateState::Red { run } if run.id == 300));
+}
+
+#[test]
+fn hs2_efcejg_the_page_budget_keeps_the_gate_pending_and_a_later_poll_finds_the_commit() {
+    let fx = fixture();
+    let api = FakeBitbucket::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.first_page(others(900, 30), 900);
+    // A refused filter parameter is read as not honoured.
+    api.filtered(
+        400,
+        json!({"type": "error", "error": {"message": "synthetic"}}),
+    );
+    api.deep(1, others(900, 100), true, None);
+    api.deep(2, others(800, 100), true, None);
+    api.deep(3, others(700, 100), true, None);
+    api.deep(
+        4,
+        vec![pipeline(5, SHA, "COMPLETED", Some("FAILED"))],
+        false,
+        None,
+    );
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    // Beyond the budget: pending, never failed, and page 4 is not asked.
+    let seen = fx.get(&job.id);
+    assert_eq!(seen.status, Status::Waiting);
+    assert!(seen.outcome.is_none());
+    assert_eq!(gate(&fx), GateState::Pending);
+    assert_eq!(api.gets(&deep_path(4)), 0);
+    assert_eq!(api.gets(&deep_path(3)), 1);
+    // The same answer again rewrites nothing.
+    let revision = seen.revision;
+    fx.clock.advance(100);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).revision, revision);
+
+    // Once the commit's pipeline is within the budget it is judged.
+    let mut third = others(700, 99);
+    third.push(pipeline(5, SHA, "COMPLETED", Some("FAILED")));
+    api.deep(3, third, true, None);
+    step(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Red { run } if run.id == 5));
+}
+
+#[test]
+fn hs2_efcejg_an_empty_page_or_a_page_without_more_ends_the_search() {
+    for (first, size) in [
+        // An empty page, even one that claims a next link.
+        (Vec::new(), Some(400)),
+        // A full page with neither `next` nor `size`.
+        (others(500, 100), None),
+        // A full page whose `size` says it is the last.
+        (others(500, 100), Some(100)),
+    ] {
+        let fx = fixture();
+        let api = FakeBitbucket::default();
+        let job =
+            ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+        api.first_page(others(500, 30), 400);
+        api.filtered(
+            200,
+            json!({"page": 1, "pagelen": 30, "size": 400, "values": others(500, 30)}),
+        );
+        let label = format!("{} values, size {size:?}", first.len());
+        let next = first.is_empty();
+        api.deep(1, first, next, size);
+        api.deep(
+            2,
+            vec![pipeline(5, SHA, "COMPLETED", Some("FAILED"))],
+            false,
+            None,
+        );
+        let mut monitor = watcher(&fx, &api);
+        monitor.tick().unwrap();
+        assert_eq!(fx.get(&job.id).status, Status::Waiting, "{label}");
+        assert_eq!(api.gets(&deep_path(2)), 0, "{label}");
+    }
+}
+
+#[test]
+fn hs2_efcejg_errors_in_the_deeper_search_keep_the_last_observation() {
+    let fx = fixture();
+    let api = FakeBitbucket::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.first_page(others(500, 30), 400);
+    api.filtered(
+        200,
+        json!({"page": 1, "pagelen": 30, "size": 1,
+            "values": [pipeline(7, SHA, "IN_PROGRESS", None)]}),
+    );
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).status, Status::Running);
+    // A spent limit or a server error on the filtered read is retried.
+    for status in [429, 500, 503] {
+        api.filtered(
+            status,
+            json!({"type": "error", "error": {"message": "synthetic"}}),
+        );
+        let asked = api.gets(&filter_path());
+        fx.clock.advance(30_000);
+        monitor.tick().unwrap();
+        assert!(api.gets(&filter_path()) > asked, "{status} was read");
+        let seen = fx.get(&job.id);
+        assert_eq!(seen.status, Status::Running, "{status}");
+        assert_eq!(seen.latest["run_id"], "7", "{status}");
+        assert_eq!(gate(&fx), GateState::Pending, "{status}");
+    }
+    // A server error on a deeper page is retried too.
+    let fx = fixture();
+    let api = FakeBitbucket::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.first_page(others(500, 30), 400);
+    api.filtered(
+        400,
+        json!({"type": "error", "error": {"message": "synthetic"}}),
+    );
+    api.deep(1, others(500, 100), true, None);
+    api.serve(&deep_path(2), 502, json!({"type": "error"}));
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).status, Status::Waiting);
+    assert!(fx.get(&job.id).outcome.is_none());
+    let mut second = others(400, 99);
+    second.push(pipeline(250, SHA, "COMPLETED", Some("SUCCESSFUL")));
+    api.deep(2, second, false, None);
+    fx.clock.advance(30_000);
+    monitor.tick().unwrap();
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 250));
 }

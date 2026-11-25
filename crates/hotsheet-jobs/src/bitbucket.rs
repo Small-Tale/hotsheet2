@@ -9,9 +9,19 @@
 //! `build_number`, `run_number`, `state.name` and `state.result.name`, and `target`
 //! with `ref_type`, `ref_name`, `commit.hash` and `selector`), a pipeline's steps
 //! (`GET …/pipelines/{uuid}/steps/`) and stops one (`POST …/pipelines/{uuid}/stopPipeline`,
-//! 204). It does not filter by commit, so each poll reads the branch's newest
-//! pipelines and keeps the commit's own. It exposes no repository ancestry, so a
-//! Bitbucket gate attests exact coverage only (see [`CiProvider::attests_ancestors`]).
+//! 204). Each poll reads the branch's newest pipelines and keeps the commit's own. It
+//! exposes no repository ancestry, so a Bitbucket gate attests exact coverage only (see
+//! [`CiProvider::attests_ancestors`]).
+//!
+//! HS2-EFCEJG: on a busy branch the commit's pipeline can fall out of that first page.
+//! When the page holds none of the commit's pipelines and the listing has more, the
+//! poll asks the list with the documented `target.commit.hash` filter (Bitbucket's
+//! OpenAPI: "The revision to filter by."). An answer holding only the commit's
+//! pipelines shows the filter is honoured; one holding other commits, or a refusal,
+//! shows it is not, and the poll pages the branch's listing instead (`pagelen=100`, the
+//! documented maximum, at most [`MAX_DEEP_PAGES`] pages per poll, de-duplicated by
+//! uuid because pages shift as pipelines arrive). Pages are asked by number, never by
+//! following an absolute `next` link. A spent budget leaves the gate pending.
 //!
 //! A rerun of the whole pipeline is a new pipeline with a new build number; rerunning
 //! its failed steps keeps the build number and raises `run_number`. The run floor is
@@ -31,13 +41,34 @@ use crate::model::{Job, Outcome};
 use crate::monitor::{CancelReply, Observation, Observed, Poll, WatchError, WatchSource};
 use crate::steps::{Step, StepStatus};
 
-/// How many of the branch's newest pipelines one poll looks at.
+/// How many of the branch's newest pipelines one poll looks at first.
 const PIPELINES_PER_POLL: usize = 30;
+/// HS2-EFCEJG: the page length of a deeper search, Bitbucket's documented maximum.
+const DEEP_PAGELEN: usize = 100;
+/// HS2-EFCEJG: how many pages of the branch's listing one poll may read beyond the
+/// first when the commit's pipeline is not on it.
+const MAX_DEEP_PAGES: u32 = 3;
 
 #[derive(Clone, Debug, Deserialize)]
 struct Page<T> {
     #[serde(default = "Vec::new")]
     values: Vec<T>,
+    /// The total count, when Bitbucket answers it.
+    #[serde(default)]
+    size: Option<u64>,
+    /// A link to the next page, present while there is one.
+    #[serde(default)]
+    next: Option<String>,
+}
+
+impl<T> Page<T> {
+    /// Whether the listing has entries beyond page `page` of `pagelen`.
+    fn more(&self, page: u32, pagelen: usize) -> bool {
+        self.next.is_some()
+            || self
+                .size
+                .is_some_and(|size| size > u64::from(page) * pagelen as u64)
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -112,6 +143,14 @@ struct Selector {
 }
 
 impl Pipeline {
+    /// The commit the pipeline built, whatever its target.
+    fn commit(&self) -> Option<&str> {
+        self.target
+            .as_ref()
+            .and_then(|target| target.commit.as_ref())
+            .and_then(|commit| commit.hash.as_deref())
+    }
+
     fn attempt(&self) -> u32 {
         self.run_number.unwrap_or(1).max(1)
     }
@@ -214,6 +253,8 @@ struct Cached {
 pub struct BitbucketPipelinesSource<A: GithubApi> {
     api: A,
     jobs: BTreeMap<String, Cached>,
+    /// HS2-EFCEJG: whether the list honours `target.commit.hash`, once learned.
+    commit_filter: Option<bool>,
 }
 
 /// `repositories/{workspace}/{repo_slug}` of a target.
@@ -231,7 +272,84 @@ impl<A: GithubApi> BitbucketPipelinesSource<A> {
         Self {
             api,
             jobs: BTreeMap::new(),
+            commit_filter: None,
         }
+    }
+
+    /// One page of the branch's pipelines, newest first; `extra` adds query
+    /// parameters. A missing repository ends the watch; 401, 403, 429 and server
+    /// errors are retried.
+    fn list(
+        &mut self,
+        repository: &str,
+        target: &CiTarget,
+        extra: &str,
+        pagelen: usize,
+    ) -> Result<(ApiResponse, Option<Page<Pipeline>>), WatchError> {
+        let response = self.get(format!(
+            "{repository}/pipelines/?target.ref_name={}{extra}&sort=-created_on&pagelen={pagelen}",
+            query_value(&target.branch)
+        ))?;
+        let page = match response.status {
+            200 => Some(serde_json::from_str(&response.body).map_err(|_| transient(&response))?),
+            _ => None,
+        };
+        Ok((response, page))
+    }
+
+    /// HS2-EFCEJG: the commit's pipelines beyond the first page, as listed (unfiltered
+    /// by target kind). Empty when they are not found within this poll's budget.
+    fn deeper(&mut self, repository: &str, target: &CiTarget) -> Result<Vec<Pipeline>, WatchError> {
+        if self.commit_filter != Some(false) {
+            let extra = format!("&target.commit.hash={}", target.sha);
+            let (response, page) = self.list(repository, target, &extra, PIPELINES_PER_POLL)?;
+            match page {
+                Some(page) => {
+                    let honoured = page.values.iter().all(|pipeline| {
+                        pipeline
+                            .commit()
+                            .is_some_and(|hash| hash.eq_ignore_ascii_case(&target.sha))
+                    });
+                    self.commit_filter = Some(honoured);
+                    if honoured {
+                        return Ok(page.values);
+                    }
+                }
+                None => match response.status {
+                    429 | 500.. => return Err(transient(&response)),
+                    404 => return Err(WatchError::Gone),
+                    // A refused parameter: page the listing instead.
+                    _ => self.commit_filter = Some(false),
+                },
+            }
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let mut found = Vec::new();
+        for number in 1..=MAX_DEEP_PAGES {
+            let (response, page) =
+                self.list(repository, target, &format!("&page={number}"), DEEP_PAGELEN)?;
+            let Some(page) = page else {
+                return Err(match response.status {
+                    404 => WatchError::Gone,
+                    _ => transient(&response),
+                });
+            };
+            let more = page.more(number, DEEP_PAGELEN);
+            let empty = page.values.is_empty();
+            for pipeline in page.values {
+                if seen.insert(pipeline.uuid.clone())
+                    && pipeline
+                        .commit()
+                        .is_some_and(|hash| hash.eq_ignore_ascii_case(&target.sha))
+                {
+                    found.push(pipeline);
+                }
+            }
+            if empty || !more || !found.is_empty() {
+                break;
+            }
+        }
+        Ok(found)
     }
 
     fn get(&mut self, path: String) -> Result<ApiResponse, WatchError> {
@@ -282,27 +400,29 @@ impl<A: GithubApi> WatchSource for BitbucketPipelinesSource<A> {
             .filter(|(target, _)| target.provider == CiProvider::BitbucketPipelines)
             .ok_or(WatchError::Gone)?;
         let repository = repository_path(&target).ok_or(WatchError::Gone)?;
-        let response = self.get(format!(
-            "{repository}/pipelines/?target.ref_name={}&sort=-created_on&pagelen={PIPELINES_PER_POLL}",
-            query_value(&target.branch)
-        ))?;
-        let pipelines: Vec<Pipeline> = match response.status {
-            200 => {
-                let listed: Page<Pipeline> =
-                    serde_json::from_str(&response.body).map_err(|_| transient(&response))?;
-                let mut pipelines: Vec<Pipeline> = listed
-                    .values
-                    .into_iter()
-                    .filter(|pipeline| pipeline.built(&target))
-                    .collect();
-                pipelines.sort_by_key(|pipeline| std::cmp::Reverse(pipeline.build_number));
-                pipelines
-            }
-            // The repository does not exist, or cannot be read with these credentials.
-            404 => return Err(WatchError::Gone),
-            // 401, 403, 429 and server errors are retried.
-            _ => return Err(transient(&response)),
+        let (response, listed) = self.list(&repository, &target, "", PIPELINES_PER_POLL)?;
+        let Some(listed) = listed else {
+            return Err(match response.status {
+                // The repository does not exist, or cannot be read with these credentials.
+                404 => WatchError::Gone,
+                // 401, 403, 429 and server errors are retried.
+                _ => transient(&response),
+            });
         };
+        let more = listed.more(1, PIPELINES_PER_POLL);
+        let mut pipelines: Vec<Pipeline> = listed
+            .values
+            .into_iter()
+            .filter(|pipeline| pipeline.built(&target))
+            .collect();
+        if pipelines.is_empty() && more {
+            pipelines = self
+                .deeper(&repository, &target)?
+                .into_iter()
+                .filter(|pipeline| pipeline.built(&target))
+                .collect();
+        }
+        pipelines.sort_by_key(|pipeline| std::cmp::Reverse(pipeline.build_number));
         let decision = decide(floor, &pipelines);
         let current = match decision {
             Decision::Pending { pipeline } => pipeline,
@@ -613,5 +733,23 @@ mod tests {
                 ("step-h".to_owned(), StepStatus::Pending),
             ]
         );
+    }
+
+    #[test]
+    fn hs2_efcejg_a_page_has_more_by_its_next_link_or_its_size() {
+        let page = |next: Option<&str>, size: Option<u64>| Page::<Pipeline> {
+            values: Vec::new(),
+            size,
+            next: next.map(str::to_owned),
+        };
+        assert!(page(Some("https://api.bitbucket.org/2.0/x?page=2"), None).more(1, 30));
+        assert!(page(None, Some(31)).more(1, 30));
+        assert!(!page(None, Some(30)).more(1, 30));
+        assert!(page(None, Some(201)).more(2, 100));
+        assert!(!page(None, Some(200)).more(2, 100));
+        assert!(!page(None, None).more(1, 30));
+        // A page answer without `values` reads as empty.
+        let empty: Page<Pipeline> = serde_json::from_str(r#"{"page": 3}"#).unwrap();
+        assert!(empty.values.is_empty() && !empty.more(3, 100));
     }
 }

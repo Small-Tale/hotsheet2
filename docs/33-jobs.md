@@ -424,8 +424,18 @@ build-list-by-commit filter and exposes no repository ancestry.
 - **Verdict.** A `SUCCESS` build of the commit is green; otherwise the newest build
   decides: `FAILURE` and `UNSTABLE` are red, `ABORTED` is cancelled, and `building`,
   `NOT_BUILT` or an unknown result wait. A rebuild is a new build number, so a rewatch
-  ignores a judged build by number. No steps are reported: Jenkins core exposes no
-  stage data (HS2-SSKBRB).
+  ignores a judged build by number.
+- **Steps (HS2-SSKBRB).** Jenkins core exposes no stage data. A Pipeline build's stages
+  come from the [Pipeline: REST API plugin](https://github.com/jenkinsci/pipeline-stage-view-plugin/blob/master/rest-api/README.md):
+  each poll reads `<job>/<number>/wfapi/describe` for the judged build only, and its
+  `stages[]` become the steps (`stage-<id>`, labelled with the stage name).
+  `SUCCESS` succeeded; `FAILED` and `UNSTABLE` failed; `ABORTED` cancelled;
+  `NOT_EXECUTED` skipped; `IN_PROGRESS` and `PAUSED_PENDING_INPUT` active, and the
+  first of those is `current_step`; anything else pending. A 404 (the plugin is not
+  installed, or the job is not a Pipeline) means no steps, and that job is not asked
+  again during the watch. 429 and server errors are retried like a job read; 401, 403
+  or an unreadable body leave the last step tree. A finished build's stages are read
+  once.
 - **Cancel** is `POST <job>/<number>/stop` (a redirect counts as accepted), sent only
   for the commit's own unfinished build.
 - **Errors.** 404 for the job ends the watch without a verdict (`unknown`); 401, 403,
@@ -480,12 +490,22 @@ Bitbucket's API exposes no repository ancestry.
 
 - **Target.** `repository` is `workspace/repo_slug`; the workflow is always `*`.
 - **Reads** ([pipelines API](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pipelines/)).
-  The API does not filter by commit, so each poll lists
+  Each poll lists
   `repositories/<workspace>/<slug>/pipelines/?target.ref_name=<branch>&sort=-created_on&pagelen=30`
   and keeps the branch pipelines (`pipeline_ref_target`, `ref_type` `branch`) whose
   `target.commit.hash` is the commit. Pull request and custom (manually run)
-  pipelines never count. A commit whose pipeline drops out of the branch's 30 newest
-  before it is judged stays pending (HS2-EFCEJG). The current pipeline's steps
+  pipelines never count.
+- **Beyond the newest 30 (HS2-EFCEJG).** When that page holds none of the commit's
+  pipelines and the listing has more (a `next` link, or a `size` beyond the page),
+  the poll adds the documented `target.commit.hash=<sha>` filter. An answer holding
+  only the commit's pipelines (or none) shows the filter is honoured and is used; one
+  holding other commits, or a 4xx refusal, shows it is not, and the source remembers
+  that and pages the branch listing instead: `page=1..3` with `pagelen=100` (the
+  documented maximum) per poll, asked by number, de-duplicated by uuid, stopping at an
+  empty page, a page with no more, or the first page holding the commit. A commit
+  beyond that budget stays pending, never failed. 429 and server errors on these reads
+  are retried like the first page. Live Bitbucket has not been checked (HS2-6BVP6M).
+- **Steps.** The current pipeline's steps
   (`…/pipelines/<uuid>/steps/`) are the Job's steps.
 - **Verdict.** A `COMPLETED` + `SUCCESSFUL` pipeline of the commit is green; otherwise
   the newest decides: `FAILED`, `ERROR` and `EXPIRED` are red, `STOPPED` is cancelled,
@@ -493,7 +513,8 @@ Bitbucket's API exposes no repository ancestry.
   once the pipeline is `COMPLETED`.
 - **Reruns.** A rerun of the whole pipeline is a new build number; rerunning failed
   steps keeps it and raises `run_number`, which is `run_attempt`. A rewatch ignores
-  the judged run and judges either.
+  the judged run and judges either. `run_number` on a rerun follows the API
+  documentation and is not yet confirmed against live Bitbucket (HS2-6BVP6M).
 - **Cancel** is `POST …/pipelines/<uuid>/stopPipeline` (204), sent only for the
   commit's own unfinished pipeline.
 - **Outcome.** The API answers no web link for a pipeline, so `run_url` is the
