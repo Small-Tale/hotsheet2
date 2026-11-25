@@ -4360,16 +4360,28 @@ work is never started on the same unverified resource in one pass, and when the
 backend returns, the claim the session took is read like any other. A provisional
 claim is never treated as exclusive.
 
-The policy is the one the namespace's machine binding names (§36.7, HS2-JJWESD),
-read through `hotsheet_resource_claims::offline_policy` when its backend cannot be
-read (HS2-KCEHVR). An unbound namespace is served by the local machine backend; it,
+The policy is the one the namespace's binding names (§36.7, HS2-JJWESD), read
+through `hotsheet_resource_claims::offline_policy` when its backend cannot be read
+(HS2-KCEHVR). An unbound namespace is served by the local machine backend; it,
 a local configuration, and a configuration registry that cannot itself be read fail
 closed. Each unreadable namespace is decided by its own policy: on one machine a
 `provisional` namespace can start work while a `fail_closed` one defers its work,
 and the namespaces that were read are held or free as usual. An older peer that
 reports only one policy for all of them is read that way, and one that reports no
-policy fails closed. The capacity read uses the machine's bindings, not a hosted
-project's own (HS2-AP8KPT).
+policy fails closed.
+
+**The hosted project's own bindings (HS2-AP8KPT).** A project can bind a namespace in
+its own `.hotsheet2/resource-claims.json`, which wins over the machine's and keeps its
+own state (§36.13). The sessions working a target checkout claim through that
+project's bindings, so the orchestrator reads them the same way: the hosted capacity
+read of a checkout lists each named namespace's claims, and takes its offline policy,
+from the backend the checkout's project bindings choose (the machine's for a
+namespace the project does not bind). The hosted resource wait
+(`/target-resource-wait`) waits in that backend, and a release watch on this machine
+waits in the backend of the first active target checkout here whose project binds
+the namespace, else the machine's. A claim of the same name in the machine's backend
+is not the project's. A capacity read that names no namespace still enumerates the
+machine's claim state only (HS2-YDZAFH); ready work always names its namespaces.
 
 ### Reading contention
 

@@ -3756,6 +3756,17 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
 - `orchestration_readiness.rs # hs2_zh9c6w` (CLI) sends `--require toolchain=node>=20`
   and `tool=codex>=0.40` as those strings.
 
+### A hosted checkout's project claim bindings (HS2-AP8KPT)
+
+- `tests/capacity.rs # hs2_ap8kpt` reads a target checkout's capacity and waits on a
+  resource through the real claim service: an unbound namespace reads the machine's
+  claim; once the project binds it, the machine's claim of the same name is not the
+  project's, the hosted wait is free, a claim taken in the project's backend is held
+  and waited on there until released; a project-bound backend that cannot be read
+  reports the project configuration's `provisional` policy for that namespace only.
+  The scripted sources of `tests/capacity.rs` and `tests/scheduler/resources.rs`
+  follow the `project` argument; `remote_servers/resources.rs` still passes.
+
 ### Read models joined by project sites (HS2-CQ0PNT)
 
 - `timeline_tests.rs # hs2_cq0pnt` (core): a run dispatched by hand through another

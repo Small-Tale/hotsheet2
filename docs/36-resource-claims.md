@@ -200,7 +200,8 @@ configuration refuses `provisional`. The choice is recorded in the configuration
 project, namespace)`, or the `offline` field of `resolve`. The orchestration
 scheduler acts on either choice, per namespace, as the machine's capacity read
 reports it (§26.20 of [26-orchestration-projects.md](26-orchestration-projects.md),
-HS2-KCEHVR).
+HS2-KCEHVR), with the hosted checkout's project bindings winning over the machine's
+as they do for the sessions there (HS2-AP8KPT).
 
 ## 36.8 Plugin form
 
@@ -381,8 +382,11 @@ Orchestration uses them this way
 ([26-orchestration-projects.md](26-orchestration-projects.md) §26.20, HS2-2FG91X): a
 plan step or a target declares the resources its work must hold, the scheduler
 lists a namespace's live claims and defers work whose resource is held, and it waits
-for a release with `wait_until_free`. It never acquires, renews or releases; the
-session that does the work does, as §36.1 prescribes.
+for a release with `ClaimService::wait_free`. HS2-AP8KPT: for a hosted target checkout
+both go through `ClaimService::new(home).with_project(checkout root)`, so a namespace
+the project binds itself is read, waited on and given its offline policy from the
+project's backend. It never acquires, renews or releases; the session that does the
+work does, as §36.1 prescribes.
 
 ## 36.13 Backend configurations and bindings (HS2-JJWESD)
 
