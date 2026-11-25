@@ -214,6 +214,15 @@ export const ORCHESTRATION_REFUSALS: Readonly<Record<string, RefusalText>> = {
   readiness_cyclic: { message: 'The plan’s prerequisites form a cycle.', next: 'Update the plan.' },
   readiness_provisional: { message: 'That plan step builds on unconfirmed work.' },
   readiness_override_denied: { message: 'Starting that step early is not allowed.' },
+  // HS2-061YTB: a manual dispatch to a machine that does not meet, or did not report, a step requirement.
+  requirement_unmet: {
+    message: "The target's machine does not meet a requirement of this step.",
+    next: 'Dispatch it to a machine that meets it, or change the step requirements.',
+  },
+  requirement_unknown: {
+    message: "The target's machine has not reported a requirement of this step.",
+    next: 'Wait for the machine to report its capabilities, then try again.',
+  },
   readiness_provisional_refused: { message: 'The policy does not allow building on unconfirmed work.' },
   readiness_not_provisional: { message: 'That plan step does not build on unconfirmed work.' },
   plan_no_targets: {
