@@ -19,6 +19,10 @@ use crate::store::{Acquire, Change, JobStore, JobUpdate, stopped_watching_outcom
 /// The latest-value key that says the last poll failed and is being retried.
 pub const WATCH_STATE_KEY: &str = "watch";
 
+/// The latest-value key naming the stage or step a running operation is in. A finished
+/// operation is in no step, so a final reading clears it unless it names one (HS2-HR83E5).
+pub const CURRENT_STEP_KEY: &str = "current_step";
+
 /// One look at the external operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Poll {
@@ -518,6 +522,9 @@ impl Monitor {
             .map(|(key, value)| (key, Some(value)))
             .collect();
         latest.insert(WATCH_STATE_KEY.to_owned(), None);
+        if !matches!(observation.state, Observed::Waiting | Observed::Running) {
+            latest.entry(CURRENT_STEP_KEY.to_owned()).or_insert(None);
+        }
         let status = match &observation.state {
             Observed::Waiting => Some(ActiveStatus::Waiting),
             Observed::Running => Some(ActiveStatus::Running),
