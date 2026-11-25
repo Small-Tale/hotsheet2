@@ -94,7 +94,10 @@ impl LiveRecord {
             if let Some(dir) = path.parent() {
                 std::fs::create_dir_all(dir)?;
             }
-            hotsheet_ticketing::metrics::ensure_gitignored(store, "metrics/local/")?;
+            hotsheet_ticketing::metrics::ensure_gitignored(
+                store,
+                hotsheet_ticketing::store::METRICS_LOCAL_IGNORE,
+            )?;
             let temp = path.with_extension("json.tmp");
             std::fs::write(
                 &temp,

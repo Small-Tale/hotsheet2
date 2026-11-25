@@ -351,6 +351,10 @@ const HS1_CLEANUP_ENTRIES = new Set([
 export function hs1MigrationArgs(root: string, ticketStore: string, exporter: string): string[] {
   return [resolve(root, '.hotsheet'), '-C', ticketStore, '--migrator', exporter];
 }
+/** The migrator step that commits Hot Sheet's own store ignore rules before a backup push (HS2-HSHT2G). */
+export function hs1BackupPreparationArgs(ticketStore: string): string[] {
+  return ['-C', ticketStore, '--prepare-backup'];
+}
 export function preserveHs1Entry(name: string): boolean {
   return !HS1_CLEANUP_ENTRIES.has(name);
 }
@@ -1052,12 +1056,15 @@ export async function connectGitTicketStoreRemote(
   runner: GitRunner = runGitCommand,
   git: BackupGit = backupGit,
   observe?: (progress: MigrationProgress) => void | Promise<void>,
+  /** Commits Hot Sheet's own store ignore rules before the readiness check (HS2-HSHT2G). */
+  prepare?: (store: string) => Promise<void>,
 ): Promise<void> {
   const remote = remoteInput.trim();
   if (!remote || remote.startsWith('-') || /[\r\n]/.test(remote)) throw new Error('Enter a valid Git remote URL.');
   const store = await realpath(storeInput.trim());
   if (!(await exists(resolve(store, 'hotsheet-store.json'))))
     throw new Error('The ticket repository is no longer available.');
+  await prepare?.(store);
   const completion = await readImportCompletion(store, git),
     existing = await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined);
   let added = false;
@@ -2573,6 +2580,9 @@ export async function runHs1MigrationJob(
       },
       async (store, args) => (await ownedRunner('git', ['-C', store, ...args], job.root)).trim(),
       observe,
+      async (store) => {
+        await ownedRunner(migrateBinary(), hs1BackupPreparationArgs(store), job.root);
+      },
     );
     return undefined;
   }

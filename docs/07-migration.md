@@ -295,7 +295,14 @@ may not have open at once):
    source project in Git-local `hotsheet-hs1-import-completed.json`. A new migration
    attempt invalidates earlier import and backup proof before exporting. Older receipts
    without this proof require a repeat import before cleanup can become available.
-4. The first remote connection/push is another project-owned background job. Git
+4. The first remote connection/push is another project-owned background job. Before
+   its readiness check it runs `hotsheet-migrate -C <store> --prepare-backup`, which
+   commits Hot Sheet's own store `.gitignore` when it differs from `HEAD`. A store an
+   older build left with an uncommitted ignore line therefore backs up without manual
+   Git work. Hosting a new import adds no such line, because the store's managed ignore
+   rules already list its machine-local runtime directories (§2, HS2-HSHT2G). Any other
+   uncommitted file still blocks backup, and the error names up to five of them. A
+   stat-only rewrite with identical bytes is not uncommitted work. Git
    reports object counts and, when available, bytes sent and transfer rate. These are
    phase-local measurements, without an invented overall or byte-total percentage. Only a successful
    push followed by verification that the remote branch contains the intended import
@@ -439,6 +446,10 @@ For headless backup, push the imported ticket store normally, then run
 revision against the current origin branch and writes the same backup proof consumed
 by the client and cleanup endpoint, without opening HS1 or rerunning export. A changed
 origin, old remote revision, dirty store, or unfinished import fails verification.
+Like the background job, verification first commits Hot Sheet's own store `.gitignore`
+(HS2-HSHT2G). `hotsheet-migrate -C <ticket-store> --prepare-backup` runs only that step
+and the readiness check, naming any other uncommitted file, so it is safe to run before
+a manual push.
 
 ## 7.4 What is and isn't migrated
 

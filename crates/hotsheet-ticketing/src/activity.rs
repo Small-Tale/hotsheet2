@@ -329,7 +329,7 @@ pub fn record(store: &FsStore, event: &ActivityEvent) -> io::Result<()> {
         .open(path)?;
     writeln!(f, "{line}")?;
     drop(f);
-    ensure_gitignored(store.root(), "activity/recent/")?;
+    ensure_gitignored(store.root(), crate::store::ACTIVITY_RECENT_IGNORE)?;
     prune_by_age(&dir, event.day(), MAX_RECENT_ACTIVITY_AGE_DAYS)?;
     Ok(())
 }

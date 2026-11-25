@@ -358,7 +358,7 @@ pub fn record_session_responses_written(
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&local, fs::Permissions::from_mode(0o700))?;
     }
-    super::ensure_gitignored(store, "metrics/local/")?;
+    super::ensure_gitignored(store, crate::store::METRICS_LOCAL_IGNORE)?;
     let lock_file = File::options()
         .create(true)
         .read(true)

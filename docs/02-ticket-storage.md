@@ -250,6 +250,14 @@ of the store's shared resource-claims registry (`.hotsheet2/resource-claims.json
 beside it (HS2-JBF90Q): a sync once committed it into the shared history, and a copy
 already committed leaves the index the same way.
 
+The list also names the machine-local runtime directories a server or CLI fills after
+the store exists: `metrics/local/` (live-state record, peaks and history),
+`metrics/raw/` (raw usage events), `activity/recent/`, and `local/` (the per-user read
+overlay). Their writers still check for their own line, but a new or imported store
+already commits all of them with its first commit, so hosting it leaves `git status`
+empty (HS2-HSHT2G). An older store gains the lines when it is next opened, and the next
+ticket commit, or the HS1 backup step's own `.gitignore` commit (§7.3), records them.
+
 A single unparseable ticket file must never make a whole project un-openable. Store
 enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every
 healthy ticket **plus** a separate report of the files that failed to parse

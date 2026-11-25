@@ -47,16 +47,33 @@ const STAGED_WRITE_PATTERN: &str = ".*.tmp";
 /// configuration is per machine now (HS2-1M8E9D, [`crate::PROVIDER_CONFIG_FILE`]); the
 /// legacy working file stays on disk as a seed and a rollback snapshot, untracked.
 pub(crate) const LEGACY_PROVIDER_CONFIG_FILE: &str = crate::provider::PROVIDER_CONFIG_FILE;
+/// HS2-HSHT2G: machine-local runtime directories that a server or CLI fills inside the
+/// store after it was created: the live-state record and peaks, raw usage events,
+/// recent activity, and the per-user read overlay. Their writers once each appended
+/// their own ignore line after the import commit, leaving `.gitignore` uncommitted.
+pub const METRICS_LOCAL_IGNORE: &str = "metrics/local/";
+/// See [`METRICS_LOCAL_IGNORE`].
+pub const METRICS_RAW_IGNORE: &str = "metrics/raw/";
+/// See [`METRICS_LOCAL_IGNORE`].
+pub const ACTIVITY_RECENT_IGNORE: &str = "activity/recent/";
+/// See [`METRICS_LOCAL_IGNORE`].
+pub const READ_OVERLAY_IGNORE: &str = "local/";
 /// Every pattern the managed store `.gitignore` carries: host metadata, lasting
-/// machine-local locks, staged atomic writes, and the legacy per-machine provider
-/// configuration. None of them is ticket data.
-pub(crate) const MANAGED_IGNORES: [&str; 6] = [
+/// machine-local locks, staged atomic writes, the legacy per-machine provider
+/// configuration, and the machine-local runtime directories. None of them is ticket
+/// data. A new store commits them all with its first commit, so later runtime writes
+/// leave `.gitignore` unchanged (HS2-HSHT2G).
+pub(crate) const MANAGED_IGNORES: [&str; 10] = [
     FINDER_METADATA_FILE,
     NOTE_MUTATION_LOCK_FILE,
     PROVIDER_CONFIG_LOCK_FILE,
     STAGED_WRITE_PATTERN,
     LEGACY_PROVIDER_CONFIG_FILE,
     RESOURCE_CLAIMS_LOCK_FILE,
+    METRICS_LOCAL_IGNORE,
+    METRICS_RAW_IGNORE,
+    ACTIVITY_RECENT_IGNORE,
+    READ_OVERLAY_IGNORE,
 ];
 /// HS2-JBF90Q: the lasting lock of the store's resource-claims registry
 /// (`.hotsheet2/resource-claims.json`, which is shared). A sync once committed it.
@@ -532,6 +549,19 @@ impl FsStore {
             fs::write(path, content)?;
         }
         Ok(())
+    }
+
+    /// Bring the managed `.gitignore` up to date and commit that one file when it differs
+    /// from `HEAD`, without pushing. Hot Sheet owns this file: a backup step runs this
+    /// first so a store that an older build left with an uncommitted ignore line is not
+    /// refused for a change of Hot Sheet's own making (HS2-HSHT2G). Returns whether a
+    /// commit was made.
+    pub fn commit_ignore_rules(&self) -> Result<bool, StoreError> {
+        self.ensure_managed_gitignore()?;
+        self.clone().with_deferred_push().autocommit_paths(
+            "Update Hot Sheet store ignore rules",
+            &[self.root.join(".gitignore")],
+        )
     }
 
     /// Keep a ticket read–revise–write sequence together across processes.
@@ -4391,6 +4421,76 @@ mod tests {
             "1",
             "an unchanged re-write must not add a commit"
         );
+    }
+
+    /// HS2-HSHT2G: the first commit of a new store already ignores every machine-local
+    /// runtime directory, so the writers that fill them afterwards (a server's live
+    /// state, usage events, recent activity, the read overlay) leave the tree clean.
+    #[test]
+    fn hs2_hsht2g_runtime_writers_leave_a_new_store_clean() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        store
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+        crate::metrics::ensure_gitignored(&store, METRICS_LOCAL_IGNORE).unwrap();
+        crate::metrics::ensure_gitignored(&store, METRICS_RAW_IGNORE).unwrap();
+        crate::overlay::LocalOverlay::new(dir.path())
+            .mark_read(
+                &ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+                &Timestamp::from("2026-11-25T00:00:00Z"),
+            )
+            .unwrap();
+        fs::create_dir_all(dir.path().join("metrics/local")).unwrap();
+        fs::write(dir.path().join("metrics/local/live-state.json"), "{}").unwrap();
+        fs::create_dir_all(dir.path().join("activity/recent")).unwrap();
+        fs::write(dir.path().join("activity/recent/today.jsonl"), "{}\n").unwrap();
+        let status = git_stdout(
+            dir.path(),
+            &["status", "--porcelain=v1", "--untracked-files=all"],
+        )
+        .unwrap();
+        assert_eq!(status, "", "runtime writes must not dirty the store");
+    }
+
+    /// HS2-HSHT2G: a store that an older build left with an uncommitted ignore line
+    /// commits Hot Sheet's own `.gitignore` alone, once, and leaves other edits.
+    #[test]
+    fn hs2_hsht2g_commit_ignore_rules_commits_only_the_store_gitignore() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        store
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+        let ignore = dir.path().join(".gitignore");
+        let legacy: String = fs::read_to_string(&ignore)
+            .unwrap()
+            .lines()
+            .filter(|line| *line != METRICS_LOCAL_IGNORE)
+            .map(|line| format!("{line}\n"))
+            .collect();
+        fs::write(&ignore, &legacy).unwrap();
+        git(dir.path(), &["commit", "-qam", "older build"]).unwrap();
+        fs::write(&ignore, format!("{legacy}{METRICS_LOCAL_IGNORE}\n")).unwrap();
+        fs::write(dir.path().join("user-notes.txt"), "unrelated").unwrap();
+        let before = git_stdout(dir.path(), &["rev-list", "--count", "HEAD"]).unwrap();
+
+        assert!(store.commit_ignore_rules().unwrap());
+        assert!(
+            !store.commit_ignore_rules().unwrap(),
+            "a second run is a no-op"
+        );
+        let after = git_stdout(dir.path(), &["rev-list", "--count", "HEAD"]).unwrap();
+        assert_eq!(
+            after.trim().parse::<u32>().unwrap(),
+            before.trim().parse::<u32>().unwrap() + 1
+        );
+        let status = git_stdout(
+            dir.path(),
+            &["status", "--porcelain=v1", "--untracked-files=all"],
+        )
+        .unwrap();
+        assert_eq!(status.trim(), "?? user-notes.txt");
     }
 
     #[test]

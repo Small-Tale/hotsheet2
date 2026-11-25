@@ -16,11 +16,15 @@ use clap::Parser;
 )]
 struct Cli {
     /// The old project's `.hotsheet` directory.
-    #[arg(required_unless_present_any = ["verify_backup", "hold_job_lock"])]
+    #[arg(required_unless_present_any = ["verify_backup", "prepare_backup", "hold_job_lock"])]
     hotsheet_dir: Option<PathBuf>,
     /// Verify a manually pushed origin and record cleanup eligibility, without importing.
     #[arg(long, conflicts_with = "hotsheet_dir")]
     verify_backup: bool,
+    /// Commit Hot Sheet's own store ignore rules and check that the imported store is
+    /// fully committed, ready for its first push. Changes nothing else.
+    #[arg(long, conflicts_with_all = ["hotsheet_dir", "verify_backup"])]
+    prepare_backup: bool,
     /// Stream versioned NDJSON phase progress and the typed final result.
     #[arg(long, conflicts_with = "verify_backup")]
     progress_json: bool,
@@ -66,6 +70,11 @@ fn main() -> Result<()> {
         std::io::stdout().flush()?;
         std::io::copy(&mut std::io::stdin(), &mut std::io::sink())?;
         drop(locks);
+        return Ok(());
+    }
+    if cli.prepare_backup {
+        hotsheet_cli::prepare_hs1_backup(&cli.path)?;
+        println!("The imported ticket store is fully committed and ready to back up.");
         return Ok(());
     }
     if cli.verify_backup {

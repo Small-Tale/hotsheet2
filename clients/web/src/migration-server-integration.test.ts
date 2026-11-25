@@ -122,6 +122,18 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
       );
       expect((await app.request(`/__hotsheet/projects/${session.id}/hs1-data`, { method: 'DELETE' })).status).toBe(400);
       expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8'))).toHaveLength(2);
+      // HS2-HSHT2G: the server hosting the imported store adds no ignore line of its own.
+      expect(await backupGit(store, ['status', '--porcelain=v1', '--untracked-files=all', '--', '.gitignore'])).toBe(
+        '',
+      );
+      // A store an older build left with an uncommitted ignore line still backs up: the job
+      // commits Hot Sheet's own `.gitignore` before its readiness check.
+      const ignore = resolve(store, '.gitignore'),
+        current = await readFile(ignore, 'utf8'),
+        legacy = current.replace(/^metrics\/local\/\n/m, '');
+      await writeFile(ignore, legacy);
+      await backupGit(store, ['commit', '-qm', 'Older build ignore rules', '--', '.gitignore']);
+      await writeFile(ignore, `${legacy}metrics/local/\n`);
       const remote = resolve(workspace, 'backup.git');
       await backupGit(workspace, ['init', '--bare', remote]);
       job = (await (await start({ ...input, kind: 'backup', remote })).json()) as MigrationJob;

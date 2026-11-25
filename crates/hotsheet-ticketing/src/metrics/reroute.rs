@@ -178,7 +178,7 @@ pub fn reroute_raw_usage(
 /// already held.
 fn append_missing(target: &FsStore, name: &Path, rows: &[&Move]) -> io::Result<usize> {
     let _lock = lock_raw(target)?;
-    ensure_gitignored(target, "metrics/raw/")?;
+    ensure_gitignored(target, crate::store::METRICS_RAW_IGNORE)?;
     let path = raw_dir(target).join(name);
     let existing = match fs::read_to_string(&path) {
         Ok(text) => text,

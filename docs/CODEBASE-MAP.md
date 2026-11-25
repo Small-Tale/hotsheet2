@@ -1177,7 +1177,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   push ancestry. `clients/web/src/hs1-backup.ts` validates this same proof for offline
   reopen presentation and a fresh remote check at DELETE. The headless entry point is
   `hotsheet-migrate -C <store> --verify-backup`; proof paths use `git rev-parse --git-path`
-  and work with ordinary repositories and Git worktrees.
+  and work with ordinary repositories and Git worktrees. `--prepare-backup`
+  (`import_completion::prepare_backup`) commits Hot Sheet's own store `.gitignore`
+  (`FsStore::commit_ignore_rules`) and names any other uncommitted file; the bridge's
+  backup job runs it before its readiness check (HS2-HSHT2G).
 
 ## Build / test
 

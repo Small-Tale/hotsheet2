@@ -161,7 +161,7 @@ pub fn record(store: &FsStore, event: &UsageEvent) -> io::Result<()> {
             .write(true)
             .open(dir.join(".usage.lock"))?,
     )?;
-    ensure_gitignored(store, "metrics/raw/")?;
+    ensure_gitignored(store, crate::store::METRICS_RAW_IGNORE)?;
     let path = dir.join(format!("{}.jsonl", event.day()));
     let line = serde_json::to_string(event).map_err(io::Error::other)?;
     let mut f = fs::OpenOptions::new()
@@ -211,7 +211,7 @@ pub fn record_many_once_with_claude_tokens(
             .write(true)
             .open(dir.join(".usage.lock"))?,
     )?;
-    ensure_gitignored(store, "metrics/raw/")?;
+    ensure_gitignored(store, crate::store::METRICS_RAW_IGNORE)?;
     let mut seen: std::collections::HashMap<String, std::collections::HashSet<String>> =
         std::collections::HashMap::new();
     let mut lines: std::collections::BTreeMap<String, Vec<u8>> = std::collections::BTreeMap::new();

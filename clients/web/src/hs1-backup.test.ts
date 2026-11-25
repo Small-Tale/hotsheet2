@@ -10,17 +10,24 @@ import {
   backupGit,
   hasCompletedHs1Import,
   hasHs1Backup,
+  porcelainPaths,
   readImportCompletion,
   recordHs1Backup,
   requireHs1Backup,
+  uncommittedMessage,
 } from './hs1-backup';
 import {
   connectGitTicketStoreRemote,
   developmentSetupAssetsFingerprint,
+  hs1BackupPreparationArgs,
   migrateHs1Project,
   projectSessionRegistry,
   runGitCommand,
 } from './project-bridge';
+
+const migrateBin =
+  process.env.HOTSHEET_MIGRATE_BIN ||
+  resolve(process.cwd(), '../../target/debug', `hotsheet-migrate${process.platform === 'win32' ? '.exe' : ''}`);
 
 const revision = 'a'.repeat(40),
   olderRevision = 'b'.repeat(40);
@@ -43,6 +50,25 @@ async function unitFixture() {
   });
   return { store, root, git };
 }
+
+describe('HS2-HSHT2G uncommitted-file naming', () => {
+  it('names each porcelain path once, including a trimmed first entry and a rename', () => {
+    expect(porcelainPaths('')).toEqual([]);
+    expect(porcelainPaths('M .gitignore\0?? notes with space.txt\0R  new.md\0old.md\0 D gone.md\0')).toEqual([
+      '.gitignore',
+      'notes with space.txt',
+      'new.md',
+      'gone.md',
+    ]);
+  });
+
+  it('lists at most five paths and counts the rest', () => {
+    expect(uncommittedMessage(['.gitignore'])).toBe(
+      'Commit these ticket-store changes before backup or Hot Sheet 1 cleanup: .gitignore.',
+    );
+    expect(uncommittedMessage(['a', 'b', 'c', 'd', 'e', 'f', 'g'])).toMatch(/: a, b, c, d, e and 2 more\.$/);
+  });
+});
 
 describe('HS1 backup proof transitions', () => {
   it('requires completed import and successful remote proof rather than origin existence', async () => {
@@ -77,9 +103,11 @@ describe('HS1 backup proof transitions', () => {
       await recordHs1Backup(store, completion!, git);
       await expect(
         readImportCompletion(store, async (path, args) =>
-          args[0] === 'status' ? ' M tickets/partial.md' : git(path, args),
+          args[0] === 'status' ? 'M tickets/partial.md\0?? .gitignore\0' : git(path, args),
         ),
-      ).rejects.toThrow(/Commit all/);
+      ).rejects.toThrow(
+        'Commit these ticket-store changes before backup or Hot Sheet 1 cleanup: tickets/partial.md, .gitignore.',
+      );
       await mkdir(resolve(store, 'hotsheet-hs1-import-pending'));
       await writeFile(resolve(store, 'hotsheet-hs1-import-pending/ticket.json'), '{}');
       await expect(requireHs1Backup(store, root, git)).rejects.toThrow(/pending/);
@@ -109,7 +137,7 @@ describe('HS1 backup proof transitions', () => {
             if (remoteChecked && args[0] === 'status') return ' M tickets/changed-during-backup.md';
             return git(path, args);
           }),
-        ).rejects.toThrow(/Commit all/);
+        ).rejects.toThrow(/Commit these ticket-store changes/);
       }
       await expect(
         requireHs1Backup(store, root, async (path, args) => {
@@ -239,6 +267,33 @@ describe('HS1 backup and cleanup through real Git and the local HTTP endpoint', 
     }
   });
 
+  it('HS2-HSHT2G commits Hot Sheet’s own ignore rules before backup and ignores a stat-only rewrite', async () => {
+    const { parent, root, store, remote } = await realFixture();
+    const prepare = async (path: string) => {
+      await runGitCommand(migrateBin, hs1BackupPreparationArgs(path));
+    };
+    try {
+      // A server wrote the store's ignore rules after the import commit.
+      await writeFile(resolve(store, '.gitignore'), 'metrics/local/\n');
+      await expect(connectGitTicketStoreRemote(store, remote)).rejects.toThrow(
+        'Commit these ticket-store changes before backup or Hot Sheet 1 cleanup: .gitignore.',
+      );
+      // A stat-only rewrite of a committed file is not uncommitted work.
+      await writeFile(resolve(store, 'attachments/proof.png'), await readFile(resolve(store, 'attachments/proof.png')));
+      await connectGitTicketStoreRemote(store, remote, undefined, undefined, undefined, prepare);
+      expect(await backupGit(store, ['status', '--porcelain=v1', '--untracked-files=all'])).toBe('');
+      expect(await backupGit(store, ['log', '-1', '--format=%s'])).toBe('Update Hot Sheet store ignore rules');
+      expect(await hasHs1Backup(store, root)).toBe(true);
+      // A real uncommitted file is named and still blocks backup.
+      await writeFile(resolve(store, 'notes.txt'), 'user edit');
+      await expect(
+        connectGitTicketStoreRemote(store, remote, undefined, undefined, undefined, prepare),
+      ).rejects.toThrow(/notes\.txt/);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
   it('rolls back only its own origin, preserves existing origins on failure, and rejects legacy receipt-only evidence', async () => {
     const { parent, root, store, remote } = await realFixture();
     const failPush = async (command: string, args: string[]) => {
@@ -256,11 +311,7 @@ describe('HS1 backup and cleanup through real Git and the local HTTP endpoint', 
       expect(await hasHs1Backup(store, root)).toBe(true);
       // The headless verifier writes the same proof that the HTTP cleanup gate reads.
       await rm(resolve(store, '.git/hotsheet-hs1-backup.json'));
-      await runGitCommand(
-        process.env.HOTSHEET_MIGRATE_BIN ||
-          resolve(process.cwd(), '../../target/debug', `hotsheet-migrate${process.platform === 'win32' ? '.exe' : ''}`),
-        ['-C', store, '--verify-backup'],
-      );
+      await runGitCommand(migrateBin, ['-C', store, '--verify-backup']);
       await expect(requireHs1Backup(store, root)).resolves.toBeUndefined();
       await backupGit(store, ['remote', 'remove', 'origin']);
       await expect(
