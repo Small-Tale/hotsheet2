@@ -5,6 +5,7 @@ import { delegate, type Signal, signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { Radio } from 'lucide';
 
+import { type AnnouncerEntry, editAnnouncerReel, nextSettleAt } from '../announcer-editorial';
 import {
   ANNOUNCER_DOCK_REGION_ID,
   ANNOUNCER_FLOATING_ID,
@@ -54,8 +55,20 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   const live = signal(false);
   const speaking = signal(false);
   const audible = signal(true);
+  /** Every retained and live event; the announcer shows and speaks its edited `entries` (HS2-RKYCTP). */
   const items = signal<AnnouncerReelItem[]>([]);
+  const entries = signal<AnnouncerEntry[]>([]);
   const index = signal(0);
+  /** When this device received each live event, so a routine group's window runs on one clock. */
+  const receivedAt = new Map<string, number>();
+  /** Reel items live narration has said, or that were already settled when it started. Items, not
+   * entry keys: when the bounded reel drops a group's first step, the group's key moves on. */
+  const heard = new Set<string>();
+  const isHeard = (entry: AnnouncerEntry) => entry.members.some((member) => heard.has(member.key));
+  const hear = (entry: AnnouncerEntry) => {
+    for (const member of entry.members) heard.add(member.key);
+  };
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
   const error = signal<string | undefined>();
   const currentDiff = signal<{ key: string; diff: string; truncated: boolean } | undefined>();
   const diffLoading = signal(false);
@@ -144,9 +157,71 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   let currentUtterance: SpeechSynthesisUtterance | undefined;
   let currentAudio: HTMLAudioElement | undefined;
   let currentUrl: string | undefined;
+  /** Narration has started and not yet ended, including the gap before speech reports its start. */
+  let narrating = false;
+
+  const editorialOptions = () => ({ now: Date.now(), receivedAt: (key: string) => receivedAt.get(key) });
+
+  /** Edit the reel again, keeping the selected entry, then let live narration say what settled. */
+  function refreshEntries() {
+    const selectedKey = entries.peek().at(index.peek())?.key;
+    entries.value = editAnnouncerReel(items.peek(), editorialOptions());
+    // Forget items the bounded reel dropped; a group keeps every member it was heard with.
+    const kept = new Set(items.peek().map((item) => item.key));
+    for (const key of [...heard, ...receivedAt.keys()])
+      if (!kept.has(key)) {
+        heard.delete(key);
+        receivedAt.delete(key);
+      }
+    const selection = selectedKey ? entries.peek().findIndex((entry) => entry.key === selectedKey) : -1;
+    if (selection >= 0) index.value = selection;
+    else index.value = Math.min(index.peek(), Math.max(0, entries.peek().length - 1));
+    pumpLive();
+    scheduleSettle();
+  }
+
+  /** While live, wake when the earliest open routine group settles; no timer otherwise. */
+  function scheduleSettle() {
+    if (settleTimer !== undefined) clearTimeout(settleTimer);
+    settleTimer = undefined;
+    if (!live.peek() || !open.peek()) return;
+    const at = nextSettleAt(entries.peek(), editorialOptions());
+    if (at === undefined) return;
+    settleTimer = setTimeout(
+      () => {
+        settleTimer = undefined;
+        refreshEntries();
+      },
+      Math.max(0, at - Date.now()),
+    );
+  }
+
+  /** Entries settled now count as heard, so live narration starts from what happens next. */
+  function markHeard() {
+    for (const entry of entries.peek()) if (entry.settled) hear(entry);
+  }
+
+  /** Say the next settled entry live narration has not said, in reel order. */
+  function pumpLive() {
+    if (!live.peek() || !open.peek() || narrating || speaking.peek()) return;
+    const list = entries.peek();
+    const next = list.findIndex((entry) => entry.settled && !isHeard(entry));
+    if (next < 0) return;
+    clearDiff();
+    if (!audible.peek()) {
+      // Muted, live mode still follows the newest settled entry.
+      markHeard();
+      index.value = list.reduce((latest, entry, at) => (entry.settled ? at : latest), next);
+      return;
+    }
+    hear(list[next]);
+    index.value = next;
+    void narrateCurrent();
+  }
 
   function cancelSpeech() {
     speechGeneration += 1;
+    narrating = false;
     if (currentUtterance && typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
     currentUtterance = undefined;
     currentAudio?.pause();
@@ -164,7 +239,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   }
 
   async function loadCurrentDiff() {
-    const item = items.peek().at(index.peek());
+    const item = entries.peek().at(index.peek());
     if (!item?.change || diffLoading.peek()) return;
     const project = projects.peek().find((entry) => entry.id === item.projectId);
     if (!project) {
@@ -186,21 +261,20 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   }
 
   async function narrateCurrent() {
-    const item = items.peek().at(index.peek());
+    const item = entries.peek().at(index.peek());
     if (!item || !audible.peek()) return;
     cancelSpeech();
+    narrating = true;
     const generation = speechGeneration;
     const onEnd = () => {
       if (generation !== speechGeneration) return;
+      narrating = false;
       currentUtterance = undefined;
       currentAudio = undefined;
       if (currentUrl) URL.revokeObjectURL(currentUrl);
       currentUrl = undefined;
       speaking.value = false;
-      if (live.peek() && index.peek() < items.peek().length - 1) {
-        index.value += 1;
-        void narrateCurrent();
-      }
+      pumpLive();
     };
     error.value = undefined;
     if (provider.peek() !== 'browser') {
@@ -220,6 +294,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         audio.onended = onEnd;
         audio.onerror = () => {
           if (generation === speechGeneration) {
+            narrating = false;
             speaking.value = false;
             error.value = 'Narration could not be played.';
           }
@@ -228,6 +303,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         await audio.play();
       } catch {
         if (generation === speechGeneration) {
+          narrating = false;
           speaking.value = false;
           error.value = 'Server voice is unavailable.';
         }
@@ -235,6 +311,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       return;
     }
     if (!('speechSynthesis' in window)) {
+      narrating = false;
       error.value = 'This browser has no local speech voice.';
       return;
     }
@@ -250,6 +327,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     };
     utterance.onerror = () => {
       if (generation === speechGeneration) {
+        narrating = false;
         speaking.value = false;
         error.value = 'Narration could not be played.';
       }
@@ -283,10 +361,11 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     if (generation !== requestGeneration || !open.peek()) return;
     const loaded = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
     if (loaded.length === 0 && results.length > 0) error.value = 'Activity could not be loaded.';
-    const selectedKey = items.peek().at(index.peek())?.key;
+    const selectedKey = entries.peek().at(index.peek())?.key;
     items.value = uncleared(mergeAnnouncerReel(items.peek(), retainedAnnouncerReel(loaded)));
+    entries.value = editAnnouncerReel(items.peek(), editorialOptions());
     if (speaking.peek() && selectedKey) {
-      const selection = items.peek().findIndex((item) => item.key === selectedKey);
+      const selection = entries.peek().findIndex((entry) => entry.key === selectedKey);
       if (selection >= 0) {
         index.value = selection;
         return;
@@ -294,24 +373,24 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     }
     if (live.peek()) {
       clearDiff();
-      index.value = Math.max(0, items.peek().length - 1);
+      // Retained history is not news: live narration continues from what happens next.
+      markHeard();
+      index.value = Math.max(0, entries.peek().length - 1);
+      scheduleSettle();
       return;
     }
-    const digest = announcerDigest(items.peek());
+    const digest = announcerDigest(entries.peek());
     clearDiff();
-    index.value = digest.length ? items.peek().findIndex((item) => item.key === digest[0].key) : 0;
+    index.value = digest.length ? entries.peek().findIndex((entry) => entry.key === digest[0].key) : 0;
   }
 
   function onActivity(project: Project, storeId: string, activity: ActivityEvent) {
     const item = announcerItem(project.id, project.name, storeId, activity);
     if (clearedAt && item.event.ts <= clearedAt) return;
-    const isNew = !items.peek().some((entry) => entry.key === item.key);
+    if (items.peek().some((entry) => entry.key === item.key)) return;
+    receivedAt.set(item.key, Date.now());
     items.value = mergeAnnouncerReel(items.peek(), [item]);
-    if (live.peek() && open.peek() && isNew && !speaking.peek()) {
-      clearDiff();
-      index.value = items.peek().findIndex((entry) => entry.key === item.key);
-      void narrateCurrent();
-    }
+    refreshEntries();
   }
 
   const unbind = delegate(document.body, 'click', '[data-announcer-action]', (_event, target) => {
@@ -326,6 +405,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         else {
           live.value = false;
           cancelSpeech();
+          scheduleSettle();
         }
         break;
       case 'expand': {
@@ -360,12 +440,16 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       case 'next':
         clearDiff();
         cancelSpeech();
-        index.value = Math.min(items.peek().length - 1, index.peek() + 1);
+        index.value = Math.min(entries.peek().length - 1, index.peek() + 1);
         break;
       case 'live':
         clearDiff();
         live.value = !live.peek();
-        if (live.peek() && items.peek().length) index.value = items.peek().length - 1;
+        if (live.peek()) {
+          markHeard();
+          if (entries.peek().length) index.value = entries.peek().length - 1;
+        }
+        scheduleSettle();
         break;
       case 'audio':
         audible.value = !audible.peek();
@@ -404,7 +488,11 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
         const latest = items.peek().reduce((max, item) => (item.event.ts > max ? item.event.ts : max), clearedAt);
         clearedAt = latest;
         items.value = [];
+        entries.value = [];
+        receivedAt.clear();
+        heard.clear();
         index.value = 0;
+        scheduleSettle();
         break;
       }
       default:
@@ -449,7 +537,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
           live={live.value}
           speaking={speaking.value}
           audible={audible.value}
-          items={items.value}
+          items={entries.value}
           index={index.value}
           error={error.value}
           currentDiff={currentDiff.value}
@@ -472,6 +560,8 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     },
     onActivity,
     dispose: () => {
+      if (settleTimer !== undefined) clearTimeout(settleTimer);
+      settleTimer = undefined;
       floatingObserver.disconnect();
       floating?.dispose();
       floating = undefined;

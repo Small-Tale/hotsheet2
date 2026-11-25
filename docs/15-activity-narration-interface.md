@@ -112,9 +112,17 @@ The `activity` capability turns native signals → events; the host owns the str
   shared note renderer, so commands and code are monospaced (HS2-YJK0G9). Speech
   never reads a literal command (HS2-R5Q2GY): the client derives a deterministic spoken
   summary. A command event becomes what it does, as specifically as can be said without reading
-  the command (HS2-RKYCTP): a compound line is split at unquoted `&&`, `||`, `;` and `|`, shell
-  housekeeping (`cd`, `export`, `echo`) and pipe filters are dropped, and at most two distinct
-  phrases are said ("codex installed dependencies and built the project"). Phrases name the test
+  the command (HS2-RKYCTP). Wrappers are unwrapped first: a shell running a script (`zsh -lc '…'`,
+  `bash -c …`, `sh -c`, `eval`, quoted or, as Codex's argv once arrived, unquoted, and nested), env
+  assignments and `env`, `sudo`, `time`, `nohup`, `nice`, `timeout N`, `xargs`, package runners
+  (`npx`, `npm exec`, `pnpm dlx`, `bunx`) and environment runners (`uv run`, `bundle exec`), so the
+  announcer never says "ran zsh". A compound line is split at unquoted `&&`, `||`, `;`, `&`, `|` and
+  parentheses, shell housekeeping (`cd`, `export`, `echo`, `set`) and pipe filters are dropped, and
+  the two most important distinct phrases are said in the order they ran ("codex committed changes
+  and pushed changes to main"). A script is named by what its name says it does
+  (`node scripts/test-quiet.mjs` "ran the tests"). When the tool reports the exit code (Codex
+  records it), a test run says "and they passed" or "and they failed", and any other failed command
+  adds "and it failed". Phrases name the test
   runner ("ran the Rust tests", "ran the browser tests"), the Git operation ("reviewed the
   changes", "pushed changes to main"), the ticket action ("claimed a ticket", "completed a
   ticket"), a file read, written, or deleted by its base name ("read notes.md"), and a search by
@@ -125,7 +133,32 @@ The `activity` capability turns native signals → events; the host owns the str
   ticket", "claimed a ticket"), built-in agent tools by their effect ("read a file", "searched
   the web", "started a sub-agent"), another MCP server by its name ("used github tools"), and
   any other plain name as words; a custom tool-call summary keeps its prose. Paths, flags, quoted arguments, and code are never
-  spoken. Other events keep their prose,
+  spoken.
+
+  **Editorial policy (HS2-RKYCTP).** The announcer edits the stream before showing or saying it,
+  like a sports announcer calling the plays and summarizing the footwork
+  (`clients/web/src/announcer-editorial.ts`, pure and deterministic). Each event is a _headline_ or
+  a _routine step_. Headlines are said on their own as soon as they arrive: any event with `high`
+  importance; tests and project checks (with pass or fail when reported), lint, type, and format
+  checks, builds, and dependency installs; commits, pushes, merges and rebases, and opening or
+  merging a pull request; claiming, creating, releasing, completing, or changing the status of a
+  ticket; starting a sub-agent, asking a question, or finishing a plan; turn end, plan, decision,
+  blocked, permission, and ticket status events; any failed command; and other prose that reports a
+  failure or error. Everything else is routine: reading, searching, listing, Git status, diffs and
+  logs, edits and file changes, reading or noting tickets, other programs and tool calls, and notes.
+  Consecutive routine steps from one agent (project, tool, and session) fold into one entry for up
+  to 45 seconds from its first step, said once by intent: edits first by file name ("edited reel.ts
+  and speech.ts", or "edited 4 files"), then exploring ("looked through the code for overlay"), then
+  ticket reading, then up to two other distinct phrases, with anything further counted ("took 2
+  other steps"). A headline from the same agent closes its open group, so the summary is said just
+  before the headline; another agent's events never close it. The folded entry still shows its
+  summary over a list of the steps it folded (up to 12, then a count), each with its precise
+  command. A lone routine step keeps its own text and speech. Entries keep the reel's time order and
+  a growing group keeps its first step's key, so the shown entry stays selected. Live narration says
+  each entry once, when it is settled: a headline immediately and a group when a headline closes it
+  or its window ends, using a runtime timer that exists only while live narration is on. Entries
+  already shown when live narration starts, and retained history, are not repeated. Clear history
+  resets the edit. Other events keep their prose,
   with inline code read as a short name or "a command", and code blocks and links
   replaced by plain words. A default edit summary is read by file name,
   browser speech or a configured server provider. The macOS server offers a local
@@ -151,6 +184,7 @@ The `activity` capability turns native signals → events; the host owns the str
   files have no diff against `HEAD`. The browser clears the response on selection
   changes, close, and disposal. Historical native patch review would require a
   separately approved short-lived content channel.
+
 - **Timeline** — a per-ticket / per-session "what happened" view, reads the stored
   window. (A natural, cheaper first consumer than full TTS.)
 

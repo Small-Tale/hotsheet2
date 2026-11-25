@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { announcerItem } from './announcer-reel';
-import { announcerSpokenText, commandPhrase, speakableProse, toolCallPhrase } from './announcer-speech';
+import {
+  announcerSpokenText,
+  announcerStep,
+  commandIntent,
+  commandOutcome,
+  commandPhrase,
+  speakableProse,
+  toolCallIntent,
+  toolCallPhrase,
+} from './announcer-speech';
 
 const command = (text: string, summary = `claude ran \`${text}\``) =>
   announcerSpokenText({ tool: 'claude', kind: 'command', summary, detail: { command: text } });
@@ -89,9 +98,9 @@ describe('announcer speech never reads a literal command (HS2-R5Q2GY)', () => {
     expect(commandPhrase("rg --files -g '!node_modules' | head -250")).toBe('looked for files');
     expect(commandPhrase('git log --oneline | head -5')).toBe('read the commit history');
     expect(commandPhrase('npm ci && npm run build; echo done')).toBe('installed dependencies and built the project');
-    // At most two distinct phrases.
+    // At most two distinct phrases, the most important ones, in the order they ran.
     expect(commandPhrase('git add a.ts && git commit -m x && git push origin main')).toBe(
-      'staged changes and committed changes',
+      'committed changes and pushed changes to main',
     );
     expect(commandPhrase('cargo test || cargo test')).toBe('ran the Rust tests');
     expect(commandPhrase('cd x; export A=1')).toBe('ran a command');
@@ -198,5 +207,117 @@ describe('announcer speech for tool calls (HS2-NKE7RB)', () => {
     );
     expect(spoken('claude used a tool')).toBe('claude used a tool.');
     expect(spoken('Fetched the release notes', 'WebFetch')).toBe('Fetched the release notes');
+  });
+});
+
+describe('announcer speech unwraps shells and wrappers (HS2-RKYCTP)', () => {
+  // Codex runs every command through `zsh -lc`; its rollout joined the argv with spaces, so stored
+  // events carry the script unquoted (`codex_rollout_watch.rs`), while the app server quotes it.
+  const unwrapped: [string, string][] = [
+    ["/bin/zsh -lc 'cd /work/repo && npm test'", 'ran the tests'],
+    ['/bin/zsh -lc "cd /work/repo && npm test"', 'ran the tests'],
+    ['/bin/zsh -lc cd /work/repo && npm test', 'ran the tests'],
+    ['/bin/zsh -lc rg -n overlay src', 'searched the code for overlay'],
+    ["zsh -c 'git status --short'", 'checked what changed'],
+    ["bash -lc 'cargo nextest run -p sample'", 'ran the Rust tests'],
+    ["bash -ilc 'git push origin main'", 'pushed changes to main'],
+    ["/usr/bin/bash -euc 'npm ci && npm run build'", 'installed dependencies and built the project'],
+    ['sh -c \'git commit -m "a && b"\'', 'committed changes'],
+    ["bash -o pipefail -c 'npx vitest run | tail -5'", 'ran the unit tests'],
+    ['bash -lc "bash -c \\"npm run lint\\""', 'linted the code'],
+    ['zsh -lc "bash -c \'git log --oneline | head -5\'"', 'read the commit history'],
+    ["/bin/zsh -lc 'set -euo pipefail; cd x; hotsheet-cli claim HS2-AAAAAA --worker w'", 'claimed a ticket'],
+    ["eval 'git diff --cached'", 'reviewed the staged changes'],
+    ['bash scripts/sync-docs.sh', 'ran the sync docs script'],
+    ['env -u HOME FOO=1 BAR=2 cargo test', 'ran the Rust tests'],
+    ['FOO=1 BAR="a b" npm run lint', 'linted the code'],
+    ['timeout 120 npx playwright test tests/a.spec.ts', 'ran the browser tests'],
+    ['timeout -s KILL 5m cargo clippy', 'linted the Rust code'],
+    ['nice -n 10 nohup cargo build --release', 'built the Rust code'],
+    ['sudo -u builder make test', 'ran the tests'],
+    ['npx --yes prettier --check src', 'checked the formatting'],
+    ['npm exec -- tsc --noEmit', 'type-checked the code'],
+    ['pnpm dlx eslint .', 'linted the code'],
+    ['bunx vitest run', 'ran the unit tests'],
+    ['uv run pytest -q', 'ran the Python tests'],
+    ['node scripts/test-quiet.mjs', 'ran the tests'],
+    ['node scripts/sync-ai-playbook.mjs --check', 'ran the sync ai playbook script'],
+    ["rg -l TODO src | xargs sed -i '' 's/a/b/'", 'looked for files and changed files'],
+    ['(cd clients/web && npm test)', 'ran the tests'],
+    ['npm test 2>&1 | tail -20', 'ran the tests'],
+    ['cargo test \\\n  -p sample', 'ran the Rust tests'],
+    ['zsh -lc', 'ran a command'],
+    ['bash', 'ran a command'],
+    ["zsh -lc 'unterminated", 'ran a command'],
+  ];
+  it.each(unwrapped)('%s → %s', (text, phrase) => {
+    expect(commandPhrase(text)).toBe(phrase);
+  });
+
+  it('never names the wrapper shell (the "codex ran zsh" report)', () => {
+    for (const shell of ['/bin/zsh', 'zsh', '/bin/bash', 'bash', 'sh'])
+      for (const flag of ['-c', '-lc', '-ilc'])
+        expect(commandPhrase(`${shell} ${flag} ./scripts/check.sh --plan`)).toBe('ran the project checks');
+    expect(commandPhrase('/bin/zsh -lc python3 - <<PY')).toBe('ran a Python script');
+  });
+
+  it('carries a category so the editorial policy can tell plays from footwork', () => {
+    expect(commandIntent('/bin/zsh -lc cd x && git add a && git commit -m y')).toMatchObject({
+      phrase: 'staged changes and committed changes',
+      category: 'commit',
+    });
+    expect(commandIntent('sed -n 1,20p src/a.ts && rg -n overlay')).toMatchObject({
+      category: 'search',
+      files: ['a.ts'],
+      term: 'overlay',
+    });
+    expect(commandIntent('cat > notes.md').category).toBe('edit');
+    expect(commandIntent('npx vitest run').category).toBe('test');
+    expect(commandIntent('ls -la').category).toBe('inspect');
+    expect(commandIntent('gh pr create --fill').category).toBe('pull-request');
+    expect(commandIntent('hotsheet-cli edit HS2-AAAAAA --status started').phrase).toBe('changed a ticket status');
+    expect(commandIntent('').category).toBe('other');
+  });
+});
+
+describe('announcer speech says how a command ended (HS2-RKYCTP)', () => {
+  const ran = (text: string, detail: Record<string, unknown>) =>
+    announcerSpokenText({
+      tool: 'codex',
+      kind: 'command',
+      summary: 'codex ran a command',
+      detail: { command: text, ...detail },
+    });
+
+  it('says whether tests passed or failed when the tool reports an exit code', () => {
+    expect(ran('/bin/zsh -lc cargo test', { exit_code: 0 })).toBe('codex ran the Rust tests, and they passed.');
+    expect(ran('/bin/zsh -lc cargo test', { exit_code: 101 })).toBe('codex ran the Rust tests, and they failed.');
+    expect(ran('npm run build', { exitCode: 2 })).toBe('codex built the project, and it failed.');
+    expect(ran('npm run build', { exitCode: 0 })).toBe('codex built the project.');
+    expect(ran('git push', { status: 'failed' })).toBe('codex pushed changes, and it failed.');
+    expect(ran('npx vitest run', {})).toBe('codex ran the unit tests.');
+    expect(commandOutcome({ exit_code: 'x' })).toBeUndefined();
+    expect(commandOutcome([1])).toBeUndefined();
+  });
+
+  it('classifies every kind of event', () => {
+    const step = (kind: string, summary: string, detail: unknown = null) =>
+      announcerStep({ tool: 'claude', kind, summary, detail });
+    expect(step('edit', 'claude edited a/b.ts', { path: 'a/b.ts' })).toEqual({
+      phrase: 'edited b.ts',
+      category: 'edit',
+      files: ['b.ts'],
+    });
+    expect(step('edit', 'claude edited a file')).toEqual({ phrase: 'edited a file', category: 'edit', files: [] });
+    expect(step('tool_call', 'claude called Grep', { name: 'Grep' }).category).toBe('search');
+    expect(step('tool_call', 'Fetched the notes', { name: 'WebFetch' })).toEqual({ phrase: '', category: 'other' });
+    expect(step('turn_end', 'claude finished a turn').category).toBe('milestone');
+    expect(step('permission', 'claude is asking permission').category).toBe('milestone');
+    expect(step('note', 'synthetic note')).toEqual({ phrase: 'left a note', category: 'other' });
+    expect(step('summary', 'dropped 4 events').category).toBe('other');
+    expect(toolCallIntent('mcp__hotsheet__hotsheet_claim').category).toBe('ticket');
+    expect(toolCallIntent('mcp__hotsheet__hotsheet_get').category).toBe('ticket-work');
+    expect(toolCallIntent('Task').category).toBe('milestone');
+    expect(toolCallIntent('Read').category).toBe('read');
   });
 });

@@ -1088,6 +1088,17 @@ only the selected synthetic item plays and no temporary speech file remains.
 Repeat with an incoming synthetic live event while Live is enabled. The browser
 suite uses fake audio to verify request and state wiring; it cannot hear output.
 
+### Announcer editing of a real agent session (HS2-RKYCTP)
+
+With Live on, drive a real Codex and a real Claude session on a synthetic project
+through a task that reads and searches the code, edits a few files, runs tests,
+and commits. Listen for a few minutes: routine reading and searching should come
+as an occasional summary ("codex looked through the code for …"), never "ran zsh"
+or a path or flag; test runs, commits, ticket claims, permission requests, and
+the turn end should be said promptly, and a Codex test run should say whether it
+passed. Judge whether the pace feels edited rather than exhaustive. Unit and
+browser tests pin the policy; only listening can judge the pace.
+
 ### Grid sidebar touch swipe on a phone or tablet (HS2-EZSQDF)
 
 Open Workspace Grid with two synthetic projects on a phone (iOS Safari and Android

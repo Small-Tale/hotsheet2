@@ -977,6 +977,113 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
     .toEqual(['Changed the synthetic live file']);
 });
 
+test('HS2-RKYCTP edits a live burst into an intent summary and speaks the headline', async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: undefined });
+    const spoken: string[] = [];
+    Object.defineProperty(window, '__announcerSpoken', { value: spoken });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: class {
+        onstart?: () => void;
+        onend?: () => void;
+        constructor(readonly text: string) {}
+      },
+    });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel() {},
+        speak(utterance: { text: string; onstart?: () => void; onend?: () => void }) {
+          spoken.push(utterance.text);
+          utterance.onstart?.();
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+  });
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/activity**', (route) => route.fulfill({ json: [] }));
+  // Codex's real command shape: every command runs inside `zsh -lc`.
+  const command = (id: string, script: string, detail: Record<string, unknown> = {}) => ({
+    id,
+    ts: '2026-11-01T01:01:00Z',
+    tool: 'codex',
+    kind: 'command',
+    summary: `codex ran \`/bin/zsh -lc ${script}\``,
+    detail: { command: `/bin/zsh -lc '${script}'`, ...detail },
+    importance: 'normal',
+  });
+  const batches = [
+    [
+      command('b-1', 'cd /work && rg -n overlay src'),
+      command('b-2', 'sed -n 1,80p src/reel.ts'),
+      command('b-3', 'ls src'),
+      command('b-4', 'git status --short'),
+      command('b-5', 'cd clients/web && npx vitest run', { exit_code: 1 }),
+    ],
+    [command('b-6', 'rg -n failing src'), command('b-7', 'sed -n 1,40p src/speech.ts')],
+  ];
+  let cursor = 0;
+  let release = 0;
+  await page.route('**/ws/poll**', (route) => {
+    const batch = release > 0 ? batches.shift() : undefined;
+    if (!batch) return route.fulfill({ json: { cursor, events: [], overflow: false } });
+    release -= 1;
+    const events = batch.map((activity) => ({
+      cursor: ++cursor,
+      store: 'synthetic-store',
+      kind: 'activity',
+      id: activity.id,
+      slug: '',
+      activity,
+    }));
+    return route.fulfill({ json: { cursor, overflow: false, events } });
+  });
+  const spoken = () => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken);
+  await page.getByRole('button', { name: 'Announcer' }).click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  await overlay.getByRole('button', { name: 'Live' }).click();
+  release = 1;
+  // Five events become two entries: the footwork summarized, then the failing test run said at once.
+  await expect
+    .poll(spoken)
+    .toEqual(['codex looked through the code for overlay.', 'codex ran the unit tests, and they failed.']);
+  await expect(overlay.locator('.announcer__count')).toHaveText('2 / 2');
+  await overlay.getByRole('button', { name: 'Previous Activity' }).click();
+  // The summary still lists every step it folded, with its precise command on screen.
+  await expect(overlay.locator('[data-component="markdown-preview"] li')).toHaveCount(4);
+  await expect(overlay).toContainText('rg -n overlay src');
+  const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
+  if (captureDir) {
+    for (const [name, width, height] of [
+      ['wide', 1280, 800],
+      ['medium', 768, 900],
+      ['narrow', 390, 844],
+      ['return', 1280, 800],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect(overlay.locator('[data-component="markdown-preview"] li')).toHaveCount(4);
+      await page.screenshot({ path: `${captureDir}/hs2-rkyctp-group-${name}.png` });
+    }
+  }
+  await overlay.getByRole('button', { name: 'Next Activity' }).click();
+  // Routine steps alone wait for their window, then are said once.
+  release = 1;
+  await expect(overlay.locator('.announcer__count')).toHaveText('2 / 3');
+  expect(await spoken()).toHaveLength(2);
+  await page.clock.fastForward(46_000);
+  await expect
+    .poll(spoken)
+    .toEqual([
+      'codex looked through the code for overlay.',
+      'codex ran the unit tests, and they failed.',
+      'codex looked through the code for failing.',
+    ]);
+  for (const text of await spoken()) expect(text).not.toMatch(/zsh|\/|-l?c\b/);
+});
+
 // HS2-F880FN: moving an open popover's node, even within the DOM, closes it. A re-render that reorders
 // the shell's slots keeps the floating announcer's node, so the controller reopens it on that mutation.
 test('HS2-F880FN reopens the floating announcer after its node moves', async ({ page }) => {

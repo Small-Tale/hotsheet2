@@ -141,6 +141,9 @@ struct ItemRecord {
     /// A `CommandExecution`'s command: an argument list (codex 0.167) or a string.
     #[serde(default)]
     command: Option<serde_json::Value>,
+    /// A finished `CommandExecution`'s exit code, so narration can say a run passed or failed.
+    #[serde(default, alias = "exitCode")]
+    exit_code: Option<i64>,
     /// A `FileChange`'s changes: a map keyed by path (codex 0.167) or a list of `{path}`.
     #[serde(default)]
     changes: Option<serde_json::Value>,
@@ -344,18 +347,25 @@ fn item_signal(item: ItemRecord) -> Option<RolloutSignal> {
         "CommandExecution" | "commandExecution" => {
             let command = match item.command? {
                 serde_json::Value::String(command) => command,
+                // Quote each argument, so `["/bin/zsh", "-lc", "cd x && npm test"]` stays one
+                // readable shell line and the announcer can unwrap the script (HS2-RKYCTP).
                 serde_json::Value::Array(parts) => parts
                     .iter()
                     .filter_map(serde_json::Value::as_str)
+                    .map(shell_quote)
                     .collect::<Vec<_>>()
                     .join(" "),
                 _ => return None,
             };
             let command = bounded(&command, MAX_COMMAND_CHARS);
+            let exit_code = item.exit_code;
             (!command.is_empty()).then(|| {
-                RolloutSignal::Activity(
-                    serde_json::json!({ "type": "commandExecution", "command": command }),
-                )
+                let mut activity =
+                    serde_json::json!({ "type": "commandExecution", "command": command });
+                if let Some(code) = exit_code {
+                    activity["exitCode"] = code.into();
+                }
+                RolloutSignal::Activity(activity)
             })
         }
         "FileChange" | "fileChange" => {
@@ -399,6 +409,19 @@ const MAX_COMMAND_CHARS: usize = 400;
 const MAX_PATH_CHARS: usize = 400;
 /// The most changed paths one file change narrates.
 const MAX_CHANGED_PATHS: usize = 50;
+
+/// One argv element as POSIX shell text: plain words as is, anything else single-quoted.
+fn shell_quote(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c));
+    if plain {
+        word.to_string()
+    } else {
+        format!("'{}'", word.replace('\'', "'\\''"))
+    }
+}
 
 fn bounded(text: &str, max: usize) -> String {
     text.trim().chars().take(max).collect()
@@ -1093,9 +1116,23 @@ mod tests {
                 "cwd":"/work","status":"completed","exit_code":0,"aggregated_output":"secret output"
             }))),
             Some(RolloutSignal::Activity(
-                json!({"type":"commandExecution","command":"cargo test -p synthetic"})
+                json!({"type":"commandExecution","command":"cargo test -p synthetic","exitCode":0})
             ))
         );
+        // Codex wraps commands in a login shell; the script stays one quoted argument (HS2-RKYCTP).
+        assert_eq!(
+            reader.feed_line(&item(json!({
+                "type":"CommandExecution","id":"c5",
+                "command":["zsh","-lc","cd /work && rg -n overlay src"],"exitCode":1
+            }))),
+            Some(RolloutSignal::Activity(json!({
+                "type":"commandExecution",
+                "command":"zsh -lc 'cd /work && rg -n overlay src'",
+                "exitCode":1
+            })))
+        );
+        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+        assert_eq!(shell_quote(""), "''");
         assert_eq!(
             reader.feed_line(&item(json!({
                 "type":"FileChange","id":"f1","status":"completed",
