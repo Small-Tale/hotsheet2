@@ -5872,6 +5872,7 @@ until it can be delivered. See
   - REST: `GET`/`PUT /feature-settings`. A PUT merges, and `null` clears a choice to its default. `POST /feature-settings/changed` announces a headless write.
   - CLI: `hotsheet-cli settings set features.<id> on|off|default` sets or clears a choice. Repeating it changes nothing. `settings get features.<id>` prints the effective `on` or `off`.
   - Every change pushes a cursored `feature_settings` change event. Clients re-read on that event and on each stream resync, never on a timer.
+  - The desktop reads and saves this computer's choices (and Standby's) through an open local project's server, even while a remote tab is selected; a remote tab answers only when no local project is open. Remote tabs share the bridge's origin, so the client re-reads when that source changes, not when the URL origin does. Before this, opening on a remote tab showed the other machine's choices until a switch saved this computer's (HS2-N3QBVG).
 - **New defaults reach everyone.** A choice that was never set takes the registered default. On upgrade, every install gets the new defaults with no migration and no notice.
 - **Turning an area off hides it.** Its buttons, view-switcher choices, menu items, shortcuts and settings controls go away.
   - A shortcut, a dashboard request or a restored view, tab or category for an area that is off is ignored. The client falls back to the project, the List view, the Info tab, the Ticket sources category or the Queue.

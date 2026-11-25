@@ -239,6 +239,7 @@ import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } fr
 import { createLiveStateStore } from '../live-state';
 import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
+import { machineSettingsKey, machineSettingsProject } from '../machine-settings-source';
 import { loadMinimizedReaders, type MinimizedReader } from '../minimized-readers';
 import { isMobileViewport, isSidePanelPortal } from '../mobile-layout';
 import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
@@ -4960,9 +4961,10 @@ export async function startHotSheetWebClient() {
   const standby = createStandbyController({
     liveStates,
     openProjectIds: () => projects.value.map((item) => item.id),
+    // Machine-wide: this computer's server, even while a remote tab is selected (HS2-N3QBVG).
     api: () => {
-      const current = project();
-      return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
+      const source = machineSettingsProject(projects.value, project());
+      return source ? new Api(source.apiPath, '', { trackBusy: false }) : undefined;
     },
     // The away digest (HS2-JJ9RYN): host rows from the pushed host health; completions read once on exit.
     hostHealth: () => hostHealth.state.value.snapshot,
@@ -5003,16 +5005,18 @@ export async function startHotSheetWebClient() {
   // App Settings › Features (HS2-3GJZGG): the machine-wide feature-area choices of the server the
   // active project talks to, kept current by `feature_settings` events.
   const featureAreas = createFeatureAreasController({
+    // Machine-wide: this computer's server, even while a remote tab is selected (HS2-N3QBVG).
     api: () => {
-      const current = project();
-      return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
+      const source = machineSettingsProject(projects.value, project());
+      return source ? new Api(source.apiPath, '', { trackBusy: false }) : undefined;
     },
   });
   let standbySettingsServer: string | undefined;
   effect(() => {
-    const current = project();
-    if (!current) return;
-    const server = new URL(current.apiPath, window.location.href).origin;
+    const source = machineSettingsProject(projects.value, project());
+    if (!source) return;
+    // Keyed by the source, not the URL origin: remote tabs share this computer's origin (HS2-N3QBVG).
+    const server = machineSettingsKey(source, window.location.href);
     if (server === standbySettingsServer) return;
     standbySettingsServer = server;
     queueMicrotask(() => {
