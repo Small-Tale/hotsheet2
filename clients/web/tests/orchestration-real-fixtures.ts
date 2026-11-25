@@ -1,9 +1,14 @@
+import { execFile } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
-import { proxyFetch, realTicketServer } from './real-ticket-server';
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { proxyFetch, type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
+
+const execute = promisify(execFile);
 
 /**
  * HS2-2XJSJK build tickets: a real server whose project is its own orchestration target ("Self"), so
@@ -227,6 +232,76 @@ export async function syntheticTool(home: string, { reportsStart = false }: { re
       '',
     ].join('\n'),
   );
+}
+
+/**
+ * HS2-6ES76F: make the fixture project a git checkout, so it has a coordination pool (in its git common
+ * directory) that the scheduler reads for the project's integrator. Use as (part of) a `realTicketServer` seed.
+ */
+export async function gitCheckout({ root, env }: RealTicketFixtureContext) {
+  const clean = withoutGitRepositoryEnv(env);
+  await execute('git', ['init', '-q', '-b', 'main'], { cwd: root, env: clean });
+  await execute('git', ['commit', '-q', '--allow-empty', '-m', 'Synthetic base'], { cwd: root, env: clean });
+}
+
+/**
+ * HS2-6ES76F: hand a ticket's work off in the project's real coordination pool through the headless
+ * coordination CLI, as the integrator and worker role skills do: the integrator assigns the ticket and
+ * leaves (so no integrator is live), the worker claims it, commits, writes its Integration handoff note,
+ * releases and records the handoff. The pool then shows one handoff pending and no integrator.
+ * `integrate()` plays the integrator taking it up and pushing it, so its commit waits on its CI gate.
+ * The project must be a git checkout (`gitCheckout`); the ticket is synthetic.
+ */
+export async function handOffInPool(server: Server, ticket: Ticket) {
+  const env = withoutGitRepositoryEnv({ ...server.env, HOTSHEET_ACTOR_ROLE: 'system' });
+  delete env.HOTSHEET_ACTOR_ID;
+  delete env.HOTSHEET_WORKER_ID;
+  const cli = (...args: string[]) => execute(server.cli, ['-C', server.store, ...args], { cwd: server.root, env });
+  const pool = (...args: string[]) => cli('coordination', '--project', server.root, ...args);
+  const git = async (...args: string[]) => (await execute('git', args, { cwd: server.root, env })).stdout.trim();
+  const assignment = 'synthetic-handoff';
+  const worker = ['--id', 'synthetic-worker', '--session', 'synthetic-worker-1', '--assignment', assignment];
+  const base = await git('rev-parse', 'HEAD');
+  await cli('edit', ticket.slug, '--up-next');
+  await pool('setup');
+  await pool('register', '--role', 'integrator', '--id', 'synthetic-integrator', '--session', 'integrator-1');
+  await pool('register', '--role', 'worker', '--id', 'synthetic-worker', '--session', 'synthetic-worker-1');
+  await pool(
+    'assign',
+    ...['--id', 'synthetic-integrator', '--session', 'integrator-1'],
+    ...['--worker', 'synthetic-worker', '--worker-session', 'synthetic-worker-1', '--operation', assignment],
+    ...['--connection', ticket.connection_id, '--native-id', ticket.id, '--slug', ticket.slug, '--base', base],
+  );
+  await pool('leave', '--role', 'integrator', '--id', 'synthetic-integrator', '--session', 'integrator-1');
+  await cli('claim', ticket.slug, '--worker', 'synthetic-worker', '--eta', '30m');
+  await pool('worker', ...worker, '--phase', 'accepted');
+  await git('commit', '-q', '--allow-empty', '-m', 'Synthetic change');
+  const commit = await git('rev-parse', 'HEAD');
+  await git('reset', '-q', '--hard', base);
+  await cli('edit', ticket.slug, '--note', `## Integration handoff\nSynthetic commit ${commit}`);
+  await cli('release', ticket.slug, '--worker', 'synthetic-worker');
+  await pool('worker', ...worker, '--phase', 'handoff', '--commit', commit);
+  return {
+    assignment,
+    commit,
+    /** The integrator takes the handoff up and pushes it: the commit now waits on its CI gate. */
+    integrate: async () => {
+      await pool('register', '--role', 'integrator', '--id', 'synthetic-integrator', '--session', 'integrator-2');
+      for (const phase of ['integrating', 'ci'])
+        await pool(
+          'mark',
+          '--id',
+          'synthetic-integrator',
+          '--session',
+          'integrator-2',
+          '--assignment',
+          assignment,
+          '--phase',
+          phase,
+        );
+      await pool('leave', '--role', 'integrator', '--id', 'synthetic-integrator', '--session', 'integrator-2');
+    },
+  };
 }
 
 export { realTicketServer };
