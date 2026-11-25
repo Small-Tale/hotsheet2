@@ -41,6 +41,15 @@ const STAGED_CHECKBOX_ACTIONS: Record<string, string> = {
   'COMMANDS_AND_AI_ACTIONS.toggleGuidanceSkill': 'Apply Selected Guidance',
 };
 
+/**
+ * Instant-apply Checkboxes the maintainer chose over Kerf's Switch. Each names the ticket and its
+ * entry in `docs/ui-design-philosophy.md`; the list only shrinks.
+ */
+const MAINTAINER_CHECKBOX_EXCEPTIONS: Record<string, string> = {
+  // "Show minimized" sits beside Hide Listed / Show Listed as the maintainer requested.
+  'TERMINALS_ACTIONS.toggleTerminalVisibilityShowMinimized': 'HS2-W1XEH7',
+};
+
 /** The instant-apply settings toggles, by source file and the expression that wires them. */
 const INSTANT_APPLY_TOGGLES: readonly (readonly [file: string, anchor: string])[] = [
   ['components/settings-workspace.tsx', 'COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity'],
@@ -68,14 +77,15 @@ describe('HS2-1MSTXP instant-apply settings toggles use Kerf Switch', () => {
       const source = readFileSync(path, 'utf8');
       for (const match of source.matchAll(/<Checkbox\b[^>]*?\baction=\{([\w.]+?)(?:\.value)?\}/gsu)) {
         const [, action] = match;
-        if (!(action in STAGED_CHECKBOX_ACTIONS)) {
+        if (!(action in STAGED_CHECKBOX_ACTIONS) && !(action in MAINTAINER_CHECKBOX_EXCEPTIONS)) {
           const line = source.slice(0, match.index).split('\n').length;
           offenders.push(`${relative(SRC, path)}:${line} ${action}`);
         }
       }
     }
     // A Checkbox whose change saves at once is an instant-apply setting: render Switch instead,
-    // or list the action above with the control that applies it.
+    // or list the action above with the control that applies it, or (only on the maintainer's
+    // explicit request) record it in MAINTAINER_CHECKBOX_EXCEPTIONS and docs/ui-design-philosophy.md.
     expect(offenders).toEqual([]);
   });
 
@@ -83,10 +93,16 @@ describe('HS2-1MSTXP instant-apply settings toggles use Kerf Switch', () => {
     const all = sources()
       .map((path) => readFileSync(path, 'utf8'))
       .join('\n');
-    for (const action of Object.keys(STAGED_CHECKBOX_ACTIONS))
+    for (const action of [...Object.keys(STAGED_CHECKBOX_ACTIONS), ...Object.keys(MAINTAINER_CHECKBOX_EXCEPTIONS)])
       expect(all, `${action} is still a Checkbox action`).toMatch(
         new RegExp(`<Checkbox\\b[^>]*?\\baction=\\{${action.replace('.', '\\.')}\\.value\\}`, 'su'),
       );
+  });
+
+  it('records each maintainer checkbox exception in the UI decisions (HS2-W1XEH7)', () => {
+    const decisions = readFileSync(resolve(SRC, '../../../docs/ui-design-philosophy.md'), 'utf8');
+    for (const ticket of Object.values(MAINTAINER_CHECKBOX_EXCEPTIONS)) expect(decisions).toContain(`(${ticket})`);
+    expect(Object.keys(MAINTAINER_CHECKBOX_EXCEPTIONS)).toHaveLength(1);
   });
 
   it('exposes the General and Features toggles to assistive technology as switches', () => {
