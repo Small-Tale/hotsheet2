@@ -6,7 +6,7 @@ import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import { wireBulkTicketDialog } from '../components/bulk-ticket-dialog-interactions';
 import { PENDING_ATTACHMENT_PICKER } from '../components/pending-attachment-picker';
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
-import { wireTicketCollection } from '../components/ticket-collection-interactions';
+import { collectionSelectAll, wireTicketCollection } from '../components/ticket-collection-interactions';
 import { wireTicketGroups } from '../components/ticket-group-interactions';
 import {
   AUTOMATIC_TICKET_GROUP_CHOICE,
@@ -163,11 +163,11 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
    * Select a set of tickets at once, as a column header's Select All does. A hidden inspector stays
    * hidden: it opens on its own only to show one ticket's details, never a multi-selection (HS2-85TR7P).
    */
-  function selectMany(slugs: string[]): void {
+  function selectMany(slugs: string[], anchor = slugs[0]): void {
     cancelTicketDrafts();
     selectedCorruptKey.value = undefined;
     selectedTicketSlugs.value = slugs;
-    dependencies.ticketSelectionAnchor = slugs[0];
+    dependencies.ticketSelectionAnchor = anchor;
     selectedTicket.value = null;
   }
   /**
@@ -222,19 +222,22 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       },
       isSelectAll: (keyboard) =>
         matchesShortcut('select-all-tickets', keyboard, keyboardShortcutOverrides.value, appleShortcutPlatform),
+      // ⌘A selects every ticket, including the members of collapsed groups (HS2-3SJ5G8); the
+      // anchor stays on a drawn row so a later range starts from a visible ticket.
       selectAll: (row) => {
         const board = row.closest('[data-component="ticket-board"]'),
-          selectable = board
-            ? [...board.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')].map(
-                (ticket) => data(ticket).ticketSlug!,
-              )
-            : ticketGroups.navigable(visibleTickets()).map((ticket) => ticket.slug),
-          next = selectAllTickets(selectable);
+          { slugs, reachable } = board
+            ? collectionSelectAll(board)
+            : {
+                slugs: visibleTickets().map((ticket) => ticket.slug),
+                reachable: ticketGroups.navigable(visibleTickets()).map((ticket) => ticket.slug),
+              },
+          next = selectAllTickets(slugs, reachable);
         dependencies.ticketSelectionAnchor = next.anchor;
         selectedTicketSlugs.value = [...next.selected];
       },
-      selectColumn: (slugs) => {
-        selectMany(slugs);
+      selectColumn: (slugs, reachable) => {
+        selectMany(slugs, selectAllTickets(slugs, reachable).anchor);
       },
       openReader: (slug, ordered, row) => {
         void openTicketReader(slug, ordered, row);

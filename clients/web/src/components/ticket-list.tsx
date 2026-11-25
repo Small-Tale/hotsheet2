@@ -105,6 +105,7 @@ export function TicketList({
                   scope="list"
                   collapsed={collapsedGroups.includes(segment.key)}
                   dropTarget={dropGroup === segment.key}
+                  memberSlugs={segment.items.map((ticket) => ticket.slug)}
                 >
                   <List gap="none" rootAttributes={{ role: 'none' }}>
                     {rows(segment.items)}

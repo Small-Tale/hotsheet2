@@ -9,6 +9,7 @@ import {
 import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createCoalescedInput } from '../debounced-autosave';
+import { TICKET_GROUP_ACTIONS } from '../interaction-attrs/ticket-groups';
 import {
   VIEWS_AND_SAVED_VIEWS_ACTIONS,
   VIEWS_AND_SAVED_VIEWS_TARGETS,
@@ -76,6 +77,11 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
       const pointer = event as MouseEvent;
       if (
         (event.target as Element).closest('[data-action="select-ticket-row"]') ||
+        // Collapsing or expanding a group, or opening its menu, keeps the selection, so an expanded
+        // group shows the members a column's Select All took while it was collapsed (HS2-3SJ5G8).
+        (event.target as Element).closest(
+          `${TICKET_GROUP_ACTIONS.toggleTicketGroup.selector}, ${TICKET_GROUP_ACTIONS.openTicketGroupMenu.selector}`,
+        ) ||
         pointer.shiftKey ||
         pointer.metaKey ||
         pointer.ctrlKey

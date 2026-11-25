@@ -822,6 +822,99 @@ test('HS2-EYEGDQ selects all of a group’s tickets in the list or one column fr
   }, page);
 });
 
+test('HS2-3SJ5G8 a column header’s Select All and ⌘A include tickets in collapsed groups', async ({ page }) => {
+  test.setTimeout(180_000);
+  await withServer(async (server, tickets) => {
+    await open(page, server);
+    await showView(page, 'Columns View');
+    const columns = board(page),
+      inspector = page.locator('#app-right-rail'),
+      notStarted = columns.locator('[data-column-id="not-started"]'),
+      started = columns.locator('[data-column-id="started"]'),
+      selectedIn = (scope: Locator) =>
+        scope
+          .locator('[data-row-selected="true"]')
+          .evaluateAll((rows) =>
+            rows.map((row) => row.querySelector<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug),
+          ),
+      slugOf = (title: string) => tickets[title].slug,
+      toggle = (column: string, name: string) =>
+        group(columns, name, column).locator('[data-action="toggle-ticket-group"]'),
+      notStartedSlugs = SEEDS.filter((item) => !item.status).map((item) => slugOf(item.title)),
+      hiddenSearch = slugOf('Document group: search syntax');
+
+    // Collapse the search group (it collapses in every column); its Not Started member draws no row.
+    await toggle('not-started', SEARCH).click();
+    await expect(toggle('not-started', SEARCH)).toHaveAttribute('aria-expanded', 'false');
+    await expect(rowOf(notStarted, hiddenSearch)).toHaveCount(0);
+    await expect(notStarted.locator('[data-ticket-slug]')).toHaveCount(notStartedSlugs.length - 1);
+
+    // Select All takes every ticket in the column, the hidden one included, and the count says so.
+    await notStarted.getByRole('button', { name: 'Select all Not Started tickets' }).click();
+    await expect(inspector).toContainText(`${notStartedSlugs.length} items selected`);
+    await expect.poll(async () => (await selectedIn(notStarted)).length).toBe(notStartedSlugs.length - 1);
+    await expect.poll(() => selectedIn(started)).toEqual([]);
+    for (const width of [1440, 1100, 760, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      await capture(page, `hs2-3sj5g8-column-select-all-collapsed-light-${width}`);
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await settle(page);
+    await capture(page, 'hs2-3sj5g8-column-select-all-collapsed-dark-1440');
+    await page.emulateMedia({ colorScheme: 'light' });
+
+    // Expanding the group shows its member already selected, and the selection is unchanged.
+    await toggle('not-started', SEARCH).click();
+    await expect(rowOf(notStarted, hiddenSearch)).toHaveCount(1);
+    await expect.poll(async () => [...(await selectedIn(notStarted))].sort()).toEqual([...notStartedSlugs].sort());
+    await expect(inspector).toContainText(`${notStartedSlugs.length} items selected`);
+    await capture(page, 'hs2-3sj5g8-column-select-all-expanded-light-1440');
+
+    // An all-collapsed column: every member is selected though no row is drawn, and a bulk action
+    // reaches the hidden tickets.
+    await toggle('started', BOARD).click();
+    await toggle('started', SEARCH).click();
+    await expect(started.locator('[data-ticket-slug]')).toHaveCount(0);
+    await started.getByRole('button', { name: 'Select all Started tickets' }).click();
+    await expect(inspector).toContainText('3 items selected');
+    await expect.poll(() => selectedIn(notStarted)).toEqual([]);
+    // Change Priority from a visible row's menu after adding it with ⌘-click, so the hidden three get it too.
+    const visible = rowOf(notStarted, slugOf('Terminal drawer remembers last tab'));
+    await visible.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+    await expect(inspector).toContainText('4 items selected');
+    await visible.click({ button: 'right' });
+    const menu = page.locator('[data-context-menu="ticket"]');
+    await menu.locator('.kui-popup-menu__item', { hasText: 'Change priority' }).hover();
+    await menu.locator('[data-context-field="priority"][data-context-value="high"]').click();
+    const startedTitles = SEEDS.filter((item) => item.status === 'started').map((item) => item.title);
+    for (const title of [...startedTitles, 'Terminal drawer remembers last tab'])
+      await expect
+        .poll(async () => (await server.request<FullTicket>(`/tickets/${tickets[title].id}`)).priority)
+        .toBe('high');
+    // A plain click deselects everything else, hidden tickets included.
+    await visible.click();
+    await expect.poll(() => selectedIn(notStarted)).toEqual([slugOf('Terminal drawer remembers last tab')]);
+    await toggle('started', BOARD).click();
+    await toggle('started', SEARCH).click();
+    await expect(started.locator('[data-ticket-slug]')).toHaveCount(3);
+    await expect.poll(() => selectedIn(started)).toEqual([]);
+
+    // ⌘A in the list view takes a collapsed group's members too.
+    await showView(page, 'List View');
+    const view = list(page),
+      listed = (await slugsIn(view)).length;
+    await group(view, BOARD).locator('[data-action="toggle-ticket-group"]').click();
+    await expect(group(view, BOARD).locator('[data-ticket-slug]')).toHaveCount(0);
+    await rowOf(view, slugOf('Terminal drawer remembers last tab')).click();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
+    await expect(inspector).toContainText(`${listed} items selected`);
+    await capture(page, 'hs2-3sj5g8-list-select-all-collapsed-light-1440');
+    await group(view, BOARD).locator('[data-action="toggle-ticket-group"]').click();
+    await expect.poll(async () => (await selectedIn(view)).length).toBe(listed);
+  }, page);
+});
+
 test('HS2-HKXSB1 opens the group menu from the header overflow button without toggling, in the list and columns', async ({
   page,
 }) => {

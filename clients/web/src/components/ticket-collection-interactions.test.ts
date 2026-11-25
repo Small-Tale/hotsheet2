@@ -168,14 +168,20 @@ describe('wireTicketCollection (HS2-RWY78R)', () => {
   it('selects a whole column and opens the reader on double-click outside controls', () => {
     const state = bindings();
     wireTicketCollection(root, state);
-    const column = {
-      dataset: { columnId: 'done' },
-      querySelectorAll: () => [row('A'), row('B')],
-    };
+    const drawn = (slug: string) => Object.assign(row(slug), { matches: () => true }),
+      // HS2-3SJ5G8: a collapsed group between the rows contributes its hidden members in place.
+      collapsed = {
+        matches: () => false,
+        getAttribute: (name: string) => (name === 'data-ticket-group-hidden-slugs' ? '["H1","H2"]' : null),
+      },
+      column = {
+        dataset: { columnId: 'done' },
+        querySelectorAll: () => [drawn('A'), collapsed, drawn('B')],
+      };
     handler('click', '[data-action="select-ticket-column"]')(event('click'), {
       closest: () => column,
     } as unknown as Element);
-    expect(state.selectColumn).toHaveBeenCalledWith(['A', 'B']);
+    expect(state.selectColumn).toHaveBeenCalledWith(['A', 'H1', 'H2', 'B'], ['A', 'B']);
     const dblclick = handler('dblclick', rowSelector);
     dblclick(event('dblclick'), row('B'));
     expect(state.openReader).toHaveBeenCalledWith('B', ['A', 'B', 'C'], rows.get('B'));

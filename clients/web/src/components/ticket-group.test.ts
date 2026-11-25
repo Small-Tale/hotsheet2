@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TicketGroup } from './ticket-group';
 import { TicketGroupContextMenu } from './ticket-group-context-menu';
 import { TicketGroupDialog, type TicketGroupDialogState } from './ticket-group-dialog';
+import { decodeHiddenTicketSlugs, HIDDEN_TICKET_SLUGS_ATTRIBUTE } from './ticket-selection';
 
 describe('TicketGroup (HS2-WZ3JGZ, HS2-HV8S4Y)', () => {
   it('renders a lowered panel with a case-preserving disclosure header and count', () => {
@@ -51,6 +52,14 @@ describe('TicketGroup (HS2-WZ3JGZ, HS2-HV8S4Y)', () => {
     expect(markup).not.toContain('ticket-group__tickets');
     expect(markup).toContain('data-collapsed="true"');
     expect(markup).toContain('data-presentation="column"');
+  });
+
+  it('carries its hidden members’ slugs only while collapsed, for Select All (HS2-3SJ5G8)', () => {
+    const props = { group: 'Board', name: 'Board', count: 2, scope: 'started', memberSlugs: ['HS2-A', 'HS2-B'] };
+    const collapsed = String(TicketGroup({ ...props, collapsed: true })),
+      value = new RegExp(`${HIDDEN_TICKET_SLUGS_ATTRIBUTE}="([^"]*)"`).exec(collapsed)?.[1];
+    expect(decodeHiddenTicketSlugs(value?.replaceAll('&quot;', '"'))).toEqual(['HS2-A', 'HS2-B']);
+    expect(String(TicketGroup({ ...props, collapsed: false }))).not.toContain(HIDDEN_TICKET_SLUGS_ATTRIBUTE);
   });
 
   it('keys each column’s copy of a group separately and marks a drop target', () => {
