@@ -215,6 +215,18 @@ Safari web app (Add to Dock) and confirm its title bar color follows the same
 choices. Automated coverage asserts the meta contents and the mocked Tauri call
 only; the native rendering needs this check.
 
+### Standby hides the cursor in the desktop app (HS2-1RGBCT)
+
+On the packaged macOS desktop app (a release build: debug builds lack the command's
+permission), click the moon in the sidebar rail and keep the mouse still: the cursor must
+disappear at once, without moving. Nudge the mouse a few pixels: it stays hidden. Move it
+an inch: it shows, and standby stays up. Rest 3 seconds without moving: it disappears again.
+Press a key: standby exits and the cursor shows over the app on the next move. Repeat with
+idle entry. Then repeat the moon click in Safari and in Chrome and note whether the cursor
+hides before the first move (Safari may keep it until the pointer moves; Chrome should hide
+it at once). Automated coverage asserts the CSS rule and the mocked shell requests only; the
+real cursor needs this check.
+
 ### WebKit list scroll after ticket mutation (HS2-KTXBK2)
 
 At wide and phone widths, scroll a long ticket list deep into its rows, change a

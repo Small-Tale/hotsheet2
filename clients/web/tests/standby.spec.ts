@@ -242,6 +242,58 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     expect(await page.evaluate(() => getComputedStyle(document.body).cursor)).not.toBe('none');
   });
 
+  test('clicking the sidebar Standby button hides the cursor natively, with no move after the click (HS2-1RGBCT)', async ({
+    page,
+  }) => {
+    // WebKit (the desktop app's WKWebView) repaints a CSS cursor change only on the next pointer move,
+    // so `cursor: none` alone leaves the arrow over the display after the click. The desktop shell
+    // hides it until the mouse moves; a fake shell records each request.
+    await page.addInitScript(() => {
+      const host = window as unknown as {
+        cursorRequests: boolean[];
+        __TAURI_INTERNALS__: { invoke: (command: string, args: { hidden?: boolean }) => Promise<unknown> };
+      };
+      host.cursorRequests = [];
+      host.__TAURI_INTERNALS__ = {
+        invoke: (command, args) => {
+          if (command === 'desktop_hide_cursor_until_moves') host.cursorRequests.push(args.hidden === true);
+          return Promise.resolve(undefined);
+        },
+      };
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openStandbyProject(page);
+    const requests = () => page.evaluate(() => (window as unknown as { cursorRequests: boolean[] }).cursorRequests);
+    expect(await requests()).toEqual([]);
+    const moon = page
+        .getByRole('complementary', { name: 'Sidebar rail' })
+        .getByRole('button', { name: 'Enter Standby' }),
+      box = (await moon.boundingBox())!;
+    await moon.click();
+    const screen = standby(page);
+    await expect(screen).toBeVisible();
+    // Hidden right after the click, before the pointer moves at all, over whatever it rests on.
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true');
+    expect(
+      await page.evaluate(
+        ([x, y]) => getComputedStyle(document.elementFromPoint(x, y)!).cursor,
+        [box.x + box.width / 2, box.y + box.height / 2],
+      ),
+    ).toBe('none');
+    await expect.poll(requests).toEqual([true]);
+    // A nudge keeps it hidden; a real move shows it; a rest hides it natively again.
+    await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2);
+    await page.mouse.move(box.x + 300, box.y + 200, { steps: 4 });
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'false');
+    await expect.poll(requests).toEqual([true, false]);
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true', { timeout: 6_000 });
+    await expect.poll(requests).toEqual([true, false, true]);
+    // Exiting releases it.
+    await page.keyboard.press('Escape');
+    await expect(screen).toHaveCount(0);
+    await expect.poll(requests).toEqual([true, false, true, false]);
+  });
+
   test('enters after the idle threshold, shows all projects from the grid, and lights a stalled project', async ({
     page,
   }) => {

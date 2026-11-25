@@ -92,7 +92,9 @@ retry, timeout and stale acknowledgements (HS2-E0H7S0). `src-tauri/src/env_path.
 `HOTSHEET_DESKTOP_STORAGE_DIRECTORY` with a blank-as-unset local copy of `hotsheet_sync::env_path`
 (HS2-15ZN8E). On macOS
 `src-tauri/src/terminal_relay.rs` runs the bundled `hotsheet-cli terminal-relay install` (bounded,
-non-blocking on failure) before the bridge starts (HS2-HYF56Y). The same bridge keeps staged draft attachment
+non-blocking on failure) before the bridge starts (HS2-HYF56Y). `src/desktop-cursor.ts` asks the shell's
+`desktop_hide_cursor_until_moves` command (AppKit `setHiddenUntilMouseMoves:` on macOS) to hide the
+cursor while standby rests, because WKWebView repaints a CSS cursor only on a move (HS2-1RGBCT). The same bridge keeps staged draft attachment
 bytes as single atomic records under `draft-files-v1`, `src/desktop-draft-files.ts` routes
 `workspace-session.ts` draft files there instead of IndexedDB on desktop, and
 `src/browser-draft-file-contract.ts` validates browser IndexedDB recovery records: the existing

@@ -23,4 +23,8 @@ tauri = { version = "=2.12.5", features = [] }
 tauri-plugin-notification = "=2.8.0"
 tauri-plugin-opener = "=2.7.2"
 
+# HS2-1RGBCT: standby hides the cursor with AppKit; WKWebView repaints a CSS cursor only on a move.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSCursor"] }
+
 [workspace]

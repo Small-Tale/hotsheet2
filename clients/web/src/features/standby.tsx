@@ -15,6 +15,7 @@ import { AwayDigestDialog } from '../components/away-digest-dialog';
 import { StandbyScreen } from '../components/standby-screen';
 import { STANDBY_SETTING_FIELDS } from '../components/standby-settings';
 import { withControlledOpen } from '../controlled-open';
+import { syncDesktopCursorHidden } from '../desktop-cursor';
 import { featureOn } from '../feature-areas';
 import type { HostHealthSnapshot } from '../host-health';
 import type { LiveStateStore } from '../live-state';
@@ -66,6 +67,11 @@ export interface StandbyControllerDependencies {
     sinceMs: number,
     untilMs: number,
   ) => Promise<AwayWindowUsage | undefined>;
+  /**
+   * Hide (`true`) or release (`false`) the cursor natively; WebKit repaints a CSS cursor change only
+   * on the next pointer move (HS2-1RGBCT). Defaults to the desktop shell's command, a no-op in a browser.
+   */
+  nativeCursorHidden?: (hidden: boolean) => void;
   /** Injected for tests. */
   setInterval?: (callback: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
@@ -80,6 +86,9 @@ const browserWakeLock = (): WakeLockLike | undefined =>
   typeof navigator !== 'undefined' && 'wakeLock' in navigator
     ? (navigator as Navigator & { wakeLock: WakeLockLike }).wakeLock
     : undefined;
+const desktopCursorHidden = (hidden: boolean) => {
+  if (typeof window !== 'undefined') void syncDesktopCursorHidden(hidden);
+};
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
 
 /**
@@ -95,6 +104,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     streamGraceMs = dependencies.streamGraceMs ?? 20_000,
     touchDevice = dependencies.touchDevice ?? coarsePointer,
     wakeLock = dependencies.wakeLock ?? browserWakeLock,
+    nativeCursorHidden = dependencies.nativeCursorHidden ?? desktopCursorHidden,
     startInterval =
       dependencies.setInterval ?? ((callback: () => void, ms: number) => globalThis.setInterval(callback, ms)),
     stopInterval =
@@ -118,6 +128,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
   const cursor = createStandbyCursor({
     onChange: (hidden) => {
       cursorHidden.value = hidden;
+      nativeCursorHidden(hidden);
     },
   });
   let away: AwayRecord | undefined,

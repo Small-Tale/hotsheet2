@@ -62,6 +62,22 @@ fn desktop_flush_complete(
     Ok(())
 }
 
+/// HS2-1RGBCT: standby hides the cursor now, until the mouse moves, with AppKit's
+/// `setHiddenUntilMouseMoves:`. WKWebView applies a CSS `cursor: none` only on the next pointer
+/// move, so the arrow otherwise stays after the Standby button's click and after every rest.
+/// `hidden: false` releases it when standby exits. Other platforms rely on the CSS rule.
+#[tauri::command]
+fn desktop_hide_cursor_until_moves(app: tauri::AppHandle, hidden: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    app.run_on_main_thread(move || {
+        objc2_app_kit::NSCursor::setHiddenUntilMouseMoves(hidden);
+    })
+    .map_err(|error| error.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, hidden);
+    Ok(())
+}
+
 fn request_desktop_close(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<DesktopClose>() else {
         return;
@@ -201,7 +217,10 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![desktop_flush_complete])
+        .invoke_handler(tauri::generate_handler![
+            desktop_flush_complete,
+            desktop_hide_cursor_until_moves
+        ])
         .setup(|app| {
             let url = if cfg!(debug_assertions) {
                 tauri::Url::parse("http://127.0.0.1:4175/")?
@@ -239,6 +258,8 @@ pub fn run() {
                         "remote": { "urls": [format!("{origin}/*")] },
                         "permissions": [
                             "allow-desktop-flush-complete",
+                            // HS2-1RGBCT: standby hides the cursor until the mouse moves.
+                            "allow-desktop-hide-cursor-until-moves",
                             // HS2-15W35F: the window chrome follows the app's pinned theme.
                             "core:window:allow-set-theme",
                             "notification:allow-is-permission-granted",
