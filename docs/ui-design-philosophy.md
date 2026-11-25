@@ -146,6 +146,12 @@ tracks upstream gaps and Hot Sheet adoption work against a dated source snapshot
   that is unavailable, still opening, or whose remote server is unreachable keeps the sidebar,
   inspector, toolbar, and terminal drawer at the user's sizes: rails show a Kerf `EmptyState`,
   and project controls are disabled with the reason as their tooltip rather than removed.
+- The unavailable project's main panel names the cause, never a raw system error (HS2-ZKAVZZ).
+  The pure `project-unavailable-cause` module maps the error to a title-style `EmptyState` title,
+  a sentence-style next step, and which of Retry and Close Tab is primary; the raw error and root
+  sit in a compact `Disclosure` (Technical Details) inside the empty state. Server-unreachable
+  copy reuses the H0QGK7 region title Server Unavailable, and an unrecognized error reuses
+  Project Unavailable.
 
 ## Hot Sheet ticket lessons
 

@@ -4133,7 +4133,7 @@ test('opens a project whose setup refresh was skipped and explains it in a dismi
     await expect(banner).toContainText('Run cargo build -p hotsheet-cli');
     // The project is fully usable: its tickets load and nothing reports it unavailable.
     await expect(page.getByText('Use real project tickets').first()).toBeVisible();
-    await expect(page.getByText('could not be reopened')).toHaveCount(0);
+    await expect(page.locator('.project-restore-error')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: test.info().outputPath(`setup-warning-${width}.png`) });
     await banner.getByRole('button', { name: 'Dismiss' }).click();
@@ -4169,7 +4169,7 @@ test('keeps a project usable through a mismatched shared server and explains it 
     await expect(page.locator('[data-component="project-setup-warning-banner"]')).toHaveCount(0);
     await expect(page.getByText('Different server build is running')).toHaveCount(0);
     await expect(page.getByText('Use real project tickets').first()).toBeVisible();
-    await expect(page.getByText('could not be reopened')).toHaveCount(0);
+    await expect(page.locator('.project-restore-error')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: test.info().outputPath(`server-build-notice-${width}.png`) });
     await banner.getByRole('button', { name: 'Dismiss' }).click();
@@ -15695,10 +15695,11 @@ test('keeps a persistently failed project remembered without obscuring a success
   await expect(failedTabRoot.locator('[data-lucide="circle-alert"]')).toBeVisible();
   await failedTab.click();
   const failure = page.locator('.project-restore-error');
-  await expect(failure).toContainText('older-server could not be reopened.');
+  // An unresponsive registered process reads as a server cause; the raw detail stays (HS2-ZKAVZZ).
+  await expect(failure).toContainText('Server Unavailable');
   await expect(failure).toContainText('The older server only supports schema 2.');
-  await expect(failure).toContainText('process (4242) is not responding');
-  await expect(failure).toContainText('Project: /work/older-server');
+  await expect(failure).toContainText('process 4242 is not responding');
+  await expect(failure).toContainText('Project folder: /work/older-server');
   await page.screenshot({ path: 'target/visual-captures/hs2-cygqfn-project-restore-error-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.screenshot({ path: 'target/visual-captures/hs2-cygqfn-project-restore-error-narrow.png', fullPage: true });
@@ -15713,7 +15714,7 @@ test('keeps a persistently failed project remembered without obscuring a success
   await expect(page.getByRole('tab', { name: 'older-server' })).toHaveAttribute('aria-selected', 'true');
   await expect(failure).toContainText('The older server only supports schema 2.');
   available = true;
-  await failure.getByRole('button', { name: 'Retry project' }).click();
+  await failure.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(failure).toHaveCount(0);
   await expect(page.getByRole('tab', { name: 'older-server' }).locator('xpath=..')).not.toHaveAttribute(
     'data-attention',

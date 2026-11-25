@@ -583,7 +583,7 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   await page.screenshot({ path: 'target/visual-captures/hs2-rsx13q-restore-failure-390.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   fixture.unavailable.delete('beta');
-  await failure.getByRole('button', { name: 'Retry project' }).click();
+  await failure.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.open-projects'))).resolves.toBe(
@@ -632,8 +632,8 @@ test('HS2-H0QGK7 keeps the sidebars, toolbar, and drawer for an unavailable tab,
   const betaTab = page.locator('[data-tab-kind="project"][data-restore-failure="true"]');
   await expect(page.locator('.project-tab-bar [data-project-pending="true"]')).toHaveCount(0);
   await betaTab.getByRole('tab', { name: 'beta' }).click();
-  await expect(failure).toContainText('beta could not be reopened');
-  await expect(failure.getByRole('button', { name: 'Retry project' })).toBeEnabled();
+  await expect(failure).toContainText('Server Unavailable');
+  await expect(failure.getByRole('button', { name: 'Retry', exact: true })).toBeEnabled();
   await expect(sidebar).toBeVisible();
   await expect(sidebar.locator('[data-project-unavailable-region="sidebar"]')).toContainText('Project Unavailable');
   await expect(toolbar).toBeVisible();

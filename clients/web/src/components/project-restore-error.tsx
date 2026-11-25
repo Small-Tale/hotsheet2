@@ -1,9 +1,19 @@
 import { Button } from '@kerfjs/ui/button';
+import { Disclosure } from '@kerfjs/ui/disclosure';
 import { EmptyState } from '@kerfjs/ui/empty-state';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { CircleAlert } from 'lucide';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
+import { CircleAlert, FileX, FolderX, Lock, ServerOff, Unlink } from 'lucide';
 
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
+import {
+  explainProjectUnavailable,
+  type ProjectUnavailableCause,
+  projectUnavailableTechnicalDetails,
+} from '../project-unavailable-cause';
 
 export interface ProjectRestoreFailure {
   root: string;
@@ -22,24 +32,74 @@ export function projectRestoreTabId(root: string): string {
   return `project-restore-error:${root}`;
 }
 
+const CAUSE_ICONS = {
+  'folder-missing': { icon: FolderX, name: 'folder-x' },
+  'not-a-folder': { icon: FileX, name: 'file-x' },
+  'permission-denied': { icon: Lock, name: 'lock' },
+  'server-unreachable': { icon: ServerOff, name: 'server-off' },
+  'store-link-broken': { icon: Unlink, name: 'unlink' },
+  unknown: { icon: CircleAlert, name: 'circle-alert' },
+} satisfies Record<ProjectUnavailableCause, { icon: typeof CircleAlert; name: string }>;
+
+/**
+ * The workspace of a remembered project that could not be reopened. It explains the cause in plain
+ * language and offers Retry and Close Tab, primary by cause; the raw error stays behind Technical
+ * Details for diagnosis (HS2-ZKAVZZ). The shell around it keeps its regions (HS2-H0QGK7).
+ */
 export function ProjectRestoreError({ root, name, error, recoveryPid, busy = false }: ProjectRestoreFailure) {
-  const recovery = recoveryPid ? ` A registered Hot Sheet server process (${recoveryPid}) is not responding.` : '';
+  const failure = { root, name, error, ...(recoveryPid ? { recoveryPid } : {}) },
+    explanation = explainProjectUnavailable(failure),
+    icon = CAUSE_ICONS[explanation.cause];
   return (
-    <EmptyState
+    <List
+      fill
+      hAlign="center"
+      vAlign="middle"
       className="project-restore-error"
-      title={`${name} could not be reopened.`}
-      detail={`${error}${recovery} The project remains remembered. Retry after the local server is available; if the problem continues, verify the project folder and relaunch the Hot Sheet server and client. Project: ${root}`}
-      icon={<LucideIcon icon={CircleAlert} name="circle-alert" />}
-      action={
-        <Button
-          emphasis="primary"
-          action={NAVIGATION_AND_TABS_ACTIONS.retryProjectRestore.value}
-          disabled={busy}
-          rootAttributes={{ 'data-project-root': root }}
-        >
-          {busy ? 'Retrying…' : 'Retry project'}
-        </Button>
-      }
-    />
+      rootAttributes={{ 'data-project-unavailable-cause': explanation.cause }}
+    >
+      <EmptyState
+        title={explanation.title}
+        detail={explanation.detail}
+        busy={busy}
+        icon={<LucideIcon icon={icon.icon} name={icon.name} />}
+        action={
+          <List gap="m">
+            <Row hAlign="center" gap="xs" wrap>
+              <Button
+                emphasis={explanation.primaryAction === 'retry' ? 'primary' : 'secondary'}
+                action={NAVIGATION_AND_TABS_ACTIONS.retryProjectRestore.value}
+                disabled={busy}
+                rootAttributes={{ 'data-project-root': root }}
+              >
+                {busy ? 'Retrying…' : 'Retry'}
+              </Button>
+              <Button
+                emphasis={explanation.primaryAction === 'close' ? 'primary' : 'secondary'}
+                action={TERMINALS_ACTIONS.closeProjectTab.value}
+                rootAttributes={{ 'data-project-id': projectRestoreTabId(root) }}
+              >
+                Close Tab
+              </Button>
+            </Row>
+            <Row hAlign="center">
+              <Disclosure
+                title="Technical Details"
+                size="compact"
+                rootAttributes={{ 'data-project-unavailable-details': '' }}
+              >
+                <List gap="xs">
+                  {projectUnavailableTechnicalDetails(failure).map((line) => (
+                    <Text size="compact" tone="quiet" font="monospace" wrap="anywhere">
+                      {line}
+                    </Text>
+                  ))}
+                </List>
+              </Disclosure>
+            </Row>
+          </List>
+        }
+      />
+    </List>
   );
 }

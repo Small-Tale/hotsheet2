@@ -61,14 +61,14 @@ try {
       await restored.goto(second);
       await restored.waitForFunction(() => document.querySelector('#app')?.children.length > 0);
       await restored.waitForFunction(() => localStorage.getItem('hotsheet.show-loading-activity') === 'true');
-      await restored.getByText('remembered-project could not be reopened.', { exact: true }).waitFor();
+      await restored.locator('.project-restore-error').getByText('Project Unavailable', { exact: true }).waitFor();
       assert.ok(opened.includes('/synthetic/remembered-project'));
       assert.equal(
         await restored.evaluate(() => localStorage.getItem('hotsheet.open-projects')),
         '["/synthetic/remembered-project"]',
       );
       await restored.reload();
-      await restored.getByText('remembered-project could not be reopened.', { exact: true }).waitFor();
+      await restored.locator('.project-restore-error').getByText('Project Unavailable', { exact: true }).waitFor();
       await restored.evaluate(() => {
         window.addEventListener('pagehide', () => localStorage.setItem('hotsheet.show-loading-activity', 'false'));
       });

@@ -1651,8 +1651,15 @@ checkout name>`, where the host is the machine name the peer last reported on th
   stream and the change-stream worker alike (a `wake` worker message). A live stream ignores a
   wake, so a wake never adds a request or timer of its own (HS2-ZTAJ1R).
   A project that remains unavailable stays in the tab bar with a red title and error icon;
-  selecting it presents the exact failure, known stale-server context, its remembered root,
-  likely recovery steps, and an in-place retry action. The shell never drops a region for a
+  selecting it explains the cause in plain language and offers Retry and Close Tab (HS2-ZKAVZZ).
+  Known causes each get their own title, explanation, and primary action: the folder was moved or
+  deleted (Project Folder Not Found; Close Tab primary), the path is now a file (Project Path Is Not
+  a Folder; Close Tab primary), the folder cannot be read (No Permission to Open Project), the local
+  server or bridge is unreachable or a registered server process is not responding (Server
+  Unavailable), and the project's ticket repository link names a repository that is gone (Ticket
+  Repository Not Found); any other error reads Project Unavailable with Retry primary. The exact
+  error, known stale-server process, and remembered root stay available behind a collapsed Technical
+  Details disclosure for diagnosis. The shell never drops a region for a
   selected tab that is not ready (unavailable, a remote project loading or reconnecting, or a
   project still opening): the project sidebar, inspector, workspace toolbar, New Ticket action, and
   terminal drawer keep the user's visibility and sizes, the rails and drawer show an empty state,

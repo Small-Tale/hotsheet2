@@ -40,6 +40,7 @@ import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-he
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { hostCallouts, projectLiveSummary } from '../project-live-summary';
+import type { ProjectUnavailableCause } from '../project-unavailable-cause';
 import { unavailableProjectShell } from '../project-unavailable-shell';
 import { DemoEvent } from './components/demo-event';
 import { tabContextMenu } from './components/demo-state';
@@ -140,7 +141,28 @@ export const appShellSettings = {
   mobileViewValue: signal('all'),
   /** The selected project is unavailable (HS2-H0QGK7): every region stays, empty, with controls disabled. */
   projectUnavailable: signal(false),
+  /** Which failure the unavailable project reports; the main panel explains it plainly (HS2-ZKAVZZ). */
+  unavailableCause: signal<ProjectUnavailableCause>('folder-missing'),
 };
+
+/** A representative raw error per cause, as the bridge reports it (HS2-ZKAVZZ). */
+const unavailableCauseErrors: Record<ProjectUnavailableCause, string> = {
+  'folder-missing': "ENOENT: no such file or directory, realpath '/work/hot-sheet-2'",
+  'not-a-folder': "ENOTDIR: not a directory, open '/work/hot-sheet-2/.hotsheet2/store'",
+  'permission-denied': "EACCES: permission denied, realpath '/work/hot-sheet-2'",
+  'server-unreachable': 'connect ECONNREFUSED 127.0.0.1:4100',
+  'store-link-broken': 'The linked ticket repository is unavailable or is not a Hot Sheet store.',
+  unknown: 'The older server only supports schema 2.',
+};
+
+const unavailableCauseChoices: { value: ProjectUnavailableCause; label: string }[] = [
+  { value: 'folder-missing', label: 'Folder Moved or Deleted' },
+  { value: 'not-a-folder', label: 'Path Is a File' },
+  { value: 'permission-denied', label: 'Permission Denied' },
+  { value: 'server-unreachable', label: 'Server Unreachable' },
+  { value: 'store-link-broken', label: 'Ticket Repository Link Broken' },
+  { value: 'unknown', label: 'Unknown Error' },
+];
 
 const mobileViewChoices = [
   { value: 'all', label: 'Queue' },
@@ -155,10 +177,14 @@ export function resetAppShellDemo(root?: ParentNode): void {
   appShellSettings.mobileView.value = false;
   appShellSettings.mobileViewValue.value = 'all';
   appShellSettings.projectUnavailable.value = false;
+  appShellSettings.unavailableCause.value = 'folder-missing';
   shellLiveExpanded.value = false;
   if (root)
     syncSettingsControls(root, 'app-shell', {
-      values: { presentation: appShellSettings.presentation.value },
+      values: {
+        presentation: appShellSettings.presentation.value,
+        'unavailable-cause': appShellSettings.unavailableCause.value,
+      },
       checked: {
         'overlay-open': appShellSettings.overlayOpen.value,
         'mobile-view-header': appShellSettings.mobileView.value,
@@ -193,6 +219,12 @@ export function AppShellSettings() {
         name="project-unavailable"
         checked={appShellSettings.projectUnavailable.value}
         label="Selected project unavailable (empty regions, disabled controls)"
+      />
+      <Select
+        name="unavailable-cause"
+        label="Unavailable Cause"
+        value={appShellSettings.unavailableCause.value}
+        choices={unavailableCauseChoices}
       />
       <Button type="button" action={'reset-settings'}>
         Reset
@@ -675,7 +707,7 @@ export function AppShellDemo() {
             <ProjectRestoreError
               root="/work/hot-sheet-2"
               name="Hot Sheet 2"
-              error="The project folder was moved or deleted."
+              error={unavailableCauseErrors[appShellSettings.unavailableCause.value]}
             />
           }
           terminalDrawer={<UnavailableTerminalDrawer message={unavailable.drawer} />}
@@ -942,6 +974,8 @@ function wireAppShellDemo(root: HTMLElement): () => void {
       if (control.getAttribute('name') === 'mobile-view-header') appShellSettings.mobileView.value = control.checked;
       if (control.getAttribute('name') === 'project-unavailable')
         appShellSettings.projectUnavailable.value = control.checked;
+      if (control.getAttribute('name') === 'unavailable-cause')
+        appShellSettings.unavailableCause.value = control.value as ProjectUnavailableCause;
     }),
   );
   demoListeners.add(
