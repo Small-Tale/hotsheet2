@@ -2263,6 +2263,14 @@ terminal” only clears the notice. A later `UserMessage` item in the same sessi
 typed in the terminal, or the queued one) clears it, and questions stay per terminal and
 session. The TUI's own queued-question entry stays until Codex consumes the follow-up input.
 
+Because the turn keeps running, a permission ask the same session raises while the question is
+open leaves it open. Only `SessionStart` names a terminal's session: a permission ask adopts a
+session only when none is known, and an ask naming another session never replaces it. A
+permission hook run by hand inside a Codex terminal inherits that terminal's id, and replacing
+the reported session with its made-up one stopped the rollout watch, so the next question never
+reached a local or remote tab (HS2-HSFVHC). The remote-project parity suite covers the
+question, its change event, and the queued answer for a local and a remote tab of one server.
+
 In the isolated live Claude check (HS2-5CX10W), a server-launched terminal delivered
 two choices, a multi-select answer, and free text to Claude. Native fallback and
 stale-answer rejection after session replacement also worked. A browser-created

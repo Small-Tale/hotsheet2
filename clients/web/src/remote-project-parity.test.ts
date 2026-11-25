@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -29,7 +29,7 @@ type Host = Awaited<ReturnType<typeof realTicketServer>>;
 interface TerminalView {
   id: string;
   launch_cwd?: string;
-  question?: { question: string; tool_use_id: string; at: string; questions: unknown };
+  question?: { question: string; tool_use_id: string; at: string; questions: unknown; agent?: string };
 }
 
 /** Pair a read-write device with the hosting server the way a peer's host does (HS2-AW2AKF). */
@@ -67,11 +67,24 @@ describe('HS2-HSFVHC remote project parity through a real hosting server', { tim
   let otherRemoteId = '';
   let otherCheckoutId = '';
   let localId = '';
+  // A stand-in `codex` on the hosting server's PATH: `codex queue` records its arguments under
+  // the session's CODEX_HOME and confirms like codex-cli does (HS2-FKM97G).
+  let fakeCodexBin = '';
 
   beforeAll(async () => {
     previousProbes = process.env.HOTSHEET_AI_TOOL_PROBES;
     process.env.HOTSHEET_AI_TOOL_PROBES = 'off';
-    host = await realTicketServer({ canonicalRoot: true, terminalBroker: true });
+    fakeCodexBin = await mkdtemp(join(tmpdir(), 'hs2-remote-parity-codex-'));
+    await writeFile(
+      join(fakeCodexBin, 'codex'),
+      '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$CODEX_HOME/queued.txt"\necho "Queued message m-1 for thread $2."\n',
+    );
+    await chmod(join(fakeCodexBin, 'codex'), 0o755);
+    host = await realTicketServer({
+      canonicalRoot: true,
+      terminalBroker: true,
+      env: { PATH: `${fakeCodexBin}:${process.env.PATH ?? ''}` },
+    });
     // This machine (the bridge) keeps its own home: only its reviewed-server registry lives here.
     previousHome = process.env.HOTSHEET_HOME;
     bridgeHome = await mkdtemp(join(tmpdir(), 'hs2-remote-parity-bridge-'));
@@ -125,6 +138,7 @@ describe('HS2-HSFVHC remote project parity through a real hosting server', { tim
     if (previousProbes === undefined) delete process.env.HOTSHEET_AI_TOOL_PROBES;
     else process.env.HOTSHEET_AI_TOOL_PROBES = previousProbes;
     await rm(bridgeHome, { recursive: true, force: true, maxRetries: 5 });
+    await rm(fakeCodexBin, { recursive: true, force: true, maxRetries: 5 });
   });
 
   /** A browser request through the bridge's project API, exactly as `Api(apiPath)` sends it. */
@@ -226,6 +240,156 @@ describe('HS2-HSFVHC remote project parity through a real hosting server', { tim
         (await hook(`/terminals/${terminal}/question?tool_use_id=${toolUse}-2&session_id=${session}`)).status,
       ).toBe(409);
       expect((await browser(projectId, `/terminals/${encodeURIComponent(terminal)}`, 'DELETE')).ok).toBe(true);
+    });
+
+  /** A Codex PermissionRequest hook in `terminal`, answered on the hosting machine. */
+  const answeredPermissionAsk = async (terminal: string, session: string, action: string) => {
+    const asked = hook('/permissions/ask', 'POST', {
+      project: `checkout:${host.checkoutId}`,
+      connection: '',
+      tool: 'Bash',
+      action,
+      agent: 'codex',
+      terminal_id: terminal,
+      session_id: session,
+    });
+    let pending: WirePermissionRequest | undefined;
+    await expect
+      .poll(async () => {
+        pending = ((await (await hook('/permissions')).json()) as WirePermissionRequest[]).find(
+          (item) => item.action === action,
+        );
+        return pending !== undefined;
+      })
+      .toBe(true);
+    expect((await hook(`/permissions/${pending!.id}`, 'POST', { decision: 'allow', scope: 'once' })).status).toBe(200);
+    expect((await asked).status).toBe(200);
+  };
+
+  for (const [index, tab] of (['local', 'remote'] as const).entries())
+    it(`shows a Codex request_user_input_async question in a ${tab} tab and queues its answer`, async () => {
+      const projectId = tab === 'local' ? localId : remoteId,
+        terminal = `codex-question-${tab}`,
+        session = `01a20000-0000-7000-8000-00000000000${index + 1}`,
+        itemId = `msg_synthetic${index + 1}`;
+      const codexHome = await mkdtemp(join(tmpdir(), 'hs2-remote-parity-codex-home-'));
+      try {
+        const launched = await browser(projectId, '/terminals', 'POST', {
+          id: terminal,
+          command: 'cat',
+          ...(tab === 'remote' ? { cwd: projectId } : { cwd: host.root }),
+        });
+        expect(launched.status).toBe(200);
+        // The Hot Sheet-launched Codex TUI's SessionStart hook, on the hosting machine.
+        expect(
+          (
+            await hook(`/terminals/${terminal}/ai-connection`, 'POST', {
+              agent: 'codex',
+              session_id: session,
+              codex_home: codexHome,
+            })
+          ).status,
+        ).toBe(204);
+        // The live repro: a permission hook run by hand inside the Codex terminal (it inherits the
+        // terminal id) named another session id. That ask must not replace the session the TUI's
+        // SessionStart reported, or its rollout watch stops and the question never appears.
+        await answeredPermissionAsk(terminal, 'synthetic-hand-run-session', `echo replaced-${tab}`);
+        const { cursor } = (await (await browser(projectId, '/ws/poll')).json()) as { cursor: number };
+        // The session's rollout, in the record shapes codex-cli 0.171.0 writes (synthetic text).
+        const day = join(codexHome, 'sessions', '2026', '11', '25');
+        await mkdir(day, { recursive: true });
+        const later = new Date(Date.now() + 2_000).toISOString();
+        const rollout = join(day, `rollout-2026-11-25T06-00-00-${session}.jsonl`);
+        const record = (value: unknown) => `${JSON.stringify(value)}\n`;
+        await writeFile(
+          rollout,
+          record({
+            timestamp: later,
+            ordinal: 0,
+            type: 'session_meta',
+            payload: {
+              id: session,
+              session_id: session,
+              originator: 'codex-tui',
+              cli_version: '0.171.0',
+              source: 'cli',
+            },
+          }) +
+            record({
+              timestamp: later,
+              ordinal: 1,
+              type: 'event_msg',
+              payload: {
+                type: 'item_completed',
+                thread_id: session,
+                turn_id: '01a20000-0000-7000-8000-0000000000aa',
+                item: {
+                  type: 'AgentMessage',
+                  id: itemId,
+                  content: [{ type: 'text', text: 'Synthetic question text.' }],
+                  phase: 'final_answer',
+                  delivery: 'async',
+                  questions: [{ title: 'Synthetic choice?', options: ['Alpha', 'Beta'] }],
+                },
+                started_at_ms: 1,
+                completed_at_ms: 1,
+              },
+            }),
+        );
+
+        // What the tab displays: the question in Claude's AskUserQuestion shape, marked Codex.
+        await expect
+          .poll(
+            async () =>
+              ((await (await browser(projectId, '/terminals')).json()) as TerminalView[]).find(
+                (item) => item.id === terminal,
+              )?.question?.tool_use_id,
+            { timeout: 20_000 },
+          )
+          .toBe(itemId);
+        const shown = ((await (await browser(projectId, '/terminals')).json()) as TerminalView[]).find(
+          (item) => item.id === terminal,
+        );
+        expect(shown?.question).toMatchObject({
+          question: 'Synthetic choice?',
+          agent: 'codex',
+          questions: [{ question: 'Synthetic choice?', options: [{ label: 'Alpha' }, { label: 'Beta' }] }],
+        });
+        const changes = (await (await browser(projectId, `/ws/poll?since=${cursor}`)).json()) as {
+          events: Array<{ kind: string; id: string }>;
+        };
+        expect(changes.events).toContainEqual(expect.objectContaining({ kind: 'terminal_question', id: terminal }));
+        // The asynchronous question leaves the turn running; a permission ask the same session
+        // raises meanwhile keeps the question open.
+        await answeredPermissionAsk(terminal, session, `echo still-asking-${tab}`);
+        expect(
+          ((await (await browser(projectId, `/terminals/${encodeURIComponent(terminal)}`)).json()) as TerminalView)
+            .question?.tool_use_id,
+        ).toBe(itemId);
+
+        // The tab's answer is queued to the Codex session as user input.
+        const answered = await browser(
+          projectId,
+          `/terminals/${encodeURIComponent(terminal)}/question/answer`,
+          'POST',
+          {
+            tool_use_id: itemId,
+            at: shown?.question?.at,
+            answers: { 'Synthetic choice?': 'Beta' },
+          },
+        );
+        expect(answered.status, await answered.clone().text()).toBe(204);
+        expect(await readFile(join(codexHome, 'queued.txt'), 'utf8')).toBe(
+          `queue\n--thread=${session}\n--message=Answer from Hot Sheet to your question:\n- Synthetic choice?: Beta\n`,
+        );
+        const after = (await (
+          await browser(projectId, `/terminals/${encodeURIComponent(terminal)}`)
+        ).json()) as TerminalView;
+        expect(after.question).toBeUndefined();
+      } finally {
+        await browser(projectId, `/terminals/${encodeURIComponent(terminal)}`, 'DELETE');
+        await rm(codexHome, { recursive: true, force: true, maxRetries: 5 });
+      }
     });
 
   for (const tab of ['local', 'remote'] as const)

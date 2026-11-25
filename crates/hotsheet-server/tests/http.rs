@@ -3454,6 +3454,20 @@ async fn hs2_ssmdq1_turn_reports_after_a_restart_reconnect_and_permission_asks_k
         StatusCode::NO_CONTENT,
         "the session survives a permission ask that names none"
     );
+    // HS2-HSFVHC: ...or one naming another session, such as a hook run by hand in the terminal.
+    send(
+        "POST",
+        "/terminals/survivor/ai-connection".into(),
+        Some(r#"{"agent":"claude","session_id":"hand-run","source":"permission_request"}"#.into()),
+    )
+    .await;
+    assert_eq!(
+        send("POST", endpoint(), turn("restart-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT,
+        "only SessionStart replaces the terminal's session"
+    );
     // ...but another agent's ask does not inherit it.
     send(
         "POST",

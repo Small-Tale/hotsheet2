@@ -714,9 +714,6 @@ pub(crate) async fn connect_terminal_ai(
     if forget_terminal_halt(&state, &id) {
         emit_terminal_halted(&state, &id, None);
     }
-    if forget_terminal_question(&state, &id, None) {
-        emit_terminal_question(&state, &id);
-    }
     let agent = body
         .agent
         .map(|agent| agent.trim().chars().take(64).collect::<String>())
@@ -730,19 +727,28 @@ pub(crate) async fn connect_terminal_ai(
     let resumed_codex = (permission_ask && agent.as_deref() == Some("codex"))
         .then(|| super::codex_watch::watched_session(&state, &id))
         .flatten();
-    let session_id = body.session_id.filter(|id| !id.is_empty()).or_else(|| {
-        permission_ask
-            .then(|| {
-                state
-                    .terminal_ai_connections
-                    .lock_or_recover()
-                    .get(&id)
-                    .filter(|previous| previous.agent == agent)
-                    .and_then(|previous| previous.session_id.clone())
-            })
-            .flatten()
-            .or_else(|| resumed_codex.as_ref().map(|(session, _)| session.clone()))
-    });
+    let known_session = permission_ask
+        .then(|| {
+            state
+                .terminal_ai_connections
+                .lock_or_recover()
+                .get(&id)
+                .filter(|previous| previous.agent == agent)
+                .and_then(|previous| previous.session_id.clone())
+        })
+        .flatten()
+        .or_else(|| resumed_codex.as_ref().map(|(session, _)| session.clone()));
+    // HS2-HSFVHC: only SessionStart names the terminal's session. A permission ask runs inside
+    // it, so an ask naming another session (a hook run by hand in the terminal, which inherits
+    // its id) never replaces it: that stopped the Codex rollout watch, and with it the session's
+    // questions, halts, and usage.
+    let continuing = known_session.is_some();
+    let session_id = known_session.or_else(|| body.session_id.filter(|id| !id.is_empty()));
+    // A Codex question is asynchronous and the turn keeps running, so a permission ask of the
+    // same session leaves it open; a new or resumed session cannot inherit it (HS2-HSFVHC).
+    if !continuing && forget_terminal_question(&state, &id, None) {
+        emit_terminal_question(&state, &id);
+    }
     let checkout_id = match body.checkout_id {
         Some(id) => {
             let checkout = state
