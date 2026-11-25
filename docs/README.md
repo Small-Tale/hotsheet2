@@ -185,6 +185,9 @@ The measured browser-like test investigation is
 The macOS file watcher start cost behind slow `coordination wait` readiness, and the
 one-start-per-waiter change, are measured in
 [file-watcher-start-cost-2026-11-12.md](file-watcher-start-cost-2026-11-12.md) (HS2-N1QDZW).
+Repeated Git repository discovery in the machine server, and the stamp-validated cache
+that replaced it, are measured in
+[git-discovery-cache-2026-11-25.md](git-discovery-cache-2026-11-25.md) (HS2-CBZV9W).
 Local test dependency and timing baseline: [30-test-dependency-baseline-2026-11-02.md](30-test-dependency-baseline-2026-11-02.md), with its [proposed dependency manifest](local-verification-dependencies.proposed.yaml) (HS2-D461XW).
 
 | Doc                                                  | Topic                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Status                  |

@@ -283,7 +283,10 @@ afterAll(async () => {
  * processes from the machine server (352 `rev-parse`; one repository discovery repeats 96 times). A
  * `git --version` spawn costs 14 ms on macOS and 90-135 ms on the Windows 11 ARM64 VM, whether or not
  * the parent has a console, so the same flow runs 4-5x longer on the Windows runners: about 100-130 s
- * against 120 s. Repeated discovery is HS2-CBZV9W; until it lands, Windows gets 2x.
+ * against 120 s. HS2-CBZV9W caches repeated discovery: on macOS the run now starts about 635 (from 774),
+ * and each machine server about 300 (from 388); the rest are status, commit and per-process probes.
+ * Windows keeps 2x until its runners are measured inside 120 s
+ * (docs/git-discovery-cache-2026-11-25.md).
  */
 const windowsBudget = process.platform === 'win32' ? 2 : 1;
 
