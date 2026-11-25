@@ -799,7 +799,7 @@ test('HS2-86ES0B Retry project follows a checkout relocated after its restore fa
   await expect(failure).toContainText('beta server unavailable');
   fixture.unavailable.delete('beta');
   fixture.projects.set('beta', { ...projectFor('beta'), root: '/moved/beta' });
-  await failure.getByRole('button', { name: 'Retry project' }).click();
+  await failure.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
   await expect
     .poll(async () =>
