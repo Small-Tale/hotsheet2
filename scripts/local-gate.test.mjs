@@ -17,6 +17,8 @@ import {
   smokeStages,
   watcherStages,
   WATCHER_CONTRACT_COMMAND,
+  linuxWatcherCoverage,
+  LINUX_WATCHER_COMMAND,
 } from './local-gate.mjs';
 import {
   catalogSpecimenCount,
@@ -143,6 +145,31 @@ test('HS2-K1WG2E watcher source edits run the HTTP watcher contract first, retri
     // Under CI First an unstarted stage is deferred once the budget is spent: run the contract first.
     assert.ok(fullRust === -1 || index < fullRust, `${changed}: contract must precede the full Rust suite`);
     assert.ok(!p.deferred.some((check) => check.command === WATCHER_CONTRACT_COMMAND), changed);
+  }
+});
+
+test('HS2-E13GV2 Linux-only watcher cases run on Linux and are named as deferred elsewhere', (t) => {
+  const changes = ['crates/hotsheet-server/src/watcher.rs'];
+  assert.equal(linuxWatcherCoverage(['crates/hotsheet-server/src/routes/tickets.rs'], 'darwin'), null);
+  const mac = linuxWatcherCoverage(changes, 'darwin');
+  assert.equal(mac.runsHere, false);
+  assert.match(mac.summary, /hs2_c3req1_linux_\*/);
+  assert.match(mac.summary, /green Linux CI Rust job/);
+  assert.ok(!watcherStages(changes, 'darwin').some((stage) => stage.command === LINUX_WATCHER_COMMAND));
+  const linux = watcherStages(changes, 'linux').find((stage) => stage.command === LINUX_WATCHER_COMMAND);
+  assert.equal(linux?.force, true);
+  assert.match(LINUX_WATCHER_COMMAND, /--retries 0/);
+  assert.equal(linuxWatcherCoverage(changes, 'linux').runsHere, true);
+  // The real plan on this (non-Linux) CI/dev host carries the deferral for the log and receipt.
+  if (process.platform !== 'linux') {
+    const f = fixture(t);
+    f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    f.put(changes[0], 'synthetic watcher change\n');
+    f.git('add', changes[0]);
+    f.git('commit', '--quiet', '-m', 'synthetic watcher change');
+    const p = prepare(f.repo, undefined, false, f.options.versions);
+    assert.deepEqual(p.linuxWatcher?.files, changes);
+    assert.equal(p.linuxWatcher?.runsHere, false);
   }
 });
 

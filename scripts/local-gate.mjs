@@ -396,9 +396,9 @@ export const WATCHER_SOURCE =
 export const WATCHER_CONTRACT_COMMAND =
   "cargo nextest run -p hotsheet-server --test http --retries 0 -E 'test(/watcher|registered_store_gets_its_own_watcher/)'";
 
-export function watcherStages(changes) {
+export function watcherStages(changes, platform = process.platform) {
   if (!changes.some((path) => WATCHER_SOURCE.test(path))) return [];
-  return [
+  const stages = [
     {
       cwd: '.',
       group: 'rust',
@@ -408,6 +408,38 @@ export function watcherStages(changes) {
       reasons: ['HS2-K1WG2E: watcher sources changed; run the HTTP watcher invalidation contract first'],
     },
   ];
+  if (linuxWatcherCoverage(changes, platform)?.runsHere)
+    stages.push({
+      cwd: '.',
+      group: 'rust',
+      selected: true,
+      force: true,
+      command: LINUX_WATCHER_COMMAND,
+      reasons: ['HS2-E13GV2: watcher sources changed on a Linux host; run the Linux-native watcher cases'],
+    });
+  return stages;
+}
+
+/**
+ * HS2-E13GV2: Linux-native watcher regressions (`#[cfg(target_os = "linux")]` cases in the server
+ * watcher) cannot run on a macOS or Windows host. On Linux they run as a forced stage; elsewhere the
+ * plan, log and receipt name them as deferred to CI so a handoff cites the green Linux CI job.
+ */
+export const LINUX_WATCHER_COMMAND =
+  "cargo nextest run -p hotsheet-server --lib --retries 0 -E 'test(/hs2_c3req1_linux_/)'";
+
+export function linuxWatcherCoverage(changes, platform = process.platform) {
+  const files = changes.filter((path) => WATCHER_SOURCE.test(path));
+  if (!files.length) return null;
+  const runsHere = platform === 'linux';
+  return {
+    files,
+    command: LINUX_WATCHER_COMMAND,
+    runsHere,
+    summary: runsHere
+      ? `Linux-only watcher regressions run locally after ${files.join(', ')}`
+      : `Linux-only watcher regressions (hs2_c3req1_linux_*) after ${files.join(', ')}; cite the green Linux CI Rust job`,
+  };
 }
 
 export function performanceStages(changes) {
@@ -571,6 +603,7 @@ function prepareSmoke(repo, baseRef, versions, options) {
     checks: keyed,
     deferred,
     platformCfg: platformCfgForRepo(repo, state.base, state.changes),
+    linuxWatcher: linuxWatcherCoverage(state.changes),
     key: hash({ context, tree: state.tree, checks: keyed.map((stage) => stage.key) }),
     cache: join(common, 'hotsheet-local-gate'),
     tools,
@@ -750,6 +783,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     browserCoverage: browserEvidence(repo, checks, budgeted.deferred),
     // HS2-A7X8F5: Rust cfg branches this host never compiles; derived from the tree, not a key input.
     platformCfg: platformCfgForRepo(repo, state.base, state.changes),
+    linuxWatcher: linuxWatcherCoverage(state.changes),
     key,
     cache: join(common, 'hotsheet-local-gate'),
     tools,
@@ -786,6 +820,8 @@ function recordedT2Selection(repo, base, full, versions, selection) {
 /** HS2-A7X8F5: a handoff quotes this so nobody reads a pass on this host as other-platform evidence. */
 function logPlatformCfg(prepared, log) {
   if (prepared.platformCfg?.files.length) log(`Platform cfg code deferred to CI: ${prepared.platformCfg.summary}`);
+  if (prepared.linuxWatcher && !prepared.linuxWatcher.runsHere)
+    log(`Linux-only watcher tests deferred to CI: ${prepared.linuxWatcher.summary}`);
 }
 
 export function runGate(options = {}) {
@@ -1113,6 +1149,7 @@ export function runGate(options = {}) {
         : {}),
       browserCoverage: before.browserCoverage,
       platformCfg: before.platformCfg,
+      linuxWatcher: before.linuxWatcher,
       results,
       flaky,
     }),

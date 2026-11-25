@@ -28,6 +28,14 @@ stage ahead of the long Rust suite. A CI First run that spends its budget inside
 full Rust stage has therefore already proved the contract. Linux-only watcher cases
 are not covered by this macOS stage (HS2-E13GV2).
 
+HS2-E13GV2 covers those Linux-native watcher cases (`#[cfg(target_os = "linux")]`,
+`hs2_c3req1_linux_*`). On a Linux host a watcher edit adds them as a forced,
+retries-off stage. On macOS or Windows the plan, the gate log
+(`Linux-only watcher tests deferred to CI: …`) and the receipt's `linuxWatcher`
+field name them as deferred. The completion note must then cite the green Linux CI
+Rust job rather than claim they ran locally. The maintainer chose this over an opt-in
+Docker probe on 2026-11-25.
+
 ## Read-only dependency edge preview (HS2-55MWQ9)
 
 `scripts/check.sh --plan` also reports an `edgePreview`. This is a candidate
