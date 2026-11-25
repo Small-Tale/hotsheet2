@@ -7,6 +7,47 @@ import type {
   ScheduleView,
 } from './command-schedules';
 
+/** The host's floor for sub-day repeats (HS2-29V4ZG); mirrors `MIN_INTERVAL_MINUTES`. */
+export const MIN_INTERVAL_MINUTES = 5;
+
+export interface EveryBounds {
+  min: number;
+  max: number;
+  label: string;
+  hint?: string;
+}
+
+/** The Every field's unit and bounds for one repeat kind, matching host validation. */
+export function everyBounds(repeats: Exclude<RecurrenceKind, 'once'>): EveryBounds {
+  if (repeats === 'minutely')
+    return {
+      min: MIN_INTERVAL_MINUTES,
+      max: 1440,
+      label: 'Every (Minutes)',
+      hint: `Minimum ${MIN_INTERVAL_MINUTES} minutes.`,
+    };
+  if (repeats === 'hourly') return { min: 1, max: 24, label: 'Every (Hours)', hint: '1 to 24 hours.' };
+  return { min: 1, max: 365, label: 'Every' };
+}
+
+export const isSubDay = (kind: RecurrenceKind) => kind === 'minutely' || kind === 'hourly';
+
+/**
+ * Change the repeat kind and keep Every inside the new kind's bounds, so switching from
+ * Daily (every 1) to minutes does not submit an interval below the floor.
+ */
+export function withRepeats(draft: ScheduleFormDraft, repeats: ScheduleFormDraft['repeats']): ScheduleFormDraft {
+  const { min, max } = everyBounds(repeats),
+    every = Number(draft.every);
+  const clamped = Number.isFinite(every) ? Math.min(max, Math.max(min, Math.round(every))) : min;
+  return { ...draft, repeats, every: String(repeats === 'minutely' && every < min ? 15 : clamped) };
+}
+
+/** The occurrence's local date, plus its time for sub-day kinds. */
+export function occurrenceLabel(item: ScheduleView['history'][number]): string {
+  return item.occurrence_time ? `${item.occurrence_date} ${item.occurrence_time}` : item.occurrence_date;
+}
+
 export interface ScheduleFormDraft {
   scheduleType: 'once' | 'repeating';
   repeats: Exclude<RecurrenceKind, 'once'>;
@@ -151,6 +192,10 @@ export function scheduleCadence(view: ScheduleView): string {
   if (paused) return 'Paused';
   let cadence: string;
   switch (recurrence.kind) {
+    case 'minutely':
+      return `Every ${recurrence.every ?? MIN_INTERVAL_MINUTES} minutes from ${time} ${zone}`;
+    case 'hourly':
+      return `${recurrence.every === 1 ? 'Hourly' : `Every ${recurrence.every ?? 1} hours`} from ${time} ${zone}`;
     case 'once':
       cadence = recurrence.date ?? 'One time';
       break;

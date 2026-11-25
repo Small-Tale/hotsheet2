@@ -1,6 +1,17 @@
-/** Checkout-local AI command schedules (HS2-G5J2E7, HS2-17663F). */
+/** Checkout-local AI command schedules (HS2-G5J2E7, HS2-17663F, HS2-29V4ZG). */
 export type ScheduleAction = 'create_ticket' | 'new_ai_session' | 'reuse_or_new_ai_session';
-export type RecurrenceKind = 'once' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'selected_dates';
+export type RecurrenceKind =
+  'once' | 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'selected_dates';
+const RECURRENCE_KINDS: readonly RecurrenceKind[] = [
+  'once',
+  'minutely',
+  'hourly',
+  'daily',
+  'weekly',
+  'monthly',
+  'yearly',
+  'selected_dates',
+];
 export type DayRule =
   | { kind: 'day_of_month'; day: number }
   | { kind: 'last_day' }
@@ -34,6 +45,8 @@ export interface ScheduleView {
   next_runs: string[];
   history: Array<{
     occurrence_date: string;
+    /** Local HH:mm of a sub-day occurrence (HS2-29V4ZG). */
+    occurrence_time?: string;
     outcome:
       | 'created'
       | 'skipped_open_ticket'
@@ -70,7 +83,7 @@ export function parseScheduleView(value: unknown): ScheduleView {
     typeof schedule.local_time !== 'string' ||
     !['create_ticket', 'new_ai_session', 'reuse_or_new_ai_session'].includes(String(schedule.action)) ||
     typeof schedule.paused !== 'boolean' ||
-    !['once', 'daily', 'weekly', 'monthly', 'yearly', 'selected_dates'].includes(String(recurrence.kind)) ||
+    !RECURRENCE_KINDS.includes(recurrence.kind as RecurrenceKind) ||
     (view.unavailable !== undefined && typeof view.unavailable !== 'string')
   )
     throw new Error('Invalid command schedule response');
@@ -80,6 +93,7 @@ export function parseScheduleView(value: unknown): ScheduleView {
     const item = object(entry, 'command schedule history');
     if (
       typeof item.occurrence_date !== 'string' ||
+      (item.occurrence_time !== undefined && typeof item.occurrence_time !== 'string') ||
       ![
         'created',
         'skipped_open_ticket',

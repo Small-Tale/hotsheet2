@@ -10,7 +10,7 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 
-import type { ScheduleFormDraft } from '../command-schedule-form';
+import { everyBounds, isSubDay, occurrenceLabel, type ScheduleFormDraft } from '../command-schedule-form';
 import type { ScheduleView } from '../command-schedules';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 
@@ -18,6 +18,8 @@ export const COMMAND_SCHEDULE_DIALOG_ID = 'command-schedule-dialog';
 export const COMMAND_SCHEDULE_FORM_ID = 'command-schedule-form';
 
 const REPEATS = [
+  { value: 'minutely', label: 'Every Few Minutes' },
+  { value: 'hourly', label: 'Hourly' },
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
@@ -105,6 +107,9 @@ export function CommandScheduleDialog({
 }: CommandScheduleDialogProps) {
   const repeating = draft?.scheduleType === 'repeating';
   const calendar = draft?.repeats === 'monthly' || draft?.repeats === 'yearly';
+  // Sub-day repeats start at the time on the start date (HS2-29V4ZG).
+  const subDay = draft?.scheduleType === 'repeating' && isSubDay(draft.repeats);
+  const every = everyBounds(draft?.repeats ?? 'daily');
   const upcoming = preview.map((run) => displayRun(run, draft?.timeZone ?? 'UTC'));
   const latestSkip = saved?.history
     .slice()
@@ -235,13 +240,14 @@ export function CommandScheduleDialog({
                         rootAttributes={{ 'data-schedule-field': 'true' }}
                       />
                       <TextField
-                        label="Every"
+                        label={every.label}
                         name="every"
                         type="number"
-                        min={1}
-                        max={365}
+                        min={every.min}
+                        max={every.max}
                         required
                         value={draft.every}
+                        {...(every.hint ? { hint: every.hint } : {})}
                         rootAttributes={{ 'data-schedule-field': 'true' }}
                       />
                     </Grid>
@@ -285,11 +291,11 @@ export function CommandScheduleDialog({
             )}
             <Grid minColumnWidth={px(144)} gap="m">
               <TextField
-                label="Time (24-hour)"
+                label={subDay ? 'First Run' : 'Time (24-hour)'}
                 name="time"
                 required
                 value={draft.time}
-                hint="HH:mm"
+                hint={subDay ? '24-hour HH:mm on the start date; repeats from this time.' : 'HH:mm'}
                 rootAttributes={{ 'data-schedule-field': 'true' }}
               />
               <Select name="timeZone" label="Time Zone" value={draft.timeZone} choices={timeZones(draft.timeZone)} />
@@ -331,7 +337,7 @@ export function CommandScheduleDialog({
             )}
             {latestSkip?.ticket_slug ? (
               <Text tone="quiet" size="compact">
-                Skipped {latestSkip.occurrence_date}: an open ticket from this command already exists.{' '}
+                Skipped {occurrenceLabel(latestSkip)}: an open ticket from this command already exists.{' '}
                 <a
                   href={`#ticket-${latestSkip.ticket_slug}`}
                   data-action="open-linked-ticket"

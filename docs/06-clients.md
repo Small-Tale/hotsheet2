@@ -1112,8 +1112,8 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   is available or the optional signal fails. Optional icon/color metadata controls the sidebar presentation.
   Manual and scheduled AI command tickets carry the stable `hs2-command:<command-id>`
   provenance tag (HS2-G5J2E7). Scheduling is checkout-local and supports one-time,
-  daily, weekly, monthly, yearly, and selected-date recurrences with bounds and
-  date exceptions. Every eligible occurrence creates the same highest-priority
+  every-N-minutes, hourly, daily, weekly, monthly, yearly, and selected-date
+  recurrences with bounds and date exceptions. Every eligible occurrence creates the same highest-priority
   Up Next task before any AI session is asked to work it; an incomplete ticket
   from the same command skips that occurrence. A one-time occurrence missed while
   the host is offline creates its ticket on return. A missing daylight-saving
@@ -1121,7 +1121,31 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   its first occurrence. An occurrence's local date is its durable identity, so
   a restart or delivery retry cannot create a second ticket for it. The local
   schedule API lists the next three instants and recent outcomes; a draft can
-  request the same preview without saving. For **Create Ticket Only**, the host leaves
+  request the same preview without saving.
+  **Sub-day repeats (HS2-29V4ZG).** `minutely` repeats every 5 to 1440 minutes and
+  `hourly` every 1 to 24 hours. Occurrences lie on the local wall-clock grid that
+  starts at the start date and time (`local_time`, shown as **First Run**) and
+  continues across midnight. The end date is inclusive. `count` counts grid
+  occurrences from the first one. An include date adds that date's grid slots,
+  even before the start; an exclude date drops every slot on its date. The
+  five-minute floor bounds a runaway schedule to 288 evaluations a day, matches
+  common cron-service floors, and leaves time for an AI session to work; the
+  dialog states it under **Every**. A sub-day occurrence's identity is its local
+  date and time: history entries add `occurrence_time`, the record adds
+  `last_processed_time`, and its ticket tag is
+  `hs2-occurrence:<command-id>:<YYYY-MM-DD>t<HHmm>`. Date-only kinds keep their
+  original fields, tags, and stored shape. A repeated daylight-saving slot runs
+  once, at its first instant. A slot in a skipped hour runs at the first valid
+  minute after the gap, unless the next slot falls at or before that instant
+  and covers it. The overlap policy is the existing one: an open ticket from the
+  same command, including a ticket an AI session is still working, records
+  `skipped_open_ticket`. Consecutive skips against the same open ticket record
+  one history entry. Slots missed while the host was offline coalesce into the
+  latest due slot, so the host runs once on return. Saving a sub-day schedule
+  starts after the current local minute and never backfills earlier slots. A
+  record written through `hotsheet-cli settings set command_schedules` without a
+  cursor starts the same way. The scheduler wakes at the next slot's instant.
+  The HTTP API and `settings set` share one validator. For **Create Ticket Only**, the host leaves
   that ticket queued. For **Auto-Start in a New AI Session**, it creates a distinct
   client-owned session for the occurrence. For **Reuse or Start an AI Session**, it
   uses an idle session in the same checkout and ticket source when its provider,

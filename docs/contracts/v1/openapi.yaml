@@ -29723,7 +29723,11 @@ components:
       properties:
         kind:
           type: string
-          enum: [once, daily, weekly, monthly, yearly, selected_dates]
+          enum: [once, minutely, hourly, daily, weekly, monthly, yearly, selected_dates]
+          description: >-
+            `minutely` and `hourly` repeat every `every` minutes (5 to 1440) or hours (1 to 24)
+            on the local wall clock from `start_date` at the schedule's `local_time`
+            (HS2-29V4ZG). Their occurrences are identified by local date and time.
         date:
           type: string
           pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
@@ -29733,7 +29737,10 @@ components:
         every:
           type: integer
           minimum: 1
-          maximum: 365
+          maximum: 1440
+          description: >-
+            Interval in the kind's unit: days, weeks, months, or years up to 365; hours up to
+            24; minutes from 5 to 1440.
         weekdays:
           type: array
           items:
@@ -29812,6 +29819,10 @@ components:
         occurrence_date:
           type: string
           pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        occurrence_time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Local time of a minutely or hourly occurrence; absent for date kinds (HS2-29V4ZG).
         outcome:
           type: string
           enum:

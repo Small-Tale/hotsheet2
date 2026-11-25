@@ -18081,6 +18081,131 @@ test('schedules an AI command through Settings and the real server (HS2-17663F)'
   }
 });
 
+test('schedules an hourly AI command, previews it, edits it to minutes, and reloads (HS2-29V4ZG)', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(
+      `${server.root}/.hotsheet2/settings.json`,
+      JSON.stringify({
+        $hotsheetSchema: 1,
+        commands: [{ id: 'cleanup', kind: 'ai', title: 'Synthetic cleanup', prompt: 'Clean up synthetic work.' }],
+      }),
+    );
+    await mockProject(page);
+    await page.route(
+      /\/__hotsheet\/project-api\/demo-checkout\/(commands|checkouts\/demo-checkout\/command-schedules)(\/.*)?$/,
+      async (route) => {
+        const incoming = new URL(route.request().url());
+        const path = incoming.pathname
+          .replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', `/checkouts/${server.checkoutId}`)
+          .replace('/__hotsheet/project-api/demo-checkout/commands', `/checkouts/${server.checkoutId}/commands`);
+        const response = await proxyFetch(route, {
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      },
+    );
+    const saved = () =>
+      server.request<
+        Array<{
+          schedule: { command_id: string; local_time: string; recurrence: { kind: string; every?: number } };
+          next_runs: string[];
+        }>
+      >(`/checkouts/${server.checkoutId}/command-schedules`);
+    const capture = (name: string) =>
+      page.screenshot({ path: testInfo.outputPath(`hs2-29v4zg-${name}.png`), animations: 'disabled' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Commands', exact: true }).click();
+    const row = page.locator('[data-component="command-settings-editor"] [data-command-id="cleanup"]');
+    const openSchedule = async () => {
+      await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+      await row.locator('[data-action="open-command-schedule"]').click();
+    };
+    await expect(row).toBeVisible();
+    await openSchedule();
+    const dialog = page.getByRole('dialog', { name: 'Schedule Command' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('radio', { name: 'Repeating' }).check();
+    await dialog.getByRole('combobox', { name: 'Repeats' }).click();
+    await expect(page.getByRole('option', { name: 'Every Few Minutes' })).toBeVisible();
+    await capture('repeats-menu-wide-light');
+    await page.getByRole('option', { name: 'Hourly' }).click();
+    await expect(dialog.getByLabel('Every (Hours)')).toHaveValue('1');
+    await expect(dialog.getByLabel('First Run', { exact: true })).toBeVisible();
+    await dialog.getByLabel('First Run', { exact: true }).fill('00:15');
+    await dialog.getByLabel('First Run', { exact: true }).press('Tab');
+    // The live preview lists three upcoming runs, one hour apart.
+    const hourlyPreview = dialog.getByText(/Then .*:15 and .*:15\./);
+    await expect(hourlyPreview).toBeVisible();
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await capture('hourly-dialog-wide-light');
+    await page.setViewportSize({ width: 900, height: 800 });
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await capture('hourly-dialog-medium-light');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await expect(hourlyPreview).toBeInViewport();
+    await capture('hourly-dialog-phone-dark');
+    await page.setViewportSize({ width: 900, height: 800 });
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await capture('hourly-dialog-medium-dark');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await expect(hourlyPreview).toBeInViewport();
+    await capture('hourly-dialog-wide-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await dialog.getByRole('button', { name: 'Create Schedule' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect.poll(async () => (await saved())[0]?.schedule.recurrence).toMatchObject({ kind: 'hourly', every: 1 });
+    const runs = (await saved())[0]?.next_runs.map((run) => Date.parse(run)) ?? [];
+    expect(runs).toHaveLength(3);
+    expect((runs[1] ?? 0) - (runs[0] ?? 0)).toBe(3_600_000);
+    await expect(row).toContainText('Hourly from 00:15');
+
+    // A reload reads the saved hourly rule back into the Manage dialog.
+    await page.reload();
+    await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Commands', exact: true }).click();
+    await expect(row).toContainText('Hourly from 00:15');
+    await openSchedule();
+    const manage = page.getByRole('dialog', { name: 'Manage Schedule' });
+    await expect(manage).toBeVisible();
+    await expect(manage.getByRole('combobox', { name: 'Repeats' })).toContainText('Hourly');
+    await expect(manage.getByLabel('First Run', { exact: true })).toHaveValue('00:15');
+    await manage.getByRole('combobox', { name: 'Repeats' }).click();
+    await page.getByRole('option', { name: 'Every Few Minutes' }).click();
+    // Switching keeps Every above the floor and states the floor.
+    await expect(manage.getByLabel('Every (Minutes)')).toHaveValue('15');
+    await expect(manage.getByText('Minimum 5 minutes.')).toBeVisible();
+    await manage.getByLabel('Every (Minutes)').fill('30');
+    await manage.getByLabel('Every (Minutes)').press('Tab');
+    await expect(manage.getByText(/Then .*:45 and .*:15\.|Then .*:15 and .*:45\./)).toBeVisible();
+    await capture('minutes-dialog-wide-light');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(manage).toBeVisible();
+    await capture('minutes-dialog-phone-light');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await manage.getByRole('button', { name: 'Save Schedule' }).click();
+    await expect(manage).not.toBeVisible();
+    await expect
+      .poll(async () => (await saved())[0]?.schedule.recurrence)
+      .toMatchObject({ kind: 'minutely', every: 30 });
+    await expect(row).toContainText('Every 30 minutes from 00:15');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('shows a skipped scheduled command with its outstanding ticket link (HS2-17663F)', async ({ page }, testInfo) => {
   const server = await realTicketServer();
   const ticketSlug = 'HS2-DEMO01';

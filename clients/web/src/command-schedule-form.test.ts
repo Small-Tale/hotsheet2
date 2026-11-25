@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { newScheduleDraft, scheduleDraftFromView, scheduleInputFromDraft } from './command-schedule-form';
+import {
+  everyBounds,
+  isSubDay,
+  MIN_INTERVAL_MINUTES,
+  newScheduleDraft,
+  occurrenceLabel,
+  scheduleCadence,
+  scheduleDraftFromView,
+  scheduleInputFromDraft,
+  withRepeats,
+} from './command-schedule-form';
 import { parseSchedulePreview, parseScheduleView } from './command-schedules';
 
 describe('HS2-17663F command schedule form', () => {
@@ -93,5 +103,80 @@ describe('HS2-17663F command schedule form', () => {
     });
     expect(view.history[0]?.outcome).toBe('delivery_uncertain');
     expect(() => parseScheduleView({ ...view, history: [{ ...view.history[0], turn_completed: 'yes' }] })).toThrow();
+  });
+});
+
+describe('HS2-29V4ZG sub-day command schedules', () => {
+  const hourly = {
+    schedule: {
+      command_id: 'cleanup',
+      time_zone: 'UTC',
+      local_time: '08:30',
+      action: 'create_ticket',
+      paused: false,
+      recurrence: { kind: 'hourly', start_date: '2027-01-01', every: 2, exclude_dates: ['2027-01-02'] },
+    },
+    next_runs: ['2027-01-01T10:30:00Z'],
+    history: [
+      { occurrence_date: '2027-01-01', occurrence_time: '08:30', outcome: 'created', ticket_slug: 'HS2-A' },
+      { occurrence_date: '2027-01-01', occurrence_time: '10:30', outcome: 'skipped_open_ticket', ticket_slug: 'HS2-A' },
+    ],
+  };
+
+  it('round-trips an hourly schedule and labels its occurrences with their time', () => {
+    const view = parseScheduleView(hourly);
+    const draft = scheduleDraftFromView(view);
+    expect(draft).toMatchObject({ scheduleType: 'repeating', repeats: 'hourly', every: '2', time: '08:30' });
+    expect(scheduleInputFromDraft(draft).recurrence).toEqual({
+      kind: 'hourly',
+      start_date: '2027-01-01',
+      every: 2,
+      exclude_dates: ['2027-01-02'],
+    });
+    expect(view.history.map(occurrenceLabel)).toEqual(['2027-01-01 08:30', '2027-01-01 10:30']);
+    expect(occurrenceLabel({ occurrence_date: '2027-01-01', outcome: 'created' })).toBe('2027-01-01');
+    expect(scheduleCadence(view)).toBe('Every 2 hours from 08:30 UTC');
+    expect(scheduleCadence({ ...view, schedule: { ...view.schedule, recurrence: { kind: 'hourly', every: 1 } } })).toBe(
+      'Hourly from 08:30 UTC',
+    );
+    expect(
+      scheduleCadence({ ...view, schedule: { ...view.schedule, recurrence: { kind: 'minutely', every: 15 } } }),
+    ).toBe('Every 15 minutes from 08:30 UTC');
+  });
+
+  it('shows the minimum interval and keeps Every inside each kind when switching', () => {
+    expect(everyBounds('minutely')).toEqual({
+      min: MIN_INTERVAL_MINUTES,
+      max: 1440,
+      label: 'Every (Minutes)',
+      hint: 'Minimum 5 minutes.',
+    });
+    expect(everyBounds('hourly')).toMatchObject({ min: 1, max: 24 });
+    expect(everyBounds('daily')).toEqual({ min: 1, max: 365, label: 'Every' });
+    const daily = { ...newScheduleDraft(), scheduleType: 'repeating' as const };
+    const minutes = withRepeats(daily, 'minutely');
+    expect(minutes).toMatchObject({ repeats: 'minutely', every: '15' });
+    expect(withRepeats({ ...minutes, every: '90' }, 'hourly').every).toBe('24');
+    expect(withRepeats({ ...minutes, every: '30' }, 'minutely').every).toBe('30');
+    expect(withRepeats({ ...minutes, every: '' }, 'daily').every).toBe('1');
+    expect(withRepeats({ ...minutes, every: 'x' }, 'hourly').every).toBe('1');
+    expect(isSubDay('minutely') && isSubDay('hourly') && !isSubDay('daily')).toBe(true);
+    expect(scheduleInputFromDraft(minutes).recurrence).toEqual({
+      kind: 'minutely',
+      start_date: daily.startDate,
+      every: 15,
+    });
+  });
+
+  it('rejects a drifted occurrence time or recurrence kind', () => {
+    expect(() =>
+      parseScheduleView({
+        ...hourly,
+        history: [{ occurrence_date: '2027-01-01', occurrence_time: 830, outcome: 'created' }],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseScheduleView({ ...hourly, schedule: { ...hourly.schedule, recurrence: { kind: 'secondly' } } }),
+    ).toThrow();
   });
 });
