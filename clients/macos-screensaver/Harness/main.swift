@@ -118,6 +118,17 @@ for size in [display, NSSize(width: 800, height: 500), NSSize(width: 1280, heigh
         let actual = text("(r=>r.width+'x'+r.height)(document.querySelector('.standby-screen').getBoundingClientRect())") ?? "?"
         fail("the standby screen is \(actual), not the \(width)x\(height) view")
     }
+    // Every region, down to the last alert callout, project row, and the freshness line, lies inside the
+    // view: a short display must not clip them under the page's hidden overflow (HS2-D9F3CA).
+    let clipped = text("""
+        (() => { const screen = document.querySelector('.standby-screen').getBoundingClientRect();
+          return [...document.querySelectorAll('.standby-screen__top, .standby-screen__gauge, .standby-screen__count, \
+        [data-role="standby-alert"], [data-role="standby-row"], [data-role="standby-freshness"]')]
+            .filter(node => { const r = node.getBoundingClientRect();
+              return r.height === 0 || r.top < screen.top || r.left < screen.left || r.bottom > screen.bottom || r.right > screen.right; })
+            .map(node => (node.dataset.role || node.className) + '@' + Math.round(node.getBoundingClientRect().bottom)).join(' '); })()
+        """) ?? "?"
+    guard clipped.isEmpty else { fail("regions fall outside the \(width)x\(height) view: \(clipped)") }
     capture("\(width)x\(height)")
 }
 saver.stopAnimation()

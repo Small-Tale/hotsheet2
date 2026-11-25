@@ -174,6 +174,9 @@ The original request on HS2-CT5EWR. Mocks: `m4-standby-all-clear-desktop`,
     visible.
   - The layout drifts a few pixels over 20 minutes, unless the user prefers reduced motion.
   - Portrait screens stack the gauge over the count.
+  - Short landscape screens, 640 px tall or less (a laptop screen saver at 800x500), shrink the hero
+    first and set each callout's title and detail on one line. Every callout, row, and the freshness
+    line stays in view (HS2-D9F3CA).
 - **Rendering.** The display is a manual-popover `<dialog>`. The top-layer watcher keeps it above
   every surface, including an open modal.
 

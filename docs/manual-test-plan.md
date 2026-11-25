@@ -1590,6 +1590,8 @@ engine-specific parts by hand. The saver takes over the display and a key press 
 4. Start the saver from the Screen Saver pane's Preview, and then by letting the Mac idle. Confirm it shows
    the same screen as standby with this project's name and state, the clock, and a "live" freshness line.
 5. While it shows, claim or release a ticket. Confirm the row and gauge change without restarting the saver.
+   On a short display (a laptop scaled to about 800x500 points, HS2-D9F3CA) with two projects needing
+   attention, confirm both amber callouts, both rows, and the freshness line are fully visible.
 6. Quit Hot Sheet. Within about three minutes the freshness line reads "connection lost".
 7. Press a key. Confirm macOS asks for the account password when the delay has passed, and that the saver
    ends after a correct one.

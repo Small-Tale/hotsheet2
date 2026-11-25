@@ -17,7 +17,7 @@ const NOW = new Date(2026, 10, 6, 2, 47, 12).getTime();
 const MINUTE = 60_000;
 
 type Scenario = 'all-clear' | 'attention' | 'connection-lost' | 'empty';
-type Orientation = 'landscape' | 'portrait';
+type Orientation = 'landscape' | 'short' | 'portrait';
 
 const SCENARIO_CHOICES: SelectChoice[] = [
   { value: 'all-clear', label: 'All Clear (m4)' },
@@ -163,6 +163,12 @@ export function StandbyScreenDemo() {
       <CatalogExample label="A Project Stalled" note="Only the problem brightens: an amber callout and its row (m5).">
         {standbyFrame('attention', 'landscape')}
       </CatalogExample>
+      <CatalogExample
+        label="Short Display"
+        note="An 800x500 laptop saver: the hero gives up height and the callouts tighten so every row stays in view (HS2-D9F3CA)."
+      >
+        {standbyFrame('attention', 'short')}
+      </CatalogExample>
       <CatalogExample label="Phone" note="Portrait stacks the gauge over the count; it still shows every open project.">
         {standbyFrame('all-clear', 'portrait')}
       </CatalogExample>
@@ -180,6 +186,7 @@ export function StandbyScreenSettings() {
         value={standbyDemoSettings.orientation.value}
         choices={[
           { value: 'landscape', label: 'Landscape (Desktop)' },
+          { value: 'short', label: 'Short Landscape (Laptop)' },
           { value: 'portrait', label: 'Portrait (Phone)' },
         ]}
       />

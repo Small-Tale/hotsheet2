@@ -333,6 +333,25 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     await expect(screen).toHaveJSProperty('offsetWidth', 390);
     await expectFits(page);
     await capture(page, 'attention-phone');
+
+    // A second stalled project on a short laptop display: both callouts, both rows, and the freshness
+    // line stay inside the screen instead of clipping under its hidden overflow (HS2-D9F3CA).
+    const bothStalled = store('hs2', 'Hot Sheet 2', 'demo-checkout', 'stalled', host.now, 2);
+    for (const socket of host.sockets)
+      socket.send(
+        JSON.stringify({ cursor: 2, store: 'hs2', kind: 'live_state', id: 'hs2', slug: '', live: bothStalled }),
+      );
+    await expect(alert).toHaveCount(2);
+    for (const size of [
+      { width: 800, height: 500 },
+      { width: 1280, height: 800 },
+    ]) {
+      await page.setViewportSize(size);
+      await page.clock.runFor(100);
+      await expect(screen).toHaveJSProperty('offsetHeight', size.height);
+      await expectFits(page);
+      await capture(page, `two-alerts-${size.width}x${size.height}`);
+    }
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.clock.runFor(100);
     await expect(screen).toHaveJSProperty('offsetWidth', 1440);

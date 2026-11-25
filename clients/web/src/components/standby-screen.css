@@ -265,3 +265,44 @@
     display: none;
   }
 }
+/* A short landscape screen (a laptop saver at 800x500, HS2-D9F3CA): the hero gives up height first and
+   the problem callouts and strip tighten, so every callout, row, and the freshness line stay in view.
+   Taller screens keep the m4/m5 layout above unchanged. */
+@container standby (orientation: landscape) and (max-height: 640px) {
+  .standby-screen__content {
+    inset-block: max(remify(24px), env(safe-area-inset-top)) max(remify(16px), env(safe-area-inset-bottom));
+    gap: remify(16px);
+  }
+  .standby-screen__hero {
+    min-block-size: remify(96px);
+  }
+  .standby-screen__alerts {
+    gap: remify(8px);
+  }
+  .standby-screen__alert {
+    padding: remify(8px) remify(16px);
+    border-radius: remify(8px);
+  }
+  .standby-screen__alert-icon {
+    font-size: var(--wa-font-size-xl);
+  }
+  /* Title and detail share one line, wrapping only when the screen is also narrow. */
+  .standby-screen__alert-text {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: remify(16px);
+  }
+  .standby-screen__alert-title {
+    font-size: var(--wa-font-size-l);
+  }
+  .standby-screen__alert-detail {
+    font-size: var(--wa-font-size-m);
+  }
+  .standby-screen__strip {
+    gap: remify(8px) remify(24px);
+  }
+  .standby-screen__row {
+    font-size: var(--wa-font-size-m);
+  }
+}
