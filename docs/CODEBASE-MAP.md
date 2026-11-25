@@ -882,7 +882,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/remote_servers/e2e.rs # HS2-2EY9DP end-to-end orchestration fleet: controller + mTLS peer, fake Claude/Codex tools, loopback CI provider with a real Job monitor; scenarios in e2e_loop.rs (whole loop) and e2e_failures.rs (restart, outage, lost access, cancel, duplicates, out-of-order, refusing peer); e2e_coverage.rs (HS2-30XYPY: an external-provider target through a loopback `github` provider, and a step deferred on a held resource); e2e_sites.rs (HS2-RCR4A6: `Fleet::sites()`, one project as two sites, each server with its own clone of one bare store bound to a `git_ref` claim backend and of one bare code repository, faked OS and tools per machine)
       tests/terminal_connection_attribution.rs # Pending trusted permission hook projection/events versus absent/wrong/correct MCP terminal leases, plus absent/stale hook ids without terminal guessing (HS2-HBA9Z8)
       src/routes/session_messages.rs # POST /connections/{id}/message (HS2-PEJ962): per-terminal SessionPush adapters, push-capable launch wiring (loopback port + random password), stable error codes, `message` connection action
-      src/routes/feedback_session.rs # HS2-25TP3N: route committed human notes to the claimed or primary same-project AI session (HS2-DB2FQ2), queue busy drives, and return chooser/start fallbacks
+      src/routes/feedback_session.rs # HS2-25TP3N: route committed human notes to the claimed or primary same-project AI session (HS2-DB2FQ2; a person-chosen primary wins while it lives, HS2-H3S7YQ), queue busy drives, and return chooser/start fallbacks
       src/routes/feedback_journal.rs # HS2-WKRFD5: per-note `${HOTSHEET_HOME}/feedback-deliveries/<note>.json` sending/sent journal that keeps delivery at most once when the activity write fails or the server restarts mid-send
       tests/session_messages.rs # E2E: fake push/no-push plugins launched in real PTYs, a loopback fake OpenCode API, prompt/command delivery, exit/reopen adapter replacement, unsupported/unreachable/ended errors
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
@@ -1339,7 +1339,15 @@ Live terminal session messaging uses the API/parser in `clients/web/src/api.ts` 
 `server-response-parsers.ts`; Drive-to-session routing remains supported. The drawer's
 message button and delegated browser prompt were removed in HS2-JVSFES. The headless
 `hotsheet-cli terminal message` route is in `crates/hotsheet-cli/src/dispatch/server.rs`
-and uses the server's `POST /connections/{id}/message` operation. Server terminal registration
+and uses the server's `POST /connections/{id}/message` operation. Beside it,
+`hotsheet-cli terminal feedback-primary <id> [--clear]` calls `PUT`/`DELETE
+/terminals/{id}/feedback-primary` (HS2-H3S7YQ): the in-memory per-checkout choice lives in
+`AppState.feedback_primary_choices`, the selection rule in `routes/feedback_session.rs`
+(`primary_terminals`, `feedback_roles`, `route`), the handlers and the `terminal_feedback_primary`
+event in `routes/terminals/signals.rs`, and the client command in
+`clients/web/src/terminal-feedback-primary.ts`, offered by the drawer tab menu
+(`components/project-tab-context-menu.tsx`) and the tile More actions menu
+(`components/terminal-dashboard.tsx`). Server terminal registration
 in `crates/hotsheet-server/src/routes/terminals/launch.rs` resolves each connection's project
 from its launch checkout/source.
 

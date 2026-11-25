@@ -1031,6 +1031,17 @@ Open two Claude terminals on a synthetic project. Confirm both tabs show a conne
 only the older one shows the plug plus a heart with the "Primary session" label. Close it and confirm the
 other tab takes the heart without a reload; reopen a terminal and confirm the role stays.
 
+### Choosing the feedback-primary session (HS2-H3S7YQ)
+
+With two Claude terminals and a shell on a synthetic project, right-click the newer AI tab and
+choose Receive Feedback Notifications. Confirm the heart moves to it in this window and in a second
+browser window without a reload, and that a human note on a synthetic Started, unclaimed ticket is
+delivered to it. Confirm the shell tab and the current derived primary show the command disabled
+with a reason. Choose Stop Receiving Feedback Notifications and confirm the oldest session takes the
+heart back; choose again, close the chosen terminal, and confirm the oldest session is primary.
+Repeat once with `hotsheet-cli terminal feedback-primary <id>` and `--clear`. Restart the server
+and confirm the choice is gone.
+
 ### Codex questions in the app (HS2-D0QTGB)
 
 In a Hot Sheet Codex terminal on a synthetic project, ask Codex to pose a question with its

@@ -75,6 +75,41 @@ describe('TerminalDashboard', () => {
     expect(halted).toContain('Clear stopped state');
     expect(halted).toContain('data-action="clear-terminal-halt"');
   });
+  it('offers the feedback-primary command in the More actions menu (HS2-H3S7YQ)', () => {
+    const menuFor = (session: Partial<(typeof groups)[0]['sessions'][0]>, actions?: ('open' | 'feedback-primary')[]) =>
+      String(
+        TerminalDashboard({
+          groups: [{ ...groups[0], sessions: [{ ...groups[0].sessions[0], ...session }] }],
+          width: 1200,
+          height: 700,
+          fitAcross: 4,
+          fitHigh: 2,
+          contextMenu: { key: 'one:term-1', x: 100, y: 100 },
+          ...(actions ? { contextMenuActions: actions } : {}),
+        }),
+      );
+    const eligible = menuFor({ kind: 'ai', alive: true, feedback_eligible: true });
+    expect(eligible).toContain('Receive Feedback Notifications');
+    expect(eligible).toContain('data-action="set-feedback-primary"');
+    expect(eligible).toMatch(/data-item-id="one:term-1" data-feedback-command="choose"/);
+    expect(eligible).not.toMatch(/data-feedback-command="choose"[^>]*aria-disabled/);
+    const chosen = menuFor({
+      kind: 'ai',
+      alive: true,
+      feedback_eligible: true,
+      feedback_primary: true,
+      feedback_primary_chosen: true,
+    });
+    expect(chosen).toContain('Stop Receiving Feedback Notifications');
+    expect(chosen).toContain('data-feedback-command="clear"');
+    const shell = menuFor({ kind: 'shell' });
+    expect(shell).toMatch(/data-feedback-command="choose"[^>]*aria-disabled="true"/);
+    expect(shell).toContain('A shell terminal cannot receive feedback notifications.');
+    // A grid that does not list the action never offers it.
+    expect(menuFor({ kind: 'ai', alive: true, feedback_eligible: true }, ['open'])).not.toContain(
+      'set-feedback-primary',
+    );
+  });
   it('renders every dashboard terminal as a fixed 80x24 scaled non-interactive viewport with Kerf floating zoom controls', () => {
     const markup = String(TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }));
     expect(markup).toContain('data-basis="across"');
@@ -288,7 +323,9 @@ describe('TerminalDashboard', () => {
     );
     expect(markup).toContain('data-action="open-terminal-context-menu"');
     expect(markup).toContain('data-context-menu="terminal"');
-    expect(markup.match(/class="kui-popup-menu__item"/g)).toHaveLength(2);
+    // Receive Feedback Notifications (HS2-H3S7YQ), Open, and Hide.
+    expect(markup.match(/class="kui-popup-menu__item"/g)).toHaveLength(3);
+    expect(markup).toContain('data-action="set-feedback-primary"');
     expect(markup).toContain('data-action="open-terminal-project"');
     expect(markup).toContain('data-action="hide-dashboard-terminal"');
     const openOnly = String(

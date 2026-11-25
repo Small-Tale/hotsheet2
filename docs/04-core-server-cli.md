@@ -772,7 +772,7 @@ local server resolves its host through one helper, `external_launch::discover_lo
 - Host-wide commands (`remote sessions status|approve|reject|update|revoke|revoke-all`,
   `lifecycle status|restart`) use the machine host first, then a host started on the
   selected store with `hotsheet-cli serve`.
-- Project commands (`live-state`, `commands`, `terminal message`, `ci report`,
+- Project commands (`live-state`, `commands`, `terminal message`, `terminal feedback-primary`, `ci report`,
   `notifications`, `ticket-flow`, `activity`, and the sync kick after a write) use a host anchored on the selected store
   first, then the machine host. `ticket-flow` and `activity` name the selected store in a
   store-scoped route, so the machine host reads the project rather than its bootstrap store

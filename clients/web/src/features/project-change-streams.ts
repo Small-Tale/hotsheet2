@@ -577,6 +577,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
                   event.kind === 'terminal_exited' ||
                   event.kind === 'terminal_question' ||
                   event.kind === 'terminal_ai_connection' ||
+                  // HS2-H3S7YQ: a person chose or cleared the project's feedback-primary session.
+                  event.kind === 'terminal_feedback_primary' ||
                   event.kind === 'terminal_hook_report' ||
                   // HS2-6MNMVB: an orchestrator session here was taken over, paused or stopped.
                   event.kind === 'terminal_orchestrator' ||

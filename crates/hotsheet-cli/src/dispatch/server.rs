@@ -334,7 +334,23 @@ pub(crate) fn cmd_terminal(store: &Path, cmd: TerminalCmd) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&result)?);
             Ok(())
         }
+        TerminalCmd::FeedbackPrimary { id, clear } => {
+            let route = feedback_primary_route(&id);
+            if clear {
+                local_server_json(store, "DELETE", &route)?;
+                println!("Feedback notifications return to the project's oldest AI session.");
+            } else {
+                let result = local_server_json(store, "PUT", &route)?;
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+            Ok(())
+        }
     }
+}
+
+/// `terminals/{id}/feedback-primary` for one terminal id (HS2-H3S7YQ).
+fn feedback_primary_route(id: &str) -> String {
+    format!("terminals/{}/feedback-primary", urlencoding_component(id))
 }
 
 pub(crate) fn cmd_activity(
@@ -486,6 +502,16 @@ pub(crate) enum TerminalCmd {
         /// Message text to deliver; quote it to preserve spaces.
         #[arg(long)]
         text: String,
+    },
+    /// Choose a live AI terminal as its project's feedback-primary session, the one that
+    /// receives human ticket feedback no live claim routes elsewhere (HS2-H3S7YQ). The choice
+    /// lasts while the terminal lives; `--clear` returns the project to the oldest session.
+    FeedbackPrimary {
+        /// Terminal id, as `GET /terminals` lists it.
+        id: String,
+        /// Forget the choice instead of making it.
+        #[arg(long)]
+        clear: bool,
     },
 }
 
@@ -1085,6 +1111,14 @@ pub(crate) fn server_json_with_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_h3s7yq_feedback_primary_route_encodes_the_terminal_id() {
+        assert_eq!(
+            feedback_primary_route("term 1/x"),
+            "terminals/term%201%2Fx/feedback-primary"
+        );
+    }
 
     #[test]
     fn hs2_82a7a7_project_reads_name_the_selected_store() {

@@ -4230,6 +4230,16 @@ explain that MCP connectivity is separate, and point to the read-only
   other connected session shows only the plug, so a secondary session is never drawn as
   disconnected, and a session whose hooks never reported shows no heart. Closing the primary moves
   the heart to the promoted session.
+- **Choosing the primary (HS2-H3S7YQ):** right-clicking an AI terminal's drawer tab offers
+  **Receive Feedback Notifications** (Lucide `heart`, "Instead of the oldest AI session.") after
+  Rename; the drawer grid's and workspace tile's More actions menus offer the same command. Choosing
+  it moves the heart to that session on every connected client (the server's
+  `terminal_feedback_primary` event triggers a terminal refetch; no polling). The chosen session's
+  menus offer **Stop Receiving Feedback Notifications** (Lucide `heart-off`), which returns the role
+  to the oldest session. The command is disabled, with its reason as the tooltip, for a shell
+  terminal, an ended session, a session that cannot receive pushed messages, and the current
+  derived primary. The choice lasts while the chosen terminal lives and is not kept across a server
+  restart; see [05](05-ai-tool-plugins.md) "Human ticket feedback delivery".
 - **Hooks without MCP:** a session whose hooks route permission prompts but whose `hotsheet-mcp`
   is not connected keeps the connected plug (and the heart when primary) in the warning tone, with
   the "MCP not connected" label (HS2-YHQM67 replaces the earlier `unplug` for this state).

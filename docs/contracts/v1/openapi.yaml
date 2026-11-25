@@ -14795,6 +14795,57 @@ paths:
         required: true
         schema:
           type: string
+  /terminals/{id}/feedback-primary:
+    description:
+      HS2-H3S7YQ. A person's choice of the project's feedback-primary AI session, which receives human ticket feedback
+      that no live claim routes elsewhere. Kept in memory on this server while the chosen terminal lives; never
+      persisted. Every change emits a terminal_feedback_primary change event.
+    put:
+      operationId: choose_feedback_primary
+      summary: Choose this live terminal as its project's feedback-primary session
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackPrimaryResponse'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: clear_feedback_primary
+      summary: Forget the choice so the oldest push-capable session is primary again; a no-op when not chosen
+      responses:
+        '204':
+          description: Completed with no response body.
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
   /terminals/{id}/halt:
     post:
       operationId: halt_terminal
@@ -33636,6 +33687,14 @@ components:
           description: This live terminal's AI session is its project's primary session for proactive feedback delivery
             (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
           type: boolean
+        feedback_primary_chosen:
+          description: HS2-H3S7YQ. The primary role is held because a person chose this terminal; absent otherwise.
+          type: boolean
+        feedback_eligible:
+          description:
+            HS2-H3S7YQ. This live terminal's AI session accepts pushed messages, so it may be chosen as the project's
+            feedback-primary session; absent otherwise.
+          type: boolean
         orchestrator:
           description:
             HS2-6MNMVB. An orchestrator started this terminal's session on this machine; names the hosted operation a
@@ -33706,6 +33765,14 @@ components:
           description: This live terminal's AI session is its project's primary session for proactive feedback delivery
             (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
           type: boolean
+        feedback_primary_chosen:
+          description: HS2-H3S7YQ. The primary role is held because a person chose this terminal; absent otherwise.
+          type: boolean
+        feedback_eligible:
+          description:
+            HS2-H3S7YQ. This live terminal's AI session accepts pushed messages, so it may be chosen as the project's
+            feedback-primary session; absent otherwise.
+          type: boolean
         scrollback:
           type: string
       additionalProperties: false
@@ -33724,6 +33791,21 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+      additionalProperties: false
+    FeedbackPrimaryResponse:
+      description: HS2-H3S7YQ. The chosen terminal and the checkout root whose feedback-primary session it now is.
+      type: object
+      required:
+        - id
+        - project
+        - feedback_primary
+      properties:
+        id:
+          type: string
+        project:
+          type: string
+        feedback_primary:
+          type: boolean
       additionalProperties: false
     TerminalNameResponse:
       type: object

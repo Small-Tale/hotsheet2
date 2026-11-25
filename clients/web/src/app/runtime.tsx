@@ -2962,6 +2962,7 @@ export async function startHotSheetWebClient() {
     persistDrawerTabOrder,
     refreshTerminalDashboard,
     clearTerminalHalt,
+    setFeedbackPrimary,
   } = terminalDashboardController;
   // The workspace grid and drawer sizes follow whichever element currently renders them: a re-render
   // that replaces the measured node must re-bind the observer, or the size freezes (HS2-0PF13V).
@@ -7361,6 +7362,7 @@ export async function startHotSheetWebClient() {
     terminalFitPhone,
     terminalSession,
     clearTerminalHalt,
+    setFeedbackPrimary,
     magnifiedTerminalKey,
     openTerminalInProject,
     terminalContextMenu,

@@ -1504,6 +1504,11 @@ export interface TerminalInfo {
   /** This live terminal's AI session is its project's primary: proactive feedback delivery goes
    * here when no claim names a session (HS2-DB2FQ2). Absent otherwise. */
   feedback_primary?: boolean;
+  /** HS2-H3S7YQ: the primary role is held because a person chose this terminal. Absent otherwise. */
+  feedback_primary_chosen?: boolean;
+  /** HS2-H3S7YQ: this live terminal's AI session accepts pushed messages, so it may be chosen as
+   * the project's feedback-primary session. Absent otherwise. */
+  feedback_eligible?: boolean;
   /** HS2-6MNMVB: an orchestrator started this terminal's session on this machine. */
   orchestrator?: TerminalOrchestrator;
 }
@@ -3433,6 +3438,15 @@ export class Api {
    */
   clearTerminal = (id: string) =>
     this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/clear`, { method: 'POST' });
+  /**
+   * Choose a live AI terminal as its project's feedback-primary session (HS2-H3S7YQ). Rejects with
+   * `409 feedback_primary_ineligible` when its session cannot receive pushed messages.
+   */
+  chooseFeedbackPrimary = (id: string) =>
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/feedback-primary`, { method: 'PUT' });
+  /** Forget the person's feedback-primary choice, so the oldest session receives feedback again (HS2-H3S7YQ). */
+  clearFeedbackPrimary = (id: string) =>
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/feedback-primary`, { method: 'DELETE' });
   /** Save (or, with `null`, clear) a terminal's shared tab name (HS2-89FPV1). */
   renameTerminal = (id: string, name: string | null) =>
     this.parsed(parseTerminalName, `/terminals/${encodeURIComponent(id)}/name`, {

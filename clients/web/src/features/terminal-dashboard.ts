@@ -7,6 +7,7 @@ import type { Project } from '../interactions/types';
 import type { DrawerAIChat } from '../project-drive';
 import { applyRememberedTabOrder } from '../tab-order';
 import { deriveAiConnectionStates } from '../terminal-ai-connection';
+import { type FeedbackPrimaryCommand, feedbackPrimaryToast } from '../terminal-feedback-primary';
 import { defaultTerminalNames, terminalNameKey, terminalTitle } from '../terminal-names';
 import { terminalProjectOwner } from '../terminal-project-scope';
 import { sameTerminalDashboardSnapshot, TerminalSnapshotRefresh } from '../terminal-snapshot-refresh';
@@ -217,6 +218,24 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
       error.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
+  /**
+   * Choose a terminal as its project's feedback-primary session, or clear that choice (HS2-H3S7YQ).
+   * The server announces the change to every client; this one refetches at once so its own tab
+   * indicator moves before the event arrives.
+   */
+  async function setFeedbackPrimary(key: string, command: FeedbackPrimaryCommand) {
+    const session = terminalSession(key),
+      current = projects.value.find((item) => item.id === session?.projectId);
+    if (!session || !current) return;
+    try {
+      const api = new Api(current.apiPath);
+      await (command === 'choose' ? api.chooseFeedbackPrimary(session.id) : api.clearFeedbackPrimary(session.id));
+      await refreshTerminalDashboard(true, current);
+      showToast(feedbackPrimaryToast(command, session.title ?? session.id));
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
   function dispose() {
     clearTimeout(aiConnectionTimer);
     aiConnectionTimer = undefined;
@@ -235,6 +254,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
     applyAiConnectionStates,
     refreshTerminalDashboard,
     clearTerminalHalt,
+    setFeedbackPrimary,
     dispose,
   };
 }

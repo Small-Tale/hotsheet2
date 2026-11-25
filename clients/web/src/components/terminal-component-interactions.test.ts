@@ -131,13 +131,37 @@ describe('terminal dashboard menu and text-size wiring (HS2-05NMW0)', () => {
     expect(click.preventDefault).toHaveBeenCalledTimes(2);
     const opened = bindings.open.mock.calls.map(([menu]) => menu as { key: string; x: number; y: number });
     expect(opened.map((menu) => menu.key)).toEqual(['a', 'b', '', 'c', 'd']);
-    // A press near the corner keeps the 224 by 104 menu inside the 400 by 300 viewport.
-    expect(opened[0].x + 224).toBeLessThanOrEqual(400);
-    expect(opened[0].y + 104).toBeLessThanOrEqual(300);
+    // A press near the corner keeps the 296 by 176 menu inside the 400 by 300 viewport.
+    expect(opened[0].x + 296).toBeLessThanOrEqual(400);
+    expect(opened[0].y + 176).toBeLessThanOrEqual(300);
     expect(bindings.clearHalt).toHaveBeenCalledWith('c');
     dispose();
     expect(registrations.slice(-3).every((item) => item.disposed)).toBe(true);
     vi.unstubAllGlobals();
+  });
+
+  it('chooses or clears the feedback-primary session from the menu, ignoring a disabled item (HS2-H3S7YQ)', () => {
+    const bindings = { open: vi.fn(), clearHalt: vi.fn(), feedbackPrimary: vi.fn() };
+    const dispose = wireTerminalDashboardMenu({} as HTMLElement, bindings);
+    const click = handler('click', action('set-feedback-primary'));
+    const item = (dataset: Record<string, string>, disabled = false) => ({
+      dataset,
+      getAttribute: (name: string) => (name === 'aria-disabled' && disabled ? 'true' : null),
+    });
+    click({}, item({ itemId: 'p:a', feedbackCommand: 'choose' }));
+    click({}, item({ itemId: 'p:a', feedbackCommand: 'clear' }));
+    click({}, item({ itemId: 'p:b', feedbackCommand: 'choose' }, true));
+    expect(bindings.feedbackPrimary.mock.calls).toEqual([
+      ['p:a', 'choose'],
+      ['p:a', 'clear'],
+    ]);
+    dispose();
+    // A binding without the command (the UX demo's older stages) ignores the action.
+    const without = wireTerminalDashboardMenu({} as HTMLElement, { open: vi.fn(), clearHalt: vi.fn() });
+    expect(() =>
+      handler('click', action('set-feedback-primary'))({}, item({ itemId: 'p:a', feedbackCommand: 'choose' })),
+    ).not.toThrow();
+    without();
   });
 
   it('cycles the focus-mode text size with the pressed control', () => {
