@@ -53,7 +53,7 @@ mod validation_runner;
 mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION};
-pub use auto_replan::{AUTO_REPLAN_ACTION, AutoReplan, ReplanMemory};
+pub use auto_replan::{AUTO_REPLAN_ACTION, AutoReplan};
 pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
     CAPACITY_RESAMPLE_MS, CapacityProbe, LocalServerCapacity, MAX_CAPACITY_WAIT_MS, ReadCapacity,
