@@ -39108,6 +39108,13 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     await note.getByRole('button', { name: 'Add response at a character position' }).click();
     await note.getByRole('textbox', { name: /Response at character/ }).fill('Use the revised flow. This is my answer.');
     await note.getByRole('button', { name: 'Respond' }).click();
+    // HS2-6RXBS9: with no AI session open, the saved answer offers to start one in a top-layer card.
+    // Dismiss it (the note stays for the AI's next read) so it cannot cover the reader's controls;
+    // a test that raced ahead of the card passed locally and timed out on CI (HS2-FZAE4Y).
+    const startPrompt = page.getByRole('dialog', { name: 'Start an AI Session' });
+    await expect(startPrompt).toBeVisible();
+    await startPrompt.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(startPrompt).toHaveCount(0);
     await expect(inspector).toHaveAttribute('data-needs-review', 'false');
     await expect(inspector.locator('.ticket-inspector__feedback')).toHaveCount(0);
     const persisted = await server.request<FullTicket>(`/tickets/${created.id}`),
