@@ -19,8 +19,8 @@ export interface DevelopmentStrategySettingsProps {
   draft?: DevelopmentStrategyDraft;
   loading?: boolean;
   saving?: boolean;
+  /** A read failure, or the persistent record of a failed save; a save's outcome is a toast (HS2-1K6122). */
   message?: string;
-  status?: string;
   /** One live cadence per linked Git source, from the same event stream as Workers. */
   cadence?: readonly { source: string; value: WorkerCadence }[];
 }
@@ -44,7 +44,6 @@ export function DevelopmentStrategySettings({
   loading = false,
   saving = false,
   message = '',
-  status = '',
   cadence = [],
 }: DevelopmentStrategySettingsProps) {
   const selection = draft?.selection ?? report?.policy.default_custom ?? report?.policy.default ?? 'ticket-assured',
@@ -209,11 +208,6 @@ export function DevelopmentStrategySettings({
             {message ? (
               <Text tone="danger" role="alert">
                 {message}
-              </Text>
-            ) : null}
-            {status ? (
-              <Text tone="quiet" role="status">
-                {status}
               </Text>
             ) : null}
           </List>

@@ -183,7 +183,7 @@ test('HS2-1YXCCW and HS2-F203CG review full pins in a settled responsive shell',
   await pins.getByRole('button', { name: 'Register Reviewed Pins' }).click();
   expect(requests).toEqual([review.requests]);
   expect(actions).toEqual([{ action: 'register_batch', review }]);
-  await expect(page.getByText('Reviewed source revisions pinned.')).toBeVisible();
+  await expect(page.locator('.app-toast').filter({ hasText: 'Reviewed source revisions pinned.' })).toBeVisible();
 });
 
 test('HS2-63D6F9 chooses an older rule without moving the source pin', async ({ page }) => {
@@ -566,7 +566,9 @@ test('optional guidance interview previews context, requires consent, and record
   await expect(interview.getByRole('button', { name: 'Copy Prompt for AI' })).toBeVisible();
   expect(opens).toBe(1);
   await interview.getByRole('button', { name: 'Copy Prompt for AI' }).click();
-  await expect(settings.getByText('Interview prompt copied. Share it with an AI tool you choose.')).toBeVisible();
+  await expect(
+    page.locator('.app-toast').filter({ hasText: 'Interview prompt copied. Share it with an AI tool you choose.' }),
+  ).toBeVisible();
   await interview.getByLabel('AI Advisory JSON').fill('not json');
   await interview.getByRole('button', { name: 'Review Advisory Answer' }).click();
   await expect(interview.getByText('Interview Status Unknown')).toBeVisible();
@@ -720,7 +722,9 @@ test('Project guidance reviews local recommendations and keeps accept separate f
     .locator('[data-recommendation="playbook:rule:rust-lint"]')
     .getByRole('button', { name: 'Accept Selection' })
     .click();
-  await expect(settings.getByText('Suggestion selected. Apply Selected Guidance when ready.')).toHaveCount(1);
+  await expect(
+    page.locator('.app-toast').filter({ hasText: 'Suggestion selected. Apply Selected Guidance when ready.' }),
+  ).toHaveCount(1);
   expect(applyCount).toBe(0);
   await expect(recommendationDialog.getByText('New Guidance Recommendations Are Available')).toHaveCount(0);
   await expect(recommendationDialog.getByText('The first accepted selection replaces the bundled default')).toHaveCount(
@@ -730,7 +734,9 @@ test('Project guidance reviews local recommendations and keeps accept separate f
     .locator('[data-recommendation="playbook:rule:rust-test"]')
     .getByRole('button', { name: 'Dismiss' })
     .click();
-  await expect(settings.getByText('Suggestion dismissed for this evidence.')).toHaveCount(1);
+  await expect(page.locator('.app-toast').filter({ hasText: 'Suggestion dismissed for this evidence.' })).toHaveCount(
+    1,
+  );
   expect(decisions).toMatchObject([
     { name: 'rust-lint', decision: 'accepted', fingerprint: 'rust-lint-v1' },
     { name: 'rust-test', decision: 'dismissed', fingerprint: 'rust-test-v1' },
@@ -760,7 +766,8 @@ test('Project guidance reviews local recommendations and keeps accept separate f
   await expect(
     recommendationDialog.locator('[data-recommendation="playbook:rule:rust-lint"]').getByText('rust-lint guidance'),
   ).toBeVisible();
-  await recommendationDialog.getByRole('button', { name: 'Close' }).click();
+  // HS2-1K6122: an action's toast sits inside the open dialog (HS2-M2G31B) with its own Close.
+  await recommendationDialog.locator('[data-dialog-close]').click();
   await expect(recommendationDialog).not.toBeVisible();
   await page.getByRole('button', { name: 'More Workspace Controls' }).click();
   await page.locator('[data-workspace-overflow-action="open-guidance-recommendations"]').click();
@@ -1165,7 +1172,7 @@ test('project guidance picker searches, selects, applies, and reports versions a
     .toBe(true);
   await picker.getByRole('button', { name: 'Apply Selected Guidance' }).click();
   await expect.poll(() => actions.some((action) => action.action === 'apply')).toBe(true);
-  await expect(picker).toContainText('Selected guidance applied.');
+  await expect(page.locator('.app-toast').filter({ hasText: 'Selected guidance applied.' })).toBeVisible();
   await picker.locator('input[name="guidance-source-id"]').fill('team-rules');
   await picker.getByRole('button', { name: 'Register source' }).click();
   await expect

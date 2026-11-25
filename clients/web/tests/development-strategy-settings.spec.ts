@@ -67,7 +67,7 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, shows th
     await expect(settings.getByRole('combobox', { name: 'Project Strategy' })).toBeVisible();
     await choose('Project Strategy', 'Steady Main');
     await settings.getByRole('button', { name: 'Save Strategy' }).click();
-    await expect(settings.getByRole('status')).toContainText('saved');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Development strategy saved.' })).toBeVisible();
     await expect
       .poll(
         async () =>
@@ -103,7 +103,7 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, shows th
     await expect(settings.getByLabel('Custom Name')).toHaveValue('reviewed-fast');
     await choose('Minimum Risk Tier', 'T1');
     await settings.getByRole('button', { name: 'Save Strategy' }).click();
-    await expect(settings.getByRole('status')).toContainText('saved');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Development strategy saved.' })).toBeVisible();
     await expect
       .poll(
         async () =>

@@ -43,8 +43,8 @@ export interface OrchestrationSettingsProps {
   loading?: boolean;
   /** Targets, `add` or `policy` with a change in flight. */
   busy?: readonly string[];
+  /** A read failure, or the persistent record of a failed change; a change's outcome is a toast (HS2-1K6122). */
   message?: string;
-  status?: string;
   /** Why projects cannot be added here now, such as a remote server's list that could not be read. */
   unavailableReason?: string;
   /**
@@ -190,7 +190,6 @@ export function OrchestrationSettings({
   loading = false,
   busy = [],
   message = '',
-  status = '',
   unavailableReason,
   hostedChoices,
   hostedServer = 'the server',
@@ -241,9 +240,6 @@ export function OrchestrationSettings({
                 {message}
               </Text>
             ) : null}
-            <Text tone="quiet" size="compact" role="status" flush>
-              {status}
-            </Text>
             {loading && rows.length === 0 ? (
               <List gap={rem(0.125)}>
                 <ListActionRow

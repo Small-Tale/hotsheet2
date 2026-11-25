@@ -46,7 +46,6 @@ export function OrchestrationSettingsDemo() {
           loading={state?.loading ?? true}
           busy={state?.busy}
           message={state?.message}
-          status={state?.status}
           policy={{ draft: state?.draft, toolLabel: demoToolLabel }}
         />
       </CatalogExample>
