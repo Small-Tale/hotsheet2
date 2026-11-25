@@ -108,6 +108,7 @@ export const DEMO_ACTIONS = {
   toggleSettings: attr('data-action', 'toggle-settings'),
   toggleTerminalVisibility: attr('data-action', 'toggle-terminal-visibility'),
   toggleTerminalVisibilityType: attr('data-action', 'toggle-terminal-visibility-type'),
+  toggleTerminalVisibilityDemoChatFeature: attr('data-action', 'toggle-terminal-visibility-demo-chat-feature'),
   toggleTicketInspector: attr('data-action', 'toggle-ticket-inspector'),
   transitionBack: attr('data-action', 'transition-back'),
   transitionForward: attr('data-action', 'transition-forward'),

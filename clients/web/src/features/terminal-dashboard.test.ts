@@ -56,6 +56,7 @@ function owner(projects = signal([project('a')])) {
     refreshDriveConnections,
     reconcileTerminalNames,
     workspaceTerminalGroups: () => terminalGroups.value,
+    chatFeatureOn: () => true,
     aiToolLabel: (tool) => tool,
     showToast,
     error,

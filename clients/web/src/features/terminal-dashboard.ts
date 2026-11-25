@@ -13,12 +13,13 @@ import { terminalProjectOwner } from '../terminal-project-scope';
 import { sameTerminalDashboardSnapshot, TerminalSnapshotRefresh } from '../terminal-snapshot-refresh';
 import {
   activeTerminalVisibilityGroup,
+  effectiveTerminalVisibleTypes,
   type parseTerminalVisibilityState,
+  scopeTerminalVisibilityTypes,
   TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
   TERMINAL_VISIBILITY_STORAGE_KEY,
   terminalProjectVisibilityScope,
   terminalVisibilityItems,
-  visibleTerminalTypes,
 } from '../terminal-visibility';
 import type { createDriveConversationsController } from './drive-conversations';
 import type { createTerminalNamesController } from './terminal-names';
@@ -43,6 +44,8 @@ export interface TerminalDashboardDependencies {
   reconcileTerminalNames: ReturnType<typeof createTerminalNamesController>['reconcileTerminalNames'];
   /** The workspace's visible terminal groups; built after this owner, so read lazily. */
   workspaceTerminalGroups: () => Parameters<typeof terminalVisibilityItems>[0];
+  /** Whether the AI chat feature area is on (HS2-4TKASN). */
+  chatFeatureOn: () => boolean;
   aiToolLabel: (tool: string) => string;
   showToast: (message: string) => void;
   error: Signal<string>;
@@ -70,6 +73,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
     refreshDriveConnections,
     reconcileTerminalNames,
     workspaceTerminalGroups,
+    chatFeatureOn,
     aiToolLabel,
     showToast,
     error,
@@ -84,12 +88,19 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   function terminalHiddenKeys(scope: string) {
     return activeTerminalVisibilityGroup(terminalVisibility.value, scope).hiddenKeys;
   }
+  /** The types a scope's visibility dialog offers (HS2-4TKASN). */
+  function terminalAvailableTypes(scope: string) {
+    return scopeTerminalVisibilityTypes(workspaceTerminalGroups(), scope, chatFeatureOn());
+  }
   function terminalVisibleTypes(scope: string) {
-    return visibleTerminalTypes(activeTerminalVisibilityGroup(terminalVisibility.value, scope));
+    return effectiveTerminalVisibleTypes(
+      activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+      terminalAvailableTypes(scope),
+    );
   }
   function terminalHiddenCount(scope: string, projectId?: string) {
     const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
-      visibleTypes = visibleTerminalTypes(active),
+      visibleTypes = terminalVisibleTypes(scope),
       hiddenKeys = new Set(active.hiddenKeys);
     return terminalVisibilityItems(
       workspaceTerminalGroups(),
@@ -243,6 +254,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   return {
     terminalSession,
     terminalHiddenKeys,
+    terminalAvailableTypes,
     terminalVisibleTypes,
     terminalHiddenCount,
     persistTerminalVisibility,

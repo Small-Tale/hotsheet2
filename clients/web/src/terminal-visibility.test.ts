@@ -3,19 +3,25 @@ import { describe, expect, it } from 'vitest';
 import {
   activeTerminalVisibilityGroup,
   addTerminalVisibilityGroup,
+  availableTerminalVisibilityTypes,
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
+  effectiveTerminalVisibleTypes,
   hideNewTerminalInNamedGroups,
   initialTerminalVisibilityState,
   parseTerminalVisibilityState,
   removeTerminalVisibilityGroup,
   renameTerminalVisibilityGroup,
+  scopeTerminalVisibilityTypes,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
   setTerminalTypeVisibleInGroup,
   setTerminalVisibleInGroup,
   TERMINAL_VISIBILITY_TYPES,
   terminalVisibilityItems,
+  type TerminalVisibilityState,
+  type TerminalVisibilityType,
   terminalVisibilityTypes,
+  toggleEffectiveTerminalTypeInGroup,
   visibleTerminalTypes,
 } from './terminal-visibility';
 
@@ -162,5 +168,71 @@ describe('workspace visibility type filtering', () => {
     state = setAllTerminalsVisibleInGroup(state, 'focus', keys(TERMINAL_VISIBILITY_TYPES), true);
     state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['ai']), false);
     expect(state.groups[1].hiddenKeys).toEqual(['one:agent']);
+  });
+});
+
+describe('workspace visibility segment availability (HS2-4TKASN)', () => {
+  const group = (hiddenTypes?: TerminalVisibilityType[]) => ({
+    id: 'default',
+    name: 'Default',
+    hiddenKeys: [],
+    hiddenTypes,
+  });
+  const session = { id: 's', projectId: 'p', projectName: 'P', alive: true, busy: false, scrollback: '' };
+  const chat = { id: 'ai-chat:c', projectId: 'p', projectName: 'P', name: 'Chat', tool: 'Codex' };
+
+  it('offers AI Chats only while the feature is on or a chat is listed', () => {
+    expect(availableTerminalVisibilityTypes(true, false)).toEqual(['shell', 'ai', 'chat']);
+    expect(availableTerminalVisibilityTypes(true, true)).toEqual(['shell', 'ai', 'chat']);
+    expect(availableTerminalVisibilityTypes(false, true)).toEqual(['shell', 'ai', 'chat']);
+    expect(availableTerminalVisibilityTypes(false, false)).toEqual(['shell', 'ai']);
+  });
+
+  it('reads chats from the listed scope only', () => {
+    const groups = [
+      { projectId: 'p', projectName: 'P', sessions: [session] },
+      { projectId: 'q', projectName: 'Q', sessions: [], chats: [{ ...chat, projectId: 'q', projectName: 'Q' }] },
+    ];
+    expect(scopeTerminalVisibilityTypes(groups, 'dashboard', false)).toEqual(['shell', 'ai', 'chat']);
+    expect(scopeTerminalVisibilityTypes(groups, 'project:p', false)).toEqual(['shell', 'ai']);
+    expect(scopeTerminalVisibilityTypes(groups, 'project:q', false)).toEqual(['shell', 'ai', 'chat']);
+    expect(scopeTerminalVisibilityTypes([], 'dashboard', false)).toEqual(['shell', 'ai']);
+    expect(scopeTerminalVisibilityTypes([], 'dashboard', true)).toEqual(['shell', 'ai', 'chat']);
+  });
+
+  it('never applies an unavailable type and falls back to the first available one', () => {
+    const available: TerminalVisibilityType[] = ['shell', 'ai'];
+    expect(effectiveTerminalVisibleTypes(group(), available)).toEqual(['shell', 'ai']);
+    expect(effectiveTerminalVisibleTypes(group(['shell']), available)).toEqual(['ai']);
+    // A chat-only choice falls back to Terminals instead of showing nothing.
+    expect(effectiveTerminalVisibleTypes(group(['shell', 'ai']), available)).toEqual(['shell']);
+    // An explicit "nothing shown" stays empty.
+    expect(effectiveTerminalVisibleTypes(group(['shell', 'ai', 'chat']), available)).toEqual([]);
+    expect(effectiveTerminalVisibleTypes(group(['shell', 'ai']), [])).toEqual([]);
+    expect(effectiveTerminalVisibleTypes(group(['shell', 'ai']))).toEqual(['chat']);
+  });
+
+  it('toggles from the applied types without trapping a fallback or losing the stored chat choice', () => {
+    const available: TerminalVisibilityType[] = ['shell', 'ai'];
+    let state: TerminalVisibilityState = { groups: [group(['shell', 'ai'])], activeByScope: {} };
+    const applied = () => effectiveTerminalVisibleTypes(state.groups[0], available);
+    expect(applied()).toEqual(['shell']);
+    // Releasing the fallback stores an explicit nothing-shown choice.
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'shell', available);
+    expect(applied()).toEqual([]);
+    expect(state.groups[0].hiddenTypes).toEqual(['shell', 'ai', 'chat']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'ai', available);
+    expect(applied()).toEqual(['ai']);
+    expect(state.groups[0].hiddenTypes).toEqual(['shell', 'chat']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'shell', available);
+    expect(applied()).toEqual(['shell', 'ai']);
+    // Chat keeps its stored choice while unavailable, and returns with it.
+    expect(state.groups[0].hiddenTypes).toEqual(['chat']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'chat', available);
+    expect(state.groups[0].hiddenTypes).toEqual(['chat']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'missing', 'shell', available);
+    expect(applied()).toEqual(['shell', 'ai']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'chat', TERMINAL_VISIBILITY_TYPES);
+    expect(effectiveTerminalVisibleTypes(state.groups[0])).toEqual(['shell', 'ai', 'chat']);
   });
 });

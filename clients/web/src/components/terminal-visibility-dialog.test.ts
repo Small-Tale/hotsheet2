@@ -35,6 +35,7 @@ describe('TerminalVisibilityDialog', () => {
         state,
         scope: 'dashboard',
         groups,
+        chatFeatureOn: true,
       }),
     );
     expect(markup).toContain('role="group" aria-label="Item Types"');
@@ -52,7 +53,13 @@ describe('TerminalVisibilityDialog', () => {
     expect(css).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
     expect(css).not.toMatch(/\.kui-/);
     const markup = String(
-      TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
+      TerminalVisibilityDialog({
+        open: true,
+        state: initialTerminalVisibilityState(),
+        scope: 'dashboard',
+        groups,
+        chatFeatureOn: true,
+      }),
     );
     expect(markup).toContain('terminal-visibility-dialog__type-grid');
     expect(markup).toMatch(/data-body-layout="fill-last"/);
@@ -64,7 +71,13 @@ describe('TerminalVisibilityDialog', () => {
   });
   it('uses selected tab-bar-item styling, shared menu headers, and shared menu rows', () => {
     const markup = String(
-      TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
+      TerminalVisibilityDialog({
+        open: true,
+        state: initialTerminalVisibilityState(),
+        scope: 'dashboard',
+        groups,
+        chatFeatureOn: true,
+      }),
     );
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('class="kui-tab-bar-item terminal-visibility-dialog__tab"');
@@ -95,6 +108,7 @@ describe('TerminalVisibilityDialog', () => {
               sessions: [{ ...groups[0].sessions[0], projectId: 'other', projectName: 'Other' }],
             },
           ],
+          chatFeatureOn: true,
           contextMenu: { id: 'focus', x: 20, y: 30 },
         }),
       );
@@ -113,6 +127,7 @@ describe('TerminalVisibilityDialog', () => {
           state,
           scope: 'project:other',
           groups,
+          chatFeatureOn: true,
           contextMenu: { id: 'default', x: 0, y: 0 },
         }),
       ),
@@ -127,5 +142,47 @@ describe('TerminalVisibilityDialog', () => {
     expect(rename).toContain('label="Rename Visibility Group"');
     expect(rename).toContain('value="Focus"');
     expect(rename).toContain('>Rename</span></button>');
+  });
+  it('shows AI Chats only while the feature is on or a chat is listed, never pressed while hidden (HS2-4TKASN)', () => {
+    const off = String(
+      TerminalVisibilityDialog({
+        open: true,
+        state: initialTerminalVisibilityState(),
+        scope: 'dashboard',
+        groups,
+        chatFeatureOn: false,
+      }),
+    );
+    expect(off).not.toContain('data-visibility-type="chat"');
+    expect(off).not.toContain('AI Chats');
+    expect(off).toContain('data-type-count="2"');
+    // A chat-only choice falls back to Terminals while AI Chats is hidden.
+    const chatOnly = (['shell', 'ai'] as const).reduce(
+      (next, type) => setTerminalTypeVisibleInGroup(next, 'default', type, false),
+      initialTerminalVisibilityState(),
+    );
+    const fallback = String(
+      TerminalVisibilityDialog({ open: true, state: chatOnly, scope: 'dashboard', groups, chatFeatureOn: false }),
+    );
+    expect(fallback).toMatch(
+      /aria-pressed="true"[^>]*data-visibility-type="shell"|data-visibility-type="shell"[^>]*aria-pressed="true"/,
+    );
+    const withChat = String(
+      TerminalVisibilityDialog({
+        open: true,
+        state: initialTerminalVisibilityState(),
+        scope: 'dashboard',
+        groups: [
+          {
+            ...groups[0],
+            chats: [{ id: 'ai-chat:c', projectId: 'project', projectName: 'Project', name: 'Chat', tool: 'Codex' }],
+          },
+        ],
+        chatFeatureOn: false,
+      }),
+    );
+    expect(withChat).toContain('data-visibility-type="chat"');
+    expect(withChat).toContain('data-type-count="3"');
+    expect(withChat).toContain('aria-label="Hide Chat"');
   });
 });

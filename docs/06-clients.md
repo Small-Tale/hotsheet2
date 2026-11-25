@@ -3816,7 +3816,14 @@ from the active workspace's list and dashboard, without closing the sessions. Ea
 visibility group persists its own type choices; older saved groups begin with all three
 visible. Hide Listed / Show Listed apply only to rows of the enabled types in the active
 group. No enabled types yields an explicit empty result and disabled bulk actions. Web
-Browsers has no control until browser tiles ship under HS2-7VS6SF. Terminal kind comes from the creation request:
+Browsers has no control until browser tiles ship under HS2-7VS6SF. AI Chats follows the
+`ai-chat` feature area (HS2-4TKASN): while the feature is off the dialog offers only
+Terminals and AI Shells, and the two share the row. Under the feature-area convention
+(HS2-3GJZGG: no entry points, data kept, open chats stay), the segment remains while the
+listed scope still has an open chat, so that chat stays controllable. An unavailable type is
+never pressed or applied to the grid; when a workspace's stored choice held only AI Chats,
+Terminals stands in until the person changes the selection, and the stored chat choice
+returns with the segment. Terminal kind comes from the creation request:
 `connect` marks AI, ordinary/default-shell launches remain shell, and the kind persists
 through PTY reattachment and broker-backed server restart. Legacy sessions without kind
 remain shell; titles, command output, and OSC8 hyperlinks never determine kind (HS2-SE3RVM).

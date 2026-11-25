@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   closeTerminalVisibilityDemo,
   setAllTerminalVisibilityDemo,
+  setTerminalVisibilityDemoChatFeature,
   showTerminalVisibilityDemo,
   terminalVisibilityDemoState,
   TerminalVisibilityDialogDemo,
@@ -45,5 +46,16 @@ describe('TerminalVisibilityDialog demo', () => {
     expect(String(TerminalVisibilityDialogDemo())).not.toMatch(
       /data-terminal-visibility-dialog=""[^>]*data-controlled-open="true"/,
     );
+  });
+  it('drops the AI Chats segment while the demo chat feature is off and nothing is open (HS2-4TKASN)', () => {
+    showTerminalVisibilityDemo();
+    setTerminalVisibilityDemoChatFeature(false);
+    let markup = String(TerminalVisibilityDialogDemo());
+    expect(markup).not.toContain('data-visibility-type="chat"');
+    expect(markup).toContain('data-action="toggle-terminal-visibility-demo-chat-feature"');
+    setTerminalVisibilityDemoChatFeature(true);
+    markup = String(TerminalVisibilityDialogDemo());
+    expect(markup).toContain('data-visibility-type="chat"');
+    closeTerminalVisibilityDemo();
   });
 });

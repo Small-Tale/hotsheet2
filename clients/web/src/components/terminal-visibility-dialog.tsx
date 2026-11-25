@@ -20,10 +20,11 @@ import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
+  effectiveTerminalVisibleTypes,
+  scopeTerminalVisibilityTypes,
   terminalVisibilityItems,
   type TerminalVisibilityState,
   type TerminalVisibilityType,
-  visibleTerminalTypes,
 } from '../terminal-visibility';
 import type { TerminalDashboardGroup } from './terminal-dashboard';
 
@@ -32,6 +33,8 @@ export interface TerminalVisibilityDialogProps {
   state: TerminalVisibilityState;
   scope: string;
   groups: TerminalDashboardGroup[];
+  /** Whether the AI chat feature area is on; off, AI Chats shows only while a chat is listed (HS2-4TKASN). */
+  chatFeatureOn: boolean;
   contextMenu?: { id: string; x: number; y: number };
 }
 
@@ -95,10 +98,19 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
   );
 }
 
-export function TerminalVisibilityDialog({ open, state, scope, groups, contextMenu }: TerminalVisibilityDialogProps) {
+export function TerminalVisibilityDialog({
+  open,
+  state,
+  scope,
+  groups,
+  chatFeatureOn,
+  contextMenu,
+}: TerminalVisibilityDialogProps) {
   const activeId = state.activeByScope[scope] ?? DEFAULT_TERMINAL_VISIBILITY_GROUP_ID;
   const active = state.groups.find((group) => group.id === activeId) ?? state.groups[0];
-  const types = visibleTerminalTypes(active);
+  const available = scopeTerminalVisibilityTypes(groups, scope, chatFeatureOn);
+  const types = effectiveTerminalVisibleTypes(active, available);
+  const choices = TYPE_CHOICES.filter((choice) => available.includes(choice.value));
   const visibleGroups = terminalVisibilityItems(groups, scope, types);
   const hidden = new Set(active.hiddenKeys);
 
@@ -173,8 +185,8 @@ export function TerminalVisibilityDialog({ open, state, scope, groups, contextMe
           </TabBar>
           <List controlInsets="trbl">
             <div role="group" aria-label="Item Types">
-              <div className="terminal-visibility-dialog__type-grid">
-                {TYPE_CHOICES.map((choice) => (
+              <div className="terminal-visibility-dialog__type-grid" data-type-count={String(choices.length)}>
+                {choices.map((choice) => (
                   <Button
                     action={TERMINALS_ACTIONS.toggleTerminalVisibilityType.value}
                     rootAttributes={{ 'data-visibility-type': choice.value }}

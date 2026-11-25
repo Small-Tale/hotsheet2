@@ -1,6 +1,8 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Switch } from '@kerfjs/ui/switch';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 import { Eye } from 'lucide';
@@ -15,16 +17,17 @@ import { closedPopupMenuRoot } from '../popup-menu-state';
 import {
   activeTerminalVisibilityGroup,
   addTerminalVisibilityGroup,
+  effectiveTerminalVisibleTypes,
   initialTerminalVisibilityState,
   removeTerminalVisibilityGroup,
   renameTerminalVisibilityGroup,
+  scopeTerminalVisibilityTypes,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
-  setTerminalTypeVisibleInGroup,
   setTerminalVisibleInGroup,
   terminalVisibilityItems,
   type TerminalVisibilityType,
-  visibleTerminalTypes,
+  toggleEffectiveTerminalTypeInGroup,
 } from '../terminal-visibility';
 import { DEMO_ACTIONS } from './demo-actions';
 import { type DemoModule, type FormControl, listen } from './demo-module';
@@ -66,25 +69,40 @@ export const terminalVisibilityDemoState = signal(
     false,
   ),
 );
+/** The demo's AI chat feature area; off, the chat-less project shows no AI Chats segment (HS2-4TKASN). */
+export const terminalVisibilityDemoChatFeature = signal(true);
+/** The demo's projects: the chat closes while the feature is off, as an empty workspace would be. */
+export const terminalVisibilityDemoProjects = () =>
+  terminalVisibilityDemoChatFeature.value
+    ? terminalVisibilityDemoGroups
+    : terminalVisibilityDemoGroups.map((group) => ({ ...group, chats: [] }));
 export const terminalVisibilityDemoOpen = signal(false),
   terminalVisibilityDemoContextMenu = signal<{ id: string; x: number; y: number } | undefined>(undefined),
   terminalVisibilityDemoNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
 export function TerminalVisibilityDialogDemo() {
   return (
     <CatalogExample label="Interactive" align="inline-control">
-      <Button
-        emphasis="primary"
-        action={'show-terminal-visibility-demo'}
-        aria-haspopup="dialog"
-        icon={<LucideIcon size="s" icon={Eye} name="eye" />}
-      >
-        Manage Workspace Visibility
-      </Button>
+      <List gap="xs">
+        <Button
+          emphasis="primary"
+          action={'show-terminal-visibility-demo'}
+          aria-haspopup="dialog"
+          icon={<LucideIcon size="s" icon={Eye} name="eye" />}
+        >
+          Manage Workspace Visibility
+        </Button>
+        <Switch
+          action={DEMO_ACTIONS.toggleTerminalVisibilityDemoChatFeature.value}
+          checked={terminalVisibilityDemoChatFeature.value}
+          label="AI chat feature on"
+        />
+      </List>
       <TerminalVisibilityDialog
         open={terminalVisibilityDemoOpen.value}
         state={terminalVisibilityDemoState.value}
         scope="dashboard"
-        groups={terminalVisibilityDemoGroups}
+        groups={terminalVisibilityDemoProjects()}
+        chatFeatureOn={terminalVisibilityDemoChatFeature.value}
         contextMenu={terminalVisibilityDemoContextMenu.value}
       />
       <TerminalVisibilityNameDialog prompt={terminalVisibilityDemoNamePrompt.value} />
@@ -160,21 +178,28 @@ export function toggleTerminalVisibilityDemo(key: string) {
     active().hiddenKeys.includes(key),
   );
 }
+const demoAvailableTypes = () =>
+  scopeTerminalVisibilityTypes(terminalVisibilityDemoProjects(), 'dashboard', terminalVisibilityDemoChatFeature.value);
 export function toggleTerminalVisibilityDemoType(type: TerminalVisibilityType) {
-  terminalVisibilityDemoState.value = setTerminalTypeVisibleInGroup(
+  terminalVisibilityDemoState.value = toggleEffectiveTerminalTypeInGroup(
     terminalVisibilityDemoState.value,
     active().id,
     type,
-    active().hiddenTypes?.includes(type) ?? false,
+    demoAvailableTypes(),
   );
+}
+export function setTerminalVisibilityDemoChatFeature(on: boolean) {
+  terminalVisibilityDemoChatFeature.value = on;
 }
 export function setAllTerminalVisibilityDemo(visible: boolean) {
   terminalVisibilityDemoState.value = setAllTerminalsVisibleInGroup(
     terminalVisibilityDemoState.value,
     active().id,
-    terminalVisibilityItems(terminalVisibilityDemoGroups, 'dashboard', visibleTerminalTypes(active())).flatMap(
-      (group) => group.items.map((item) => item.key),
-    ),
+    terminalVisibilityItems(
+      terminalVisibilityDemoProjects(),
+      'dashboard',
+      effectiveTerminalVisibleTypes(active(), demoAvailableTypes()),
+    ).flatMap((group) => group.items.map((item) => item.key)),
     visible,
   );
 }
@@ -201,6 +226,11 @@ function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
     delegate(root, 'click', DEMO_ACTIONS.toggleTerminalVisibilityType.selector, (_event, target) => {
       const type = (target as HTMLElement).dataset.visibilityType;
       if (type === 'shell' || type === 'ai' || type === 'chat') toggleTerminalVisibilityDemoType(type);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', DEMO_ACTIONS.toggleTerminalVisibilityDemoChatFeature.selector, (_event, target) => {
+      setTerminalVisibilityDemoChatFeature((target as HTMLInputElement).checked);
     }),
   );
   demoListeners.add(
