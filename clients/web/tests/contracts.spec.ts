@@ -949,7 +949,12 @@ test('HS2-GDJXGZ real orchestration session and hosted target session responses 
       const refused = await send('POST', hosted, start);
       expect(refused.status, attempt).toBe(200);
       matches(hostedPath, 'post', '200', refused.body);
-      expect(refused.body, attempt).toEqual({ outcome: 'refused', reason: 'tool_not_installed' });
+      // HS2-8Z9VHH: a refused admission names its reason (here the tool that is not installed).
+      expect(refused.body, attempt).toEqual({
+        outcome: 'refused',
+        reason: 'tool_not_installed',
+        admission: { reason: 'tool_not_installed', tool: 'synthetic-absent-tool' },
+      });
     }
     expect((await send('GET', hosted)).body.sessions).toEqual([]);
 

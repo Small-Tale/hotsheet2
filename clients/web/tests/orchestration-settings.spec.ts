@@ -1056,7 +1056,8 @@ test('HS2-89YNGN a remote orchestration project adds a site from the projects op
     await page.setViewportSize(wide);
     const submenu = await openSites();
     await submenu.getByRole('menuitem', { name: /Docs/ }).click();
-    await expect(settings.getByRole('status')).toHaveText('Docs added as a site of Web.');
+    // Action results arrive as a toast, never an inline status line (HS2-1K6122).
+    await expect(page.locator('.app-toast').filter({ hasText: 'Docs added as a site of Web.' })).toBeVisible();
     expect(posted).toContain(`${base}/hosted-projects`);
     const declared = await server.request<{ targets: { label: string; site_of?: string }[] }>(`${base}/targets`);
     expect(declared.targets.map((target) => [target.label, target.site_of ?? null])).toEqual([
@@ -1586,7 +1587,10 @@ test('HS2-NAA3HV makes a site the home site of its project from Settings', async
     const menu = await openSiteMenu();
     await menu.getByRole('menuitem', { name: 'Make Widgets laptop the Home Site' }).click();
     // No confirmation: the same action on the old home undoes it.
-    await expect(settings.getByRole('status')).toHaveText('Widgets laptop is the home site of the project now.');
+    // Action results arrive as a toast, never an inline status line (HS2-1K6122).
+    await expect(
+      page.locator('.app-toast').filter({ hasText: 'Widgets laptop is the home site of the project now.' }),
+    ).toBeVisible();
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     expect(await declared()).toEqual(['Widgets<Laptop', 'Laptop<']);
     await expect(rows.nth(0)).toContainText('Widgets laptop');

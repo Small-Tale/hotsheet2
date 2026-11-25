@@ -3362,6 +3362,11 @@ paths:
                     $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
                   tool_setup:
                     $ref: '#/components/schemas/OrchestrationSessionToolSetup'
+                  admission:
+                    description:
+                      A refused admission's reason, limit and observed value, so the person learns what to change
+                      (HS2-8Z9VHH); present only on an admission refusal.
+                    $ref: '#/components/schemas/AdmissionRefusal'
                 additionalProperties: false
         default:
           description:
