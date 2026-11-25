@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { remoteProjectId } from './remote-projects/identity';
 import {
   duplicateReference,
   duplicateTargetKey,
   parseDuplicateReference,
   prioritizeExactDuplicateTargets,
+  relationTargetProject,
   resolveDuplicateReferenceTarget,
   ticketCloseReasonLabel,
   validateTicketClose,
@@ -126,5 +128,30 @@ describe('structured ticket close outcomes', () => {
     });
     expect(unique?.slug).toBe('HS2-LEGACY');
     await expect(resolveDuplicateReferenceTarget('legacy', projects, async () => ticket)).resolves.toBeUndefined();
+  });
+});
+
+describe('relation targets across servers (HS2-4SPTA4)', () => {
+  const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    B = '01ARZ3NDEKTSV4RRFFQ69G5FAW';
+  const projects = [
+    { id: 'demo' },
+    { id: remoteProjectId(A, 'demo') },
+    { id: remoteProjectId(B, 'demo') },
+    { id: remoteProjectId(A, 'docs') },
+  ];
+
+  it('maps a remote ticket reference to its own host’s tab, never a same-named checkout elsewhere', () => {
+    expect(relationTargetProject(projects, 'demo', remoteProjectId(A, 'docs'))?.id).toBe(remoteProjectId(A, 'demo'));
+    expect(relationTargetProject(projects, 'demo', remoteProjectId(B, 'demo'))?.id).toBe(remoteProjectId(B, 'demo'));
+    expect(relationTargetProject(projects, 'docs', remoteProjectId(B, 'demo'))).toBeUndefined();
+  });
+
+  it('keeps local references local and resolves a composite id that names the source tab', () => {
+    expect(relationTargetProject(projects, 'demo', 'demo')?.id).toBe('demo');
+    expect(relationTargetProject(projects, 'demo', undefined)?.id).toBe('demo');
+    expect(relationTargetProject(projects, remoteProjectId(A, 'docs'), remoteProjectId(A, 'docs'))?.id).toBe(
+      remoteProjectId(A, 'docs'),
+    );
   });
 });

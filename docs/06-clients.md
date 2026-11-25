@@ -3016,6 +3016,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   standard new-ticket form with identical layout; only its title ("Create follow-up to
   <slug>") and the recorded association differ, with no repeated source line in the body
   (HS2-Y4Y7V6).
+  Clicking a follow-up or duplicate-target reference opens the target ticket. The
+  reference's project id is read on the source ticket's own server: in a remote project
+  tab it names that host's checkout and opens in that host's tab, never a tab of another
+  server with the same checkout id. When that checkout is not open from the host, a toast
+  says to open it on that host (HS2-4SPTA4).
   If creation returns a target with `follow_up_link_error`, the client retries
   only the idempotent source-link request and retains the created ticket even
   if repair remains unavailable (HS2-2Z11A5).

@@ -1,3 +1,5 @@
+import { parseRemoteProjectId, remoteProjectId } from './remote-projects/identity';
+
 export type TicketCloseReason = 'completed' | 'not_planned' | 'duplicate' | 'obsolete' | 'works_as_designed';
 
 export interface DuplicateTarget {
@@ -66,6 +68,30 @@ export function parseDuplicateReference(value: string): DuplicateReference | und
   const separator = qualified.indexOf(':');
   if (separator < 1 || separator === qualified.length - 1) return undefined;
   return { project_id, connection_id: qualified.slice(0, separator), native_id: qualified.slice(separator + 1) };
+}
+
+/**
+ * The open project a relation's `project_id` names, read relative to the server of the ticket that
+ * holds the relation (HS2-4SPTA4). A ticket in a remote tab stores its host's native checkout id,
+ * while the tab's id is `remote:<binding>:<checkout>`, so the id maps to that same host's tab; it is
+ * never matched to a tab of another server, where the same checkout id may mean another project.
+ */
+export function relationTargetProject<P extends { id: string }>(
+  projects: readonly P[],
+  referenceProjectId: string,
+  sourceProjectId: string | undefined,
+): P | undefined {
+  const source = sourceProjectId ? parseRemoteProjectId(sourceProjectId) : undefined;
+  if (!source) return projects.find((item) => item.id === referenceProjectId);
+  // A reference that already names this tab (a composite id) still resolves to it.
+  if (referenceProjectId === sourceProjectId) return projects.find((item) => item.id === sourceProjectId);
+  let candidate: string;
+  try {
+    candidate = remoteProjectId(source.bindingId, referenceProjectId);
+  } catch {
+    return undefined;
+  }
+  return projects.find((item) => item.id === candidate);
 }
 
 function lookupTarget(project: DuplicateLookupProject, ticket: DuplicateLookupTicket): DuplicateTarget {

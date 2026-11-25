@@ -67,6 +67,7 @@ import { submitNotWorkingReport } from '../not-working-workflow';
 import { noteAuthorship } from '../note-authorship';
 import { responseLinkUnavailable } from '../note-response-link';
 import { type PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
+import { parseRemoteProjectId } from '../remote-projects/identity';
 import {
   bulkTagChoices,
   type BulkTicketAction,
@@ -81,6 +82,7 @@ import {
   type DuplicateTarget,
   duplicateTargetKey,
   parseDuplicateReference,
+  relationTargetProject,
   resolveDuplicateReferenceTarget,
   ticketCloseReasonLabel,
   validateTicketClose,
@@ -2445,9 +2447,15 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   async function openDuplicateTarget(id: string) {
     const reference = parseDuplicateReference(id);
     if (reference) {
-      const target = projects.value.find((item) => item.id === reference.project_id);
+      // The reference names a checkout on the source ticket's own server (HS2-4SPTA4).
+      const source = project(),
+        target = relationTargetProject(projects.value, reference.project_id, source?.id);
       if (!target) {
-        showToast(`Open project ${reference.project_id} to view this duplicate target.`);
+        showToast(
+          source?.remoteHost && parseRemoteProjectId(source.id)
+            ? `Open that project on ${source.remoteHost} to view this ticket.`
+            : `Open project ${reference.project_id} to view this duplicate target.`,
+        );
         return;
       }
       try {
