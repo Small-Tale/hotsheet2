@@ -323,12 +323,18 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     }
     terminalDrawerTransitioning.value = true;
     terminalDrawerVisible.value = visible;
-    localStorage.setItem('hotsheet.terminals.drawer-open', String(visible));
     terminalDrawerTransitionTimer = window.setTimeout(() => {
       terminalDrawerTransitionTimer = undefined;
       terminalDrawerTransitioning.value = false;
       if (!terminalDrawerVisible.value) terminalDrawerMounted.value = false;
     }, 220);
+    // Storage can be full or blocked (a private window). Remembering the choice is a convenience: a
+    // refused write must not leave the drawer transitioning, unrefreshed and unobserved (HS2-N7QZJ4).
+    try {
+      localStorage.setItem('hotsheet.terminals.drawer-open', String(visible));
+    } catch {
+      // The drawer still opens and closes; it is just not remembered across reloads.
+    }
     if (visible) {
       if (refresh) void refreshTerminalDashboard();
       observeTerminalDrawer();
