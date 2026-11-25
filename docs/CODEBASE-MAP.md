@@ -250,6 +250,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/local-gate.mjs     # Exact-input affected gate and receipt runner; records reached, deferred, reused, failed, and interrupted check attempts; validates reviewed exact-tree plans for configured strategies (HS2-FCCRCK, HS2-5RDMEV, HS2-RRNZYN; tests: local-gate.test.mjs)
   scripts/gate-browser-exercise.mjs # Static index of the browser specs and providers.spec titles that exercise a changed client module through its class/route hooks, plain-module helpers and nearest shipped parents (HS2-N7EY18, HS2-R1D0S5; tests: local-gate.test.mjs)
   scripts/gate-budget.mjs    # Mandatory floor, measured optional-stage ranking, explicit T2 selection and receipt budget identity (HS2-GN06JT; tests: gate-budget.test.mjs)
+  scripts/gate-browser-budget.mjs # CI First browser-case cap: ranked whole-file and grep units, per-file and per-case timing estimates, changed spec and changed-module cases kept within KEPT_EXTRA_MS, runnable deferred commands (HS2-FXY4M2; tests: gate-budget.test.mjs, local-gate.test.mjs)
   scripts/gate-test-plan.mjs # Versioned reviewed plan validation, complete deferred-stage disclosure, exact-tree/ticket/strategy identity, and atomic persistence (HS2-RRNZYN; tests: gate-test-plan.test.mjs)
   scripts/gate-case-rerun.mjs # Failed suite stages rerun only their failed cases on the same stage key: per-runner selectors, narrowed commands, flaky recording, and whole-stage fallbacks (HS2-5340N1; tests: gate-case-rerun.test.mjs, local-gate.test.mjs)
   scripts/gate-ticket-profile.mjs # Provider-neutral ticket/tag resolution and testing profiles, including shared development-policy gate selection (HS2-VQ5ND5, HS2-BF79YX; tests: gate-ticket-profile.test.mjs)
@@ -1430,7 +1431,8 @@ HS2-ARJNJV). The unset setting preserves the existing integration and risk-tier
 gate defaults; `scripts/gate-ticket-profile.mjs` reads an explicit setting for
 local gate selection and enforces custom minimums. Under CI First,
 `scripts/gate-budget.mjs` and `scripts/local-gate.mjs` run a best-effort budgeted gate
-that defers unstarted stages to CI, and `scripts/main-integration-window.mjs`
+that defers unstarted stages to CI, `scripts/gate-browser-budget.mjs` caps browser cases
+to what fits after the floor (HS2-FXY4M2), and `scripts/main-integration-window.mjs`
 (`ciFirstPush`) lets `scripts/push.sh` push main without a receipt. Its
 `selectedSourceStore` falls back to the shipping checkout's `.hotsheet2/store` link
 from a linked worktree, and `authorizeMainState` names `coordination repair-identity`

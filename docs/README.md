@@ -232,7 +232,9 @@ notification, and the client implementations remain follow-ups.
 defines the versioned shared project policy and the Ticket Assured, Steady Main,
 and Risk Guided presets (HS2-BF79YX), plus validated named custom policies
 (HS2-ARJNJV). CI First (HS2-ZGS7JP, shipped) runs best-effort budgeted local checks,
-pushes to main without a full-gate receipt and makes the covering CI run the gate;
+keeps changed-spec and changed-module browser cases and caps other ranked cases to the budget left after the floor
+(HS2-FXY4M2, shipped), pushes to main without a full-gate receipt and makes the covering
+CI run the gate;
 its red-CI manifest builder (HS2-H21PJS) and stricter-gate fallback (HS2-KW2R9T) are
 deferred. Headless CLI, authenticated REST and the Project Settings editor
 use one policy workflow (HS2-NBDXPW); the editor previews session and ticket

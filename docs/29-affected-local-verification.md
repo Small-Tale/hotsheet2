@@ -353,6 +353,54 @@ same plan and receipt as every other stage. A rerun on the same inputs reuses pa
 deferred stages. Under CI First `scripts/push.sh` does not require the receipt at all;
 the covering main CI run is the gate.
 
+**Browser cases within the budget (HS2-FXY4M2).** Under CI First an unforced
+Playwright stage is not an uncapped floor. Before this change, a CSS edit in a component
+selected seven whole spec files, 11 provider cases and 5 ux-demo cases as a mandatory
+floor with an unknown cost. A changed `providers.spec.ts` once selected 621 cases. The
+planner splits each browser stage into units: one whole spec file, or one `--grep`
+alternative. Each unit gets a relevance rank:
+
+1. A changed spec's own tests: the changed titles, or the whole file when its edit has no
+   identified title.
+2. Named regressions: HS2-79GJYG demo-state checks, HS2-P9A21R and HS2-4S22C4 workspace
+   chrome cases, the HS2-WWZS75 startup spec, and contracts after a router or OpenAPI change.
+3. Specs and titles that exercise a changed module (HS2-N7EY18, HS2-R1D0S5, HS2-1DF5PQ).
+4. The baseline real-server contracts and shell composition.
+5. Path-name heuristics, such as terminal, timeline, command or attachment patterns.
+
+A unit's cost comes from the timing history (HS2-TCCKRZ, below). A whole file uses
+its per-file estimate. A grep alternative uses the p75 of that file's recorded passing
+cases, or else the file estimate divided by the spec's statically declared `test(` calls.
+That share overestimates a case in a spec that generates cases in loops. Each new
+Playwright command adds 5 seconds, and the first selected unit adds the fixture build.
+
+The maintainer chose to keep the cases for the changed module. Items 1 and 3 always run,
+even when the floor alone exceeds the budget. They count toward the floor and run first:
+
+- Changed-spec units (item 1) always run.
+- Exercised-module units (item 3) are kept cheapest first. Their cap is the larger of the
+  budget left after the floor and the changed-spec cost, plus `KEPT_EXTRA_MS` in
+  `scripts/gate-browser-budget.mjs` (3 minutes). This safety valve bounds an unusually
+  large exercised set. The rest of that set is deferred by name as
+  `deferred to CI by the kept-case cap`.
+
+Items 2, 4 and 5 fill only what the budget leaves after the floor and the kept cases. They
+are taken first fit in (rank, spec file, declared order) order, so the result does not
+depend on stage order. A unit with no recorded timing is deferred as unknown cost, even in
+item 3. An unknown floor estimate counts as zero here, and the run-time cut still bounds
+the gate.
+
+A stage whose units all share one decision keeps its command. A mixed stage becomes one
+runnable command per decision: changed spec, kept, selected, deferred and trimmed.
+Browser stages run changed spec first, then kept, then by rank, so the run-time cut
+reaches them last. The plan's `browserBudget` and the receipt's `bestEffort.browser`
+record the counts. They also list each kept case planned past the budget
+(`keptOverBudgetCases`, `keptOverBudgetMs`) and every deferred file or grep alternative.
+The final log line `Browser cases (HS2-FXY4M2): ...` shows the same. The deferred
+commands also appear in the plan and receipt deferrals. A forced browser stage
+(HS2-RRNZYN high-impact paths, `testing:browser`) and an explicitly proposed browser
+stage still run whole. Outside CI First, browser stages keep the HS2-GN06JT floor rules.
+
 ### Verified ticket worktree cleanup (HS2-HR3ZX4)
 
 After a direct ticket or reviewed code handoff is completed, its claim is released,

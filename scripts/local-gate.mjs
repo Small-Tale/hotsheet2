@@ -11,6 +11,7 @@ import { ciBrowserMatrix, gateBrowserCoverage, WORKFLOWS } from './browser-engin
 import { edgePreviewForRepo } from './gate-edge-plan.mjs';
 import { platformCfgForRepo } from './platform-cfg.mjs';
 import { contractInputsChanged, highImpactBrowserChange, parseBudget, selectBudget } from './gate-budget.mjs';
+import { BROWSER_RANK, countDeclaredTests } from './gate-browser-budget.mjs';
 import { readTicketProfile } from './gate-ticket-profile.mjs';
 import {
   planIdentity,
@@ -200,18 +201,43 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
       classifyPath(path).groups.includes?.('web'),
   );
   if (!full && !webChanged && !contractInputsChanged(changes)) return [];
-  const files = new Set(['tests/contracts.spec.ts']);
-  if (full || webChanged) files.add('tests/shell-composition.spec.ts');
+  // HS2-FXY4M2: every file and grep alternative keeps the relevance rank the best-effort
+  // browser budget orders by; a file added for several reasons keeps its most relevant rank.
+  const fileRanks = new Map();
+  const files = {
+    add(file, rank) {
+      fileRanks.set(file, Math.min(rank, fileRanks.get(file) ?? Infinity));
+    },
+    has: (file) => fileRanks.has(file),
+    [Symbol.iterator]: () => fileRanks.keys(),
+  };
+  files.add(
+    'tests/contracts.spec.ts',
+    contractInputsChanged(changes) ? BROWSER_RANK.regression : BROWSER_RANK.baseline,
+  );
+  if (full || webChanged) files.add('tests/shell-composition.spec.ts', BROWSER_RANK.baseline);
   const reasons = [
     full || webChanged
       ? 'real-server contracts and shipped shell composition'
       : 'HS2-PDNJA0: router or OpenAPI contract changed',
   ];
-  for (const file of exercised?.files ?? []) files.add(file);
-  if (exercised?.providerWhole) files.add('tests/providers.spec.ts');
+  for (const file of exercised?.files ?? []) files.add(file, BROWSER_RANK.exercised);
+  if (exercised?.providerWhole) files.add('tests/providers.spec.ts', BROWSER_RANK.exercised);
   reasons.push(...(exercised?.reasons ?? []));
   const scoped = [];
   const priority = [];
+  /** A `--grep` stage over one spec file; each alternative keeps its rank (HS2-FXY4M2). */
+  const grepStage = (file, alternatives, stageReasons, command) => ({
+    cwd: 'clients/web',
+    group: 'web',
+    selected: true,
+    command:
+      command ??
+      `npx playwright test ${quote(file)} --grep ${quote(alternatives.map((entry) => entry.pattern).join('|'))}`,
+    reasons: stageReasons,
+    browser: { file, alternatives },
+  });
+  const ranked = (patterns, rank) => patterns.map((pattern) => ({ pattern, rank }));
   // HS2-79GJYG: a full browser command can consume CI First's budget before Playwright reaches
   // the late ux-demo spec. Run the small shared app-shell/demo-state contract first, including
   // catalog specimen counts and the interactive project-tab state that escaped HS2-TGYKHQ.
@@ -219,37 +245,45 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
     /^clients\/web\/src\/ux-demo\/(?:app-shell-demo\.tsx|components\/demo-state\.ts)$/.test(path),
   );
   if (sharedDemoStateChanged)
-    priority.push({
-      cwd: 'clients/web',
-      group: 'web',
-      selected: true,
-      command:
-        "npx playwright test 'tests/ux-demo.spec.ts' --grep 'labels converted demo specimens through Kerf CatalogExample|represents the application states extracted from main\\.tsx|operates the project tab bar across pointer, keyboard, and responsive states|reorders demo project tabs through Kerf wireTabBars'",
-      reasons: ['HS2-79GJYG: shared demo state needs an early catalog and project-tab browser check'],
-    });
+    priority.push(
+      grepStage(
+        'tests/ux-demo.spec.ts',
+        ranked(
+          [
+            'labels converted demo specimens through Kerf CatalogExample',
+            'represents the application states extracted from main\\.tsx',
+            'operates the project tab bar across pointer, keyboard, and responsive states',
+            'reorders demo project tabs through Kerf wireTabBars',
+          ],
+          BROWSER_RANK.regression,
+        ),
+        ['HS2-79GJYG: shared demo state needs an early catalog and project-tab browser check'],
+      ),
+    );
   for (const path of changes) {
     if (/^clients\/web\/tests\/.*\.spec\.ts$/.test(path) && !path.endsWith('/providers.spec.ts')) {
       const file = path.replace('clients/web/', '');
       const titles = testTitles[path];
       if (titles?.length)
-        scoped.push({
-          cwd: 'clients/web',
-          group: 'web',
-          selected: true,
-          command: `npx playwright test ${quote(file)} --grep ${quote(
-            titles.map((title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
-          )}`,
-          reasons: ['changed browser test bodies with statically identified parents'],
-        });
-      else files.add(file);
+        scoped.push(
+          grepStage(
+            file,
+            ranked(
+              titles.map((title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+              BROWSER_RANK.changed,
+            ),
+            ['changed browser test bodies with statically identified parents'],
+          ),
+        );
+      else files.add(file, BROWSER_RANK.changed);
     }
-    if (/terminal|dashboard/.test(path)) files.add('tests/terminal-feedback.spec.ts');
-    if (/timeline/.test(path)) files.add('tests/ticket-timeline-usage.spec.ts');
+    if (/terminal|dashboard/.test(path)) files.add('tests/terminal-feedback.spec.ts', BROWSER_RANK.heuristic);
+    if (/timeline/.test(path)) files.add('tests/ticket-timeline-usage.spec.ts', BROWSER_RANK.heuristic);
   }
   // HS2-WWZS75: startup code must still boot in WebKit on an insecure LAN origin whose random
   // source fails. HS2-2MZWZT escaped to CI because only the provider suite was selected here.
   if (changes.some((path) => /^clients\/web\/src\/(?:app\/|main\.tsx$|browser-id\.ts$)/.test(path))) {
-    files.add('tests/terminal-safari.spec.ts');
+    files.add('tests/terminal-safari.spec.ts', BROWSER_RANK.regression);
     reasons.push('HS2-WWZS75: app startup must boot under degraded WebKit browser APIs');
   }
   const workspaceChromeChanged = changes.some((path) =>
@@ -258,94 +292,103 @@ export function browserStages(changes, full, providerTitles = [], testTitles = {
     ),
   );
   if (workspaceChromeChanged) {
-    scoped.push({
-      cwd: 'clients/web',
-      group: 'web',
-      selected: true,
-      command:
-        "npx playwright test 'tests/mobile-layout.spec.ts' --grep 'mobile viewport uses a single-column layout|resizing from mobile back to desktop'",
-      reasons: ['HS2-P9A21R: workspace navigation must retain reachable phone toggles through resize'],
-    });
-    scoped.push({
-      cwd: 'clients/web',
-      group: 'web',
-      selected: true,
-      command:
-        "npx playwright test 'tests/search-scope.spec.ts' --grep 'keeps the workspace title whole when a search changes it to a longer title'",
-      reasons: ['HS2-P9A21R: title-only search transitions must remeasure workspace action overflow'],
-    });
+    scoped.push(
+      grepStage(
+        'tests/mobile-layout.spec.ts',
+        ranked(
+          ['mobile viewport uses a single-column layout', 'resizing from mobile back to desktop'],
+          BROWSER_RANK.regression,
+        ),
+        ['HS2-P9A21R: workspace navigation must retain reachable phone toggles through resize'],
+      ),
+    );
+    scoped.push(
+      grepStage(
+        'tests/search-scope.spec.ts',
+        ranked(
+          ['keeps the workspace title whole when a search changes it to a longer title'],
+          BROWSER_RANK.regression,
+        ),
+        ['HS2-P9A21R: title-only search transitions must remeasure workspace action overflow'],
+      ),
+    );
     // HS2-4S22C4: HS2-6PZ35D narrowed the phone workspace search from app-shell.tsx and escaped to
     // CI twice, once through these warm-switch width cases and once through the GRAQ2K focus case.
-    scoped.push({
-      cwd: 'clients/web',
-      group: 'web',
-      selected: true,
-      command: "npx playwright test 'tests/project-tab-warm-cache.spec.ts' --grep 'HS2-RDFY4A|HS2-C5Y899'",
-      reasons: ['HS2-4S22C4: workspace chrome changes must keep the measured workspace search width across switches'],
-    });
+    scoped.push(
+      grepStage('tests/project-tab-warm-cache.spec.ts', ranked(['HS2-RDFY4A', 'HS2-C5Y899'], BROWSER_RANK.regression), [
+        'HS2-4S22C4: workspace chrome changes must keep the measured workspace search width across switches',
+      ]),
+    );
   }
   // Provider flows share one large file. A bounded grep preserves the affected shipped parents.
   const patterns = [];
   if (workspaceChromeChanged)
     patterns.push(
-      'projects Kerf workspace segments through mode transitions',
-      // HS2-4S22C4: the second HS2-6PZ35D escape; workspace search focus lives in the same chrome.
-      'keeps workspace search focused after Select All deletion',
+      ...ranked(
+        [
+          'projects Kerf workspace segments through mode transitions',
+          // HS2-4S22C4: the second HS2-6PZ35D escape; workspace search focus lives in the same chrome.
+          'keeps workspace search focused after Select All deletion',
+        ],
+        BROWSER_RANK.regression,
+      ),
     );
   const escapeTitle = (title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // HS2-EWF0FT escape: the demo spec is large too; a demo change runs only the tests that open it.
   if (exercised?.demoTitles?.length)
-    scoped.push({
-      cwd: 'clients/web',
-      group: 'web',
-      selected: true,
-      command: `npx playwright test ${quote('tests/ux-demo.spec.ts')} --grep ${quote(exercised.demoTitles.map(escapeTitle).join('|'))}`,
-      reasons: ['HS2-N7EY18/HS2-R1D0S5: ux-demo tests that open or render the changed module'],
-    });
+    scoped.push(
+      grepStage('tests/ux-demo.spec.ts', ranked(exercised.demoTitles.map(escapeTitle), BROWSER_RANK.exercised), [
+        'HS2-N7EY18/HS2-R1D0S5: ux-demo tests that open or render the changed module',
+      ]),
+    );
   // HS2-1DF5PQ: tests in other specs that walk the whole demo catalog, by title.
   for (const [file, titles] of Object.entries(exercised?.scopedTitles ?? {}))
     if (!files.has(file))
-      scoped.push({
-        cwd: 'clients/web',
-        group: 'web',
-        selected: true,
-        command: `npx playwright test ${quote(file)} --grep ${quote(titles.map(escapeTitle).join('|'))}`,
-        reasons: ['HS2-1DF5PQ: catalog-walking tests render every ux-demo entry, including a changed or new one'],
-      });
-  patterns.push(...providerTitles.map(escapeTitle));
+      scoped.push(
+        grepStage(file, ranked(titles.map(escapeTitle), BROWSER_RANK.exercised), [
+          'HS2-1DF5PQ: catalog-walking tests render every ux-demo entry, including a changed or new one',
+        ]),
+      );
+  patterns.push(...ranked(providerTitles.map(escapeTitle), BROWSER_RANK.changed));
   if (changes.includes('clients/web/tests/providers.spec.ts') && !providerTitles.length) {
-    files.add('tests/providers.spec.ts');
+    files.add('tests/providers.spec.ts', BROWSER_RANK.changed);
     reasons.push('shared or unclassified provider fixture change requires the full affected file');
   }
-  if (changes.some((path) => /command/.test(path))) patterns.push('command.*(run|launch)|launch.*history');
-  if (changes.some((path) => /attachment/.test(path))) patterns.push('attachment.*(batch|purpose|image|preview)');
-  if (changes.some((path) => /code-review/.test(path))) patterns.push('Code Review|associated commits|change evidence');
+  if (changes.some((path) => /command/.test(path)))
+    patterns.push(...ranked(['command.*(run|launch)', 'launch.*history'], BROWSER_RANK.heuristic));
+  if (changes.some((path) => /attachment/.test(path)))
+    patterns.push(...ranked(['attachment.*(batch|purpose|image|preview)'], BROWSER_RANK.heuristic));
+  if (changes.some((path) => /code-review/.test(path)))
+    patterns.push(...ranked(['Code Review', 'associated commits', 'change evidence'], BROWSER_RANK.heuristic));
   if (
     !patterns.length &&
     changes.some((path) => /^clients\/web\/src\/(app\/|state|routing|render|auth|credentials)/.test(path))
   ) {
-    files.add('tests/providers.spec.ts');
+    files.add('tests/providers.spec.ts', BROWSER_RANK.heuristic);
     reasons.push('shared application infrastructure without a narrower feature boundary requires the provider suite');
   }
   // HS2-R1D0S5: provider tests that render or exercise a changed module through its shipped parent.
-  patterns.push(...(exercised?.providerTitles ?? []).map(escapeTitle));
+  patterns.push(...ranked((exercised?.providerTitles ?? []).map(escapeTitle), BROWSER_RANK.exercised));
+  const sortedFiles = [...files].sort();
   const result = [
     {
       cwd: 'clients/web',
       group: 'web',
       selected: true,
-      command: `npx playwright test ${[...files].sort().map(quote).join(' ')}`,
+      command: `npx playwright test ${sortedFiles.map(quote).join(' ')}`,
       reasons,
+      browser: { files: sortedFiles.map((file) => ({ file, rank: fileRanks.get(file) })) },
     },
   ];
   if (patterns.length && !files.has('tests/providers.spec.ts'))
-    result.push({
-      cwd: 'clients/web',
-      group: 'web',
-      selected: true,
-      command: `npx playwright test tests/providers.spec.ts --grep ${quote(patterns.join('|'))}`,
-      reasons: ['affected provider-backed parent flows'],
-    });
+    result.push(
+      grepStage(
+        'tests/providers.spec.ts',
+        patterns,
+        ['affected provider-backed parent flows'],
+        `npx playwright test tests/providers.spec.ts --grep ${quote(patterns.map((entry) => entry.pattern).join('|'))}`,
+      ),
+    );
   return [
     {
       cwd: 'clients/web',
@@ -472,6 +515,21 @@ export function performanceStages(changes) {
       reasons: ['testing:perf selects the web performance baseline'],
     });
   return stages;
+}
+
+/** HS2-FXY4M2: declared cases per spec file a budgeted browser stage names, for per-case estimates. */
+function browserCaseCounts(repo, stages) {
+  const files = new Set(
+    stages.flatMap((stage) =>
+      stage.browser ? (stage.browser.files?.map((entry) => entry.file) ?? [stage.browser.file]) : [],
+    ),
+  );
+  const counts = {};
+  for (const file of files) {
+    const path = join(repo, 'clients/web', file);
+    if (existsSync(path)) counts[file] = countDeclaredTests(readFileSync(path, 'utf8'));
+  }
+  return counts;
 }
 
 function budgetConfig(repo) {
@@ -731,6 +789,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
     full: selected.mode === 'full' || profile?.deep === true,
     fullReason: profile?.deep ? 'deep-testing tag' : 'full fallback',
     bestEffort,
+    browserCaseCounts: browserCaseCounts(repo, affected),
   });
   const chosen = budgeted.selected;
   // HS2-PNBH4X: refuse a stale or missing install in any selected Node package, and bind the exact
@@ -815,6 +874,17 @@ function recordedT2Selection(repo, base, full, versions, selection) {
     if (before.key === receipt.key) return { selection: candidate, before };
   }
   return undefined;
+}
+
+/** HS2-FXY4M2: the browser case split a handoff quotes, naming every case left to CI. */
+export function browserBudgetLine(browser) {
+  const list = (names) => names.map((name) => `\n  ${name}`).join('');
+  const over = browser.keptOverBudgetCases.length
+    ? `; ${browser.keptOverBudgetCases.length} kept over budget by ${browser.keptOverBudgetMs}ms:${list(browser.keptOverBudgetCases)}`
+    : '';
+  return `Browser cases (HS2-FXY4M2): ${browser.mandatory} changed-spec, ${browser.kept} changed-module and ${browser.selected} budgeted case(s) planned in ${browser.plannedMs}ms of the ${Math.max(0, browser.remainingMs)}ms left after the floor${over}; ${browser.deferred} deferred to CI${
+    browser.deferredCases.length ? `:${list(browser.deferredCases)}` : ''
+  }`;
 }
 
 /** HS2-A7X8F5: a handoff quotes this so nobody reads a pass on this host as other-platform evidence. */
@@ -1144,6 +1214,8 @@ export function runGate(options = {}) {
                 .map((stage) => `${stage.cwd}::${stage.command}`),
               plannedDeferred: omittedStages.map((stage) => `${stage.cwd}::${stage.command}`),
               runtimeDeferred: runtimeDeferred.map((stage) => `${stage.cwd}::${stage.command}`),
+              // HS2-FXY4M2: the browser cases the budget ran and the ones it left to CI.
+              browser: before.browserBudget,
             },
           }
         : {}),
@@ -1174,6 +1246,8 @@ export function runGate(options = {}) {
         left.length ? `\n${left.map((stage) => `  ${stage.cwd}: ${stage.command}`).join('\n')}` : 'none'
       }`,
     );
+    const browser = before.browserBudget;
+    if (browser) log(browserBudgetLine(browser));
   }
   // HS2-HW6VED: the engine facts a handoff quotes; the full CI matrix is in the receipt and --plan.
   if (before.browserCoverage) {
