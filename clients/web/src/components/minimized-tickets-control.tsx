@@ -4,21 +4,17 @@ import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { delegate } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
-import { CircleAlert, Layers2, X } from 'lucide';
+import { Layers2, X } from 'lucide';
 
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
-import { defaultCategoryPresentation } from './category-presentation';
+import type { MinimizedDialogItem } from '../minimized-dialogs';
 
-/** One minimized ticket reader as the floating control lists it (HS2-Q8WF64). */
-export interface MinimizedTicketSummary {
-  /** The minimized reader frame id the restore action names. */
-  id: string;
-  slug: string;
-  title: string;
-  category: string;
-  /** The draft indicator, such as "Unsent note", when closing this reader would lose a draft. */
-  draft?: string;
-}
+/**
+ * One minimized dialog as the floating control lists it: a ticket reader (HS2-Q8WF64) or another
+ * minimized dialog kind such as the new-ticket composer (HS2-3JR0ZH). `minimizedAt` is optional
+ * here because the control lists items in the order it is given.
+ */
+export type MinimizedTicketSummary = Omit<MinimizedDialogItem, 'minimizedAt'> & { minimizedAt?: number };
 
 export interface MinimizedTicketsControlProps {
   tickets: readonly MinimizedTicketSummary[];
@@ -27,24 +23,12 @@ export interface MinimizedTicketsControlProps {
 /** The control's Lucide icon everywhere it stands for minimized tickets, chosen by the maintainer (HS2-Q8WF64). */
 const MINIMIZED_ICON = <LucideIcon icon={Layers2} name="layers-2" />;
 
-function ticketLabel(ticket: MinimizedTicketSummary) {
-  return `${ticket.slug} ${ticket.title}`.trim();
-}
-
-function categoryIcon(category: string) {
-  const presentation = defaultCategoryPresentation(category);
-  return presentation ? (
-    <LucideIcon icon={presentation.icon} name={presentation.iconName} />
-  ) : (
-    <LucideIcon icon={CircleAlert} name="circle-alert" />
-  );
-}
-
 /**
- * The minimized ticket readers of the current project tab (HS2-Q8WF64), as one button in the
- * workspace's floating control cluster beside the Terminal Drawer button. One minimized ticket
- * restores on click. Several show a corner count and open a menu that lists each ticket with its
- * draft indicator, then Restore All and Close All…. Renders nothing while no ticket is minimized.
+ * The minimized dialogs of the current project tab (ticket readers, HS2-Q8WF64, and the new-ticket
+ * composer, HS2-3JR0ZH), as one button in the workspace's floating control cluster beside the
+ * Terminal Drawer button. One minimized item restores on click. Several show a corner count and
+ * open a menu that lists each item with its draft indicator, then Restore All and Close All….
+ * Renders nothing while nothing is minimized.
  */
 export function MinimizedTicketsControl({ tickets }: MinimizedTicketsControlProps) {
   const only = tickets.at(0);
@@ -55,10 +39,11 @@ export function MinimizedTicketsControl({ tickets }: MinimizedTicketsControlProp
         <button
           type="button"
           {...INSPECTOR_AND_EDITOR_ACTIONS.restoreMinimizedTicket.attrs}
-          data-minimized-reader-id={only.id}
+          data-minimized-item-id={only.id}
+          data-minimized-kind={only.kind}
           data-minimized-tickets-control="single"
-          aria-label={`Restore ${ticketLabel(only)}${only.draft ? ` (${only.draft})` : ''}`}
-          title={`Restore ${only.slug}`}
+          aria-label={`Restore ${only.label}${only.draft ? ` (${only.draft})` : ''}`}
+          title={`Restore ${only.shortLabel}`}
         >
           {MINIMIZED_ICON}
         </button>
@@ -67,15 +52,15 @@ export function MinimizedTicketsControl({ tickets }: MinimizedTicketsControlProp
   const items: PopupMenuEntry[] = [
     { kind: 'heading', label: 'Minimized Tickets' },
     ...tickets.map((ticket): PopupMenuEntry => ({
-      label: ticketLabel(ticket),
+      label: ticket.label,
       action: INSPECTOR_AND_EDITOR_ACTIONS.restoreMinimizedTicket.value,
-      icon: categoryIcon(ticket.category),
+      icon: <LucideIcon icon={ticket.icon.icon} name={ticket.icon.name} />,
       details: ticket.draft ? (
         <Badge tone="warning" appearance="solid" size="compact">
           {ticket.draft}
         </Badge>
       ) : undefined,
-      attributes: { 'data-minimized-reader-id': ticket.id },
+      attributes: { 'data-minimized-item-id': ticket.id, 'data-minimized-kind': ticket.kind },
     })),
     { kind: 'divider' },
     {
@@ -117,12 +102,12 @@ export interface MinimizedTicketsControlBindings {
   readonly closeAll: () => void;
 }
 
-/** Wire every MinimizedTicketsControl under `root`; production restores readers, the demo a fixture. */
+/** Wire every MinimizedTicketsControl under `root`; production restores dialogs, the demo a fixture. */
 export function wireMinimizedTicketsControl(root: HTMLElement, bindings: MinimizedTicketsControlBindings): () => void {
   const lifetime = createScope();
   lifetime.add(
     delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.restoreMinimizedTicket.selector, (_event, target) => {
-      const id = (target as HTMLElement).dataset.minimizedReaderId;
+      const id = (target as HTMLElement).dataset.minimizedItemId;
       if (id) bindings.restore(id);
     }),
   );

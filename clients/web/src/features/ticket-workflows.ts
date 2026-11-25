@@ -291,6 +291,8 @@ export interface TicketWorkflowDependencies {
   activeTicketSurface: () => ParentNode;
   draftScope: (kind: 'composer' | 'not-working', projectId?: string) => string;
   ago: (value?: string) => string;
+  /** The composer opened in this project, so a minimized composer there is restored (HS2-3JR0ZH). */
+  composerOpened?: (projectId: string | undefined) => void;
 }
 
 /** A saved human note waiting on the app-level Choose/Start an AI Session prompt (HS2-6RXBS9). */
@@ -466,6 +468,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     activeTicketSurface,
     draftScope,
     ago,
+    composerOpened,
   } = dependencies;
   /** Each project's median phase durations for the in-progress timeline stage, loaded once (HS2-ST6RN1). */
   const typicalPhasesByProject = signal<Record<string, Readonly<Record<string, number>>>>({});
@@ -2542,6 +2545,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     if (!composerTitle.value.trim() && !composerDetails.value.trim() && !composerUpNext.value)
       composerBacklog.value = newTicketStatusForView(selectedView.value) === 'backlog';
     composerExpanded.value = true;
+    composerOpened?.(projectId);
     scheduleProjectSessionPersistence();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {

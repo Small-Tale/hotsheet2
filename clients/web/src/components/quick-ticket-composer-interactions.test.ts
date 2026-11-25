@@ -60,6 +60,7 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     clearAttachments: vi.fn(),
     draggingTickets: () => ticketDrag,
     submit: vi.fn(),
+    minimize: vi.fn(),
   };
   wireQuickTicketComposer({} as HTMLElement, bindings);
 
@@ -88,6 +89,20 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     expect(bindings.clearAttachments).toHaveBeenCalledTimes(1);
     expect(submit.preventDefault).toHaveBeenCalled();
     expect(bindings.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('HS2-3JR0ZH minimizes from its control without taking focus, and its later hide is no dismissal', () => {
+    const press = cancelable();
+    handler('mousedown', 'minimize-ticket-composer')(press, {});
+    expect(press.preventDefault).toHaveBeenCalledTimes(1);
+    handler('click', 'minimize-ticket-composer')({}, {});
+    expect(bindings.minimize).toHaveBeenCalledTimes(1);
+    // Minimizing collapses the composer before Web Awesome hides it, so the draft is kept.
+    const popup = {};
+    expanded = false;
+    handler('capture:wa-hide', 'quick-ticket-composer')(cancelable({ target: popup }), popup);
+    handler('capture:wa-after-hide', 'quick-ticket-composer')({ target: popup }, popup);
+    expect(bindings.dismissed).not.toHaveBeenCalled();
   });
 
   it('refuses to hide while submitting and resets a user-dismissed expanded composer', () => {

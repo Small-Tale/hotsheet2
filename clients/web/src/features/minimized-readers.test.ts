@@ -1,4 +1,5 @@
 import { signal } from 'kerfjs';
+import { Sparkles } from 'lucide';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Capabilities, FullTicket, Note } from '../api';
@@ -239,13 +240,16 @@ describe('minimizing a linked reader (HS2-Q8WF64)', () => {
     });
     expect(minimized.frame).toEqual({ ...top, open: false });
     expect(h.stored().map((item) => item.id)).toEqual([top.id]);
+    // Summaries are minimized dialog items (HS2-3JR0ZH): a reader's label is its slug and title.
     expect(h.controller.summaries()).toEqual([
       {
         id: top.id,
-        slug: 'HS2-B',
-        title: 'Synthetic b',
-        category: 'feature',
+        kind: 'ticket-reader',
+        label: 'HS2-B Synthetic b',
+        shortLabel: 'HS2-B',
+        icon: { icon: Sparkles, name: 'sparkles' },
         draft: MINIMIZED_DRAFT_LABELS.unsentNote,
+        minimizedAt: minimized.minimizedAt,
       },
     ]);
     expect(h.calls.minimizeMotion).toBe(1);
@@ -367,7 +371,10 @@ describe('restoring minimized readers (HS2-Q8WF64)', () => {
       ]),
     );
     const h = harness({ minimized: stored });
-    expect(h.controller.summaries()[0]).toMatchObject({ slug: 'HS2-R', draft: MINIMIZED_DRAFT_LABELS.unsentNote });
+    expect(h.controller.summaries()[0]).toMatchObject({
+      shortLabel: 'HS2-R',
+      draft: MINIMIZED_DRAFT_LABELS.unsentNote,
+    });
     expect(await h.controller.restore('frame-r')).toBe(true);
     expect(h.fetchTicket).toHaveBeenCalledWith(project('beta'), 'git-local:r');
     const frame = h.linkedReaderStack.value.at(-1)!;

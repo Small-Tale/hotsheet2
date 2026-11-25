@@ -3,6 +3,7 @@ import type { InspectorTab } from './components/ticket-inspector';
 import { DETAILS_FEEDBACK_ID } from './feedback-needed';
 import type { InlineFeedbackReply } from './feedback-replies';
 import { isRecord, tryParseJson } from './json-value';
+import { loadMinimizedRecords, saveMinimizedRecords } from './minimized-dialogs';
 import { type TicketReaderEditState, ticketReaderEditState, type TicketReaderFrame } from './ticket-reader-stack';
 
 /**
@@ -58,6 +59,8 @@ export const MINIMIZED_DRAFT_LABELS = {
   unsavedEdit: 'Unsaved edit',
   unsentNote: 'Unsent note',
   reply: 'Reply in progress',
+  /** A minimized new-ticket composer holding a title, details, or staged files (HS2-3JR0ZH). */
+  newTicket: 'Unsaved ticket',
 } as const;
 
 export type MinimizedDraftLabel = (typeof MINIMIZED_DRAFT_LABELS)[keyof typeof MINIMIZED_DRAFT_LABELS];
@@ -290,21 +293,12 @@ export function parseMinimizedReaders(raw: string | null | undefined): Minimized
 }
 
 export function loadMinimizedReaders(storage: Pick<Storage, 'getItem'> | undefined): MinimizedReader[] {
-  try {
-    return parseMinimizedReaders(storage?.getItem(MINIMIZED_READERS_STORAGE_KEY));
-  } catch {
-    return [];
-  }
+  return loadMinimizedRecords(storage, MINIMIZED_READERS_STORAGE_KEY, parseMinimizedReaders);
 }
 
 export function saveMinimizedReaders(
   storage: Pick<Storage, 'setItem' | 'removeItem'> | undefined,
   list: readonly MinimizedReader[],
 ): void {
-  try {
-    if (list.length === 0) storage?.removeItem(MINIMIZED_READERS_STORAGE_KEY);
-    else storage?.setItem(MINIMIZED_READERS_STORAGE_KEY, serializeMinimizedReaders(list));
-  } catch {
-    // Storage may be unavailable (private mode, quota); the list still lives for this session.
-  }
+  saveMinimizedRecords(storage, MINIMIZED_READERS_STORAGE_KEY, list, serializeMinimizedReaders);
 }

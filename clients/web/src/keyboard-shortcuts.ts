@@ -137,7 +137,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
     id: 'minimize-ticket-reader',
     label: 'Minimize or Restore Ticket Reader',
     description:
-      'Minimize the open ticket reader, keeping its drafts; with no reader open, restore the minimized ticket or list them.',
+      'Minimize the open ticket reader or new-ticket composer, keeping its drafts; with neither open, restore the minimized item or list them.',
     group: 'Views & panels',
     defaultChord: { key: 'm', mod: true, alt: true, shift: true },
     editable: true,
