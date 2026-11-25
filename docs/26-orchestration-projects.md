@@ -5578,7 +5578,8 @@ and explicit dependencies, priority, etc, in mind)".
   (also before the default goal ticket exists), and each `goals` entry that is the
   default goal carries `default_goal: true`. The Orchestration header then adds
   `· Working through all open tickets`, and Propose Plan and Update Plan say they plan
-  from all open tickets.
+  from all open tickets. The No Plan Yet empty state says so too, with goal tickets
+  optional (HS2-GSRFG0); while explicit goals are open it proposes from them.
 - **New tickets later.** A ticket created in a target after the plan was proposed is
   planned by the next **Update Plan**, which re-plans the default goal beside the
   running plan (HS2-190RDX). While orchestration runs this happens on its own
@@ -5948,7 +5949,12 @@ A read on the server also starts the target followers of §26.9.
   first" (warning, naming the prerequisites whose gate is red) or "Reopened · the fix
   invalidated it" (warning). The timeline item carries that record as `provisional`
   (the ledger `state` and each gate's prerequisite, slug and `result`); confirmed work
-  keeps the plan's words.
+  keeps the plan's words. A running card whose run is not plainly at work says so on that
+  line instead of the busy Working state (HS2-FXY5QM): "Project unreachable" (warning),
+  "Cancelling", "No worker holds it" (warning; the run is `intervened`: its worker let go
+  of the claim, or a person or another worker took it) and "Paused", in that order when
+  several hold. The inspector's Run section words the run state ("Dispatched to a
+  worker", "No worker holds it") and adds a **Next** row with what a person can do.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
@@ -5968,7 +5974,11 @@ A read on the server also starts the target followers of §26.9.
   the tool the person drives with in this project. A proposed or paused plan has
   **Start Orchestration**, which turns `placement.automatic` on through the policy route
   of §26.8; it is disabled, with the reason, while there is no policy or the project's
-  type is Software (`project_software`, HS2-J3ZF27). No placement actor is needed: the
+  type is Software (`project_software`, HS2-J3ZF27). The reason is never only the disabled
+  button's title (HS2-1DC8X1): a proposed plan's dry-run banner ends with it, and a paused
+  plan that cannot start shows a **Start Orchestration Is Unavailable** banner with it.
+  When the fix is in Settings › Orchestration (no policy saved, no project added) the banner
+  offers **Open Orchestration Settings**. No placement actor is needed: the
   orchestrator acts as the orchestration project (HS2-XYAHB4). A Software project's kept
   automatic policy does not read as running. While running, **Pause** turns it off; running work
   continues. A policy that leaves placement Auto runs once the plan has a step, and the header
@@ -7011,7 +7021,11 @@ A ready card's **Why It Is Not Running** reads the scheduler's own explanation
 **Scheduler** says what the last pass decided ("Waits: the project's session limit is
 reached (last pass 14:02)") and **Next** when it looks again: the retry time a held
 resource's expiry or a backoff gives, or when something it waits on changes. Until it
-is read, the scheduler's last logged reason for the step stands in.
+is read, the scheduler's last logged reason for the step stands in. Every reason is in
+words, never a code (HS2-2Y535C): with no saved policy it says "Waits: no policy is
+saved yet; apply one in Settings › Orchestration", and a policy block names the limit
+that denied it ("the policy does not allow it (the machine's session limit is
+reached)"). A source policy test fails on a scheduler reason with no words.
 
 With no card selected, the inspector shows the **overview** (answer A): the
 orchestration project's name, then **Scheduler** (placement: automatic, paused or a

@@ -92,6 +92,15 @@ describe('OrchestrationTimelineView (HS2-J89JC7)', () => {
       OrchestrationTimelineView({ timeline: demoTimeline('no_plan'), propose: { available: true } }),
     );
     expect(ready).not.toMatch(/data-action="propose-orchestration-plan"[^>]*disabled/);
+    // HS2-GSRFG0: explicit goals are planned from; with none open, goal tickets are optional.
+    expect(ready).toContain('Propose a plan from the open goal tickets in this project.');
+    expect(ready).toContain('title="Propose a plan from the goal tickets"');
+    const allOpen = String(
+      OrchestrationTimelineView({ timeline: demoTimeline('no_plan'), propose: { available: true }, defaultGoal: true }),
+    );
+    expect(allOpen).toContain('Propose a plan to work through all open tickets of the chosen projects');
+    expect(allOpen).toContain('title="Propose a plan that works through all open tickets"');
+    expect(allOpen).not.toContain('Write goal tickets');
     const failed = String(OrchestrationTimelineView({ timeline: demoTimeline('running'), error: 'Offline.' }));
     expect(failed).toContain('The Orchestration Timeline Could Not Be Read');
     expect(failed).toContain('data-column-id="orchestration-done"');
@@ -150,9 +159,40 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
         },
       }),
     );
-    expect(blocked).toContain('Set the orchestration limits in Orchestration settings first');
+    expect(blocked).toContain('No policy is saved yet. Apply one in Orchestration settings first');
     expect(blocked).toMatch(
       /data-action="start-orchestration"[^>]*disabled|disabled[^>]*data-action="start-orchestration"/,
+    );
+    // HS2-1DC8X1: the dry-run banner offers the way to the setting.
+    expect(blocked).toContain('data-action="open-orchestration-settings"');
+    expect(blocked).toContain('Open Orchestration Settings');
+  });
+
+  it('HS2-1DC8X1 says why a paused plan cannot start, with the way to the setting', () => {
+    const paused = (start_blocked?: 'policy_absent' | 'project_software') =>
+      String(
+        OrchestrationToolbar({
+          timeline: {
+            ...demoTimeline('paused'),
+            kick_off: { can_start: start_blocked === undefined, can_pause: false, start_blocked },
+          },
+        }),
+      );
+    const absent = paused('policy_absent');
+    expect(absent).toContain('Start Orchestration Is Unavailable');
+    expect(absent).toContain(
+      'No policy is saved yet. Apply one in Orchestration settings first. Work already running continues.',
+    );
+    expect(absent).toContain('data-orchestration-start-blocked="policy_absent"');
+    expect(absent).toContain('data-action="open-orchestration-settings"');
+    // A reason changed elsewhere names it, with no Settings action.
+    const software = paused('project_software');
+    expect(software).toContain('Start Orchestration Is Unavailable');
+    expect(software).not.toContain('open-orchestration-settings');
+    // Nothing blocks: no banner, and a proposed plan with a policy has no settings action.
+    expect(paused()).not.toContain('Start Orchestration Is Unavailable');
+    expect(String(OrchestrationToolbar({ timeline: demoTimeline('proposed') }))).not.toContain(
+      'open-orchestration-settings',
     );
   });
 });
@@ -296,6 +336,17 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
       }),
     );
     expect(paused).toContain('data-control="resume"');
+    // HS2-FXY5QM: the run's state in words, and what a person can do when no worker holds it.
+    expect(paused).toContain('Dispatched to a worker, paused');
+    const gone = String(
+      OrchestrationInspector({
+        item: { ...item('step-3'), run: { ...item('step-3').run!, state: 'intervened' } },
+        timeline: demoTimeline('running'),
+      }),
+    );
+    expect(gone).toContain('No worker holds it');
+    expect(gone).toContain('Hand it off, record what happened with Correct…, or cancel the run.');
+    expect(gone).not.toContain('Intervened');
   });
 
   it('HS2-PR984R Where It Runs names the site the scheduler chose and its machine', () => {

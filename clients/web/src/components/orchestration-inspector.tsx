@@ -36,6 +36,8 @@ import {
   clockTime,
   itemSlug,
   machineLabel,
+  runAttention,
+  runStateText,
   stateBadge,
   toolLabel,
 } from '../orchestration-timeline-board';
@@ -233,11 +235,13 @@ function RunSection({
   clock: ClockFormat;
   details?: OrchestrationInspectorDetails;
 }) {
-  const run = item.run!;
+  const run = item.run!,
+    attention = item.state === 'running' || item.state === 'provisional' ? runAttention(run) : undefined;
   return (
     <OrchestrationInspectorSection label="Run">
       <ValueTable label="Run" density="compact" stackBelow="narrow">
-        <ValueTableRow label="State" value={`${sentence(run.state)}${run.paused ? ', paused' : ''}`} />
+        <ValueTableRow label="State" value={runStateText(run)} />
+        {attention?.next ? <ValueTableRow label="Next" value={attention.next} /> : undefined}
         <ValueTableRow
           label="Ticket"
           value={`${itemSlug(item)}: ${item.status ? words(item.status) : 'not read yet'}`}

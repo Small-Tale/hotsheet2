@@ -5,7 +5,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Sparkles, X } from 'lucide';
+import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Settings, Sparkles, X } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
@@ -13,6 +13,7 @@ import {
   type ClockFormat,
   clockTime,
   plannerWorkingLabel,
+  startBlockedInSettings,
   startBlockedReason,
   timelineStatus,
 } from '../orchestration-timeline-board';
@@ -74,6 +75,16 @@ export function OrchestrationToolbar({
   const goal = defaultGoal && timeline.phase !== 'no_projects' ? ' · Working through all open tickets' : '';
   const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
   const blocked = startBlockedReason(timeline);
+  // HS2-1DC8X1: the reason a person can act on is a banner with the way there, never only a disabled title.
+  const openSettings = startBlockedInSettings(timeline) ? (
+    <Button
+      size="compact"
+      action={ORCHESTRATION_ACTIONS.openOrchestrationSettings.value}
+      icon={<LucideIcon size="s" icon={Settings} name="settings" />}
+    >
+      Open Orchestration Settings
+    </Button>
+  ) : undefined;
   const updating = planning === 'updating';
   const answer =
     planning === 'asked' && question ? (
@@ -211,6 +222,21 @@ export function OrchestrationToolbar({
             detail={`Columns run from the newest work on the left to the first work on the right. Start Orchestration starts sessions within the Orchestration settings.${
               blocked ? ` ${blocked}.` : ''
             }`}
+            action={openSettings}
+            actionPlacement="below"
+          />
+        </List>
+      )}
+      {timeline.phase === 'paused' && blocked !== undefined && (
+        <List controlInsets="trl">
+          <StateBanner
+            copyLayout="stacked"
+            tone="warning"
+            title="Start Orchestration Is Unavailable"
+            detail={`${blocked}. Work already running continues.`}
+            action={openSettings}
+            actionPlacement="below"
+            rootAttributes={{ 'data-orchestration-start-blocked': timeline.kick_off.start_blocked ?? '' }}
           />
         </List>
       )}

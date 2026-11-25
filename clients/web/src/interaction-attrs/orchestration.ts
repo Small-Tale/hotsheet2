@@ -16,6 +16,8 @@ export const ORCHESTRATION_ACTIONS = {
   /** HS2-N5BDE4: open the goal ticket where the planner asked the person a question. */
   answerOrchestrationQuestion: action('answer-orchestration-question'),
   chooseOrchestrationProjects: action('choose-orchestration-projects'),
+  /** HS2-1DC8X1: a blocked Start Orchestration's banner opens the settings that unblock it. */
+  openOrchestrationSettings: action('open-orchestration-settings'),
   orchestrationRunControl: action('orchestration-run-control'),
   showOrchestrationRequest: action('show-orchestration-request'),
   openOrchestrationGoal: action('open-orchestration-goal'),

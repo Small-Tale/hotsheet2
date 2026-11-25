@@ -74,6 +74,9 @@ const REASONS: Readonly<Record<string, string>> = {
   requirement_unknown: 'its project’s machine has not said whether it meets a requirement of the step',
   permission_required: 'it waits for a person’s permission',
   actor_required: 'the scheduler has not looked at it yet',
+  // HS2-2Y535C: the explain answer's own codes for a step the pass did not rank.
+  policy_absent: 'no policy is saved yet; apply one in Settings › Orchestration',
+  not_considered: 'the scheduler has not looked at it yet',
 };
 
 export function schedulerReasonText(code: string): string {
@@ -92,7 +95,10 @@ const MODEL_DETAILS: Readonly<Record<string, string>> = {
 
 /** HS2-747WQA: a scheduler reason as a phrase, or its model-resolution detail in its place when it has one. */
 export function schedulerReasonWithModel(code: string, detail: string | undefined): string {
-  return (detail && MODEL_DETAILS[detail]) || schedulerReasonText(code);
+  if (detail && MODEL_DETAILS[detail]) return MODEL_DETAILS[detail];
+  // HS2-2Y535C: a policy block names the limit that denied it.
+  const limit = code === 'policy_denied' && detail ? SITE_PASS_DETAILS[detail] : undefined;
+  return limit ? `${schedulerReasonText(code)} (${limit})` : schedulerReasonText(code);
 }
 
 /** HS2-9FKTB3: why a site that could have taken the work was not chosen. */

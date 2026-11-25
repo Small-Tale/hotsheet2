@@ -579,3 +579,23 @@ describe('a pattern-only Models list that resolves to no model, in words (HS2-74
     });
   });
 });
+
+describe('HS2-2Y535C the explain answer’s own codes and a policy block, in words', () => {
+  it('words a step with no saved policy and one the pass did not rank, with no code left', () => {
+    const absent = explanationRows({ standing: 'not_placed', reason: 'policy_absent' }, clock);
+    expect(absent[0].value).toBe('Waits: no policy is saved yet; apply one in Settings › Orchestration');
+    const unranked = explanationRows({ standing: 'not_placed', reason: 'not_considered' }, clock);
+    expect(unranked[0].value).toBe('Waits: the scheduler has not looked at it yet');
+    for (const rows of [absent, unranked]) for (const row of rows) expect(row.value).not.toMatch(/_|policy absent/);
+  });
+
+  it('names the limit behind a policy block, and keeps the bare phrase for a limit it cannot word', () => {
+    expect(schedulerReasonWithModel('policy_denied', 'policy_machine_cap')).toBe(
+      'the policy does not allow it (the machine’s session limit is reached)',
+    );
+    expect(schedulerReasonWithModel('policy_denied', 'policy_future_rule')).toBe('the policy does not allow it');
+    expect(schedulerReasonWithModel('policy_denied', undefined)).toBe('the policy does not allow it');
+    // Another reason's detail is not a policy limit.
+    expect(schedulerReasonWithModel('target_cap', 'policy_machine_cap')).toBe('the project’s session limit is reached');
+  });
+});

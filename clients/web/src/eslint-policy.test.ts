@@ -576,6 +576,29 @@ describe('web ESLint policy', () => {
     expect([...codes].filter((code) => !(code in ORCHESTRATION_REFUSALS))).toEqual([]);
   });
 
+  it('HS2-2Y535C words every reason the scheduler gives for a step it does not place', async () => {
+    // `Blocker::code()` and the explain answer's own codes reach Why It Is Not Running as `reason`.
+    const { schedulerReasonText } = await import('./orchestration-scheduler');
+    const blocker = readFileSync(
+      new URL('../../../crates/hotsheet-ticketing/src/orchestration/scheduler.rs', import.meta.url),
+      'utf8',
+    );
+    const start = blocker.indexOf('pub fn code(', blocker.indexOf('impl Blocker {'));
+    const codes = [...blocker.slice(start, blocker.indexOf('\n    }\n', start)).matchAll(/"([a-z0-9_]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(codes.length).toBeGreaterThan(0);
+    const explain = readFileSync(
+      new URL('../../../crates/hotsheet-cli/src/orchestration/scheduler.rs', import.meta.url),
+      'utf8',
+    );
+    const own = /answer\.reason = if view\.enabled \{\s*"([a-z_]+)"\s*\} else \{\s*"([a-z_]+)"/.exec(explain);
+    expect(own).not.toBeNull();
+    codes.push(own![1], own![2]);
+    // An unworded code falls back to the code with spaces, which is what this case forbids.
+    expect(codes.filter((code) => schedulerReasonText(code) === code.replaceAll('_', ' '))).toEqual([]);
+  });
+
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     expect(config).not.toContain("files: ['src/main.tsx']");

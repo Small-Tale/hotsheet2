@@ -992,7 +992,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       const client = clientFor(current),
         stored = await client.orchestrationPolicy(current.id);
       if (!stored.policy) {
-        dependencies.showToast('Set the orchestration limits in Orchestration settings first.');
+        dependencies.showToast('No policy is saved yet. Apply one in Orchestration settings first.');
         return;
       }
       const placement = { ...(stored.policy.placement ?? {}), automatic };

@@ -11,11 +11,12 @@ import { wireOrchestrationTimeline } from '../components/orchestration-timeline-
 import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { TicketRow } from '../components/ticket-row';
-import type { TimelinePhase } from '../orchestration-timeline';
+import type { TimelineItem, TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
 import {
+  DEMO_NOW,
   demoClock,
   demoContention,
   demoDecisions,
@@ -38,6 +39,10 @@ export const orchestrationDemoSettings = {
   defaultGoal: signal(false),
   /** HS2-R2N33M: placement runs because the policy leaves it Auto and a plan exists. */
   autoPlacement: signal(false),
+  /** HS2-1DC8X1: no policy is saved, so Start Orchestration says why and offers the settings. */
+  policyAbsent: signal(false),
+  /** HS2-FXY5QM: the condition of API-12's run: '' is a worker at work. */
+  runCondition: signal(''),
   /** HS2-65AD6J: how the project's integrator stands for a card with a run; '' shows no Integration section. */
   integrator: signal('keep'),
   /** HS2-747WQA: what the ready DOC-9 waits for: a held resource, or a Models pattern that resolves to no model. */
@@ -77,6 +82,37 @@ const INTEGRATOR = [
   { value: 'none', label: 'Not Needed' },
 ];
 
+const RUN_CONDITIONS = [
+  { value: '', label: 'A Worker at Work' },
+  { value: 'intervened', label: 'No Worker Holds It' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'cancelling', label: 'Cancelling' },
+  { value: 'unreachable', label: 'Project Unreachable' },
+];
+
+/** HS2-FXY5QM: the running timeline with API-12's run in the chosen condition. */
+function runningTimeline(phase: TimelinePhase = 'running') {
+  const timeline = demoTimeline(phase),
+    condition = orchestrationDemoSettings.runCondition.value;
+  if (!condition) return timeline;
+  const change = (run: NonNullable<TimelineItem['run']>) => ({
+    ...run,
+    state: condition === 'intervened' ? 'intervened' : run.state,
+    paused: condition === 'paused' || run.paused,
+    cancel_requested: condition === 'cancelling' || run.cancel_requested,
+    unreachable_since_ms: condition === 'unreachable' ? DEMO_NOW - 600_000 : run.unreachable_since_ms,
+  });
+  return {
+    ...timeline,
+    waves: timeline.waves.map((wave) => ({
+      ...wave,
+      items: wave.items.map((item) =>
+        item.step_id === 'step-3' && item.run ? { ...item, run: change(item.run) } : item,
+      ),
+    })),
+  };
+}
+
 const DOC_WAITS = [
   { value: 'resource_held', label: 'A Held Resource' },
   { value: 'model_unresolved', label: 'Models Not Reported' },
@@ -102,6 +138,8 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.busy.value = false;
   settings.defaultGoal.value = false;
   settings.autoPlacement.value = false;
+  settings.policyAbsent.value = false;
+  settings.runCondition.value = '';
   settings.integrator.value = 'keep';
   settings.docWait.value = 'resource_held';
   settings.collapsed.value = [];
@@ -113,12 +151,14 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
         planning: settings.planning.value,
         integrator: settings.integrator.value,
         'doc-wait': settings.docWait.value,
+        'run-condition': settings.runCondition.value,
       },
       checked: {
         'propose-available': settings.proposeAvailable.value,
         busy: settings.busy.value,
         'default-goal': settings.defaultGoal.value,
         'auto-placement': settings.autoPlacement.value,
+        'policy-absent': settings.policyAbsent.value,
       },
     });
 }
@@ -129,13 +169,13 @@ const propose = () =>
     : { available: false, reason: 'Choose an AI tool for this project in Settings first' };
 
 const card = (step: string) => {
-  const timeline = demoTimeline('running');
+  const timeline = runningTimeline();
   return timelineCard(findTimelineItem(timeline, step)!.item, timeline, undefined, demoClock);
 };
 
 /** The work area: wide (grid, opened at its right end in the app) and phone (paged). */
 export function OrchestrationTimelineViewDemo() {
-  const timeline = demoTimeline(orchestrationDemoSettings.phase.value),
+  const timeline = runningTimeline(orchestrationDemoSettings.phase.value),
     view = (layout: 'grid' | 'paged') => (
       <OrchestrationTimelineView
         timeline={timeline}
@@ -145,6 +185,7 @@ export function OrchestrationTimelineViewDemo() {
         propose={propose()}
         planning={orchestrationDemoSettings.planning.value}
         busy={orchestrationDemoSettings.busy.value}
+        defaultGoal={orchestrationDemoSettings.defaultGoal.value}
         clock={demoClock}
       />
     );
@@ -207,6 +248,15 @@ export function OrchestrationToolbarDemo() {
             timeline={{
               ...demoTimeline(value),
               automatic_by_default: value === 'running' && orchestrationDemoSettings.autoPlacement.value,
+              ...((value === 'proposed' || value === 'paused') && orchestrationDemoSettings.policyAbsent.value
+                ? {
+                    kick_off: {
+                      ...demoTimeline(value).kick_off,
+                      can_start: false,
+                      start_blocked: 'policy_absent' as const,
+                    },
+                  }
+                : {}),
             }}
             propose={propose()}
             update={propose()}
@@ -224,7 +274,7 @@ export function OrchestrationToolbarDemo() {
 
 /** The inspector of the selected card, in the state the settings choose. */
 export function OrchestrationInspectorDemo() {
-  const timeline = demoTimeline('running'),
+  const timeline = runningTimeline(),
     found = findTimelineItem(timeline, orchestrationDemoSettings.selected.value);
   return (
     <>
@@ -363,9 +413,11 @@ export function OrchestrationDemoSettings() {
       <Select name="planning" label="Planning Session" value={settings.planning.value} choices={PLANNING} />
       <Select name="integrator" label="Integrator" value={settings.integrator.value} choices={INTEGRATOR} />
       <Select name="doc-wait" label="DOC-9 Waits For" value={settings.docWait.value} choices={DOC_WAITS} />
+      <Select name="run-condition" label="API-12’s Run" value={settings.runCondition.value} choices={RUN_CONDITIONS} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />
+      <Checkbox name="policy-absent" checked={settings.policyAbsent.value} label="No Policy Saved" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
@@ -387,9 +439,11 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'planning') settings.planning.value = control.value;
       if (name === 'integrator') settings.integrator.value = control.value;
       if (name === 'doc-wait') settings.docWait.value = control.value;
+      if (name === 'run-condition') settings.runCondition.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
       if (name === 'auto-placement') settings.autoPlacement.value = control.checked;
+      if (name === 'policy-absent') settings.policyAbsent.value = control.checked;
     }),
   );
   scope.add(
