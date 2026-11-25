@@ -185,6 +185,7 @@ export function OrchestrationTimelineViewDemo() {
         propose={propose()}
         planning={orchestrationDemoSettings.planning.value}
         busy={orchestrationDemoSettings.busy.value}
+        defaultGoal={orchestrationDemoSettings.defaultGoal.value}
         clock={demoClock}
       />
     );

@@ -92,6 +92,15 @@ describe('OrchestrationTimelineView (HS2-J89JC7)', () => {
       OrchestrationTimelineView({ timeline: demoTimeline('no_plan'), propose: { available: true } }),
     );
     expect(ready).not.toMatch(/data-action="propose-orchestration-plan"[^>]*disabled/);
+    // HS2-GSRFG0: explicit goals are planned from; with none open, goal tickets are optional.
+    expect(ready).toContain('Propose a plan from the open goal tickets in this project.');
+    expect(ready).toContain('title="Propose a plan from the goal tickets"');
+    const allOpen = String(
+      OrchestrationTimelineView({ timeline: demoTimeline('no_plan'), propose: { available: true }, defaultGoal: true }),
+    );
+    expect(allOpen).toContain('Propose a plan to work through all open tickets of the chosen projects');
+    expect(allOpen).toContain('title="Propose a plan that works through all open tickets"');
+    expect(allOpen).not.toContain('Write goal tickets');
     const failed = String(OrchestrationTimelineView({ timeline: demoTimeline('running'), error: 'Offline.' }));
     expect(failed).toContain('The Orchestration Timeline Could Not Be Read');
     expect(failed).toContain('data-column-id="orchestration-done"');

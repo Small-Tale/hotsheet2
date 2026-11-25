@@ -5578,7 +5578,8 @@ and explicit dependencies, priority, etc, in mind)".
   (also before the default goal ticket exists), and each `goals` entry that is the
   default goal carries `default_goal: true`. The Orchestration header then adds
   `· Working through all open tickets`, and Propose Plan and Update Plan say they plan
-  from all open tickets.
+  from all open tickets. The No Plan Yet empty state says so too, with goal tickets
+  optional (HS2-GSRFG0); while explicit goals are open it proposes from them.
 - **New tickets later.** A ticket created in a target after the plan was proposed is
   planned by the next **Update Plan**, which re-plans the default goal beside the
   running plan (HS2-190RDX). While orchestration runs this happens on its own
