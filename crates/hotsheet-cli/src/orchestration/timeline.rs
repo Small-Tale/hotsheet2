@@ -337,7 +337,10 @@ impl OrchestrationRuntime {
                 (step_id.clone(), placed)
             })
             .collect();
+        // HS2-CQ0PNT: runs, labels and prerequisites join a step through any site.
+        let sites = self.project_sites(owner_id)?;
         let input = TimelineInput {
+            sites: &sites,
             owner_checkout_id: owner_id,
             now_ms,
             declared,

@@ -496,15 +496,21 @@ pub struct GateFilter {
     pub commit: Option<String>,
     /// Leave out superseded gates.
     pub current_only: bool,
+    /// HS2-CQ0PNT: with `target_id`, also the gates of every other site of its
+    /// project, which is the same code project and so the same commits.
+    pub sites: Option<ProjectSites>,
 }
 
 impl GateFilter {
     fn matches(&self, gate: &Gate) -> bool {
         self.run_id.as_ref().is_none_or(|id| &gate.run_id == id)
-            && self
-                .target_id
-                .as_ref()
-                .is_none_or(|id| &gate.target_id == id)
+            && self.target_id.as_ref().is_none_or(|id| {
+                &gate.target_id == id
+                    || self
+                        .sites
+                        .as_ref()
+                        .is_some_and(|sites| sites.same_project(id, &gate.target_id))
+            })
             && self.commit.as_ref().is_none_or(|sha| &gate.commit == sha)
             && !(self.current_only && gate.state == GateState::Superseded)
     }

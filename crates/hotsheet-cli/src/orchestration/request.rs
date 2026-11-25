@@ -1108,6 +1108,8 @@ impl OrchestrationRuntime {
                         target_id: query_text(path, "target_id")?,
                         commit,
                         current_only: false,
+                        // HS2-CQ0PNT: a target's roll-up covers every site of its project.
+                        sites: Some(self.project_sites(owner)?),
                     },
                 )?)
             }

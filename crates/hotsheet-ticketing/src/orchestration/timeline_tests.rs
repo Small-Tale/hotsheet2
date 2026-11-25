@@ -165,6 +165,8 @@ struct Fixture {
     steps: Vec<TimelineStep>,
     runs: Vec<Run>,
     step_runs: BTreeMap<String, BTreeSet<String>>,
+    /// HS2-CQ0PNT
+    sites: ProjectSites,
     sessions: Vec<OrchestratedSession>,
     hints: BTreeMap<String, PlacementHint>,
     permissions: BTreeMap<String, PermissionWait>,
@@ -214,6 +216,7 @@ impl Fixture {
             steps: &self.steps,
             runs: &self.runs,
             step_runs: &self.step_runs,
+            sites: &self.sites,
             sessions: &self.sessions,
             hints: &self.hints,
             permissions: &self.permissions,
@@ -960,4 +963,80 @@ fn hs2_6ge7wm_an_item_reports_the_site_its_run_was_placed_on() {
         ("retired", "retired")
     );
     assert_eq!(lost.location, TargetLocation::Unbound);
+}
+
+/// HS2-CQ0PNT: "api" is a site of the "web" project. A step planned through one site
+/// keeps its run, its label and the prerequisite that names it through the other
+/// site, as readiness does; moving the step to the other site while the run stands
+/// changes none of that. Without the grouping, targets compare exactly as before.
+#[test]
+fn hs2_cq0pnt_a_step_keeps_its_run_label_and_dependents_through_any_site() {
+    let item = |view: &Timeline, step: &str| -> TimelineItem {
+        view.waves
+            .iter()
+            .flat_map(|wave| wave.items.iter())
+            .find(|item| item.step_id == step)
+            .cloned()
+            .unwrap()
+    };
+    // Step 3 works ticket 3 and is in progress; step 5 waits on ticket 3, named on web.
+    let mut fixture = Fixture::new(vec![step(3, L::InProgress, &[]), step(5, L::Blocked, &[3])]);
+    // The run was dispatched through the "api" site, by hand: not a scheduler run.
+    let mut through_api = run(3, 3, RunState::Requested, 10, None);
+    through_api.target.target_id = "api".into();
+    fixture.runs = vec![through_api.clone()];
+    // The ticket's label was last read through the api site.
+    fixture.tickets.insert(
+        ("api".into(), SOURCE.into(), id(3)),
+        TicketLabel {
+            slug: Some("TGT-3".into()),
+            ..TicketLabel::default()
+        },
+    );
+    fixture.steps[1].readiness.reasons = vec![ReadinessReason {
+        code: "prerequisite_open".into(),
+        prerequisite: Some(prerequisite(3)),
+        commits: Vec::new(),
+    }];
+
+    // Two separate projects: exactly as before, nothing joins.
+    let apart = fixture.view();
+    assert!(item(&apart, "step-3").run.is_none());
+    assert_eq!(item(&apart, "step-3").ticket.slug, None);
+
+    // One project: the run and the label join the step.
+    fixture.sites = ProjectSites::default().with_site("api", "web");
+    for moved in [false, true] {
+        if moved {
+            // The step is planned through the api site now, the run still stands.
+            fixture.steps[0].readiness.step.target.target_id = "api".into();
+        }
+        let view = fixture.view();
+        let working = item(&view, "step-3");
+        assert_eq!(
+            working.run.as_ref().map(|run| run.run_id.clone()),
+            Some(through_api.run_id.clone()),
+            "moved {moved}"
+        );
+        assert_eq!(working.site_id, "api", "moved {moved}");
+        assert_eq!(
+            working.ticket.slug.as_deref(),
+            Some("TGT-3"),
+            "moved {moved}"
+        );
+        // The prerequisite named through web still finds the step, wherever it moved.
+        let waiting = item(&view, "step-5");
+        assert_eq!(waiting.waits_on.len(), 1, "moved {moved}");
+        assert_eq!(
+            waiting.waits_on[0].step_id.as_deref(),
+            Some("step-3"),
+            "moved {moved}"
+        );
+        assert_eq!(waiting.waits_on[0].slug.as_deref(), Some("TGT-3"));
+    }
+    // A run of a different ticket on the other site never joins.
+    let mut other = run(4, 7, RunState::Requested, 20, None);
+    other.target.target_id = "web".into();
+    fixture.runs = vec![other];
+    assert!(item(&fixture.view(), "step-3").run.is_none());
 }

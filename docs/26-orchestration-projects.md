@@ -212,6 +212,18 @@ they name; comparisons go through the project key:
   edge to the step planned through another, an active run or a confirmed read through
   any site counts for the ticket, and cycles that close only through another site are
   found.
+- **Read models join the same way (HS2-CQ0PNT).** The timeline (§26.26) attaches to a
+  step its run through any site of the project, not only one the scheduler placed,
+  and finds a ticket's label and a prerequisite's step through any site, so a step
+  moved to another site while its run stands keeps its run, label and dependents.
+  Target lines show, on a checkout bound as one site, the steps planned through
+  every site of its project, the ticket named by that checkout's own connection id,
+  one line per ticket. A gate roll-up asked for a target and commit
+  (`commit_gate_state`, `GET …/gates?target_id=`) covers the gates of every site of
+  the project, which builds the same commits. The progress summary (§26.18) counts a
+  ticket reached through two sites as one work item under the home site's connection
+  id, attributed to its earliest run's target. Each run still names the site it went
+  through.
 
 **One ticket, one id per machine (HS2-3JGPDR).** A Git source's connection id is a hash
 of the store's local path, so the store every site shares has another connection id on

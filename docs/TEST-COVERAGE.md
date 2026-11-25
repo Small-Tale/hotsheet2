@@ -3756,6 +3756,21 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
 - `orchestration_readiness.rs # hs2_zh9c6w` (CLI) sends `--require toolchain=node>=20`
   and `tool=codex>=0.40` as those strings.
 
+### Read models joined by project sites (HS2-CQ0PNT)
+
+- `timeline_tests.rs # hs2_cq0pnt` (core): a run dispatched by hand through another
+  site, the label read through it and a prerequisite named through the first site join
+  the step, before and after the step moves to the other site; apart (no grouping)
+  nothing joins, and another ticket's run never does.
+- `target_lines_tests.rs # hs2_cq0pnt`: a checkout bound as a site shows a step
+  planned through the home, under its own connection id; moved, and both at once, one
+  line with the other counted; another project's target stays out.
+- `gate_tests.rs # hs2_cq0pnt`: a target and commit roll-up covers every site of the
+  project, through either site, never another project, and sees a site's verdict.
+- `summary_tests.rs # hs2_cq0pnt`: a ticket dispatched through two sites with
+  different connection ids is one work item (one redispatch, cost once, earliest
+  run's target), two apart.
+
 ### Redo of a scheduler session's run (HS2-DBCN9N)
 
 - `tests/provisional.rs # hs2_dbcn9n` places an orchestrator-owned session on the

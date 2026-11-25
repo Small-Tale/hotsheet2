@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::ProjectSites;
 use super::line_observations::ObservedOwner;
 use super::timeline::{ItemState, Timeline, TimelineItem, TimelinePhase};
 
@@ -23,6 +24,10 @@ pub struct TargetLineSource<'a> {
     /// The owner's targets whose binding on this machine names the checkout.
     pub target_ids: &'a [String],
     pub timeline: &'a Timeline,
+    /// HS2-CQ0PNT: which of the owner's targets are sites of one project. A step that
+    /// names another site of a project bound here is a line of this checkout too, its
+    /// ticket named by this checkout's own connection id. Empty compares exactly.
+    pub sites: &'a ProjectSites,
 }
 
 /// The orchestration line of one target ticket.
@@ -134,8 +139,28 @@ pub fn target_lines_observed(
         let proposed = source.timeline.phase == TimelinePhase::Proposed;
         for wave in &source.timeline.waves {
             for item in &wave.items {
-                if !source.target_ids.contains(&item.target.target_id) {
+                // HS2-CQ0PNT: the target bound here that is the item's site, or another
+                // site of its project.
+                let Some(bound) = source
+                    .target_ids
+                    .iter()
+                    .find(|id| **id == item.target.target_id)
+                    .or_else(|| {
+                        source
+                            .target_ids
+                            .iter()
+                            .find(|id| source.sites.same_project(id, &item.target.target_id))
+                    })
+                else {
                     continue;
+                };
+                let mut item = item.clone();
+                if *bound != item.target.target_id {
+                    item.target.connection_id = source.sites.connection_on(
+                        &item.target.target_id,
+                        &item.target.connection_id,
+                        bound,
+                    );
                 }
                 consider(
                     order,
@@ -146,7 +171,7 @@ pub fn target_lines_observed(
                         proposed,
                         also_planned: 0,
                         observed_from: None,
-                        item: item.clone(),
+                        item,
                     },
                 );
             }
