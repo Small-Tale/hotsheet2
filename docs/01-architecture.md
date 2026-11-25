@@ -2,185 +2,120 @@
 
 ## 1.1 The shape
 
-Hot Sheet 2 is built as **one core library** with thin surfaces around it. The
-core owns all domain logic; the surfaces are adapters.
+Hot Sheet 2 is a local-first ticketing and AI work coordination system.
+The [Structurizr baseline](architecture/README.md) maps the audited runtime,
+storage and trust boundaries. Its [coverage matrix](architecture/coverage.md)
+links each boundary to implementation and test evidence.
 
-![Hot Sheet 2 architecture: one hotsheet-core Rust crate (model, store, index,
-watch, query, plugins, coord, merge-driver) that the server and CLI link and that
-the Tauri and SwiftUI clients embed; the server exposes HTTP/WebSocket/MCP to
-remote clients and to AI tools.](diagrams/architecture.svg)
-
-> Diagram source: [`diagrams/src/architecture.html`](diagrams/src/architecture.html)
-> → rendered to [`diagrams/architecture.svg`](diagrams/architecture.svg) with
-> `domotion capture` (see [diagrams/README.md](diagrams/README.md)).
+The [earlier overview diagram](diagrams/architecture.svg) and its
+[HTML source](diagrams/src/architecture.html) document the initial design.
+Refer to the baseline for current process and storage boundaries.
 
 ## 1.2 Components
 
-### hotsheet-core (library)
+### Shared Rust libraries
 
-The heart. Everything domain-specific lives here so it is written and tested
-once. It is **I/O-capable but policy-free**: it reads/writes files and spawns
-processes through injected adapters, so it can be unit-tested against in-memory
-fakes and linked into its **two host binaries — the server and the CLI** (clients
-are not hosts; they use the server's API). See
-[04-core-server-cli.md](04-core-server-cli.md).
-
-Key modules:
-
-- **model** — `Ticket`, `Note`, `Attachment`, `Category`, `Store`, `Project`,
-  status/priority enums, the claim/lease fields.
-- **ticket providers** — a normalized contract plus capability-aware routing and
-  aggregation. The current file/git engine is the default provider; GitHub/Jira/etc.
-  may be authoritative directly. [16](16-external-sync-interface.md).
-- **git provider/store** — read/write/commit ticket files in a git-backed store;
-  multi-store resolution. [02-ticket-storage.md](02-ticket-storage.md).
-- **index** — SQLite schema, upsert-from-file, query, FTS.
-  [03-indexing-and-query.md](03-indexing-and-query.md).
-- **watch** — filesystem notifications → debounced incremental reindex.
-- **query** — the list/filter/search/sort surface the UI and CLI call.
-- **plugins** — AI-tool plugin registry + capability traits; the terminal
-  manager and permission bridge. [05-ai-tool-plugins.md](05-ai-tool-plugins.md).
-- **coord** — claim/lease primitive for distributed drain.
+The CLI, server and serverless MCP paths share domain code. `hotsheet-model`
+owns the Git ticket format. `hotsheet-ticketing` owns Git ticket operations,
+provider contracts, checkout links, settings, ticket coordination and the
+orchestration domain. Separate crates implement the local search index,
+native provider adapters, AI-tool setup and drive, terminals, jobs, resource
+leases, notifications and shared infrastructure. The
+[crate ownership table](architecture/coverage.md#cargo-workspace-ownership)
+maps the complete workspace. [04-core-server-cli.md](04-core-server-cli.md)
 
 ### hotsheet-server (binary)
 
-A thin `axum`/`tokio` process that wraps the core and exposes:
+The long-lived Axum/Tokio server owns the checkout-scoped HTTP API, live
+WebSockets, long polling, file watching, index reconciliation, terminal
+services, notifications, scheduled AI commands, and orchestration runtime.
+On Unix, the detached terminal broker usually owns the PTYs. On Windows,
+the server hosts PTYs in process. [04-core-server-cli.md](04-core-server-cli.md)
 
-- **REST** over HTTP for CRUD/query.
-- **WebSocket** for live push (index changes, claims, terminal streams,
-  permission prompts).
-- **MCP** for AI tools (the `hotsheet_*` tool surface).
-- The **filesystem watcher** and **terminal/PTY manager** run here (they need a
-  long-lived process).
+### hotsheet-cli (binary) and MCP shim
 
-Runs completely independently of any client. Multiple clients (local and remote)
-attach to one server. See [04-core-server-cli.md](04-core-server-cli.md) §4.3.
-
-### hotsheet-cli (binary)
-
-A thin `clap` process that wraps the core for **direct-to-disk** operations —
-create/list/edit/search/complete tickets without a running server. When a server
-is running, disk changes it makes are picked up by the watcher and reindexed.
-Also hosts developer/ops commands (`init`, `migrate`, `reindex`, `serve`,
-`doctor`). See [04-core-server-cli.md](04-core-server-cli.md) §4.4.
+The CLI supports direct Git-store operations while the server is stopped. It
+also exposes bootstrap, provider and host operations. The MCP shim presents
+stdio tools to AI clients. It can use project-scoped or explicit server HTTP
+routes, or open a local Git store directly in serverless mode. The separate
+legacy migrator invokes the Node PGLite exporter for HS1 import.
+[04-core-server-cli.md](04-core-server-cli.md) · [07-migration.md](07-migration.md)
 
 ### Clients
 
-**Pure consumers of the server API in every case — no client ever embeds the
-core.** A local project and a remote project differ only in _which_ server the
-client talks to (a localhost server vs. a remote origin); the client is the same
-thin HTTP/WS/MCP consumer either way.
-
-- **Tauri desktop** — a Rust shell hosting a web UI. It **auto-starts and
-  supervises the local server** when none is running, then talks to it over
-  HTTP/WS; for a remote project it talks HTTP/WS over mTLS.
-- **SwiftUI (macOS/iOS)** — native app over HTTP/WS. macOS auto-starts the local
-  server; iOS is remote-first (it connects to a Mac's server).
-- **Android (later)** — same API, a Kotlin/Compose UI.
-
-The auto-started server is **detached and outlives the client** — closing the app
-leaves the server running. See [06-clients.md](06-clients.md) and
-[04-core-server-cli.md](04-core-server-cli.md) §4.3.
+The Kerf web workspace runs in a browser or the Tauri WebView. The packaged
+Tauri shell starts the Node web host and project bridge, which can discover
+or start the standalone Rust server. The workspace uses HTTP and WebSocket
+routes through that bridge. Closing the desktop shell leaves the independently
+launched server running. The macOS screen saver consumes a credential-free
+snapshot file. SwiftUI ticket clients and Android are tracked as client designs.
+[06-clients.md](06-clients.md) · [tauri-desktop.md](tauri-desktop.md)
 
 ## 1.3 Data flow
 
-**Write path (create/edit a ticket):** the server routes to the selected provider.
-The diagram shows the default git-provider path; remote providers call their native
-API and then refresh the same normalized index/event stream.
+- **Write a ticket.** The checkout and source connection select a provider. For
+  Git the engine persists Markdown and attachments in the linked store and
+  the server updates its local projection. For GitHub Issues, GitLab Issues,
+  or Jira the native issue remains authoritative.
+- **Reconcile a store edit.** The local watcher invalidates affected Git-store
+  paths, reconciles indexed rows, and publishes scoped events. CLI writes can
+  take this path because direct operations do not require the server.
+- **Read a ticket list.** The server serves local indexed pages and queries
+  external providers according to their capabilities. It merges checkout
+  pages and reports per-source coverage and failures.
+- **Keep a workspace current.** WebSockets deliver live changes. Long polling
+  can replay from a cursor. A dropped replay window or replaced host can require
+  rebuilding the affected client projection.
 
-```mermaid
-flowchart LR
-  C[client] --> A[server API]
-  A --> W["core.store.write(ticket)"]
-  W --> F[file written + git commit]
-  A --> U["core.index.upsert(ticket)"]
-  U --> S[SQLite row + FTS updated]
-  A --> B[broadcast over WebSocket] --> R[all clients redraw]
-```
-
-The CLI and a direct text-editor edit skip the API: they write the file, and the
-watcher path below reconciles the index.
-
-**Reconcile path (a file changed on disk out-of-band):**
-
-```mermaid
-flowchart LR
-  FS[fs change] --> WA[watcher] --> D[debounce]
-  D --> DF["diff (content hash vs indexed)"]
-  DF --> RD["core.store.read(changed)"]
-  RD --> UP["core.index.upsert / delete"]
-  UP --> B[broadcast over WebSocket]
-```
-
-**Read path (draw the list / search):**
-
-```mermaid
-flowchart LR
-  C[client] --> Q[server query API]
-  Q --> IX["core.index.query(filter, sort, text)<br/>SQLite — no disk walk"]
-  IX --> RW[rows] --> RN[client renders]
-```
-
-The UI never walks the store directory to draw a list; it always reads the index.
+See the [baseline views](architecture/README.md#where-to-start) for ordered
+examples, and the [transport contracts](contracts/README.md) for wire detail.
 
 ## 1.4 Process & trust model
 
-- **The server is a standalone process in every case — local included.** There is
-  no embedded-in-the-client mode. A client that finds no server running
-  **auto-starts one, detached**, and connects to it; the server **survives the
-  client closing**. One local server instance per machine serves every local
-  project (the HS1 instance model). Lifecycle detail:
-  [04-core-server-cli.md](04-core-server-cli.md) §4.3.
-- **Local (Tier 0):** loopback HTTP, per-project shared secret. The server trusts
-  anything that presents the secret from localhost. Same as HS1. **mTLS is
-  optional even locally** (§4.6) — worth it on a shared multi-user machine where
-  another local user could otherwise reach the port; unnecessary on a
-  single-user box.
-- **Exposed (Tier 1, HS2-W4JJJE):** an off-loopback bind defaults to the
-  existing mTLS certificate and ACL model. An explicit `--remote-transport`
-  selects HTTP or server-only HTTPS with paired application sessions, or mTLS.
-  The machine bearer is usable only from the accepted loopback socket peer;
-  forwarded headers do not change that decision. See
-  [08-distributed-and-remote.md](08-distributed-and-remote.md).
-- **Remote browser application access (HS2-7DBJMS):** a browser-facing host explicitly
-  selects remote auth even when its upstream server is loopback. The host owner
-  approves a short-lived pairing request from the trusted local CLI; the server
-  keeps a revocable opaque browser session and enforces its read-only or read-write
-  role on REST and live streams. The bridge forwards that session to the selected
-  server and never adds its local bearer for remote requests. Browser sessions
-  do not replace transport security: direct HTTP is an explicit operator choice,
-  and HTTPS or a trusted terminating frontend protects sessions in transit.
-  HS2-747RTD owns Serve/direct TLS launch.
-- **One writer per store working copy at a time** for the _index_ is enforced by a
-  lock; git itself arbitrates concurrent _content_ edits via normal merge. The
-  index is per-machine and disposable, so cross-machine index locking is a
-  non-issue.
+- The Rust server is a separate host process. A managed local launch discovers
+  or starts it through instance lifecycle operations.
+- The local bearer belongs to instance data. Loopback trust uses the socket
+  peer. An off-loopback listener defaults to mTLS, with explicit direct HTTP
+  and server TLS options using paired sessions where configured.
+- Paired browser/device grants govern remote browser access. Host approval is
+  required for pairing. The web bridge forwards the remote session authority
+  and keeps the local bearer scoped to its own instance route. Device grants
+  apply to read/write REST and live stream access.
+- Orchestration peers are user-managed hosts. The plan owner coordinates work
+  and the target host admits operations under its own authority and capacity.
+- Ticket claims, machine resource leases, and execution records represent
+  different kinds of ownership. A scheduled auto-start claims the exact
+  persisted occurrence ticket before handing work to the AI tool.
+
+[Distributed and remote](08-distributed-and-remote.md) ·
+[Orchestration](26-orchestration-projects.md) ·
+[Resource claims](36-resource-claims.md)
 
 ## 1.5 What is deliberately NOT a component
 
-- **No ORM, no migrations-as-code for user data.** The "schema" is the ticket file
-  format (versioned in frontmatter). The SQLite index has its own schema, but it is
-  disposable and rebuilt, so its migrations are "drop and rebuild," not data
-  migrations.
-- **No server-rendered UI.** HS1 rendered HTML on the server via a custom JSX
-  runtime. HS2 clients are native/SPA and the server speaks data (JSON), not
-  markup. This is the client/service split the rewrite is chartered to make.
-- **No first-class AI tool.** There is no "Claude module" the server imports;
-  Claude is a plugin like any other. See [05-ai-tool-plugins.md](05-ai-tool-plugins.md).
+The Git ticket format is versioned Markdown and attachment files. SQLite is a
+rebuildable query projection. One writer per store working copy owns index
+maintenance. Git arbitrates concurrent content changes across working copies.
+The Node host serves a client-side UI, while
+the Rust API serves data and streams. Tool manifests and adapters express AI
+provider capabilities behind the shared launch and drive interfaces.
 
 ## 1.6 Cross-references
 
-- Technology choices and rationale: [09-technology-decisions.md](09-technology-decisions.md)
-- Storage: [02-ticket-storage.md](02-ticket-storage.md)
-- Indexing: [03-indexing-and-query.md](03-indexing-and-query.md)
+- [Architecture model and coverage](architecture/README.md)
+- [Technology decisions](09-technology-decisions.md)
+- [Ticket storage](02-ticket-storage.md)
+- [Indexing and queries](03-indexing-and-query.md)
 
 ## 1.7 Deployment boundary (HS2-51HMCC)
 
 Hot Sheet 2 currently has no Small Tale-hosted service, beta or production
 environment, infrastructure definitions, state backend, or deployed URL. The
 server runs as a detached process on a user's machine (§1.4); remote clients
-attach to a server on another user's machine (§1.2). The web client is bundled
-with the Tauri desktop app, and `clients/web` has build and local-server commands.
+attach through the web bridge to a user-managed host (§1.2). The
+[baseline](architecture/README.md) records desktop, headless, and remote peer
+deployment modes. The web client is bundled with the Tauri desktop app, and
+`clients/web` has build and local-server commands.
 Those are build and local runtime paths, not an infrastructure deployment.
 
 The shared deployment-scripts rule's environment argument, SHA-tagged deployable

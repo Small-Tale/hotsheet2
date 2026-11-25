@@ -6,6 +6,10 @@ in **early implementation** — the Rust core, CLI, server, index, MCP shim, and
 AI-tool plugins are built; see [CODEBASE-MAP.md](CODEBASE-MAP.md) for what exists.
 These documents remain the source of truth for what we are building and why.
 
+The [Structurizr architecture baseline](architecture/README.md) describes the
+implementation at a pinned source revision, with a coverage matrix and source
+evidence. Start there for current runtime, storage, and deployment boundaries.
+
 **Windows terminal status (HS2-2TD7M7):** the server uses in-process PTYs on
 Windows; Unix keeps detached broker persistence across server restarts. Windows
 server and credential-cache execution awaits fresh native Platforms verification.

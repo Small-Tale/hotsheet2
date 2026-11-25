@@ -4,6 +4,11 @@
 > language decision — see [09-technology-decisions.md](09-technology-decisions.md)
 > §9.2 and the maintainer-confirmation note there.
 
+The original shared-core proposal below describes the intended reuse boundary.
+The [audited architecture baseline](architecture/coverage.md#cargo-workspace-ownership)
+maps that boundary to the separate crates and runtime entry points in the
+published implementation.
+
 ## 4.1 The shared core
 
 `hotsheet-core` is a single library holding **all** domain logic, written once and

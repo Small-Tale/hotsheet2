@@ -1,5 +1,10 @@
 # Codebase Map
 
+For the audited architecture and its source links, see the
+[Structurizr baseline](architecture/README.md). The model records runtime
+and data ownership. The [coverage matrix](architecture/coverage.md) maps
+shared crates and source files to those owners.
+
 `scripts/check.sh` runs `scripts/local-gate.mjs`, reusing the HS2-FCCRCK
 `scripts/gate-plan.mjs` dependency plan and exact-input stage receipts. The
 HS2-GN06JT `scripts/gate-budget.mjs` selects measured optional stages under the
