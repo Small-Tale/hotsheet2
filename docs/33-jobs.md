@@ -401,6 +401,41 @@ stays pending until the commit's own build is judged.
   `HOTSHEET_CIRCLECI_API_URL` (default `https://circleci.com/api/v2`), HTTPS except
   loopback HTTP. A 429 waits for `Retry-After`, or for Buildkite's `RateLimit-Reset`.
 
+## 33.11b Jenkins watch as shipped (HS2-7H0S8R)
+
+`jenkins` watch Jobs follow one commit's CI gate like §33.11a, through the same machine
+monitor, CI gate API and REST port, with **exact coverage only**. Jenkins has no
+build-list-by-commit filter and exposes no repository ancestry.
+
+- **Target.** `repository` is the job's full name, one to ten `/`-separated folder and
+  job names (letters, digits, `-`, `_`, `.`), and the workflow is always `*`.
+- **Reads** ([remote access API](https://www.jenkins.io/doc/book/using/remote-access-api/)).
+  Each poll reads `job/<a>/job/<b>/api/json` with a `tree` filter for `_class` and the
+  30 newest builds' `number`, `result`, `building`, `url` and the Git plugin's
+  `BuildData` (`lastBuiltRevision.SHA1`, `branch[].name`). When `_class` is a
+  multibranch project, the branch job `…/job/<branch>` is read instead (a `/` in the
+  branch becomes `%2F` in its name); the class is read once per watch. A branch job
+  that is not indexed yet leaves the gate pending.
+- **Coverage.** A build counts when one of its `BuildData` actions recorded exactly the
+  commit; a pipeline that also checks out a shared library has several. In a plain
+  (not multibranch) job that action must also name the branch as `main`,
+  `refs/heads/main`, `origin/main` or `refs/remotes/<remote>/main`. A later commit's
+  success never covers the commit.
+- **Verdict.** A `SUCCESS` build of the commit is green; otherwise the newest build
+  decides: `FAILURE` and `UNSTABLE` are red, `ABORTED` is cancelled, and `building`,
+  `NOT_BUILT` or an unknown result wait. A rebuild is a new build number, so a rewatch
+  ignores a judged build by number. No steps are reported: Jenkins core exposes no
+  stage data (HS2-SSKBRB).
+- **Cancel** is `POST <job>/<number>/stop` (a redirect counts as accepted), sent only
+  for the commit's own unfinished build.
+- **Errors.** 404 for the job ends the watch without a verdict (`unknown`); 401, 403,
+  429 and server errors are retried with backoff and keep the last observation.
+- **Credentials.** Every Jenkins is self-hosted: `HOTSHEET_JENKINS_URL` names the
+  controller (HTTPS, or loopback HTTP), and without it nothing is sent. `JENKINS_USER`
+  and the API token `JENKINS_API_TOKEN` go as HTTP Basic, which needs no CSRF crumb.
+  They are kept in memory only; `job watch status` reports `jenkins_token` as
+  `JENKINS_API_TOKEN` when both are set, otherwise `null`.
+
 ## 33.12 Validation and deployment runners (HS2-BWAPSX)
 
 A hosted validation step or deployment that runs in a detached runner

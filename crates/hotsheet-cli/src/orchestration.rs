@@ -251,6 +251,8 @@ impl OrchestrationRuntime {
                 // HS2-17HVNP: Buildkite builds and CircleCI pipelines, likewise.
                 Arc::new(GithubActionsGates::buildkite(&home)),
                 Arc::new(GithubActionsGates::circleci(&home)),
+                // HS2-7H0S8R: Jenkins builds, likewise.
+                Arc::new(GithubActionsGates::jenkins(&home)),
             ],
             sessions: Arc::new(NoSessionHost),
             session_executor: Arc::new(ExecutorUnavailable),

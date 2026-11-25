@@ -2169,8 +2169,10 @@ their evidence is always exact coverage. No declared identity names their slugs,
 the link must give `repository`. Because a slug names no Git remote, the hosted
 repository check refuses a Buildkite or CircleCI watch of a target on another machine
 (`gate_repository_mismatch`); HS2-56MTYN covers that case and ancestor coverage.
-Jenkins (HS2-7H0S8R), Azure Pipelines (HS2-JZ1DD2) and Bitbucket Pipelines
-(HS2-BWF72S) are follow-ups.
+HS2-7H0S8R adds `jenkins` (`repository` is the job's full name, `folder/job`, workflow
+`*`; §33.11b), watched, read and refused on another machine the same way, with exact
+coverage. Azure Pipelines (HS2-JZ1DD2) and Bitbucket Pipelines (HS2-BWF72S) are
+follow-ups.
 
 ### Coverage
 

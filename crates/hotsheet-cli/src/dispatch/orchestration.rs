@@ -188,8 +188,9 @@ enum GateCmd {
         #[arg(long)]
         branch: Option<String>,
         /// The CI provider adapter: github-actions (default), gitlab-ci (HS2-TPAHYA),
-        /// buildkite (`--repo <organization>/<pipeline>`) or circleci (`--repo
-        /// <vcs>/<organization>/<project>`, HS2-17HVNP).
+        /// buildkite (`--repo <organization>/<pipeline>`), circleci (`--repo
+        /// <vcs>/<organization>/<project>`, HS2-17HVNP) or jenkins (`--repo
+        /// <folder>/<job>`, HS2-7H0S8R).
         #[arg(long)]
         provider: Option<String>,
         /// HS2-TQG6AT: the artifact whose digest a passed verdict records, by name;

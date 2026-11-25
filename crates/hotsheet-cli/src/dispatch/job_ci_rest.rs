@@ -13,7 +13,13 @@
 //! - CircleCI API v2 (<https://circleci.com/docs/api/v2/index.html>): root
 //!   `https://circleci.com/api/v2` (`HOTSHEET_CIRCLECI_API_URL`), token `CIRCLECI_TOKEN`
 //!   as `Circle-Token`. A spent limit answers 429 with `Retry-After`.
+//! - HS2-7H0S8R: Jenkins' JSON API
+//!   (<https://www.jenkins.io/doc/book/using/remote-access-api/>): every Jenkins is
+//!   self-hosted, so there is no default root; `HOTSHEET_JENKINS_URL` names it. The user
+//!   `JENKINS_USER` and API token `JENKINS_API_TOKEN` are sent as HTTP Basic, which
+//!   Jenkins accepts without a CSRF crumb.
 
+use base64::Engine;
 use hotsheet_extsync::github::{GitHubTransport, UreqGitHubTransport};
 use hotsheet_jobs::{ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, GithubApi};
 
@@ -22,49 +28,107 @@ const MAX_RETRY_AFTER_MS: u64 = 60 * 60 * 1000;
 /// Without credentials there is nothing to retry quickly.
 const NO_TOKEN_RETRY_MS: u64 = 60_000;
 
+/// How a credential is sent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Scheme {
+    /// The token as the header's whole value.
+    Raw,
+    /// `Bearer <token>`.
+    Bearer,
+    /// HS2-7H0S8R: `Basic base64(<user>:<token>)`; the user from `user_env`, or empty.
+    Basic { user_env: Option<&'static str> },
+}
+
+/// One way to authenticate: a token variable, the header it goes in and its scheme.
+#[derive(Clone, Copy, Debug)]
+struct Credential {
+    token_env: &'static str,
+    header: &'static str,
+    scheme: Scheme,
+}
+
 /// One provider's REST settings.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct RestProvider {
-    default_api: &'static str,
+    /// `None` when the provider is only ever self-hosted (HS2-7H0S8R).
+    default_api: Option<&'static str>,
     url_env: &'static str,
-    token_env: &'static str,
-    /// The header the token is sent in, and whether it is a `Bearer` value.
-    header: &'static str,
-    bearer: bool,
+    /// Tried in order; the first one fully configured is used.
+    credentials: &'static [Credential],
 }
 
 pub(super) const BUILDKITE: RestProvider = RestProvider {
-    default_api: "https://api.buildkite.com/v2",
+    default_api: Some("https://api.buildkite.com/v2"),
     url_env: "HOTSHEET_BUILDKITE_API_URL",
-    token_env: "BUILDKITE_API_TOKEN",
-    header: "Authorization",
-    bearer: true,
+    credentials: &[Credential {
+        token_env: "BUILDKITE_API_TOKEN",
+        header: "Authorization",
+        scheme: Scheme::Bearer,
+    }],
 };
 
 pub(super) const CIRCLECI: RestProvider = RestProvider {
-    default_api: "https://circleci.com/api/v2",
+    default_api: Some("https://circleci.com/api/v2"),
     url_env: "HOTSHEET_CIRCLECI_API_URL",
-    token_env: "CIRCLECI_TOKEN",
-    header: "Circle-Token",
-    bearer: false,
+    credentials: &[Credential {
+        token_env: "CIRCLECI_TOKEN",
+        header: "Circle-Token",
+        scheme: Scheme::Raw,
+    }],
 };
 
+/// HS2-7H0S8R: a Jenkins controller, named by `HOTSHEET_JENKINS_URL`.
+pub(super) const JENKINS: RestProvider = RestProvider {
+    default_api: None,
+    url_env: "HOTSHEET_JENKINS_URL",
+    credentials: &[Credential {
+        token_env: "JENKINS_API_TOKEN",
+        header: "Authorization",
+        scheme: Scheme::Basic {
+            user_env: Some("JENKINS_USER"),
+        },
+    }],
+};
+
+/// A trimmed, non-empty environment value.
+fn env_value(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
 impl RestProvider {
-    /// The token from the provider's variable, when set. Read fresh on every request.
-    fn token(self) -> Option<String> {
-        std::env::var(self.token_env)
-            .ok()
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
+    /// The first fully configured credential as a header, read fresh on every request
+    /// through `lookup`, with the variable that holds its token.
+    fn authorization(
+        self,
+        lookup: impl Fn(&str) -> Option<String>,
+    ) -> Option<(&'static str, String, &'static str)> {
+        self.credentials.iter().find_map(|credential| {
+            let token = lookup(credential.token_env)?;
+            let value = match credential.scheme {
+                Scheme::Raw => token,
+                Scheme::Bearer => format!("Bearer {token}"),
+                Scheme::Basic { user_env } => {
+                    let user = match user_env {
+                        Some(name) => lookup(name)?,
+                        None => String::new(),
+                    };
+                    let pair = format!("{user}:{token}");
+                    format!(
+                        "Basic {}",
+                        base64::engine::general_purpose::STANDARD.encode(pair)
+                    )
+                }
+            };
+            Some((credential.header, value, credential.token_env))
+        })
     }
 
-    /// For `job watch status`: whether a token is configured, never the token.
-    pub(super) fn has_token(self) -> bool {
-        self.token().is_some()
-    }
-
-    pub(super) fn token_env(self) -> &'static str {
-        self.token_env
+    /// For `job watch status`: the variable of the configured token, never the token.
+    pub(super) fn token_source(self) -> Option<&'static str> {
+        self.authorization(env_value).map(|(_, _, source)| source)
     }
 }
 
@@ -73,7 +137,7 @@ fn api_base(provider: RestProvider, configured: Option<&str>) -> Option<String> 
     let base = configured
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or(provider.default_api)
+        .or(provider.default_api)?
         .trim_end_matches('/');
     let loopback = ["http://127.0.0.1", "http://localhost", "http://[::1]"]
         .into_iter()
@@ -119,14 +183,9 @@ impl GithubApi for UreqCiRestApi {
             retry_after_ms: Some(NO_TOKEN_RETRY_MS),
         };
         let base = self.base.clone().ok_or(unavailable)?;
-        let token = self.provider.token().ok_or(unavailable)?;
-        let value = if self.provider.bearer {
-            format!("Bearer {token}")
-        } else {
-            token
-        };
+        let (header, value, _) = self.provider.authorization(env_value).ok_or(unavailable)?;
         let mut headers = vec![
-            (self.provider.header, value),
+            (header, value),
             ("Accept", "application/json".to_owned()),
             ("User-Agent", "hotsheet-cli".to_owned()),
         ];
@@ -161,11 +220,8 @@ mod tests {
 
     #[test]
     fn hs2_17hvnp_a_token_is_only_ever_sent_over_https_or_to_this_machine() {
-        for provider in [BUILDKITE, CIRCLECI] {
-            assert_eq!(
-                api_base(provider, None).as_deref(),
-                Some(provider.default_api)
-            );
+        for provider in [BUILDKITE, CIRCLECI, JENKINS] {
+            assert_eq!(api_base(provider, None).as_deref(), provider.default_api);
             assert_eq!(
                 api_base(provider, Some("http://127.0.0.1:9/v2/")).as_deref(),
                 Some("http://127.0.0.1:9/v2")
@@ -178,8 +234,57 @@ mod tests {
                 assert_eq!(api_base(provider, Some(refused)), None, "{refused}");
             }
         }
-        assert_eq!(BUILDKITE.token_env(), "BUILDKITE_API_TOKEN");
-        assert_eq!(CIRCLECI.token_env(), "CIRCLECI_TOKEN");
+        let all = |name: &str| Some(format!("value-of-{name}"));
+        assert_eq!(
+            BUILDKITE.authorization(all),
+            Some((
+                "Authorization",
+                "Bearer value-of-BUILDKITE_API_TOKEN".to_owned(),
+                "BUILDKITE_API_TOKEN"
+            ))
+        );
+        assert_eq!(
+            CIRCLECI.authorization(all),
+            Some((
+                "Circle-Token",
+                "value-of-CIRCLECI_TOKEN".to_owned(),
+                "CIRCLECI_TOKEN"
+            ))
+        );
+    }
+
+    #[test]
+    fn hs2_7h0s8r_jenkins_needs_its_url_and_sends_user_and_token_as_basic() {
+        // Every Jenkins is self-hosted: without a configured root nothing is sent.
+        assert_eq!(api_base(JENKINS, None), None);
+        assert_eq!(api_base(JENKINS, Some("  ")), None);
+        let lookup = |pairs: &'static [(&'static str, &'static str)]| {
+            move |name: &str| {
+                pairs
+                    .iter()
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| (*value).to_owned())
+            }
+        };
+        let both = lookup(&[("JENKINS_USER", "ci-bot"), ("JENKINS_API_TOKEN", "t0ken")]);
+        assert_eq!(
+            JENKINS.authorization(both),
+            Some((
+                "Authorization",
+                // base64("ci-bot:t0ken")
+                "Basic Y2ktYm90OnQwa2Vu".to_owned(),
+                "JENKINS_API_TOKEN"
+            ))
+        );
+        // A token without its user, or a user without a token, is not a credential.
+        assert_eq!(
+            JENKINS.authorization(lookup(&[("JENKINS_API_TOKEN", "t0ken")])),
+            None
+        );
+        assert_eq!(
+            JENKINS.authorization(lookup(&[("JENKINS_USER", "ci-bot")])),
+            None
+        );
     }
 
     #[test]

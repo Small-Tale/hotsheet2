@@ -36,6 +36,8 @@ pub const GITLAB_CI_KIND: &str = "gitlab-ci";
 pub const BUILDKITE_KIND: &str = "buildkite";
 /// HS2-17HVNP: the Job kind name and the `external.system` of a CircleCI watch.
 pub const CIRCLECI_KIND: &str = "circleci";
+/// HS2-7H0S8R: the Job kind name and the `external.system` of a Jenkins watch.
+pub const JENKINS_KIND: &str = "jenkins";
 
 /// HS2-TPAHYA: which CI provider a watch observes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -47,6 +49,8 @@ pub enum CiProvider {
     Buildkite,
     /// HS2-17HVNP: CircleCI pipelines and their workflows.
     Circleci,
+    /// HS2-7H0S8R: Jenkins builds of one job, or of a multibranch project's branch job.
+    Jenkins,
 }
 
 impl CiProvider {
@@ -57,14 +61,16 @@ impl CiProvider {
             Self::GitlabCi => GITLAB_CI_KIND,
             Self::Buildkite => BUILDKITE_KIND,
             Self::Circleci => CIRCLECI_KIND,
+            Self::Jenkins => JENKINS_KIND,
         }
     }
 
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::GithubActions,
         Self::GitlabCi,
         Self::Buildkite,
         Self::Circleci,
+        Self::Jenkins,
     ];
 
     pub fn from_kind(kind: &str) -> Option<Self> {
@@ -87,7 +93,8 @@ pub struct CiTarget {
     pub provider: CiProvider,
     /// `owner/name`; for GitLab the project's full path, `group/[subgroup/…]project`;
     /// for Buildkite `organization/pipeline` (slugs); for CircleCI the project slug
-    /// `vcs/organization/project`, for example `gh/acme/widgets` (HS2-17HVNP).
+    /// `vcs/organization/project`, for example `gh/acme/widgets` (HS2-17HVNP); for
+    /// Jenkins the job's full name, `[folder/…]job` (HS2-7H0S8R).
     pub repo: String,
     /// Full 40-character commit SHA, lowercase.
     pub sha: String,
@@ -194,6 +201,26 @@ impl CiTarget {
         Self::checked(CiProvider::Circleci, project, sha, workflow, branch)
     }
 
+    /// HS2-7H0S8R: a Jenkins target: `job` is the job's full name, one to ten
+    /// `/`-separated segments (`folder/job`, or a multibranch project, whose branch job
+    /// the watch reads). Jenkins builds have no workflow of their own, so `workflow`
+    /// must be `*`.
+    pub fn jenkins(
+        job: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        let segments: Vec<&str> = job.split('/').collect();
+        if !(1..=10).contains(&segments.len()) || !segments.iter().all(|s| part(s)) {
+            return Err(crate::JobError::Invalid("ci.repo"));
+        }
+        if workflow != "*" {
+            return Err(crate::JobError::Invalid("ci.workflow"));
+        }
+        Self::checked(CiProvider::Jenkins, job, sha, workflow, branch)
+    }
+
     /// HS2-17HVNP: the target of any provider, as its own constructor validates it.
     pub fn for_provider(
         provider: CiProvider,
@@ -207,6 +234,7 @@ impl CiTarget {
             CiProvider::GitlabCi => Self::gitlab(repo, sha, workflow, branch),
             CiProvider::Buildkite => Self::buildkite(repo, sha, workflow, branch),
             CiProvider::Circleci => Self::circleci(repo, sha, workflow, branch),
+            CiProvider::Jenkins => Self::jenkins(repo, sha, workflow, branch),
         }
     }
 
