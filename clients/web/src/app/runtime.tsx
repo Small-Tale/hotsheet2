@@ -218,6 +218,7 @@ import { createWorkspaceSearchController, type SidebarSearchCounts } from '../fe
 import { createWorkspaceSurface } from '../features/workspace-surface';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { createFeedbackResponseDrafts } from '../feedback-response-drafts';
+import { feedbackSessionLabel } from '../feedback-session-labels';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import { createGuidanceSearchModel } from '../guidance-search-model';
 import {
@@ -6321,6 +6322,21 @@ export async function startHotSheetWebClient() {
   const { notWorkingSurfaceProps, attachmentItems, selectedInspectorProps, previewInspectorProps } =
     createInspectorSurface({
       feedbackDelivery,
+      feedbackSessionLabels: (current, sessions) =>
+        Object.fromEntries(
+          sessions.map((session) => [
+            session.id,
+            feedbackSessionLabel(session, {
+              projectName: current.name,
+              terminals: terminalGroups.value.find((group) => group.projectId === current.id)?.sessions ?? [],
+              chats: terminalDrawerChatsByProject.value[current.id] ?? [],
+              claims: tickets.value.flatMap((ticket) =>
+                ticket.claimed_by ? [{ worker: ticket.claimed_by, slug: ticket.slug, title: ticket.title }] : [],
+              ),
+              toolLabel: aiToolLabel,
+            }),
+          ]),
+        ),
       ago,
       api,
       attachmentContext,

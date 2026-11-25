@@ -43,6 +43,7 @@ import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { type FeatureId, featureOn } from '../feature-areas';
 import type { InlineFeedbackReply } from '../feedback-replies';
+import type { FeedbackSessionLabel } from '../feedback-session-labels';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { ticketCloseReasonLabel } from '../ticket-close';
 import { ticketDisplayNumber } from '../ticket-display-number';
@@ -105,6 +106,8 @@ export interface TicketInspectorProps {
   /** The ticket has an unresolved `feedback_needed` note — it is waiting on the user. */
   feedbackNeeded?: boolean;
   feedbackDelivery?: FeedbackDelivery;
+  /** How the Choose an AI Session prompt names each session, by its id (HS2-5MCAKY). */
+  feedbackSessionLabels?: Readonly<Record<string, FeedbackSessionLabel>>;
   feedbackTicketId?: string;
   closeReason?: TicketCloseReason;
   /** Derived AI completion confidence of a completed/verified ticket (HS2-DWTJ43). */
@@ -221,6 +224,7 @@ export function ticketInspectorPanel({
   upNextEligible = status === 'not_started' || status === 'started',
   feedbackNeeded = false,
   feedbackDelivery,
+  feedbackSessionLabels = {},
   feedbackTicketId,
   closeReason,
   latestConfidence,
@@ -447,17 +451,23 @@ export function ticketInspectorPanel({
             actionPlacement="below"
             action={
               <>
-                {feedbackDelivery.sessions.map((session) => (
-                  <Button
-                    type="button"
-                    emphasis="secondary"
-                    size="default"
-                    action="choose-feedback-session"
-                    rootAttributes={{ 'data-ticket-id': feedbackTicketId ?? slug, 'data-connection-id': session.id }}
-                  >
-                    {`${session.tool} ${session.id.slice(-6)}`}
-                  </Button>
-                ))}
+                {feedbackDelivery.sessions.map((session) => {
+                  const named = Object.hasOwn(feedbackSessionLabels, session.id)
+                    ? feedbackSessionLabels[session.id]
+                    : undefined;
+                  return (
+                    <Button
+                      type="button"
+                      emphasis="secondary"
+                      size="default"
+                      action="choose-feedback-session"
+                      title={named?.description ?? `Session ${session.id}`}
+                      rootAttributes={{ 'data-ticket-id': feedbackTicketId ?? slug, 'data-connection-id': session.id }}
+                    >
+                      {named?.label ?? session.tool}
+                    </Button>
+                  );
+                })}
               </>
             }
           />

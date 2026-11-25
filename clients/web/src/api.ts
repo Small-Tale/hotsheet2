@@ -979,7 +979,12 @@ export interface CorruptTicket {
 /** Result of notifying a session after a human note on a Started ticket (HS2-25TP3N). */
 export type FeedbackDelivery =
   | { status: 'sent' | 'queued'; note_id: string; connection_id: string }
-  | { status: 'choose'; note_id: string; sessions: Array<{ id: string; tool: string }> }
+  | {
+      status: 'choose';
+      note_id: string;
+      /** `worker` is the session's claim worker id, when it has one (HS2-5MCAKY). */
+      sessions: Array<{ id: string; tool: string; worker?: string }>;
+    }
   | { status: 'start'; note_id: string }
   /** Best-effort delivery failed; the saved note reaches the AI when it next reads the ticket (HS2-H9Z9KZ). */
   | { status: 'not_shared'; note_id: string };

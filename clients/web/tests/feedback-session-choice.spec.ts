@@ -9,6 +9,8 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
   try {
     const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic session feedback' });
     await server.request(`/tickets/${created.id}`, 'PATCH', { status: 'started' });
+    // The codex session's worker holds the live claim, so its choice names this ticket (HS2-5MCAKY).
+    await server.request(`/tickets/${created.id}/claim`, 'POST', { worker: 'synthetic-codex-worker' });
     const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
     const notifications: Array<{ path: string; connection_id: string }> = [];
     await page.routeWebSocket(/.*/, (route) => {
@@ -51,8 +53,8 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
                 status: 'choose',
                 note_id: saved.notes.at(-1)?.id,
                 sessions: [
-                  { id: 'session-123456', tool: 'codex' },
-                  { id: 'session-654321', tool: 'claude' },
+                  { id: 'session-123456', tool: 'codex', worker: 'synthetic-codex-worker' },
+                  { id: 'session-654321', tool: 'claude', worker: 'synthetic-idle-worker' },
                 ],
               },
             },
@@ -73,7 +75,16 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
     await editor.blur();
     const choice = inspector.locator('[data-component="feedback-session-choice"]');
     await expect(choice).toBeVisible();
-    await expect(choice.getByRole('button', { name: 'codex 123456' })).toBeVisible();
+    // Choices name the session's tab (or tool), project, and claimed ticket, never a raw id (HS2-5MCAKY).
+    const codex = choice.getByRole('button', { name: `Codex · feedback · ${created.slug}` }),
+      claude = choice.getByRole('button', { name: 'Claude · feedback', exact: true });
+    await expect(codex).toBeVisible();
+    await expect(claude).toBeVisible();
+    await expect(codex).toHaveAttribute(
+      'title',
+      new RegExp(`working on ${created.slug} .*\\(session session-123456\\)`),
+    );
+    await expect(choice).not.toContainText('123456');
     await page.screenshot({ path: test.info().outputPath('feedback-chooser-wide.png') });
     await page.setViewportSize({ width: 768, height: 850 });
     await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
@@ -102,7 +113,7 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
     await expect(choice).toBeVisible();
     await page.waitForTimeout(500);
     await page.screenshot({ path: test.info().outputPath('feedback-chooser-wide-return.png') });
-    await choice.getByRole('button', { name: 'codex 123456' }).click();
+    await codex.click();
     await expect(choice).toHaveCount(0);
     expect(notifications).toHaveLength(1);
     expect(notifications[0]?.connection_id).toBe('session-123456');

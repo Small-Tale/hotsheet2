@@ -29,6 +29,7 @@ import type { TicketBlockersProps } from '../components/ticket-blockers';
 import { type InspectorTab, type TicketInspectorProps } from '../components/ticket-inspector';
 import { type TicketPriority } from '../components/ticket-row';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
+import type { FeedbackSessionLabel } from '../feedback-session-labels';
 import { type NotWorkingTarget, type Project } from '../interactions/types';
 import { type ProjectTicketSources } from '../new-ticket-source';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
@@ -40,6 +41,11 @@ import type { StoredPendingAttachment } from '../workspace-session';
 /** Live application bindings createInspectorSurface reads (HS2-K0VC2C). */
 export interface InspectorSurfaceDependencies {
   feedbackDelivery: Signal<{ ticketId: string; delivery: FeedbackDelivery } | undefined>;
+  /** Names the Choose an AI Session candidates by tab title, project, and claimed ticket (HS2-5MCAKY). */
+  feedbackSessionLabels: (
+    current: Project,
+    sessions: ReadonlyArray<{ id: string; tool: string; worker?: string }>,
+  ) => Record<string, FeedbackSessionLabel>;
   ago: (value?: string) => string;
   api: () => Api;
   attachmentContext: (ticket: FullTicket, current?: Project) => AttachmentReferenceContext | undefined;
@@ -227,11 +233,13 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
           : undefined,
       source = defaultProviders.value[current.id]?.sources.find(
         (candidate) => candidate.connectionId === ticket.connection_id,
-      );
+      ),
+      delivery = feedbackDelivery.value?.ticketId === ticket.qualified_id ? feedbackDelivery.value.delivery : undefined;
     return {
       slug: ticket.slug,
-      feedbackDelivery:
-        feedbackDelivery.value?.ticketId === ticket.qualified_id ? feedbackDelivery.value.delivery : undefined,
+      feedbackDelivery: delivery,
+      feedbackSessionLabels:
+        delivery?.status === 'choose' ? dependencies.feedbackSessionLabels(current, delivery.sessions) : undefined,
       feedbackTicketId: ticket.qualified_id,
       source,
       title: ticket.title,

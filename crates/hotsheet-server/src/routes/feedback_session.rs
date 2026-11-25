@@ -57,6 +57,9 @@ pub(crate) type Reservations = Arc<Mutex<HashSet<String>>>;
 pub(crate) struct SessionChoice {
     pub(crate) id: String,
     pub(crate) tool: String,
+    /// The session's claim worker id, so a client can name the ticket it works (HS2-5MCAKY).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub(crate) worker: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -88,6 +91,7 @@ fn choice(candidate: &Candidate) -> SessionChoice {
     SessionChoice {
         id: candidate.id.clone(),
         tool: candidate.tool.clone(),
+        worker: candidate.worker.clone(),
     }
 }
 
@@ -819,6 +823,25 @@ pub(crate) fn route(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// HS2-5MCAKY: a chooser entry carries the session's claim worker, so the client can name
+    /// the ticket it works; a candidate with no worker omits the field.
+    #[test]
+    fn hs2_5mcaky_a_session_choice_carries_its_worker() {
+        let mut claimed = candidate("drive-1", "/work/demo", Some("git"));
+        claimed.worker = "codex-worker".to_owned();
+        let mut idle = candidate("drive-2", "/work/demo", Some("git"));
+        idle.worker.clear();
+        let delivery = Delivery::Choose {
+            note_id: "NOTE1".to_owned(),
+            sessions: vec![choice(&claimed), choice(&idle)],
+        };
+        let json = serde_json::to_value(&delivery).expect("serializes");
+        assert_eq!(json["status"], "choose");
+        assert_eq!(json["sessions"][0]["id"], "drive-1");
+        assert_eq!(json["sessions"][0]["worker"], "codex-worker");
+        assert!(json["sessions"][1].get("worker").is_none());
+    }
 
     /// HS2-N5BDE4: an answer names the AI that asked: the request it replies to, else
     /// the newest unanswered one; a person's request or an answered one names nobody.

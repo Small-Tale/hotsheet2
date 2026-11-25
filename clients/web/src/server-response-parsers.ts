@@ -892,7 +892,11 @@ export const parseFeedbackDelivery: ResponseParser<FeedbackDelivery> = (value) =
     value.status === 'choose' &&
     Array.isArray(value.sessions) &&
     value.sessions.every(
-      (session) => isRecord(session) && typeof session.id === 'string' && typeof session.tool === 'string',
+      (session) =>
+        isRecord(session) &&
+        typeof session.id === 'string' &&
+        typeof session.tool === 'string' &&
+        (session.worker === undefined || typeof session.worker === 'string'),
     )
   )
     return value as FeedbackDelivery;
