@@ -2711,7 +2711,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   unlinked (HS2-5T33YV). Activating one searches exact slugs across every open project:
   one match opens an exact reader layer above the current inspector or reader,
   no match reports a transient toast, and multiple matches open a compact source chooser
-  rather than the advanced-search surface. The chooser separates its major regions by 16 px,
+  rather than the advanced-search surface. Copies of one ticket open in several tabs (for
+  example a local and a remote clone of one project) are one match, not a choice: matches
+  with the same slug and the same Hot Sheet ticket ULID (`native_id`, minted once and
+  carried by sync, while each clone's store hash differs) open the best copy directly. The
+  best copy is the most recently updated; among equally recent copies, a local tab's;
+  otherwise the first. Provider ids that are not ULIDs, such as issue numbers, never merge,
+  and different tickets that share a slug still get the chooser (HS2-MBFGRV). The chooser separates its major regions by 16 px,
   keeps adjacent result rows connected at zero gap, uses 8 px row insets with a 72 px minimum
   row height, and gives connected ticket/source metadata 4 px of air (HS2-4Y6SM9). The explicit `@<project-id>/<ticket-slug>`
   form, for example `@product-docs/HS2-BD09B6`, limits resolution to one open project and

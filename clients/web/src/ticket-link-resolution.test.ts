@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
+import { remoteProjectId } from './remote-projects/identity';
 import {
+  bestTicketCopies,
   parseTicketLinkReference,
   resolveTicketLink,
+  type TicketLinkMatch,
   ticketLinkMatchKey,
   ticketReferencePattern,
 } from './ticket-link-resolution';
@@ -136,5 +139,65 @@ describe('ticket link resolution', () => {
       kind: 'open',
       match: { projectId: 'beta-02', projectName: 'Beta', connectionId: 'github' },
     });
+  });
+});
+
+describe('copies of one ticket in several tabs (HS2-MBFGRV)', () => {
+  const ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    remote = remoteProjectId('01ARZ3NDEKTSV4RRFFQ69G5FAW', 'hotsheet2-abc');
+  const copy = (projectId: string, overrides: Partial<TicketLinkMatch> = {}): TicketLinkMatch => ({
+    projectId,
+    projectName: projectId,
+    ticketId: `${projectId}:id`,
+    qualifiedId: `${projectId}-store:${ULID}`,
+    connectionId: `${projectId}-store`,
+    slug: 'HS2-ABC123',
+    title: 'Synthetic',
+    nativeId: ULID,
+    updatedAt: '2026-11-20T00:00:00Z',
+    ...overrides,
+  });
+
+  it('opens the most recently updated copy, even a remote one', () => {
+    const newer = copy(remote, { updatedAt: '2026-11-21T00:00:00Z' });
+    expect(bestTicketCopies([copy('local'), newer])).toEqual([newer]);
+  });
+
+  it('prefers a local copy among equally recent ones, else the first', () => {
+    expect(bestTicketCopies([copy(remote), copy('local')]).map((match) => match.projectId)).toEqual(['local']);
+    const second = remoteProjectId('01ARZ3NDEKTSV4RRFFQ69G5FAX', 'hotsheet2-abc');
+    expect(bestTicketCopies([copy(remote), copy(second)]).map((match) => match.projectId)).toEqual([remote]);
+    // A copy without a timestamp never wins over a dated one.
+    expect(bestTicketCopies([copy('local', { updatedAt: undefined }), copy(remote)])[0].projectId).toBe(remote);
+  });
+
+  it('keeps different tickets that share a slug, and never merges non-ULID provider ids', () => {
+    const other = copy(remote, { nativeId: '01ARZ3NDEKTSV4RRFFQ69G5FAY' });
+    expect(bestTicketCopies([copy('local'), other])).toHaveLength(2);
+    const issue = (projectId: string) => copy(projectId, { nativeId: '123' });
+    expect(bestTicketCopies([issue('a'), issue('b')])).toHaveLength(2);
+  });
+
+  it('resolves a prose link to one copy instead of a choice', () => {
+    const row = (native: string, updated: string) =>
+      ({
+        id: 'x',
+        slug: 'HS2-ABC123',
+        title: 'Synthetic',
+        native_id: native,
+        qualified_id: `s:${native}`,
+        connection_id: 's',
+        updated_at: updated,
+      }) as TicketRow;
+    const reference = parseTicketLinkReference('HS2-ABC123')!;
+    const resolution = resolveTicketLink(
+      reference,
+      [
+        { id: 'local', name: 'local', tickets: [row(ULID, '2026-11-20T00:00:00Z')] },
+        { id: remote, name: 'remote', tickets: [row(ULID, '2026-11-20T00:00:00Z')] },
+      ],
+      remote,
+    );
+    expect(resolution).toMatchObject({ kind: 'open', match: { projectId: 'local' } });
   });
 });

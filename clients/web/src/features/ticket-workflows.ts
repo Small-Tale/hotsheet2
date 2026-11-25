@@ -110,7 +110,7 @@ import {
 } from '../ticket-field-reconciliation';
 import { ticketGroupCollapsed } from '../ticket-group-state';
 import { withoutCollapsedGroupMembers } from '../ticket-groups';
-import { type TicketLinkMatch, ticketLinkMatchKey } from '../ticket-link-resolution';
+import { bestTicketCopies, type TicketLinkMatch, ticketLinkMatchKey } from '../ticket-link-resolution';
 import { projectTicketPatch, reportMutationTiming, ticketRowFromFull } from '../ticket-mutation';
 import {
   type ClipboardTicket,
@@ -2496,11 +2496,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               slug: result.value.ticket.slug,
               title: result.value.ticket.title,
               status: result.value.ticket.status,
+              nativeId: result.value.ticket.native_id,
+              updatedAt: result.value.ticket.updated_at,
             },
           ]
         : [],
     );
-    const unique = new Map(matches.map((match) => [ticketLinkMatchKey(match), match]));
+    // Copies of one ticket in several tabs open the best copy without asking (HS2-MBFGRV).
+    const unique = new Map(bestTicketCopies(matches).map((match) => [ticketLinkMatchKey(match), match]));
     if (unique.size === 0) {
       showToast(`No exact match for ${id}.`);
       return;
