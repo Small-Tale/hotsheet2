@@ -13,6 +13,7 @@ fn tool(name: &str, installed: bool, configured: bool) -> ToolAvailability {
         tool: name.into(),
         installed,
         configured,
+        models: None,
     }
 }
 

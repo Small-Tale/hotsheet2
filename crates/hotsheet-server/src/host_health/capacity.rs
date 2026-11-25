@@ -66,6 +66,18 @@ pub trait CapacitySource: Send {
     ) -> Option<HostCapabilities> {
         None
     }
+
+    /// HS2-0VTQFF: the model ids each tool's catalog reports, by tool, in the order a
+    /// snapshot reports them (see [`reported_models`]). `discover` is the server's
+    /// memoized AI-tool discovery, the one behind `/ai-tools` `models[]`. Asked at most
+    /// once per [`MODELS_TTL`]. A source that cannot tell answers `None`, and every
+    /// tool's models then read as unreported.
+    fn models(
+        &mut self,
+        _discover: &dyn Fn() -> Vec<hotsheet_plugins::AiToolDescriptor>,
+    ) -> Option<HashMap<String, Vec<String>>> {
+        None
+    }
 }
 
 /// The real host.
@@ -110,6 +122,13 @@ impl CapacitySource for RoomyFixtureCapacity {
         toolchains: &[String],
     ) -> Option<HostCapabilities> {
         SystemCapacity.capabilities(plugin_dirs, toolchains)
+    }
+
+    fn models(
+        &mut self,
+        discover: &dyn Fn() -> Vec<hotsheet_plugins::AiToolDescriptor>,
+    ) -> Option<HashMap<String, Vec<String>>> {
+        SystemCapacity.models(discover)
     }
 }
 
@@ -160,6 +179,13 @@ impl CapacitySource for SystemCapacity {
             hotsheet_aitools::ai_tool_probes_enabled(),
         ))
     }
+
+    fn models(
+        &mut self,
+        discover: &dyn Fn() -> Vec<hotsheet_plugins::AiToolDescriptor>,
+    ) -> Option<HashMap<String, Vec<String>>> {
+        Some(reported_models(&discover()))
+    }
 }
 
 /// One live AI session as the server knows it. The launch directory stays here: it decides
@@ -187,6 +213,45 @@ struct Inner {
     reading: Option<Reading>,
     /// HS2-ZY4Z4G: the last capability detection, for the toolchains it was asked about.
     capabilities: Option<CapabilityReading>,
+    /// HS2-0VTQFF: the last model-catalog reading, by tool.
+    models: Option<ModelsReading>,
+}
+
+struct ModelsReading {
+    taken: Instant,
+    generation: u64,
+    report: Option<HashMap<String, Vec<String>>>,
+}
+
+/// HS2-0VTQFF: how long one model-catalog reading answers capacity reads. Discovery runs
+/// installed tools' version and catalog commands, so it is shared like capabilities.
+pub(crate) const MODELS_TTL: Duration = super::capabilities::CAPABILITIES_TTL;
+
+/// HS2-0VTQFF: each discovered tool's model ids as a capacity snapshot reports them: the
+/// catalog's default first, then the rest in the catalog's own order (newest first).
+pub(crate) fn reported_models(
+    tools: &[hotsheet_plugins::AiToolDescriptor],
+) -> HashMap<String, Vec<String>> {
+    tools
+        .iter()
+        .map(|tool| {
+            let default = tool
+                .default_model
+                .as_ref()
+                .filter(|id| tool.models.iter().any(|model| &model.id == *id));
+            let models = default
+                .into_iter()
+                .cloned()
+                .chain(
+                    tool.models
+                        .iter()
+                        .map(|model| model.id.clone())
+                        .filter(|id| Some(id) != default),
+                )
+                .collect();
+            (tool.id.clone(), models)
+        })
+        .collect()
 }
 
 struct CapabilityReading {
@@ -201,6 +266,8 @@ pub(crate) struct Capacity {
     cache_ms: AtomicU64,
     samples: AtomicU64,
     detections: AtomicU64,
+    /// HS2-0VTQFF: bumped to drop the model reading without waiting behind one.
+    models_generation: AtomicU64,
 }
 
 impl Default for Capacity {
@@ -225,10 +292,12 @@ impl Capacity {
                 source,
                 reading: None,
                 capabilities: None,
+                models: None,
             }),
             cache_ms: AtomicU64::new(CAPACITY_CACHE.as_millis() as u64),
             samples: AtomicU64::new(0),
             detections: AtomicU64::new(0),
+            models_generation: AtomicU64::new(0),
         }
     }
 
@@ -273,6 +342,39 @@ impl Capacity {
             .capabilities
             .as_ref()
             .and_then(|reading| reading.report.clone())
+    }
+
+    /// HS2-0VTQFF: the model ids each tool's catalog reports, asked from the source when
+    /// first wanted, then shared for [`MODELS_TTL`] or until [`Self::forget_models`].
+    /// Blocking: call it off the async runtime.
+    pub(crate) fn models(
+        &self,
+        discover: &dyn Fn() -> Vec<hotsheet_plugins::AiToolDescriptor>,
+    ) -> Option<HashMap<String, Vec<String>>> {
+        let mut inner = self.inner.lock_or_recover();
+        let generation = self.models_generation.load(Ordering::SeqCst);
+        let fresh = inner.models.as_ref().is_some_and(|reading| {
+            reading.generation == generation && reading.taken.elapsed() < MODELS_TTL
+        });
+        if !fresh {
+            let report = inner.source.models(discover);
+            inner.models = Some(ModelsReading {
+                taken: Instant::now(),
+                generation,
+                report,
+            });
+        }
+        inner
+            .models
+            .as_ref()
+            .and_then(|reading| reading.report.clone())
+    }
+
+    /// HS2-0VTQFF: drop the shared model reading after tool installation or plugin state
+    /// changed, so the next capacity read asks again. Lock-free, like the discovery
+    /// invalidation it follows.
+    pub(crate) fn forget_models(&self) {
+        self.models_generation.fetch_add(1, Ordering::SeqCst);
     }
 
     /// The capacity of this machine for the checkout rooted at `root`. Blocking: call it
@@ -365,6 +467,8 @@ impl Capacity {
                         tool: tool.clone(),
                         installed: *installed,
                         configured: configured(tool),
+                        // Filled by the probe from the model catalogs (HS2-0VTQFF).
+                        models: None,
                     })
                     .collect()
             }),
@@ -470,7 +574,25 @@ impl CapacityProbe for ServerCapacity {
             },
         );
         observation.capabilities = capabilities;
+        // HS2-0VTQFF: each detected tool's catalog models, from the same discovery as
+        // `/ai-tools` `models[]`, so a pattern-only policy resolves to one at launch.
+        if let Some(tools) = observation.tools.as_mut()
+            && let Some(models) = self
+                .state
+                .capacity
+                .models(&|| crate::routes::permissions::discovered_ai_tools(&self.state, false))
+        {
+            fill_models(tools, &models);
+        }
         observation
+    }
+}
+
+/// HS2-0VTQFF: give each tool the models its catalog reports; a tool discovery did not
+/// report (not detected) keeps `None`.
+pub(crate) fn fill_models(tools: &mut [ToolAvailability], models: &HashMap<String, Vec<String>>) {
+    for tool in tools {
+        tool.models = models.get(&tool.tool).cloned();
     }
 }
 

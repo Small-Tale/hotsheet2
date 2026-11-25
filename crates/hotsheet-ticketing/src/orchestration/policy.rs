@@ -191,14 +191,64 @@ impl ToolScope {
         }
     }
 
-    /// HS2-1X1TXC: the model a session the orchestrator starts names: the first exact
-    /// model listed. A list of patterns only names none, so the tool runs its own
-    /// default model.
+    /// HS2-1X1TXC: the first exact model listed. A list of patterns only names none;
+    /// a start resolves such a list against the host's models with
+    /// [`Self::resolve_start_model`].
     pub fn start_model(&self) -> Option<String> {
         self.models
             .iter()
             .find(|model| !model.contains('*'))
             .cloned()
+    }
+
+    /// HS2-0VTQFF: the model a session the orchestrator starts names. No models names
+    /// none (the tool's own default, any model being allowed); a list with an exact
+    /// model names the first exact one, as before. A list of patterns only names the
+    /// newest model the host reports that a pattern matches: `reported` lists the
+    /// tool's catalog default first, then the catalog in its own order, newest first
+    /// (see `ToolAvailability::models`), so the first match wins. A host that did not
+    /// report the tool's models, or reported none that match, starts nothing rather
+    /// than the tool's default, which may not match.
+    pub fn resolve_start_model(
+        &self,
+        reported: Option<&[String]>,
+    ) -> Result<Option<String>, ModelUnresolved> {
+        if self.models.is_empty() {
+            return Ok(None);
+        }
+        if let Some(exact) = self.start_model() {
+            return Ok(Some(exact));
+        }
+        let reported = reported.ok_or(ModelUnresolved::CatalogUnknown)?;
+        reported
+            .iter()
+            .find(|model| {
+                self.models
+                    .iter()
+                    .any(|pattern| super::wildcard_match(pattern, model))
+            })
+            .cloned()
+            .map(Some)
+            .ok_or(ModelUnresolved::NoMatch)
+    }
+}
+
+/// HS2-0VTQFF: why a pattern-only model list names no model to start with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelUnresolved {
+    /// The host did not report the tool's models: an older peer, a tool it did not
+    /// detect, or a catalog it could not read.
+    CatalogUnknown,
+    /// The host reported the tool's models and no pattern matches any of them.
+    NoMatch,
+}
+
+impl ModelUnresolved {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::CatalogUnknown => "model_unresolved",
+            Self::NoMatch => "no_matching_model",
+        }
     }
 }
 

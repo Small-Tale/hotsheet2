@@ -11,6 +11,7 @@ fn tool(name: &str, installed: bool, configured: bool) -> ToolAvailability {
         tool: name.into(),
         installed,
         configured,
+        models: None,
     }
 }
 fn session(id: &str, tool: Option<&str>, resident_mb: Option<u64>) -> SessionFootprint {
@@ -815,4 +816,44 @@ fn hs2_8z9vhh_a_refusal_names_its_limit_and_observed_value() {
         AdmissionRefusal::bare("new_reason").describe(),
         "new_reason"
     );
+}
+
+/// HS2-0VTQFF: a tool's reported models are part of the version only when reported,
+/// so a snapshot without them keeps its version; a new model changes it. They read
+/// back by tool, and a snapshot from an older peer without the field parses.
+#[test]
+fn hs2_0vtqff_reported_models_change_the_version_and_read_by_tool() {
+    let base = healthy();
+    let version = capacity_version(&base);
+    let mut reported = base.clone();
+    reported.tools.as_mut().unwrap()[0].models = Some(vec!["syn-2".into()]);
+    let with_models = capacity_version(&reported);
+    assert_ne!(with_models, version);
+    let tool = reported.tools.as_ref().unwrap()[0].tool.clone();
+    assert_eq!(
+        reported.reported_models(&tool),
+        Some(&["syn-2".to_owned()][..])
+    );
+    assert_eq!(base.reported_models(&tool), None);
+    assert_eq!(reported.reported_models("not-a-tool"), None);
+    let mut unknown = reported.clone();
+    unknown.tools = None;
+    assert_eq!(unknown.reported_models(&tool), None);
+
+    let mut newer = reported.clone();
+    newer.tools.as_mut().unwrap()[0].models = Some(vec!["syn-3".into(), "syn-2".into()]);
+    assert_ne!(capacity_version(&newer), with_models);
+    // Reported empty differs from unreported.
+    let mut empty = base.clone();
+    empty.tools.as_mut().unwrap()[0].models = Some(Vec::new());
+    assert_ne!(capacity_version(&empty), version);
+
+    // Unreported models are not written; an older peer's tool entry parses.
+    let json = serde_json::to_value(&base).unwrap();
+    assert!(json["tools"][0].get("models").is_none());
+    let parsed: CapacitySnapshot = serde_json::from_value(json).unwrap();
+    assert_eq!(parsed, base);
+    let round: CapacitySnapshot =
+        serde_json::from_value(serde_json::to_value(&reported).unwrap()).unwrap();
+    assert_eq!(round, reported);
 }

@@ -264,6 +264,7 @@ pub(super) fn roomy() -> HostObservation {
                     tool: tool.into(),
                     installed: true,
                     configured: true,
+                    models: None,
                 })
                 .into(),
         ),

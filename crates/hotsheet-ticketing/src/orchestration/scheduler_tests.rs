@@ -124,6 +124,7 @@ pub(super) fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> Capacity
                     tool: (*tool).into(),
                     installed: true,
                     configured: true,
+                    models: None,
                 })
                 .collect(),
         ),
@@ -2166,4 +2167,123 @@ fn hs2_n5bde4_an_unlisted_project_and_tools_are_auto_and_zero_is_off() {
     let without_alpha = starts(&world.now());
     assert_eq!(without_alpha.len(), 4);
     assert!(without_alpha.iter().all(|(_, tool)| tool == "beta"));
+}
+
+/// HS2-0VTQFF: set the models target 1's machine reports for `tool`.
+fn report_models(world: &mut World, tool: &str, models: Option<&[&str]>) {
+    let tools = world.targets[0]
+        .capacity
+        .as_mut()
+        .unwrap()
+        .tools
+        .as_mut()
+        .unwrap();
+    let known = tools.iter_mut().find(|known| known.tool == tool).unwrap();
+    known.models = models.map(|models| models.iter().map(|m| (*m).to_owned()).collect());
+}
+
+fn allow_models(world: &mut World, tool: &str, models: &[&str]) {
+    let scope = world.policy.targets[0]
+        .tools
+        .iter_mut()
+        .find(|scope| scope.tool == tool)
+        .unwrap();
+    scope.models = models.iter().map(|m| (*m).to_owned()).collect();
+}
+
+fn started_models(schedule: &Schedule) -> Vec<(String, Option<String>)> {
+    schedule
+        .placements
+        .iter()
+        .filter(|placement| placement.action == PlacementAction::Start)
+        .map(|placement| (placement.tool.clone(), placement.model.clone()))
+        .collect()
+}
+
+/// HS2-0VTQFF: a worker start under a pattern-only list names the newest model the
+/// target's machine reports that matches; without a match, or without a report, the
+/// tool is passed over with a stable code, and exact lists are unchanged.
+#[test]
+fn hs2_0vtqff_a_worker_start_names_the_resolved_model() {
+    let mut world = World::new(&[(1, 2)]);
+    world.work = vec![work(1, 1)];
+    allow_models(&mut world, "alpha", &["syn-large-*"]);
+    world.policy.targets[0].tools.truncate(1);
+
+    // Unknown catalog: nothing starts on the tool's own default.
+    assert_eq!(
+        blocked(&world.now(), 1),
+        ("no_tool_available", Some("model_unresolved".into()))
+    );
+
+    // Reported, no match.
+    report_models(&mut world, "alpha", Some(&["syn-small-2", "syn-small-1"]));
+    assert_eq!(
+        blocked(&world.now(), 1),
+        ("no_tool_available", Some("no_matching_model".into()))
+    );
+
+    // Reported with matches: the first one, newest first.
+    report_models(
+        &mut world,
+        "alpha",
+        Some(&["syn-small-2", "syn-large-3", "syn-large-2"]),
+    );
+    let schedule = world.now();
+    assert_eq!(
+        started_models(&schedule),
+        [("alpha".to_owned(), Some("syn-large-3".to_owned()))]
+    );
+    // The same inputs give the same model again.
+    assert_eq!(started_models(&world.now()), started_models(&schedule));
+
+    // The catalog changes (a newer model appears): the next start follows it.
+    report_models(&mut world, "alpha", Some(&["syn-large-4", "syn-large-3"]));
+    assert_eq!(
+        started_models(&world.now()),
+        [("alpha".to_owned(), Some("syn-large-4".to_owned()))]
+    );
+
+    // A mixed list keeps its first exact model, whatever the catalog says.
+    allow_models(&mut world, "alpha", &["syn-large-*", "syn-exact"]);
+    assert_eq!(
+        started_models(&world.now()),
+        [("alpha".to_owned(), Some("syn-exact".to_owned()))]
+    );
+    report_models(&mut world, "alpha", None);
+    assert_eq!(
+        started_models(&world.now()),
+        [("alpha".to_owned(), Some("syn-exact".to_owned()))]
+    );
+
+    // Patterns only again, catalog gone: refused again (empty then refill).
+    allow_models(&mut world, "alpha", &["syn-large-*"]);
+    assert_eq!(
+        blocked(&world.now(), 1).1.as_deref(),
+        Some("model_unresolved")
+    );
+    report_models(&mut world, "alpha", Some(&["syn-large-5"]));
+    assert_eq!(
+        started_models(&world.now()),
+        [("alpha".to_owned(), Some("syn-large-5".to_owned()))]
+    );
+}
+
+/// HS2-0VTQFF: a preferred tool whose patterns resolve to nothing leaves the work to
+/// the next allowed tool, and a step's own preferred model still wins when allowed.
+#[test]
+fn hs2_0vtqff_an_unresolved_tool_passes_the_work_to_the_next_tool() {
+    let mut world = World::new(&[(1, 2)]);
+    world.work = vec![work(1, 1)];
+    allow_models(&mut world, "alpha", &["syn-large-*"]);
+    report_models(&mut world, "alpha", Some(&["syn-small-1"]));
+    assert_eq!(started_models(&world.now()), [("beta".to_owned(), None)]);
+
+    // A planned model the patterns allow is named as is.
+    world.work[0].tool = Some("alpha".into());
+    world.work[0].model = Some("syn-large-9".into());
+    assert_eq!(
+        started_models(&world.now()),
+        [("alpha".to_owned(), Some("syn-large-9".to_owned()))]
+    );
 }

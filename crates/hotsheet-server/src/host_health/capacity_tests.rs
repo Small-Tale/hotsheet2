@@ -19,6 +19,9 @@ struct Script {
     /// HS2-ZY4Z4G
     capabilities: Option<HostCapabilities>,
     toolchains_asked: Vec<Vec<String>>,
+    /// HS2-0VTQFF: report models from the server's discovery, as the real host does.
+    models_from_discovery: bool,
+    models_asked: u32,
 }
 
 #[derive(Clone, Default)]
@@ -76,6 +79,16 @@ impl CapacitySource for Scripted {
             script.toolchains_asked.push(toolchains.to_vec());
             script.capabilities.clone()
         })
+    }
+    fn models(
+        &mut self,
+        discover: &dyn Fn() -> Vec<hotsheet_plugins::AiToolDescriptor>,
+    ) -> Option<HashMap<String, Vec<String>>> {
+        let from_discovery = self.0.with_lock(|script| {
+            script.models_asked += 1;
+            script.models_from_discovery
+        });
+        from_discovery.then(|| reported_models(&discover()))
     }
 }
 
@@ -290,12 +303,14 @@ fn host_health_capacity_reading_is_taken_on_demand_and_shared_inside_the_cache_w
             ToolAvailability {
                 tool: "codex".into(),
                 installed: true,
-                configured: true
+                configured: true,
+                models: None,
             },
             ToolAvailability {
                 tool: "claude".into(),
                 installed: false,
-                configured: false
+                configured: false,
+                models: None,
             },
         ])
     );
@@ -654,6 +669,49 @@ mod server {
         assert_eq!(error["code"], "corrupt_orchestration_data");
     }
 
+    /// HS2-0VTQFF: the capacity read reports each detected tool's catalog models from
+    /// the server's own discovery (the one behind `/ai-tools`), default first; the
+    /// reading is shared, and a discovery invalidation asks again.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn hs2_0vtqff_the_capacity_read_reports_each_tools_catalog_models() {
+        let mut f = fixture();
+        let scans = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let counted = scans.clone();
+        f.state = f
+            .state
+            .clone()
+            .with_capacity_cache(Duration::ZERO)
+            .with_ai_tool_discovery(Duration::ZERO, move |_, _, _, _| {
+                counted.fetch_add(1, Ordering::SeqCst);
+                vec![descriptor(
+                    "codex",
+                    &["syn-a", "syn-b", "syn-c"],
+                    Some("syn-b"),
+                )]
+            });
+        f.scripted.set(|script| script.models_from_discovery = true);
+        let router = app(f.state.clone());
+        let capacity = format!("/checkouts/{}/target-capacity", f.checkout.id);
+        let (status, snapshot) = call(&router, "GET", &capacity, None).await;
+        assert_eq!(status, StatusCode::OK, "{snapshot}");
+        assert_eq!(
+            snapshot["tools"],
+            json!([{"tool":"codex","installed":true,"configured":true,
+                    "models":["syn-b","syn-a","syn-c"]},
+                {"tool":"claude","installed":false,"configured":true}])
+        );
+        // A second reading (the capacity cache is off) shares the model reading.
+        let (_, again) = call(&router, "GET", &capacity, None).await;
+        assert_eq!(again["tools"], snapshot["tools"]);
+        assert_eq!(scans.load(Ordering::SeqCst), 1);
+        assert_eq!(f.scripted.0.with_lock(|script| script.models_asked), 1);
+        // A tool install or plugin change asks again.
+        f.state.invalidate_ai_tool_discovery();
+        let (_, after) = call(&router, "GET", &capacity, None).await;
+        assert_eq!(after["tools"], snapshot["tools"]);
+        assert_eq!(scans.load(Ordering::SeqCst), 2);
+    }
+
     #[cfg(unix)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn host_health_capacity_lists_live_ai_sessions_by_tool_and_footprint_only() {
@@ -774,4 +832,63 @@ fn hs2_zy4z4g_capabilities_are_detected_once_and_again_after_the_ttl_or_new_tool
     scripted.set(|script| script.capabilities = None);
     assert!(capacity.capabilities(&[], &declared).is_some());
     assert_eq!(capacity.detections(), 2);
+}
+
+// ---- HS2-0VTQFF: catalog models ----------------------------------------------------------
+
+fn descriptor(
+    id: &str,
+    models: &[&str],
+    default: Option<&str>,
+) -> hotsheet_plugins::AiToolDescriptor {
+    hotsheet_plugins::AiToolDescriptor {
+        id: id.into(),
+        display_name: id.into(),
+        models: models
+            .iter()
+            .map(|model| hotsheet_plugins::ModelSpec {
+                id: (*model).into(),
+                label: (*model).into(),
+                effort_levels: Vec::new(),
+            })
+            .collect(),
+        default_model: default.map(str::to_owned),
+        ..hotsheet_plugins::AiToolDescriptor::default()
+    }
+}
+
+#[test]
+fn hs2_0vtqff_reported_models_put_the_catalog_default_first_then_catalog_order() {
+    let reported = reported_models(&[
+        descriptor("alpha", &["syn-3", "syn-2", "syn-1"], Some("syn-2")),
+        // A default the catalog does not list is not reported.
+        descriptor("beta", &["syn-b2", "syn-b1"], Some("syn-gone")),
+        descriptor("gamma", &["syn-g1"], None),
+        descriptor("delta", &[], Some("syn-d")),
+    ]);
+    let list = |tool: &str| reported.get(tool).cloned();
+    let ids = |ids: &[&str]| Some(ids.iter().map(|id| (*id).to_owned()).collect::<Vec<_>>());
+    assert_eq!(list("alpha"), ids(&["syn-2", "syn-3", "syn-1"]));
+    assert_eq!(list("beta"), ids(&["syn-b2", "syn-b1"]));
+    assert_eq!(list("gamma"), ids(&["syn-g1"]));
+    assert_eq!(list("delta"), ids(&[]));
+
+    // Tools take their own list; one discovery did not report keeps unknown.
+    let mut tools = vec![
+        ToolAvailability {
+            tool: "alpha".into(),
+            installed: true,
+            configured: true,
+            models: None,
+        },
+        ToolAvailability {
+            tool: "omega".into(),
+            installed: false,
+            configured: true,
+            models: Some(vec!["stale".into()]),
+        },
+    ];
+    fill_models(&mut tools, &reported);
+    assert_eq!(tools[0].models, list("alpha"));
+    assert_eq!(tools[1].models, None);
 }
