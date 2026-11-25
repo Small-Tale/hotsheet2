@@ -3955,3 +3955,260 @@ fn hs2_0vtqff_a_started_session_records_the_resolved_model() {
     assert_eq!(launches[0].model.as_deref(), Some("syn-codex-4"));
     let _ = &clock;
 }
+
+/// Claims a test holds by hand: each with its expiry, never a holder or token. A
+/// release wait never blocks, since a one-shot pass never waits.
+#[derive(Default)]
+struct HandHeld(std::sync::Mutex<Vec<hotsheet_ticketing::orchestration::HeldClaim>>);
+impl ClaimSource for HandHeld {
+    fn held(
+        &self,
+        namespace: &str,
+        _: Option<&Path>,
+    ) -> Result<Vec<hotsheet_ticketing::orchestration::HeldClaim>, ClaimsUnreachable> {
+        Ok(self
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|claim| claim.namespace == namespace)
+            .cloned()
+            .collect())
+    }
+    fn wait_free(&self, _: &str, _: &str, _: std::time::Duration, _: Option<&Path>) -> bool {
+        false
+    }
+}
+
+/// HS2-AK75HT (HS2-YADH9C): a step's own session claiming its resource never defers
+/// that step, which is in progress and out of the ready work. When the session is
+/// lost while its claim is still live, the step is placed again only once that claim
+/// expires, and then on the same run: the lost session's claim is waited out like any
+/// other holder's, and nothing is dispatched twice.
+#[test]
+fn hs2_ak75ht_a_lost_sessions_live_claim_holds_its_step_until_the_claim_expires() {
+    clocked!(clock, tx);
+    let mut f = Placed::new(&BOTH, &mut tx);
+    let claims = Arc::new(HandHeld::default());
+    f.m.runtime = f.m.runtime.clone().with_claim_source(claims.clone());
+    let step = f.ready("Needs the VM", &mut tx);
+    let target_ticket =
+        f.m.runtime
+            .readiness(&f.owner(), &step, &mut tx)
+            .unwrap()
+            .readiness
+            .step
+            .target
+            .native_id;
+    f.m.runtime
+        .readiness_define(
+            &f.owner(),
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": f.m.owner_connection(),
+                    "native_id": f.orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": f.m.target_connection(),
+                "native_id": target_ticket, "prerequisites": [],
+                "resources": [{"namespace": "vm", "resource": "macos-vm"}],
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(outcomes(&f.tick(&mut tx)), [("started", None)]);
+    let first = f.record(&format!("sched-start-{step}"));
+    let run = f.run_of(&step);
+
+    // The session claims the resource for its work. Its own claim holds nothing back:
+    // the step is running, so a pass neither defers it nor starts anything.
+    let expires = START + 30 * MINUTE;
+    *claims.0.lock().unwrap() = vec![hotsheet_ticketing::orchestration::HeldClaim {
+        namespace: "vm".into(),
+        resource: "macos-vm".into(),
+        expires_at_ms: expires,
+    }];
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty(), "{:?}", outcomes(&tick));
+        assert!(
+            tick.view.schedule.unplaced.is_empty(),
+            "{:?}",
+            tick.view.schedule.unplaced
+        );
+        assert!(tick.view.schedule.contention.is_empty());
+    }
+
+    // The session crashes with its claim still live: the step waits for the expiry.
+    f.at(&clock, START + MINUTE);
+    f.host.crash(&f.terminal(&first));
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty(), "{:?}", outcomes(&tick));
+    assert_eq!(f.record(&first.operation_id).state, SessionState::Lost);
+    let deferred = &tick.view.schedule.unplaced;
+    assert_eq!(deferred.len(), 1, "{deferred:?}");
+    assert_eq!(deferred[0].step_id, step);
+    assert_eq!(
+        (deferred[0].reason.code(), deferred[0].detail.as_deref()),
+        ("resource_held", Some("vm/macos-vm"))
+    );
+    assert_eq!(tick.view.schedule.retry_at_ms, Some(expires));
+    assert_eq!(f.host.launches().len(), 1);
+    // Just before the expiry, however often it runs, nothing more happens.
+    f.at(&clock, expires - 1);
+    for _ in 0..2 {
+        assert!(f.tick(&mut tx).outcomes.is_empty());
+    }
+    assert_eq!(f.host.launches().len(), 1);
+
+    // At the expiry the claim is over: a replacement starts on the same run.
+    f.at(&clock, expires);
+    assert_eq!(outcomes(&f.tick(&mut tx)), [("started", None)]);
+    assert_eq!(f.host.launches().len(), 2);
+    let runs = f.m.runtime.run_list(&f.owner(), false).unwrap();
+    assert_eq!(runs.len(), 1, "nothing is dispatched twice");
+    assert_eq!(runs[0].run_id, run.run_id);
+    let replacement = f
+        .records()
+        .into_iter()
+        .find(|session| session.state == SessionState::Running)
+        .unwrap();
+    assert_eq!(replacement.run_id.as_deref(), Some(run.run_id.as_str()));
+    assert_eq!(
+        replacement.replaces.as_deref(),
+        Some(first.session_id.as_str())
+    );
+    // The replacement is told the resource its work must hold, as the first was.
+    let prompt = &f.host.launches()[1].role_prompt;
+    assert!(prompt.contains("`vm/macos-vm`"), "{prompt}");
+}
+
+/// HS2-190RDX (HS2-YADH9C): a plan update whose draft and a person's live edit change
+/// the same step differently is refused as a whole. The update fails with that step
+/// named, the person's edit stands, the draft's other changes are not applied (the
+/// step it removed keeps its running work and session), the draft is forgotten, and
+/// a new update can open at once. No work is lost to a refused swap.
+#[test]
+fn hs2_yadh9c_a_conflicting_plan_update_is_refused_without_touching_running_work() {
+    clocked!(clock, tx);
+    let _ = &clock;
+    let f = Placed::new(&BOTH, &mut tx);
+    let keep = f.ready("Keep", &mut tx);
+    let drop = f.ready("Drop", &mut tx);
+    let waiting = f.ready("Waiting", &mut tx);
+    assert_eq!(
+        outcomes(&f.tick(&mut tx)),
+        [("started", None), ("started", None)]
+    );
+    let drop_session = f.record(&format!("sched-start-{drop}"));
+    let slug_of = |step: &str, tx: &mut Transaction<'_>| {
+        ops::resolve(
+            &f.m.target_store,
+            &f.m.runtime
+                .readiness(&f.owner(), step, tx)
+                .unwrap()
+                .readiness
+                .step
+                .target
+                .native_id,
+        )
+        .unwrap()
+        .unwrap()
+        .slug
+    };
+    let waiting_slug = slug_of(&waiting, &mut tx);
+    let tool_of = |step: &str, tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .readiness(&f.owner(), step, tx)
+            .unwrap()
+            .readiness
+            .step
+            .tool
+    };
+
+    let update = f.update_plan(&mut tx);
+    assert_eq!(update.state, PlanUpdateState::Drafting);
+    // The planner drafts: drop is removed and waiting prefers codex.
+    f.m.runtime
+        .readiness_remove(
+            &f.owner(),
+            &serde_json::from_value(json!({"step_id": drop, "plan_update": update.update_id}))
+                .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    f.draft_define(&update.update_id, &waiting_slug, Some("codex"), &mut tx);
+    // Meanwhile a person changes the same live step another way.
+    f.m.runtime
+        .readiness_define(
+            &f.owner(),
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": f.m.owner_connection(),
+                    "native_id": f.orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": f.m.target_connection(),
+                "native_id": waiting_slug, "prerequisites": [], "tool": "claude",
+            }))
+            .unwrap(),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(tool_of(&waiting, &mut tx).as_deref(), Some("claude"));
+
+    // Finishing is refused as a conflict naming that step.
+    let refused = f.m.runtime.plan_update_finish(
+        &f.owner(),
+        &serde_json::from_value(json!({"update_id": update.update_id})).unwrap(),
+        Some(&worker()),
+        &mut tx,
+    );
+    assert_eq!(
+        refused.as_ref().err().map(OrchestrationError::code),
+        Some("plan_update_conflict"),
+        "{refused:?}"
+    );
+    let status = f.m.runtime.plan_status(&f.owner(), &mut tx).unwrap();
+    let failed = status.update.unwrap();
+    assert_eq!(failed.update_id, update.update_id);
+    assert_eq!(failed.state, PlanUpdateState::Failed);
+    assert_eq!(failed.reason.as_deref(), Some("plan_update_conflict"));
+    assert_eq!(failed.conflicts, std::slice::from_ref(&waiting));
+    assert_eq!(failed.draft_steps, 0, "the draft is forgotten");
+    assert!(failed.swap.is_none());
+    // The live plan is the person's: every step stands and the person's edit holds.
+    let live = f.live_steps(&mut tx);
+    assert!(live.contains(&keep) && live.contains(&drop) && live.contains(&waiting));
+    assert_eq!(tool_of(&waiting, &mut tx).as_deref(), Some("claude"));
+    // The step the draft removed keeps its run and its session.
+    assert!(!f.run_of(&drop).state.is_terminal());
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &drop_session.session_id).0,
+        PlacementAction::Keep
+    );
+    assert_eq!(
+        f.record(&drop_session.operation_id).state,
+        SessionState::Running
+    );
+    assert!(
+        f.audited("plan_update_apply")
+            .iter()
+            .any(|(outcome, reason, _)| *outcome == AuditOutcome::Failed
+                && reason.as_deref() == Some("plan_update_conflict"))
+    );
+    // Its later draft writes are refused, and a new update opens at once.
+    let late = f.m.runtime.readiness_remove(
+        &f.owner(),
+        &serde_json::from_value(json!({"step_id": keep, "plan_update": update.update_id})).unwrap(),
+        Some(&worker()),
+        &mut tx,
+    );
+    assert_eq!(
+        late.as_ref().err().map(OrchestrationError::code),
+        Some("plan_update_not_open")
+    );
+    let next = f.update_plan(&mut tx);
+    assert_ne!(next.update_id, update.update_id);
+    assert_eq!(next.state, PlanUpdateState::Drafting);
+    assert_eq!(next.draft_steps, 3);
+}
