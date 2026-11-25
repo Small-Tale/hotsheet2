@@ -632,7 +632,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['terminal-visibility-dialog', 1],
     ['ai-conversation', 1],
     ['project-tab', 1],
-    ['project-tabs', 5],
+    ['project-tabs', 6],
     ['resizable-region', 2],
     ['connection-state-banner', 5],
     ['app-shell', 1],
