@@ -6511,6 +6511,7 @@ export async function startHotSheetWebClient() {
       selectedStep: orchestrationView.selectedStep.value,
       collapsedGroups: orchestrationView.collapsedGroups(),
       propose: orchestrationView.proposeAvailability(),
+      planning: orchestrationView.planning.value,
     }),
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({

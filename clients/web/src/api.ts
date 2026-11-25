@@ -2020,6 +2020,31 @@ type HostParsedRequest = <T>(parse: ResponseParser<T>, path: string, requested?:
  */
 export const ORCHESTRATION_APP_ACTOR = 'hotsheet-app';
 
+/** HS2-8Z9VHH: an admission refusal's values, from the server's `admission` detail. */
+export interface AdmissionRefusalDetail {
+  reason: string;
+  setting?: string;
+  limit?: number;
+  observed?: number;
+  tool?: string;
+}
+
+/** Reads the `admission` object of a failure body; anything malformed is ignored. */
+export function parseAdmissionRefusal(value: unknown): AdmissionRefusalDetail | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.reason !== 'string' || !record.reason) return undefined;
+  const number = (key: string) => (typeof record[key] === 'number' ? record[key] : undefined);
+  const text = (key: string) => (typeof record[key] === 'string' ? record[key] : undefined);
+  return {
+    reason: record.reason,
+    setting: text('setting'),
+    limit: number('limit'),
+    observed: number('observed'),
+    tool: text('tool'),
+  };
+}
+
 export class ApiHttpError extends Error {
   constructor(
     message: string,
@@ -2028,6 +2053,8 @@ export class ApiHttpError extends Error {
     readonly code?: string,
     /** HS2-9XJEZC: the orchestrator permission request a `permission_required` refusal waits on. */
     readonly requestId?: string,
+    /** HS2-8Z9VHH: a `session_admission_refused` failure's reason, limit and observed value. */
+    readonly admission?: AdmissionRefusalDetail,
   ) {
     super(message);
   }
@@ -2107,6 +2134,7 @@ export class Api {
           response.status,
           errorCodeOf(failure),
           requestIdOf(failure),
+          parseAdmissionRefusal((failure as { admission?: unknown } | null | undefined)?.admission),
         );
       }
       onResponse?.(response);

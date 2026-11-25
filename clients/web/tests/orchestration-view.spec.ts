@@ -975,8 +975,12 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
     await page.locator('[data-segment-value="orchestration"]').first().click();
     const toolbar = page.locator('[data-orchestration-toolbar="no_plan"]');
     await expect(toolbar).toContainText('No Plan Yet · Planner waiting in its terminal');
-    const propose = toolbar.getByRole('button', { name: 'Propose Plan' });
+    // HS2-2Z4M6M: the planner's state takes Propose Plan's place, with a spinner and the reason as its title.
+    const propose = toolbar.locator('[data-planner-state]');
+    await expect(propose).toHaveAttribute('data-planner-state', 'Planner Waiting');
+    await expect(propose).toContainText('Planner Waiting');
     await expect(propose).toBeDisabled();
+    await expect(toolbar.getByRole('button', { name: 'Propose Plan' })).toHaveCount(0);
     await expect(propose).toHaveAttribute('title', 'The planning session is waiting for an answer in its terminal tab');
     await capture(page, 'waiting-1440', 'hs2-5ryxnn');
     await page.setViewportSize({ width: 1100, height: 820 });
@@ -994,6 +998,7 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
     await page.locator('[data-segment-value="orchestration"]').first().click();
     await expect(toolbar).toContainText('No Plan Yet · Planning');
     await expect(toolbar).not.toContainText('waiting');
+    await expect(propose).toHaveAttribute('data-planner-state', 'Planning');
     await expect(propose).toHaveAttribute('title', 'A planning session is working on the plan now');
   } finally {
     await server.stop(page);
@@ -1128,6 +1133,82 @@ test('HS2-N5BDE4 a planner that asked a question says so and opens the goal tick
     await page.locator('[data-segment-value="list"]').first().click();
     await page.locator('[data-segment-value="orchestration"]').first().click();
     await expect(toolbar).not.toContainText('asked a question');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
+ * HS2-8Z9VHH: the synthetic tool, and this machine's own admission file refusing every session
+ * (`max_sessions: 0`), so the next session start is refused by the real admission.
+ */
+async function refusingMachine(home: string) {
+  await syntheticTool(home);
+  await writeFile(
+    resolve(home, 'orchestration-admission.json'),
+    JSON.stringify({ schema_version: 1, admission: { max_sessions: 0 } }),
+  );
+}
+
+const refusalToast = (page: Page, text: string) => page.locator('.app-toast').filter({ hasText: text });
+
+test('HS2-2Z4M6M a refused Propose Plan says why on the first press, from the real admission', async ({ page }) => {
+  test.setTimeout(120_000);
+  // The planner runs in an installed tool (Auto); the synthetic tool keeps that independent of the host.
+  const server = await realTicketServer({ seed: ({ env }) => refusingMachine(env.HOTSHEET_HOME!) });
+  try {
+    await declareSelf(server, false);
+    await asOrchestrationProject(server);
+    await server.request('/tickets', 'POST', { title: 'Ship the synthetic sign-on' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    let proposals = 0;
+    await openProject(page, server, 'Launch', async () => {
+      await page.route(/\/orchestration\/planning\/propose$/, async (route) => {
+        proposals += 1;
+        await route.fallback();
+      });
+    });
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const toolbar = page.locator('[data-orchestration-toolbar="no_plan"]');
+    const propose = toolbar.getByRole('button', { name: 'Propose Plan' });
+    await expect(propose).toBeEnabled();
+    await propose.click();
+    // One press, one answer in words: the machine's limit and the setting to change, with the code after it.
+    const toast = refusalToast(page, 'Propose Plan failed: The machine’s session limit is 0');
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText('Sessions per Machine in Settings › Orchestration › Machine Defaults');
+    await expect(toast).toContainText('(session_cap_reached)');
+    expect(proposals).toBe(1);
+    // Nothing started: the button is back for another press.
+    await expect(propose).toBeEnabled();
+    await capture(page, 'refused-1440', 'hs2-2z4m6m');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await propose.click();
+    await expect(toast).toBeVisible();
+    await capture(page, 'refused-390', 'hs2-2z4m6m');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-8Z9VHH a refused planner session start for Update Plan says why on the first press', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer({ seed: ({ env }) => refusingMachine(env.HOTSHEET_HOME!) });
+  try {
+    await declareSelf(server);
+    await asOrchestrationProject(server);
+    await planAndDispatch(server);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, 'Launch');
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const update = page.locator('[data-orchestration-toolbar="proposed"]').getByRole('button', { name: 'Update Plan' });
+    await expect(update).toBeEnabled();
+    await update.click();
+    const toast = refusalToast(page, 'Update Plan failed: The machine’s session limit is 0');
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText('(session_cap_reached)');
+    await expect(toast).not.toContainText('orchestration session refused the request');
+    await capture(page, 'update-refused-1440', 'hs2-8z9vhh');
   } finally {
     await server.stop(page);
   }

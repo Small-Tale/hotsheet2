@@ -469,6 +469,42 @@ describe('web ESLint policy', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('HS2-8Z9VHH words every orchestration, session and remote refusal code the server can return', async () => {
+    // Each error enum's `code()` in the server's orchestration model is an answer a person can see.
+    const { ORCHESTRATION_REFUSALS } = await import('./orchestration-refusals');
+    const model = new URL('../../../crates/hotsheet-ticketing/src/orchestration/', import.meta.url);
+    const enums: Record<string, string> = {
+      OrchestrationError: 'mod.rs',
+      TargetOpError: 'mod.rs',
+      DenialReason: 'actions.rs',
+      AdmissionReason: 'capacity.rs',
+      TargetFailure: 'contract.rs',
+      SiteError: 'contract/sites.rs',
+      GateError: 'gates.rs',
+      PolicyDenial: 'policy.rs',
+      ReadinessError: 'readiness.rs',
+      RunError: 'runs.rs',
+      SessionError: 'sessions.rs',
+      ValidationError: 'validation.rs',
+    };
+    const codes = new Set<string>();
+    for (const [name, file] of Object.entries(enums)) {
+      const source = readFileSync(new URL(file, model), 'utf8');
+      const start = source.indexOf(`pub fn code(`, source.indexOf(`impl ${name} {`));
+      const body = source.slice(start, source.indexOf('\n    }\n', start));
+      const found = [...body.matchAll(/"([a-z0-9_]+)"/g)].map((match) => match[1]);
+      expect(found.length, name).toBeGreaterThan(0);
+      for (const code of found) codes.add(code);
+    }
+    // The host's own setup failure (`TOOL_SETUP_FAILED`) is reported as a reason too.
+    const cli = readFileSync(
+      new URL('../../../crates/hotsheet-cli/src/orchestration/sessions.rs', import.meta.url),
+      'utf8',
+    );
+    codes.add(/TOOL_SETUP_FAILED: &str = "([a-z_]+)"/.exec(cli)![1]);
+    expect([...codes].filter((code) => !(code in ORCHESTRATION_REFUSALS))).toEqual([]);
+  });
+
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     expect(config).not.toContain("files: ['src/main.tsx']");

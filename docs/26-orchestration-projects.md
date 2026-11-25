@@ -5353,6 +5353,19 @@ hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestra
 view's header reads `Planner waiting in its terminal`, and Propose Plan
 says the planning session waits for an answer in its terminal tab (HS2-5RYXNN).
 
+**Propose Plan feedback (HS2-2Z4M6M, HS2-8Z9VHH).** The press never goes silent. While
+it is on its way the button becomes a busy `Starting Planner`; while the planner works
+or waits it is a busy `Planning` or `Planner Waiting` with the reason as its title, in
+the header and in the No Plan Yet empty state alike (a planner that finished its turn
+keeps Propose Plan, so a press re-plans). A refusal is a toast on the first press,
+worded from the shared refusal map (`clients/web/src/orchestration-refusals.ts`): a
+refused admission names the machine's count and limit and the setting to change, for
+example "The machine already runs 2 AI sessions; its limit is 2. Close a session, or
+raise Sessions per Machine in Settings › Orchestration › Machine Defaults.", with the
+code after it as secondary detail. Every refusal code of the orchestration, session and
+remote surfaces has an entry there; a policy test fails on an unmapped code. Run
+controls, Start or Pause, reopen and plan-health actions use the same words.
+
 ### The default goal (HS2-YSRT6Y)
 
 The maintainer's words: "the default goal for an orchestrator, if no explicit goals are
