@@ -313,6 +313,8 @@ fn base_tools_list() -> Value {
                 "note_summary": { "type": ["string", "null"], "description": "concise plain-text timeline headline; with note_id, null clears the existing summary" },
                 "response_to": { "type": ["string", "null"], "description": "feedback request note id answered by the appended note; with note_id, links that existing note as the response (null removes the link; providers without note_response_link refuse)" },
                 "note_confidence": { "type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "AI completion confidence (0-100) for the appended note; required with status completed by AI authors, alongside a ## Confidence section in the note. With note_id it corrects that note's score (note text optional), and null clears it" },
+                "commits": { "type": "array", "items": { "type": "string" }, "description": "commits holding this ticket's work; an AI completion verifies they are on the remote instead of searching for slug-first commits (HS2-R8ZH4K)" },
+                "no_commit": { "type": "boolean", "description": "the ticket has no code commits: an AI completion skips the remote-commit check and records the opt-out; otherwise it is rejected with commit_not_on_remote, commit_remote_unverified or commits_not_found when its commits are not on a remote branch" },
                 "note_id": str_prop("existing note ULID to edit instead of appending")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id"] }
@@ -323,7 +325,9 @@ fn base_tools_list() -> Value {
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "reason": str_prop("completed|not_planned|duplicate|obsolete|works_as_designed"),
-                "duplicate_of": str_prop("required when reason=duplicate")
+                "duplicate_of": str_prop("required when reason=duplicate"),
+                "commits": { "type": "array", "items": { "type": "string" }, "description": "commits holding this ticket's work; an AI completion verifies they are on the remote instead of searching for slug-first commits (HS2-R8ZH4K)" },
+                "no_commit": { "type": "boolean", "description": "the ticket has no code commits: an AI completion skips the remote-commit check and records the opt-out; otherwise it is rejected with commit_not_on_remote, commit_remote_unverified or commits_not_found when its commits are not on a remote branch" }
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id", "reason"] }
         },
@@ -984,6 +988,8 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
             let body = json!({
                 "reason": reason,
                 "duplicate_of": args.get("duplicate_of").cloned().unwrap_or(Value::Null),
+                "commits": args.get("commits").cloned().unwrap_or(Value::Null),
+                "no_commit": args.get("no_commit").cloned().unwrap_or(Value::Null),
             });
             let closed = backend
                 .send(
@@ -1708,6 +1714,33 @@ mod core_backend {
                 ));
             }
             Ok(GitProvider::new(connection_id, self.store.clone()))
+        }
+
+        /// HS2-R8ZH4K: an AI completion's commits must be on the remote. The code checkout
+        /// is this call's checkout, else any registered checkout linked to the store.
+        fn check_remote_commits(
+            &self,
+            actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+            completes: bool,
+            slug: &str,
+            body: &Value,
+        ) -> Result<hotsheet_ticketing::completion_remote::Outcome, BackendError> {
+            use hotsheet_ticketing::completion_remote as remote;
+            let claim = commit_claim(body)?;
+            if !completes || !actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai) {
+                return Ok(remote::Outcome::NotApplicable);
+            }
+            let preferred = self
+                .checkout
+                .as_ref()
+                .map(|checkout| PathBuf::from(&checkout.root));
+            let candidates = remote::checkout_candidates(
+                &self.checkout_registry,
+                self.store.root(),
+                preferred.as_deref(),
+            );
+            let repo = remote::code_checkout(&candidates, self.store.root());
+            remote::check(actor, completes, slug, repo.as_deref(), &claim, true).map_err(rule_err)
         }
 
         /// Wrap an already-open store (used by tests via a `TempStore`).
@@ -3550,13 +3583,16 @@ mod core_backend {
                     let reason = opt_enum(body, "reason")?
                         .ok_or_else(|| bad_request("reason is required"))?;
                     let actor = body_actor(body)?;
+                    let completes = hotsheet_ticketing::actor::close_completes(t.status, reason);
                     hotsheet_ticketing::actor::check_completion(
                         actor.as_ref(),
                         &t.slug,
-                        hotsheet_ticketing::actor::close_completes(t.status, reason),
+                        completes,
                         hotsheet_ticketing::actor::scored_in_current_cycle(&t),
                     )
                     .map_err(rule_err)?;
+                    let remote =
+                        self.check_remote_commits(actor.as_ref(), completes, &t.slug, body)?;
                     let dup = match body
                         .get("duplicate_of")
                         .and_then(Value::as_str)
@@ -3574,7 +3610,20 @@ mod core_backend {
                         hotsheet_ticketing::actor::note_actor(actor.as_ref()).as_ref(),
                     )
                     .map_err(op_err)?;
-                    self.api(&closed)
+                    let closed = hotsheet_ticketing::completion_remote::record(
+                        &self.store,
+                        &closed.id,
+                        (self.now)(),
+                        actor.as_ref(),
+                        &remote,
+                    )
+                    .map_err(store_err)?
+                    .unwrap_or(closed);
+                    let mut response = self.api(&closed)?;
+                    if let Some(warning) = remote.warning() {
+                        response["warnings"] = serde_json::json!([warning]);
+                    }
+                    Ok(response)
                 }
                 "POST" if restore_id(path).is_some() => {
                     let ticket = self.resolve(restore_id(path).unwrap())?;
@@ -3744,13 +3793,16 @@ mod core_backend {
                         Some(_) => matches!(confidence_change, Some(Some(_))),
                         None => note_text.is_some() && confidence_change.flatten().is_some(),
                     };
+                    let completes = hotsheet_ticketing::actor::completes(t.status, patch.status);
                     hotsheet_ticketing::actor::check_completion(
                         actor.as_ref(),
                         &t.slug,
-                        hotsheet_ticketing::actor::completes(t.status, patch.status),
+                        completes,
                         scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&t),
                     )
                     .map_err(rule_err)?;
+                    let remote =
+                        self.check_remote_commits(actor.as_ref(), completes, &t.slug, body)?;
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
                     let mut written_note = None;
@@ -3801,10 +3853,20 @@ mod core_backend {
                             None => updated,
                         },
                     };
+                    let latest = hotsheet_ticketing::completion_remote::record(
+                        &self.store,
+                        &latest.id,
+                        (self.now)(),
+                        actor.as_ref(),
+                        &remote,
+                    )
+                    .map_err(store_err)?
+                    .unwrap_or(latest);
                     let mut response = self.api(&latest)?;
                     let mut warnings = note_text
                         .map(|text| ops::attachment_reference_warnings(&self.store, &latest, &text))
                         .unwrap_or_default();
+                    warnings.extend(remote.warning().map(str::to_owned));
                     // HS2-C1CFSH: an explicit regular note never opens a request; say so.
                     warnings.extend(
                         written_note.and_then(|id| ops::note_feedback_marker_warning(&latest, &id)),
@@ -4418,6 +4480,30 @@ mod core_backend {
         hotsheet_ticketing::actor::MutationActor::parse(role, id)
             .map(Some)
             .map_err(|error| bad_request(format!("actor: {error}")))
+    }
+
+    /// The commit claim an AI completion carries: `commits` (SHAs) or `no_commit`.
+    fn commit_claim(
+        body: &Value,
+    ) -> Result<hotsheet_ticketing::completion_remote::CommitClaim, BackendError> {
+        let commits = match body.get("commits") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(items)) => items
+                .iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| bad_request("commits must be an array of strings"))
+                })
+                .collect::<Result<_, _>>()?,
+            Some(_) => return Err(bad_request("commits must be an array of strings")),
+        };
+        let no_commit = match body.get("no_commit") {
+            None | Some(Value::Null) => false,
+            Some(Value::Bool(value)) => *value,
+            Some(_) => return Err(bad_request("no_commit must be a boolean")),
+        };
+        Ok(hotsheet_ticketing::completion_remote::CommitClaim { commits, no_commit })
     }
 
     /// A role rule refusal maps to the server's 422 so both backends read the same.
@@ -7364,6 +7450,138 @@ mod tests {
             update["inputSchema"]["properties"]["note_confidence"]["maximum"],
             100
         );
+    }
+
+    /// HS2-R8ZH4K: through MCP, an AI completion of a ticket whose slug-first commit is
+    /// only local is refused with `commit_not_on_remote` and changes nothing; once pushed it
+    /// completes; with no commits it needs `no_commit`, which is recorded in history; and
+    /// `hotsheet_close` takes the same explicit `commits`.
+    #[test]
+    fn hs2_r8zh4k_ai_completion_requires_commits_on_the_remote_through_mcp() {
+        fn git(dir: &std::path::Path, args: &[&str]) -> String {
+            let output = hotsheet_ticketing::git::command()
+                .arg("-C")
+                .arg(dir)
+                .args(["-c", "user.name=T", "-c", "user.email=t@example.invalid"])
+                .args([
+                    "-c",
+                    "commit.gpgsign=false",
+                    "-c",
+                    "init.defaultBranch=main",
+                ])
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "git {args:?}");
+            String::from_utf8(output.stdout).unwrap()
+        }
+        let (dir, backend) = core();
+        let root = tempfile::tempdir().unwrap();
+        let remote = root.path().join("remote.git");
+        let code = root.path().join("code");
+        std::fs::create_dir(&remote).unwrap();
+        git(&remote, &["init", "--quiet", "--bare"]);
+        git(
+            root.path(),
+            &["clone", "--quiet", remote.to_str().unwrap(), "code"],
+        );
+        std::fs::write(code.join("base.txt"), "base").unwrap();
+        git(&code, &["add", "."]);
+        git(&code, &["commit", "--quiet", "-m", "base"]);
+        git(&code, &["push", "--quiet", "origin", "HEAD:main"]);
+        let registry = root.path().join("checkouts.json");
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry)
+            .register(&code, None, None, vec![dir.path().to_path_buf()])
+            .unwrap();
+        let backend = backend.with_checkout_registry(
+            hotsheet_ticketing::checkouts::CheckoutRegistry::new(registry),
+        );
+        let ticket = call(&backend, "hotsheet_create", json!({ "title": "Coded" }));
+        let (id, slug) = (
+            ticket["id"].as_str().unwrap().to_owned(),
+            ticket["slug"].as_str().unwrap().to_owned(),
+        );
+        let complete = |extra: Value| {
+            let mut args = json!({ "id": id, "status": "completed", "note": "## Confidence\n80",
+                "note_confidence": 80, "actor_role": "ai", "actor_id": "codex-1" });
+            for (key, value) in extra.as_object().unwrap() {
+                args[key] = value.clone();
+            }
+            call(&backend, "hotsheet_update", args)
+        };
+        let refused = complete(json!({}));
+        assert!(
+            refused["error"]
+                .as_str()
+                .unwrap()
+                .contains("error 422: commits_not_found"),
+            "{refused}"
+        );
+        std::fs::write(code.join("work.txt"), "work").unwrap();
+        git(&code, &["add", "."]);
+        git(
+            &code,
+            &["commit", "--quiet", "-m", &format!("{slug} the work")],
+        );
+        let refused = complete(json!({}));
+        let message = refused["error"].as_str().unwrap();
+        assert!(
+            message.contains("error 422: commit_not_on_remote"),
+            "{message}"
+        );
+        assert!(
+            message.contains(&format!("merge-pending/{slug}")),
+            "{message}"
+        );
+        assert_eq!(
+            call(&backend, "hotsheet_get", json!({ "id": id }))["status"],
+            "not_started"
+        );
+        git(
+            &code,
+            &[
+                "push",
+                "--quiet",
+                "origin",
+                &format!("HEAD:merge-pending/{slug}"),
+            ],
+        );
+        assert_eq!(complete(json!({}))["status"], "completed");
+
+        let docs = call(&backend, "hotsheet_create", json!({ "title": "Decision" }));
+        let docs_id = docs["id"].as_str().unwrap().to_owned();
+        let opted = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": docs_id, "status": "completed", "note": "## Confidence\n90",
+                "note_confidence": 90, "actor_role": "ai", "no_commit": true }),
+        );
+        assert_eq!(opted["status"], "completed");
+        assert!(
+            opted["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|note| note["summary"] == "Completed without code commits"),
+            "{opted}"
+        );
+
+        let closing = call(&backend, "hotsheet_create", json!({ "title": "Closed" }));
+        let closing_id = closing["id"].as_str().unwrap().to_owned();
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": closing_id, "note": "## Confidence\n75", "note_confidence": 75,
+                "actor_role": "ai" }),
+        );
+        let pushed = git(&code, &["rev-parse", "HEAD"]).trim().to_owned();
+        let closed = call(
+            &backend,
+            "hotsheet_close",
+            json!({ "id": closing_id, "reason": "completed", "actor_role": "ai",
+                "commits": [pushed] }),
+        );
+        assert_eq!(closed["close_reason"], "completed", "{closed}");
     }
 
     /// HS2-RD4M29: mutating tools accept `actor_role`/`actor_id`; an `ai` completion without

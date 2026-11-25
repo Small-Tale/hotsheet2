@@ -412,6 +412,13 @@ enum Cmd {
         /// The duplicate target (slug or ULID); required when reason=duplicate.
         #[arg(long)]
         duplicate_of: Option<String>,
+        /// A commit holding this ticket's work; repeatable. An AI `completed` close
+        /// verifies these are on the remote (HS2-R8ZH4K).
+        #[arg(long = "commit", value_name = "SHA")]
+        commits: Vec<String>,
+        /// The ticket has no code commits; record the opt-out (HS2-R8ZH4K).
+        #[arg(long, conflicts_with = "commits")]
+        no_commit: bool,
     },
     /// Restore a ticket from Trash to the status it held before it was deleted.
     Restore { id: String },

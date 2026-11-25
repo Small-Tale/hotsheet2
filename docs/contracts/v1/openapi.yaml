@@ -28412,6 +28412,14 @@ components:
             - type: 'null'
         actor:
           $ref: '#/components/schemas/Actor'
+        commits:
+          description: Commits holding the ticket's work; an AI completion verifies they are on the remote (HS2-R8ZH4K).
+          type: array
+          items:
+            type: string
+        no_commit:
+          description: The ticket has no code commits; an AI completion skips the remote-commit check and records the opt-out (HS2-R8ZH4K).
+          type: boolean
       additionalProperties: false
     ClaimTicket:
       type: object
@@ -28623,6 +28631,14 @@ components:
               additionalProperties: false
         actor:
           $ref: '#/components/schemas/Actor'
+        commits:
+          description: Commits holding the ticket's work; an AI completion verifies they are on the remote (HS2-R8ZH4K).
+          type: array
+          items:
+            type: string
+        no_commit:
+          description: The ticket has no code commits; an AI completion skips the remote-commit check and records the opt-out (HS2-R8ZH4K).
+          type: boolean
       additionalProperties: false
     AssignTicket:
       type: object
@@ -29161,6 +29177,14 @@ components:
             - type: 'null'
         actor:
           $ref: '#/components/schemas/Actor'
+        commits:
+          description: Commits holding the ticket's work; an AI completion verifies they are on the remote (HS2-R8ZH4K).
+          type: array
+          items:
+            type: string
+        no_commit:
+          description: The ticket has no code commits; an AI completion skips the remote-commit check and records the opt-out (HS2-R8ZH4K).
+          type: boolean
       additionalProperties: false
     BatchResult:
       type: object
@@ -29474,6 +29498,14 @@ components:
                   - type: 'null'
               actor:
                 $ref: '#/components/schemas/Actor'
+              commits:
+                description: Commits holding the ticket's work; an AI completion verifies they are on the remote (HS2-R8ZH4K).
+                type: array
+                items:
+                  type: string
+              no_commit:
+                description: The ticket has no code commits; an AI completion skips the remote-commit check and records the opt-out (HS2-R8ZH4K).
+                type: boolean
             additionalProperties: false
         actor:
           $ref: '#/components/schemas/Actor'

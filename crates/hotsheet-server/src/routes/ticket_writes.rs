@@ -144,6 +144,7 @@ pub(crate) fn do_update_with_ticket(
         );
     }
     let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let commit_claim = req.commit_claim();
     let note_text = req.note.clone();
     if req
         .expected_token
@@ -256,11 +257,21 @@ pub(crate) fn do_update_with_ticket(
                 && confidence_change.flatten().is_some()
         }
     };
+    let completes = hotsheet_ticketing::actor::completes(ticket.status, patch.status);
     hotsheet_ticketing::actor::check_completion(
         actor.as_ref(),
         &ticket.slug,
-        hotsheet_ticketing::actor::completes(ticket.status, patch.status),
+        completes,
         scores_now || hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
+    )?;
+    let remote = check_remote_commits(
+        state,
+        entry,
+        None,
+        actor.as_ref(),
+        completes,
+        &ticket.slug,
+        &commit_claim,
     )?;
     let updated = ops::update(&entry.store, &ticket.id, now(), patch)?;
     // An optional note append/edit rides the same update call (parity with CLI + MCP).
@@ -306,6 +317,14 @@ pub(crate) fn do_update_with_ticket(
             None => updated,
         },
     };
+    let latest = hotsheet_ticketing::completion_remote::record(
+        &entry.store,
+        &latest.id,
+        now(),
+        actor.as_ref(),
+        &remote,
+    )?
+    .unwrap_or(latest);
     if publish {
         state.changed_in(entry, "updated", &latest);
     }
@@ -319,6 +338,9 @@ pub(crate) fn do_update_with_ticket(
     response
         .warnings
         .extend(written_note.and_then(|id| ops::note_feedback_marker_warning(&latest, &id)));
+    response
+        .warnings
+        .extend(remote.warning().map(str::to_owned));
     Ok((response, latest))
 }
 
@@ -421,11 +443,24 @@ pub(crate) fn do_close(
     let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
     let reason: CloseReason = opt_parse(Some(req.reason.as_str()))?.expect("reason present");
     let actor = parse_actor(req.actor.as_ref())?;
+    let completes = hotsheet_ticketing::actor::close_completes(ticket.status, reason);
     hotsheet_ticketing::actor::check_completion(
         actor.as_ref(),
         &ticket.slug,
-        hotsheet_ticketing::actor::close_completes(ticket.status, reason),
+        completes,
         hotsheet_ticketing::actor::scored_in_current_cycle(&ticket),
+    )?;
+    let remote = check_remote_commits(
+        state,
+        entry,
+        source_project_id,
+        actor.as_ref(),
+        completes,
+        &ticket.slug,
+        &hotsheet_ticketing::completion_remote::CommitClaim {
+            commits: req.commits.clone(),
+            no_commit: req.no_commit,
+        },
     )?;
     let dup = match req.duplicate_of {
         Some(DuplicateOfReq::Legacy(reference)) => {
@@ -466,8 +501,54 @@ pub(crate) fn do_close(
         dup,
         hotsheet_ticketing::actor::note_actor(actor.as_ref()).as_ref(),
     )?;
+    let closed = hotsheet_ticketing::completion_remote::record(
+        &entry.store,
+        &closed.id,
+        now(),
+        actor.as_ref(),
+        &remote,
+    )?
+    .unwrap_or(closed);
     state.changed_in(entry, "closed", &closed);
-    api_ticket(entry, &closed)
+    let mut response = api_ticket(entry, &closed)?;
+    response
+        .warnings
+        .extend(remote.warning().map(str::to_owned));
+    Ok(response)
+}
+
+/// HS2-R8ZH4K: an AI completion's commits must be on the remote. The code checkout is the
+/// route's project checkout, else any registered checkout linked to this store.
+fn check_remote_commits(
+    state: &AppState,
+    entry: &StoreEntry,
+    project_id: Option<&str>,
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    completes: bool,
+    slug: &str,
+    claim: &hotsheet_ticketing::completion_remote::CommitClaim,
+) -> Result<hotsheet_ticketing::completion_remote::Outcome, ApiError> {
+    use hotsheet_ticketing::completion_remote as remote;
+    if !completes || !actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai) {
+        return Ok(remote::Outcome::NotApplicable);
+    }
+    let preferred = project_id
+        .and_then(|id| state.checkout_registry.resolve(id).ok())
+        .map(|checkout| std::path::PathBuf::from(checkout.root));
+    let candidates = remote::checkout_candidates(
+        &state.checkout_registry,
+        entry.store.root(),
+        preferred.as_deref(),
+    );
+    let repo = remote::code_checkout(&candidates, entry.store.root());
+    Ok(remote::check(
+        actor,
+        completes,
+        slug,
+        repo.as_deref(),
+        claim,
+        true,
+    )?)
 }
 
 pub(crate) async fn create_ticket(
