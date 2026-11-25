@@ -1,7 +1,7 @@
 //! Trash for external ticket providers (GH-5).
 //!
-//! A provider whose Delete is a restorable Trash (GitHub Issues: a closed issue carrying
-//! `status:deleted`) implements [`TicketProvider::restore`] and
+//! A provider whose Delete is a restorable Trash (GitHub Issues, and GitLab since HS2-DBKM89:
+//! a closed issue carrying `status:deleted`) implements [`TicketProvider::restore`] and
 //! [`TicketProvider::purge_trashed`]. Retention expiry and Empty Trash share
 //! [`purge_provider_trash`], which never reports a ticket as removed unless the provider
 //! confirmed it: a ticket whose credentials cannot permanently delete it stays in Trash and

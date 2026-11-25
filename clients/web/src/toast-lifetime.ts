@@ -27,14 +27,15 @@ export function createToastLifetime(
     publish(state);
   };
   return {
-    show(message: string) {
+    /** Show `message` for `lifetime` ms (the default unless a longer message needs more). */
+    show(message: string, lifetime = duration) {
       clear();
       state = { message, generation: state.generation + 1 };
       publish(state);
       const generation = state.generation;
       timeout = clock.setTimeout(() => {
         hide(generation);
-      }, duration);
+      }, lifetime);
     },
     hide,
     dispose: clear,

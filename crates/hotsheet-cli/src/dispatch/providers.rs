@@ -1248,8 +1248,8 @@ pub(crate) fn cmd_provider_restore(path: &Path, connection: &str, id: &str) -> R
     let store = FsStore::open(path)?;
     let git_id = git_connection_id(&store);
     if connection != git_id {
-        // GitHub Issues restores from its own Trash (GH-5); other providers refuse by
-        // capability name.
+        // GitHub Issues (GH-5) and GitLab (HS2-DBKM89) restore from their own Trash; other
+        // providers refuse by capability name.
         let restored = configured_provider(path, connection)?.restore(id, now_ts())?;
         println!("{}", serde_json::to_string_pretty(&restored)?);
         return Ok(());

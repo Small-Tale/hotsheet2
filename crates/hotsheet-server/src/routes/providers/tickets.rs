@@ -84,8 +84,9 @@ pub(crate) async fn restore_provider_ticket(
     Path((connection_id, id)): Path<(String, String)>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let Some(entry) = state.host.get(&connection_id) else {
-        // An external provider restores from its own Trash (GitHub Issues, GH-5) or refuses
-        // by capability name; unknown connections keep their not-found diagnostics.
+        // An external provider restores from its own Trash (GitHub Issues GH-5, GitLab
+        // HS2-DBKM89) or refuses by capability name; unknown connections keep their not-found
+        // diagnostics.
         return provider_for(&state, &connection_id)?
             .restore(&id, now())
             .map(Json)

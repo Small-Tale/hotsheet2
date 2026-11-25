@@ -774,9 +774,48 @@ issue with no marker and it read back as Completed (a Verified ticket also lost
   every six hours) for every provider connection a registered checkout links, using the
   longest `trash_cleanup_days` among those checkouts.
 
-GitLab still closes a deleted issue and reads it back as Completed, and Jira has no Trash
-mapping; both refuse restore and permanent deletion by capability name until their own Trash
-mappings land (HS2-DBKM89, HS2-73Z1R8).
+**Trash on GitLab Issues (HS2-DBKM89).** GitLab had the same bug: Delete sent
+`state_event: close` with no marker, so the ticket read back as Completed. GitLab now uses the
+same Trash design, in the adapter's single-colon label convention (`category:`, `priority:`,
+`status:`):
+
+| Hot Sheet                       | GitLab                                                        |
+| ------------------------------- | ------------------------------------------------------------- |
+| Not started / Started / Backlog | `opened`; `status:started` or `status:backlog`                |
+| Completed                       | `closed`, no `status:` label                                  |
+| Deleted (Trash)                 | `closed` + `status:deleted` and `deleted-from:<prior status>` |
+
+- **Delete** closes the issue and labels it `status:deleted` and `deleted-from:<status>`
+  (`not-started`, `started`, `backlog`, or `completed`). GitLab has one closed state and the
+  adapter maps no close reasons (`close_reasons: false`), so `deleted-from:completed` alone
+  records that the ticket was closed before Delete; no `closed:` label is written. Ordinary
+  tags, category, and priority survive, and repeating Delete keeps the same restore label. An
+  issue that was already closed keeps its original `closed_at`.
+- **Reading**: a closed issue with `status:deleted` reads as `deleted` and appears only in
+  Trash; its `close_reason` is Completed only when it was Completed before Delete. A reopened
+  issue that still carries the label is not in Trash. `deleted-from:` is never a tag.
+- **Restore** (the same routes, CLI, and MCP tool as GitHub) replaces the labels with the
+  prior status's labels and sends `state_event: reopen` only when that status is open, so a
+  Completed ticket stays closed. An issue trashed without `deleted-from:` reopens as Not
+  started, and restoring an issue outside Trash is a conflict.
+- **Permanent deletion** uses `DELETE /projects/:id/issues/:iid`, which GitLab allows only to
+  project Owners and instance administrators. 204 counts as purged, and so does 404 or 410
+  for an issue already gone. A 403 (Maintainer or lower, or a token without the `api` scope)
+  keeps the issue closed in Trash and lists it under `retained` with the provider-neutral
+  reason plus GitLab's message; it is never counted as purged. A 403 carrying GitLab's
+  rate-limit headers is a rate limit, not a refusal, and stops the purge run. An issue
+  outside Trash is refused before any write.
+- **Retention** works as for GitHub, from the issue's `updated_at`.
+- **Tests:** a stateful fake GitLab (REST v4 shapes) covers every starting status, repeat
+  Delete, Restore, purge by an Owner, refusals, 404/410, rate limits, expiry, and Empty Trash
+  (`gitlab_trash_tests.rs`), and `crates/hotsheet-server/tests/gitlab_trash_http.rs` covers
+  the checkout and connection routes, Empty Trash, and the retention sweep. The opt-in
+  `gitlab_live_trash_delete_restore_and_permission_checked_purge` writes only with
+  `HOTSHEET_GITLAB_LIVE_WRITE=1`. It has not run, because the repository names no always-safe
+  GitLab test project.
+
+Jira has no Trash mapping yet; it refuses restore and permanent deletion by capability name
+until its own mapping lands (HS2-73Z1R8).
 
 Every write to a closed issue re-sends its current `state_reason` and `closed:` /
 `duplicate-of:` labels, because GitHub silently resets an omitted reason to `completed`;

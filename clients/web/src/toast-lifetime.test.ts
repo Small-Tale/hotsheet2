@@ -38,4 +38,23 @@ describe('application toast lifetime', () => {
       vi.useRealTimers();
     }
   });
+
+  it('keeps a toast for a requested longer lifetime and the next one for the default (GH-5)', () => {
+    vi.useFakeTimers();
+    try {
+      const states: ToastState[] = [];
+      const toast = createToastLifetime((state) => states.push(state));
+      toast.show('Long explanation', 12_000);
+      vi.advanceTimersByTime(11_999);
+      expect(states.at(-1)).toEqual({ message: 'Long explanation', generation: 1 });
+      vi.advanceTimersByTime(1);
+      expect(states.at(-1)).toEqual({ message: '', generation: 1 });
+      toast.show('Short');
+      vi.advanceTimersByTime(2_500);
+      expect(states.at(-1)).toEqual({ message: '', generation: 2 });
+      toast.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -145,7 +145,12 @@ the checkout has a git-backed ticket source. Its confirmation states the number 
 that will be permanently removed from the active store and that git history retains the
 files. Confirming closes the dialog immediately, projects an empty Trash, and returns to a
 loading Queue while the request runs; success reconciles that Queue and removes the now-empty
-Trash destination, while failure restores Trash and presents a persistent server error. The
+Trash destination, while failure restores Trash and presents a persistent server error. When
+an external provider keeps some tickets (its connection may not permanently delete them, or
+it could not be reached), the workspace returns to Trash and the toast names up to three
+kept tickets and counts the rest, with each distinct reason. That toast stays up for reading
+time (about 300 ms a word, at most 20 seconds) instead of the default 2.5 seconds, and can
+be dismissed sooner (GH-5, HS2-DBKM89). The
 header action keeps its icon and label on one line at every supported size.
 The server
 purges Trash tickets after the project's shared retention period (30 days by default);

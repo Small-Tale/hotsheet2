@@ -17,6 +17,10 @@ use crate::note_trailer;
 
 mod attachments;
 
+/// Trash labels, restore, and permission-checked permanent deletion (HS2-DBKM89).
+#[path = "gitlab_trash.rs"]
+mod trash;
+
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
 
@@ -105,18 +109,27 @@ impl GitLabProvider {
         url: &str,
         body: Option<&Value>,
     ) -> Result<HttpResponse, ProviderError> {
+        let response = self.send(method, url, body)?;
+        self.checked(url, response)
+    }
+
+    /// One authenticated request whose status the caller interprets itself.
+    fn send(
+        &self,
+        method: &str,
+        url: &str,
+        body: Option<&Value>,
+    ) -> Result<HttpResponse, ProviderError> {
         let headers = [
             ("PRIVATE-TOKEN", self.config.token.clone()),
             ("User-Agent", "hotsheet2".into()),
         ];
-        let response = self
-            .transport
+        self.transport
             .request(method, url, &headers, body)
             .map_err(|message| ProviderError::Conflict {
                 ticket: self.config.connection_id.clone(),
                 message,
-            })?;
-        self.checked(url, response)
+            })
     }
 
     /// Map a GitLab status to a typed provider error (shared by JSON and binary requests).
@@ -127,20 +140,13 @@ impl GitLabProvider {
                 connection_id: self.config.connection_id.clone(),
                 message: response_message(&response.body),
             }),
-            403 if response.headers.contains_key("retry-after")
-                || response
+            403 if rate_limited(&response) => Err(ProviderError::RateLimited {
+                connection_id: self.config.connection_id.clone(),
+                retry_after_seconds: response
                     .headers
-                    .get("ratelimit-remaining")
-                    .is_some_and(|value| value == "0") =>
-            {
-                Err(ProviderError::RateLimited {
-                    connection_id: self.config.connection_id.clone(),
-                    retry_after_seconds: response
-                        .headers
-                        .get("retry-after")
-                        .and_then(|value| value.parse().ok()),
-                })
-            }
+                    .get("retry-after")
+                    .and_then(|value| value.parse().ok()),
+            }),
             403 => Err(ProviderError::Authentication {
                 connection_id: self.config.connection_id.clone(),
                 message: response_message(&response.body),
@@ -152,7 +158,8 @@ impl GitLabProvider {
                     .get("retry-after")
                     .and_then(|value| value.parse().ok()),
             }),
-            404 => Err(ProviderError::NotFound {
+            // A deleted issue answers 404; 410 Gone is treated the same (HS2-DBKM89).
+            404 | 410 => Err(ProviderError::NotFound {
                 connection_id: self.config.connection_id.clone(),
                 native_id: url.rsplit('/').next().unwrap_or(url).into(),
             }),
@@ -309,8 +316,14 @@ impl GitLabProvider {
             .as_deref()
             .and_then(parse_priority)
             .unwrap_or_default();
+        let deleted_from = trash::deleted_from(&issue.labels);
         let status = if issue.state == "closed" {
-            Status::Completed
+            if issue.labels.iter().any(|label| label == trash::TRASH_LABEL) {
+                // A closed issue carrying the Trash label is in Trash, never Completed.
+                Status::Deleted
+            } else {
+                Status::Completed
+            }
         } else if issue.labels.iter().any(|label| label == "status:started") {
             Status::Started
         } else if issue.labels.iter().any(|label| label == "status:backlog") {
@@ -395,6 +408,7 @@ impl GitLabProvider {
                     !label.starts_with("category:")
                         && !label.starts_with("priority:")
                         && !label.starts_with("status:")
+                        && !label.starts_with(trash::DELETED_FROM_PREFIX)
                 })
                 .collect(),
             blocked_by: vec![],
@@ -407,7 +421,15 @@ impl GitLabProvider {
             completed_at: issue.closed_at.clone(),
             verified_at: None,
             closed_at: issue.closed_at,
-            close_reason: (issue.state == "closed").then_some(CloseReason::Completed),
+            // GitLab has one closed state. A Trash ticket keeps the reason it had before
+            // Delete: Completed only when it was closed then (HS2-DBKM89).
+            close_reason: if status == Status::Deleted {
+                deleted_from
+                    .is_some_and(trash::closes_issue)
+                    .then_some(CloseReason::Completed)
+            } else {
+                (issue.state == "closed").then_some(CloseReason::Completed)
+            },
             duplicate_of: None,
             copied_from: None,
             transfer_operation_id: marker(&body, "operation"),
@@ -744,6 +766,17 @@ impl TicketProvider for GitLabProvider {
         let priority = patch.priority.unwrap_or(normalized.priority);
         let tags = patch.tags.unwrap_or(normalized.tags);
         let status = patch.status.unwrap_or(normalized.status);
+        let labels = if status == Status::Deleted {
+            // Delete moves the issue to Trash and keeps what Restore needs (HS2-DBKM89).
+            let previous = if normalized.status == Status::Deleted {
+                trash::deleted_from(&current.labels)
+            } else {
+                Some(normalized.status)
+            };
+            trash::trashed_labels(&category, priority, &tags, previous)
+        } else {
+            mapped_labels(&category, priority, &tags, Some(status))
+        };
         let mut description = patch
             .details
             .unwrap_or_else(|| current.description.clone().unwrap_or_default());
@@ -753,11 +786,15 @@ impl TicketProvider for GitLabProvider {
             description.push_str(&suffix);
         }
         let write_started = Instant::now();
-        let response = self.request("PUT", &self.endpoint(&format!("issues/{native_id}")), Some(&json!({
-            "title":patch.title.unwrap_or(current.title), "description":description,
-            "labels":mapped_labels(&category, priority, &tags, Some(status)).join(","),
-            "state_event": if matches!(status, Status::Completed | Status::Verified | Status::Archive | Status::Deleted) { "close" } else { "reopen" }
-        })))?;
+        let response = self.request(
+            "PUT",
+            &self.endpoint(&format!("issues/{native_id}")),
+            Some(&json!({
+                "title":patch.title.unwrap_or(current.title), "description":description,
+                "labels":labels.join(","),
+                "state_event": if trash::closes_issue(status) { "close" } else { "reopen" }
+            })),
+        )?;
         timing.remote_write = write_started.elapsed();
         let ack_started = Instant::now();
         let ticket = self.ticket(self.json(response)?, vec![]);
@@ -871,6 +908,17 @@ impl TicketProvider for GitLabProvider {
             Some(&json!({"state_event":"close"})),
         )?;
         Ok(self.ticket(self.json(response)?, vec![]))
+    }
+
+    fn restore(&self, native_id: &str, _now: Timestamp) -> Result<ApiTicket, ProviderError> {
+        self.restore_from_trash(native_id)
+    }
+
+    fn purge_trashed(
+        &self,
+        native_id: &str,
+    ) -> Result<hotsheet_ticketing::ProviderPurgeOutcome, ProviderError> {
+        self.delete_trashed_issue(native_id)
     }
 
     fn assign(
@@ -1061,6 +1109,16 @@ fn encode_path(value: &str) -> String {
             }
         })
         .collect()
+}
+
+/// GitLab's rate limiter answers 403 with `Retry-After` or `RateLimit-Remaining: 0`; any
+/// other 403 is a refusal.
+fn rate_limited(response: &HttpResponse) -> bool {
+    response.headers.contains_key("retry-after")
+        || response
+            .headers
+            .get("ratelimit-remaining")
+            .is_some_and(|value| value == "0")
 }
 
 fn response_message(body: &str) -> String {

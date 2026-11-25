@@ -1038,8 +1038,9 @@ export async function startHotSheetWebClient() {
     }
     if (toastHost.isConnected) void toastPresentation.publish(state);
   });
-  function showToast(message: string) {
-    toastLifetime.show(message);
+  // A longer explanation may ask for more reading time than the default (GH-5).
+  function showToast(message: string, duration?: number) {
+    toastLifetime.show(message, duration);
   }
   const activeTicketCount = signal(0),
     projectTabClaimClock = signal(Date.now()),

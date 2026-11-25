@@ -32769,6 +32769,69 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   await page.screenshot({ path: 'target/visual-captures/hs2-rdvwzx-empty-trash-complete-narrow.png', fullPage: true });
 });
 
+// GH-5 / HS2-DBKM89: a provider that may not permanently delete keeps its tickets in Trash; the
+// toast names the tickets that stayed and why, stays up long enough to read, and the workspace
+// returns to the Trash view that still holds them. Synthetic provider ids only.
+test('keeps provider Trash the connection may not delete and explains it after Empty Trash', async ({ page }) => {
+  const notPermitted =
+    "this connection's credentials cannot permanently delete tickets in the provider, so the ticket stays closed in Trash; reconnect with an account that can delete issues, or delete it in the provider (GitLab said: 403 Forbidden)";
+  await mockProject(page);
+  await page.route('**/trash/empty', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({
+          json: {
+            purged: 1,
+            tickets: ['HS2-OLD001'],
+            retained: [
+              { qualified_id: 'gitlab-main:5', slug: 'acme/repo#5', message: notPermitted },
+              { qualified_id: 'gitlab-main:6', slug: 'acme/repo#6', message: notPermitted },
+            ],
+            unavailable: [],
+          },
+        })
+      : route.fallback(),
+  );
+  const toast = page.locator('wa-toast-item .app-toast');
+  const expected = `Emptied Trash — 1 ticket permanently removed. 2 tickets stayed in Trash (acme/repo#5, acme/repo#6): ${notPermitted}.`;
+  await page.clock.install();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openMockedProject(page);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Empty Trash leaves Trash optimistically; the retained tickets bring the workspace back.
+    await page.locator('[data-action="select-view"][data-item-id="trash"]').click();
+    await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
+    await page.getByRole('button', { name: 'Empty Trash' }).click();
+    await page
+      .locator('[data-dialog-component="empty-trash-dialog"]')
+      .getByRole('button', { name: 'Empty Trash' })
+      .click();
+    await expect(page.locator('[data-dialog-component="empty-trash-dialog"]')).toHaveCount(0);
+    await expect(toast).toHaveText(expected);
+    await expect(page.locator('#workspace-page-title')).toContainText('Trash');
+    await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
+    // Past the default 2.5-second lifetime the explanation is still readable.
+    await page.clock.runFor(3_000);
+    await expect(toast).toHaveText(expected);
+    for (const [label, width, height] of [
+      ['wide', 1440, 900],
+      ['medium', 1024, 768],
+      ['narrow', 390, 844],
+      ['wide-again', 1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await settledAnimations(page.locator('[data-component="app-shell"]'));
+      await expect(toast).toBeVisible();
+      await page.screenshot({ path: `target/visual-captures/gh-5-trash-retained-toast-${scheme}-${label}.png` });
+    }
+    // It still leaves on its own once its reading time is over.
+    await page.clock.runFor(30_000);
+    await expect(toast).toHaveCount(0);
+  }
+});
+
 test('restores Trash and surfaces a persistent error when emptying fails', async ({ page }) => {
   await mockProject(page);
   await page.route('**/trash/empty', (route) =>

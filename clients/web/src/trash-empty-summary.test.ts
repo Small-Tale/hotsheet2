@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { trashEmptyLeftTickets, trashEmptySummary } from './trash-empty-summary';
+import { trashEmptyLeftTickets, trashEmptySummary, trashEmptyToastDuration } from './trash-empty-summary';
 
 describe('trashEmptySummary (GH-5)', () => {
   it('counts only removed tickets when everything was purged', () => {
@@ -27,9 +27,23 @@ describe('trashEmptySummary (GH-5)', () => {
       ],
     };
     expect(trashEmptySummary(result)).toBe(
-      'Emptied Trash — 0 tickets permanently removed. 2 tickets stayed in Trash: this connection may not delete.',
+      'Emptied Trash — 0 tickets permanently removed. 2 tickets stayed in Trash (acme/repo#5, acme/repo#6): this connection may not delete.',
     );
     expect(trashEmptyLeftTickets(result)).toBe(true);
+  });
+
+  it('names the first three kept tickets and counts the rest', () => {
+    const retained = [5, 6, 7, 8, 9].map((number) => ({
+      qualified_id: `gitlab-main:${number}`,
+      slug: `acme/repo#${number}`,
+      message: 'refused',
+    }));
+    expect(trashEmptySummary({ purged: 0, tickets: [], retained })).toBe(
+      'Emptied Trash — 0 tickets permanently removed. 5 tickets stayed in Trash (acme/repo#5, acme/repo#6, acme/repo#7 and 2 more): refused.',
+    );
+    expect(trashEmptySummary({ purged: 0, tickets: [], retained: retained.slice(0, 3) })).toContain(
+      '(acme/repo#5, acme/repo#6, acme/repo#7): refused.',
+    );
   });
 
   it('reports a provider whose Trash could not be read', () => {
@@ -42,5 +56,27 @@ describe('trashEmptySummary (GH-5)', () => {
       'Emptied Trash — 1 ticket permanently removed. Could not empty github-main: rate limited.',
     );
     expect(trashEmptyLeftTickets(result)).toBe(true);
+  });
+
+  it('keeps a plain result at the default lifetime and gives an explanation reading time', () => {
+    expect(trashEmptyToastDuration({ purged: 3, tickets: ['AA-1', 'AA-2', 'AA-3'] })).toBe(2_500);
+    const reason =
+      "this connection's credentials cannot permanently delete tickets in the provider, so the ticket stays closed in Trash; reconnect with an account that can delete issues, or delete it in the provider (GitLab said: 403 Forbidden)";
+    const kept = {
+      purged: 1,
+      tickets: ['AA-1'],
+      retained: [{ qualified_id: 'gitlab-main:5', slug: 'acme/repo#5', message: reason }],
+    };
+    const words = trashEmptySummary(kept).split(/\s+/).length;
+    expect(trashEmptyToastDuration(kept)).toBe(words * 300);
+    expect(trashEmptyToastDuration(kept)).toBeGreaterThan(10_000);
+    const short = { purged: 0, tickets: [], unavailable: [{ connection_id: 'x', message: 'down' }] };
+    expect(trashEmptyToastDuration(short)).toBe(Math.max(2_500, trashEmptySummary(short).split(/\s+/).length * 300));
+    const many = {
+      purged: 0,
+      tickets: [],
+      unavailable: Array.from({ length: 40 }, (_, index) => ({ connection_id: `c${index}`, message: 'unreachable' })),
+    };
+    expect(trashEmptyToastDuration(many)).toBe(20_000);
   });
 });
