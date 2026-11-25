@@ -1,7 +1,8 @@
 //! Trash for external ticket providers (GH-5).
 //!
 //! A provider whose Delete is a restorable Trash (GitHub Issues, and GitLab since HS2-DBKM89:
-//! a closed issue carrying `status:deleted`) implements [`TicketProvider::restore`] and
+//! a closed issue carrying `status:deleted`; Jira since HS2-73Z1R8: the `hotsheet-trash`
+//! label) implements [`TicketProvider::restore`] and
 //! [`TicketProvider::purge_trashed`]. Retention expiry and Empty Trash share
 //! [`purge_provider_trash`], which never reports a ticket as removed unless the provider
 //! confirmed it: a ticket whose credentials cannot permanently delete it stays in Trash and
@@ -74,9 +75,7 @@ pub fn purge_provider_trash(
             continue;
         }
         if let Some(cutoff) = cutoff {
-            let due = Timestamp::new(ticket.updated_at.clone())
-                .instant()
-                .is_some_and(|changed| changed <= cutoff);
+            let due = changed_at(&ticket.updated_at).is_some_and(|changed| changed <= cutoff);
             if !due {
                 continue;
             }
@@ -113,4 +112,44 @@ pub fn purge_provider_trash(
         }
     }
     Ok(report)
+}
+
+/// A provider's last-change time. RFC 3339, or the ISO 8601 basic UTC offset Jira REST v3
+/// writes (`2026-11-01T00:00:00.000+0000`), which RFC 3339 parsing alone rejects; without it
+/// a Jira Trash ticket would never reach retention (HS2-73Z1R8).
+fn changed_at(text: &str) -> Option<time::OffsetDateTime> {
+    if let Some(parsed) = Timestamp::new(text.to_string()).instant() {
+        return Some(parsed);
+    }
+    let split = text.len().checked_sub(5)?;
+    let (stamp, offset) = text.split_at_checked(split)?;
+    let (sign, digits) = offset.split_at_checked(1)?;
+    if !matches!(sign, "+" | "-") || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    Timestamp::new(format!("{stamp}{sign}{}:{}", &digits[..2], &digits[2..])).instant()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changed_at;
+
+    #[test]
+    fn hs2_73z1r8_changed_at_reads_rfc3339_and_jira_basic_offsets() {
+        let rfc = changed_at("2026-11-01T08:00:00.000+08:00").unwrap();
+        assert_eq!(changed_at("2026-11-01T00:00:00Z"), Some(rfc));
+        assert_eq!(changed_at("2026-11-01T08:00:00.000+0800"), Some(rfc));
+        assert_eq!(changed_at("2026-10-31T22:00:00.000-0200"), Some(rfc));
+        for bad in [
+            "",
+            "+0000",
+            "2026-11-01T00:00:00.000 0000",
+            "2026-11-01T00:00:00.000+00x0",
+            "not a time",
+            "2026-11-01T00:00:00.000Zé",
+            "2026-11-01T00:00:00.é000",
+        ] {
+            assert_eq!(changed_at(bad), None, "{bad:?}");
+        }
+    }
 }

@@ -575,8 +575,10 @@ Trash is the git provider's lifecycle. GitHub Issues and GitLab (HS2-DBKM89) map
 (`status:deleted`, `deleted-from:<status>`) with the same restore, Empty Trash, and retention
 behavior, and permanently deletes an issue only when the connection's credentials allow it;
 otherwise the issue stays closed in Trash and Empty Trash reports it as retained
-([16](16-external-sync-interface.md), GH-5). Jira rejects restore and permanent deletion
-explicitly.
+([16](16-external-sync-interface.md), GH-5). Jira (HS2-73Z1R8) maps Trash onto the single
+`hotsheet-trash` label and never transitions the workflow, so Restore removes the label and
+the ticket returns to its unchanged status. It permanently deletes an issue only with the Delete
+Issues permission, and otherwise reports it as retained in the same way.
 
 Up Next and priority are ordering metadata rather than substantive ticket content. A patch
 whose only effective changes are `up_next` and/or `priority` preserves `updated_at`, so

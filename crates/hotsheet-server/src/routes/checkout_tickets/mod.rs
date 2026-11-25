@@ -1107,8 +1107,8 @@ pub(crate) async fn close_checkout_ticket(
     }))
 }
 /// Restore a Trash ticket to its pre-deletion status (HS2-MWDR19). A provider with its own
-/// restorable Trash (GitHub Issues GH-5, GitLab HS2-DBKM89) restores natively; any other
-/// provider refuses by capability name.
+/// restorable Trash (GitHub Issues GH-5, GitLab HS2-DBKM89, Jira HS2-73Z1R8) restores
+/// natively; any other provider refuses by capability name.
 pub(crate) async fn restore_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,

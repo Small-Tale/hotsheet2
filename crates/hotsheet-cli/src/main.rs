@@ -317,7 +317,7 @@ enum Cmd {
         #[arg(long)]
         provisional: bool,
     },
-    /// Restore a Trash ticket in a git-backed provider, GitHub Issues, or GitLab (GH-5).
+    /// Restore a Trash ticket in a git-backed provider, GitHub Issues, GitLab, or Jira (GH-5).
     ProviderRestore { connection: String, id: String },
     /// Atomically reopen a Not Working ticket with a note and/or evidence files.
     ProviderReportNotWorking {

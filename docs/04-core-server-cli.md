@@ -1115,7 +1115,7 @@ hotsheet provider-new github-main "Bug title"
 hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-delete-note github-main 42 <note-id> # requires note_delete capability
 hotsheet provider-assign github-main 42 --to octocat # replace assignees where supported
-hotsheet provider-restore <connection> <ticket-id> # git-backed, GitHub Issues, or GitLab Trash
+hotsheet provider-restore <connection> <ticket-id> # git-backed, GitHub Issues, GitLab, or Jira Trash
 hotsheet provider-report-not-working <git-connection> <ticket-id> --note-file report.md --evidence proof.png --expected-token <token>
 hotsheet provider-close github-main 42 --reason completed
 hotsheet provider-disable github-main           # temporary: no reads/writes, tickets hidden
@@ -1374,7 +1374,7 @@ fails explicitly when unsupported. Neither deletion command changes other notes.
 `provider-assign` accepts repeated `--to` values, `--clear`, and repeated
 `--review email:kind` requests. It checks assignment and review capabilities before a
 provider write. `provider-restore` restores a Trash ticket from a git-backed provider, from
-GitHub Issues (GH-5), or from GitLab (HS2-DBKM89); other trackers refuse by capability. `provider-report-not-working` requires a
+GitHub Issues (GH-5), from GitLab (HS2-DBKM89), or from Jira (HS2-73Z1R8); other trackers refuse by capability. `provider-report-not-working` requires a
 note (`--note` or `--note-file`) or one or more `--evidence` files, checks the atomic
 report capability, reads all evidence before mutation, and accepts an optional opaque
 `--expected-token` to reject a stale report. These commands print the resulting native
