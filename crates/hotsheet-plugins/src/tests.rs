@@ -481,8 +481,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 53 -->")); // HS2-2SJPCH, HS2-7YSKXE, HS2-K3W691, HS2-5P112Z
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 30 -->")); // HS2-2SJPCH, HS2-K3W691, HS2-5P112Z
+    assert!(worker.contains("<!-- hotsheet-skill-version: 54 -->")); // HS2-2SJPCH, HS2-7YSKXE, HS2-K3W691, HS2-5P112Z
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 31 -->")); // HS2-2SJPCH, HS2-K3W691, HS2-5P112Z
     // HS2-K3W691: long gates and pushes run in the background, never under a foreground
     // tool timeout that stops them mid-run: once per integrator push step, once for the worker.
     assert_eq!(
@@ -563,7 +563,7 @@ fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy() {
     ] {
         assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
     }
-    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 10 -->")); // HS2-2SJPCH, HS2-5P112Z
+    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 11 -->")); // HS2-2SJPCH, HS2-5P112Z
     assert!(dispatcher.contains("development-strategy-resolve"));
     assert!(dispatcher.contains("A policy change does not rewrite an accepted assignment"));
 }
@@ -1065,7 +1065,7 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 76 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 77 -->"));
     // HS2-XYF4YT: claim answers name prerequisites awaiting CI and red gates once.
     assert!(skill_body.contains("## Prerequisites awaiting CI (HS2-XYF4YT)"));
     assert!(skill_body.contains("provisional.red_gates"));
@@ -1074,7 +1074,7 @@ fn codex_declares_its_project_local_skill() {
     assert!(skill_body.contains("orchestration validation profiles --project <checkout>"));
     let claude = find_in("claude", &[]).unwrap();
     let (_, claude_body) = claude.skill().unwrap();
-    assert!(claude_body.contains("<!-- hotsheet-skill-version: 76 -->"));
+    assert!(claude_body.contains("<!-- hotsheet-skill-version: 77 -->"));
     assert!(claude_body.contains("## Prerequisites awaiting CI (HS2-XYF4YT)"));
     assert!(claude_body.contains("## Validation profiles (HS2-YYNW9F)"));
     // HS2-F9062F: setup must install the strategy-aware generic workflow.

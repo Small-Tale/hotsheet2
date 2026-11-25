@@ -4,7 +4,7 @@ description: Keep a local worker session receiving exact dispatcher or legacy as
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 53 -->
+<!-- hotsheet-skill-version: 54 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
@@ -251,12 +251,21 @@ Never claim the requested ticket yourself.
    paths and commit the verified change on the worker branch with the ticket slug in
    the subject. For a findings-only task, put the proposed `## Findings handoff`
    text in the evidence file and do not create an empty commit. Do not
-   merge or push the worker branch or `main` as part of this handoff.
+   merge the worker branch or push `main` as part of this handoff.
+   **Put the verified commit on the remote (HS2-8HCBA1, HS2-M0ANR4).** Review the
+   commits for secrets, customer data and machine-local paths, then push the worker
+   branch to `merge-pending/<SLUG>`, where `<SLUG>` is the assignment's named
+   merge-pending slug (the ticket's own slug unless the dispatcher names a batch
+   integration ticket): `git push origin <branch>:merge-pending/<SLUG>`. Name that
+   branch in the handoff. Never rebase or force-push a pushed `merge-pending/`
+   branch; if a red base gate makes you rebase, push the rebased commit to a new
+   labeled branch such as `merge-pending/<SLUG>-r2` and name both. A completion
+   whose commits are only local is refused (`commit_not_on_remote`, HS2-R8ZH4K).
 4. **Hand off without completing.** On a current runtime, run the read-only preflight,
    inspect verified versus self-attested checks, then use `--publish`; do not add a
    separate note, release or mailbox acknowledgement. A genuine blocker still uses
    the blocked-report path. On an older runtime, add a regular ticket note for code headed `## Integration
-handoff` with the branch name, full commit SHA, worktree location labeled as
+handoff` with the branch name, its `merge-pending/<SLUG>` remote branch, full commit SHA, worktree location labeled as
    machine-local, gate results, unresolved risks, and any follow-up slugs. State that
    the ticket remains Started pending integration. For findings, add a regular note
    headed `## Findings handoff` with the verified result, evidence, limitations, and
