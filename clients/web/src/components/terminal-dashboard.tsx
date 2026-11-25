@@ -34,7 +34,7 @@ import type { TerminalAiConnection, TerminalHalt, TerminalOrchestrator } from '.
 import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import { aiConnectionIcon, aiConnectionLabel, type AiConnectionState } from '../terminal-ai-connection';
+import { aiConnectionIcon, aiConnectionLabel, type AiConnectionState, aiPrimaryIcon } from '../terminal-ai-connection';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
   TERMINAL_TILE_VERTICAL_CHROME,
@@ -383,10 +383,17 @@ function TerminalCard({
                     >
                       <LucideIcon
                         size="s"
-                        icon={aiConnectionIcon(session.aiConnection, session.feedback_primary).icon}
-                        name={aiConnectionIcon(session.aiConnection, session.feedback_primary).name}
-                        color={uiColor(aiConnectionIcon(session.aiConnection, session.feedback_primary).tone)}
+                        icon={aiConnectionIcon(session.aiConnection).icon}
+                        name={aiConnectionIcon(session.aiConnection).name}
+                        color={uiColor(aiConnectionIcon(session.aiConnection).tone)}
                       />
+                      {(() => {
+                        // The primary role beside the plug, as on the drawer tab (HS2-1WFGX1).
+                        const primary = aiPrimaryIcon(session.aiConnection, session.feedback_primary);
+                        return primary ? (
+                          <LucideIcon size="s" icon={primary.icon} name={primary.name} color={uiColor(primary.tone)} />
+                        ) : undefined;
+                      })()}
                     </span>
                   )}
                 </>

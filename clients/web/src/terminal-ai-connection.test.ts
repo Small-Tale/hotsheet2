@@ -5,6 +5,7 @@ import {
   aiConnectionIcon,
   aiConnectionLabel,
   aiConnectionState,
+  aiPrimaryIcon,
   deriveAiConnectionStates,
 } from './terminal-ai-connection';
 
@@ -117,11 +118,14 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
       return `${name}:${tone}`;
     };
     expect(icon('connected')).toBe('plug:neutral-on-quiet');
-    expect(icon('connected', true)).toBe('plug-zap:neutral-on-quiet');
     expect(icon('mcp_missing')).toBe('plug:warning-on-quiet');
-    expect(icon('mcp_missing', true)).toBe('plug-zap:warning-on-quiet');
     expect(icon('missing')).toBe('unplug:warning-on-quiet');
-    expect(icon('missing', true)).toBe('unplug:warning-on-quiet');
+    // HS2-1WFGX1: the primary role is a second icon (a heart) beside the plug, never a different plug.
+    expect(aiPrimaryIcon('connected', true)).toMatchObject({ name: 'heart', tone: 'brand-on-quiet' });
+    expect(aiPrimaryIcon('mcp_missing', true)?.name).toBe('heart');
+    expect(aiPrimaryIcon('missing', true)).toBeUndefined();
+    expect(aiPrimaryIcon('connected', false)).toBeUndefined();
+    expect(aiPrimaryIcon('connected')).toBeUndefined();
     expect(aiConnectionLabel('connected', 'claude', undefined, undefined, true, true)).toMatch(
       /^Claude is connected to Hot Sheet: .* Primary session: feedback notifications for this project are sent here\.$/,
     );

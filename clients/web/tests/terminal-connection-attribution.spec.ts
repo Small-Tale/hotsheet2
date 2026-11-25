@@ -42,7 +42,7 @@ test('reconciles independent hook and MCP attribution without guessing terminal 
     const tabState = async (id: string, expected: 'missing' | 'mcp_missing' | 'connected') => {
       await expect(tab(id)).toHaveAttribute('data-ai-connection', expected);
       // HS2-YHQM67: hooks that route permission prompts keep a connected plug even without MCP; a
-      // push-capable session may also be its project's primary (plug-zap).
+      // push-capable session may also be its project's primary (plug plus heart, HS2-1WFGX1).
       await expect(icon(id)).toHaveAttribute('data-lucide', expected === 'missing' ? 'unplug' : /^plug(-zap)?$/);
     };
     const state = async (id: string, expected: 'missing' | 'mcp_missing' | 'connected') => {
@@ -289,13 +289,16 @@ test('keeps every hooked session connected and marks one primary across close an
     const expectTabs = async (primary: string, secondary: string[]) => {
       await expect(tab(primary)).toHaveAttribute('data-ai-connection', 'connected');
       await expect(tab(primary)).toHaveAttribute('data-ai-primary', 'true');
-      await expect(icon(primary)).toHaveAttribute('data-lucide', 'plug-zap');
+      // HS2-1WFGX1: the primary keeps the plug and adds a heart beside it.
+      await expect(icon(primary)).toHaveAttribute('data-lucide', 'plug');
+      await expect(tab(primary).locator('.terminal-drawer__ai-primary')).toHaveAttribute('data-lucide', 'heart');
       await expect(icon(primary).locator('title')).toContainText('Primary session');
       for (const id of secondary) {
         // A connected secondary session is never drawn as disconnected.
         await expect(tab(id)).toHaveAttribute('data-ai-connection', 'connected');
         await expect(tab(id)).not.toHaveAttribute('data-ai-primary', 'true');
         await expect(icon(id)).toHaveAttribute('data-lucide', 'plug');
+        await expect(tab(id).locator('.terminal-drawer__ai-primary')).toHaveCount(0);
         await expect(icon(id).locator('title')).not.toContainText('Primary session');
       }
     };
@@ -313,9 +316,9 @@ test('keeps every hooked session connected and marks one primary across close an
     ] as const) {
       await page.setViewportSize({ width, height: 844 });
       await expectTabs('primary-a', ['primary-b']);
-      await page.screenshot({ path: test.info().outputPath(`hs2-yhqm67-two-sessions-${label}.png`) });
+      await page.screenshot({ path: `target/visual-captures/hs2-1wfgx1-two-sessions-${label}.png` });
     }
-    await tab('primary-a').screenshot({ path: test.info().outputPath('hs2-yhqm67-primary-tab-detail.png') });
+    await tab('primary-a').screenshot({ path: 'target/visual-captures/hs2-1wfgx1-primary-tab-detail.png' });
 
     // Close the primary from its tab: the remaining session is promoted without a reload.
     await tab('primary-a').hover();

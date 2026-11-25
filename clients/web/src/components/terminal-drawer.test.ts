@@ -1007,18 +1007,19 @@ describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
     const count = (pattern: RegExp) => both.match(pattern)?.length ?? 0;
     expect(count(/data-ai-connection="connected"/g)).toBe(4);
     expect(count(/data-ai-primary="true"/g)).toBe(2);
-    expect(count(/data-lucide="plug-zap"/g)).toBe(2);
-    expect(count(/data-lucide="plug"/g)).toBe(2);
+    // HS2-1WFGX1: every connected session shows the plug; the primary adds a heart beside it.
+    expect(count(/data-lucide="heart"/g)).toBe(2);
+    expect(count(/data-lucide="plug"/g)).toBe(4);
     expect(both).not.toContain('data-lucide="unplug"');
     expect(both).toContain('Primary session: feedback notifications for this project are sent here.');
     // The primary closed and the server promoted the remaining terminal.
     const promoted = tabs([true]);
     expect(promoted).toContain('data-ai-primary="true"');
-    expect(promoted).toContain('data-lucide="plug-zap"');
+    expect(promoted).toContain('data-lucide="heart"');
     // No primary (for example no push-capable session): every connected tab is a plain plug.
     const none = tabs([false, false]);
     expect(none).not.toContain('data-ai-primary');
-    expect(none).not.toContain('plug-zap');
+    expect(none).not.toContain('data-lucide="heart"');
     expect(none).not.toContain('Primary session');
   });
   it('lets a halt outrank the connection state', () => {

@@ -528,7 +528,11 @@ describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
       const primary = String(
         FixedAspectTerminalCard({ session: { ...session, aiConnection, feedback_primary: true } }),
       );
-      expect(primary).toContain(`data-lucide="${aiConnection === 'missing' ? 'unplug' : 'plug-zap'}"`);
+      expect(primary).toContain(`data-lucide="${aiConnection === 'missing' ? 'unplug' : 'plug'}"`);
+      // HS2-1WFGX1: a primary that can receive notifications adds a heart beside the plug.
+      if (aiConnection === 'missing') expect(primary).not.toContain('data-lucide="heart"');
+      else expect(primary).toContain('data-lucide="heart"');
+      expect(markup).not.toContain('data-lucide="heart"');
       expect(primary).toContain('data-ai-primary="true"');
       expect(primary).toContain('Primary session: feedback notifications for this project are sent here.');
       expect(markup).not.toContain('data-ai-primary');

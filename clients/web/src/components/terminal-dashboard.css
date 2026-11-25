@@ -572,3 +572,11 @@
 .terminal-session .xterm {
   background: var(--hs-terminal-background);
 }
+/* The connection plug and, for the project's primary, the heart beside it stay on one line
+   (HS2-1WFGX1). */
+.terminal-tile__ai-connection {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+}

@@ -1028,8 +1028,8 @@ that incident's cause. Never use the running user host or real customer actions.
 ### Primary AI session icon (HS2-YHQM67)
 
 Open two Claude terminals on a synthetic project. Confirm both tabs show a connected plug and
-only the older one shows `plug-zap` with the "Primary session" label. Close it and confirm the
-other tab takes `plug-zap` without a reload; reopen a terminal and confirm the role stays.
+only the older one shows the plug plus a heart with the "Primary session" label. Close it and confirm the
+other tab takes the heart without a reload; reopen a terminal and confirm the role stays.
 
 ### Codex questions in the app (HS2-D0QTGB)
 

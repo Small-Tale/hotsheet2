@@ -1663,8 +1663,9 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect(dashboard).toHaveAttribute('data-fit', '3');
   await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(4);
-  // HS2-YHQM67: the demo's only connected tile is the project's primary, so it shows plug-zap.
-  await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="plug-zap"]')).toBeVisible();
+  // HS2-YHQM67, HS2-1WFGX1: the demo's only connected tile is the project's primary: plug plus heart.
+  await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
+  await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="heart"]')).toBeVisible();
   await expect(dashboard.locator('[data-ai-connection="connected"]')).toHaveAttribute(
     'title',
     /hotsheet-mcp tools are connected\. Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z/,

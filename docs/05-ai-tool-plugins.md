@@ -2417,7 +2417,7 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > hook-only session gets the same 15 s grace, then keeps the plug in the warning tone with an
 > accessible label that names what is missing ("MCP not connected", how to fix it), because its
 > permission prompts still reach Hot Sheet (HS2-YHQM67); `unplug` is reserved for a session
-> whose hooks never reported. The project's primary session shows `plug-zap` (HS2-YHQM67). A
+> whose hooks never reported. The project's primary session adds a Lucide `heart` beside its plug (HS2-YHQM67, HS2-1WFGX1). A
 > current server always serializes `mcp_connected`; one that omits it predates MCP presence and
 > keeps the hook-only verdict (version skew). The client
 > re-reads terminals on `mcp_presence` events, never by polling.

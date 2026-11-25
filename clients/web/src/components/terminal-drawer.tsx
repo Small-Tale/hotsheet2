@@ -47,7 +47,7 @@ import { featureOn } from '../feature-areas';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import { aiConnectionIcon, aiConnectionLabel } from '../terminal-ai-connection';
+import { aiConnectionIcon, aiConnectionLabel, aiPrimaryIcon } from '../terminal-ai-connection';
 import { TERMINAL_GRID_PHONE_BREAKPOINT, terminalGridContentSize } from '../terminal-grid-layout';
 import { orchestratorTabNameKeep } from '../terminal-names';
 import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
@@ -319,9 +319,9 @@ export function TerminalDrawer({
                     <LucideIcon
                       className="terminal-drawer__ai-connection"
                       size="s"
-                      icon={aiConnectionIcon(session.aiConnection, session.feedback_primary).icon}
-                      name={aiConnectionIcon(session.aiConnection, session.feedback_primary).name}
-                      color={uiColor(aiConnectionIcon(session.aiConnection, session.feedback_primary).tone)}
+                      icon={aiConnectionIcon(session.aiConnection).icon}
+                      name={aiConnectionIcon(session.aiConnection).name}
+                      color={uiColor(aiConnectionIcon(session.aiConnection).tone)}
                       label={aiConnectionLabel(
                         session.aiConnection,
                         session.ai_connection?.agent,
@@ -339,6 +339,20 @@ export function TerminalDrawer({
                         session.feedback_primary,
                       )}
                     />
+                    {(() => {
+                      // The primary role is its own indicator beside the plug (HS2-1WFGX1); the plug's
+                      // label already names the role, so the heart is decorative.
+                      const primary = aiPrimaryIcon(session.aiConnection, session.feedback_primary);
+                      return primary ? (
+                        <LucideIcon
+                          className="terminal-drawer__ai-primary"
+                          size="s"
+                          icon={primary.icon}
+                          name={primary.name}
+                          color={uiColor(primary.tone)}
+                        />
+                      ) : undefined;
+                    })()}
                     {session.busy ? <BusyDot /> : undefined}
                   </Row>
                 ) : session.busy ? (
