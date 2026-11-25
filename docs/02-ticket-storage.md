@@ -515,7 +515,11 @@ workflow `status`:
   cannot silently select the wrong project or source. This is a real reference, so the
   UI links to the canonical ticket. Reverse backlinks from the canonical ticket are
   tracked separately in **HS2-HEQR6E**.
-  Checkout registry ids are durable across an explicit `checkout relocate`; non-Git
+  Checkout registry ids are durable across an explicit `checkout relocate`, which also
+  records the former root in the registry's optional `relocatedRoots` map (former root to
+  checkout id), so a client that remembered the old path follows the checkout to its new
+  root (HS2-86ES0B). A checkout relocated before that map existed is still followed by the
+  id its first canonical root produced. An older reader ignores the map; non-Git
   source renames retain an alias chain through `checkout rename-source`. Resolution
   follows those aliases to the current connection id and rejects cycles or ambiguous
   retargeting. Git source ids remain path-derived and require a store migration instead.

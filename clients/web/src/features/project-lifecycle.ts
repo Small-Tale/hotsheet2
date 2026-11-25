@@ -348,7 +348,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         throw new Error(opened.error);
       }
       await wireOpenedProject(root, opened);
-      if (remember)
+      // A retried tab that followed a relocated checkout forgets its old root (HS2-86ES0B).
+      if (remember || opened.project.root !== root)
         localStorage.setItem('hotsheet.open-projects', JSON.stringify(dependencies.rememberedProjectRoots()));
       dependencies.startPermissionUpdates();
       dependencies.syncProjectChangeStreams();

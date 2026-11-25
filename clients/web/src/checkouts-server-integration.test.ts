@@ -1,13 +1,14 @@
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { Checkout, ProviderConnection, SourceDetach } from './api';
+import { execFileAsync } from './child-process';
 import { createDevApp } from './dev-server';
 import { parseGitSetup } from './local-bridge-client';
-import { createLocalGitTicketStore, listServerCheckouts, openLocalProject } from './project-bridge';
+import { createLocalGitTicketStore, listServerCheckouts, openLocalProject, toolBinary } from './project-bridge';
 import { parseRegisteredProjects, REGISTERED_PROJECTS_PATH } from './registered-projects-model';
 import { parseProviderAccount } from './server-response-parsers';
 
@@ -122,6 +123,39 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     const afterDeletion = await createDevApp().request('/__hotsheet/checkouts');
     expect(afterDeletion.status).toBe(200);
     expect((await afterDeletion.json()) as Checkout[]).not.toContainEqual(expect.objectContaining({ id: session.id }));
+  }, 120_000);
+
+  it('HS2-86ES0B reopens a relocated checkout from the root a restored tab remembered', async () => {
+    const app = createDevApp(),
+      headers = { 'content-type': 'application/json' },
+      parent = await realpath(await mkdtemp(join(workspace, 'relocate-'))),
+      original = join(parent, 'app'),
+      moved = join(parent, 'moved');
+    await mkdir(original);
+    const store = await createLocalGitTicketStore(original);
+    const opened = await openLocalProject(original, store);
+    // The client restores a tab by posting the root it remembered to the real bridge route.
+    const restore = () =>
+      app.request('/__hotsheet/projects/open', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ root: opened.root }),
+      });
+
+    await rename(original, moved);
+    const untold = await restore();
+    expect(untold.status, 'a move the registry was not told about stays unavailable').toBe(400);
+    expect(((await untold.json()) as { error: string }).error).toContain('ENOENT');
+
+    // The supported headless relocate path.
+    await execFileAsync(toolBinary(), ['checkout', 'relocate', opened.id, moved], {
+      cwd: parent,
+      env: process.env,
+    });
+    const restored = await restore();
+    expect(restored.status).toBe(201);
+    expect(await restored.json()).toMatchObject({ id: opened.id, root: moved, stores: [store] });
+    expect((await listServerCheckouts()).filter((checkout) => checkout.id === opened.id)).toHaveLength(1);
   }, 120_000);
 
   it('HS2-7VB81E leaves a checked-out ticket repository untouched until source admission', async () => {

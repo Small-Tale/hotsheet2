@@ -19311,6 +19311,49 @@ paths:
         '410': *a4
         '501': *a4
         default: *a4
+  /projects/follow-relocation:
+    post:
+      operationId: follow_project_relocation
+      summary: Find the checkout an explicit relocate moved away from a vanished root
+      description:
+        HS2-86ES0B. Host-only. Returns the registered checkout that `checkout relocate` moved away from `root`, so a
+        restored tab that remembered the old path reopens at the checkout's current root. `checkout` is null when the
+        root still exists, is registered again, is relative, matches more than one checkout, or the checkout's current
+        root is also missing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - root
+              properties:
+                root:
+                  type: string
+                  description: The absolute project root a client remembered.
+              additionalProperties: false
+      responses:
+        '200':
+          description: The followed checkout, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - checkout
+                properties:
+                  checkout:
+                    oneOf:
+                      - $ref: '#/components/schemas/Checkout'
+                      - type: 'null'
+                additionalProperties: false
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:

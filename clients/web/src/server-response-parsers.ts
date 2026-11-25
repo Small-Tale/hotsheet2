@@ -529,6 +529,16 @@ export const parseOpenedCheckout: ResponseParser<OpenedCheckout> = (value) => {
   return value as OpenedCheckout;
 };
 
+/** `POST /projects/follow-relocation` (HS2-86ES0B): the relocated checkout, or `null`. */
+export const parseFollowedRelocation: ResponseParser<{ root: string } | undefined> = (value) => {
+  const what = 'project relocation',
+    body = record(value, what);
+  if (body.checkout === null) return undefined;
+  const checkout = record(body.checkout, what);
+  requiredString(checkout, 'root', what);
+  return { root: checkout.root as string };
+};
+
 /** `GET /checkouts/{id}/corrupt-tickets` reduced to the paths the bridge authorizes reveals for. */
 export const parseCorruptTicketPaths: ResponseParser<Array<{ path: string }>> = (value) =>
   list(value, 'corrupt ticket list', (entry) => {

@@ -2,6 +2,7 @@
 //! ticket-store identity: several checkouts may share one repository and each checkout
 //! may use several ticket stores (and vice versa).
 
+mod relocation;
 mod respelling;
 mod source_observation;
 pub use source_observation::CheckoutSourceProof;
@@ -219,6 +220,17 @@ struct RegistryFile {
     /// always contain ids understood by the active provider registry.
     #[serde(default, rename = "sourceAliases")]
     source_aliases: BTreeMap<String, BTreeMap<String, String>>,
+    /// HS2-86ES0B: each former root an explicit `relocate` moved a checkout away from, keyed
+    /// by that root and valued by the durable checkout id. A client that remembered the old
+    /// path (a restored project tab) follows it to the checkout's current root. Kept outside
+    /// `Checkout`, like `source_aliases`; a stale entry is harmless because a lookup ignores
+    /// a root that is registered again or a checkout id that no longer exists.
+    #[serde(
+        default,
+        rename = "relocatedRoots",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    relocated_roots: BTreeMap<String, String>,
     /// `(checkout id, connection id)` pairs that exist only because a sourceless entry
     /// was read through its root's `.hotsheet2/store` link. They were never persisted as
     /// registry links, so registering one is a new selection, not a pre-identity link
@@ -238,6 +250,7 @@ impl Default for RegistryFile {
             schema_version: CHECKOUT_REGISTRY_SCHEMA_VERSION,
             checkouts: Vec::new(),
             source_aliases: BTreeMap::new(),
+            relocated_roots: BTreeMap::new(),
             link_derived_sources: BTreeSet::new(),
         }
     }
@@ -364,6 +377,12 @@ pub fn discover_ticket_stores(root: &Path) -> Result<Vec<PathBuf>, CheckoutError
 pub fn checkout_id(root: &Path) -> Result<String, CheckoutError> {
     let canonical = hotsheet_sync::paths::canonicalize(root)
         .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+    Ok(checkout_id_for_canonical(&canonical))
+}
+
+/// [`checkout_id`] for a path that is already canonical, or that no longer exists and was
+/// canonical when it was registered (HS2-86ES0B follows a relocated checkout by it).
+fn checkout_id_for_canonical(canonical: &Path) -> String {
     let name = canonical
         .file_name()
         .and_then(|v| v.to_str())
@@ -383,7 +402,7 @@ pub fn checkout_id(root: &Path) -> Result<String, CheckoutError> {
         "{:x}",
         Sha256::digest(canonical.to_string_lossy().as_bytes())
     );
-    Ok(format!("{}-{}", slug.trim_matches('-'), &hash[..12]))
+    format!("{}-{}", slug.trim_matches('-'), &hash[..12])
 }
 
 #[derive(Debug, Clone)]
@@ -851,6 +870,9 @@ impl PreparedCheckoutLinks<'_> {
             .position(|entry| entry.id == checkout_id)?;
         let removed = self.file.checkouts.remove(index);
         self.file.source_aliases.remove(checkout_id);
+        self.file
+            .relocated_roots
+            .retain(|_, id| id.as_str() != checkout_id);
         self.file
             .link_derived_sources
             .retain(|(id, _)| id != checkout_id);
@@ -1406,11 +1428,12 @@ impl CheckoutRegistry {
             .iter_mut()
             .find(|checkout| checkout.id == current.id)
             .expect("resolved checkout remains in the locked registry");
-        entry.root = root_text;
+        let former_root = std::mem::replace(&mut entry.root, root_text.clone());
         if let Some(alias) = alias {
             entry.alias = alias.to_string();
         }
         let relocated = entry.clone();
+        relocation::record(&mut file.relocated_roots, &former_root, &relocated);
         self.write_locked(&file)?;
         Ok(relocated)
     }

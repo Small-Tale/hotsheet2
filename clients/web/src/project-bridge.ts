@@ -22,6 +22,7 @@ import { errorMessageOf, isRecord, parseJson, responseJson, responseJsonBody } f
 import { hotsheetHome, hotsheetLegacyHome, type MachineHomeEnvironment, nonBlank } from './machine-home';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
+import { resolveProjectRoot } from './project-relocation';
 import type { RegisteredProject } from './registered-projects-model';
 import {
   remoteConnectionCreate,
@@ -50,6 +51,7 @@ import {
   parseCheckout,
   parseCheckouts,
   parseCorruptTicketPaths,
+  parseFollowedRelocation,
   parseOpenedCheckout,
   parseServerCompatibility,
   type ResponseParser,
@@ -1715,8 +1717,25 @@ async function serverRequest<T>(
   return parse(await responseJsonBody(response));
 }
 
+/** HS2-86ES0B: ask the bootstrap server which checkout a relocate moved away from `root`. */
+async function followProjectRelocation(root: string): Promise<string | undefined> {
+  const store = await bootstrapStore();
+  const instance = await ensureServer(store);
+  const followed = await serverRequest(
+    { url: instance.url, secret: instance.secret, serverStore: store },
+    '/projects/follow-relocation',
+    parseFollowedRelocation,
+    { method: 'POST', body: JSON.stringify({ root }) },
+  );
+  return followed?.root;
+}
+
 export async function openLocalProject(rootInput: string, ticketStoreInput?: string): Promise<ProjectSession> {
-  const root = await realpath(rootInput.trim());
+  // A remembered root that `checkout relocate` moved opens at the checkout's current root (HS2-86ES0B).
+  // An explicitly chosen ticket store belongs to the path as typed, so it is never redirected.
+  const root = ticketStoreInput?.trim()
+    ? await realpath(rootInput.trim())
+    : await resolveProjectRoot(rootInput.trim(), { realpath, followRelocation: followProjectRelocation });
   const ticketStore = ticketStoreInput?.trim()
     ? await realpath(ticketStoreInput.trim())
     : ((await linkedTicketStore(root)) ?? (await suggestedTicketStore(root)));

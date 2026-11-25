@@ -769,6 +769,47 @@ test('survives all-failed, empty, and refilled startup transitions without retai
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/gamma/'))).toBe(true);
 });
 
+test('HS2-86ES0B a restored tab follows a relocated checkout and remembers its new root', async ({ page }) => {
+  // The bridge resolved the remembered `/work/beta` to the checkout `checkout relocate` moved.
+  const fixture = await startupFixture(page, ['alpha', 'beta'], 'beta');
+  fixture.projects.set('beta', { ...projectFor('beta'), root: '/moved/beta' });
+  await page.goto('/');
+  await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
+  await expect(page.locator('.project-restore-error')).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.open-projects')))
+    .toBe(JSON.stringify(['/work/alpha', '/moved/beta']));
+  await expect(page.evaluate(() => localStorage.getItem('hotsheet.workspace.active-project-root.v1'))).resolves.toBe(
+    '/moved/beta',
+  );
+  // The next start opens the new root directly and keeps the tab order.
+  fixture.openBodies.length = 0;
+  await page.reload();
+  await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.project-tab-bar [role="tab"]')).toHaveText([/^alpha/, /^beta/]);
+  expect(fixture.openBodies.map((body) => body.root).sort()).toEqual(['/moved/beta', '/work/alpha']);
+});
+
+test('HS2-86ES0B Retry project follows a checkout relocated after its restore failed', async ({ page }) => {
+  const fixture = await startupFixture(page, ['alpha', 'beta'], 'beta');
+  fixture.unavailable.set('beta', {});
+  await page.goto('/');
+  const failure = page.locator('.project-restore-error');
+  await expect(failure).toContainText('beta server unavailable');
+  fixture.unavailable.delete('beta');
+  fixture.projects.set('beta', { ...projectFor('beta'), root: '/moved/beta' });
+  await failure.getByRole('button', { name: 'Retry project' }).click();
+  await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
+  await expect
+    .poll(async () =>
+      (
+        JSON.parse((await page.evaluate(() => localStorage.getItem('hotsheet.open-projects'))) ?? '[]') as string[]
+      ).sort(),
+    )
+    .toEqual(['/moved/beta', '/work/alpha']);
+});
+
 test('activates a passive tab after closing the active project, then opens again after closing every project', async ({
   page,
 }) => {

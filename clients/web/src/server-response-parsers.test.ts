@@ -16,6 +16,7 @@ import {
   parseCustomView,
   parseDevelopmentStrategyReport,
   parseFeedbackDelivery,
+  parseFollowedRelocation,
   parseFullTicket,
   parseGitHubAuthStatus,
   parseGroupCreate,
@@ -380,6 +381,9 @@ describe('server response parsers (HS2-34P6XY)', () => {
     expect(parseCheckout(full)).toBe(full);
     expect(parseCheckouts([checkout])).toEqual([checkout]);
     expect(parseOpenedCheckout({ checkout: { ...checkout, sources: [] } }).checkout.id).toBe('c');
+    // HS2-86ES0B: the relocated checkout's current root, or nothing to follow.
+    expect(parseFollowedRelocation({ checkout: { ...checkout, root: '/moved' } })).toEqual({ root: '/moved' });
+    expect(parseFollowedRelocation({ checkout: null })).toBeUndefined();
     expect(parseCorruptTicketPaths([{ path: '/x.md', error: 'bad' }])).toEqual([{ path: '/x.md', error: 'bad' }]);
     expect(parseAccountIdentity({ identity: 'me' })).toEqual({ identity: 'me' });
     expect(parseTrashPurge({ purged: 1, tickets: ['a'] })).toEqual({ purged: 1, tickets: ['a'] });
@@ -463,6 +467,8 @@ describe('server response parsers (HS2-34P6XY)', () => {
     ['checkout', () => parseCheckout({ ...checkout, unverified_store_sources: { g: 1 } })],
     ['checkout list', () => parseCheckouts({ checkouts: [] })],
     ['project open', () => parseOpenedCheckout({ checkout: { ...checkout } })],
+    ['project relocation', () => parseFollowedRelocation({})],
+    ['project relocation', () => parseFollowedRelocation({ checkout: { id: 'c' } })],
     ['corrupt ticket', () => parseCorruptTicketPaths([{}])],
     ['account identity', () => parseAccountIdentity([])],
     ['trash purge', () => parseTrashPurge({ purged: '1', tickets: [] })],

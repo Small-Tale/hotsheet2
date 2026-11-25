@@ -130,12 +130,13 @@ use routes::checkouts::{
     add_checkout_source, checkout_repository_commits, checkout_repository_compaction,
     checkout_repository_file_action, checkout_repository_files, checkout_repository_size,
     checkout_repository_status, checkout_repository_sync, configure_checkout_repository_remote,
-    create_corrupt_ticket_repair, execute_checkout_repository_compaction, get_checkout_code_review,
-    get_checkout_ticket_usage, initialize_checkout_repository, list_checkout_corrupt_tickets,
-    list_checkout_tickets, list_checkouts, open_checkout_code_review,
-    open_checkout_repository_review, open_project, prewarm_corrupt_tickets, register_checkout,
-    relink_checkout_git_source, remove_checkout_route, remove_checkout_source, resolve_checkout,
-    set_checkout_default_source, set_checkout_source_color, set_checkout_source_ticket_prefix,
+    create_corrupt_ticket_repair, execute_checkout_repository_compaction,
+    follow_project_relocation, get_checkout_code_review, get_checkout_ticket_usage,
+    initialize_checkout_repository, list_checkout_corrupt_tickets, list_checkout_tickets,
+    list_checkouts, open_checkout_code_review, open_checkout_repository_review, open_project,
+    prewarm_corrupt_tickets, register_checkout, relink_checkout_git_source, remove_checkout_route,
+    remove_checkout_source, resolve_checkout, set_checkout_default_source,
+    set_checkout_source_color, set_checkout_source_ticket_prefix,
 };
 use routes::claims::{
     claim_checkout_next_ticket, claim_checkout_ticket, claim_next_ticket, claim_ticket,
@@ -1776,6 +1777,10 @@ pub fn app(state: AppState) -> Router {
         .route("/provider-transfers/move", post(provider_move_route))
         .route("/checkouts", get(list_checkouts).post(register_checkout))
         .route("/projects/open", post(open_project))
+        .route(
+            "/projects/follow-relocation",
+            post(follow_project_relocation),
+        )
         .route("/checkouts/{reference}/close", post(close_checkout_session))
         .route(
             "/checkouts/{reference}",

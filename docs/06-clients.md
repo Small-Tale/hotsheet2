@@ -1674,7 +1674,13 @@ checkout name>`, where the host is the machine name the peer last reported on th
   closable through the tab's close control or context menu. The unavailable tab's menu offers only
   Close Tab because it has no live project to minimize (HS2-TGYKHQ); closing confirms the choice and
   forgets its remembered root without requiring the project to open (HS2-TGYKHQ). Until then,
-  every tab-persistence path retains failed roots for the next launch. Restore failures must never
+  every tab-persistence path retains failed roots for the next launch. A remembered root that an
+  explicit `hotsheet-cli checkout relocate` moved reopens the checkout at its current root: the
+  bridge asks the server's registry (`POST /projects/follow-relocation`) when the remembered folder
+  is gone, and the client then remembers the new root, after a startup restore and after Retry
+  (HS2-86ES0B). Nothing searches the disk, so a folder moved without telling the registry stays
+  unavailable with Retry and Close; run `hotsheet-cli checkout relocate <id> <new root>` (or open
+  the new folder and close the stale tab) to recover. Restore failures must never
   leave stale compatibility or connection diagnostics over a different project that reopened successfully.
   A checkout with existing sources opens directly regardless of its default source;
   project setup refresh runs for source-free checkouts too (HS2-TSXSH6). Source-less project setup uses a

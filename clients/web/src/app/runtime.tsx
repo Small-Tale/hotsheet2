@@ -8252,12 +8252,17 @@ export async function startHotSheetWebClient() {
   void restoreRemoteProjectTabs().catch(() => undefined);
   const disposeRemoteReconnectWakeups = wireRemoteReconnectWakeups(remoteReconnect);
   void (async () => {
+    // Remembered roots that opened a relocated checkout at its new root (HS2-86ES0B).
+    const followedRelocations = new Set<string>();
     try {
       await restoreRememberedProjects({
         roots: rememberedRoots,
         activeRoot: rememberedActiveRoot,
         fetch: (root) => openProjectFetch(root),
-        wire: (root, opened, index) => wireOpenedProject(root, opened, projectTabRank(root, index)),
+        wire: (root, opened, index) => {
+          if (opened.project.root !== root) followedRelocations.add(root);
+          return wireOpenedProject(root, opened, projectTabRank(root, index));
+        },
         retainFailure: (root, failure) => {
           retainProjectRestoreFailure(root, failure.error, failure.recovery?.expected.pid);
         },
@@ -8280,6 +8285,9 @@ export async function startHotSheetWebClient() {
         },
       });
       localProjectRestoreSettled = true;
+      // Remember the current root, so the next start opens it directly (HS2-86ES0B).
+      if (followedRelocations.size > 0)
+        localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
       revealRemoteTabWhenIdle();
       if (startupTicketDeepLink) await openStartupTicketDeepLink(startupTicketDeepLink);
       startPermissionUpdates();

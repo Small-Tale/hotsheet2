@@ -1258,7 +1258,13 @@ unreviewed Git descriptors carry `identity_review_required`, and project opening
 does not host or project tickets from those links.
 The CLI's `checkout resolve`, `checkout register`, and `checkout source-color`
 inspect configuration without opening ticket data, so they remain usable for
-recovery. Project launch retains an unverified registered source for review and
+recovery. `checkout relocate <reference> <new root>` moves a checkout and keeps its
+id and its former root; afterwards `checkout resolve <old root>`, `POST /projects/open`
+with the old root, and `POST /projects/follow-relocation` (`{root}` to `{checkout}` or
+`{checkout: null}`, host-only) all reach the checkout at its new root while the old
+folder is gone (HS2-86ES0B). An existing folder, a root registered again, ambiguous
+evidence, or a checkout whose current root is missing is never followed, and nothing
+searches the disk for a folder moved without `checkout relocate`. Project launch retains an unverified registered source for review and
 does not silently host a same-path replacement (HS2-TSXSH6).
 For this case, `PATCH /checkouts/{reference}/sources/{connection_id}/relink`
 accepts `review_unverified_recovery: true` only after the caller explicitly reviews the
@@ -2118,6 +2124,7 @@ The checked routes either start a host program or name an arbitrary host path:
 | `POST /checkouts/{ref}/repository/files/action`                                                      | open or reveal a repository file                     |
 | `POST /checkouts/{ref}/tickets/{id}/attachments/{aid}/action`, `…/attachments/by-name/{name}/action` | open, reveal, or report the attachment's host path   |
 | `POST /projects/open`, `POST /checkouts`                                                             | open or register a project at any host path          |
+| `POST /projects/follow-relocation`                                                                   | report where a relocated checkout's host path moved  |
 | `POST /stores`                                                                                       | host a ticket store at any host path                 |
 | `PUT /checkouts/{ref}/sources/{id}` with `provider: "git"`                                           | host a Git source at its locator path                |
 | `PATCH /checkouts/{ref}/sources/{id}/relink`                                                         | re-point a Git source to another host path           |

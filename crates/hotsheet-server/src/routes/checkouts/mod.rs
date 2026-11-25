@@ -210,8 +210,17 @@ fn schedule_worklist_regeneration(
 pub(crate) async fn open_project(
     State(state): State<AppState>,
     _host: HostAccess,
-    Json(body): Json<OpenProjectBody>,
+    Json(mut body): Json<OpenProjectBody>,
 ) -> Result<(StatusCode, Json<OpenProjectResponse>), ApiError> {
+    // HS2-86ES0B: a remembered root that an explicit relocate moved opens the checkout at
+    // its current root. An existing folder is never redirected.
+    if let Some(moved) = state
+        .checkout_registry
+        .follow_relocation(FsPath::new(&body.root))
+        .map_err(checkout_lookup_error)?
+    {
+        body.root = moved.root;
+    }
     let discovered = body.stores.is_none() && body.sources.is_none();
     let source_mode = if body.sources.is_some() {
         hotsheet_ticketing::checkouts::OpenSourceMode::Explicit
@@ -322,6 +331,31 @@ pub(crate) async fn open_project(
             discovered,
         }),
     ))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct FollowRelocationBody {
+    root: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct FollowRelocationResponse {
+    checkout: Option<hotsheet_ticketing::checkouts::Checkout>,
+}
+
+/// HS2-86ES0B: the checkout an explicit relocate moved away from a vanished `root`, or
+/// `null`. The local bridge asks before it prepares an open, so a restored tab that
+/// remembered the old path reopens the checkout at its current root.
+pub(crate) async fn follow_project_relocation(
+    State(state): State<AppState>,
+    _host: HostAccess,
+    Json(body): Json<FollowRelocationBody>,
+) -> Result<Json<FollowRelocationResponse>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .follow_relocation(FsPath::new(&body.root))
+        .map_err(checkout_lookup_error)?;
+    Ok(Json(FollowRelocationResponse { checkout }))
 }
 
 pub(crate) async fn list_checkouts(
