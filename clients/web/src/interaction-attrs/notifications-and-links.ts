@@ -44,6 +44,10 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   dismissAppError: action('dismiss-app-error'),
   openHaltedSession: action('open-halted-session'),
   dismissHaltedSession: action('dismiss-halted-session'),
+  /** HS2-6RXBS9: the app-level Choose/Start an AI Session prompt after a human note. */
+  chooseFeedbackSession: action('choose-feedback-session'),
+  startFeedbackSession: action('start-feedback-session'),
+  dismissFeedbackDelivery: action('dismiss-feedback-delivery'),
   answerTerminalQuestion: action('answer-terminal-question'),
   returnTerminalQuestion: action('return-terminal-question'),
   toggleVerifiedColumn: action('toggle-verified-column'),

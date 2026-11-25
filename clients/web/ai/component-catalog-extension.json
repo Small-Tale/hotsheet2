@@ -1392,6 +1392,32 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "note-delivery-popup",
+      "name": "NoteDeliveryPopup",
+      "kind": "component",
+      "purpose": "The app-level Choose/Start an AI Session prompt after a saved human note: the ticket, project, and one labeled button per candidate session, or Start AI Session (HS2-6RXBS9).",
+      "useWhen": [
+        "Hot Sheet needs a person to choose, or start, the AI session that a saved human note notifies, from any project or view."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific NoteDeliveryPopup behavior."
+      ],
+      "publicClasses": [
+        "note-delivery-popup"
+      ],
+      "publicTokens": [],
+      "source": "src/components/note-delivery-popup.tsx",
+      "geometry": {
+        "margin": "self",
+        "border": "self",
+        "padding": "child",
+        "notes": [
+          "Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY)."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "note-metadata-dialog",
       "name": "NoteMetadataDialog",
       "kind": "component",

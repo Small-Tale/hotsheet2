@@ -974,13 +974,24 @@
       "kind": "composition",
       "purpose": "Schedule and manage one AI custom command with a recurrence preview.",
       "source": "src/components/command-schedule-dialog.tsx",
-      "publicExports": [{ "name": "CommandScheduleDialog" }],
+      "publicExports": [
+        {
+          "name": "CommandScheduleDialog"
+        }
+      ],
       "sourceLinks": ["src/components/command-schedule-dialog.tsx"],
       "composition": {
-        "parents": { "mode": "any", "entries": [] },
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
         "contexts": ["application-ui"],
         "zones": [],
-        "children": { "mode": "any", "concepts": [], "requiredConcepts": [] },
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
         "state": [],
         "wiring": {
           "required": true,
@@ -994,7 +1005,10 @@
           "scope": "application",
           "obligations": []
         },
-        "responsive": { "owner": "not-applicable", "behaviors": [] },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
         "layout": {
           "roles": ["structure"],
           "geometry": {
@@ -1005,8 +1019,15 @@
           }
         }
       },
-      "boundaries": { "rootClass": null, "publicClasses": [], "publicTokens": [], "placeableClasses": [] },
-      "accessibility": { "obligations": [] },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
       "diagnostics": [],
       "provenance": {
         "selection": "src/components/command-schedule-dialog.tsx",
@@ -4777,7 +4798,7 @@
       "id": "ticket-group-merge-dialog",
       "name": "TicketGroupMergeDialog",
       "kind": "component",
-      "purpose": "Merge into… dialog for Project Settings › Ticket groups: the tickets that move, a destination Select, and Merge groups.",
+      "purpose": "Merge into\u2026 dialog for Project Settings \u203a Ticket groups: the tickets that move, a destination Select, and Merge groups.",
       "source": "src/components/ticket-group-merge-dialog.tsx",
       "publicExports": [
         {
@@ -4832,7 +4853,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs merge into… dialog for Project Settings › Ticket groups: the tickets that move, a destination Select, and Merge groups."
+          "Hot Sheet needs merge into\u2026 dialog for Project Settings \u203a Ticket groups: the tickets that move, a destination Select, and Merge groups."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketGroupMergeDialog behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -6111,6 +6132,74 @@
           "Hot Sheet needs acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific HaltedSessionPopup behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "note-delivery-popup",
+      "name": "NoteDeliveryPopup",
+      "kind": "component",
+      "purpose": "The app-level Choose/Start an AI Session prompt after a saved human note: the ticket, project, and one labeled button per candidate session, or Start AI Session (HS2-6RXBS9).",
+      "source": "src/components/note-delivery-popup.tsx",
+      "publicExports": [
+        {
+          "name": "NoteDeliveryPopup"
+        }
+      ],
+      "sourceLinks": ["src/components/note-delivery-popup.tsx", "src/feedback-session-labels.ts"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "self",
+            "border": "self",
+            "padding": "child",
+            "notes": [
+              "Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY)."
+            ]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["note-delivery-popup"],
+        "publicTokens": [],
+        "placeableClasses": ["note-delivery-popup"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/note-delivery-popup.tsx",
+        "composition": "src/components/note-delivery-popup.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Hot Sheet needs a person to choose, or start, the AI session that a saved human note notifies, from any project or view."
+        ],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific NoteDeliveryPopup behavior."],
         "documentation": "../../docs/ux-components.md"
       }
     },
@@ -8719,7 +8808,7 @@
       "id": "ticket-group-settings",
       "name": "TicketGroupSettings",
       "kind": "component",
-      "purpose": "Project Settings › Ticket groups: every project group, empty ones included, with its ticket count and View tickets, Rename, Merge into, and Delete group actions.",
+      "purpose": "Project Settings \u203a Ticket groups: every project group, empty ones included, with its ticket count and View tickets, Rename, Merge into, and Delete group actions.",
       "source": "src/components/ticket-group-settings.tsx",
       "publicExports": [
         {
@@ -8774,7 +8863,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs project Settings › Ticket groups: every project group, empty ones included, with its ticket count and View tickets, Rename, Merge into, and Delete group actions."
+          "Hot Sheet needs project Settings \u203a Ticket groups: every project group, empty ones included, with its ticket count and View tickets, Rename, Merge into, and Delete group actions."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketGroupSettings behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -9422,7 +9511,7 @@
       "id": "project-general-settings",
       "name": "ProjectGeneralSettings",
       "kind": "component",
-      "purpose": "Project Settings → General: the project-scoped settings that come first, starting with the Project Type select (Software or Orchestration), with a hint that says what the type means and that added projects stay while the type is Software (HS2-W27N1D).",
+      "purpose": "Project Settings \u2192 General: the project-scoped settings that come first, starting with the Project Type select (Software or Orchestration), with a hint that says what the type means and that added projects stay while the type is Software (HS2-W27N1D).",
       "source": "src/components/project-general-settings.tsx",
       "publicExports": [
         {
@@ -9489,7 +9578,7 @@
       "id": "orchestration-settings",
       "name": "OrchestrationSettings",
       "kind": "component",
-      "purpose": "Project Settings → Orchestration for an Orchestration project: the projects it orchestrates as rows with place, connection badge and a menu (Show Project Tab, Stop Orchestrating…), the + Add Project menu of other open projects with Open Another Project…, an empty state, and the limits-only policy (HS2-W27N1D, HS2-XHQ1EH).",
+      "purpose": "Project Settings \u2192 Orchestration for an Orchestration project: the projects it orchestrates as rows with place, connection badge and a menu (Show Project Tab, Stop Orchestrating\u2026), the + Add Project menu of other open projects with Open Another Project\u2026, an empty state, and the limits-only policy (HS2-W27N1D, HS2-XHQ1EH).",
       "source": "src/components/orchestration-settings.tsx",
       "publicExports": [
         {
@@ -9758,7 +9847,7 @@
       "id": "orchestration-project-detail",
       "name": "OrchestrationProjectDetail",
       "kind": "component",
-      "purpose": "One orchestrated project's detail in the inspector: binding with every site's location (HS2-NGP2AK) and connection, the project's own limits with a help popup (HS2-Y737GM), the Auto limits under Advanced (HS2-25KT42) and Apply Limits (HS2-7WF6JD), capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over… and Stop, and Stop Orchestrating…; a section whose read fails says so in place (HS2-W27N1D).",
+      "purpose": "One orchestrated project's detail in the inspector: binding with every site's location (HS2-NGP2AK) and connection, the project's own limits with a help popup (HS2-Y737GM), the Auto limits under Advanced (HS2-25KT42) and Apply Limits (HS2-7WF6JD), capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over\u2026 and Stop, and Stop Orchestrating\u2026; a section whose read fails says so in place (HS2-W27N1D).",
       "source": "src/components/orchestration-project-detail.tsx",
       "publicExports": [
         {
@@ -9825,7 +9914,7 @@
       "id": "registered-projects-settings",
       "name": "RegisteredProjectsSettings",
       "kind": "component",
-      "purpose": "App Settings → Projects: every project registered with Hot Sheet on this computer, with a Folder Missing badge for a deleted or unmounted folder and Remove from Hot Sheet in each row's menu, which unregisters the project without deleting files (HS2-R806FZ).",
+      "purpose": "App Settings \u2192 Projects: every project registered with Hot Sheet on this computer, with a Folder Missing badge for a deleted or unmounted folder and Remove from Hot Sheet in each row's menu, which unregisters the project without deleting files (HS2-R806FZ).",
       "source": "src/components/registered-projects-settings.tsx",
       "publicExports": [
         {

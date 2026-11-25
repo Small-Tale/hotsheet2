@@ -8,6 +8,7 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
   const server = await realTicketServer();
   try {
     const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic session feedback' });
+    const other = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic other ticket' });
     await server.request(`/tickets/${created.id}`, 'PATCH', { status: 'started' });
     // The codex session's worker holds the live claim, so its choice names this ticket (HS2-5MCAKY).
     await server.request(`/tickets/${created.id}/claim`, 'POST', { worker: 'synthetic-codex-worker' });
@@ -73,8 +74,12 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
     const editor = inspector.getByRole('textbox', { name: 'New note' });
     await editor.fill('Synthetic human feedback');
     await editor.blur();
-    const choice = inspector.locator('[data-component="feedback-session-choice"]');
+    // The choice is an app-level prompt like a permission request, not an inspector banner (HS2-6RXBS9).
+    const choice = page.locator('[data-component="note-delivery-popup"]');
     await expect(choice).toBeVisible();
+    await expect(inspector.locator('[data-component="note-delivery-popup"]')).toHaveCount(0);
+    await expect(choice).toContainText(created.slug);
+    await expect(choice).toContainText('feedback');
     // Choices name the session's tab (or tool), project, and claimed ticket, never a raw id (HS2-5MCAKY).
     const codex = choice.getByRole('button', { name: `Codex · feedback · ${created.slug}` }),
       claude = choice.getByRole('button', { name: 'Claude · feedback', exact: true });
@@ -86,8 +91,14 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
     );
     await expect(choice).not.toContainText('123456');
     await page.screenshot({ path: test.info().outputPath('feedback-chooser-wide.png') });
+    // Selecting another ticket leaves the prompt up: it belongs to the note, not the inspector.
+    await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${other.slug}"]`).click();
+    await expect(inspector.getByRole('heading', { name: 'Synthetic other ticket' }).first()).toBeVisible();
+    await expect(choice).toBeVisible();
+    // Hiding the inspector leaves the prompt up.
+    await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
+    await expect(choice).toBeVisible();
     await page.setViewportSize({ width: 768, height: 850 });
-    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
     await expect(choice).toBeVisible();
     await page.waitForTimeout(500);
     await expect
@@ -98,8 +109,6 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
       .toBe(true);
     await page.screenshot({ path: test.info().outputPath('feedback-chooser-medium.png') });
     await page.setViewportSize({ width: 390, height: 844 });
-    if (await page.getByRole('button', { name: 'Show Ticket Inspector' }).isVisible())
-      await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
     await expect(choice).toBeVisible();
     await page.waitForTimeout(500);
     await expect
@@ -115,8 +124,20 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
     await page.screenshot({ path: test.info().outputPath('feedback-chooser-wide-return.png') });
     await codex.click();
     await expect(choice).toHaveCount(0);
+    await expect(page.locator('.app-toast, [data-component="app-toast"]').first()).toContainText('notified');
     expect(notifications).toHaveLength(1);
     expect(notifications[0]?.connection_id).toBe('session-123456');
+    // A second note's prompt can be dismissed without notifying anyone.
+    await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${created.slug}"]`).click();
+    if (await page.getByRole('button', { name: 'Show Ticket Inspector' }).isVisible())
+      await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
+    await inspector.getByRole('button', { name: 'Add Note' }).first().click();
+    await editor.fill('Second synthetic feedback');
+    await editor.blur();
+    await expect(choice).toBeVisible();
+    await choice.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(choice).toHaveCount(0);
+    expect(notifications).toHaveLength(1);
     const stored = await server.request<FullTicket>(`/tickets/${created.id}`);
     expect(stored.notes.some((note) => note.text === 'Synthetic human feedback')).toBe(true);
   } finally {

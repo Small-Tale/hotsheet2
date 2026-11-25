@@ -162,6 +162,7 @@ describe('UX demo catalog', () => {
       'attachment-filename-editor',
       'notification-card',
       'halted-session-popup',
+      'note-delivery-popup',
       'permission-request',
       'notification-center',
       'terminal-drawer',

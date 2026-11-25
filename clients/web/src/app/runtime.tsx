@@ -7,7 +7,7 @@ import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { wireDialogStack } from '@kerfjs/ui/surface-scaffold';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
-import { batch, computed, effect, mount, signal } from 'kerfjs';
+import { batch, computed, effect, mount, type SafeHtml, signal } from 'kerfjs';
 
 import {
   claimEtaPresentation,
@@ -85,6 +85,7 @@ import {
   selectDevelopmentStrategy,
 } from '../components/development-strategy-settings-interactions';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
+import { NoteDeliveryPopup } from '../components/note-delivery-popup';
 import {
   NO_RESPONSE_LINK,
   type NoteMetadataDialogState,
@@ -5068,6 +5069,7 @@ export async function startHotSheetWebClient() {
   const {
     feedbackDelivery,
     chooseFeedbackSession,
+    dismissFeedbackDelivery,
     attachmentEpochs,
     restoreTicketDraft,
     flushTicketDrafts,
@@ -5409,6 +5411,41 @@ export async function startHotSheetWebClient() {
     refreshCodeReview: refreshLinkedCodeReview,
     replaceFrame: replaceLinkedReaderFrame,
   });
+  /** The app-level Choose/Start an AI Session prompt for a saved human note (HS2-6RXBS9, HS2-5MCAKY). */
+  function noteDeliveryPopup(): SafeHtml | undefined {
+    const pending = feedbackDelivery.value,
+      owner = pending && projects.value.find((item) => item.id === pending.projectId);
+    if (!pending || !owner || (pending.delivery.status !== 'choose' && pending.delivery.status !== 'start')) return;
+    const rows = owner.id === selectedProjectId.value ? tickets.value : (ticketRowsByProject.value[owner.id] ?? []),
+      context = {
+        projectName: owner.name,
+        terminals: terminalGroups.value.find((group) => group.projectId === owner.id)?.sessions ?? [],
+        chats: terminalDrawerChatsByProject.value[owner.id] ?? [],
+        claims: rows.flatMap((ticket) =>
+          ticket.claimed_by ? [{ worker: ticket.claimed_by, slug: ticket.slug, title: ticket.title }] : [],
+        ),
+        toolLabel: aiToolLabel,
+      };
+    return (
+      <NoteDeliveryPopup
+        prompt={{
+          key: `note-delivery:${pending.delivery.note_id}`,
+          ticketId: pending.ticketId,
+          slug: pending.slug,
+          title: pending.title,
+          projectName: owner.name,
+          kind: pending.delivery.status,
+          sessions:
+            pending.delivery.status === 'choose'
+              ? pending.delivery.sessions.map((session) => ({
+                  id: session.id,
+                  ...feedbackSessionLabel(session, context),
+                }))
+              : [],
+        }}
+      />
+    );
+  }
   document.body.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -5424,7 +5461,17 @@ export async function startHotSheetWebClient() {
       if (ticketId && connectionId) void chooseFeedbackSession(ticketId, connectionId);
       return;
     }
-    if (target.closest('[data-action="start-feedback-session"]')) void toggleSidebarDrive();
+    if (target.closest('[data-action="dismiss-feedback-delivery"]')) {
+      dismissFeedbackDelivery();
+      return;
+    }
+    if (target.closest('[data-action="start-feedback-session"]')) {
+      // The prompt can be answered from any tab: start the session in the note's own project.
+      const owner = feedbackDelivery.value?.projectId;
+      dismissFeedbackDelivery();
+      if (owner && owner !== selectedProjectId.value) selectProjectTab(owner);
+      void toggleSidebarDrive();
+    }
   });
   const projectTeardown = createProjectTeardown({
     projects,
@@ -6321,22 +6368,6 @@ export async function startHotSheetWebClient() {
   const { terminalOperationsSurfaceProps } = terminalOperationsSurface;
   const { notWorkingSurfaceProps, attachmentItems, selectedInspectorProps, previewInspectorProps } =
     createInspectorSurface({
-      feedbackDelivery,
-      feedbackSessionLabels: (current, sessions) =>
-        Object.fromEntries(
-          sessions.map((session) => [
-            session.id,
-            feedbackSessionLabel(session, {
-              projectName: current.name,
-              terminals: terminalGroups.value.find((group) => group.projectId === current.id)?.sessions ?? [],
-              chats: terminalDrawerChatsByProject.value[current.id] ?? [],
-              claims: tickets.value.flatMap((ticket) =>
-                ticket.claimed_by ? [{ worker: ticket.claimed_by, slug: ticket.slug, title: ticket.title }] : [],
-              ),
-              toolLabel: aiToolLabel,
-            }),
-          ]),
-        ),
       ago,
       api,
       attachmentContext,
@@ -6620,6 +6651,7 @@ export async function startHotSheetWebClient() {
     customViewsFor,
     globalWorkspaceSurfaceProps,
     haltedSessionsController,
+    noteDeliveryPopup,
     hs1MigrationProject,
     hs1SourceIdentity,
     initialProjectRestorePending,

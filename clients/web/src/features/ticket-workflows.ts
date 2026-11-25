@@ -293,30 +293,51 @@ export interface TicketWorkflowDependencies {
   ago: (value?: string) => string;
 }
 
+/** A saved human note waiting on the app-level Choose/Start an AI Session prompt (HS2-6RXBS9). */
+export interface PendingFeedbackDelivery {
+  ticketId: string;
+  projectId: string;
+  slug: string;
+  title: string;
+  delivery: FeedbackDelivery;
+}
+
 /** Ticket mutation, selection, transfer, attachment, close, and composer workflows. */
 export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) {
-  const feedbackDelivery = signal<{ ticketId: string; delivery: FeedbackDelivery } | undefined>();
-  /** Show the saved note's notification outcome; `choose` and `start` render in the inspector. */
-  function announceFeedbackDelivery(ticketId: string, delivery: FeedbackDelivery) {
-    feedbackDelivery.value = { ticketId, delivery };
+  /**
+   * A saved human note still waiting for the person to choose, or start, the AI session to notify. It
+   * keeps its own project and ticket so the app-level prompt survives selecting another ticket,
+   * project, or view (HS2-6RXBS9).
+   */
+  const feedbackDelivery = signal<PendingFeedbackDelivery | undefined>();
+  /** Show the saved note's notification outcome; `choose` and `start` wait in the app-level prompt. */
+  function announceFeedbackDelivery(
+    owner: Project,
+    ticket: Pick<WireTicketRow, 'qualified_id' | 'slug' | 'title'>,
+    delivery: FeedbackDelivery,
+  ) {
+    feedbackDelivery.value =
+      delivery.status === 'choose' || delivery.status === 'start'
+        ? { ticketId: ticket.qualified_id, projectId: owner.id, slug: ticket.slug, title: ticket.title, delivery }
+        : undefined;
     if (delivery.status === 'sent') showToast('The AI session was notified.');
     if (delivery.status === 'queued') showToast('The AI session will be notified after its current turn.');
     // HS2-H9Z9KZ: delivery is best-effort; the note stays on the ticket for the AI's next read.
     if (delivery.status === 'not_shared') showToast('Saved, but the AI session could not be told right now.');
   }
   async function chooseFeedbackSession(ticketId: string, connectionId: string) {
-    const current = project();
-    const ticket = tickets.value.find((item) => item.qualified_id === ticketId);
     const pending = feedbackDelivery.value;
-    if (!current || !ticket || pending?.ticketId !== ticketId || pending.delivery.status !== 'choose') return;
+    if (pending?.ticketId !== ticketId || pending.delivery.status !== 'choose') return;
+    const owner = projects.value.find((item) => item.id === pending.projectId);
+    if (!owner) return;
     try {
-      const delivery = await api().notifyTicketNote(
-        current.id,
-        ticket.qualified_id,
+      const delivery = await new Api(owner.apiPath).notifyTicketNote(
+        owner.id,
+        ticketId,
         pending.delivery.note_id,
         connectionId,
       );
-      feedbackDelivery.value = { ticketId, delivery };
+      if (feedbackDelivery.value === pending) feedbackDelivery.value = undefined;
       showToast(
         delivery.status === 'queued'
           ? 'The AI session will be notified after its current turn.'
@@ -325,6 +346,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     } catch (reason) {
       showToast(reason instanceof Error ? reason.message : String(reason));
     }
+  }
+  /** The person dismissed the prompt; the note stays on the ticket for the AI's next read. */
+  function dismissFeedbackDelivery() {
+    feedbackDelivery.value = undefined;
   }
   const {
     state,
@@ -681,7 +706,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
                 base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
               );
               updated = result.ticket;
-              if (result.feedbackDelivery) announceFeedbackDelivery(ticket.qualified_id, result.feedbackDelivery);
+              if (result.feedbackDelivery) announceFeedbackDelivery(current, ticket, result.feedbackDelivery);
             }
             localTicketChangeAcknowledgements.acknowledge(current.id, {
               store: updated.connection_id,
@@ -2882,6 +2907,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   return {
     feedbackDelivery,
     chooseFeedbackSession,
+    dismissFeedbackDelivery,
     attachmentEpochs: () => ({ composer: composerAttachmentEpoch, notWorking: notWorkingAttachmentEpoch }),
     applyTicketPatch,
     restoreTicketDraft,

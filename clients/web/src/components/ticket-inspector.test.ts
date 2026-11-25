@@ -74,48 +74,6 @@ describe('TicketInspector', () => {
     expect(unavailable).toContain('Advisory claim state unavailable');
     expect(unavailable).not.toContain('data-action="advisory-release"');
   });
-  it('offers scoped nonmodal session choices or a start action after human feedback (HS2-25TP3N)', () => {
-    const choose = String(
-      TicketInspector({
-        ...base,
-        feedbackTicketId: 'source:ABC',
-        feedbackDelivery: {
-          status: 'choose',
-          note_id: 'NOTE1',
-          sessions: [{ id: 'session-123456', tool: 'codex' }],
-        },
-      }),
-    );
-    expect(choose).toContain('data-component="feedback-session-choice"');
-    expect(choose).toContain('data-action="choose-feedback-session"');
-    expect(choose).toContain('data-connection-id="session-123456"');
-    expect(choose).toContain('data-ticket-id="source:ABC"');
-    // Without a resolved label the button names the tool and keeps the id only as its tooltip (HS2-5MCAKY).
-    expect(choose).not.toContain('codex 123456');
-    expect(choose).toContain('title="Session session-123456"');
-    const named = String(
-      TicketInspector({
-        ...base,
-        feedbackTicketId: 'source:ABC',
-        feedbackDelivery: {
-          status: 'choose',
-          note_id: 'NOTE1',
-          sessions: [{ id: 'session-123456', tool: 'codex', worker: 'w1' }],
-        },
-        feedbackSessionLabels: {
-          'session-123456': {
-            label: 'Codex 2 · demo · HS2-ABC123',
-            description: 'Codex in demo (session session-123456)',
-          },
-        },
-      }),
-    );
-    expect(named).toContain('Codex 2 · demo · HS2-ABC123');
-    expect(named).toContain('title="Codex in demo (session session-123456)"');
-    const start = String(TicketInspector({ ...base, feedbackDelivery: { status: 'start', note_id: 'NOTE1' } }));
-    expect(start).toContain('data-component="feedback-session-start"');
-    expect(start).toContain('data-action="start-feedback-session"');
-  });
   it('renders the row-backed partial variant with placeholders for loaded-only content (HS2-15833W)', () => {
     const partial = { ...base, blockedReason: 'Waiting on review', contentLoading: true, details: '' };
     const info = String(TicketInspector({ ...partial, activeTab: 'info', notes: [] }));

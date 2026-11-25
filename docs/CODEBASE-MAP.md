@@ -406,6 +406,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/tab-order.ts         #   Stable same-strip drag reordering plus remembered project-order application
     src/project-tab-order.ts #   Saved combined local-and-remote project tab order and its startup ranks (HS2-NRBWGF)
     src/feedback-session-labels.ts # Names Choose an AI Session candidates by tab title, project, and claimed ticket (HS2-5MCAKY)
+    src/components/note-delivery-popup.tsx # App-level Choose/Start an AI Session prompt for a saved human note (HS2-6RXBS9)
     src/terminal-grid-layout.ts # Pure workspace tile geometry: desktop 1–10-across/1–3-high, independent phone 1–3-across defaulting to one 80×24 card per row, plus the drawer's full-height level 1 and width-driven levels 2–3
     src/terminal-project-scope.ts # Host-wide terminal ownership projection into the most-specific open project root
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation

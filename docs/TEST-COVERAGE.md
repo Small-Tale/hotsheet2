@@ -686,10 +686,11 @@ project/source filtering, and empty-to-one-session routing in
 `crates/hotsheet-server/src/routes/feedback_session.rs`. The real HTTP test in
 `crates/hotsheet-server/tests/http.rs` checks a committed human Started-ticket
 note returns a start offer, a foreign session cannot be chosen, and an AI note
-does not trigger delivery. `clients/web/src/components/ticket-inspector.test.ts`
-checks the nonmodal chooser/start controls; the real-server browser flow in
-`clients/web/tests/feedback-session-choice.spec.ts` saves a human note, chooses a
-session, and checks wide/medium/narrow/wide rendering. HS2-DB2FQ2 adds
+does not trigger delivery. `clients/web/src/components/note-delivery-popup.test.ts`
+checks the app-level chooser/start prompt (HS2-6RXBS9); the real-server browser flow in
+`clients/web/tests/feedback-session-choice.spec.ts` saves a human note, keeps the prompt
+up while another ticket is selected and the inspector is hidden, chooses a session, dismisses
+a second note's prompt without notifying, and checks wide/medium/narrow/wide rendering. HS2-DB2FQ2 adds
 `hs2_db2fq2_routing_follows_the_primary_across_open_close_reopen` (unit) and, in
 `crates/hotsheet-server/tests/session_messages.rs`, real-server routing of human
 notes to the primary across two-terminal close and reopen, plus the change event

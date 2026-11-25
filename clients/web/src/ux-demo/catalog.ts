@@ -269,6 +269,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('attachment-filename-editor'),
       cataloged('notification-card', ['badge']),
       cataloged('halted-session-popup', ['notification-card', 'list', 'row', 'text']),
+      cataloged('note-delivery-popup', ['notification-card']),
       cataloged('permission-request', ['notification-card']),
       cataloged('notification-center', ['permission-request']),
     ],

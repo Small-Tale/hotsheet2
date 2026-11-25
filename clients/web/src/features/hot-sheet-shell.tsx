@@ -139,6 +139,8 @@ export interface HotSheetShellDependencies {
   customViewsFor: (projectId?: string) => CustomView[];
   globalWorkspaceSurfaceProps: () => GlobalWorkspaceSurfaceProps;
   haltedSessionsController: { popup: () => SafeHtml | undefined; waiting: () => number; dispose: () => void };
+  /** A saved note waiting on Choose/Start an AI Session, shown at app level (HS2-6RXBS9). */
+  noteDeliveryPopup: () => SafeHtml | undefined;
   hs1MigrationProject: Signal<Project | undefined>;
   hs1SourceIdentity: (value: Project) => string;
   initialProjectRestorePending: Signal<boolean>;
@@ -264,6 +266,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     customViewsFor,
     globalWorkspaceSurfaceProps,
     haltedSessionsController,
+    noteDeliveryPopup,
     hs1MigrationProject,
     hs1SourceIdentity,
     initialProjectRestorePending,
@@ -371,8 +374,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     const settingsHostsPermission =
         !restoreFailure && !openingRoot && !remotePlaceholder && permissionPopupInSettings(),
       haltPopup = haltedSessionsController.popup(),
+      // A permission request and a halted session outrank a pending note delivery (HS2-6RXBS9).
       popup =
-        (conversationOpen.value || settingsHostsPermission ? undefined : permissionPopupSurface('top')) ?? haltPopup,
+        (conversationOpen.value || settingsHostsPermission ? undefined : permissionPopupSurface('top')) ??
+        haltPopup ??
+        noteDeliveryPopup(),
       currentJob = current && migrationJobsByRoot.value[current.root],
       currentBackupUnverified = Boolean(
         currentJob?.kind === 'backup' &&
