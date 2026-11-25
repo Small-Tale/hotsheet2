@@ -3,6 +3,7 @@ import './terminal-ticket-rail.css';
 
 import { px } from '@kerfjs/ui/css-values';
 import { NavStack, type NavStackView } from '@kerfjs/ui/nav-stack';
+import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -10,6 +11,8 @@ import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
+import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
+import { type MinimizedProjectChoice, minimizedProjectMenuItem } from './project-strip-actions';
 import { SearchScopeToolbar } from './search-scope-toolbar';
 import {
   inspectorToggle,
@@ -25,8 +28,14 @@ export const TERMINAL_TICKET_RAIL_STACK_ID = 'terminal-ticket-rail-stack';
 export const TERMINAL_TICKET_RAIL_ROOT_KEY = 'root';
 
 export interface TerminalTicketRailProps {
+  /** Every open project, in tab order; minimized ones move into the Minimized Projects submenu. */
   projects: readonly { id: string; name: string }[];
   selectedProjectId: string;
+  /**
+   * The minimized projects with their tab status (HS2-2609BW). They leave the switcher's top level
+   * and are listed under a final Minimized Projects submenu, drawn like Restore Project rows.
+   */
+  minimizedProjects?: readonly MinimizedProjectChoice[];
   views?: readonly { id: string; label: string }[];
   selectedViewId?: string;
   controls: SafeHtml;
@@ -41,6 +50,44 @@ export interface TerminalTicketRailProps {
   title?: string;
   /** The rail view's primary action, rendered as literal Toolbar `trailing` content (HS2-F4P7ZA). */
   action?: TicketViewActionSpec;
+}
+
+/**
+ * The rail's project switcher entries (HS2-2609BW): every open, non-minimized project as a checked
+ * choice, then, only while any project is minimized, a final Minimized Projects item whose submenu
+ * lists them with the Restore Project row presentation (HS2-R64JXA). Every row switches the rail to
+ * its project; a minimized project stays minimized, as the switcher always treated it.
+ */
+export function terminalRailProjectMenuItems(
+  projects: readonly { id: string; name: string }[],
+  selectedProjectId: string,
+  minimizedProjects: readonly MinimizedProjectChoice[] = [],
+): PopupMenuEntry[] {
+  const minimized = new Set(minimizedProjects.map((item) => item.id)),
+    select = NAVIGATION_AND_TABS_ACTIONS.selectTerminalRailProject.value;
+  const open: PopupMenuEntry[] = projects
+    .filter((project) => !minimized.has(project.id))
+    .map((project) => ({
+      label: project.name,
+      checked: project.id === selectedProjectId,
+      action: select,
+      attributes: { 'data-project-id': project.id },
+    }));
+  if (minimizedProjects.length === 0) return open;
+  return [
+    ...open,
+    ...(open.length > 0 ? [{ kind: 'divider' } as const] : []),
+    {
+      label: 'Minimized Projects',
+      checked: minimized.has(selectedProjectId),
+      attributes: { 'data-rail-minimized-projects': 'true' },
+      submenu: minimizedProjects.map((item) => ({
+        ...minimizedProjectMenuItem(item),
+        checked: item.id === selectedProjectId,
+        action: select,
+      })),
+    },
+  ];
 }
 
 /** A static surface's panel parts as one pushed NavStack view (HS2-FY06N4). */
@@ -68,6 +115,7 @@ function detailView(key: string, parts: SidebarPanelParts): NavStackView {
 export function terminalTicketRailPanel({
   projects,
   selectedProjectId,
+  minimizedProjects = [],
   views = [],
   selectedViewId = 'all',
   controls,
@@ -103,16 +151,13 @@ export function terminalTicketRailPanel({
     key: TERMINAL_TICKET_RAIL_ROOT_KEY,
     toolbar: {
       leading: (
-        <ToolbarControlGroup single appearance="borderless">
-          <Select
-            className="terminal-ticket-rail__project"
-            presentation="toolbar-borderless"
-            name="terminal-rail-project"
-            value={selectedProjectId}
-            ariaLabel="Ticket Rail Project"
-            triggerWidth="max-content"
-            choices={projects.map((project) => ({ value: project.id, label: project.name }))}
-            renderSelected={(choice) => <span>{choice.label}</span>}
+        // The switcher is a PopupMenu rather than a Select so minimized projects can sit in a nested
+        // submenu (HS2-2609BW); Kerf Select has no submenu. Each row is a checked choice.
+        <ToolbarControlGroup single nestedDropdown appearance="borderless" content="text">
+          <PopupMenu
+            text={projects.find((project) => project.id === selectedProjectId)?.name ?? 'Projects'}
+            rootAttributes={{ 'data-terminal-rail-project': selectedProjectId }}
+            items={terminalRailProjectMenuItems(projects, selectedProjectId, minimizedProjects)}
           />
         </ToolbarControlGroup>
       ),

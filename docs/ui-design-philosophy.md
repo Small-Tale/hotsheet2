@@ -7,6 +7,8 @@ installed `@kerfjs/ui/docs/interaction-conventions.md` and its linked
 `clients/web/ai/component-catalog-extension.json` define component selection and
 geometry ownership. This file records Hot Sheet decisions and ticket evidence; it
 does not fork Kerf's guidance.
+The [Kerf consumer fitness audit](https://github.com/brianwestphal/kerf/blob/main/docs/kerf-consumer-fitness-audit.md#hot-sheet-2-adoption)
+tracks upstream gaps and Hot Sheet adoption work against a dated source snapshot.
 
 ## Product decisions
 
@@ -135,6 +137,11 @@ does not fork Kerf's guidance.
   and selection defaults with no deviation: the group header's commands open from
   a `ListHeader` `overflowAction` button and from its context menu, and the title
   aligns with the ticket rows through `leadingEdge="summary-row"` (HS2-HKXSB1).
+
+- Manage Workspace Visibility's **Show minimized** (HS2-W1XEH7) is a Kerf `Checkbox`, not
+  the `Switch` Kerf recommends for a setting that applies at once. The maintainer asked for
+  a checkbox beside Hide Listed / Show Listed. It applies immediately and is remembered per
+  workspace, like the rest of the dialog's visibility choices.
 
 ## Hot Sheet ticket lessons
 

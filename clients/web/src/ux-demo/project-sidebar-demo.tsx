@@ -115,7 +115,16 @@ export const sidebarCommands: CommandNavigationItem[] = [
   { id: 'build', label: 'Build clients', color: '#f97316', icon: 'build', kind: 'shell', group: 'Quality' },
   // The transparent palette slot (no fill) aligns with the filled rows (HS2-F9JKMJ).
   { id: 'everything', label: 'Run everything', color: 'transparent', icon: 'balloon', group: 'Quality' },
-  { id: 'publish', label: 'Publish preview', color: '#8b5cf6', icon: 'send', kind: 'ai', group: 'Release' },
+  {
+    id: 'publish',
+    label: 'Publish preview',
+    color: '#8b5cf6',
+    icon: 'send',
+    kind: 'ai',
+    group: 'Release',
+    // The tooltip names what a click does (HS2-17Y2EC).
+    actionLabel: 'Auto-Start in a New AI Session',
+  },
 ];
 
 /** One sidebar specimen in a sidebar-width (272px) Kerf frame (HS2-5K0VN4), with the shared sidebar event log below it. Resizing
@@ -219,6 +228,7 @@ export const commandEditorCommands = signal<CommandDefinition[]>([
     title: 'Publish preview',
     kind: 'ai',
     prompt: 'Publish a preview',
+    action: 'new_ai_session',
     color: '#8b5cf6',
     icon: 'send',
     group: 'Release',

@@ -7,6 +7,7 @@ import {
   scheduleDraftFromView,
   type ScheduleFormDraft,
   scheduleInputFromDraft,
+  withRepeats,
 } from '../command-schedule-form';
 import type { ScheduleView } from '../command-schedules';
 import { COMMAND_SCHEDULE_DIALOG_ID } from '../components/command-schedule-dialog';
@@ -83,6 +84,7 @@ export function createCommandSchedulesController(project: () => Project | undefi
     const previous = draft.value;
     if (!previous || !(name in previous)) return;
     if (name === 'weekdays') draft.value = { ...previous, weekdays: (value as string[]).map(Number) };
+    else if (name === 'repeats') draft.value = withRepeats(previous, value as ScheduleFormDraft['repeats']);
     else draft.value = { ...previous, [name]: value };
     error.value = '';
     void refreshPreview();

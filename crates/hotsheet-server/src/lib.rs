@@ -1824,6 +1824,10 @@ pub fn app(state: AppState) -> Router {
             post(record_checkout_command_launch),
         )
         .route(
+            "/checkouts/{reference}/commands/{id}/ai-run",
+            post(routes::command_schedules::run_ai),
+        )
+        .route(
             "/checkouts/{reference}/command-runs",
             get(list_checkout_command_runs),
         )

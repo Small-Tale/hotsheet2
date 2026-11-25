@@ -1,6 +1,44 @@
-/** Checkout-local AI command schedules (HS2-G5J2E7, HS2-17663F). */
+/** Checkout-local AI command schedules (HS2-G5J2E7, HS2-17663F, HS2-29V4ZG). */
 export type ScheduleAction = 'create_ticket' | 'new_ai_session' | 'reuse_or_new_ai_session';
-export type RecurrenceKind = 'once' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'selected_dates';
+export const SCHEDULE_ACTIONS: readonly ScheduleAction[] = [
+  'create_ticket',
+  'new_ai_session',
+  'reuse_or_new_ai_session',
+];
+
+export function isScheduleAction(value: unknown): value is ScheduleAction {
+  return SCHEDULE_ACTIONS.includes(value as ScheduleAction);
+}
+
+/** One label per action, shared by the command editor, schedule dialog, and sidebar (HS2-17Y2EC). */
+export const SCHEDULE_ACTION_LABELS: Record<ScheduleAction, string> = {
+  create_ticket: 'Create Ticket Only',
+  new_ai_session: 'Auto-Start in a New AI Session',
+  reuse_or_new_ai_session: 'Reuse or Start an AI Session',
+};
+
+/** A command without an action keeps the original click: queue and signal an idle session (HS2-17Y2EC). */
+export const LEGACY_COMMAND_ACTION_LABEL = 'Create Ticket and Notify an Idle AI Session';
+
+/** What clicking an AI command does, for its editor and sidebar tooltip (HS2-17Y2EC). */
+export const commandClickActionLabel = (action: ScheduleAction | undefined) =>
+  action ? SCHEDULE_ACTION_LABELS[action] : LEGACY_COMMAND_ACTION_LABEL;
+
+/** What a schedule inheriting this command's action does; schedules never signaled, so unset is ticket-only. */
+export const scheduleInheritedAction = (commandAction: ScheduleAction | undefined): ScheduleAction =>
+  commandAction ?? 'create_ticket';
+export type RecurrenceKind =
+  'once' | 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'selected_dates';
+const RECURRENCE_KINDS: readonly RecurrenceKind[] = [
+  'once',
+  'minutely',
+  'hourly',
+  'daily',
+  'weekly',
+  'monthly',
+  'yearly',
+  'selected_dates',
+];
 export type DayRule =
   | { kind: 'day_of_month'; day: number }
   | { kind: 'last_day' }
@@ -24,16 +62,21 @@ export interface Recurrence {
 export interface ScheduleInput {
   time_zone: string;
   local_time: string;
-  action: ScheduleAction;
+  /** Absent inherits the command's action (HS2-17Y2EC). */
+  action?: ScheduleAction;
   paused: boolean;
   recurrence: Recurrence;
 }
 
 export interface ScheduleView {
   schedule: ScheduleInput & { command_id: string };
+  /** The override, else the command's action, else ticket-only; absent while unavailable (HS2-17Y2EC). */
+  effective_action?: ScheduleAction;
   next_runs: string[];
   history: Array<{
     occurrence_date: string;
+    /** Local HH:mm of a sub-day occurrence (HS2-29V4ZG). */
+    occurrence_time?: string;
     outcome:
       | 'created'
       | 'skipped_open_ticket'
@@ -68,9 +111,10 @@ export function parseScheduleView(value: unknown): ScheduleView {
     typeof schedule.command_id !== 'string' ||
     typeof schedule.time_zone !== 'string' ||
     typeof schedule.local_time !== 'string' ||
-    !['create_ticket', 'new_ai_session', 'reuse_or_new_ai_session'].includes(String(schedule.action)) ||
+    (schedule.action !== undefined && !isScheduleAction(schedule.action)) ||
+    (view.effective_action !== undefined && !isScheduleAction(view.effective_action)) ||
     typeof schedule.paused !== 'boolean' ||
-    !['once', 'daily', 'weekly', 'monthly', 'yearly', 'selected_dates'].includes(String(recurrence.kind)) ||
+    !RECURRENCE_KINDS.includes(recurrence.kind as RecurrenceKind) ||
     (view.unavailable !== undefined && typeof view.unavailable !== 'string')
   )
     throw new Error('Invalid command schedule response');
@@ -80,6 +124,7 @@ export function parseScheduleView(value: unknown): ScheduleView {
     const item = object(entry, 'command schedule history');
     if (
       typeof item.occurrence_date !== 'string' ||
+      (item.occurrence_time !== undefined && typeof item.occurrence_time !== 'string') ||
       ![
         'created',
         'skipped_open_ticket',
@@ -97,6 +142,7 @@ export function parseScheduleView(value: unknown): ScheduleView {
   }
   return {
     schedule: schedule as unknown as ScheduleView['schedule'],
+    ...(view.effective_action === undefined ? {} : { effective_action: view.effective_action }),
     next_runs: strings(view.next_runs, 'command schedule preview'),
     history: history as ScheduleView['history'],
     ...(view.unavailable === undefined ? {} : { unavailable: view.unavailable }),

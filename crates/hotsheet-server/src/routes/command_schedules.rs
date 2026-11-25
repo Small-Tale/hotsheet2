@@ -22,14 +22,16 @@ use jiff::{
     tz::{AmbiguousOffset, TimeZone},
 };
 use serde::{Deserialize, Serialize};
-use time::{Date, Duration, Time};
+use time::{Date, Duration, PrimitiveDateTime, Time};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ScheduleInput {
     time_zone: String,
     local_time: String,
-    action: ScheduleAction,
+    /// Absent or null inherits the command's action (HS2-17Y2EC).
+    #[serde(default)]
+    action: Option<ScheduleAction>,
     #[serde(default)]
     paused: bool,
     recurrence: Recurrence,
@@ -38,6 +40,10 @@ pub(crate) struct ScheduleInput {
 #[derive(Debug, Serialize)]
 pub(crate) struct ScheduleView {
     schedule: CommandSchedule,
+    /// The action the next occurrence performs: the override, else the command's action,
+    /// else ticket-only. Absent while the command is unavailable (HS2-17Y2EC).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effective_action: Option<ScheduleAction>,
     next_runs: Vec<String>,
     history: Vec<OccurrenceResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -89,13 +95,19 @@ fn write_records(
     }
 }
 
-fn view(record: ScheduleRecord, now: Timestamp, available: bool) -> Result<ScheduleView, ApiError> {
+fn view(
+    record: ScheduleRecord,
+    now: Timestamp,
+    command: Option<&CommandDefinition>,
+) -> Result<ScheduleView, ApiError> {
+    let available = command.is_some();
     let next_runs = if available {
         next_runs(&record.schedule, now)?
     } else {
         Vec::new()
     };
     Ok(ScheduleView {
+        effective_action: command.map(|command| record.schedule.effective_action(command.action)),
         schedule: record.schedule,
         next_runs,
         history: record.history,
@@ -107,6 +119,9 @@ fn view(record: ScheduleRecord, now: Timestamp, available: bool) -> Result<Sched
 fn next_runs(schedule: &CommandSchedule, now: Timestamp) -> Result<Vec<String>, ApiError> {
     if schedule.paused {
         return Ok(Vec::new());
+    }
+    if schedule.recurrence.kind.is_sub_day() {
+        return sub_day_next_runs(schedule, now);
     }
     let zone = TimeZone::get(&schedule.time_zone).map_err(invalid)?;
     let local_today = zone.to_datetime(now).date();
@@ -164,6 +179,12 @@ pub(crate) fn occurrence_instant(
     let (hour, minute) =
         command_schedules::parse_local_time(&schedule.local_time).map_err(invalid)?;
     let local = date.with_time(Time::from_hms(hour, minute, 0).map_err(invalid)?);
+    local_instant(&zone, local).map(|(instant, _)| instant)
+}
+
+/// Resolve one local civil minute: a gap advances to the first valid minute (reported as
+/// `true`), and a fold chooses its first occurrence.
+fn local_instant(zone: &TimeZone, local: PrimitiveDateTime) -> Result<(Timestamp, bool), ApiError> {
     for step in 0..=1440 {
         let candidate = local
             .checked_add(Duration::minutes(step))
@@ -182,10 +203,97 @@ pub(crate) fn occurrence_instant(
         .map_err(invalid)?;
         let ambiguous = zone.to_ambiguous_timestamp(civil);
         if !matches!(ambiguous.offset(), AmbiguousOffset::Gap { .. }) {
-            return ambiguous.earlier().map_err(invalid);
+            return ambiguous
+                .earlier()
+                .map(|instant| (instant, step > 0))
+                .map_err(invalid);
         }
     }
     Err(invalid("no valid local minute within a day"))
+}
+
+fn local_now(zone: &TimeZone, now: Timestamp) -> Result<PrimitiveDateTime, ApiError> {
+    let local = zone.to_datetime(now);
+    let date = Date::from_calendar_date(
+        i32::from(local.year()),
+        time::Month::try_from(local.month() as u8).map_err(invalid)?,
+        local.day() as u8,
+    )
+    .map_err(invalid)?;
+    let time = Time::from_hms(
+        local.hour() as u8,
+        local.minute() as u8,
+        local.second() as u8,
+    )
+    .map_err(invalid)?;
+    Ok(date.with_time(time))
+}
+
+/// Resolve sub-day slots to instants (HS2-29V4ZG). A slot in a DST gap runs at the first
+/// valid minute after the gap unless the next slot resolves at or before that instant,
+/// in which case the next slot covers it. A folded slot runs once, at its first instant.
+fn sub_day_instants(
+    schedule: &CommandSchedule,
+    zone: &TimeZone,
+    after: PrimitiveDateTime,
+    through: PrimitiveDateTime,
+    limit: usize,
+) -> Result<Vec<(PrimitiveDateTime, Timestamp)>, ApiError> {
+    let slots = command_schedules::slots_through(
+        &schedule.recurrence,
+        &schedule.local_time,
+        after,
+        through,
+        limit + 1,
+    )
+    .map_err(invalid)?;
+    let resolved = slots
+        .iter()
+        .map(|slot| local_instant(zone, *slot))
+        .collect::<Result<Vec<_>, _>>()?;
+    let full = slots.len() == limit + 1;
+    let mut result = Vec::new();
+    for (index, (slot, (instant, gap))) in slots.iter().zip(&resolved).enumerate() {
+        let next = resolved.get(index + 1).map(|(instant, _)| *instant);
+        if next.is_none() && full {
+            // The lookahead slot only decides its predecessor.
+            break;
+        }
+        if *gap && next.is_some_and(|next| next <= *instant) {
+            continue;
+        }
+        result.push((*slot, *instant));
+    }
+    Ok(result)
+}
+
+/// Folds and offset changes are at most a few hours; a three-hour margin keeps the
+/// current slot in view on both sides of a transition.
+const SUB_DAY_MARGIN: Duration = Duration::hours(3);
+
+fn sub_day_next_runs(schedule: &CommandSchedule, now: Timestamp) -> Result<Vec<String>, ApiError> {
+    Ok(next_sub_day_instants(schedule, now, 3)?
+        .into_iter()
+        .map(|(_, instant)| instant.to_string())
+        .collect())
+}
+
+fn next_sub_day_instants(
+    schedule: &CommandSchedule,
+    now: Timestamp,
+    count: usize,
+) -> Result<Vec<(PrimitiveDateTime, Timestamp)>, ApiError> {
+    let zone = TimeZone::get(&schedule.time_zone).map_err(invalid)?;
+    let local = local_now(&zone, now)?;
+    let after = local.saturating_sub(SUB_DAY_MARGIN);
+    let through = local.saturating_add(Duration::days(366 * 20));
+    // Three hours at the five-minute floor is 36 slots before `now`.
+    let limit = 40 + count;
+    Ok(sub_day_instants(schedule, &zone, after, through, limit)?
+        .into_iter()
+        .filter(|(_, instant)| *instant > now)
+        .take(count)
+        .collect())
 }
 
 pub(crate) async fn list(
@@ -196,10 +304,10 @@ pub(crate) async fn list(
     let definitions = commands::from_settings(&settings).map_err(invalid)?;
     let mut result = Vec::new();
     for record in records(&settings)? {
-        let available = definitions.iter().any(|command| {
+        let command = definitions.iter().find(|command| {
             command.id == record.schedule.command_id && command.kind == CommandKind::Ai
         });
-        result.push(view(record, Timestamp::now(), available)?);
+        result.push(view(record, Timestamp::now(), command)?);
     }
     Ok(Json(result))
 }
@@ -236,15 +344,15 @@ pub(crate) async fn put(
 ) -> Result<Json<ScheduleView>, ApiError> {
     let (checkout, settings) = checkout_settings(&state, &reference)?;
     let definitions = commands::from_settings(&settings).map_err(invalid)?;
-    if !definitions
+    let Some(command) = definitions
         .iter()
-        .any(|command| command.id == command_id && command.kind == CommandKind::Ai)
-    {
+        .find(|command| command.id == command_id && command.kind == CommandKind::Ai)
+    else {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "schedules require an existing AI command",
         ));
-    }
+    };
     let schedule = CommandSchedule {
         command_id: command_id.clone(),
         time_zone: input.time_zone,
@@ -273,6 +381,21 @@ pub(crate) async fn put(
         }
     }
     let initial_cursor = date_before_today(&schedule, now)?;
+    // Sub-day schedules start after the current local minute; they never backfill the
+    // slots that already passed today (HS2-29V4ZG).
+    let initial_time = if schedule.recurrence.kind.is_sub_day() {
+        let local = local_now(&zone, now)?;
+        Some((
+            local.date().to_string(),
+            command_schedules::format_local_time(local.time()),
+        ))
+    } else {
+        None
+    };
+    let initial_date = initial_time
+        .as_ref()
+        .map_or(initial_cursor, |(date, _)| date.clone());
+    let initial_time = initial_time.map(|(_, time)| time);
     let prior = records(&settings)?;
     let mut next = prior.clone();
     let record = if let Some(existing) = next
@@ -285,14 +408,16 @@ pub(crate) async fn put(
             || existing.schedule.local_time != schedule.local_time
             || existing.schedule.time_zone != schedule.time_zone
         {
-            existing.last_processed_date = Some(initial_cursor.clone());
+            existing.last_processed_date = Some(initial_date.clone());
+            existing.last_processed_time = initial_time.clone();
         }
         existing.schedule = schedule;
         existing.clone()
     } else {
         let record = ScheduleRecord {
             schedule,
-            last_processed_date: Some(initial_cursor),
+            last_processed_date: Some(initial_date),
+            last_processed_time: initial_time,
             history: Vec::new(),
         };
         next.push(record.clone());
@@ -301,7 +426,7 @@ pub(crate) async fn put(
     write_records(&settings, &prior, &next)?;
     state.command_schedule_kick.notify_one();
     emit_changed(&state, &checkout.id, &command_id);
-    Ok(Json(view(record, Timestamp::now(), true)?))
+    Ok(Json(view(record, Timestamp::now(), Some(command))?))
 }
 
 pub(crate) async fn delete(
@@ -321,6 +446,184 @@ pub(crate) async fn delete(
         emit_changed(&state, &checkout.id, &command_id);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// How a manual or headless AI command run ended (HS2-17Y2EC).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AiRunDelivery {
+    /// Create Ticket Only: the ticket is queued for any worker.
+    Queued,
+    /// The selected session claimed the ticket and accepted its turn.
+    Started,
+    /// The ticket exists, but no session could take it; `reason` says why.
+    Failed,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct AiRunView {
+    action: ScheduleAction,
+    delivery: AiRunDelivery,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    ticket: ApiTicket,
+    run: crate::commands::CommandRun,
+}
+
+/// Run an AI command's configured action (HS2-17Y2EC): create its command ticket, then for a
+/// session action claim that exact ticket under the selected session worker and hand it off
+/// through the same path a scheduled occurrence uses. A command without an action runs as
+/// **Create Ticket Only** here; the client's legacy click adds its idle-session signal itself.
+pub(crate) async fn run_ai(
+    State(state): State<AppState>,
+    Path((reference, command_id)): Path<(String, String)>,
+) -> Result<Json<AiRunView>, ApiError> {
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
+    let definitions = commands::from_settings(&settings).map_err(invalid)?;
+    let Some(command) = definitions
+        .iter()
+        .find(|command| command.id == command_id && command.kind == CommandKind::Ai)
+        .cloned()
+    else {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "only an existing AI command can run an AI action",
+        ));
+    };
+    let action = command_schedules::resolve_action(None, command.action);
+    let ticket = {
+        let state = state.clone();
+        let reference = reference.clone();
+        let command = command.clone();
+        tokio::task::spawn_blocking(move || {
+            let source = checkout_source_for_create(&state, &reference, None)?;
+            create_occurrence_ticket(&state, &reference, &source, &command, None)
+        })
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??
+    };
+    let (delivery, reason, tool) = if action == ScheduleAction::CreateTicket {
+        (AiRunDelivery::Queued, None, None)
+    } else {
+        match deliver_one(
+            &state,
+            DeliveryTarget {
+                reference: &reference,
+                project: &checkout.root,
+                settings: &settings,
+                command: &command,
+                action,
+                ticket_id: &ticket.qualified_id,
+                ticket_slug: &ticket.slug,
+                occurrence_date: None,
+            },
+        )
+        .await
+        {
+            DeliveryAttempt::Accepted { completed, worker } => {
+                watch_manual_turn(&state, &reference, &ticket.qualified_id, completed, worker);
+                let tool = permissions::effective_ai_settings(&state, Some(&settings))
+                    .await
+                    .ok()
+                    .map(|defaults| selected_ai(&command, &defaults).0);
+                (AiRunDelivery::Started, None, tool)
+            }
+            DeliveryAttempt::AwaitClaim => {
+                note_manual_failure(&state, &reference, &ticket.qualified_id, "ticket_claimed");
+                (AiRunDelivery::Failed, Some("ticket_claimed"), None)
+            }
+            DeliveryAttempt::Failed(reason) => {
+                note_manual_failure(&state, &reference, &ticket.qualified_id, reason);
+                (AiRunDelivery::Failed, Some(reason), None)
+            }
+        }
+    };
+    state.commands.replace_project(
+        checkout.id.clone(),
+        checkout.root.clone().into(),
+        definitions,
+    );
+    let run = state
+        .commands
+        .record_launch_for(
+            &checkout.id,
+            &command_id,
+            crate::commands::CommandLaunch {
+                kind: crate::commands::LaunchKind::Ai,
+                ticket_id: Some(ticket.id.clone()),
+                ticket_slug: Some(ticket.slug.clone()),
+                tool,
+                terminal_id: None,
+                terminal_label: None,
+            },
+        )
+        .map_err(invalid)?;
+    Ok(Json(AiRunView {
+        action,
+        delivery,
+        reason,
+        ticket,
+        run,
+    }))
+}
+
+/// A manual run's session turn that later fails releases its claim, so the ticket returns to
+/// the queue instead of staying held by a session that stopped (HS2-17Y2EC).
+fn watch_manual_turn(
+    state: &AppState,
+    reference: &str,
+    ticket_id: &str,
+    completed: tokio::sync::oneshot::Receiver<bool>,
+    worker: String,
+) {
+    let state = state.clone();
+    let reference = reference.to_owned();
+    let ticket_id = ticket_id.to_owned();
+    tokio::spawn(async move {
+        if completed.await == Ok(true) {
+            return;
+        }
+        note_manual_failure(&state, &reference, &ticket_id, "ai_turn_failed");
+        if let Ok((entry, native_id)) = claims::checkout_claim_entry(&state, &reference, &ticket_id)
+        {
+            if let Ok(Some(ticket)) = entry.resolve(&native_id) {
+                if let Ok(ticket) =
+                    ops::release(&entry.store, &ticket.id, crate::now(), &worker, false)
+                {
+                    state.changed_in(&entry, "released", &ticket);
+                }
+            }
+        }
+    });
+}
+
+fn note_manual_failure(state: &AppState, reference: &str, ticket_id: &str, reason: &str) {
+    let Ok((entry, native_id)) = claims::checkout_claim_entry(state, reference, ticket_id) else {
+        return;
+    };
+    let Ok(Some(ticket)) = entry.resolve(&native_id) else {
+        return;
+    };
+    if let Ok(ticket) = ops::add_note_with_metadata(
+        &entry.store,
+        &ticket.id,
+        hotsheet_model::Ulid::new(),
+        crate::now(),
+        hotsheet_model::NoteKind::Regular,
+        ops::NoteMetadataInput {
+            summary: Some("AI command session did not start".into()),
+            actor: Some(hotsheet_model::NoteActor {
+                role: hotsheet_model::AttachmentActorRole::System,
+                id: Some("hotsheet-command-runner".into()),
+            }),
+            ..ops::NoteMetadataInput::default()
+        },
+        format!(
+            "The AI command's session could not take this ticket ({reason}). The ticket stays queued for any worker."
+        ),
+    ) {
+        state.changed_in(&entry, "note_added", &ticket);
+    }
 }
 
 fn query_tag(
@@ -352,12 +655,14 @@ fn query_tag(
         .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))
 }
 
+/// A command ticket carries the command provenance tag; a scheduled one also carries its
+/// occurrence identity, and a manual or headless run (HS2-17Y2EC) has none.
 fn create_occurrence_ticket(
     state: &AppState,
     reference: &str,
     source: &hotsheet_ticketing::checkouts::TicketSource,
     command: &CommandDefinition,
-    occurrence_tag: String,
+    occurrence_tag: Option<String>,
 ) -> Result<ApiTicket, ApiError> {
     let req = CreateReq {
         title: command.title.trim().into(),
@@ -365,10 +670,11 @@ fn create_occurrence_ticket(
         priority: Some("highest".into()),
         status: Some("not_started".into()),
         details: command.prompt.as_deref().map(str::trim).map(str::to_owned),
-        tags: Some(vec![
-            command_schedules::command_tag(&command.id),
-            occurrence_tag,
-        ]),
+        tags: Some(
+            std::iter::once(command_schedules::command_tag(&command.id))
+                .chain(occurrence_tag)
+                .collect(),
+        ),
         up_next: Some(true),
         blocked_by: None,
         follow_up_to: None,
@@ -387,6 +693,135 @@ fn create_occurrence_ticket(
     } else {
         do_provider_create(state, &source.connection_id, req)
     }
+}
+
+/// Reuse the occurrence's ticket, skip when the command already has an open ticket, or
+/// create the occurrence ticket. Shared by date and sub-day recurrences (HS2-29V4ZG).
+fn occurrence_ticket(
+    state: &AppState,
+    reference: &str,
+    schedule: &CommandSchedule,
+    command: &CommandDefinition,
+    occurrence_tag: String,
+) -> Result<(ApiTicket, command_schedules::OccurrenceOutcome), ApiError> {
+    let source = checkout_source_for_create(state, reference, None)?;
+    // HS2-17Y2EC: the schedule's override, else the command's action, else ticket-only.
+    let queued = if schedule.effective_action(command.action) == ScheduleAction::CreateTicket {
+        command_schedules::OccurrenceOutcome::Created
+    } else {
+        command_schedules::OccurrenceOutcome::DeliveryPending
+    };
+    if let Some(ticket) = query_tag(state, &source.connection_id, occurrence_tag.clone(), false)? {
+        return Ok((ticket, queued));
+    }
+    if let Some(ticket) = query_tag(
+        state,
+        &source.connection_id,
+        command_schedules::command_tag(&schedule.command_id),
+        true,
+    )? {
+        return Ok((
+            ticket,
+            command_schedules::OccurrenceOutcome::SkippedOpenTicket,
+        ));
+    }
+    Ok((
+        create_occurrence_ticket(state, reference, &source, command, Some(occurrence_tag))?,
+        queued,
+    ))
+}
+
+/// Evaluate one sub-day schedule (HS2-29V4ZG). Missed slots coalesce into the latest due
+/// slot, so a host that was offline runs once on return instead of replaying a backlog.
+/// The overlap policy is the date kinds' `skipped_open_ticket`; consecutive skips against
+/// the same open ticket record one history entry so the bounded history stays useful.
+fn process_sub_day(
+    state: &AppState,
+    reference: &str,
+    checkout_id: &str,
+    settings: &Settings,
+    snapshot: &ScheduleRecord,
+    command: &CommandDefinition,
+    now: Timestamp,
+) -> Result<Option<Timestamp>, ApiError> {
+    let schedule = &snapshot.schedule;
+    let zone = TimeZone::get(&schedule.time_zone).map_err(invalid)?;
+    let local = local_now(&zone, now)?;
+    let cursor = snapshot.sub_day_cursor();
+    let due = match cursor {
+        Some(cursor) => {
+            let after = cursor.max(local.saturating_sub(Duration::days(2)));
+            // Two days and the margin at the five-minute floor is under 650 slots.
+            sub_day_instants(
+                schedule,
+                &zone,
+                after,
+                local.saturating_add(SUB_DAY_MARGIN),
+                2048,
+            )?
+            .into_iter()
+            .rfind(|(_, instant)| *instant <= now)
+        }
+        None => None,
+    };
+    if due.is_some() || cursor.is_none() {
+        // A record written without a cursor (for example through `settings set`) starts
+        // at the current local minute rather than backfilling earlier slots.
+        let (slot, ticket) = match due {
+            Some((slot, _)) => {
+                let date = slot.date().to_string();
+                let time = command_schedules::format_local_time(slot.time());
+                let tag = command_schedules::occurrence_tag_at(&schedule.command_id, &date, &time);
+                (
+                    slot,
+                    Some(occurrence_ticket(state, reference, schedule, command, tag)?),
+                )
+            }
+            None => (local.replace_second(0).map_err(invalid)?, None),
+        };
+        let date = slot.date().to_string();
+        let time = command_schedules::format_local_time(slot.time());
+        // Re-read after the side effect; a concurrent edit must not be overwritten.
+        let prior = records(settings)?;
+        let mut next = prior.clone();
+        if let Some(record) = next
+            .iter_mut()
+            .find(|record| record.schedule.command_id == schedule.command_id)
+            && record.schedule == *schedule
+        {
+            record.last_processed_date = Some(date.clone());
+            record.last_processed_time = Some(time.clone());
+            if let Some((ticket, outcome)) = ticket {
+                let key = command_schedules::occurrence_key(&date, Some(&time));
+                let repeated_skip = outcome
+                    == command_schedules::OccurrenceOutcome::SkippedOpenTicket
+                    && record.history.last().is_some_and(|last| {
+                        last.outcome == command_schedules::OccurrenceOutcome::SkippedOpenTicket
+                            && last.ticket_id.as_deref() == Some(ticket.qualified_id.as_str())
+                    });
+                if !repeated_skip && !record.history.iter().any(|item| item.key() == key) {
+                    record.history.push(OccurrenceResult {
+                        occurrence_date: date,
+                        occurrence_time: Some(time),
+                        outcome,
+                        ticket_id: Some(ticket.qualified_id),
+                        ticket_slug: Some(ticket.slug),
+                        turn_completed: (schedule.effective_action(command.action)
+                            != ScheduleAction::CreateTicket)
+                            .then_some(false),
+                    });
+                    if record.history.len() > command_schedules::HISTORY_LIMIT {
+                        record.history.remove(0);
+                    }
+                }
+            }
+            write_records(settings, &prior, &next)?;
+            emit_changed(state, checkout_id, &schedule.command_id);
+        }
+    }
+    Ok(next_sub_day_instants(schedule, now, 1)?
+        .first()
+        .map(|(_, instant)| *instant))
 }
 
 /// One durable evaluation pass. A ticket carries its occurrence identity before the
@@ -411,6 +846,21 @@ pub(crate) fn process_checkout(
             // Preserve the schedule and history if its command is edited or deleted.
             continue;
         };
+        if schedule.recurrence.kind.is_sub_day() {
+            if let Some(instant) = process_sub_day(
+                state,
+                reference,
+                &checkout.id,
+                &settings,
+                &snapshot,
+                command,
+                now,
+            )? {
+                next_wake =
+                    Some(next_wake.map_or(instant, |previous: Timestamp| previous.min(instant)));
+            }
+            continue;
+        }
         let zone = TimeZone::get(&schedule.time_zone).map_err(invalid)?;
         let today = local_date(&zone, now)?;
         let after = snapshot
@@ -431,40 +881,10 @@ pub(crate) fn process_checkout(
                     Some(next_wake.map_or(instant, |previous: Timestamp| previous.min(instant)));
                 break;
             }
-            let source = checkout_source_for_create(state, reference, None)?;
             let occurrence_tag =
                 command_schedules::occurrence_tag(&schedule.command_id, &date.to_string());
-            let (ticket, outcome) = if let Some(ticket) =
-                query_tag(state, &source.connection_id, occurrence_tag.clone(), false)?
-            {
-                (
-                    ticket,
-                    if schedule.action == ScheduleAction::CreateTicket {
-                        command_schedules::OccurrenceOutcome::Created
-                    } else {
-                        command_schedules::OccurrenceOutcome::DeliveryPending
-                    },
-                )
-            } else if let Some(ticket) = query_tag(
-                state,
-                &source.connection_id,
-                command_schedules::command_tag(&schedule.command_id),
-                true,
-            )? {
-                (
-                    ticket,
-                    command_schedules::OccurrenceOutcome::SkippedOpenTicket,
-                )
-            } else {
-                (
-                    create_occurrence_ticket(state, reference, &source, command, occurrence_tag)?,
-                    if schedule.action == ScheduleAction::CreateTicket {
-                        command_schedules::OccurrenceOutcome::Created
-                    } else {
-                        command_schedules::OccurrenceOutcome::DeliveryPending
-                    },
-                )
-            };
+            let (ticket, outcome) =
+                occurrence_ticket(state, reference, schedule, command, occurrence_tag)?;
             // Re-read after the side effect; a concurrent edit must not be overwritten.
             let prior = records(&settings)?;
             let mut next = prior.clone();
@@ -486,10 +906,12 @@ pub(crate) fn process_checkout(
             {
                 record.history.push(OccurrenceResult {
                     occurrence_date: date_string,
+                    occurrence_time: None,
                     outcome,
                     ticket_id: Some(ticket.qualified_id),
                     ticket_slug: Some(ticket.slug),
-                    turn_completed: (schedule.action != ScheduleAction::CreateTicket)
+                    turn_completed: (schedule.effective_action(command.action)
+                        != ScheduleAction::CreateTicket)
                         .then_some(false),
                 });
                 if record.history.len() > command_schedules::HISTORY_LIMIT {
@@ -566,11 +988,19 @@ struct DeliverySession<'a> {
     effort: Option<&'a str>,
     action: ScheduleAction,
     ticket_id: &'a str,
+    /// `false` for a manual or headless command run (HS2-17Y2EC), which names its own
+    /// new session after the command rather than the scheduler.
+    scheduled: bool,
 }
 
 fn delivery_connection(state: &AppState, target: DeliverySession<'_>) -> (String, Option<String>) {
     let own_id = format!(
-        "hotsheet-scheduled-{}",
+        "hotsheet-{}-{}",
+        if target.scheduled {
+            "scheduled"
+        } else {
+            "command"
+        },
         target.ticket_id.to_ascii_lowercase()
     );
     if target.action == ScheduleAction::ReuseOrNewAiSession {
@@ -616,7 +1046,10 @@ struct DeliveryTarget<'a> {
     action: ScheduleAction,
     ticket_id: &'a str,
     ticket_slug: &'a str,
-    occurrence_date: &'a str,
+    /// The occurrence key: a date, or `date T time` for sub-day kinds (HS2-29V4ZG). `None`
+    /// is a manual or headless run of the command (HS2-17Y2EC), which has no occurrence
+    /// ledger to update.
+    occurrence_date: Option<&'a str>,
 }
 
 async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAttempt {
@@ -645,6 +1078,7 @@ async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAt
             effort: effort.as_deref(),
             action: target.action,
             ticket_id: &ticket.id.to_string(),
+            scheduled: target.occurrence_date.is_some(),
         },
     );
     let worker = hotsheet_aitools::session_worker_id(&tool, &connection_id);
@@ -655,7 +1089,14 @@ async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAt
         &now,
         now.plus_minutes(30),
         &worker,
-        Some("Scheduled AI command".into()),
+        Some(
+            if target.occurrence_date.is_some() {
+                "Scheduled AI command"
+            } else {
+                "AI command"
+            }
+            .into(),
+        ),
         None,
     );
     match claimed {
@@ -667,17 +1108,20 @@ async fn deliver_one(state: &AppState, target: DeliveryTarget<'_>) -> DeliveryAt
     }
     // HS2-NR0VRF: commit the ambiguity boundary before sending a turn. If the
     // host dies after this write, restart must not replay a possibly sent prompt.
-    if !matches!(
-        set_delivery_outcome(
-            target.settings,
-            &target.command.id,
-            target.occurrence_date,
-            target.ticket_id,
-            command_schedules::OccurrenceOutcome::DeliveryDispatching,
-            false,
-        ),
-        Ok(Some(_))
-    ) {
+    // A manual run has no ledger and is never replayed (HS2-17Y2EC).
+    if target.occurrence_date.is_some_and(|occurrence_date| {
+        !matches!(
+            set_delivery_outcome(
+                target.settings,
+                &target.command.id,
+                occurrence_date,
+                target.ticket_id,
+                command_schedules::OccurrenceOutcome::DeliveryDispatching,
+                false,
+            ),
+            Ok(Some(_))
+        )
+    }) {
         if let Ok(ticket) = ops::release(&entry.store, &ticket.id, crate::now(), &worker, false) {
             state.changed_in(&entry, "released", &ticket);
         }
@@ -731,8 +1175,7 @@ fn set_delivery_outcome(
             .find(|record| record.schedule.command_id == command_id)
             .and_then(|record| {
                 record.history.iter_mut().find(|item| {
-                    item.occurrence_date == occurrence_date
-                        && item.ticket_id.as_deref() == Some(ticket_id)
+                    item.key() == occurrence_date && item.ticket_id.as_deref() == Some(ticket_id)
                 })
             })
         else {
@@ -787,8 +1230,7 @@ fn mark_turn_completed(
             .find(|record| record.schedule.command_id == command_id)
             .and_then(|record| {
                 record.history.iter_mut().find(|item| {
-                    item.occurrence_date == occurrence_date
-                        && item.ticket_id.as_deref() == Some(ticket_id)
+                    item.key() == occurrence_date && item.ticket_id.as_deref() == Some(ticket_id)
                 })
             })
         else {
@@ -933,7 +1375,15 @@ async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiErr
     let (checkout, settings) = checkout_settings(state, reference)?;
     let definitions = commands::from_settings(&settings).map_err(invalid)?;
     for record in records(&settings)? {
-        if record.schedule.action == ScheduleAction::CreateTicket {
+        let command = definitions.iter().find(|command| {
+            command.id == record.schedule.command_id && command.kind == CommandKind::Ai
+        });
+        // Resolve at delivery time (HS2-17Y2EC): an inheriting schedule follows its command's
+        // current action, and an occurrence whose command is gone waits until it returns.
+        let action = record
+            .schedule
+            .effective_action(command.and_then(|command| command.action));
+        if action == ScheduleAction::CreateTicket {
             continue;
         }
         for item in record.history.iter().filter(|item| {
@@ -949,9 +1399,7 @@ async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiErr
             let Some(ticket_slug) = item.ticket_slug.as_deref() else {
                 continue;
             };
-            let result = if let Some(command) = definitions.iter().find(|command| {
-                command.id == record.schedule.command_id && command.kind == CommandKind::Ai
-            }) {
+            let result = if let Some(command) = command {
                 deliver_one(
                     state,
                     DeliveryTarget {
@@ -959,10 +1407,10 @@ async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiErr
                         project: &checkout.root,
                         settings: &settings,
                         command,
-                        action: record.schedule.action,
+                        action,
                         ticket_id,
                         ticket_slug,
-                        occurrence_date: &item.occurrence_date,
+                        occurrence_date: Some(&item.key()),
                     },
                 )
                 .await
@@ -985,7 +1433,7 @@ async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiErr
             let previous = set_delivery_outcome(
                 &settings,
                 &record.schedule.command_id,
-                &item.occurrence_date,
+                &item.key(),
                 ticket_id,
                 outcome,
                 false,
@@ -1002,7 +1450,7 @@ async fn deliver_pending(state: &AppState, reference: &str) -> Result<(), ApiErr
                 let state = state.clone();
                 let reference = reference.to_owned();
                 let command_id = record.schedule.command_id.clone();
-                let occurrence_date = item.occurrence_date.clone();
+                let occurrence_date = item.key();
                 let ticket_id = ticket_id.to_owned();
                 tokio::spawn(async move {
                     if completed.await == Ok(true) {
@@ -1264,7 +1712,7 @@ mod tests {
                 command_id: "daily-summary".into(),
                 time_zone: "America/New_York".into(),
                 local_time: "09:00".into(),
-                action,
+                action: Some(action),
                 paused: false,
                 recurrence: Recurrence {
                     kind: command_schedules::RecurrenceKind::Daily,
@@ -1282,6 +1730,7 @@ mod tests {
                 },
             },
             last_processed_date: Some(cursor.into()),
+            last_processed_time: None,
             history: Vec::new(),
         }
     }
@@ -1465,6 +1914,7 @@ mod tests {
                 effort: None,
                 action: ScheduleAction::ReuseOrNewAiSession,
                 ticket_id: "synthetic-ticket-id",
+                scheduled: true,
             },
         );
         assert_ne!(mismatched, "existing-session");
@@ -1939,5 +2389,681 @@ mod tests {
             serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
             json!([])
         );
+    }
+
+    fn ts(raw: &str) -> Timestamp {
+        raw.parse().unwrap()
+    }
+
+    fn hourly_record(cursor_date: &str, cursor_time: &str) -> ScheduleRecord {
+        let mut record = sample_record(cursor_date, ScheduleAction::CreateTicket);
+        record.schedule.recurrence.kind = command_schedules::RecurrenceKind::Hourly;
+        record.last_processed_time = Some(cursor_time.into());
+        record
+    }
+
+    fn sub_day_runs(schedule: &CommandSchedule, after: &str, through: &str) -> Vec<String> {
+        let zone = TimeZone::get(&schedule.time_zone).unwrap();
+        let parse = |raw: &str| {
+            let (date, time) = raw.split_once('T').unwrap();
+            let (hour, minute) = command_schedules::parse_local_time(time).unwrap();
+            command_schedules::parse_date(date)
+                .unwrap()
+                .with_time(Time::from_hms(hour, minute, 0).unwrap())
+        };
+        sub_day_instants(schedule, &zone, parse(after), parse(through), 100)
+            .unwrap()
+            .into_iter()
+            .map(|(slot, instant)| {
+                format!(
+                    "{}T{} {instant}",
+                    slot.date(),
+                    command_schedules::format_local_time(slot.time())
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn hs2_29v4zg_dst_gap_and_fold_never_double_run_sub_day_slots() {
+        let mut schedule = hourly_record("2026-03-07", "00:00").schedule;
+        schedule.local_time = "00:00".into();
+        schedule.recurrence.start_date = Some("2026-03-08".into());
+        // Spring forward in New York: 02:00 does not exist and the 03:00 slot covers it.
+        assert_eq!(
+            sub_day_runs(&schedule, "2026-03-08T00:30", "2026-03-08T04:00"),
+            [
+                "2026-03-08T01:00 2026-03-08T06:00:00Z",
+                "2026-03-08T03:00 2026-03-08T07:00:00Z",
+                "2026-03-08T04:00 2026-03-08T08:00:00Z"
+            ]
+        );
+        // Every 40 minutes: 02:00 and 02:40 both fall in the gap; only the later one runs,
+        // at the first valid minute, and 03:20 keeps its own instant.
+        schedule.recurrence.kind = command_schedules::RecurrenceKind::Minutely;
+        schedule.recurrence.every = Some(40);
+        assert_eq!(
+            sub_day_runs(&schedule, "2026-03-08T01:00", "2026-03-08T03:20"),
+            [
+                "2026-03-08T01:20 2026-03-08T06:20:00Z",
+                "2026-03-08T02:40 2026-03-08T07:00:00Z",
+                "2026-03-08T03:20 2026-03-08T07:20:00Z"
+            ]
+        );
+        // Fall back: the repeated 01:00 hour runs once, at its first (EDT) instant.
+        schedule.recurrence.kind = command_schedules::RecurrenceKind::Hourly;
+        schedule.recurrence.every = Some(1);
+        schedule.recurrence.start_date = Some("2026-11-01".into());
+        assert_eq!(
+            sub_day_runs(&schedule, "2026-10-31T23:30", "2026-11-01T02:00"),
+            [
+                "2026-11-01T00:00 2026-11-01T04:00:00Z",
+                "2026-11-01T01:00 2026-11-01T05:00:00Z",
+                "2026-11-01T02:00 2026-11-01T07:00:00Z"
+            ]
+        );
+    }
+
+    #[test]
+    fn hs2_29v4zg_hourly_occurrence_identity_wake_and_restart() {
+        let (_root, state, checkout, settings, store) = fixture();
+        settings
+            .set(
+                command_schedules::SETTING,
+                json!([hourly_record("2026-03-08", "09:00")]),
+                Scope::Local,
+            )
+            .unwrap();
+        // 10:30 EDT: the 10:00 slot is due, and the scheduler wakes for 11:00 EDT.
+        let now = ts("2026-03-08T14:30:00Z");
+        let wake = process_checkout(&state, &checkout, now).unwrap();
+        assert_eq!(wake, Some(ts("2026-03-08T15:00:00Z")));
+        let tickets = ops::query(&store, &TicketQuery::default()).unwrap();
+        assert_eq!(tickets.len(), 1);
+        assert!(
+            tickets[0]
+                .tags
+                .contains(&"hs2-occurrence:daily-summary:2026-03-08t1000".to_owned())
+        );
+        let record = records(&settings).unwrap().remove(0);
+        assert_eq!(record.last_processed_date.as_deref(), Some("2026-03-08"));
+        assert_eq!(record.last_processed_time.as_deref(), Some("10:00"));
+        assert_eq!(record.history.len(), 1);
+        assert_eq!(record.history[0].key(), "2026-03-08T10:00");
+        // A second pass in the same slot is a no-op.
+        assert_eq!(
+            process_checkout(&state, &checkout, now).unwrap(),
+            Some(ts("2026-03-08T15:00:00Z"))
+        );
+        assert_eq!(records(&settings).unwrap()[0].history.len(), 1);
+        // A crash after the ticket write but before the cursor write reuses the ticket.
+        let mut stale = records(&settings).unwrap();
+        stale[0].last_processed_time = Some("09:00".into());
+        stale[0].history.clear();
+        settings
+            .set(command_schedules::SETTING, json!(stale), Scope::Local)
+            .unwrap();
+        process_checkout(&state, &checkout, now).unwrap();
+        assert_eq!(
+            ops::query(&store, &TicketQuery::default()).unwrap().len(),
+            1
+        );
+        let record = records(&settings).unwrap().remove(0);
+        assert_eq!(record.history.len(), 1);
+        assert_eq!(
+            record.history[0].outcome,
+            command_schedules::OccurrenceOutcome::Created
+        );
+        assert_eq!(
+            next_runs(&record.schedule, now).unwrap(),
+            [
+                "2026-03-08T15:00:00Z",
+                "2026-03-08T16:00:00Z",
+                "2026-03-08T17:00:00Z"
+            ]
+        );
+    }
+
+    #[test]
+    fn hs2_29v4zg_open_ticket_skips_once_then_next_slot_runs_after_completion() {
+        let (_root, state, checkout, settings, store) = fixture();
+        settings
+            .set(
+                command_schedules::SETTING,
+                json!([hourly_record("2026-03-08", "09:00")]),
+                Scope::Local,
+            )
+            .unwrap();
+        process_checkout(&state, &checkout, ts("2026-03-08T14:05:00Z")).unwrap();
+        // The 10:00 ticket is still open at 11:00 and 12:00: one skip entry, no ticket.
+        process_checkout(&state, &checkout, ts("2026-03-08T15:05:00Z")).unwrap();
+        process_checkout(&state, &checkout, ts("2026-03-08T16:05:00Z")).unwrap();
+        let tickets = ops::query(&store, &TicketQuery::default()).unwrap();
+        assert_eq!(tickets.len(), 1);
+        let record = records(&settings).unwrap().remove(0);
+        assert_eq!(record.last_processed_time.as_deref(), Some("12:00"));
+        let outcomes: Vec<_> = record
+            .history
+            .iter()
+            .map(|item| (item.key(), item.outcome))
+            .collect();
+        assert_eq!(
+            outcomes,
+            [
+                (
+                    "2026-03-08T10:00".to_owned(),
+                    command_schedules::OccurrenceOutcome::Created
+                ),
+                (
+                    "2026-03-08T11:00".to_owned(),
+                    command_schedules::OccurrenceOutcome::SkippedOpenTicket
+                ),
+            ]
+        );
+        assert_eq!(record.history[1].ticket_slug, record.history[0].ticket_slug);
+        ops::update(
+            &store,
+            &tickets[0].id,
+            crate::now(),
+            ops::TicketPatch {
+                status: Some(hotsheet_model::Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        process_checkout(&state, &checkout, ts("2026-03-08T17:05:00Z")).unwrap();
+        assert_eq!(
+            ops::query(&store, &TicketQuery::default()).unwrap().len(),
+            2
+        );
+        let record = records(&settings).unwrap().remove(0);
+        assert_eq!(
+            record.history.last().map(|item| (item.key(), item.outcome)),
+            Some((
+                "2026-03-08T13:00".to_owned(),
+                command_schedules::OccurrenceOutcome::Created
+            ))
+        );
+    }
+
+    #[test]
+    fn hs2_29v4zg_missed_slots_coalesce_and_fold_does_not_replay() {
+        let (_root, state, checkout, settings, store) = fixture();
+        settings
+            .set(
+                command_schedules::SETTING,
+                json!([hourly_record("2026-03-08", "10:00")]),
+                Scope::Local,
+            )
+            .unwrap();
+        // Back at 16:20 EDT after six missed slots: only 16:00 runs.
+        process_checkout(&state, &checkout, ts("2026-03-08T20:20:00Z")).unwrap();
+        let tickets = ops::query(&store, &TicketQuery::default()).unwrap();
+        assert_eq!(tickets.len(), 1);
+        assert!(
+            tickets[0]
+                .tags
+                .contains(&"hs2-occurrence:daily-summary:2026-03-08t1600".to_owned())
+        );
+        assert_eq!(records(&settings).unwrap()[0].history.len(), 1);
+
+        let (_root, state, checkout, settings, store) = fixture();
+        settings
+            .set(
+                command_schedules::SETTING,
+                json!([hourly_record("2026-11-01", "01:00")]),
+                Scope::Local,
+            )
+            .unwrap();
+        // 01:30 EST, the second pass through the 01:00 hour: nothing is due again.
+        let wake = process_checkout(&state, &checkout, ts("2026-11-01T06:30:00Z")).unwrap();
+        assert!(
+            ops::query(&store, &TicketQuery::default())
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(wake, Some(ts("2026-11-01T07:00:00Z")));
+    }
+
+    #[test]
+    fn hs2_29v4zg_record_without_cursor_starts_now_instead_of_backfilling() {
+        let (_root, state, checkout, settings, store) = fixture();
+        let mut record = hourly_record("2026-03-08", "09:00");
+        record.last_processed_date = None;
+        record.last_processed_time = None;
+        settings
+            .set(command_schedules::SETTING, json!([record]), Scope::Local)
+            .unwrap();
+        let wake = process_checkout(&state, &checkout, ts("2026-03-08T14:30:45Z")).unwrap();
+        assert_eq!(wake, Some(ts("2026-03-08T15:00:00Z")));
+        assert!(
+            ops::query(&store, &TicketQuery::default())
+                .unwrap()
+                .is_empty()
+        );
+        let record = records(&settings).unwrap().remove(0);
+        assert_eq!(record.last_processed_date.as_deref(), Some("2026-03-08"));
+        assert_eq!(record.last_processed_time.as_deref(), Some("10:30"));
+    }
+
+    #[tokio::test]
+    async fn hs2_29v4zg_schedule_api_accepts_hourly_and_enforces_minimum_interval() {
+        let (_root, state, checkout, settings, _store) = fixture();
+        let router = crate::app(state);
+        let request = |method: &str, uri: String, body: serde_json::Value| {
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("x-hotsheet-secret", "synthetic-secret")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap()
+        };
+        let input = |kind: &str, every: u16| {
+            json!({
+                "time_zone": "UTC", "local_time": "00:00", "action": "create_ticket",
+                "recurrence": {"kind": kind, "start_date": "2026-01-01", "every": every}
+            })
+        };
+        let preview = router
+            .clone()
+            .oneshot(request(
+                "POST",
+                format!("/checkouts/{checkout}/command-schedules/preview"),
+                input("hourly", 2),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(preview.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let runs: Vec<Timestamp> =
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["next_runs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|run| run.as_str().unwrap().parse().unwrap())
+                .collect();
+        assert_eq!(runs.len(), 3);
+        assert_eq!(runs[1].as_second() - runs[0].as_second(), 7200);
+        assert_eq!(runs[0].as_second() % 7200, 0);
+        let refused = router
+            .clone()
+            .oneshot(request(
+                "PUT",
+                format!("/checkouts/{checkout}/command-schedules/daily-summary"),
+                input("minutely", 4),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+        let saved = router
+            .oneshot(request(
+                "PUT",
+                format!("/checkouts/{checkout}/command-schedules/daily-summary"),
+                input("minutely", 5),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(saved.status(), StatusCode::OK);
+        let record = records(&settings).unwrap().remove(0);
+        assert_eq!(
+            record.schedule.recurrence.kind,
+            command_schedules::RecurrenceKind::Minutely
+        );
+        // The cursor starts at the current minute, so passed slots are not backfilled.
+        assert!(record.sub_day_cursor().is_some());
+        // The headless settings path validates the same rule.
+        let mut invalid_record = record.clone();
+        invalid_record.schedule.recurrence.every = Some(1);
+        assert!(
+            settings
+                .set(
+                    command_schedules::SETTING,
+                    json!([invalid_record]),
+                    Scope::Local
+                )
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn hs2_29v4zg_sub_day_delivery_updates_its_exact_occurrence() {
+        let (_root, state, checkout, settings, _store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        let mut record = hourly_record("2026-03-08", "09:00");
+        record.schedule.action = Some(ScheduleAction::NewAiSession);
+        settings
+            .set(command_schedules::SETTING, json!([record]), Scope::Local)
+            .unwrap();
+        process_checkout(&state, &checkout, ts("2026-03-08T14:05:00Z")).unwrap();
+        // The open ticket skips 11:00; the skip shares the ticket id but not the key.
+        process_checkout(&state, &checkout, ts("2026-03-08T15:05:00Z")).unwrap();
+        deliver_pending(&state, &checkout).await.unwrap();
+        let history = records(&settings).unwrap()[0].history.clone();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].key(), "2026-03-08T10:00");
+        assert_eq!(
+            history[0].outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
+        assert_eq!(
+            history[1].outcome,
+            command_schedules::OccurrenceOutcome::SkippedOpenTicket
+        );
+        assert_eq!(backend.preparations.lock().unwrap().len(), 1);
+    }
+
+    async fn send_json(
+        router: &axum::Router,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+    ) -> (StatusCode, serde_json::Value) {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .header("x-hotsheet-secret", "synthetic-secret")
+                    .header("content-type", "application/json")
+                    .body(body.map_or_else(Body::empty, |body| Body::from(body.to_string())))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+        )
+    }
+
+    fn set_command_action(settings: &Settings, action: Option<&str>) {
+        let mut command = json!({"id":"daily-summary","title":"Daily summary","kind":"ai","prompt":"Summarize synthetic work"});
+        if let Some(action) = action {
+            command["action"] = action.into();
+        }
+        settings
+            .set("commands", json!([command]), Scope::Local)
+            .unwrap();
+    }
+
+    async fn wait_for_turns(backend: &ScheduledFakeDrive, count: usize) {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while backend.turns.lock().unwrap().len() < count {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("fake drive turn");
+    }
+
+    /// HS2-17Y2EC: a command whose action starts a new session runs headlessly over HTTP: the
+    /// exact ticket is created, claimed by the new session's worker before the handoff, and
+    /// recorded as the command's launch.
+    #[tokio::test]
+    async fn hs2_17y2ec_ai_run_new_session_claims_ticket_and_records_launch() {
+        let (_root, state, checkout, settings, store) = fixture();
+        set_command_action(&settings, Some("new_ai_session"));
+        let backend = ScheduledFakeDrive::default();
+        let router = crate::app(with_scheduled_backend(state, backend.clone()));
+        let (status, body) = send_json(
+            &router,
+            "POST",
+            &format!("/checkouts/{checkout}/commands/daily-summary/ai-run"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["action"], "new_ai_session");
+        assert_eq!(body["delivery"], "started");
+        assert!(body.get("reason").is_none());
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert_eq!(body["ticket"]["slug"], ticket.slug.as_str());
+        assert!(
+            ticket
+                .tags
+                .iter()
+                .any(|tag| tag == "hs2-command:daily-summary")
+        );
+        let worker = hotsheet_aitools::session_worker_id(
+            "codex",
+            &format!(
+                "hotsheet-command-{}",
+                ticket.id.to_string().to_ascii_lowercase()
+            ),
+        );
+        assert_eq!(ticket.claimed_by.as_deref(), Some(worker.as_str()));
+        assert_eq!(
+            backend.preparations.lock().unwrap()[0].3.as_deref(),
+            Some(worker.as_str())
+        );
+        wait_for_turns(&backend, 1).await;
+        assert!(backend.turns.lock().unwrap()[0].contains(&ticket.slug));
+        assert_eq!(body["run"]["launch"]["kind"], "ai");
+        assert_eq!(body["run"]["launch"]["tool"], "codex");
+        assert_eq!(body["run"]["launch"]["ticket_slug"], ticket.slug.as_str());
+        let (_, runs) = send_json(
+            &router,
+            "GET",
+            &format!("/checkouts/{checkout}/command-runs"),
+            None,
+        )
+        .await;
+        assert_eq!(runs[0]["command_id"], "daily-summary");
+    }
+
+    /// HS2-17Y2EC: a command without an action runs headlessly as Create Ticket Only, the
+    /// same queued ticket the legacy click creates, and never prepares a session.
+    #[tokio::test]
+    async fn hs2_17y2ec_ai_run_without_action_only_queues_the_ticket() {
+        let (_root, state, checkout, _settings, store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let router = crate::app(with_scheduled_backend(state, backend.clone()));
+        let (status, body) = send_json(
+            &router,
+            "POST",
+            &format!("/checkouts/{checkout}/commands/daily-summary/ai-run"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["action"], "create_ticket");
+        assert_eq!(body["delivery"], "queued");
+        assert!(body["run"]["launch"].get("tool").is_none());
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert_eq!(ticket.claimed_by, None);
+        assert!(ticket.up_next);
+        assert!(backend.preparations.lock().unwrap().is_empty());
+        let (status, _) = send_json(
+            &router,
+            "POST",
+            &format!("/checkouts/{checkout}/commands/missing/ai-run"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    /// HS2-17Y2EC: a session action whose provider cannot start still leaves the ticket
+    /// queued, unclaimed, with a note, and reports why.
+    #[tokio::test]
+    async fn hs2_17y2ec_ai_run_failed_handoff_keeps_unclaimed_ticket() {
+        let (_root, state, checkout, settings, store) = fixture();
+        set_command_action(&settings, Some("reuse_or_new_ai_session"));
+        let backend = ScheduledFakeDrive::default();
+        backend.fail_prepare_once.store(true, Ordering::SeqCst);
+        let router = crate::app(with_scheduled_backend(state, backend.clone()));
+        let (status, body) = send_json(
+            &router,
+            "POST",
+            &format!("/checkouts/{checkout}/commands/daily-summary/ai-run"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["delivery"], "failed");
+        assert_eq!(body["reason"], "ai_handoff_failed");
+        let ticket = ops::query(&store, &TicketQuery::default())
+            .unwrap()
+            .remove(0);
+        assert_eq!(ticket.claimed_by, None);
+        assert!(
+            ticket
+                .notes
+                .iter()
+                .any(|note| note.text.contains("ai_handoff_failed"))
+        );
+    }
+
+    /// HS2-17Y2EC: an inheriting schedule follows its command's action, an explicit override
+    /// wins over it, and the HTTP view reports the effective action.
+    #[tokio::test]
+    async fn hs2_17y2ec_schedule_inherits_command_action_until_overridden() {
+        let (_root, state, checkout, settings, _store) = fixture();
+        set_command_action(&settings, Some("new_ai_session"));
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        let mut inherit = sample_record("2026-03-07", ScheduleAction::CreateTicket);
+        inherit.schedule.action = None;
+        settings
+            .set(command_schedules::SETTING, json!([inherit]), Scope::Local)
+            .unwrap();
+        process_checkout(
+            &state,
+            &checkout,
+            Timestamp::from_second(1_772_980_200).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::DeliveryPending
+        );
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
+        assert_eq!(backend.preparations.lock().unwrap().len(), 1);
+        // The stored schedule still inherits; the view resolves it.
+        let router = crate::app(state.clone());
+        let (_, listed) = send_json(
+            &router,
+            "GET",
+            &format!("/checkouts/{checkout}/command-schedules"),
+            None,
+        )
+        .await;
+        assert!(listed[0]["schedule"].get("action").is_none());
+        assert_eq!(listed[0]["effective_action"], "new_ai_session");
+
+        // An explicit Create Ticket Only override wins over the command's session action.
+        let (_root, state, checkout, settings, _store) = fixture();
+        set_command_action(&settings, Some("new_ai_session"));
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        due_ticket(&state, &checkout, &settings, ScheduleAction::CreateTicket);
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::Created
+        );
+        assert!(backend.preparations.lock().unwrap().is_empty());
+        let router = crate::app(state);
+        let (_, listed) = send_json(
+            &router,
+            "GET",
+            &format!("/checkouts/{checkout}/command-schedules"),
+            None,
+        )
+        .await;
+        assert_eq!(listed[0]["schedule"]["action"], "create_ticket");
+        assert_eq!(listed[0]["effective_action"], "create_ticket");
+    }
+
+    /// HS2-17Y2EC with HS2-29V4ZG: an inheriting hourly schedule resolves the command's
+    /// action in the shared occurrence helper, records its sub-day key, and delivers it.
+    #[tokio::test]
+    async fn hs2_17y2ec_sub_day_schedule_inherits_command_action() {
+        let (_root, state, checkout, settings, _store) = fixture();
+        set_command_action(&settings, Some("new_ai_session"));
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        let mut record = hourly_record("2026-03-08", "09:00");
+        record.schedule.action = None;
+        settings
+            .set(command_schedules::SETTING, json!([record]), Scope::Local)
+            .unwrap();
+        process_checkout(&state, &checkout, ts("2026-03-08T14:05:00Z")).unwrap();
+        let history = records(&settings).unwrap()[0].history.clone();
+        assert_eq!(history[0].key(), "2026-03-08T10:00");
+        assert_eq!(
+            history[0].outcome,
+            command_schedules::OccurrenceOutcome::DeliveryPending
+        );
+        assert_eq!(history[0].turn_completed, Some(false));
+        deliver_pending(&state, &checkout).await.unwrap();
+        assert_eq!(
+            records(&settings).unwrap()[0].history[0].outcome,
+            command_schedules::OccurrenceOutcome::Delivered
+        );
+        assert_eq!(backend.preparations.lock().unwrap().len(), 1);
+
+        // The same inheriting hourly schedule stays ticket-only for a command without an action.
+        let (_root, state, checkout, settings, _store) = fixture();
+        let backend = ScheduledFakeDrive::default();
+        let state = with_scheduled_backend(state, backend.clone());
+        settings
+            .set(command_schedules::SETTING, json!([record]), Scope::Local)
+            .unwrap();
+        process_checkout(&state, &checkout, ts("2026-03-08T14:05:00Z")).unwrap();
+        deliver_pending(&state, &checkout).await.unwrap();
+        let item = records(&settings).unwrap()[0].history[0].clone();
+        assert_eq!(item.outcome, command_schedules::OccurrenceOutcome::Created);
+        assert_eq!(item.turn_completed, None);
+        assert!(backend.preparations.lock().unwrap().is_empty());
+    }
+
+    /// HS2-17Y2EC: the schedule API accepts an omitted action as "Use command default" and
+    /// stores no action, so a later command change still applies.
+    #[tokio::test]
+    async fn hs2_17y2ec_schedule_api_saves_inherited_action() {
+        let (_root, state, checkout, settings, _store) = fixture();
+        let router = crate::app(state);
+        let input = json!({
+            "time_zone":"UTC", "local_time":"09:00", "paused":false,
+            "recurrence":{"kind":"daily", "start_date":"2026-12-01", "every":1}
+        });
+        let path = format!("/checkouts/{checkout}/command-schedules/daily-summary");
+        let (status, saved) = send_json(&router, "PUT", &path, Some(input.clone())).await;
+        assert_eq!(status, StatusCode::OK, "{saved}");
+        assert!(saved["schedule"].get("action").is_none());
+        assert_eq!(saved["effective_action"], "create_ticket");
+        assert_eq!(records(&settings).unwrap()[0].schedule.action, None);
+        set_command_action(&settings, Some("reuse_or_new_ai_session"));
+        let (_, listed) = send_json(
+            &router,
+            "GET",
+            &format!("/checkouts/{checkout}/command-schedules"),
+            None,
+        )
+        .await;
+        assert_eq!(listed[0]["effective_action"], "reuse_or_new_ai_session");
+        let mut explicit = input;
+        explicit["action"] = "new_ai_session".into();
+        let (_, saved) = send_json(&router, "PUT", &path, Some(explicit)).await;
+        assert_eq!(saved["schedule"]["action"], "new_ai_session");
+        assert_eq!(saved["effective_action"], "new_ai_session");
     }
 }

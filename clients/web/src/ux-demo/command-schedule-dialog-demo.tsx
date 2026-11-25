@@ -4,7 +4,12 @@ import { closeDialog, openDialog } from '@kerfjs/ui/surface-scaffold';
 import { attr, delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { newScheduleDraft, scheduleInputFromDraft } from '../command-schedule-form';
+import {
+  newScheduleDraft,
+  type ScheduleFormDraft,
+  scheduleInputFromDraft,
+  withRepeats,
+} from '../command-schedule-form';
 import type { ScheduleView } from '../command-schedules';
 import { COMMAND_SCHEDULE_DIALOG_ID, CommandScheduleDialog } from '../components/command-schedule-dialog';
 import { wireCommandScheduleDialog } from '../components/command-schedule-dialog-interactions';
@@ -16,6 +21,8 @@ const saved = signal<ScheduleView | undefined>(undefined);
 const samplePreview = ['2027-02-15T01:00:00Z', '2028-02-21T01:00:00Z', '2029-02-19T01:00:00Z'];
 const preview = signal(samplePreview);
 const showSkippedRun = attr('data-action', 'demo-command-schedule-skipped');
+const showHourly = attr('data-action', 'demo-command-schedule-hourly');
+const hourlyPreview = ['2027-02-15T01:00:00Z', '2027-02-15T02:00:00Z', '2027-02-15T03:00:00Z'];
 
 /** Deterministic synthetic schedule; the dialog and its controls are production components. */
 export function CommandScheduleDialogDemo() {
@@ -29,9 +36,11 @@ export function CommandScheduleDialogDemo() {
           {saved.value ? 'Manage Schedule…' : 'Schedule…'}
         </Button>
         {saved.value ? <Button action={showSkippedRun.value}>Show Skipped Run</Button> : null}
+        <Button action={showHourly.value}>Show Hourly</Button>
       </div>
       <CommandScheduleDialog
         commandTitle="Review Architecture"
+        commandAction="new_ai_session"
         draft={draft.value}
         saved={saved.value}
         preview={preview.value}
@@ -63,6 +72,7 @@ export const demoModule: DemoModule = {
         },
         change: (name, value) => {
           if (name === 'weekdays') draft.value = { ...draft.value, weekdays: (value as string[]).map(Number) };
+          else if (name === 'repeats') draft.value = withRepeats(draft.value, value as ScheduleFormDraft['repeats']);
           else draft.value = { ...draft.value, [name]: value };
           preview.value = [];
         },
@@ -88,6 +98,13 @@ export const demoModule: DemoModule = {
         togglePaused: () => {
           draft.value = { ...draft.value, paused: !draft.value.paused };
         },
+      }),
+    );
+    scope.add(
+      delegate(root, 'click', showHourly.selector, () => {
+        // HS2-29V4ZG: a sub-day draft shows the minute floor and the hourly preview.
+        draft.value = withRepeats({ ...draft.value, scheduleType: 'repeating' }, 'hourly');
+        preview.value = hourlyPreview;
       }),
     );
     scope.add(

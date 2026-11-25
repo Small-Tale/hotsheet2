@@ -465,13 +465,14 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         ],
       ).map((entry) => entry.tab);
     const hidden = new Set(minimizedProjectIds.value),
-      minimizedProjects = projects.value
-        .filter((item) => hidden.has(item.id))
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          description: minimizedProjectDescription(item, projects.value),
-        }));
+      // A Restore Project row carries its tab's computed status, so the menu draws the tab's own
+      // location icon, counts, and alerts (HS2-R64JXA).
+      // `projectTabs` maps `projects` one to one, so each index names the same project.
+      minimizedProjects = projectTabs.flatMap((tab, index) =>
+        hidden.has(tab.id)
+          ? [{ ...tab, description: minimizedProjectDescription(projects.value[index], projects.value) }]
+          : [],
+      );
     const tabs = [
       ...rankedProjectTabs.filter((tab) => !hidden.has(tab.id)),
       ...projectRestoreFailures.value.map((item) => ({
@@ -520,7 +521,12 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           workspacePresentation="edge-to-edge"
           inspector={
             shellMode.value === 'terminals'
-              ? terminalRailSurfacePanel(terminalRailSurfaceProps())
+              ? (() => {
+                  // The rail's project switcher lists minimized projects under its own submenu with
+                  // their tab status, as the Restore Project menu draws them (HS2-2609BW).
+                  const { rail } = terminalRailSurfaceProps();
+                  return terminalRailSurfacePanel({ rail: { ...rail, minimizedProjects } });
+                })()
               : statsInspectorPanel()
           }
           inspectorVisible={!inspectorCollapsed.value}

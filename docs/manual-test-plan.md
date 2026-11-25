@@ -704,6 +704,16 @@ and a new session in the second. A held ticket claim must leave delivery pending
 resume after the holder releases it. This live-provider check supplements the hermetic
 real-store and fake-drive regressions without copying customer content.
 
+### AI command click starts a live session (HS2-17Y2EC)
+
+With a synthetic AI command and an installed provider, set the command's Action to
+Auto-Start in a New AI Session and click it in the sidebar. Confirm one Up Next ticket
+appears, claimed by the new session, and the session's chat opens a turn naming it. Set
+Reuse or Start an AI Session with an idle matching chat open and confirm the click reuses
+it. Hover the button and confirm the tooltip begins with the chosen action. The browser
+suite covers the click against a real server without a provider; this check covers the
+live hand-off.
+
 ### Command edit survives an immediate reload (HS2-25HAK3)
 
 Playwright cannot route the `keepalive` request a real page unload sends, so the browser test

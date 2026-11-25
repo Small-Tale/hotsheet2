@@ -193,62 +193,6 @@ test('HS2-9EGWC4 pre-commit checks only whitespace for a registry-only commit', 
   }
 });
 
-test('HS2-6PA2DD pre-push lets only merge-pending branch deletions skip the gate', () => {
-  const f = fixture();
-  try {
-    const log = resolve(f.root, 'gate.log');
-    executable(
-      resolve(f.repo, 'scripts/check.sh'),
-      '#!/bin/sh\nprintf "check\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\nexit 1\n',
-    );
-    run('git', ['add', 'scripts/check.sh'], f.repo);
-    run('git', ['commit', '-q', '-m', 'Failing fixture gate'], f.repo);
-    const remote = resolve(f.root, 'remote.git');
-    run('git', ['init', '-q', '--bare', remote], f.root);
-    run('git', ['remote', 'add', 'origin', remote], f.repo);
-    // Seed the remote without hooks: main, two merge-pending branches and an ordinary branch.
-    run(
-      'git',
-      [
-        'push',
-        '-q',
-        'origin',
-        'main',
-        'main:refs/heads/merge-pending/HS2-AAAAAA',
-        'main:refs/heads/merge-pending/HS2-BBBBBB',
-        'main:refs/heads/merge-pending/HS2-CCCCCC',
-        'main:refs/heads/feature',
-      ],
-      f.repo,
-    );
-    run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
-    const env = { ...withoutGitRepositoryEnv(process.env), HOTSHEET_HOOK_TEST_LOG: log };
-    const remoteHas = (ref) => run('git', ['for-each-ref', '--format=%(refname)', ref], remote).trim() !== '';
-    // Deleting merge-pending branches, alone or together, never runs the gate.
-    run('git', ['push', '-q', 'origin', '--delete', 'merge-pending/HS2-AAAAAA'], f.repo, env);
-    run('git', ['push', '-q', 'origin', '--delete', 'merge-pending/HS2-BBBBBB'], f.repo, env);
-    assert.equal(remoteHas('refs/heads/merge-pending/HS2-AAAAAA'), false);
-    assert.equal(remoteHas('refs/heads/merge-pending/HS2-BBBBBB'), false);
-    assert.equal(existsSync(log), false);
-    // Deleting any other branch still takes the gate, which refuses here.
-    assert.throws(() => run('git', ['push', '-q', 'origin', '--delete', 'feature'], f.repo, env));
-    assert.equal(remoteHas('refs/heads/feature'), true);
-    // So does a merge-pending deletion pushed together with an update.
-    assert.throws(() =>
-      run(
-        'git',
-        ['push', '-q', 'origin', ':refs/heads/merge-pending/HS2-CCCCCC', 'main:refs/heads/merge-pending/HS2-DDDDDD'],
-        f.repo,
-        env,
-      ),
-    );
-    assert.equal(remoteHas('refs/heads/merge-pending/HS2-CCCCCC'), true);
-    assert.equal(readFileSync(log, 'utf8'), 'check\ncheck\n');
-  } finally {
-    rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
 test('HS2-9EGWC4 pre-push lets only a registry-only fast-forward skip the gate and window', () => {
   const f = fixture();
   try {
@@ -313,6 +257,71 @@ test('HS2-9EGWC4 pre-push lets only a registry-only fast-forward skip the gate a
     entry('7K3M9P2QXF', 'Rewritten');
     assert.throws(() => run('git', ['push', '-q', '--force', 'origin', 'main'], f.repo, env));
     assert.equal(remoteMain(), published);
+  } finally {
+    f.dispose();
+  }
+});
+
+test('HS2-12K3FN pre-push lets a delete-only push of non-main branches skip the gate', () => {
+  const f = fixture();
+  try {
+    const bin = resolve(f.root, 'bin');
+    executable(resolve(bin, 'zsh'), '#!/bin/sh\nexit 1\n');
+    const log = resolve(f.root, 'gate.log');
+    executable(
+      resolve(f.repo, 'scripts/check.sh'),
+      '#!/bin/sh\nprintf "check\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\nexit 1\n',
+    );
+    run('git', ['add', 'scripts/check.sh'], f.repo);
+    run('git', ['commit', '-q', '-m', 'Failing fixture gate'], f.repo);
+    const remote = resolve(f.root, 'remote.git');
+    run('git', ['init', '-q', '--bare', remote], f.root);
+    run('git', ['remote', 'add', 'origin', remote], f.repo);
+    run(
+      'git',
+      [
+        'push',
+        '-q',
+        'origin',
+        'main',
+        'main:refs/heads/merge-pending/HS-ONE',
+        'main:refs/heads/merge-pending/HS-TWO',
+        'main:refs/heads/merge-pending/HS-THREE',
+      ],
+      f.repo,
+    );
+    run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
+    const env = {
+      ...withoutGitRepositoryEnv(process.env),
+      PATH: `${bin}:${process.env.PATH}`,
+      HOTSHEET_HOOK_TEST_LOG: log,
+    };
+    const heads = () =>
+      run('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads'], remote).trim().split('\n').sort();
+    // Deleting one, then two branches in one push, sends no code: no gate, no main window.
+    run('git', ['push', '-q', 'origin', '--delete', 'merge-pending/HS-ONE'], f.repo, env);
+    run('git', ['push', '-q', 'origin', '--delete', 'merge-pending/HS-TWO', 'merge-pending/HS-THREE'], f.repo, env);
+    assert.deepEqual(heads(), ['main']);
+    assert.equal(existsSync(log), false);
+    // A push that also sends commits is gated, and the failing gate blocks the delete too.
+    const noHooks = resolve(f.root, 'no-hooks');
+    mkdirSync(noHooks);
+    run(
+      'git',
+      ['-c', `core.hooksPath=${noHooks}`, 'push', '-q', 'origin', 'main:refs/heads/merge-pending/HS-FOUR'],
+      f.repo,
+    );
+    put(resolve(f.repo, 'code.ts'), 'code\n');
+    run('git', ['add', 'code.ts'], f.repo);
+    run('git', ['-c', `core.hooksPath=${noHooks}`, 'commit', '-q', '-m', 'Code'], f.repo);
+    assert.throws(() =>
+      run('git', ['push', '-q', 'origin', 'HEAD:refs/heads/feature', ':refs/heads/merge-pending/HS-FOUR'], f.repo, env),
+    );
+    assert.equal(readFileSync(log, 'utf8'), 'check\n');
+    assert.deepEqual(heads(), ['main', 'merge-pending/HS-FOUR']);
+    // Deleting main never takes the fast path.
+    assert.throws(() => run('git', ['push', '-q', 'origin', '--delete', 'main'], f.repo, env));
+    assert.deepEqual(heads(), ['main', 'merge-pending/HS-FOUR']);
   } finally {
     f.dispose();
   }

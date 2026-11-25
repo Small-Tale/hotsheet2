@@ -423,6 +423,15 @@ impl Settings {
                 "expected \"off\", \"session\", or \"start\"",
             ));
         }
+        if key == "commands" {
+            // HS2-17Y2EC: the headless `settings set commands` path rejects a definition the
+            // server could not load, such as an unknown AI run action, before it is written.
+            serde_json::from_value::<Vec<crate::commands::CommandDefinition>>(value.clone())
+                .map_err(|source| SettingsError::Invalid {
+                    key: key.into(),
+                    source,
+                })?;
+        }
         if key == crate::commands::COMMAND_GROUPS_KEY {
             serde_json::from_value::<Vec<String>>(value.clone()).map_err(|source| {
                 SettingsError::Invalid {

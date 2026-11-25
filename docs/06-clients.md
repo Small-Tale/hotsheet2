@@ -619,6 +619,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   Minimized Projects appears immediately before Add Project while any project is hidden.
   Its restore menu lists projects in their original tab order, adds a host or path when
   names collide, and restores a chosen project to its original slot and activates it.
+  Each restore row shows its project tab's own presentation (HS2-R64JXA): the tab name, the
+  cloud for a remote project (a folder for a local one), and the tab's trailing status (Up
+  Next badge with its active-ticket ring, attention, disconnected, notification, and
+  migration indicators), drawn by the same shared helpers as the tab. The menu keeps Kerf's
+  default popup inset (HS2-7DWS3S).
   Hiding the selected tab activates the next visible tab, then the previous one; hiding a
   background tab leaves the workspace alone. When all tabs are hidden, Workspace Grid or
   a neutral workspace still exposes restore and add controls. Bulk close commands act on
@@ -1105,10 +1110,23 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   client also sends `$hotsheet` so that connection re-reads and works the prioritized
   queue. Ticket creation remains the authoritative action and succeeds when no connection
   is available or the optional signal fails. Optional icon/color metadata controls the sidebar presentation.
+  Each AI command also has an optional **Action** in its editor (HS2-17Y2EC), with the
+  same options and semantics as a schedule's action: **Create Ticket Only**,
+  **Auto-Start in a New AI Session**, or **Reuse or Start an AI Session**. Unset (the
+  editor's **Create Ticket and Notify an Idle AI Session** default, which every existing
+  command keeps) is the click described above. With an explicit action, a click asks the
+  host to run it through `POST /checkouts/{reference}/commands/{id}/ai-run`: the host
+  creates the same command ticket and, for a session action, claims that exact ticket
+  under the selected session worker and hands it off exactly as a scheduled occurrence
+  does, using the command's provider/model/effort selection. A failed handoff leaves the
+  ticket queued and unclaimed with a note, and the response names the reason. The run
+  joins the command's run history. The sidebar button's tooltip begins with the effective
+  click action. Headless callers set the field with `hotsheet-cli settings set commands`
+  and run it through the same HTTP route.
   Manual and scheduled AI command tickets carry the stable `hs2-command:<command-id>`
   provenance tag (HS2-G5J2E7). Scheduling is checkout-local and supports one-time,
-  daily, weekly, monthly, yearly, and selected-date recurrences with bounds and
-  date exceptions. Every eligible occurrence creates the same highest-priority
+  every-N-minutes, hourly, daily, weekly, monthly, yearly, and selected-date
+  recurrences with bounds and date exceptions. Every eligible occurrence creates the same highest-priority
   Up Next task before any AI session is asked to work it; an incomplete ticket
   from the same command skips that occurrence. A one-time occurrence missed while
   the host is offline creates its ticket on return. A missing daylight-saving
@@ -1116,12 +1134,43 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   its first occurrence. An occurrence's local date is its durable identity, so
   a restart or delivery retry cannot create a second ticket for it. The local
   schedule API lists the next three instants and recent outcomes; a draft can
-  request the same preview without saving. For **Create Ticket Only**, the host leaves
+  request the same preview without saving.
+  **Sub-day repeats (HS2-29V4ZG).** `minutely` repeats every 5 to 1440 minutes and
+  `hourly` every 1 to 24 hours. Occurrences lie on the local wall-clock grid that
+  starts at the start date and time (`local_time`, shown as **First Run**) and
+  continues across midnight. The end date is inclusive. `count` counts grid
+  occurrences from the first one. An include date adds that date's grid slots,
+  even before the start; an exclude date drops every slot on its date. The
+  five-minute floor bounds a runaway schedule to 288 evaluations a day, matches
+  common cron-service floors, and leaves time for an AI session to work; the
+  dialog states it under **Every**. A sub-day occurrence's identity is its local
+  date and time: history entries add `occurrence_time`, the record adds
+  `last_processed_time`, and its ticket tag is
+  `hs2-occurrence:<command-id>:<YYYY-MM-DD>t<HHmm>`. Date-only kinds keep their
+  original fields, tags, and stored shape. A repeated daylight-saving slot runs
+  once, at its first instant. A slot in a skipped hour runs at the first valid
+  minute after the gap, unless the next slot falls at or before that instant
+  and covers it. The overlap policy is the existing one: an open ticket from the
+  same command, including a ticket an AI session is still working, records
+  `skipped_open_ticket`. Consecutive skips against the same open ticket record
+  one history entry. Slots missed while the host was offline coalesce into the
+  latest due slot, so the host runs once on return. Saving a sub-day schedule
+  starts after the current local minute and never backfills earlier slots. A
+  record written through `hotsheet-cli settings set command_schedules` without a
+  cursor starts the same way. The scheduler wakes at the next slot's instant.
+  The HTTP API and `settings set` share one validator. For **Create Ticket Only**, the host leaves
   that ticket queued. For **Auto-Start in a New AI Session**, it creates a distinct
   client-owned session for the occurrence. For **Reuse or Start an AI Session**, it
   uses an idle session in the same checkout and ticket source when its provider,
   model, and effort are compatible; otherwise it starts a new one (HS2-MB3BQE).
   The configured command AI selection takes precedence over the project default.
+  A schedule's action is an optional override (HS2-17Y2EC). **Use Command Default**,
+  the default for a new schedule, stores no action and follows the command's current
+  action; a command without one runs as **Create Ticket Only**, since schedules never
+  sent the idle-session signal. A schedule saved before HS2-17Y2EC always stored an
+  action, so it loads as that explicit override and behaves exactly as before. The host
+  resolves the action per occurrence and before each delivery retry; the schedule view
+  reports it as `effective_action`.
   Before either auto-start handoff, the host claims the exact recorded ticket under
   the selected session worker identity. A claim held by another worker leaves the
   ticket pending for retry. A failed handoff or failed provider turn is recorded in the
@@ -3787,7 +3836,26 @@ from the active workspace's list and dashboard, without closing the sessions. Ea
 visibility group persists its own type choices; older saved groups begin with all three
 visible. Hide Listed / Show Listed apply only to rows of the enabled types in the active
 group. No enabled types yields an explicit empty result and disabled bulk actions. Web
-Browsers has no control until browser tiles ship under HS2-7VS6SF. Terminal kind comes from the creation request:
+Browsers has no control until browser tiles ship under HS2-7VS6SF. AI Chats follows the
+`ai-chat` feature area (HS2-4TKASN): while the feature is off the dialog offers only
+Terminals and AI Shells, and the two share the row. Under the feature-area convention
+(HS2-3GJZGG: no entry points, data kept, open chats stay), the segment remains while the
+listed scope still has an open chat, so that chat stays controllable. An unavailable type is
+never pressed or applied to the grid; when a workspace's stored choice held only AI Chats,
+Terminals stands in until the person changes the selection, and the stored chat choice
+returns with the segment. Each project heading carries a show-all or hide-all action
+(HS2-HC67SP) that acts on that project's listed rows only. If any listed row is hidden, it
+shows them all; if all are visible, it hides them all. It is Kerf `ListHeader`'s trailing
+action: one keyboard stop named "Show All <project> <types>" or "Hide All …" (the noun is the
+single listed type, else Items). Like each row, its eye or eye-off icon reports state.
+Hide Listed and Show Listed stay in the footer. Making the project name itself the control
+waits on Kerf KF-J289N4 (HS2-DZH5GH). A **Show minimized** checkbox in the dialog footer
+(HS2-W1XEH7) is off by default and remembered per workspace. Off, items of minimized
+project tabs are left out: they are not listed, not shown in that workspace's grid, and not
+counted by the eye badge. On, they are listed and follow their own visibility. Hide Listed,
+Show Listed and the heading toggles act only on listed items. The choice is stored as
+`showMinimized` on the workspace's group in `localStorage hotsheet.terminals.visibility-groups`
+(absent means off, so older saved groups read as off), and survives reload. Terminal kind comes from the creation request:
 `connect` marks AI, ordinary/default-shell launches remain shell, and the kind persists
 through PTY reattachment and broker-backed server restart. Legacy sessions without kind
 remain shell; titles, command output, and OSC8 hyperlinks never determine kind (HS2-SE3RVM).
@@ -3826,7 +3894,12 @@ the leading edge of the dashboard toolbar.
 The dashboard keeps a resizable right ticket rail open by default and allows it to be hidden
 and restored from the dashboard toolbar. That rail reuses the selected project's list and
 notification views, compact workspace actions, content-sized project selector, and quick-ticket
-launcher; board and settings modes are deliberately absent. Its view heading ends with the same
+launcher; board and settings modes are deliberately absent. The project selector is a Kerf
+`PopupMenu` whose rows are checked choices (HS2-2609BW): it lists the open, non-minimized projects
+directly and, only while any project is minimized, ends with a **Minimized Projects** item whose
+submenu lists them with the Restore Project row presentation (tab name, folder or cloud icon, and
+trailing status). Choosing a minimized project there switches the rail to it without restoring its
+tab, as the selector always did; the Restore Project menu remains the way to restore a tab. Its view heading ends with the same
 quiet separator used at the top of ticket collections, clearly dividing the white header from the
 lowered scrolling ticket surface. The ticket collection keeps its intrinsic height inside that
 surface so the rail remains the vertical scroll owner and every row stays reachable even when the

@@ -318,8 +318,16 @@ export function TerminalTicketRailDemo() {
         projects={[
           { id: 'demo', name: 'Demo project' },
           { id: 'docs', name: 'Documentation and release planning' },
+          { id: 'site', name: 'Marketing site' },
+          { id: 'remote:mini', name: 'Mac mini · Demo project' },
         ]}
         selectedProjectId="demo"
+        // Minimized projects leave the switcher's top level for its Minimized Projects submenu, drawn
+        // like Restore Project rows (HS2-2609BW, HS2-R64JXA).
+        minimizedProjects={[
+          { id: 'site', name: 'Marketing site', location: 'local', upNextCount: 3, activeTicketCount: 1 },
+          { id: 'remote:mini', name: 'Mac mini · Demo project', location: 'remote', notificationCount: 2 },
+        ]}
         views={[
           { id: 'all', label: 'Queue' },
           { id: 'backlog', label: 'Backlog' },

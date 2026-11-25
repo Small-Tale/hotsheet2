@@ -74,6 +74,7 @@ import { type WorkspaceViewMode } from '../components/workspace-header';
 import type { ConfirmationWorkflow } from '../confirmation';
 import { syncConversationScroll } from '../conversation-scroll';
 import { draftFiles } from '../draft-file-recovery';
+import { featureOn } from '../feature-areas';
 import type { NotWorkingTarget, PendingEvidence, Project, UnhealthyServerRecovery } from '../interactions/types';
 import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSources } from '../new-ticket-source';
 import type { DesktopRemoteDiscovery, DesktopRemotePairing, DesktopRemoteServer } from '../remote-projects/client';
@@ -252,7 +253,8 @@ export interface HotSheetAppDependencies {
   unhealthyServerRecoveryBusy: Signal<boolean>;
   viewMode: Signal<WorkspaceViewMode>;
   workspaceSearchActive: () => boolean;
-  workspaceTerminalGroups: () => TerminalDashboardGroup[];
+  /** The projects a scope's workspace lists: minimized ones only when it shows them (HS2-W1XEH7). */
+  terminalScopeGroups: (scope: string) => TerminalDashboardGroup[];
 }
 
 /**
@@ -400,7 +402,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     unhealthyServerRecoveryBusy,
     viewMode,
     workspaceSearchActive,
-    workspaceTerminalGroups,
+    terminalScopeGroups,
   } = dependencies;
   let renderedTicketCollectionKey = initialRenderedTicketCollectionKey;
   function HotSheetApp() {
@@ -592,7 +594,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           open={Boolean(visibilityScope)}
           state={terminalVisibility.value}
           scope={visibilityScope ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE}
-          groups={workspaceTerminalGroups()}
+          groups={terminalScopeGroups(visibilityScope ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE)}
+          chatFeatureOn={featureOn('ai-chat')}
           contextMenu={terminalVisibilityContextMenu.value}
         />
         <TerminalVisibilityNameDialog prompt={terminalVisibilityNamePrompt.value} />

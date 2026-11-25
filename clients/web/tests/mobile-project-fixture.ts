@@ -98,6 +98,8 @@ export async function openDemoProject(
     pollDown?: () => boolean;
     /** Extra fields of the `projects/open` answer, such as banner triggers (HS2-YCB15Z). */
     openExtras?: Record<string, unknown>;
+    /** The `GET /feature-settings` answer; every feature area is on when omitted (HS2-4TKASN). */
+    featureSettings?: unknown;
   } = {},
 ) {
   let repositoryInitialized = false;
@@ -193,7 +195,8 @@ export async function openDemoProject(
     if (path.startsWith('/__hotsheet/remote-auth/owner') && populated.remoteAuthOwner)
       return populated.remoteAuthOwner(route);
     // HS2-3GJZGG: these specs exercise the features themselves, so every feature area is on.
-    if (path.endsWith('/feature-settings')) return route.fulfill({ json: allFeaturesOn() });
+    if (path.endsWith('/feature-settings'))
+      return route.fulfill({ json: populated.featureSettings ?? allFeaturesOn() });
     if (path.endsWith('/standby-settings') && populated.standbySettings)
       return route.fulfill({
         json:

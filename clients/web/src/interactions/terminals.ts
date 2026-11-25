@@ -69,15 +69,16 @@ import { type TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
   addTerminalVisibilityGroup,
+  projectVisibilityToggleTarget,
   removeTerminalVisibilityGroup,
   renameTerminalVisibilityGroup,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
-  setTerminalTypeVisibleInGroup,
+  setShowMinimizedInGroup,
   setTerminalVisibleInGroup,
-  TERMINAL_VISIBILITY_TYPES,
   type TerminalVisibilityState,
   type TerminalVisibilityType,
+  toggleEffectiveTerminalTypeInGroup,
 } from '../terminal-visibility';
 import { wireTopLayerOverlays } from '../top-layer-overlay';
 import { data } from './dom';
@@ -107,7 +108,10 @@ export interface TerminalInteractionsDependencies {
   readonly terminalVisibilityContextMenu: Signal<{ id: string; x: number; y: number } | undefined>;
   readonly terminalVisibilityDialogScope: Signal<string | undefined>;
   readonly terminalVisibilityNamePrompt: Signal<TerminalVisibilityNamePrompt | undefined>;
-  readonly terminalKeysForVisibilityDialog: () => string[];
+  readonly terminalKeysForVisibilityDialog: (projectId?: string) => string[];
+  /** The item types a scope's visibility dialog offers (HS2-4TKASN). */
+  readonly terminalAvailableTypes: (scope: string) => readonly TerminalVisibilityType[];
+  readonly terminalVisibleTypes: (scope: string) => readonly TerminalVisibilityType[];
   readonly openGridAIChat: (projectId: string, chatId: string) => void;
   readonly setTerminalDrawerVisible: (visible: boolean, refresh?: boolean) => void;
   readonly terminalDrawerVisible: Signal<boolean>;
@@ -216,6 +220,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,
     terminalKeysForVisibilityDialog,
+    terminalAvailableTypes,
+    terminalVisibleTypes,
     openGridAIChat,
     setTerminalDrawerVisible,
     terminalDrawerVisible,
@@ -817,10 +823,14 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalVisibilityType.selector, (_event, target) => {
       const scope = terminalVisibilityDialogScope.value,
         type = data(target).visibilityType as TerminalVisibilityType | undefined;
-      if (!scope || !type || !TERMINAL_VISIBILITY_TYPES.includes(type)) return;
+      const available = scope ? terminalAvailableTypes(scope) : [];
+      if (!scope || !type || !available.includes(type)) return;
+      // Toggle from what the workspace applies, so a fallback type releases cleanly (HS2-4TKASN).
       const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
-        visible = active.hiddenTypes?.includes(type) ?? false;
-      persistTerminalVisibility(setTerminalTypeVisibleInGroup(terminalVisibility.value, active.id, type, visible));
+        visible = !terminalVisibleTypes(scope).includes(type);
+      persistTerminalVisibility(
+        toggleEffectiveTerminalTypeInGroup(terminalVisibility.value, active.id, type, available),
+      );
       const magnified = terminalSession(magnifiedTerminalKey.value);
       if (!visible && magnified && (magnified.kind === 'ai' ? 'ai' : 'shell') === type)
         magnifiedTerminalKey.value = undefined;
@@ -925,6 +935,40 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
         visible = active.hiddenKeys.includes(key);
       persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, visible));
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'change',
+      TERMINALS_ACTIONS.toggleTerminalVisibilityShowMinimized.selector,
+      (_event, target) => {
+        const scope = terminalVisibilityDialogScope.value;
+        if (!scope) return;
+        // Remembered per workspace with its other visibility choices (HS2-W1XEH7).
+        const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope);
+        persistTerminalVisibility(
+          setShowMinimizedInGroup(terminalVisibility.value, active.id, (target as HTMLInputElement).checked),
+        );
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalVisibilityProject.selector, (_event, target) => {
+      const scope = terminalVisibilityDialogScope.value,
+        projectId = data(target).projectId;
+      if (!scope || !projectId) return;
+      // Any hidden listed item shows the project's listed items; otherwise all hide (HS2-HC67SP).
+      const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+        keys = terminalKeysForVisibilityDialog(projectId);
+      persistTerminalVisibility(
+        setAllTerminalsVisibleInGroup(
+          terminalVisibility.value,
+          active.id,
+          keys,
+          projectVisibilityToggleTarget(keys, active.hiddenKeys),
+        ),
+      );
     }),
   );
   lifetime.add(

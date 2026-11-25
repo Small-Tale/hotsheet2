@@ -45,6 +45,8 @@ export const TERMINALS_ACTIONS = {
   cancelTerminalVisibilityName: action('cancel-terminal-visibility-name'),
   toggleTerminalVisibility: action('toggle-terminal-visibility'),
   toggleTerminalVisibilityType: action('toggle-terminal-visibility-type'),
+  toggleTerminalVisibilityProject: action('toggle-terminal-visibility-project'),
+  toggleTerminalVisibilityShowMinimized: action('toggle-terminal-visibility-show-minimized'),
   openTerminalProject: action('open-terminal-project'),
   openGridAiChat: action('open-grid-ai-chat'),
   toggleTerminalDrawer: action('toggle-terminal-drawer'),

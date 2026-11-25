@@ -246,12 +246,8 @@ export function minimizeDemoProjectTab(id: string): void {
 }
 
 function demoMinimizedProjects() {
-  return projectTabs.value
-    .filter((tab) => minimizedProjectTabs.value.includes(tab.id))
-    .map((tab) => ({
-      id: tab.id,
-      name: tab.name,
-    }));
+  // A Restore Project row carries its tab's status, as the app passes it (HS2-R64JXA).
+  return projectTabs.value.filter((tab) => minimizedProjectTabs.value.includes(tab.id));
 }
 
 export function closeOtherProjectTabs(id: string): void {
@@ -350,6 +346,34 @@ export function ProjectTabBarDemo() {
         <ProjectTabBar
           tabs={projectTabs.value.filter((tab) => !minimizedProjectTabs.value.includes(tab.id))}
           minimizedProjects={demoMinimizedProjects()}
+          mode={shellMode.value}
+        />
+      </CatalogExample>
+      {/* Restore Project rows reuse the project tab's location icon and status indicators (HS2-R64JXA)
+          inside the default popup inset (HS2-7DWS3S). */}
+      <CatalogExample
+        label="Restore Project Menu"
+        note="Open Minimized Projects: active work, a remote project, a disconnected remote, attention, notifications, and a duplicate name."
+        viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}
+      >
+        <ProjectTabBar
+          tabs={[{ id: 'restore-demo-open', name: 'Hot Sheet 2', location: 'local', selected: true }]}
+          label="Open Projects with Minimized Projects"
+          minimizedProjects={[
+            { id: 'restore-demo-active', name: 'Overview', location: 'local', upNextCount: 2, activeTicketCount: 3 },
+            { id: 'restore-demo-queue', name: 'Orchestration', location: 'local', upNextCount: 5 },
+            { id: 'restore-demo-remote', name: 'Build host · Domotion', location: 'remote', activeTicketCount: 1 },
+            { id: 'restore-demo-offline', name: 'Build host · Vitween', location: 'remote', disconnected: true },
+            {
+              id: 'restore-demo-attention',
+              name: 'AI Playbook',
+              location: 'local',
+              attention: true,
+              attentionLabel: 'An AI session needs your attention',
+              notificationCount: 2,
+            },
+            { id: 'restore-demo-duplicate', name: 'Apple FM', location: 'local', description: '/work/apple-fm' },
+          ]}
           mode={shellMode.value}
         />
       </CatalogExample>
