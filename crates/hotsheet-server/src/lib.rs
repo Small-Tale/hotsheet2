@@ -1303,6 +1303,12 @@ impl AppState {
         self.permissions.clone()
     }
 
+    /// Record every journaled human-feedback delivery of the hosted stores (HS2-5TE2TG); run
+    /// once after startup hosting. Returns how many stores had journaled deliveries.
+    pub fn reconcile_feedback_deliveries(&self) -> usize {
+        crate::routes::feedback_session::reconcile_hosted_deliveries(self)
+    }
+
     /// The `(url-id, root-path)` of every hosted store — the set the background sync loop
     /// iterates (sync, Trash purge, distributed work), sorted by id. Read from the store
     /// registry alone: the loops open each store themselves, so parsing every ticket just

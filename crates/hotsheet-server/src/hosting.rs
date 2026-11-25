@@ -147,6 +147,16 @@ impl AppState {
         };
         self.host.register(entry.clone());
         prewarm_corrupt_tickets(entry.clone());
+        // HS2-5TE2TG: a delivery journaled before a restart is recorded once its store is hosted.
+        {
+            let state = self.clone();
+            let hosted = entry.clone();
+            let _ = std::thread::Builder::new()
+                .name("feedback-journal-reconcile".into())
+                .spawn(move || {
+                    crate::routes::feedback_session::reconcile_hosted_store(&state, &hosted);
+                });
+        }
         let project = store.root().display().to_string();
         let rule_path = {
             let paths = self.permission_rule_paths.lock_or_recover();

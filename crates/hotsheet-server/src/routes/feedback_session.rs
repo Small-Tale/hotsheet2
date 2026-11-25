@@ -313,6 +313,34 @@ fn reconcile_store(state: &AppState, entry: &StoreEntry) {
     }
 }
 
+/// Record every journaled delivery of every hosted store (HS2-5TE2TG). A sent entry whose
+/// activity note failed was otherwise recorded only on a retry for that note or the next
+/// successful delivery to its store, so its ticket could lack the record indefinitely. Run once
+/// the server has hosted its stores at startup, and for a store hosted later. Returns how many
+/// stores had journaled deliveries.
+pub(crate) fn reconcile_hosted_deliveries(state: &AppState) -> usize {
+    let journal = journal(state);
+    let mut stores = 0;
+    for (id, _) in state.host.locations() {
+        let Some(entry) = state.host.get(&id) else {
+            continue;
+        };
+        if journal.for_store(entry.store.root()).is_empty() {
+            continue;
+        }
+        stores += 1;
+        reconcile_store(state, &entry);
+    }
+    stores
+}
+
+/// Record the journaled deliveries of one store that was just hosted (HS2-5TE2TG).
+pub(crate) fn reconcile_hosted_store(state: &AppState, entry: &StoreEntry) {
+    if !journal(state).for_store(entry.store.root()).is_empty() {
+        reconcile_store(state, entry);
+    }
+}
+
 /// Admit one delivery of `note_id`, or explain why it was refused. A journal entry left by an
 /// earlier attempt (a failed activity write, or a restart mid-send) is reconciled here and
 /// never resent (HS2-WKRFD5).
@@ -1065,6 +1093,66 @@ mod tests {
             .with_machine_home(dir.join("home"));
         let entry = state.default_entry();
         (state, entry, ticket.id)
+    }
+
+    /// HS2-5TE2TG: a restart records every journaled delivery of a hosted store without any
+    /// retry or later delivery: a sent entry as notified, a mid-send entry as uncertain. An
+    /// entry of a store this server does not host waits for that store, and a second pass
+    /// changes nothing. Synthetic tickets only.
+    #[test]
+    fn hs2_5te2tg_startup_records_journaled_deliveries_of_hosted_stores_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let (state, entry, ticket_id) = journaled_state(dir.path());
+        let journal = journal(&state);
+        let (sent, sending, elsewhere) = (
+            Ulid::new().to_string(),
+            Ulid::new().to_string(),
+            Ulid::new().to_string(),
+        );
+        for (note, state_now, root) in [
+            (&sent, JournalState::Sent, entry.store.root().to_path_buf()),
+            (
+                &sending,
+                JournalState::Sending,
+                entry.store.root().to_path_buf(),
+            ),
+            (
+                &elsewhere,
+                JournalState::Sent,
+                dir.path().join("not-hosted.hs2"),
+            ),
+        ] {
+            journal
+                .write(&JournalEntry {
+                    note_id: note.clone(),
+                    ticket_id: ticket_id.to_string(),
+                    store_root: root,
+                    connection_id: "drive-1".into(),
+                    state: state_now,
+                })
+                .unwrap();
+        }
+        // The server restarts: nothing retries these notes and nothing else is delivered.
+        let restarted = state.clone().with_machine_home(dir.path().join("home"));
+        restarted
+            .feedback_notification_reservations
+            .lock_or_recover()
+            .clear();
+        assert_eq!(restarted.reconcile_feedback_deliveries(), 1);
+        let ticket = entry.store.read_ticket(&ticket_id).unwrap();
+        assert!(delivery_recorded(&ticket, &sent));
+        assert!(delivery_recorded(&ticket, &sending));
+        assert!(journal.read(&sent).unwrap().is_none());
+        assert!(journal.read(&sending).unwrap().is_none());
+        // The unhosted store's entry stays for when that store is hosted.
+        assert!(journal.read(&elsewhere).unwrap().is_some());
+        // A second pass has nothing left to do and writes no duplicate note.
+        let notes = ticket.notes.len();
+        assert_eq!(restarted.reconcile_feedback_deliveries(), 0);
+        assert_eq!(
+            entry.store.read_ticket(&ticket_id).unwrap().notes.len(),
+            notes
+        );
     }
 
     #[tokio::test]

@@ -424,6 +424,12 @@ async fn main() -> Result<()> {
     if extra > 0 {
         println!("hosting {extra} configured store(s) from stores.json");
     }
+    // HS2-5TE2TG: record deliveries journaled before this restart (the primary store included;
+    // a configured store also reconciles as it is hosted).
+    {
+        let state = state.clone();
+        tokio::task::spawn_blocking(move || state.reconcile_feedback_deliveries());
+    }
     // Terminals that survived a restart in the broker get their session monitors back, so an
     // ended session still releases its claims (HS2-RXWXQ8).
     hotsheet_server::resume_broker_terminal_sessions(&state).await;
