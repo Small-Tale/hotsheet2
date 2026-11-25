@@ -7001,7 +7001,11 @@ A ready card's **Why It Is Not Running** reads the scheduler's own explanation
 **Scheduler** says what the last pass decided ("Waits: the project's session limit is
 reached (last pass 14:02)") and **Next** when it looks again: the retry time a held
 resource's expiry or a backoff gives, or when something it waits on changes. Until it
-is read, the scheduler's last logged reason for the step stands in.
+is read, the scheduler's last logged reason for the step stands in. Every reason is in
+words, never a code (HS2-2Y535C): with no saved policy it says "Waits: no policy is
+saved yet; apply one in Settings › Orchestration", and a policy block names the limit
+that denied it ("the policy does not allow it (the machine's session limit is
+reached)"). A source policy test fails on a scheduler reason with no words.
 
 With no card selected, the inspector shows the **overview** (answer A): the
 orchestration project's name, then **Scheduler** (placement: automatic, paused or a
