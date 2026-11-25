@@ -1254,6 +1254,12 @@ starts these followers at start for every owner whose plan names target tickets,
 when a step is defined or refreshed; a finished or removed step names nothing, and a
 target with nothing left to follow is not contacted.
 
+**Targets followed for new tickets (HS2-BQN0M5).** While the default goal is
+re-planned automatically (§26.25), every active project target is followed as well,
+acting as the scheduler's actor. An event for an open ticket that no step names starts
+one background Update Plan. When the re-plan stops applying, a target with nothing
+else to follow is no longer contacted.
+
 **Session changes on the same feed (HS2-257Q2Z).** When a session an orchestrator
 started exits or finishes a turn, its hosting server publishes that on its change
 stream for the session's checkout, and the hosted feed lists it under `sessions`
@@ -5569,8 +5575,47 @@ and explicit dependencies, priority, etc, in mind)".
   from all open tickets.
 - **New tickets later.** A ticket created in a target after the plan was proposed is
   planned by the next **Update Plan**, which re-plans the default goal beside the
-  running plan (HS2-190RDX). Automatic re-planning when a target reports a new ticket,
-  on the target's change events and never by polling, is HS2-BQN0M5.
+  running plan (HS2-190RDX). While orchestration runs this happens on its own
+  (HS2-BQN0M5, below).
+
+#### Automatic re-planning on a new target ticket (HS2-BQN0M5)
+
+The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatically.
+
+- **When.** The re-plan applies while the owner orchestrates, its placement is on (the
+  scheduler has an acting actor; Auto counts once the live plan has a step), and the
+  open goals are only the standing default goal. An explicit goal, closing the
+  default goal, or pausing placement turns it off.
+- **Followed.** While it applies, a server follows every active project target (not a
+  further site) on its change feed, the same bounded long-poll request with cursor
+  replay and backoff as §26.9, including a target that no step names yet. No timer
+  and no polling is involved.
+- **Trigger.** A ticket event for a ticket that no unfinished step names and no
+  unfinished run works is read through the gate (`tickets_read`). If the ticket is open
+  (any status except completed, verified, archive, deleted or moved), it becomes
+  _pending_. The event for a ticket that is created or reopened is what starts a
+  re-plan. A handshake, an `overflow` or a reconnect cannot say which tickets are new,
+  so it starts nothing. An event that names no ticket (a store reconciliation) starts
+  nothing either.
+- **Coalesced.** All pending tickets go into one background **Update Plan**. That
+  includes a burst on one page, and the tickets of later pages while an update still
+  drafts. A pending ticket is settled once a step names it, or once a plan update
+  newer than the one it saw started, since that planner saw the ticket.
+- **Respecting the planner.** A drafting update is never interrupted. A planner still
+  at work on another proposal is not given one: the update is deferred and asked again
+  on the follower's next step, which is its next long-poll answer, once the planner is
+  free. The update reuses the newest planner's tool, model and effort, and acts as the
+  scheduler's actor. Without any planner nothing is started; a person's next press
+  starts one.
+- **Once per ticket.** A ticket handed to a re-plan starts no further one while it
+  stays open, even when the planner chose to leave it out (held for a person, or
+  live-claimed elsewhere). Closing it forgets it, so reopening it re-plans once more.
+  An automatic update that fails or is cancelled is not retried for the same tickets.
+  The memory is per follower and in process, so after a server restart a skipped open
+  ticket can start one more update on its next change.
+- **Audit.** Each automatic update is audited as `plan_update_auto` (with
+  `plan_update_started`, `plan_update_existing` or the refusal reason) instead of
+  `plan_update`. Its finish and cancel are audited as for any update.
 
 ### A planner asks instead of stalling (HS2-N5BDE4)
 
@@ -5701,7 +5746,8 @@ re-plans in the background; nothing pauses.
   draft. The planner's tab stays open; its later draft writes are refused with
   `plan_update_not_open`. Pausing stays available, but re-planning never needs it.
 - **Audit.** `plan_update` (`plan_update_started`, `plan_update_existing` or the
-  refusal), `plan_update_apply` (`plan_update_applied`, or the failure reason) and
+  refusal; `plan_update_auto` instead for one a new target ticket started,
+  HS2-BQN0M5), `plan_update_apply` (`plan_update_applied`, or the failure reason) and
   `plan_update_cancel`. Unknown ids are `plan_update_not_found` (404); acting on an
   update that is not drafting is `plan_update_not_open` (409).
 
