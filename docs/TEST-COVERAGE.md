@@ -916,6 +916,16 @@ attention, disconnected, notification, partial counts, operation); and
 local project whose workers claim tickets over its live stream, and a minimized remote
 project, then asserts the menu's work badge, ring, and cloud at wide, medium, narrow,
 and wide again in light and dark (Chromium and WebKit), and the restored remote tab's cloud.
+HS2-2609BW covers the workspace grid rail's project switcher: `terminal-ticket-rail.test.ts`
+checks `terminalRailProjectMenuItems` with no minimized projects (direct checked rows, no group),
+with minimized projects (open rows, divider, final Minimized Projects submenu reusing the Restore
+Project row's icon, status, and description), the checked row and group when the rail shows a
+minimized project, and the all-minimized case; `rail-project-switcher-minimized.spec.ts` minimizes
+two projects through Minimize Tab in the shipped app, opens the submenu, picks a minimized project
+by pointer and another by keyboard (End, ArrowRight, ArrowDown, Enter), asserts the rail switches
+without restoring the tabs, and that restoring both removes the group, with captures at wide,
+medium, narrow, and wide again in light and dark (Chromium and WebKit). The UX demo's
+TerminalTicketRail shows two minimized projects and `ux-demo.spec.ts` opens its submenu.
 
 HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
 the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the

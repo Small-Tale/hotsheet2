@@ -521,7 +521,12 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           workspacePresentation="edge-to-edge"
           inspector={
             shellMode.value === 'terminals'
-              ? terminalRailSurfacePanel(terminalRailSurfaceProps())
+              ? (() => {
+                  // The rail's project switcher lists minimized projects under its own submenu with
+                  // their tab status, as the Restore Project menu draws them (HS2-2609BW).
+                  const { rail } = terminalRailSurfaceProps();
+                  return terminalRailSurfacePanel({ rail: { ...rail, minimizedProjects } });
+                })()
               : statsInspectorPanel()
           }
           inspectorVisible={!inspectorCollapsed.value}

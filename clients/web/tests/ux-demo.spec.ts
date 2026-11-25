@@ -1780,11 +1780,12 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   // selector before the standard toggle, above the pinned controls and the scrolling ticket list.
   const panel = page.getByRole('region', { name: 'Interactive', exact: true }),
     rail = page.locator('[data-component="terminal-ticket-rail"]'),
-    project = panel.locator('kui-select[name="terminal-rail-project"]'),
+    project = panel.locator('[data-terminal-rail-project]'),
     view = rail.locator('kui-select[name="terminal-rail-view"]'),
     launcher = rail.locator('[data-component="quick-ticket-composer-launcher"]');
   await expect(rail).toBeVisible();
-  await expect(project).toHaveAttribute('value', 'demo');
+  // The project switcher is a PopupMenu naming the selected project (HS2-2609BW).
+  await expect(project).toHaveAttribute('data-terminal-rail-project', 'demo');
   await expect(view).toHaveAttribute('value', 'all');
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
   await expect(launcher).toContainText('Ticket…');
@@ -1803,7 +1804,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
       search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
-      project = document.querySelector('kui-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
+      project = document.querySelector('[data-terminal-rail-project]')!.getBoundingClientRect(),
       projectChrome = getComputedStyle(
         document.querySelector<HTMLElement>('[data-catalog-example-viewport] [data-nav-stack-chrome] .kui-toolbar')!,
       ),
@@ -1877,14 +1878,14 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     node.scrollTop = 0;
   });
   await rail.screenshot({ path: 'target/visual-captures/hs2-r292m4-terminal-ticket-rail-wide.png' });
-  await project.click();
-  const longProject = project.locator('.kui-select__option[data-value="docs"]');
+  await project.getByRole('button', { name: 'Demo project' }).click();
+  const longProject = project.getByRole('menuitemcheckbox', { name: 'Documentation and release planning' });
   await expect(longProject).toBeVisible();
   const menuGeometry = await project.evaluate((node) => {
-    const listbox = node.querySelector<HTMLElement>('.kui-select__popup')!,
+    const listbox = node.querySelector<HTMLElement>('[role="menu"]')!,
       listboxBox = listbox.getBoundingClientRect(),
-      option = node.querySelector<HTMLElement>('.kui-select__option[data-value="docs"]')!,
-      label = option.querySelector<HTMLElement>('.kui-select__option-label')!;
+      option = node.querySelector<HTMLElement>('[role="menuitemcheckbox"][data-project-id="docs"]')!,
+      label = option.querySelector<HTMLElement>('.kui-popup-menu__item-label')!;
     return {
       triggerWidth: node.getBoundingClientRect().width,
       listboxWidth: listboxBox.width,
@@ -1906,6 +1907,13 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     path: 'target/visual-captures/hs2-fpftyy-terminal-ticket-rail-project-menu-wide.png',
     fullPage: true,
   });
+  // HS2-2609BW: the demo's minimized projects sit only in the final Minimized Projects submenu.
+  await expect(project.locator(':scope > [role="menu"] > [data-project-id="site"]')).toHaveCount(0);
+  await project.locator('[data-rail-minimized-projects="true"]').hover();
+  await expect(project.locator('[data-project-id="site"]')).toBeVisible();
+  await expect(project.locator('[data-project-id="remote:mini"] [data-lucide="cloud"]')).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-2609bw-terminal-ticket-rail-minimized-submenu.png' });
+  await page.keyboard.press('Escape');
   // HS2-7N6F67: the compact view selector must not clip its longer option labels either.
   await page.keyboard.press('Escape');
   await view.click();
@@ -10704,7 +10712,7 @@ test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one 
     await back.click();
     await expect(root).toHaveAttribute('data-nav-active', 'true');
     await expect(pushed).toHaveCount(0);
-    await expect(rail.locator('kui-select[name="terminal-rail-project"]')).toBeVisible();
+    await expect(rail.locator('[data-terminal-rail-project]')).toBeVisible();
     await page.screenshot({ path: `target/visual-captures/hs2-fy06n4-rail-root-${width}.png` });
   }
 });

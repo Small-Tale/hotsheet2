@@ -179,9 +179,16 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'kui-select[name="terminal-rail-project"]', (_event, target) => {
-      selectTerminalRailProject((target as Control).value);
-    }),
+    // The rail's project PopupMenu rows, including its Minimized Projects submenu (HS2-2609BW).
+    delegate(
+      document.body,
+      'click',
+      NAVIGATION_AND_TABS_ACTIONS.selectTerminalRailProject.selector,
+      (_event, target) => {
+        const id = data(target).projectId;
+        if (id) selectTerminalRailProject(id);
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'change', 'kui-select[name="terminal-rail-view"]', (_event, target) => {

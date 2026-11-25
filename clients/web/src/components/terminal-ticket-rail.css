@@ -2,7 +2,7 @@
    (HS2-FY06N4); the stack fills it and owns the toolbar row, pinned header, and scrolling view.
    The composed WorkspaceControls, TicketSearchField, QuickTicketLauncher, and NotificationCenter
    take their rail presentation through their own props (HS2-8FS5BJ); this module styles only its
-   own wrappers and the className hook it passes to its project Select. */
+   own wrappers and the className hook it passes to its view Select. */
 .terminal-ticket-rail {
   display: grid;
   width: 100%;
@@ -10,12 +10,6 @@
   min-height: 0;
   overflow: hidden;
   background: var(--wa-color-surface-default);
-}
-/* Kerf beta.60 public tokens: the project Select in the root view's toolbar (HS2-FY06N4) reads its
-   selected name at body size in the normal text color. */
-.terminal-ticket-rail__project {
-  --kui-select-selected-color: var(--wa-color-neutral-on-normal);
-  --kui-select-selected-font-size: var(--wa-font-size-m);
 }
 /* Public Select tokens give the view-title Select its large bold name; maxTriggerWidth caps its label. */
 .terminal-ticket-rail__view {

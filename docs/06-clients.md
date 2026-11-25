@@ -3855,7 +3855,12 @@ the leading edge of the dashboard toolbar.
 The dashboard keeps a resizable right ticket rail open by default and allows it to be hidden
 and restored from the dashboard toolbar. That rail reuses the selected project's list and
 notification views, compact workspace actions, content-sized project selector, and quick-ticket
-launcher; board and settings modes are deliberately absent. Its view heading ends with the same
+launcher; board and settings modes are deliberately absent. The project selector is a Kerf
+`PopupMenu` whose rows are checked choices (HS2-2609BW): it lists the open, non-minimized projects
+directly and, only while any project is minimized, ends with a **Minimized Projects** item whose
+submenu lists them with the Restore Project row presentation (tab name, folder or cloud icon, and
+trailing status). Choosing a minimized project there switches the rail to it without restoring its
+tab, as the selector always did; the Restore Project menu remains the way to restore a tab. Its view heading ends with the same
 quiet separator used at the top of ticket collections, clearly dividing the white header from the
 lowered scrolling ticket surface. The ticket collection keeps its intrinsic height inside that
 surface so the rail remains the vertical scroll owner and every row stays reachable even when the

@@ -6883,11 +6883,11 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(page.locator('[data-component="terminal-dashboard"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const rail = page.locator('#app-right-rail'),
-    projectSelect = page.locator('#app-right-rail kui-select[name="terminal-rail-project"]'),
+    projectSelect = page.locator('#app-right-rail [data-terminal-rail-project]'),
     viewSelect = rail.locator('kui-select[name="terminal-rail-view"]'),
     launcher = rail.locator('[data-component="quick-ticket-composer-launcher"]');
   await expect(rail).toBeVisible();
-  await expect(projectSelect).toHaveAttribute('value', 'demo-checkout');
+  await expect(projectSelect).toHaveAttribute('data-terminal-rail-project', 'demo-checkout');
   await expect(projectSelect.locator('xpath=..')).toHaveAttribute('data-component', 'toolbar-control-group');
   await expect(viewSelect).toHaveAttribute('value', 'all');
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
@@ -6901,7 +6901,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
       search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
-      project = document.querySelector('kui-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
+      project = document.querySelector('[data-terminal-rail-project]')!.getBoundingClientRect(),
       hide = document.querySelector<HTMLElement>('[aria-label="Hide ticket rail"]')!.getBoundingClientRect(),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       // Kerf Button owns the fill inside the app-owned drop shell.
