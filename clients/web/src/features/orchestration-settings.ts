@@ -89,7 +89,10 @@ export interface OrchestrationSettingsState {
   loading: boolean;
   /** The last failure, until the next successful change or read. */
   message: string;
-  /** The last success, for the polite status line. */
+  /**
+   * The last success. HS2-1K6122: it is announced through the app's toast when it is set and is
+   * never rendered inline; the state keeps it as the record of the last change.
+   */
   status: string;
   /** Targets, sessions, `add` or `policy` with a change in flight. */
   busy: readonly string[];
@@ -163,6 +166,8 @@ export interface OrchestrationSettingsDependencies {
   showInspector: () => void;
   /** Run after a microtask, for settling the open flow; tests run it at once. */
   defer?: (run: () => void) => void;
+  /** HS2-1K6122: the app's toast, which announces each change's outcome. */
+  notify?: (message: string) => void;
 }
 
 const messageOf = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
@@ -226,6 +231,8 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
   const stateOf = (projectId: string): OrchestrationSettingsState => settings.value[projectId] ?? EMPTY;
   const put = (projectId: string, change: Partial<OrchestrationSettingsState>) => {
     settings.value = { ...settings.value, [projectId]: { ...stateOf(projectId), ...change } };
+    // HS2-1K6122: a change's outcome is a toast, never an inline status line.
+    if (change.status) dependencies.notify?.(change.status);
   };
   const busy = (projectId: string, key: string, on: boolean) => {
     const list = stateOf(projectId).busy.filter((item) => item !== key);

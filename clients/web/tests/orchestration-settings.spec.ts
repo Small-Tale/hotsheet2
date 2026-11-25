@@ -211,7 +211,7 @@ test('HS2-W27N1D Project Type adds the Orchestration category, which adds, detai
     await redo.click();
     await expect(redo).toBeChecked();
     await policy.getByRole('button', { name: 'Apply Policy' }).click();
-    await expect(settings.getByRole('status')).toContainText('Policy saved.');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Policy saved.' })).toBeVisible();
     const stored = await server.request<{
       policy: { machine: { max_sessions: number }; speculation: { redo_reopened: boolean } };
     }>(`${base}/policy`);
@@ -544,7 +544,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     await limits.scrollIntoViewIfNeeded();
     await capture('limits-draft-1440');
     await limits.getByRole('button', { name: 'Apply Limits' }).click();
-    await expect(settings.getByRole('status')).toContainText('Limits for Web saved.');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Limits for Web saved.' })).toBeVisible();
     let stored = await server.request<Stored>(`${base}/policy`);
     expect(stored.policy.targets.map((entry) => entry.target_id)).toEqual([targets.Docs, targets.Web]);
     expect(stored.policy.targets[1]).toMatchObject({
@@ -617,7 +617,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     await account.scrollIntoViewIfNeeded();
     await capture('policy-account-1440');
     await policy.getByRole('button', { name: 'Apply Policy' }).click();
-    await expect(settings.getByRole('status')).toContainText('Policy saved.');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Policy saved.' })).toBeVisible();
     stored = await server.request<Stored>(`${base}/policy`);
     expect(stored.policy.tools[0].accounts).toEqual([{ account: 'team', max_sessions: 1, budget_cents_per_day: 1250 }]);
     // The project entries the policy form does not show are unchanged.
@@ -719,12 +719,7 @@ test('HS2-N3HWP9 tool Sessions and Weight show Auto when empty and store 0 to tu
     }
     await policy.getByRole('button', { name: 'Apply Policy' }).click();
     // With no project added the empty state is a status too; find the save message by its words.
-    await expect(
-      page
-        .locator('[data-component="orchestration-settings"]')
-        .getByRole('status')
-        .filter({ hasText: 'Policy saved.' }),
-    ).toBeVisible();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Policy saved.' })).toBeVisible();
     const stored = await server.request<{ policy: { tools: Record<string, unknown>[] } }>(`${base}/policy`);
     expect(stored.policy.tools[0]).toMatchObject({ max_sessions: 0 });
     expect(stored.policy.tools.every((tool) => !('weight' in tool))).toBe(true);
@@ -946,7 +941,7 @@ test('HS2-92FJXM a remote orchestration project adds the projects open on its se
     await capture('menu-1440');
     // Choosing Web adds it through the hosted route; the server binds it there.
     await menu.getByRole('menuitemcheckbox', { name: 'Web' }).click();
-    await expect(settings.getByText('Web added.')).toBeVisible();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Web added.' })).toBeVisible();
     expect(posted).toEqual([`${base}/hosted-projects`]);
     await expect(settings.locator('[data-orchestration-project]').filter({ hasText: 'Web' })).toBeVisible();
     const hosted = await server.request<{ checkout_id: string; added: boolean }[]>(`${base}/hosted-projects`);
@@ -956,7 +951,7 @@ test('HS2-92FJXM a remote orchestration project adds the projects open on its se
     await expect(menu.getByRole('menuitemcheckbox', { name: 'Web' })).toBeChecked();
     await capture('menu-added-1440');
     await menu.getByRole('menuitemcheckbox', { name: 'Web' }).click();
-    await expect(settings.getByText('Web is already added.')).toBeVisible();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Web is already added.' })).toBeVisible();
     for (const [index, size] of [{ width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
       await page.setViewportSize(size);
       if (size.width === 390) {
@@ -1032,7 +1027,7 @@ test('HS2-0G80WD a remote orchestration project stops orchestrating a project af
     // Confirmed: removed through the hosted route on the serving machine.
     await page.getByRole('button', { name: 'Stop Orchestrating', exact: true }).click();
     await expect(webRow).toHaveCount(0);
-    await expect(settings.getByText('Web removed.')).toBeVisible();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Web removed.' })).toBeVisible();
     expect(posted).toContain(`DELETE ${base}/hosted-projects/${added.target_id}`);
     const declared = await server.request<{ targets: { label: string; state: string }[] }>(`${base}/targets`);
     expect(declared.targets.map((target) => `${target.label}:${target.state}`)).toEqual(['Web:removed']);
@@ -1508,8 +1503,18 @@ test('HS2-E9VVQF adds and separates sites from Settings and asks only for a dupl
     // Docs, of the same store: declared and bound as a site of Widgets in one step.
     submenu = await openSites();
     await submenu.getByRole('menuitem', { name: /Docs/ }).click();
-    await expect(settings.getByRole('status')).toHaveText('Docs added as a site of Widgets.');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Docs added as a site of Widgets.' })).toBeVisible();
     await expect(settings.getByRole('alert')).toHaveCount(0);
+    // HS2-1K6122: the outcome is the toast; nothing about it is inlined under + Add Project.
+    await expect(settings.getByText('Docs added as a site of Widgets.')).toHaveCount(0);
+    await page.waitForFunction(() =>
+      document
+        .getAnimations()
+        .every(
+          (animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity,
+        ),
+    );
+    await page.screenshot({ path: test.info().outputPath('hs2-1k6122-site-added-toast.png') });
     expect(await declared()).toEqual(['Widgets', 'Docs < Widgets']);
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(1)).toContainText('Site of Widgets');
@@ -1525,7 +1530,7 @@ test('HS2-E9VVQF adds and separates sites from Settings and asks only for a dupl
     });
     await siteMenu.getByRole('menuitem', { name: 'Separate from Widgets' }).click();
     // No confirmation: the grouping is undone at once.
-    await expect(settings.getByRole('status')).toHaveText('Docs is its own project again.');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Docs is its own project again.' })).toBeVisible();
     // Neither row is a site any more, so neither lists a site's machine.
     await expect(rows.filter({ hasText: /arm64|x86_64/ })).toHaveCount(0);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
@@ -1573,13 +1578,13 @@ test('HS2-E9VVQF adds and separates sites from Settings and asks only for a dupl
     // Add as a Site of Docs.
     question = await addClone();
     await question.getByRole('button', { name: 'Add as a Site of Docs', exact: true }).click();
-    await expect(settings.getByRole('status')).toHaveText('Clone added as a site of Docs.');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Clone added as a site of Docs.' })).toBeVisible();
     expect((await declared()).sort()).toEqual(['Clone < ' + (await docsId()), 'Docs', 'Widgets'].sort());
 
     // + Add Project → Other, whose store no added project uses: added at once, no question.
     await settings.getByRole('button', { name: 'Add Project' }).click();
     await page.getByRole('menu', { name: 'Add Project' }).getByRole('menuitemcheckbox', { name: /Other/ }).click();
-    await expect(settings.getByRole('status')).toHaveText('Other added.');
+    await expect(page.locator('.app-toast').filter({ hasText: 'Other added.' })).toBeVisible();
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
   } finally {
     await server.stop(page);
@@ -1614,7 +1619,7 @@ test('HS2-W27N1D catalog demos render the production components and run their co
   await page.getByRole('menu').getByText('Mobile').click();
   await expect(interactive.locator('[data-orchestration-project]')).toHaveCount(4);
   // HS2-E9VVQF: Mobile reaches API's ticket store, so the demo's duplicate question adds it as a site.
-  await expect(interactive.getByRole('status')).toHaveText('Mobile added as a site of API.');
+  // HS2-1K6122: the outcome is the app's toast, which the catalog demo does not host; the row shows the site.
   await expect(interactive.locator('[data-orchestration-project]').filter({ hasText: 'Site of API' })).toHaveCount(1);
   await page.screenshot({ path: test.info().outputPath('orchestration-settings-demo.png'), fullPage: true });
   expect(errors).toEqual([]);

@@ -75,6 +75,8 @@ export function createNotificationSettings(dependencies: {
   api: () => NotificationSettingsApi | undefined;
   /** Saved views of the open projects; a project that fails to answer is left out. */
   savedViews?: () => Promise<readonly ProjectSavedViews[]>;
+  /** HS2-1K6122: the app's toast, which announces each change's outcome. */
+  notify?: (message: string) => void;
 }) {
   const notifiers = signal<NotifierList | undefined>(undefined),
     config = signal<NotificationConfig | undefined>(undefined),
@@ -114,6 +116,12 @@ export function createNotificationSettings(dependencies: {
     }
   }
 
+  /** HS2-1K6122: a change's outcome is a toast, never the inline status line; `status` keeps the record. */
+  function succeeded(done: string) {
+    status.value = done;
+    dependencies.notify?.(done);
+  }
+
   /** Run one change, report its failure in place, and re-read what the server stored. */
   async function change(work: (api: NotificationSettingsApi) => Promise<string | undefined>) {
     const api = dependencies.api();
@@ -122,10 +130,12 @@ export function createNotificationSettings(dependencies: {
     status.value = '';
     try {
       const done = await work(api);
-      if (done) status.value = done;
+      if (done) succeeded(done);
       return true;
     } catch (reason) {
+      // The failure stays on the page until the next change, and is announced like a success.
       message.value = messageOf(reason);
+      dependencies.notify?.(message.value);
       return false;
     } finally {
       await refresh();
@@ -179,7 +189,7 @@ export function createNotificationSettings(dependencies: {
       for (const [field, value] of Object.entries(draft.secrets))
         await api.saveNotificationChannelSecret(id, field, value);
       channelEditor.value = undefined;
-      status.value = editor.id ? 'Channel saved.' : 'Channel added.';
+      succeeded(editor.id ? 'Channel saved.' : 'Channel added.');
     } catch (reason) {
       channelEditor.value = { ...editor, busy: false, error: messageOf(reason) };
     }
@@ -263,7 +273,7 @@ export function createNotificationSettings(dependencies: {
     try {
       await api.saveNotificationRule(id, rule);
       ruleEditor.value = undefined;
-      status.value = editor.id ? 'Rule saved.' : 'Rule added.';
+      succeeded(editor.id ? 'Rule saved.' : 'Rule added.');
     } catch (reason) {
       ruleEditor.value = { ...editor, busy: false, error: messageOf(reason) };
     }

@@ -673,6 +673,91 @@ pub struct AdmissionDecision {
     pub footprint_mb: u64,
     pub footprint_source: FootprintSource,
     pub sampled_at_ms: Option<u64>,
+    /// HS2-8Z9VHH: the limit behind `reason`, with the value it was compared against,
+    /// so a refusal can say what to change. `None` when accepted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<AdmissionRefusal>,
+}
+
+/// HS2-8Z9VHH: why a machine refused or reduced a session, in values: the admission
+/// reason code, the machine limit it names (`setting`, a [`MachineLimits`] field), that
+/// limit's value and what the machine observed. A reason with no limit (a tool that is
+/// not installed, an unknown measurement) carries the tool or nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdmissionRefusal {
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setting: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+}
+
+impl AdmissionRefusal {
+    /// A refusal that names only its reason code.
+    pub fn bare(reason: &str) -> Self {
+        Self {
+            reason: reason.to_owned(),
+            setting: None,
+            limit: None,
+            observed: None,
+            tool: None,
+        }
+    }
+
+    /// HS2-8Z9VHH: the session cap, with the running sessions it counted.
+    pub fn session_cap(max_sessions: u32, running: u64) -> Self {
+        Self {
+            setting: Some("max_sessions".into()),
+            limit: Some(u64::from(max_sessions)),
+            observed: Some(running),
+            ..Self::bare(AdmissionReason::SessionCapReached.code())
+        }
+    }
+
+    /// The refusal in plain words, with its numbers, for a CLI or a log line.
+    pub fn describe(&self) -> String {
+        let value =
+            |value: Option<u64>| value.map_or_else(|| "unknown".to_owned(), |v| v.to_string());
+        match self.reason.as_str() {
+            "session_cap_reached" => format!(
+                "this machine already runs {} AI sessions; its limit (max_sessions) is {}",
+                value(self.observed),
+                value(self.limit)
+            ),
+            "above_cpu_ceiling" => format!(
+                "CPU load is {}%, above the {}% ceiling (max_cpu_percent)",
+                value(self.observed),
+                value(self.limit)
+            ),
+            "below_disk_floor" => format!(
+                "{} MB of disk is free, below the {} MB floor (min_free_disk_mb)",
+                value(self.observed),
+                value(self.limit)
+            ),
+            "below_ram_floor" => format!(
+                "{} MB of memory is free, which leaves no room for a session above the {} MB floor (min_free_ram_mb)",
+                value(self.observed),
+                value(self.limit)
+            ),
+            "tool_not_installed" => format!(
+                "{} is not installed on this machine",
+                self.tool.as_deref().unwrap_or("the AI tool")
+            ),
+            "tool_not_configured" => format!(
+                "this project opted out of {}",
+                self.tool.as_deref().unwrap_or("the AI tool")
+            ),
+            "capacity_unknown" => {
+                "this machine could not measure its capacity and does not allow unknown measurements"
+                    .to_owned()
+            }
+            other => other.to_owned(),
+        }
+    }
 }
 
 /// One session's estimated resident memory: the owner's estimate, raised to what a
@@ -790,7 +875,44 @@ pub fn decide_admission(
             }
         }
     };
+    // HS2-8Z9VHH: the limit behind the reason, with what the snapshot measured.
+    let refusal = reason.map(|reason| {
+        let bare = AdmissionRefusal::bare(reason.code());
+        let limit = |setting: &str, limit: u64, observed: Option<u64>| AdmissionRefusal {
+            setting: Some(setting.into()),
+            limit: Some(limit),
+            observed,
+            ..bare.clone()
+        };
+        match reason {
+            R::SessionCapReached => AdmissionRefusal {
+                observed: running_sessions.map(u64::from),
+                ..AdmissionRefusal::session_cap(limits.max_sessions, 0)
+            },
+            R::AboveCpuCeiling => limit(
+                "max_cpu_percent",
+                u64::from(limits.max_cpu_percent),
+                snapshot.cpu.load_percent.map(u64::from),
+            ),
+            R::BelowDiskFloor => limit(
+                "min_free_disk_mb",
+                limits.min_free_disk_mb,
+                snapshot.disk.free_mb,
+            ),
+            R::BelowRamFloor => limit(
+                "min_free_ram_mb",
+                limits.min_free_ram_mb,
+                snapshot.memory.free_mb,
+            ),
+            R::ToolNotInstalled | R::ToolNotConfigured => AdmissionRefusal {
+                tool: Some(request.tool.clone()),
+                ..bare.clone()
+            },
+            R::CapacityUnknown => bare.clone(),
+        }
+    });
     AdmissionDecision {
+        refusal,
         outcome,
         tool: request.tool.clone(),
         model: request.model.clone(),

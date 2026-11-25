@@ -26,6 +26,7 @@ function setup({ empty = false, answers = [] as boolean[], choices = [] as Confi
   const deferred: (() => void)[] = [];
   const activated: string[] = [];
   const shown: string[] = [];
+  const toasts: string[] = [];
   const settings = createOrchestrationSettings({
     api: () => api,
     openProjects: () => open,
@@ -49,10 +50,12 @@ function setup({ empty = false, answers = [] as boolean[], choices = [] as Confi
     knownTools: () => ['claude', 'codex'],
     showInspector: vi.fn(),
     defer: (run) => deferred.push(run),
+    notify: (message) => toasts.push(message),
   });
   return {
     settings,
     api,
+    toasts,
     asked,
     activated,
     shown,
@@ -146,6 +149,8 @@ describe('Settings → Orchestration (HS2-W27N1D)', () => {
     expect(state(t).manifest?.targets).toHaveLength(1);
     await t.settings.addOpenProject(DEMO_OWNER, 'web-0000000000ab');
     expect(state(t).status).toBe('Web is already added.');
+    // HS2-1K6122: each outcome is announced through the toast, once.
+    expect(t.toasts).toEqual(['Web added.', 'Web is already added.']);
     // The owner itself and an unknown tab add nothing.
     await t.settings.addOpenProject(DEMO_OWNER, DEMO_OWNER);
     await t.settings.addOpenProject(DEMO_OWNER, 'not-open');
@@ -800,6 +805,7 @@ describe('Add a Site and Separate from <project> (HS2-E9VVQF)', () => {
     );
     expect(state(t).message).toBe('');
     expect(state(t).status).toBe('Mobile is its own project again.');
+    expect(t.toasts.at(-1)).toBe('Mobile is its own project again.');
     expect(state(t).manifest?.targets.find((target) => target.label === 'Mobile')?.site_of).toBeUndefined();
     // A project that is not a site: nothing to separate.
     await t.settings.separateSite(DEMO_OWNER, DEMO_TARGETS.web);

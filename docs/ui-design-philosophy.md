@@ -68,6 +68,22 @@ does not fork Kerf's guidance.
   The remaining filename, command-group, and AI-launch prompts use controlled in-app inputs
   (HS2-WMZ6Z5). ESLint now rejects every native `alert`, `confirm`, `prompt`, and
   `window.open` call (HS2-ECT6FE); see [tauri-desktop.md](tauri-desktop.md).
+- **Action feedback is a toast, never an inline line (HS2-1K6122).** The maintainer's
+  explicit rule, after the same bug recurred several times: the outcome of an action a
+  person pressed (success, refusal or failure) is announced through the app's one toast
+  path, `showToast` in `app/runtime.tsx` (passed to features as `showToast` or
+  `notify`), never as a status or message line inlined on the page. This is the project
+  decision beside Kerf's "do not use a toast as the only record of failure": a failed
+  action is toasted _and_ keeps any persistent record its surface already has (an error
+  line, a state banner, a field's error), so the failure is never only transient. Inline
+  live regions stay for what is not an action's outcome: loading and progress, a read or
+  load failure, a dialog's own submit and field validation, and live state. A refusal says
+  why in words and what to change, never a bare code (HS2-8Z9VHH,
+  `clients/web/src/orchestration-refusals.ts`). The `HS2-1K6122` case in
+  `clients/web/src/eslint-policy.test.ts` fails on a new inline success line and pins
+  the remaining inline message regions in a list that only shrinks (`HS2-M4P3QM`). The
+  toast stays the app's own host until `HS2-E4F1WM` moves it to Kerf's toast.
+
 - A question before an action that undo cannot cover uses the shared in-app
   `ConfirmationDialog` through `createConfirmation().request(...)` (HS2-6S1346), never a
   per-feature dialog. Erasing a gallery annotation asks nothing, because markup undo and

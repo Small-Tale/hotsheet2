@@ -85,7 +85,7 @@ test('manages notifier channels and rules through App Settings → Notifications
       .toEqual([expect.objectContaining({ id: 'desk-voice', notifier: 'speak', label: 'Desk Voice', enabled: true })]);
     const saved = (await server.request<Config>('/notification-config')).channels[0];
     expect(saved.settings.command).toEqual(['true']);
-    await expect(settings.getByText('Channel added.')).toBeVisible();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Channel added.' })).toBeVisible();
 
     // A credential field is a write-only password input that never shows a stored value.
     await settings.getByRole('button', { name: 'Add Channel…' }).click();
@@ -97,7 +97,7 @@ test('manages notifier channels and rules through App Settings → Notifications
     await expect(page.getByRole('dialog', { name: 'Add Channel' })).toBeHidden();
 
     await rowMenu(page, 'Desk Voice', 'Send Test');
-    await expect(settings.getByText('Test notification sent.')).toBeVisible();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Test notification sent.' })).toBeVisible();
     await expect(settings.getByText(/Delivered to desk-voice/)).toBeVisible();
 
     // A rule that sends project.stopped to the new channel.
@@ -161,7 +161,9 @@ test('manages notifier channels and rules through App Settings → Notifications
         channels: [],
         rules: [],
       });
-    await expect(settings.getByText('Channel removed with 1 rule that used only it.')).toBeVisible();
+    await expect(
+      page.locator('.app-toast').filter({ hasText: 'Channel removed with 1 rule that used only it.' }),
+    ).toBeVisible();
     await expect(settings.getByText('No channels yet.')).toBeVisible();
   } finally {
     await server.stop(page);

@@ -115,6 +115,33 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
     // HS2-FDS95D: a planner that finished its turn still reads as planning.
     expect(toolbar('no_plan', { planning: 'replannable' })).toContain('No Plan Yet · Planning');
     expect(toolbar('no_projects')).not.toContain('data-action=');
+    // HS2-2Z4M6M: a press on its way, a starting or working planner take Propose Plan's place, busy.
+    for (const [extra, label] of [
+      [{ busy: true, propose: { available: true } }, 'Starting Planner'],
+      [{ planning: 'planning', propose: { available: false, reason: 'A planning session is working' } }, 'Planning'],
+      [{ planning: 'waiting' }, 'Planner Waiting'],
+    ] as const) {
+      const markup = toolbar('no_plan', extra);
+      expect(markup).not.toContain('data-action="propose-orchestration-plan"');
+      expect(markup).toContain(`data-planner-state="${label}"`);
+      expect(markup).toContain('disabled');
+    }
+    expect(
+      toolbar('no_plan', { planning: 'planning', propose: { available: false, reason: 'Working now' } }),
+    ).toContain('title="Working now"');
+    // A planner that finished its turn keeps the button, so a press re-plans (HS2-FDS95D).
+    expect(toolbar('no_plan', { planning: 'replannable', propose: { available: true } })).toContain(
+      'data-action="propose-orchestration-plan"',
+    );
+    const working = String(
+      OrchestrationTimelineView({
+        timeline: demoTimeline('no_plan'),
+        planning: 'planning',
+        propose: { available: false },
+      }),
+    );
+    expect(working).toContain('data-planner-state="Planning"');
+    expect(working).not.toContain('data-action="propose-orchestration-plan"');
     const blocked = String(
       OrchestrationToolbar({
         timeline: {

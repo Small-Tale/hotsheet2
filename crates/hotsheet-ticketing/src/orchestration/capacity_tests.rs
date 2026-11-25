@@ -753,3 +753,66 @@ fn hs2_awb7bx_admission_limits_change_the_capacity_version() {
     assert_ne!(with(&closed), with(&open));
     assert_eq!(with(&closed), with(&closed));
 }
+
+/// HS2-8Z9VHH: every refusal names the limit behind its reason and what the machine
+/// observed, so a person reads what to change instead of a bare code.
+#[test]
+fn hs2_8z9vhh_a_refusal_names_its_limit_and_observed_value() {
+    let decide = |change: fn(&mut CapacitySnapshot), tool: &str| {
+        let mut snapshot = healthy();
+        change(&mut snapshot);
+        decide_admission(&snapshot, &AdmissionConfig::default(), &ask(tool, 1))
+            .refusal
+            .expect("a refusal")
+    };
+    let cap = decide(
+        |s| s.sessions = Some(vec![session("a", None, None), session("b", None, None)]),
+        "codex",
+    );
+    assert_eq!(cap, AdmissionRefusal::session_cap(2, 2));
+    assert_eq!(
+        cap.describe(),
+        "this machine already runs 2 AI sessions; its limit (max_sessions) is 2"
+    );
+    let cpu = decide(|s| s.cpu.load_percent = Some(97), "codex");
+    assert_eq!(
+        (cpu.setting.as_deref(), cpu.limit, cpu.observed),
+        (Some("max_cpu_percent"), Some(90), Some(97))
+    );
+    let disk = decide(|s| s.disk.free_mb = Some(10), "codex");
+    assert_eq!(
+        (disk.setting.as_deref(), disk.limit, disk.observed),
+        (Some("min_free_disk_mb"), Some(5120), Some(10))
+    );
+    let ram = decide(|s| s.memory.free_mb = Some(100), "codex");
+    assert_eq!(
+        (ram.setting.as_deref(), ram.limit, ram.observed),
+        (Some("min_free_ram_mb"), Some(2048), Some(100))
+    );
+    let missing = decide(|_| {}, "gemini");
+    assert_eq!(missing.reason, "tool_not_installed");
+    assert_eq!(missing.tool.as_deref(), Some("gemini"));
+    assert!(missing.describe().contains("gemini is not installed"));
+    let unknown = decide(|s| s.cpu.load_percent = None, "codex");
+    assert_eq!(unknown, AdmissionRefusal::bare("capacity_unknown"));
+    // Accepted: no refusal. The wire shape round-trips with and without one.
+    let accepted = decide_admission(&healthy(), &AdmissionConfig::default(), &ask("codex", 1));
+    assert_eq!(accepted.refusal, None);
+    assert!(
+        serde_json::to_value(&accepted)
+            .unwrap()
+            .get("refusal")
+            .is_none()
+    );
+    let wire = serde_json::to_value(&cap).unwrap();
+    assert_eq!(wire["setting"], "max_sessions");
+    assert_eq!(
+        serde_json::from_value::<AdmissionRefusal>(wire).unwrap(),
+        cap
+    );
+    // A code a newer host sends reads as itself.
+    assert_eq!(
+        AdmissionRefusal::bare("new_reason").describe(),
+        "new_reason"
+    );
+}

@@ -64,13 +64,13 @@ pub use capabilities::{
     requirement_misses, valid_toolchain, validate_toolchains,
 };
 pub use capacity::{
-    AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRequest,
-    AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB, CAPACITY_LOAD_STEP_PERCENT,
-    CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot, CpuCapacity,
-    DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim, HostObservation,
-    MAX_CLAIM_NAMESPACES, MAX_CLAIM_PAGES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, PoolState,
-    SessionFootprint, TargetSpeculation, ToolAvailability, UnreadableNamespace, capacity_version,
-    decide_admission, effective_limits, estimated_footprint,
+    AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRefusal,
+    AdmissionRequest, AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB,
+    CAPACITY_LOAD_STEP_PERCENT, CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot,
+    CpuCapacity, DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim,
+    HostObservation, MAX_CLAIM_NAMESPACES, MAX_CLAIM_PAGES, MAX_SESSION_FOOTPRINT_MB,
+    MemoryCapacity, PoolState, SessionFootprint, TargetSpeculation, ToolAvailability,
+    UnreadableNamespace, capacity_version, decide_admission, effective_limits, estimated_footprint,
 };
 pub use contract::*;
 pub use gates::{
@@ -297,6 +297,11 @@ pub enum OrchestrationError {
         state: RequirementState,
         requirement: String,
     },
+    /// HS2-8Z9VHH: the session's machine refused admission. Its code stays
+    /// `session_admission_refused`; the refusal names the reason, the limit and the
+    /// observed value, so a person learns what to change.
+    #[error("the machine refused the session: {}", .0.describe())]
+    AdmissionRefused(Box<AdmissionRefusal>),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -333,6 +338,7 @@ impl OrchestrationError {
                 RequirementState::Unmet => "requirement_unmet",
                 RequirementState::Unknown => "requirement_unknown",
             },
+            Self::AdmissionRefused(_) => SessionError::AdmissionRefused.code(),
         }
     }
 
@@ -341,6 +347,14 @@ impl OrchestrationError {
     pub fn refusal_detail(&self) -> Option<(&'static str, &str)> {
         match self {
             Self::Requirement { requirement, .. } => Some(("requirement", requirement)),
+            _ => None,
+        }
+    }
+
+    /// HS2-8Z9VHH: the admission refusal behind a `session_admission_refused` error.
+    pub fn admission_refusal(&self) -> Option<&AdmissionRefusal> {
+        match self {
+            Self::AdmissionRefused(refusal) => Some(refusal),
             _ => None,
         }
     }

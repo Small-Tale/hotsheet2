@@ -1418,6 +1418,13 @@ many) or `refused`, with the limits that were enforced and one reason code:
 | `below_ram_floor`     | Free RAM minus the floor fits no session, or fewer than asked             |
 | `capacity_unknown`    | A needed measurement is `null` and the owner did not set `allow_unknown`  |
 
+A refused or reduced answer also carries `refusal` (HS2-8Z9VHH): the reason with the
+machine limit behind it (`setting`: `max_sessions`, `max_cpu_percent`,
+`min_free_disk_mb` or `min_free_ram_mb`), that limit's enforced value (`limit`) and
+what the machine measured (`observed`: running AI sessions, CPU percent, free disk or
+free RAM in MB). A tool reason carries `tool` instead; `capacity_unknown` carries the
+reason only.
+
 A limit that a known measurement breaks always refuses with its own reason. Unknown
 measurements are listed in `unknown` and refuse as `capacity_unknown` unless the owner
 set `allow_unknown`, in which case that check is skipped. `reduced` names the tighter
@@ -3145,7 +3152,11 @@ person took over still runs, so it still counts until it stops.
    `session_cap_reached`, or a session code) and the caller gets
    `session_admission_refused`, `session_role_active`, `session_start_failed` or
    `session_host_unavailable`. A failure that may be transient leaves the session
-   `requested`, and the same request repeats it.
+   `requested`, and the same request repeats it. HS2-8Z9VHH: the host's reply keeps
+   the admission `refusal` (above) as `admission`, so a `session_admission_refused`
+   error body carries `admission` with the reason, limit and observed value, and the
+   CLI and MCP message says it in words (for example "this machine already runs 2 AI
+   sessions; its limit (max_sessions) is 2"). An older host sends only the reason.
 
 **Tool setup in the target checkout (HS2-WEFJV8).** The tool starts in the target
 checkout and reads its MCP, instruction and hook configuration from there. The
@@ -5394,8 +5405,8 @@ declares no target), `plan_goal_not_open` (the named goal is closed) or, only fo
 project with no git ticket source to open the default goal in, `plan_no_goals`, all
 HTTP 409. A host that cannot launch answers as a
 session start does (`session_host_unavailable`, `session_start_failed`,
-`session_admission_refused`) and leaves nothing reserved, so the same press can be
-repeated. A press needs an identified actor and is audited as `plan_propose` with its
+`session_admission_refused`, with its `admission` detail, HS2-8Z9VHH) and leaves
+nothing reserved, so the same press can be repeated. A press needs an identified actor and is audited as `plan_propose` with its
 operation id and `plan_started`, `plan_replanned`, `plan_existing` or the refusal code.
 
 `goal` names one goal ticket (slug or id, with its `connection_id` when the project
@@ -5407,6 +5418,19 @@ and `placement_automatic`, so a view can say the plan is a dry run. The planner'
 hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestration
 view's header reads `Planner waiting in its terminal`, and Propose Plan
 says the planning session waits for an answer in its terminal tab (HS2-5RYXNN).
+
+**Propose Plan feedback (HS2-2Z4M6M, HS2-8Z9VHH).** The press never goes silent. While
+it is on its way the button becomes a busy `Starting Planner`; while the planner works
+or waits it is a busy `Planning` or `Planner Waiting` with the reason as its title, in
+the header and in the No Plan Yet empty state alike (a planner that finished its turn
+keeps Propose Plan, so a press re-plans). A refusal is a toast on the first press,
+worded from the shared refusal map (`clients/web/src/orchestration-refusals.ts`): a
+refused admission names the machine's count and limit and the setting to change, for
+example "The machine already runs 2 AI sessions; its limit is 2. Close a session, or
+raise Sessions per Machine in Settings › Orchestration › Machine Defaults.", with the
+code after it as secondary detail. Every refusal code of the orchestration, session and
+remote surfaces has an entry there; a policy test fails on an unmapped code. Run
+controls, Start or Pause, reopen and plan-health actions use the same words.
 
 ### The default goal (HS2-YSRT6Y)
 

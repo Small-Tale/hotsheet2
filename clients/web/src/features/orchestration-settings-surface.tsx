@@ -43,6 +43,8 @@ export interface OrchestrationSettingsSurfaceDependencies {
   showInspector: () => void;
   /** Reviewed remote server names by registration id. */
   remoteServerLabels: () => Promise<Record<string, string>>;
+  /** HS2-1K6122: the app's toast, for each change's outcome. */
+  showToast?: (message: string) => void;
 }
 
 /**
@@ -76,6 +78,7 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     hasTerminal: (projectId, terminalId) => dependencies.hasTerminal(`${projectId}:${terminalId}`),
     knownTools: () => dependencies.aiTools().map((tool) => tool.id),
     showInspector: dependencies.showInspector,
+    notify: dependencies.showToast,
   });
 
   /**
@@ -180,7 +183,6 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
       loading: state?.loading ?? true,
       busy: state?.busy,
       message: state?.message,
-      status: state?.status,
       // HS2-92FJXM: a project open from another server adds that server's open projects.
       ...(isRemoteProjectId(current.id)
         ? {

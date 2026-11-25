@@ -497,6 +497,8 @@ fn pool_session(expires_at: i64) -> crate::coordination::Session {
 fn session_error(result: Result<SessionView, OrchestrationError>) -> SessionError {
     match result {
         Err(OrchestrationError::Session(error)) => error,
+        // HS2-8Z9VHH: a refused admission keeps its code and adds the reason.
+        Err(OrchestrationError::AdmissionRefused(_)) => SessionError::AdmissionRefused,
         Err(other) => panic!("expected a session error, got {other}"),
         Ok(view) => panic!("expected a session error, got {:?}", view.session.state),
     }
@@ -872,9 +874,20 @@ fn hs2_gdjxgz_the_targets_machine_may_refuse_and_a_refusal_never_launches() {
     // Its own admission says no: below the RAM floor.
     f.probe
         .set(|observation| observation.memory.free_mb = Some(100));
-    assert_eq!(
-        session_error(f.start("op-1", 1, "codex", json!({}), &mut tx)),
-        SessionError::AdmissionRefused
+    // HS2-8Z9VHH: the refusal names its limit and what the machine observed.
+    let refused = f.start("op-1", 1, "codex", json!({}), &mut tx).unwrap_err();
+    assert_eq!(refused.code(), SessionError::AdmissionRefused.code());
+    let admission = refused
+        .admission_refusal()
+        .expect("admission detail")
+        .clone();
+    assert_eq!(admission.reason, "below_ram_floor");
+    assert_eq!(admission.setting.as_deref(), Some("min_free_ram_mb"));
+    assert_eq!(admission.observed, Some(100));
+    assert!(admission.limit.is_some());
+    assert!(
+        refused.to_string().contains("100 MB of memory is free"),
+        "{refused}"
     );
     assert_eq!(
         reason("op-1"),
@@ -925,10 +938,17 @@ fn hs2_gdjxgz_the_targets_machine_may_refuse_and_a_refusal_never_launches() {
             reported: None,
         });
     }
-    assert_eq!(
-        session_error(f.start("op-3", 1, "codex", json!({}), &mut tx)),
-        SessionError::AdmissionRefused
-    );
+    let refused = f.start("op-3", 1, "codex", json!({}), &mut tx).unwrap_err();
+    assert_eq!(refused.code(), SessionError::AdmissionRefused.code());
+    // HS2-8Z9VHH: the fresh listing's count and the cap it broke.
+    let admission = refused
+        .admission_refusal()
+        .expect("admission detail")
+        .clone();
+    assert_eq!(admission.reason, "session_cap_reached");
+    assert_eq!(admission.setting.as_deref(), Some("max_sessions"));
+    assert_eq!(admission.observed, Some(4));
+    assert!(admission.limit.is_some_and(|limit| limit <= 4));
     assert_eq!(reason("op-3").1.as_deref(), Some("session_cap_reached"));
     f.host.live().clear();
 
