@@ -1,5 +1,6 @@
 import type {
   AdvisoryClaimStatus,
+  AiCommandRun,
   AiToolDefaults,
   AiToolDescriptor,
   CalibrationReport,
@@ -1703,10 +1704,21 @@ export const parseTrashPurgePreview = shape<TrashPurgePreview>('trash purge prev
   purge_count: isNumber,
 });
 
+const isScheduleActionValue = (value: unknown) =>
+  value === 'create_ticket' || value === 'new_ai_session' || value === 'reuse_or_new_ai_session';
+
 export const parseCommandDefinition = shape<CommandDefinition>(
   'command',
   { id: isString, title: isString },
-  { kind: isString, program: isString, args: isStringArray, group: isString, command: isString, prompt: isString },
+  {
+    kind: isString,
+    program: isString,
+    args: isStringArray,
+    group: isString,
+    command: isString,
+    prompt: isString,
+    action: isScheduleActionValue,
+  },
 );
 
 export const parseCustomView = shape<CustomView>('view', { id: isString, name: isString, query: isString });
@@ -1728,6 +1740,19 @@ export const parseCommandRun = shape<CommandRun>(
   'command run',
   { id: isString, command_id: isString, state: isString, output: listOf(isObject) },
   { exit_code: isNumber, started_at: isString, launch: parseCommandLaunch.check },
+);
+
+/** `POST /checkouts/{reference}/commands/{id}/ai-run` (HS2-17Y2EC). */
+export const parseAiCommandRun = shape<AiCommandRun>(
+  'AI command run',
+  {
+    action: isScheduleActionValue,
+    delivery: (value) => value === 'queued' || value === 'started' || value === 'failed',
+    ticket: parseFullTicket.check,
+    run: parseCommandRun.check,
+  },
+  {},
+  { reason: isString },
 );
 
 export const parsePollResponse = shape<PollResponse>('change poll', {

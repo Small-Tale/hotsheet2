@@ -40,6 +40,7 @@ export function CommandScheduleDialogDemo() {
       </div>
       <CommandScheduleDialog
         commandTitle="Review Architecture"
+        commandAction="new_ai_session"
         draft={draft.value}
         saved={saved.value}
         preview={preview.value}

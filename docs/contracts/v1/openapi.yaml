@@ -17035,6 +17035,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/commands/{id}/ai-run:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: run_checkout_ai_command
+      description: >-
+        HS2-17Y2EC: run an AI command's configured action headlessly. Creates the command's
+        Up Next ticket (tagged hs2-command:<id>); for new_ai_session or
+        reuse_or_new_ai_session, claims that exact ticket under the selected session worker
+        and hands it off, as a scheduled occurrence does. A command without an action runs as
+        create_ticket. The launch joins the command's run history.
+      responses:
+        '200':
+          description: The ticket exists; delivery reports whether a session took it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiCommandRun'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The command is missing or not an AI command.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /commands/{id}/launches:
     parameters:
       - name: id
@@ -29677,10 +29722,36 @@ components:
           type: string
         effort:
           type: string
+        action:
+          description: >-
+            HS2-17Y2EC: an AI command's run action, which a sidebar click performs and a
+            schedule inherits. Absent keeps the legacy click (queue the ticket and signal an
+            idle compatible session); schedules and ai-run treat absent as create_ticket.
+          $ref: '#/components/schemas/CommandScheduleAction'
         icon:
           type: string
         color:
           type: string
+      additionalProperties: false
+    CommandScheduleAction:
+      type: string
+      enum: [create_ticket, new_ai_session, reuse_or_new_ai_session]
+    AiCommandRun:
+      type: object
+      required: [action, delivery, ticket, run]
+      properties:
+        action:
+          $ref: '#/components/schemas/CommandScheduleAction'
+        delivery:
+          type: string
+          enum: [queued, started, failed]
+        reason:
+          type: string
+          description: Why no session took the ticket when delivery is failed.
+        ticket:
+          $ref: '#/components/schemas/Ticket'
+        run:
+          $ref: '#/components/schemas/CommandRun'
       additionalProperties: false
     CommandDefinitions:
       type: array
@@ -29778,7 +29849,7 @@ components:
       additionalProperties: false
     CommandScheduleInput:
       type: object
-      required: [time_zone, local_time, action, recurrence]
+      required: [time_zone, local_time, recurrence]
       properties:
         time_zone:
           type: string
@@ -29786,8 +29857,10 @@ components:
           type: string
           pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
         action:
-          type: string
-          enum: [create_ticket, new_ai_session, reuse_or_new_ai_session]
+          description: HS2-17Y2EC explicit override; omit or null to use the command default.
+          anyOf:
+            - $ref: '#/components/schemas/CommandScheduleAction'
+            - type: 'null'
         paused:
           type: boolean
         recurrence:
@@ -29795,7 +29868,7 @@ components:
       additionalProperties: false
     CommandSchedule:
       type: object
-      required: [command_id, time_zone, local_time, action, paused, recurrence]
+      required: [command_id, time_zone, local_time, paused, recurrence]
       properties:
         command_id:
           type: string
@@ -29805,8 +29878,10 @@ components:
           type: string
           pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
         action:
-          type: string
-          enum: [create_ticket, new_ai_session, reuse_or_new_ai_session]
+          description: >-
+            HS2-17Y2EC explicit override. Absent uses the command default; a schedule saved
+            before HS2-17Y2EC always carries one and keeps it.
+          $ref: '#/components/schemas/CommandScheduleAction'
         paused:
           type: boolean
         recurrence:
@@ -29850,6 +29925,11 @@ components:
       properties:
         schedule:
           $ref: '#/components/schemas/CommandSchedule'
+        effective_action:
+          description: >-
+            HS2-17Y2EC: the action the next occurrence performs (override, else the command
+            action, else create_ticket). Absent while the command is unavailable.
+          $ref: '#/components/schemas/CommandScheduleAction'
         next_runs:
           type: array
           items:

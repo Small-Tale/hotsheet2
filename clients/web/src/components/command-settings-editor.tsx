@@ -25,7 +25,12 @@ import { Bot, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
 import type { AiToolDefaults, AiToolDescriptor, CommandDefinition } from '../api';
 import { commandGroupSections } from '../command-order';
 import { scheduleCadence, scheduleNextRun } from '../command-schedule-form';
-import type { ScheduleView } from '../command-schedules';
+import {
+  LEGACY_COMMAND_ACTION_LABEL,
+  SCHEDULE_ACTION_LABELS,
+  SCHEDULE_ACTIONS,
+  type ScheduleView,
+} from '../command-schedules';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { lucideCatalogVersion } from '../lucide-catalog';
 import { resolveCommandIcon } from './command-icon';
@@ -75,6 +80,8 @@ export interface CommandSettingsEditorProps {
 }
 
 const kind = (command: CommandDefinition) => command.kind ?? 'program';
+/** The Action choice that stores no action and keeps the legacy click (HS2-17Y2EC). */
+const COMMAND_DEFAULT_CLICK = 'default';
 const TYPE_LABELS: Record<'program' | 'shell' | 'ai', string> = { program: 'Program', shell: 'Shell', ai: 'AI' };
 
 /** The inline style setting a command row/dialog icon tile to its color; undefined when transparent. */
@@ -326,6 +333,17 @@ function CommandDetailFields({
             value={command.prompt ?? ''}
           />
           <AiCommandSelection command={command} tools={aiTools} defaults={aiDefaults} />
+          {/* The run action a sidebar click performs and a schedule inherits (HS2-17Y2EC). */}
+          <Select
+            name="action"
+            label="Action"
+            value={command.action ?? COMMAND_DEFAULT_CLICK}
+            choices={[
+              { value: COMMAND_DEFAULT_CLICK, label: LEGACY_COMMAND_ACTION_LABEL },
+              ...SCHEDULE_ACTIONS.map((value) => ({ value, label: SCHEDULE_ACTION_LABELS[value] })),
+            ]}
+            hint="What clicking the command does. Schedules use it unless they override it."
+          />
         </>
       )}
       <TextField

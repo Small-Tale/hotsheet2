@@ -164,6 +164,21 @@ describe('command settings workflow (HS2-1M05KF)', () => {
     );
   });
 
+  it('edits an AI command run action and clears it with the default or a type change (HS2-17Y2EC)', () => {
+    const ai: CommandDefinition = { id: 'one', title: 'Review', kind: 'ai', prompt: 'Review' };
+    const session = editCommandDefinition([ai], 'one', 'action', 'new_ai_session')[0];
+    expect(session.action).toBe('new_ai_session');
+    const reuse = editCommandDefinition([session], 'one', 'action', 'reuse_or_new_ai_session')[0];
+    expect(reuse.action).toBe('reuse_or_new_ai_session');
+    // The editor's default choice stores no action, so the command keeps the legacy click.
+    const legacy = editCommandDefinition([reuse], 'one', 'action', 'default')[0];
+    expect(legacy).not.toHaveProperty('action');
+    expect(editCommandDefinition([legacy], 'one', 'action', 'create_ticket')[0].action).toBe('create_ticket');
+    expect(editCommandDefinition([session], 'one', 'kind', 'shell')[0]).not.toHaveProperty('action');
+    expect(editCommandDefinition([session], 'one', 'kind', 'program')[0]).not.toHaveProperty('action');
+    expect(editCommandDefinition([session], 'one', 'kind', 'ai')[0].action).toBe('new_ai_session');
+  });
+
   it('retains emptied groups through reorder, deletion, and later reuse', () => {
     const before = [shell('a', 'Keep'), shell('b', 'Other')],
       moved = reorderCommandSettings(before, [], ['a'], { kind: 'group', group: 'Other' });

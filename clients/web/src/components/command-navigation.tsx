@@ -59,12 +59,21 @@ export interface CommandNavigationItem {
   group?: string;
   running?: boolean;
   lastRun?: string;
+  /** What clicking an AI command does, named in its tooltip (HS2-17Y2EC). */
+  actionLabel?: string;
 }
 export interface CommandNavigationProps {
   label: string;
   commands: CommandNavigationItem[];
   expanded: boolean;
   collapsedGroups?: readonly string[];
+}
+/** The button tooltip: an AI command's click action first (HS2-17Y2EC), then its run history hint. */
+function commandTooltip(command: CommandNavigationItem): string {
+  const history = command.lastRun
+    ? `Last run: ${command.lastRun}. Press and hold for output.`
+    : 'Press and hold for command history.';
+  return command.actionLabel ? `Click: ${command.actionLabel}. ${history}` : history;
 }
 export function CommandNavigation({ label, commands, expanded, collapsedGroups = [] }: CommandNavigationProps) {
   const groups = commands.reduce<Map<string, CommandNavigationItem[]>>((result, command) => {
@@ -121,11 +130,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                             rootAttributes={{ 'data-command-color': color, 'data-command-palette': palette }}
                             pressed={Boolean(command.running)}
                             busy={Boolean(command.running)}
-                            title={
-                              command.lastRun
-                                ? `Last run: ${command.lastRun}. Press and hold for output.`
-                                : 'Press and hold for command history.'
-                            }
+                            title={commandTooltip(command)}
                             icon={<LucideIcon icon={icon} name={name} />}
                             label={command.running ? `Running ${command.label}` : command.label}
                             trailing={

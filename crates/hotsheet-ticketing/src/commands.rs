@@ -40,6 +40,10 @@ pub struct CommandDefinition {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// An AI command's run action (HS2-17Y2EC). Absent keeps the legacy click: queue the
+    /// ticket and signal an idle compatible session when one exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<crate::command_schedules::ScheduleAction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -96,6 +100,62 @@ pub fn groups_from_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hs2_17y2ec_command_action_is_optional_and_round_trips() {
+        let legacy: CommandDefinition = serde_json::from_value(serde_json::json!(
+            {"id": "review", "title": "Review", "kind": "ai", "prompt": "Review"}
+        ))
+        .unwrap();
+        assert_eq!(legacy.action, None);
+        assert!(
+            serde_json::to_value(&legacy)
+                .unwrap()
+                .get("action")
+                .is_none()
+        );
+        let explicit: CommandDefinition = serde_json::from_value(serde_json::json!(
+            {"id": "review", "title": "Review", "kind": "ai", "prompt": "Review",
+             "action": "reuse_or_new_ai_session"}
+        ))
+        .unwrap();
+        assert_eq!(
+            explicit.action,
+            Some(crate::command_schedules::ScheduleAction::ReuseOrNewAiSession)
+        );
+        assert_eq!(
+            serde_json::to_value(&explicit).unwrap()["action"],
+            "reuse_or_new_ai_session"
+        );
+    }
+
+    /// HS2-17Y2EC: `hotsheet-cli settings set commands` goes through this writer, so a
+    /// headless edit can set a valid action and cannot store an unknown one.
+    #[test]
+    fn hs2_17y2ec_settings_writer_validates_command_action() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::Settings::new(dir.path());
+        let command = |action: &str| {
+            serde_json::json!([{"id": "review", "title": "Review", "kind": "ai",
+                "prompt": "Review", "action": action}])
+        };
+        settings
+            .set("commands", command("new_ai_session"), crate::Scope::Local)
+            .unwrap();
+        assert_eq!(
+            from_settings(&settings).unwrap()[0].action,
+            Some(crate::command_schedules::ScheduleAction::NewAiSession)
+        );
+        assert!(
+            settings
+                .set("commands", command("run_everything"), crate::Scope::Local)
+                .is_err()
+        );
+        assert_eq!(
+            from_settings(&settings).unwrap()[0].action,
+            Some(crate::command_schedules::ScheduleAction::NewAiSession)
+        );
+    }
+
     #[test]
     fn normalizes_kept_command_groups() {
         let groups = normalize_groups(

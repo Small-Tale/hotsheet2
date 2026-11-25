@@ -137,7 +137,12 @@ import { createConfirmation } from '../confirmation';
 import { withControlledOpen } from '../controlled-open';
 import { createConversationUnreadTracker, trackDocumentVisibility } from '../conversation-unread';
 import { copyText } from '../copy-text';
-import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
+import {
+  aiCommandRunMessage,
+  customAiCommandSignalConnection,
+  customAiCommandTicket,
+  HOTSHEET_SKILL_SIGNAL,
+} from '../custom-ai-command';
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import { syncDesktopWindowTheme } from '../desktop-window-theme';
 import { developmentStrategyTagSuggestions } from '../development-strategy-tags';
@@ -5744,6 +5749,37 @@ export async function startHotSheetWebClient() {
       await finishLocalCreation();
     }
   }
+  /**
+   * Run an AI command's configured action on the host (HS2-17Y2EC): it creates the command ticket and, for a
+   * session action, claims it under the selected session and hands it off, recording the launch itself.
+   */
+  async function runAiCommandAction(command: CommandDefinition, current: Project) {
+    if (!(defaultProvider()?.capabilities.create ?? true)) {
+      error.value = 'The default ticket source does not support ticket creation.';
+      return;
+    }
+    const finishLocalCreation = beginLocalTicketCreation();
+    try {
+      const result = await new Api(current.apiPath).runAiCommand(current.id, command.id),
+        created = result.ticket;
+      localTicketChangeAcknowledgements.acknowledge(current.id, {
+        store: created.connection_id,
+        id: created.id,
+        kind: 'created',
+      });
+      pendingCreatedTickets.register(current.id, created);
+      if (project()?.id === current.id) {
+        tickets.value = prependCreatedTicketRow(tickets.value, created);
+        publishOptimisticTicketRows(current.id);
+        commandRuns.value = [result.run, ...commandRuns.value.filter((item) => item.id !== result.run.id)];
+      }
+      showToast(aiCommandRunMessage(result, aiToolLabel));
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      await finishLocalCreation();
+    }
+  }
   async function runCommand(commandId: string) {
     const command = commandDefinitions.value.find((item) => item.id === commandId),
       current = project();
@@ -5775,7 +5811,9 @@ export async function startHotSheetWebClient() {
       return;
     }
     if (command.kind === 'ai') {
-      await queueAiCommand(command, current);
+      // A command without an action keeps the legacy click; any explicit action runs on the host (HS2-17Y2EC).
+      if (command.action) await runAiCommandAction(command, current);
+      else await queueAiCommand(command, current);
       return;
     }
     try {
@@ -6030,6 +6068,8 @@ export async function startHotSheetWebClient() {
     commandScheduleDialog: () => ({
       commandTitle: commandSettingsDefinitions().find((item) => item.id === commandSchedules.openCommandId.value)
         ?.title,
+      commandAction: commandSettingsDefinitions().find((item) => item.id === commandSchedules.openCommandId.value)
+        ?.action,
       draft: commandSchedules.draft.value,
       saved: commandSchedules.currentView(),
       preview: commandSchedules.preview.value,

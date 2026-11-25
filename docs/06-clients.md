@@ -1110,6 +1110,19 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   client also sends `$hotsheet` so that connection re-reads and works the prioritized
   queue. Ticket creation remains the authoritative action and succeeds when no connection
   is available or the optional signal fails. Optional icon/color metadata controls the sidebar presentation.
+  Each AI command also has an optional **Action** in its editor (HS2-17Y2EC), with the
+  same options and semantics as a schedule's action: **Create Ticket Only**,
+  **Auto-Start in a New AI Session**, or **Reuse or Start an AI Session**. Unset (the
+  editor's **Create Ticket and Notify an Idle AI Session** default, which every existing
+  command keeps) is the click described above. With an explicit action, a click asks the
+  host to run it through `POST /checkouts/{reference}/commands/{id}/ai-run`: the host
+  creates the same command ticket and, for a session action, claims that exact ticket
+  under the selected session worker and hands it off exactly as a scheduled occurrence
+  does, using the command's provider/model/effort selection. A failed handoff leaves the
+  ticket queued and unclaimed with a note, and the response names the reason. The run
+  joins the command's run history. The sidebar button's tooltip begins with the effective
+  click action. Headless callers set the field with `hotsheet-cli settings set commands`
+  and run it through the same HTTP route.
   Manual and scheduled AI command tickets carry the stable `hs2-command:<command-id>`
   provenance tag (HS2-G5J2E7). Scheduling is checkout-local and supports one-time,
   every-N-minutes, hourly, daily, weekly, monthly, yearly, and selected-date
@@ -1151,6 +1164,13 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   uses an idle session in the same checkout and ticket source when its provider,
   model, and effort are compatible; otherwise it starts a new one (HS2-MB3BQE).
   The configured command AI selection takes precedence over the project default.
+  A schedule's action is an optional override (HS2-17Y2EC). **Use Command Default**,
+  the default for a new schedule, stores no action and follows the command's current
+  action; a command without one runs as **Create Ticket Only**, since schedules never
+  sent the idle-session signal. A schedule saved before HS2-17Y2EC always stored an
+  action, so it loads as that explicit override and behaves exactly as before. The host
+  resolves the action per occurrence and before each delivery retry; the schedule view
+  reports it as `effective_action`.
   Before either auto-start handoff, the host claims the exact recorded ticket under
   the selected session worker identity. A claim held by another worker leaves the
   ticket pending for retry. A failed handoff or failed provider turn is recorded in the

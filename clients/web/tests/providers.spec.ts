@@ -18206,6 +18206,177 @@ test('schedules an hourly AI command, previews it, edits it to minutes, and relo
   }
 });
 
+test('runs an AI command action chosen in its editor from the sidebar, and schedules inherit or override it (HS2-17Y2EC)', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  // No AI tool is on the server's PATH, so a session action exercises the real hand-off failure path
+  // without ever launching a developer's installed AI tool; the successful hand-off is covered by the
+  // server's fake-drive tests (hs2_17y2ec_ai_run_new_session_claims_ticket_and_records_launch).
+  const server = await realTicketServer({ env: { PATH: '/usr/bin:/bin' } });
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(
+      `${server.root}/.hotsheet2/settings.json`,
+      JSON.stringify({
+        $hotsheetSchema: 1,
+        commands: [{ id: 'review', kind: 'ai', title: 'Review synthetic plan', prompt: 'Review a synthetic plan.' }],
+      }),
+    );
+    await mockProject(page);
+    const aiRuns: string[] = [];
+    // Commands, schedules, AI runs, and run history are the real server's; the rest is the project fixture.
+    await page.route(
+      /\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups|command-runs|checkouts\/demo-checkout\/(command-schedules|commands\/[^/]+\/ai-run))(\/.*)?$/,
+      async (route) => {
+        const incoming = new URL(route.request().url());
+        if (incoming.pathname.endsWith('/ai-run')) aiRuns.push(incoming.pathname);
+        const path = projectScopedServerPath(
+          server.checkoutId,
+          incoming.pathname
+            .replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', `/checkouts/${server.checkoutId}`)
+            .replace('/__hotsheet/project-api/demo-checkout', ''),
+        );
+        const response = await proxyFetch(route, {
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      },
+    );
+    // Real-app review captures at wide, medium, narrow, and back to wide, in both schemes (visual QA).
+    const captureAcrossSizes = async (name: string, ready: Locator) => {
+      const sizes = [
+        ['wide-light', 1440, 900, 'light'],
+        ['medium-light', 900, 800, 'light'],
+        ['narrow-light', 390, 844, 'light'],
+        ['narrow-dark', 390, 844, 'dark'],
+        ['wide-dark', 1440, 900, 'dark'],
+      ] as const;
+      for (const [label, width, height, colorScheme] of sizes) {
+        await page.setViewportSize({ width, height });
+        await page.emulateMedia({ colorScheme });
+        await expect(ready).toBeVisible();
+        await page.screenshot({
+          path: testInfo.outputPath(`hs2-17y2ec-${name}-${label}.png`),
+          animations: 'disabled',
+        });
+      }
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.emulateMedia({ colorScheme: 'light' });
+    };
+    const storedCommand = async () =>
+      (await server.request<Array<{ id: string; action?: string }>>(`/checkouts/${server.checkoutId}/commands`)).find(
+        (command) => command.id === 'review',
+      );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    const sidebarCommand = page.getByRole('button', { name: 'Review synthetic plan AI command', exact: true });
+    // An existing command keeps the legacy click and says so.
+    await expect(sidebarCommand).toHaveAttribute('title', /^Click: Create Ticket and Notify an Idle AI Session\./);
+
+    const editor = page.locator('[data-component="command-settings-editor"]'),
+      commandDialog = page.locator('#command-editor-dialog'),
+      row = editor.locator('[data-command-id="review"]').first(),
+      chooseAction = async (value: string) => {
+        await page.getByLabel('Settings View').click();
+        await page.getByRole('button', { name: 'Commands', exact: true }).click();
+        await row.dblclick();
+        const action = commandDialog.locator('kui-select[name="action"]');
+        await expect(action).toBeVisible();
+        await action.locator('.kui-select__trigger').click();
+        await action.locator(`.kui-select__option[data-value="${value}"]`).click();
+        await expect(action).toHaveJSProperty('value', value);
+        return action;
+      };
+    await chooseAction('create_ticket');
+    await captureAcrossSizes('command-editor', commandDialog);
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(async () => (await storedCommand())?.action).toBe('create_ticket');
+
+    // Create Ticket Only: the host queues the exact command ticket and claims nothing.
+    await page.getByLabel('List View').click();
+    await expect(sidebarCommand).toHaveAttribute('title', /^Click: Create Ticket Only\./);
+    const queuedResponse = page.waitForResponse((response) => response.url().endsWith('/ai-run'));
+    await sidebarCommand.click();
+    const queued = (await (await queuedResponse).json()) as { delivery: string; ticket: FullTicket };
+    expect(queued.delivery).toBe('queued');
+    const queuedTicket = await server.request<FullTicket>(`/tickets/${queued.ticket.id}`);
+    expect(queuedTicket.tags).toContain('hs2-command:review');
+    expect(queuedTicket.claimed_by ?? null).toBeNull();
+    await expect(page.locator('.app-toast', { hasText: `Queued ${queued.ticket.slug}.` })).toBeVisible();
+
+    // Auto-Start in a New AI Session: the click goes to the host, which reports why no session took it.
+    await chooseAction('new_ai_session');
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(async () => (await storedCommand())?.action).toBe('new_ai_session');
+    await page.getByLabel('List View').click();
+    await expect(sidebarCommand).toHaveAttribute('title', /^Click: Auto-Start in a New AI Session\./);
+    const sessionResponse = page.waitForResponse((response) => response.url().endsWith('/ai-run'));
+    await sidebarCommand.click();
+    const session = (await (await sessionResponse).json()) as {
+      action: string;
+      delivery: string;
+      reason?: string;
+      ticket: FullTicket;
+    };
+    expect(session).toMatchObject({ action: 'new_ai_session', delivery: 'failed', reason: 'ai_provider_unavailable' });
+    const sessionTicket = await server.request<FullTicket>(`/tickets/${session.ticket.id}`);
+    expect(sessionTicket.claimed_by ?? null).toBeNull();
+    expect(sessionTicket.notes.some((note) => note.text.includes('ai_provider_unavailable'))).toBe(true);
+    await expect(
+      page.locator('.app-toast', { hasText: `Queued ${session.ticket.slug}; no AI session could start it` }),
+    ).toBeVisible();
+    expect(aiRuns).toHaveLength(2);
+    await expect
+      .poll(async () =>
+        (
+          await server.request<Array<{ command_id: string; launch?: { kind: string } }>>(
+            `/checkouts/${server.checkoutId}/command-runs`,
+          )
+        ).map((run) => `${run.command_id}:${run.launch?.kind}`),
+      )
+      .toEqual(['review:ai', 'review:ai']);
+
+    // A new schedule inherits the command's action; an explicit choice overrides it.
+    const savedSchedule = () =>
+      server.request<Array<{ schedule: { action?: string }; effective_action?: string }>>(
+        `/checkouts/${server.checkoutId}/command-schedules`,
+      );
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Commands', exact: true }).click();
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    const dialog = page.getByRole('dialog', { name: 'Schedule Command' });
+    const scheduleAction = dialog.locator('kui-select[name="action"]');
+    await expect(scheduleAction).toHaveJSProperty('value', 'command_default');
+    await expect(scheduleAction).toContainText('Use Command Default (Auto-Start in a New AI Session)');
+    await captureAcrossSizes('schedule-dialog', dialog);
+    const future = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+    await dialog.getByLabel('Date').fill(future);
+    await dialog.getByRole('button', { name: 'Create Schedule' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect.poll(async () => (await savedSchedule())[0]?.effective_action).toBe('new_ai_session');
+    expect((await savedSchedule())[0]?.schedule.action).toBeUndefined();
+
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    const manage = page.getByRole('dialog', { name: 'Manage Schedule' });
+    const manageAction = manage.locator('kui-select[name="action"]');
+    await expect(manageAction).toHaveJSProperty('value', 'command_default');
+    await manageAction.locator('.kui-select__trigger').click();
+    await manageAction.locator('.kui-select__option[data-value="create_ticket"]').click();
+    await expect(manageAction).toHaveJSProperty('value', 'create_ticket');
+    await manage.getByRole('button', { name: 'Save Schedule' }).click();
+    await expect(manage).not.toBeVisible();
+    await expect.poll(async () => (await savedSchedule())[0]?.schedule.action).toBe('create_ticket');
+    expect((await savedSchedule())[0]?.effective_action).toBe('create_ticket');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('shows a skipped scheduled command with its outstanding ticket link (HS2-17663F)', async ({ page }, testInfo) => {
   const server = await realTicketServer();
   const ticketSlug = 'HS2-DEMO01';

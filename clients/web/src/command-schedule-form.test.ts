@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  COMMAND_DEFAULT_ACTION,
   everyBounds,
   isSubDay,
   MIN_INTERVAL_MINUTES,
@@ -11,7 +12,16 @@ import {
   scheduleInputFromDraft,
   withRepeats,
 } from './command-schedule-form';
-import { parseSchedulePreview, parseScheduleView } from './command-schedules';
+import {
+  commandClickActionLabel,
+  LEGACY_COMMAND_ACTION_LABEL,
+  parseSchedulePreview,
+  parseScheduleView,
+  SCHEDULE_ACTION_LABELS,
+  SCHEDULE_ACTIONS,
+  scheduleInheritedAction,
+} from './command-schedules';
+import { CommandScheduleDialog } from './components/command-schedule-dialog';
 
 describe('HS2-17663F command schedule form', () => {
   it('round-trips a paused yearly weekday occurrence and preserves its exact date rule', () => {
@@ -178,5 +188,63 @@ describe('HS2-29V4ZG sub-day command schedules', () => {
     expect(() =>
       parseScheduleView({ ...hourly, schedule: { ...hourly.schedule, recurrence: { kind: 'secondly' } } }),
     ).toThrow();
+  });
+});
+
+describe('HS2-17Y2EC schedule action override', () => {
+  const base = {
+    command_id: 'review',
+    time_zone: 'UTC',
+    local_time: '09:00',
+    paused: false,
+    recurrence: { kind: 'once', date: '2027-03-12' },
+  };
+
+  it('defaults a new schedule to the command default and saves no override', () => {
+    const draft = newScheduleDraft();
+    expect(draft.action).toBe(COMMAND_DEFAULT_ACTION);
+    expect(scheduleInputFromDraft(draft)).not.toHaveProperty('action');
+    expect(scheduleInputFromDraft({ ...draft, action: 'new_ai_session' }).action).toBe('new_ai_session');
+  });
+
+  it('loads an inheriting schedule as the command default and a legacy one as its explicit override', () => {
+    const inheriting = parseScheduleView({
+      schedule: base,
+      effective_action: 'reuse_or_new_ai_session',
+      next_runs: [],
+      history: [],
+    });
+    expect(inheriting.effective_action).toBe('reuse_or_new_ai_session');
+    expect(scheduleDraftFromView(inheriting).action).toBe(COMMAND_DEFAULT_ACTION);
+    expect(scheduleInputFromDraft(scheduleDraftFromView(inheriting))).not.toHaveProperty('action');
+    // A record stored before HS2-17Y2EC always carried an action: it stays an explicit choice.
+    const legacy = parseScheduleView({ schedule: { ...base, action: 'create_ticket' }, next_runs: [], history: [] });
+    expect(legacy.effective_action).toBeUndefined();
+    expect(scheduleDraftFromView(legacy).action).toBe('create_ticket');
+    expect(scheduleInputFromDraft(scheduleDraftFromView(legacy)).action).toBe('create_ticket');
+  });
+
+  it('rejects unknown actions in either the override or the effective action', () => {
+    expect(() => parseScheduleView({ schedule: { ...base, action: 'run' }, next_runs: [], history: [] })).toThrow();
+    expect(() => parseScheduleView({ schedule: base, effective_action: 'run', next_runs: [], history: [] })).toThrow();
+  });
+
+  it('names the click and inherited actions from one label table', () => {
+    expect(commandClickActionLabel(undefined)).toBe(LEGACY_COMMAND_ACTION_LABEL);
+    for (const action of SCHEDULE_ACTIONS) expect(commandClickActionLabel(action)).toBe(SCHEDULE_ACTION_LABELS[action]);
+    // Schedules never sent the legacy idle-session signal, so an unset command inherits ticket-only.
+    expect(scheduleInheritedAction(undefined)).toBe('create_ticket');
+    expect(scheduleInheritedAction('new_ai_session')).toBe('new_ai_session');
+  });
+
+  it('offers Use Command Default naming the inherited action in the shipped dialog', () => {
+    const markup = String(
+      CommandScheduleDialog({ commandTitle: 'Review', commandAction: 'new_ai_session', draft: newScheduleDraft() }),
+    );
+    expect(markup).toContain('Use Command Default (Auto-Start in a New AI Session)');
+    for (const action of SCHEDULE_ACTIONS) expect(markup).toContain(SCHEDULE_ACTION_LABELS[action]);
+    expect(String(CommandScheduleDialog({ draft: newScheduleDraft() }))).toContain(
+      'Use Command Default (Create Ticket Only)',
+    );
   });
 });

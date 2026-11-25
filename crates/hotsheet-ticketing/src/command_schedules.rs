@@ -18,12 +18,27 @@ pub const MAX_INTERVAL_MINUTES: u16 = 1440;
 /// An hour interval may span at most one day, so every date has a slot to include.
 pub const MAX_INTERVAL_HOURS: u16 = 24;
 
+/// What running an AI command does once its ticket exists. A command carries an optional
+/// default and a schedule an optional override (HS2-17Y2EC).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScheduleAction {
     CreateTicket,
     NewAiSession,
     ReuseOrNewAiSession,
+}
+
+/// The action a scheduled occurrence or headless run performs (HS2-17Y2EC): the schedule's
+/// explicit override, else the command's own action, else **Create Ticket Only**. A command
+/// without an action keeps the legacy sidebar click (queue plus an optional idle-session
+/// signal), which schedules never had, so schedules treat it as ticket-only.
+pub fn resolve_action(
+    schedule_override: Option<ScheduleAction>,
+    command_action: Option<ScheduleAction>,
+) -> ScheduleAction {
+    schedule_override
+        .or(command_action)
+        .unwrap_or(ScheduleAction::CreateTicket)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,7 +105,10 @@ pub struct CommandSchedule {
     pub command_id: String,
     pub time_zone: String,
     pub local_time: String,
-    pub action: ScheduleAction,
+    /// The explicit action override. Absent means "Use command default" (HS2-17Y2EC); a
+    /// record stored before HS2-17Y2EC always has one, so it keeps its behavior unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<ScheduleAction>,
     #[serde(default)]
     pub paused: bool,
     pub recurrence: Recurrence,
@@ -205,6 +223,11 @@ pub fn parse_local_time(raw: &str) -> Result<(u8, u8), String> {
 }
 
 impl CommandSchedule {
+    /// The effective action for this schedule given its command's action (HS2-17Y2EC).
+    pub fn effective_action(&self, command_action: Option<ScheduleAction>) -> ScheduleAction {
+        resolve_action(self.action, command_action)
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.command_id.trim().is_empty() || self.command_id != self.command_id.trim() {
             return Err("schedule command_id must be non-empty and trimmed".into());
@@ -642,6 +665,63 @@ mod tests {
             dates.iter().map(ToString::to_string).collect::<Vec<_>>(),
             ["2027-02-15", "2028-02-21", "2029-02-19"]
         );
+    }
+
+    #[test]
+    fn hs2_17y2ec_resolves_override_then_command_then_ticket_only() {
+        use ScheduleAction::*;
+        assert_eq!(resolve_action(None, None), CreateTicket);
+        assert_eq!(resolve_action(None, Some(NewAiSession)), NewAiSession);
+        assert_eq!(
+            resolve_action(Some(CreateTicket), Some(ReuseOrNewAiSession)),
+            CreateTicket
+        );
+        assert_eq!(
+            resolve_action(Some(ReuseOrNewAiSession), None),
+            ReuseOrNewAiSession
+        );
+    }
+
+    #[test]
+    fn hs2_17y2ec_legacy_schedule_keeps_stored_action_as_override() {
+        // A record written before HS2-17Y2EC, when `action` was required.
+        let legacy = serde_json::json!({
+            "schedule": {
+                "command_id": "daily",
+                "time_zone": "UTC",
+                "local_time": "09:00",
+                "action": "new_ai_session",
+                "paused": false,
+                "recurrence": {"kind": "once", "date": "2026-12-01"}
+            },
+            "last_processed_date": "2026-11-30"
+        });
+        let record: ScheduleRecord = serde_json::from_value(legacy.clone()).unwrap();
+        assert_eq!(record.schedule.action, Some(ScheduleAction::NewAiSession));
+        // A command default never replaces the migrated explicit choice.
+        assert_eq!(
+            record
+                .schedule
+                .effective_action(Some(ScheduleAction::CreateTicket)),
+            ScheduleAction::NewAiSession
+        );
+        // It round-trips unchanged, so loading never rewrites the stored action.
+        assert_eq!(serde_json::to_value(&record).unwrap(), legacy);
+        // An inheriting schedule omits the field and follows its command.
+        let mut inherit = record.schedule.clone();
+        inherit.action = None;
+        let value = serde_json::to_value(&inherit).unwrap();
+        assert!(value.get("action").is_none());
+        let parsed: CommandSchedule = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            parsed.effective_action(Some(ScheduleAction::ReuseOrNewAiSession)),
+            ScheduleAction::ReuseOrNewAiSession
+        );
+        assert_eq!(parsed.effective_action(None), ScheduleAction::CreateTicket);
+        // Unknown action names still fail closed.
+        let mut bad = legacy;
+        bad["schedule"]["action"] = "run_everything".into();
+        assert!(serde_json::from_value::<ScheduleRecord>(bad).is_err());
     }
 
     #[test]

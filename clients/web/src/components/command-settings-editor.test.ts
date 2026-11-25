@@ -316,4 +316,31 @@ describe('CommandSettingsEditor', () => {
     expect(markup).toContain('aria-label="Custom commands"');
     expect(markup).not.toContain('Loading Commands');
   });
+  it('edits an AI command run action, defaulting to the legacy click (HS2-17Y2EC)', () => {
+    const legacy = String(
+      CommandSettingsEditor({
+        commands: [{ id: 'r', title: 'Review', kind: 'ai', prompt: 'Review it' }],
+        editingId: 'r',
+      }),
+    );
+    expect(legacy).toMatch(/<kui-select[^>]*name="action"/);
+    expect(legacy).toContain('Create Ticket and Notify an Idle AI Session');
+    expect(legacy).toContain('Auto-Start in a New AI Session');
+    expect(legacy).toContain('Schedules use it unless they override it.');
+    const explicit = String(
+      CommandSettingsEditor({
+        commands: [{ id: 'r', title: 'Review', kind: 'ai', prompt: 'Review it', action: 'new_ai_session' }],
+        editingId: 'r',
+      }),
+    );
+    expect(explicit.match(/<kui-select[^>]*name="action"[^>]*>/)?.[0]).toMatch(/new_ai_session/);
+    // Program and shell commands have no run action.
+    const shell = String(
+      CommandSettingsEditor({
+        commands: [{ id: 's', title: 'Lint', kind: 'shell', command: 'npm run lint' }],
+        editingId: 's',
+      }),
+    );
+    expect(shell).not.toMatch(/<kui-select[^>]*name="action"/);
+  });
 });

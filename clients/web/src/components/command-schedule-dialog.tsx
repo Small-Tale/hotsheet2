@@ -10,8 +10,20 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 
-import { everyBounds, isSubDay, occurrenceLabel, type ScheduleFormDraft } from '../command-schedule-form';
-import type { ScheduleView } from '../command-schedules';
+import {
+  COMMAND_DEFAULT_ACTION,
+  everyBounds,
+  isSubDay,
+  occurrenceLabel,
+  type ScheduleFormDraft,
+} from '../command-schedule-form';
+import {
+  SCHEDULE_ACTION_LABELS,
+  SCHEDULE_ACTIONS,
+  type ScheduleAction,
+  scheduleInheritedAction,
+  type ScheduleView,
+} from '../command-schedules';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 
 export const COMMAND_SCHEDULE_DIALOG_ID = 'command-schedule-dialog';
@@ -57,11 +69,16 @@ const MONTHS = [
   'November',
   'December',
 ].map((label, index) => ({ value: String(index + 1), label }));
-const ACTIONS = [
-  { value: 'create_ticket', label: 'Create Ticket Only' },
-  { value: 'new_ai_session', label: 'Auto-Start in a New AI Session' },
-  { value: 'reuse_or_new_ai_session', label: 'Reuse or Start an AI Session' },
-] as const;
+/** "Use Command Default" names what the command's action resolves to, then the explicit overrides (HS2-17Y2EC). */
+function actionChoices(commandAction: ScheduleAction | undefined) {
+  return [
+    {
+      value: COMMAND_DEFAULT_ACTION,
+      label: `Use Command Default (${SCHEDULE_ACTION_LABELS[scheduleInheritedAction(commandAction)]})`,
+    },
+    ...SCHEDULE_ACTIONS.map((value) => ({ value, label: SCHEDULE_ACTION_LABELS[value] })),
+  ];
+}
 
 function timeZones(current: string) {
   const zones = new Set(['UTC', current, ...Intl.supportedValuesOf('timeZone')]);
@@ -87,6 +104,8 @@ function displayRun(instant: string, zone: string) {
 
 export interface CommandScheduleDialogProps {
   commandTitle?: string;
+  /** The command's own run action, which "Use Command Default" inherits (HS2-17Y2EC). */
+  commandAction?: ScheduleAction;
   draft?: ScheduleFormDraft;
   saved?: ScheduleView;
   preview?: readonly string[];
@@ -98,6 +117,7 @@ export interface CommandScheduleDialogProps {
 /** The approved schedule form; the controller owns its draft and API requests (HS2-17663F). */
 export function CommandScheduleDialog({
   commandTitle,
+  commandAction,
   draft,
   saved,
   preview = [],
@@ -300,7 +320,7 @@ export function CommandScheduleDialog({
               />
               <Select name="timeZone" label="Time Zone" value={draft.timeZone} choices={timeZones(draft.timeZone)} />
             </Grid>
-            <Select name="action" label="Action" value={draft.action} choices={ACTIONS} />
+            <Select name="action" label="Action" value={draft.action} choices={actionChoices(commandAction)} />
             {saved && (
               <Button
                 action={COMMANDS_AND_AI_ACTIONS.toggleCommandSchedule.value}

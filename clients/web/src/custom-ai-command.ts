@@ -1,4 +1,26 @@
-import type { CommandDefinition, ToolConnection } from './api';
+import type { AiCommandRun, CommandDefinition, ToolConnection } from './api';
+
+/** The toast after an AI command ran through its configured action (HS2-17Y2EC). */
+export function aiCommandRunMessage(result: AiCommandRun, toolLabel: (tool: string) => string): string {
+  const slug = result.ticket.slug;
+  if (result.delivery === 'queued') return `Queued ${slug}.`;
+  if (result.delivery === 'started') {
+    const tool = result.run.launch?.tool;
+    return `Started ${slug} in ${tool ? `a ${toolLabel(tool)}` : 'an AI'} session.`;
+  }
+  const reason = result.reason ? (RUN_FAILURE_REASONS[result.reason] ?? result.reason) : undefined;
+  return `Queued ${slug}; no AI session could start it${reason ? ` (${reason})` : ''}.`;
+}
+
+/** Plain words for the host's hand-off failure codes; an unknown code is shown as sent. */
+const RUN_FAILURE_REASONS: Record<string, string> = {
+  ai_provider_unavailable: 'no AI tool is available',
+  ai_handoff_failed: 'the AI session did not start',
+  ticket_claimed: 'another worker holds the ticket',
+  ticket_claim_failed: 'the ticket could not be claimed',
+  ticket_source_unavailable: 'the ticket source is unavailable',
+  ticket_unavailable: 'the ticket is unavailable',
+};
 
 export const HOTSHEET_SKILL_SIGNAL = '$hotsheet';
 

@@ -67,9 +67,13 @@ export interface ScheduleFormDraft {
   excludeDates: string;
   time: string;
   timeZone: string;
-  action: ScheduleAction;
+  /** `command_default` inherits the command's action and saves no override (HS2-17Y2EC). */
+  action: ScheduleAction | typeof COMMAND_DEFAULT_ACTION;
   paused: boolean;
 }
+
+/** The schedule Action choice that follows the command's own action (HS2-17Y2EC). */
+export const COMMAND_DEFAULT_ACTION = 'command_default';
 
 const listDates = (value: string) =>
   value
@@ -106,7 +110,7 @@ export function newScheduleDraft(): ScheduleFormDraft {
     excludeDates: '',
     time: '09:00',
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-    action: 'create_ticket',
+    action: COMMAND_DEFAULT_ACTION,
     paused: false,
   };
 }
@@ -136,7 +140,7 @@ export function scheduleDraftFromView(view: ScheduleView): ScheduleFormDraft {
     excludeDates: (recurrence.exclude_dates ?? []).join(', '),
     time: schedule.local_time,
     timeZone: schedule.time_zone,
-    action: schedule.action,
+    action: schedule.action ?? COMMAND_DEFAULT_ACTION,
     paused: schedule.paused,
   };
 }
@@ -170,7 +174,7 @@ export function scheduleInputFromDraft(draft: ScheduleFormDraft): ScheduleInput 
   return {
     time_zone: draft.timeZone,
     local_time: draft.time,
-    action: draft.action,
+    ...(draft.action === COMMAND_DEFAULT_ACTION ? {} : { action: draft.action }),
     paused: draft.paused,
     recurrence,
   };

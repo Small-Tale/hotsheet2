@@ -718,6 +718,7 @@ mod tests {
                 tool: None,
                 model: None,
                 effort: None,
+                action: None,
                 icon: None,
                 color: None,
             }],
@@ -756,6 +757,7 @@ mod tests {
             tool: None,
             model: None,
             effort: None,
+            action: None,
             icon: None,
             color: None,
         }
@@ -846,6 +848,7 @@ mod tests {
             tool: None,
             model: None,
             effort: None,
+            action: None,
             icon: None,
             color: None,
         };

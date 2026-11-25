@@ -30,6 +30,7 @@ import {
   ignoreBody,
   parseAccountIdentity,
   parseAdvisoryClaimStatus,
+  parseAiCommandRun,
   parseAiToolDefaults,
   parseAiToolDescriptor,
   parseCalibrationReport,
@@ -1724,6 +1725,8 @@ export interface CommandDefinition {
   tool?: string;
   model?: string;
   effort?: string;
+  /** An AI command's run action; absent keeps the legacy queue-and-signal click (HS2-17Y2EC). */
+  action?: 'create_ticket' | 'new_ai_session' | 'reuse_or_new_ai_session';
   icon?: string;
   color?: string;
 }
@@ -1754,6 +1757,15 @@ export interface CommandRun {
   output: CommandOutputLine[];
   started_at?: string;
   launch?: CommandLaunch;
+}
+/** An AI command run through its configured action (HS2-17Y2EC). */
+export interface AiCommandRun {
+  action: NonNullable<CommandDefinition['action']>;
+  /** `queued` for Create Ticket Only, `started` once a session claimed the ticket, `failed` otherwise. */
+  delivery: 'queued' | 'started' | 'failed';
+  reason?: string;
+  ticket: FullTicket;
+  run: CommandRun;
 }
 /** The phase report fields the client reads: each phase's median wall time (HS2-ST6RN1). */
 export interface PhaseReport {
@@ -3523,6 +3535,13 @@ export class Api {
       parseScheduleView,
       `/checkouts/${encodeURIComponent(checkout)}/command-schedules/${encodeURIComponent(commandId)}`,
       { method: 'PUT', body: JSON.stringify(input) },
+    );
+  /** Run an AI command's configured action: queue its ticket or hand it to a session (HS2-17Y2EC). */
+  runAiCommand = (checkout: string, commandId: string) =>
+    this.parsed(
+      parseAiCommandRun,
+      `/checkouts/${encodeURIComponent(checkout)}/commands/${encodeURIComponent(commandId)}/ai-run`,
+      { method: 'POST' },
     );
   deleteCommandSchedule = (checkout: string, commandId: string) =>
     this.parsed(
