@@ -1042,6 +1042,77 @@ test('HS2-0G80WD a remote orchestration project stops orchestrating a project af
   }
 });
 
+test('HS2-7SHGQH a remote orchestration project row shows its project open from the same server', async ({ page }) => {
+  test.setTimeout(180_000);
+  const { server, others, remoteId } = await openRemoteOrchestration(page);
+  try {
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    await server.request(`${base}/hosted-projects`, 'POST', {
+      checkout_id: others[0].id,
+      label: 'Web',
+      actor: { role: 'human' },
+    });
+    // The Web checkout is also open here, as a tab of the same remote server.
+    const binding = remoteId.split(':')[1],
+      webId = `remote:${binding}:${others[0].id}`,
+      webPath = `/__hotsheet/project-api/${encodeURIComponent(webId)}`;
+    await page.addInitScript(
+      (roots) => {
+        localStorage.setItem('hotsheet.open-projects', JSON.stringify(roots));
+      },
+      [remoteId, webId],
+    );
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
+      const root = (route.request().postDataJSON() as { root?: string } | null)?.root;
+      const web = root === webId;
+      return route.fulfill({
+        status: 201,
+        json: {
+          id: web ? webId : remoteId,
+          root: web ? webId : remoteId,
+          name: web ? 'Build host · Web' : 'Build host · Launch',
+          remoteHost: 'Build host',
+          stores: [],
+          apiPath: web ? webPath : `/__hotsheet/project-api/${encodeURIComponent(remoteId)}`,
+        },
+      });
+    });
+    await page.context().route(`**${webPath}/**`, async (route) => {
+      const incoming = new URL(route.request().url());
+      const path = incoming.pathname
+        .slice(webPath.length)
+        .replace(`/checkouts/${encodeURIComponent(webId)}`, `/checkouts/${others[0].id}`);
+      try {
+        const response = await proxyFetch(route, {
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+          timeout: 60_000,
+        });
+        await route.fulfill({ response });
+      } catch {
+        await route.abort().catch(() => undefined);
+      }
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('tab', { name: /Launch/ }).click();
+    await showProjectSettings(page, 'General');
+    await orchestrationNav(page).click();
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const webRow = settings.locator('[data-orchestration-project]').filter({ hasText: 'Web' });
+    await expect(webRow).toBeVisible();
+    await webRow.getByRole('button', { name: /Actions for Web/ }).click();
+    // The row is the serving server's local checkout; here it is the remote Web tab.
+    const show = page.getByRole('menuitem', { name: 'Show Project Tab' });
+    await expect(show).toBeEnabled();
+    await show.click();
+    await expect(page.getByRole('tab', { name: /Web/ })).toHaveAttribute('aria-selected', 'true');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 /**
  * HS2-SHH7WW: two checkouts of one ticket store declared as sites of one project. Settings lists the
  * other site right after its project, labelled with the project, its machine and connection, through

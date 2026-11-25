@@ -75,6 +75,25 @@ describe('orchestration settings model (HS2-W27N1D)', () => {
     ).toBe(remote);
   });
 
+  it('maps a serving server’s bindings to this client’s tabs when the project is open from it (HS2-7SHGQH)', () => {
+    const serving = `remote:${REMOTE}:orch-1`,
+      remoteDestination = {
+        kind: 'remote' as const,
+        registration_id: '01ARZ3NDEKTSV4RRFFQ69G5FAZ',
+        identity: { server_id: 's' },
+        checkout_id: 'api-1',
+        checkout_authority: 'a',
+      };
+    // A checkout local to the serving server opens here as a remote tab of the same registration.
+    expect(tabProjectIdOf(local('web-1').destination!, serving)).toBe(`remote:${REMOTE}:web-1`);
+    // A registration of the serving server is not one of this client's: no tab is known.
+    expect(tabProjectIdOf(remoteDestination, serving)).toBeUndefined();
+    // A local settings tab keeps the existing mapping.
+    expect(tabProjectIdOf(local('web-1').destination!, 'orch-1')).toBe('web-1');
+    const rows = projectRows(manifest, { T1: local('api-1'), T2: local('web-1') }, {}, undefined, serving);
+    expect(rows.find((row) => row.targetId === 'T1')?.tabProjectId).toBe(`remote:${REMOTE}:api-1`);
+  });
+
   it('lists active projects by label with place and connection, never removed ones', () => {
     const rows = projectRows(
       manifest,

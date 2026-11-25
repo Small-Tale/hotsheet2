@@ -150,7 +150,7 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
   function orchestration(current: Project): OrchestrationSettingsProps {
     const state = settings.settings.value[current.id],
       labels = settings.remoteLabels.value,
-      rows = projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites),
+      rows = projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites, current.id),
       choices = addChoices(
         projects.value.map((item) => ({ id: item.id, name: item.name })),
         current.id,
@@ -206,7 +206,7 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     const target = settings.selected.value[current.id];
     if (!target) return undefined;
     const state = settings.settings.value[current.id],
-      rows = projectRows(state?.manifest, state?.bindings ?? {}, settings.remoteLabels.value),
+      rows = projectRows(state?.manifest, state?.bindings ?? {}, settings.remoteLabels.value, undefined, current.id),
       row = rows.find((item) => item.targetId === target),
       // HS2-D4G81Q: every site of the target's project, with what each machine is.
       siteProject = state?.sites?.projects.find((item) => item.sites.some((site) => site.target_id === target)),

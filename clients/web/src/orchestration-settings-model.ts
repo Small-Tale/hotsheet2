@@ -34,8 +34,17 @@ export function destinationOf(projectId: string): AddDestination {
     : { kind: 'local', checkout_id: projectId };
 }
 
-/** The open tab that shows a bound project, so its row can show that tab or its sessions. */
-export function tabProjectIdOf(destination: OrchestrationDestination): string {
+/**
+ * The open tab that shows a bound project, so its row can show that tab or its sessions. Bindings are
+ * the serving server's: when that is another server (the settings tab `servingProjectId` is a remote
+ * tab), a checkout local to it opens here as a remote tab of the same registration, and a destination
+ * remote to it names a registration of that server, not of this client, so no tab here is known
+ * (HS2-7SHGQH).
+ */
+export function tabProjectIdOf(destination: OrchestrationDestination, servingProjectId?: string): string | undefined {
+  const serving = servingProjectId ? parseRemoteProjectId(servingProjectId) : undefined;
+  if (serving)
+    return destination.kind === 'local' ? remoteProjectId(serving.bindingId, destination.checkout_id) : undefined;
   return destination.kind === 'local'
     ? destination.checkout_id
     : remoteProjectId(destination.registration_id, destination.checkout_id);
@@ -120,6 +129,7 @@ export function projectRows(
   bindings: Readonly<Record<string, OrchestrationBinding | undefined>>,
   remoteLabels: Readonly<Record<string, string>>,
   sites?: OrchestrationSitesView,
+  servingProjectId?: string,
 ): OrchestrationProjectRow[] {
   // HS2-D4G81Q: a site's OS shows on the rows of a project with several sites.
   const capabilities = new Map(
@@ -150,7 +160,7 @@ export function projectRows(
       where: [prefix, place].filter(Boolean).join(' · '),
       place,
       connection: connectionStatus(binding),
-      tabProjectId: destination ? tabProjectIdOf(destination) : undefined,
+      tabProjectId: destination ? tabProjectIdOf(destination, servingProjectId) : undefined,
       siteOf: projectOf(target),
       system: machine ? systemLabel(machine) : undefined,
     };

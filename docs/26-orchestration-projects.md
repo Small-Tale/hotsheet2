@@ -5829,8 +5829,12 @@ the type changes to Software while it shows.
 - **Projects.** One row per active declaration with its name, where it is bound (local
   on this computer, or remote on the reviewed server's name), and a connection badge from
   the cached binding. Its "…" menu (and its context menu) has Show Project Tab (enabled
-  while that project's tab is open) and Stop Orchestrating…. An empty project shows _No
-  projects yet._
+  while that project's tab is open) and Stop Orchestrating…. For an orchestration project
+  open from another server, a project local to that server is its remote tab here (same
+  server registration); a project remote to that server names one of its registrations,
+  not this computer's, so no tab is matched and Show Project Tab stays disabled
+  (HS2-7SHGQH). The sessions' Show in Drawer follows the same mapping. An empty project
+  shows _No projects yet._
 - **Add a Site and Separate (HS2-E9VVQF).** A project row's menu has **Add a Site**, a
   submenu of the open projects that reach the same ticket store as that project, by
   default. Each open tab is inspected once through the machine-local `POST

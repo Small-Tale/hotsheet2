@@ -713,7 +713,9 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
   function sessionTab(projectId: string, session: OrchestrationSession): string | undefined {
     const destination = stateOf(projectId).bindings[session.target_id]?.destination;
     if (!destination || !session.hosted) return undefined;
-    const tab = tabProjectIdOf(destination);
+    // HS2-7SHGQH: bindings are the serving tab's, which may be another server's.
+    const tab = tabProjectIdOf(destination, projectId);
+    if (!tab) return undefined;
     return dependencies.openProjects().some((project) => project.id === tab) &&
       dependencies.hasTerminal(tab, session.hosted.session_id)
       ? tab
