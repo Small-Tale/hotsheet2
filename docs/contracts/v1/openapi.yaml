@@ -27363,6 +27363,11 @@ components:
           type: boolean
         target_id:
           type: string
+        checkout_authority:
+          description:
+            HS2-89YNGN. The ticket store the checkout reaches, as the non-secret digest a binding records; absent when
+            this server could not read the checkout's sources.
+          type: string
       additionalProperties: false
     AddHostedOrchestrationProject:
       type: object
@@ -27377,6 +27382,13 @@ components:
             - string
             - 'null'
         target_id:
+          type:
+            - string
+            - 'null'
+        site_of:
+          description:
+            HS2-89YNGN. Add it as another site of this active project target; a checkout of another ticket store is
+            refused with site_store_mismatch before anything is declared.
           type:
             - string
             - 'null'

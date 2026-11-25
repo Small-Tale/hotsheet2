@@ -445,6 +445,11 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
 
   /** HS2-E9VVQF: a project row's Add a Site → an open project, added as another site of that project. */
   function addSite(ownerId: string, projectTargetId: string, projectId: string) {
+    // HS2-89YNGN: for a project open from another server, `projectId` is one of that server's open checkouts.
+    if (isRemoteProjectId(ownerId)) {
+      const label = targetLabel(ownerId, projectTargetId);
+      return label ? addHosted(ownerId, projectId, { targetId: projectTargetId, label }) : Promise.resolve();
+    }
     const open = dependencies.openProjects().find((project) => project.id === projectId),
       label = targetLabel(ownerId, projectTargetId);
     if (!open || !label || projectId === ownerId) return Promise.resolve();
@@ -503,6 +508,29 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
    * project open from another server. That server binds it; a repeat is the same project.
    */
   async function addHostedProject(ownerId: string, checkoutId: string) {
+    const choice = stateOf(ownerId).hosted?.find((item) => item.checkout_id === checkoutId),
+      choose = dependencies.choose;
+    if (!choice || stateOf(ownerId).busy.includes('add')) return;
+    // HS2-89YNGN: as for a project served here, a duplicate of an added project's ticket store is asked about.
+    if (choose && !choice.added) {
+      const state = stateOf(ownerId),
+        duplicate = duplicateProject(choice.checkout_authority, state.manifest, state.bindings);
+      if (duplicate) {
+        const answer = await choose({
+          title: `Is ${choice.name} another site of ${duplicate.label}?`,
+          message: `${choice.name} uses the same ticket store as ${duplicate.label}. A site is the same project in another place, such as another computer, and shares its tickets, plan and runs.`,
+          confirmLabel: `Add as a Site of ${duplicate.label}`,
+          alternateLabel: 'Add as a Separate Project',
+        });
+        if (answer === 'cancel') return;
+        if (answer === 'confirm') return addHosted(ownerId, checkoutId, duplicate);
+      }
+    }
+    return addHosted(ownerId, checkoutId);
+  }
+
+  /** HS2-92FJXM, HS2-89YNGN: add one of the serving machine's open checkouts, as a site of `site` when given. */
+  async function addHosted(ownerId: string, checkoutId: string, site?: { targetId: string; label: string }) {
     const api = dependencies.api(ownerId),
       choice = stateOf(ownerId).hosted?.find((item) => item.checkout_id === checkoutId);
     if (!api || !choice || stateOf(ownerId).busy.includes('add')) return;
@@ -513,11 +541,22 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
         checkout_id: checkoutId,
         label: choice.name,
         target_id: newUlid(),
+        ...(site ? { site_of: site.targetId } : {}),
       });
-      put(ownerId, { status: added.added ? `${added.label} added.` : `${added.label} is already added.` });
+      put(ownerId, {
+        status: !added.added
+          ? `${added.label} is already added.`
+          : site
+            ? `${added.label} added as a site of ${site.label}.`
+            : `${added.label} added.`,
+      });
       await loadSettings(ownerId);
     } catch (reason) {
-      put(ownerId, { message: `Could not add ${choice.name}. ${messageOf(reason)}` });
+      put(ownerId, {
+        message: site
+          ? `Could not add ${choice.name} as a site of ${site.label}. ${siteFailure(reason)}`
+          : `Could not add ${choice.name}. ${messageOf(reason)}`,
+      });
     } finally {
       busy(ownerId, 'add', false);
     }

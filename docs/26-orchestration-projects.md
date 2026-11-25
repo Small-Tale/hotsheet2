@@ -5875,9 +5875,12 @@ the type changes to Software while it shows.
   revision without asking (the same action on the old home undoes it; the result shows
   in the status line and a refusal with its site code in the message line), and
   **Separate from <project>**, which clears `site_of` at the stored manifest revision
-  without asking: adding it as a site again undoes it. Both are offered only for an orchestration project served on this
-  machine; one open from another server adds through the hosted route, which cannot
-  inspect a store (HS2-89YNGN).
+  without asking: adding it as a site again undoes it. For an orchestration project open
+  from another server (HS2-89YNGN), Add a Site lists that server's open checkouts
+  (machine _Build host_), compared by the `checkout_authority` each hosted choice
+  reports, with no Open Another Project… (nothing new is opened on that server), and adds
+  through the hosted route with `site_of`; + Add Project there asks the same duplicate
+  question.
 - **+ Add Project.** The other open projects first, local and remote with their machine,
   checked when already added; then **Open Another Project…**, which runs the regular
   open-project flow (HS2-BT4KN6). The project it opens appears in its own tab, is added,
@@ -5971,7 +5974,12 @@ through `/checkouts/{owner}/orchestration/hosted-projects`:
 - `GET` lists the serving machine's open checkouts (registered, present and resolving,
   as `/remote-checkouts` reports them available), other than the orchestration project
   itself, each with `added` and its `target_id` when added.
-- `POST {checkout_id, label?, target_id?}` is the same workflow as adding a project
+- HS2-89YNGN: each listed choice also reports `checkout_authority`, the non-secret
+  digest of the ticket store it reaches (the one a binding records, from the same
+  machine-local inspection; absent when its sources cannot be read), so a client on
+  another machine can offer the open checkouts of one project's store as its sites and
+  ask about a duplicate, as a local client compares its own inspections.
+- `POST {checkout_id, label?, target_id?, site_of?}` is the same workflow as adding a project
   with a local destination on that server: a person's act (an AI actor is refused), a
   repeat returns the same project with `added: false`, and it is announced as
   `orchestration_changed`. A checkout the server does not have open is refused with 403
@@ -5994,7 +6002,7 @@ through `/checkouts/{owner}/orchestration/hosted-projects`:
   unbound one _Not bound on <server>_; never _Local on This Computer_.
 - Headless, on the serving machine: `hotsheet-cli ... orchestration project hosted
 --project <owner>` and `project add-hosted <checkout> [--label] [--target-id]
---project <owner>`, and `project remove-hosted <target> --project <owner>` (HS2-0G80WD), through the same route.
+--project <owner>` (with `--site-of <project-target>` to add it as a site, HS2-89YNGN; refused with `site_store_mismatch` before anything is declared when it reaches another store), and `project remove-hosted <target> --project <owner>` (HS2-0G80WD), through the same route.
 
 ### Live updates
 

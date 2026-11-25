@@ -413,3 +413,146 @@ async fn hs2_92fjxm_hs2_0g80wd_a_read_write_device_adds_and_removes_projects_ove
     assert_eq!(gone["removed"], true, "{gone}");
     served.stop().await;
 }
+
+/// HS2-89YNGN: a client on another machine adds one of the serving machine's open
+/// checkouts as another site of a project, over authenticated mTLS and headless. Each
+/// hosted choice names its ticket store, a site of an unknown project is refused before
+/// anything is declared, and `project add-hosted --site-of` is the same workflow.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_89yngn_a_remote_client_adds_a_hosted_checkout_as_a_site() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::at(root.path().join("tls"));
+    init_ca(&paths, &[]).unwrap();
+    let device = issue_device(&paths, "synthetic-client").unwrap();
+    set_device_role(&paths, "synthetic-client", DeviceRole::ReadWrite).unwrap();
+    let credentials = credentials(&device);
+    let home = root.path().join("home");
+    let source = root.path().join("host-store");
+    let memory = Arc::new(Memory::default());
+    let host = state(&source, &home);
+    let owner = configured_owner(&source, &home, &root.path().join("owner"));
+    let api_project = configured_owner(&source, &home, &root.path().join("api"));
+    let docs_project = configured_owner(&source, &home, &root.path().join("docs"));
+    let clone_project = configured_owner(&source, &home, &root.path().join("clone"));
+    let host = host.with_orchestration_runtime(shared_runtime(&source, &home, &memory));
+    let router = app(host.clone());
+    let base = format!("/checkouts/{}/orchestration", owner.id);
+    let (status, set) = api(
+        router.clone(),
+        "PUT",
+        &format!("{base}/project-type"),
+        json!({"project_type":"orchestration","actor":{"role":"human"}}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let served = serve(host.clone(), &paths, None).await;
+    let hosted = format!("/checkouts/{}/orchestration/hosted-projects", owner.id);
+    let person = json!({"role":"human","id":"remote-person"});
+
+    // Every choice names the store it reaches: these three share one.
+    let (status, listed) = call(&served.origin, &credentials, "GET", hosted.clone(), None).await;
+    assert_eq!(status, 200, "{listed}");
+    let stores: Vec<&Value> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|choice| &choice["checkout_authority"])
+        .collect();
+    assert_eq!(stores.len(), 3, "{listed}");
+    assert!(stores[0].is_string(), "{listed}");
+    assert!(stores.iter().all(|store| *store == stores[0]), "{listed}");
+
+    let (status, added) = call(
+        &served.origin,
+        &credentials,
+        "POST",
+        hosted.clone(),
+        Some(json!({"checkout_id":api_project.id,"label":"API","actor":person})),
+    )
+    .await;
+    assert_eq!(status, 200, "{added}");
+    let project = added["target_id"].as_str().unwrap().to_owned();
+    // A site of a project that is not declared is refused before anything is declared.
+    let (status, unknown) = call(
+        &served.origin,
+        &credentials,
+        "POST",
+        hosted.clone(),
+        Some(json!({"checkout_id":docs_project.id,"label":"Docs","site_of":"01ARZ3NDEKTSV4RRFFQ69G5FAV","actor":person})),
+    )
+    .await;
+    assert_eq!(status, 404, "{unknown}");
+    assert_eq!(unknown["code"], "site_project_unknown", "{unknown}");
+    let declared = |router: axum::Router| {
+        let base = base.clone();
+        async move {
+            api(router, "GET", &format!("{base}/targets"), Value::Null, true)
+                .await
+                .1["targets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|target| {
+                    (
+                        target["label"].as_str().unwrap().to_owned(),
+                        target["site_of"].as_str().map(str::to_owned),
+                    )
+                })
+                .collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(
+        declared(router.clone()).await,
+        vec![("API".to_owned(), None)]
+    );
+    // Over mTLS: Docs is declared and bound as a site of API in one step.
+    let (status, site) = call(
+        &served.origin,
+        &credentials,
+        "POST",
+        hosted.clone(),
+        Some(
+            json!({"checkout_id":docs_project.id,"label":"Docs","site_of":project,"actor":person}),
+        ),
+    )
+    .await;
+    assert_eq!(status, 200, "{site}");
+    assert_eq!(site["added"], true, "{site}");
+    // Headless on the serving machine: `project add-hosted --site-of`.
+    let human = [
+        "--actor-role",
+        "human",
+        "--actor-id",
+        "maintainer",
+        "-C",
+        source.to_str().unwrap(),
+        "orchestration",
+    ];
+    let clone = cli_named(
+        &home,
+        &human,
+        &[
+            "project",
+            "add-hosted",
+            &clone_project.id,
+            "--label",
+            "Clone",
+            "--site-of",
+            &project,
+            "--project",
+            &owner.id,
+        ],
+    );
+    assert_eq!(clone["added"], true, "{clone}");
+    assert_eq!(
+        declared(router.clone()).await,
+        vec![
+            ("API".to_owned(), None),
+            ("Docs".to_owned(), Some(project.clone())),
+            ("Clone".to_owned(), Some(project.clone())),
+        ]
+    );
+}

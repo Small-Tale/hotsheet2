@@ -978,6 +978,104 @@ test('HS2-92FJXM a remote orchestration project adds the projects open on its se
   }
 });
 
+/**
+ * HS2-89YNGN: for an orchestration project open from another server, + Add Project asks about a duplicate of an
+ * added project's ticket store, and a project row's Add a Site offers that server's open checkouts of the same
+ * store and adds one as a site through the hosted route. Web and Docs share the owner's store.
+ */
+test('HS2-89YNGN a remote orchestration project adds a site from the projects open on its server', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(240_000);
+  const { server, others, posted } = await openRemoteOrchestration(page);
+  try {
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const web = await server.request<{ target_id: string }>(`${base}/hosted-projects`, 'POST', {
+      checkout_id: others[0].id,
+      label: 'Web',
+      actor: { role: 'human' },
+    });
+    const listed = await server.request<{ checkout_id: string; checkout_authority?: string }[]>(
+      `${base}/hosted-projects`,
+    );
+    expect(listed.every((choice) => typeof choice.checkout_authority === 'string')).toBe(true);
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await page.goto('/');
+    await page.getByRole('tab', { name: /Launch/ }).click();
+    await expect(
+      page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Orchestration View' }),
+    ).toBeVisible();
+    await showProjectSettings(page, 'General');
+    await orchestrationNav(page).click();
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const rows = settings.locator('[data-orchestration-project]');
+    await expect(rows).toHaveCount(1);
+    const directory = join('target', 'visual-captures', 'hs2-89yngn');
+    await mkdir(directory, { recursive: true });
+    const capture = (name: string) =>
+      page.screenshot({ path: join(directory, `hs2-89yngn-${name}-${browserName}.png`), animations: 'disabled' });
+
+    // + Add Project → Docs, a duplicate of Web's store: asked, and Cancel adds nothing.
+    await settings.getByRole('button', { name: 'Add Project' }).click();
+    await page.getByRole('menu', { name: 'Add Project' }).getByRole('menuitemcheckbox', { name: /Docs/ }).click();
+    const question = page.getByRole('alertdialog', { name: 'Is Docs another site of Web?' });
+    await expect(question).toBeVisible();
+    await capture('duplicate-1440-light');
+    await question.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(question).toHaveCount(0);
+    expect(posted.filter((path) => path.endsWith('/hosted-projects'))).toEqual([]);
+
+    // Web's "…" → Add a Site: the server's open checkouts of its store, without Open Another Project….
+    const openSites = async () => {
+      await rows.nth(0).getByRole('button', { name: 'Actions for Web' }).click();
+      await page.getByRole('menuitem', { name: 'Add a Site' }).click();
+      const submenu = page.getByRole('menu', { name: 'Add a Site' });
+      await expect(submenu).toBeVisible();
+      await expect(submenu.getByRole('menuitem', { name: /Docs/ })).toContainText('Build host');
+      await expect(submenu.getByRole('menuitem', { name: 'Open Another Project…' })).toHaveCount(0);
+      return submenu;
+    };
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+        await page.setViewportSize(size);
+        if (size.width === 390) {
+          const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+          if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        }
+        const submenu = await openSites();
+        const box = await submenu.boundingBox();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(size.width + 1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await capture(`add-site-${String(size.width)}${index === 3 ? '-after-390' : ''}-${scheme}`);
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await expect(submenu).toBeHidden();
+      }
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize(wide);
+    const submenu = await openSites();
+    await submenu.getByRole('menuitem', { name: /Docs/ }).click();
+    await expect(settings.getByRole('status')).toHaveText('Docs added as a site of Web.');
+    expect(posted).toContain(`${base}/hosted-projects`);
+    const declared = await server.request<{ targets: { label: string; site_of?: string }[] }>(`${base}/targets`);
+    expect(declared.targets.map((target) => [target.label, target.site_of ?? null])).toEqual([
+      ['Web', null],
+      ['Docs', web.target_id],
+    ]);
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(1)).toContainText('Site of Web');
+    await capture('added-1440-light');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-0G80WD a remote orchestration project stops orchestrating a project after the shared confirmation', async ({
   page,
   browserName,

@@ -1796,7 +1796,7 @@ export const parseHostedOrchestrationProjectChoice = shape<HostedOrchestrationPr
   'hosted project',
   { checkout_id: isString, name: isString, added: isBoolean },
   {},
-  { target_id: isString },
+  { target_id: isString, checkout_authority: isString },
 );
 export const parseRemovedOrchestrationProject = shape<RemovedOrchestrationProject>('removed project', {
   target_id: isString,

@@ -53,6 +53,10 @@ pub struct AddHostedProject {
     pub label: Option<String>,
     #[serde(default)]
     pub target_id: Option<String>,
+    /// HS2-89YNGN: add it as another site of this active project target, with the
+    /// same refusal before anything is declared as the local add (`site_store_mismatch`).
+    #[serde(default)]
+    pub site_of: Option<String>,
 }
 
 /// HS2-92FJXM: one checkout this server has open, as + Add Project lists it for a
@@ -65,6 +69,12 @@ pub struct HostedProjectChoice {
     pub added: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_id: Option<String>,
+    /// HS2-89YNGN: the ticket store the checkout reaches, as the non-secret digest a
+    /// binding records (`checkout_authority`), so a client can offer the open projects
+    /// of one project's store as its sites and notice a duplicate. Absent when this
+    /// server could not read the checkout's sources.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkout_authority: Option<String>,
 }
 
 /// HS2-92FJXM: why a checkout cannot be added from another machine.
@@ -278,11 +288,25 @@ impl OrchestrationRuntime {
                     .iter()
                     .find(|(id, _)| *id == checkout.id)
                     .map(|(_, target)| target.clone());
+                // HS2-89YNGN: the same machine-local inspection the local Add a Site uses;
+                // it binds nothing.
+                let checkout_authority = self
+                    .inspect(
+                        owner_id,
+                        hotsheet_ticketing::orchestration::InspectTarget {
+                            destination: InspectDestination::Local {
+                                checkout_id: checkout.id.clone(),
+                            },
+                        },
+                    )
+                    .ok()
+                    .map(|inspection| inspection.destination.authority().to_owned());
                 HostedProjectChoice {
                     name: checkout.alias.clone(),
                     added: target_id.is_some(),
                     target_id,
                     checkout_id: checkout.id,
+                    checkout_authority,
                 }
             })
             .collect();
@@ -334,7 +358,7 @@ impl OrchestrationRuntime {
                 },
                 label: request.label,
                 target_id: request.target_id,
-                site_of: None,
+                site_of: request.site_of,
             },
             actor,
             tx,

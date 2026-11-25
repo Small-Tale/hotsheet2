@@ -10,6 +10,7 @@ import type { Choose, Confirm } from '../confirmation';
 import type { Project } from '../interactions/types';
 import {
   addChoices,
+  hostedSiteSources,
   projectRows,
   resourceSuggestions,
   siteChoicesByProject,
@@ -166,9 +167,26 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     return {
       rows,
       choices,
-      // HS2-E9VVQF: a project served here offers Add a Site on each project row.
+      // HS2-E9VVQF: a project served here offers Add a Site on each project row. HS2-89YNGN: one open from
+      // another server offers that server's open checkouts of the same ticket store.
       ...(isRemoteProjectId(current.id)
-        ? {}
+        ? state?.hosted
+          ? (() => {
+              const hosted = hostedSiteSources(state.hosted, servedBy(current) ?? 'the server');
+              return {
+                siteChoices: siteChoicesByProject(
+                  rows,
+                  hosted.choices,
+                  hosted.stores,
+                  state.manifest,
+                  state.bindings,
+                  Boolean(state.showAllSites),
+                ),
+                showAllSites: Boolean(state.showAllSites),
+                hostedSites: true,
+              };
+            })()
+          : {}
         : {
             siteChoices: siteChoicesByProject(
               rows,

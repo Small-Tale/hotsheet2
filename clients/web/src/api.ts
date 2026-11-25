@@ -1187,6 +1187,8 @@ export interface HostedOrchestrationProjectChoice {
   name: string;
   added: boolean;
   target_id?: string;
+  /** HS2-89YNGN: the ticket store it reaches (non-secret digest), absent when the server could not read it. */
+  checkout_authority?: string;
 }
 /** `DELETE /checkouts/{owner}/orchestration/projects/{target}` (HS2-W27N1D). */
 export interface RemovedOrchestrationProject {
@@ -3285,7 +3287,11 @@ export class Api {
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,
     );
   /** HS2-92FJXM: add one of them; the serving machine binds it, and a repeat is the same project. */
-  addHostedOrchestrationProject = (owner: string, request: { checkout_id: string; label: string; target_id: string }) =>
+  addHostedOrchestrationProject = (
+    owner: string,
+    // HS2-89YNGN: `site_of` adds it as another site of that project.
+    request: { checkout_id: string; label: string; target_id: string; site_of?: string },
+  ) =>
     this.parsed(
       parseOrchestrationProjectView,
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,

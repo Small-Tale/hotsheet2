@@ -4,6 +4,7 @@
  * network or the DOM.
  */
 import type {
+  HostedOrchestrationProjectChoice,
   OrchestrationBinding,
   OrchestrationDestination,
   OrchestrationManifest,
@@ -300,6 +301,27 @@ export function siteChoices(
       };
     })
     .filter((choice) => showAll || choice.sameStore === true);
+}
+
+/**
+ * HS2-89YNGN: a project open from another server adds that server's open checkouts. As Add a Site and the duplicate
+ * check read them: each checkout as an add choice on that server, and the store each reaches (`null` when unread).
+ */
+export function hostedSiteSources(
+  hosted: readonly HostedOrchestrationProjectChoice[],
+  server: string,
+): { choices: AddChoice[]; stores: Record<string, string | null> } {
+  return {
+    choices: hosted.map((choice) => ({
+      projectId: choice.checkout_id,
+      name: choice.name,
+      location: 'remote' as const,
+      machine: server,
+      destination: { kind: 'local' as const, checkout_id: choice.checkout_id },
+      added: choice.added,
+    })),
+    stores: Object.fromEntries(hosted.map((choice) => [choice.checkout_id, choice.checkout_authority ?? null])),
+  };
 }
 
 /** HS2-E9VVQF: every project row's Add a Site choices, by the project's target id. */
