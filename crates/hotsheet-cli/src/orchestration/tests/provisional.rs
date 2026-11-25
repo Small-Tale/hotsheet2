@@ -58,6 +58,7 @@ impl CapacityProbe for Probe {
                 tool: "codex".into(),
                 installed: true,
                 configured: true,
+                models: None,
             }]),
             sessions: Some(Vec::new()),
         }

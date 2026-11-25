@@ -913,12 +913,37 @@ other number is used as given. Auto is written by leaving the member out.
 **Model patterns (HS2-1X1TXC).** An entry of a target tool's `models` is an exact model
 name or a pattern in which `*` matches any run of characters (`claude-opus-*`, `gpt-*`,
 `*-mini`). A session's model is allowed when any entry matches it. A session the
-orchestrator starts names the first exact model listed; when every entry is a pattern
-it names none, so the tool runs its own default model, and a session that names no model
-is allowed only under such a pattern-only list. The maintainer's request was to pick a
-family rather than type a version; resolving a pattern to the newest matching model the
-host reports is follow-up work. Validation is unchanged: at most 32 unique entries of at
-most 128 bytes without whitespace.
+orchestrator starts names the first exact model listed. A session that names no model is
+allowed only under a pattern-only list (the access dry run asks that question, since it
+reads no catalog). The maintainer's request was to pick a family rather than type a
+version. Validation is unchanged: at most 32 unique entries of at most 128 bytes without
+whitespace.
+
+**Resolving a pattern at launch (HS2-0VTQFF).** When every entry is a pattern, a start
+names the newest model the target's machine reports that a pattern matches, so the
+session runs a matching model rather than the tool's own default:
+
+- The machine reports each detected tool's models in its capacity snapshot
+  (`tools[].models`), from the same AI-tool discovery and model catalog as `/ai-tools`
+  `models[]`: the catalog's default first, then the rest in the catalog's own order,
+  which lists newest first. The first reported id any pattern matches wins, so the
+  catalog default is chosen whenever it matches. The pick is deterministic for a given
+  catalog and follows it when a newer model appears.
+- The reading is shared for ten minutes (as the machine's capabilities are), and a tool
+  install or plugin change that invalidates discovery drops it. Reported models are part
+  of the capacity `version` only when present, so a snapshot without them keeps its
+  version.
+- Worker and role (dispatcher, integrator) starts resolve the same way. The placement and
+  the orchestrated session record name the resolved model, and the tool launches on it.
+- A machine that does not report the tool's models (an older peer, or a tool it did not
+  detect) starts nothing on a guess: the work is blocked `no_tool_available` with detail
+  `model_unresolved`. A reported catalog with no match blocks with `no_matching_model`.
+  The next allowed tool is tried first; a role session that cannot start says the same
+  code as its `roles_unplaced` detail.
+- An exact or mixed list keeps its first exact model, and a list with no models still
+  names none (any model). A step's own preferred model the patterns allow is named as is.
+- A remote target's machine fills `tools[].models` through its own hosted capacity
+  route, so it resolves the same way once it runs this version.
 
 Files written before Auto read unchanged: every stored number keeps its meaning. What
 changes is the unset case. A tool or project the policy did not list used to start

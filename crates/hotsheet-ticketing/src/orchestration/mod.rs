@@ -114,7 +114,7 @@ pub use planning::{
 };
 pub use policy::{
     AUTO_TOOL_WEIGHT, AccountPolicy, IgnoredField, MAX_POLICY_ACCOUNTS, MAX_POLICY_MODELS,
-    MAX_POLICY_SESSIONS, MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits,
+    MAX_POLICY_SESSIONS, MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, ModelUnresolved,
     ORCHESTRATOR_ACTOR_PREFIX, PlacementPolicy, PolicyBody, PolicyDenial, PolicyProblem,
     PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, PolicyWarning, ROLE_SESSIONS_NOT_HOME,
     RoleSessionKind, SessionLoad, SetPolicy, Speculation, TargetPolicy, TargetRoleSessions,

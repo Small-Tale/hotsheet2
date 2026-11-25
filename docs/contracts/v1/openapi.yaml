@@ -22432,6 +22432,15 @@ components:
               configured:
                 description: The checkout has not opted out of the tool.
                 type: boolean
+              models:
+                description:
+                  HS2-0VTQFF. The model ids the host's catalog reports for the tool (as `/ai-tools` `models[]`), the
+                  catalog default first, then the catalog's own order, newest first. A start resolves a pattern-only
+                  Models list to the first id it matches. Absent when not reported (an older peer, or a tool the host did
+                  not detect).
+                type: array
+                items:
+                  type: string
         sessions:
           description:
             Running AI sessions on the host, by id, tool and metrics only; null when the terminal host could not be
@@ -24726,7 +24735,9 @@ components:
             - requirement_unknown
         detail:
           description: The limit, policy rule, tool exclusion or resource behind the reason; for `requirement_unmet` and
-            `requirement_unknown` the requirement, such as `os:windows` (HS2-ZY4Z4G).
+            `requirement_unknown` the requirement, such as `os:windows` (HS2-ZY4Z4G). For `no_tool_available`,
+            `model_unresolved` or `no_matching_model` when a pattern-only Models list resolves to no reported model
+            (HS2-0VTQFF).
           type: string
         retry_at_ms:
           description: When the reason is known to end.
@@ -24904,7 +24915,8 @@ components:
                   - dispatcher_unavailable
               detail:
                 description: '`target_cap`, `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
-                  `machine_refused`, `target_disabled`, `policy_opt_out` or `replacements_exhausted`.'
+                  `machine_refused`, `model_unresolved`, `no_matching_model` (HS2-0VTQFF), `target_disabled`, `policy_opt_out`
+                  or `replacements_exhausted`.'
                 type: string
               retry_at_ms:
                 type: integer

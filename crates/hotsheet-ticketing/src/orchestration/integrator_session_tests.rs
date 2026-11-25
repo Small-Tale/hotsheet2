@@ -352,3 +352,51 @@ fn hs2_4jq41v_ci_pending_enters_the_capacity_version_only_when_reported() {
     });
     assert_ne!(capacity_version(&snapshot), without);
 }
+
+/// HS2-0VTQFF: an integrator start resolves a pattern-only list like a worker start;
+/// with nothing to resolve it says why instead of starting the tool's default.
+#[test]
+fn hs2_0vtqff_an_integrator_start_names_the_resolved_model() {
+    let mut world = World::new(&[(1, 3)]);
+    pool(&mut world, 1, 0, false);
+    world.policy.targets[0].tools.truncate(1);
+    world.policy.targets[0].tools[0].models = vec!["syn-large-*".into()];
+    assert!(integrator_starts(&world.now()).is_empty());
+    assert_eq!(
+        not_started(&world.now()),
+        Some(("integrator_not_started", Some("model_unresolved".into())))
+    );
+
+    let known = &mut world.targets[0]
+        .capacity
+        .as_mut()
+        .unwrap()
+        .tools
+        .as_mut()
+        .unwrap()[0];
+    known.models = Some(vec!["syn-small-1".into()]);
+    assert_eq!(
+        not_started(&world.now()),
+        Some(("integrator_not_started", Some("no_matching_model".into())))
+    );
+
+    let known = &mut world.targets[0]
+        .capacity
+        .as_mut()
+        .unwrap()
+        .tools
+        .as_mut()
+        .unwrap()[0];
+    known.models = Some(vec!["syn-small-1".into(), "syn-large-2".into()]);
+    let schedule = world.now();
+    let start = schedule
+        .placements
+        .iter()
+        .find(|placement| placement.role == Some(SessionRole::Integrator))
+        .unwrap();
+    assert_eq!(
+        (start.tool.as_str(), start.model.as_deref()),
+        ("alpha", Some("syn-large-2"))
+    );
+    assert_eq!(not_started(&schedule), None);
+}

@@ -3930,3 +3930,28 @@ fn hs2_4jq41v_an_integrator_that_never_takes_its_role_is_replaced_then_reported(
     assert_eq!(f.record(&format!("{base}.4")).role, SessionRole::Integrator);
     assert!(unavailable(&tick).is_none());
 }
+
+/// HS2-0VTQFF: under a pattern-only Models list the real executor launches the tool
+/// on the newest model the machine reports that matches, and the session record
+/// names that model.
+#[test]
+fn hs2_0vtqff_a_started_session_records_the_resolved_model() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let mut body = policy();
+    body.targets[0].tools[0].models = vec!["syn-codex-*".into()];
+    f.set_policy(body, &mut tx);
+    f.probe.set(|observation| {
+        observation.tools.as_mut().unwrap()[0].models =
+            Some(vec!["syn-codex-4".into(), "syn-codex-3".into()]);
+    });
+    let step = f.ready("Pattern", &mut tx);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let session = f.record(&format!("sched-start-{step}"));
+    assert_eq!(session.model.as_deref(), Some("syn-codex-4"));
+    let launches = f.host.launches();
+    assert_eq!(launches.len(), 1);
+    assert_eq!(launches[0].model.as_deref(), Some("syn-codex-4"));
+    let _ = &clock;
+}

@@ -23,10 +23,10 @@ use super::resources::ContentionLog;
 use super::storage::{Storage, decode};
 use super::{
     AdmissionConfig, AdmissionOutcome, AdmissionReason, AdmissionRequest, CapacityEntry,
-    CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OfflinePolicy,
-    OrchestrationError, PolicyBody, PolicyDenial, ProjectSites, RequirementState,
+    CapacitySnapshot, CapacityState, MAX_TARGETS, ModelUnresolved, ORCHESTRATION_VERSION,
+    OfflinePolicy, OrchestrationError, PolicyBody, PolicyDenial, ProjectSites, RequirementState,
     ResourceContention, ResourceState, RoleSessionKind, SelectionRequest, SessionCount,
-    SessionRole, SignalSupport, StepRequirements, ToolScope, UnreadableClaims, UnreadableReason,
+    SessionRole, SignalSupport, StepRequirements, TargetPolicy, UnreadableClaims, UnreadableReason,
     decide_admission, requirement_misses, select,
 };
 
@@ -740,7 +740,8 @@ pub const INTEGRATOR_TARGET_DISABLED: &str = "target_disabled";
 pub enum RoleBlocker {
     /// This pass could not start one; `detail` is a [`Blocker`] code (`target_cap`,
     /// `machine_refused`, `no_tool_available`, `cooldown`, `refusal_backoff`,
-    /// `target_unavailable`), `target_disabled` or `policy_opt_out`.
+    /// `target_unavailable`), a model-resolution code (`model_unresolved`,
+    /// `no_matching_model`, HS2-0VTQFF), `target_disabled` or `policy_opt_out`.
     IntegratorNotStarted,
     /// The scheduler's integrators failed to take up their role until their
     /// replacements were exhausted; none is started again before `retry_at_ms`.
@@ -945,6 +946,21 @@ fn machine_tools(snapshot: Option<&CapacitySnapshot>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// HS2-0VTQFF: the model a start of `tool` on `target` names: the policy's start model,
+/// a pattern-only list resolved against the models the target's machine reports.
+fn start_model(
+    target: &TargetPolicy,
+    tool: &str,
+    snapshot: Option<&CapacitySnapshot>,
+) -> Result<Option<String>, ModelUnresolved> {
+    match target.tools.iter().find(|scope| scope.tool == tool) {
+        None => Ok(None),
+        Some(scope) => {
+            scope.resolve_start_model(snapshot.and_then(|snapshot| snapshot.reported_models(tool)))
+        }
+    }
 }
 
 /// The policy rule a running session breaks, if any.
@@ -1496,26 +1512,27 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
             continue;
         }
         // HS2-TH53NN: the preferred model goes with the preferred tool (or with any
-        // tool when none is preferred); another tool uses its own first model.
-        let model = item
-            .model
-            .clone()
-            .filter(|_| {
-                item.tool
-                    .as_ref()
-                    .is_none_or(|tool| tool == &candidate.tool)
-                    && target
-                        .scope(&candidate.tool)
-                        .is_some_and(|scope| scope.allows(item.model.as_deref()))
-            })
-            .or_else(|| {
-                // HS2-1X1TXC: the first exact model; patterns alone name none.
-                target
-                    .tools
-                    .iter()
-                    .find(|scope| scope.tool == candidate.tool)
-                    .and_then(ToolScope::start_model)
-            });
+        // tool when none is preferred); another tool uses its own start model.
+        let preferred = item.model.clone().filter(|_| {
+            item.tool
+                .as_ref()
+                .is_none_or(|tool| tool == &candidate.tool)
+                && target
+                    .scope(&candidate.tool)
+                    .is_some_and(|scope| scope.allows(item.model.as_deref()))
+        });
+        let model = match preferred {
+            Some(model) => Some(model),
+            // HS2-0VTQFF: a pattern-only list resolves to the newest reported model
+            // it matches; none to resolve leaves this tool for the next candidate.
+            None => match start_model(&target, &candidate.tool, Some(snapshot)) {
+                Ok(model) => model,
+                Err(unresolved) => {
+                    nearest = Some((Blocker::NoTool, unresolved.code().into(), None));
+                    continue;
+                }
+            },
+        };
         let admission = decide_admission(
             snapshot,
             &AdmissionConfig::default(),
@@ -2022,17 +2039,24 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 .get(snapshot.server_id.as_str())
                 .copied()
                 .unwrap_or(0);
+            // HS2-0VTQFF: why a candidate had no model to start, named when no
+            // candidate reached the machine's admission.
+            let mut unresolved = None;
+            let mut admitted = false;
             let placed = selection.candidates.iter().find_map(|candidate| {
                 if candidate.status.state == CapacityState::Degraded
                     && running(&load, &candidate.tool, candidate.account.as_deref()) > 0
                 {
                     return None;
                 }
-                let model = target
-                    .tools
-                    .iter()
-                    .find(|scope| scope.tool == candidate.tool)
-                    .and_then(ToolScope::start_model);
+                let model = match start_model(&target, &candidate.tool, Some(snapshot)) {
+                    Ok(model) => model,
+                    Err(reason) => {
+                        unresolved.get_or_insert(reason);
+                        return None;
+                    }
+                };
+                admitted = true;
                 let admission = decide_admission(
                     snapshot,
                     &AdmissionConfig::default(),
@@ -2047,7 +2071,12 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                     .then_some((candidate, model, admission))
             });
             let Some((candidate, model, admission)) = placed else {
-                blocked(Blocker::MachineRefused.code(), None);
+                blocked(
+                    unresolved
+                        .filter(|_| !admitted)
+                        .map_or(Blocker::MachineRefused.code(), ModelUnresolved::code),
+                    None,
+                );
                 continue;
             };
             let account = candidate.account.as_deref();

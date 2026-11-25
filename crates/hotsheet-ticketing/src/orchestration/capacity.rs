@@ -69,6 +69,13 @@ pub struct ToolAvailability {
     pub installed: bool,
     /// The hosted checkout has not opted out of it.
     pub configured: bool,
+    /// HS2-0VTQFF: the model ids the host's catalog reports for the tool (the same
+    /// catalog as `/ai-tools` `models[]`): the catalog's default first, then the rest
+    /// in the catalog's own order, newest first. A start resolves a pattern-only
+    /// model list to the first id it matches. `None` when the host did not report
+    /// them (an older peer, or a tool it did not detect); never a guess.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<Vec<String>>,
 }
 
 /// One running AI session: an id, its tool and what it was observed to use.
@@ -239,8 +246,15 @@ pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
             let mut tools: Vec<String> = tools
                 .iter()
                 .map(|tool| {
+                    // HS2-0VTQFF: models only when reported, so a snapshot without them
+                    // keeps its version.
+                    let models = tool
+                        .models
+                        .as_ref()
+                        .map(|models| format!("[{}]", models.join("|")))
+                        .unwrap_or_default();
                     format!(
-                        "{}:{}{}",
+                        "{}:{}{}{models}",
                         tool.tool,
                         u8::from(tool.installed),
                         u8::from(tool.configured)
@@ -438,6 +452,17 @@ impl CapacitySnapshot {
     }
 
     /// The host's own part, as a probe that relays another server's snapshot needs it.
+    /// HS2-0VTQFF: the model ids the host reports for `tool`, newest first; `None`
+    /// when it reported none for it.
+    pub fn reported_models(&self, tool: &str) -> Option<&[String]> {
+        self.tools
+            .as_ref()?
+            .iter()
+            .find(|known| known.tool == tool)?
+            .models
+            .as_deref()
+    }
+
     pub fn into_host(self) -> HostObservation {
         HostObservation {
             sampled_at_ms: self.sampled_at_ms,

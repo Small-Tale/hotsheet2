@@ -62,11 +62,13 @@ fn roomy() -> HostObservation {
                 tool: "codex".into(),
                 installed: true,
                 configured: true,
+                models: None,
             },
             ToolAvailability {
                 tool: "claude".into(),
                 installed: false,
                 configured: true,
+                models: None,
             },
         ]),
         sessions: Some(Vec::new()),

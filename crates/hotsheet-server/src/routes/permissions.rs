@@ -799,6 +799,8 @@ impl AppState {
     /// without waiting for a discovery in progress (HS2-QV8B7R).
     pub(crate) fn invalidate_ai_tool_discovery(&self) {
         self.ai_tool_generation.fetch_add(1, Ordering::AcqRel);
+        // HS2-0VTQFF: capacity's model reading comes from the same discovery.
+        self.capacity.forget_models();
     }
 }
 
