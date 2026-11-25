@@ -38,6 +38,10 @@ pub struct UpdatePlan {
     /// A retained id: the same id answers with the same update and never opens two.
     #[serde(default)]
     pub operation_id: Option<String>,
+    /// HS2-BQN0M5: started by a target's new ticket, not pressed. Audited as
+    /// `plan_update_auto`. Never read from a request.
+    #[serde(skip)]
+    pub(super) automatic: bool,
 }
 
 /// Names the update to finish or cancel; the drafting one when omitted.
@@ -95,7 +99,10 @@ pub struct PlanUpdateView {
 }
 
 impl OrchestrationRuntime {
-    fn plan_updates(&self, owner_id: &str) -> Result<PlanUpdateStore, OrchestrationError> {
+    pub(super) fn plan_updates(
+        &self,
+        owner_id: &str,
+    ) -> Result<PlanUpdateStore, OrchestrationError> {
         PlanUpdateStore::new(&self.home, owner_id)
     }
 
@@ -285,6 +292,11 @@ impl OrchestrationRuntime {
             identifier(operation_id, "bounded operation id required")?;
         }
         let owner = self.owner(owner_id)?;
+        let action = if request.automatic {
+            super::auto_replan::AUTO_REPLAN_ACTION
+        } else {
+            "plan_update"
+        };
         if self.declarations(owner_id)?.targets.is_empty() {
             return Err(OrchestrationError::Readiness(ReadinessError::NoTargets));
         }
@@ -307,7 +319,7 @@ impl OrchestrationRuntime {
                 self.update_audit(
                     owner_id,
                     actor,
-                    "plan_update",
+                    action,
                     Some(&update.update_id),
                     (AuditOutcome::Succeeded, Some("plan_update_existing")),
                     tx,
@@ -379,7 +391,7 @@ impl OrchestrationRuntime {
             self.update_audit(
                 owner_id,
                 actor,
-                "plan_update",
+                action,
                 Some(&update_id),
                 (AuditOutcome::Failed, Some(reason)),
                 tx,
@@ -395,7 +407,7 @@ impl OrchestrationRuntime {
         self.update_audit(
             owner_id,
             actor,
-            "plan_update",
+            action,
             Some(&update_id),
             (AuditOutcome::Succeeded, Some("plan_update_started")),
             tx,

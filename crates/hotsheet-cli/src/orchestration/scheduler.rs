@@ -1673,7 +1673,10 @@ impl OrchestrationRuntime {
         )
     }
 
-    fn scheduler_actor(&self, owner_id: &str) -> Result<Option<MutationActor>, OrchestrationError> {
+    pub(super) fn scheduler_actor(
+        &self,
+        owner_id: &str,
+    ) -> Result<Option<MutationActor>, OrchestrationError> {
         // HS2-J3ZF27: a Software project has no loop.
         if !self.orchestrating(owner_id)? {
             return Ok(None);

@@ -266,7 +266,9 @@ static WATCHERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<
     std::sync::OnceLock::new();
 
 /// Start a follower for every target of this owner that has an unfinished run, or an
-/// unfinished session (HS2-257Q2Z), and no follower yet. A follower holds one bounded
+/// unfinished session (HS2-257Q2Z), a planned ticket (HS2-TMA4YA), or, while the
+/// default goal is re-planned automatically, every project target (HS2-BQN0M5), and
+/// no follower yet. A follower holds one bounded
 /// request open on its target, syncs the runs whose tickets changed, wakes the owner's
 /// scheduler for a session change no run event reports, backs off after a failure, and
 /// ends when the target has neither. With none, nothing is started and no target is
@@ -292,6 +294,9 @@ fn ensure_watchers(state: &AppState, owner: &str) {
     // HS2-TMA4YA: a target whose tickets an unfinished plan step names, with or without
     // a run on them.
     targets.extend(shared.planned_targets(owner));
+    // HS2-BQN0M5: every project target while a new ticket there re-plans the default
+    // goal automatically.
+    targets.extend(shared.replan_targets(owner));
     for target in targets {
         let key = format!("{}|{target}", loop_key(state, owner));
         let registry = WATCHERS.get_or_init(Default::default);

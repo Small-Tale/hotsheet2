@@ -2,7 +2,7 @@
 use hotsheet_model::{Status, Ticket};
 use hotsheet_ticketing::checkouts::Checkout;
 use hotsheet_ticketing::orchestration::{
-    DenialReason, RunEventKind, RunEventSource, RunState, TargetAction, TargetOpError,
+    AuditOutcome, DenialReason, RunEventKind, RunEventSource, RunState, TargetAction, TargetOpError,
 };
 use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::{Value, json};
@@ -1536,4 +1536,332 @@ fn hs2_xa9dza_a_push_wakes_a_run_whose_site_handoff_is_pending() {
         .unwrap();
     feed.pushed();
     assert!(step(&mut state, &mut tx));
+}
+
+/// HS2-BQN0M5: the automatic actions in the owner's audit.
+fn auto_replans(m: &Machine) -> Vec<(AuditOutcome, Option<String>, Option<String>)> {
+    m.runtime
+        .audit(&m.owner.id, 0, 500)
+        .unwrap()
+        .entries
+        .into_iter()
+        .filter(|entry| entry.record.action == AUTO_REPLAN_ACTION)
+        .map(|entry| {
+            (
+                entry.record.outcome,
+                entry.record.reason,
+                entry.record.actor_id,
+            )
+        })
+        .collect()
+}
+
+fn set_status(m: &Machine, ticket: &Ticket, status: Status) {
+    ops::update(
+        &m.target_store,
+        &ticket.id,
+        NOW.into(),
+        TicketPatch {
+            status: Some(status),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+}
+
+fn placement(m: &Machine, automatic: bool) {
+    let mut rng = Rng(5_000 + u128::from(automatic));
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let current = m.runtime.policy(&m.owner.id).unwrap();
+    m.runtime
+        .set_policy(
+            &m.owner.id,
+            serde_json::from_value(json!({
+                "expected_revision": current.revision,
+                "policy": {
+                    "tools": [{"tool": "claude", "max_sessions": 2}],
+                    "targets": [{"target_id": id(1), "actions": ["tickets_read"],
+                        "tools": [{"tool": "claude"}]}],
+                    "placement": {"automatic": automatic},
+                },
+            }))
+            .unwrap(),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+}
+
+/// HS2-BQN0M5: while the default goal is the only goal and orchestration runs, a ticket
+/// a target reports that no step names starts one background Update Plan, from the
+/// follower's change feed and never on a timer. Transitions: idle and paused start
+/// nothing; a busy planner defers; a burst while an update drafts is one more update;
+/// a planned ticket, a repeated change and an explicit goal start nothing; a reopened
+/// ticket starts one; every automatic update is audited as `plan_update_auto`.
+#[test]
+fn hs2_bqn0m5_a_new_target_ticket_replans_the_default_goal_once() {
+    use super::sessions::{Probe, ScriptedHost, roomy};
+    use hotsheet_ticketing::orchestration::{AuditOutcome as O, PlanUpdateState};
+    let feed = Arc::new(Feed::default());
+    let mut m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let host = Arc::new(ScriptedHost::default());
+    let probe = Arc::new(Probe::default());
+    probe.set(|observation| *observation = roomy());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_probe(probe)
+        .with_session_host(host.clone());
+    let mut rng = Rng(9_100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let owner = m.owner.id.clone();
+    let mut state = WatchState::default();
+    let step = |state: &mut WatchState, tx: &mut Transaction<'_>| {
+        m.runtime.watch_step(&owner, &id(1), state, 8_000, tx)
+    };
+    // Idle: nothing planned, no policy. No follower, no request.
+    assert!(m.runtime.replan_targets(&owner).is_empty());
+    assert_eq!(step(&mut state, &mut tx), WatchStep::default());
+    assert!(feed.calls().is_empty());
+
+    // Propose Plan opens the default goal; the plan names one target ticket.
+    let planned = target_ticket(&m, "Already planned");
+    let proposal = m
+        .runtime
+        .plan_propose(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude", "model": "synthetic-model"})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let goal = proposal.goals[0].clone();
+    assert!(goal.default_goal);
+    let planner = proposal.session.session.session_id.clone();
+    m.runtime
+        .readiness_define(
+            &owner,
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": m.owner_connection(), "native_id": goal.native_id},
+                "target_id": id(1), "connection_id": m.target_connection(),
+                "native_id": planned.id.to_string(),
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    // Placement off: the planned ticket is followed, but nothing re-plans.
+    placement(&m, false);
+    assert!(m.runtime.replan_targets(&owner).is_empty());
+    assert!(step(&mut state, &mut tx).active, "handshake");
+    let early = target_ticket(&m, "Created while paused");
+    feed.push(&m.target_connection(), &early);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert!(auto_replans(&m).is_empty());
+
+    // Orchestration runs: every project target is followed for new tickets.
+    placement(&m, true);
+    assert_eq!(m.runtime.replan_targets(&owner), [id(1)]);
+    // A quiet step asks for nothing.
+    let launched = host.launches().len();
+    let pushed = host.pushes().len();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    // A change to a planned ticket starts nothing.
+    feed.push(&m.target_connection(), &planned);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+
+    // A new ticket while the planner is still at work: deferred, nothing asked.
+    host.set_busy(&planner, true);
+    let first = target_ticket(&m, "New after the plan");
+    feed.push(&m.target_connection(), &first);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Deferred);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Deferred);
+    assert!(auto_replans(&m).is_empty());
+    assert_eq!(host.pushes().len(), pushed);
+    // The planner finishes its turn: the next follower step starts one update, in
+    // that planner, acting as the orchestrator.
+    host.set_busy(&planner, false);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    let started = m
+        .runtime
+        .plan_status(&owner, &mut tx)
+        .unwrap()
+        .update
+        .unwrap();
+    assert_eq!(started.state, PlanUpdateState::Drafting);
+    assert_eq!(host.launches().len(), launched, "no second planner");
+    assert_eq!(host.pushes().len(), pushed + 1);
+    assert!(host.pushes().last().unwrap().1.contains("--plan-update"));
+    let audited = auto_replans(&m);
+    assert_eq!(audited.len(), 1);
+    assert_eq!(audited[0].0, O::Succeeded);
+    assert_eq!(audited[0].1.as_deref(), Some("plan_update_started"));
+    assert!(
+        audited[0]
+            .2
+            .as_deref()
+            .is_some_and(|actor| actor.starts_with("orchestrator")),
+        "{audited:?}"
+    );
+    // Nothing more while quiet.
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+
+    // A burst while that update drafts: deferred, then one more update.
+    let burst: Vec<Ticket> = (0..3)
+        .map(|n| target_ticket(&m, &format!("Burst {n}")))
+        .collect();
+    for ticket in &burst {
+        feed.push(&m.target_connection(), ticket);
+    }
+    feed.push(&m.target_connection(), &burst[0]);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Deferred);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Deferred);
+    assert_eq!(auto_replans(&m).len(), 1);
+    m.runtime
+        .plan_update_finish(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 2);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    m.runtime
+        .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+
+    // A ticket handed once starts nothing on its next change, while it stays open.
+    feed.push(&m.target_connection(), &first);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    // Closed and reopened: one update again.
+    set_status(&m, &first, Status::Completed);
+    feed.push(&m.target_connection(), &first);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    set_status(&m, &first, Status::NotStarted);
+    feed.push(&m.target_connection(), &first);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 3);
+    m.runtime
+        .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+
+    // An overflow cannot say which tickets are new: nothing is started.
+    let unseen = target_ticket(&m, "Missed in an overflow");
+    feed.push(&m.target_connection(), &unseen);
+    feed.overflow.store(true, Ordering::SeqCst);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    feed.overflow.store(false, Ordering::SeqCst);
+
+    // An explicit goal takes precedence: no re-plan, and no target followed for it.
+    let explicit = m.orchestration_ticket("Ship the release");
+    assert!(m.runtime.replan_targets(&owner).is_empty());
+    let other = target_ticket(&m, "New under an explicit goal");
+    feed.push(&m.target_connection(), &other);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    ops::update(
+        &m.owner_store,
+        &explicit.id,
+        NOW.into(),
+        TicketPatch {
+            status: Some(Status::Completed),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    // Paused again: nothing either.
+    placement(&m, false);
+    let paused = target_ticket(&m, "New while paused");
+    feed.push(&m.target_connection(), &paused);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!(auto_replans(&m).len(), 3);
+}
+
+/// HS2-BQN0M5: an update that started after a pending ticket was seen covered it, so
+/// no second update follows; a target with no planned ticket is followed only while
+/// the re-plan applies, and a person's own Update Plan is not audited as automatic.
+#[test]
+fn hs2_bqn0m5_an_update_started_after_the_ticket_covers_it() {
+    use super::sessions::{Probe, ScriptedHost, roomy};
+    let feed = Arc::new(Feed::default());
+    let mut m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let host = Arc::new(ScriptedHost::default());
+    let probe = Arc::new(Probe::default());
+    probe.set(|observation| *observation = roomy());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_probe(probe)
+        .with_session_host(host.clone());
+    let mut rng = Rng(9_200);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let owner = m.owner.id.clone();
+    let mut state = WatchState::default();
+    let proposal = m
+        .runtime
+        .plan_propose(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let planner = proposal.session.session.session_id.clone();
+    placement(&m, true);
+    // No step names a target ticket, yet the target is followed for new tickets.
+    assert!(m.runtime.planned_targets(&owner).is_empty());
+    assert_eq!(m.runtime.replan_targets(&owner), [id(1)]);
+    assert!(
+        m.runtime
+            .watch_step(&owner, &id(1), &mut state, 8_000, &mut tx)
+            .active
+    );
+    host.set_busy(&planner, true);
+    let fresh = target_ticket(&m, "Seen before the press");
+    feed.push(&m.target_connection(), &fresh);
+    assert_eq!(
+        m.runtime
+            .watch_step(&owner, &id(1), &mut state, 8_000, &mut tx)
+            .replan,
+        AutoReplan::Deferred
+    );
+    // A person presses Update Plan once the planner is free: that planner sees the
+    // ticket, so the follower asks for nothing more.
+    host.set_busy(&planner, false);
+    m.runtime
+        .plan_update(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(m.last_audit().0, "plan_update");
+    m.runtime
+        .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(
+        m.runtime
+            .watch_step(&owner, &id(1), &mut state, 8_000, &mut tx)
+            .replan,
+        AutoReplan::Idle
+    );
+    assert!(auto_replans(&m).is_empty());
+    // Paused with nothing planned: the follower ends and asks nothing more.
+    placement(&m, false);
+    let asked = feed.calls().len();
+    assert!(
+        !m.runtime
+            .watch_step(&owner, &id(1), &mut state, 8_000, &mut tx)
+            .active
+    );
+    assert_eq!(feed.calls().len(), asked);
 }
