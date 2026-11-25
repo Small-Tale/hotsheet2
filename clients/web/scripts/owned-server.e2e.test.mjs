@@ -21,10 +21,18 @@ vi.setConfig({ testTimeout: 30_000 });
 let fixtures;
 const recorded = [];
 const handles = [];
+// HS2-XH1S69: POSIX process groups this file created (detached runners, launchers, foreign fixtures).
+// They are swept by group id, which needs no process-table read: a pgid cannot name another process
+// while any member of the group is alive, so a successful group signal only reaches our fixtures.
+const groups = new Set();
+// HS2-XH1S69: an upper bound on every fixture's life, far beyond any test's bound, so a hard-killed
+// test run (no afterEach) cannot leave fixtures running for days.
+const FIXTURE_LIFETIME_MS = 5 * 60_000;
 
 // The runner stands in for Playwright's test runner: detached webServer group, stdin pipe held open.
 const RUNNER = `
 const { spawn } = require('node:child_process');
+setTimeout(() => process.exit(0), ${FIXTURE_LIFETIME_MS}).unref();
 const config = JSON.parse(process.argv[1]);
 const child = spawn(config.command, config.args, {
   shell: config.shell, detached: config.detached ?? true, stdio: ['pipe', 'pipe', 'pipe'],
@@ -41,14 +49,16 @@ const SERVER = `
 const net = require('node:net');
 const { spawn } = require('node:child_process');
 const mode = process.argv[2] ?? 'plain';
+setTimeout(() => process.exit(0), ${FIXTURE_LIFETIME_MS}).unref();
+const lifetime = 'setTimeout(() => process.exit(0), ${FIXTURE_LIFETIME_MS}).unref(); ';
 if (mode === 'ignore-term') process.on('SIGTERM', () => {});
 if (mode === 'exit-7') setTimeout(() => process.exit(7), 0);
 const descendants = [];
 if (mode === 'descendants') {
   // Same group, ignores SIGTERM, bound to nothing: only the launcher's group sweep can end it.
-  descendants.push(spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1e6)'], { stdio: 'ignore' }));
+  descendants.push(spawn(process.execPath, ['-e', lifetime + 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1e6)'], { stdio: 'ignore' }));
   // Detached into its own group but bound to this server by its stdin, like Vite's esbuild service.
-  descendants.push(spawn(process.execPath, ['-e', 'process.stdin.on("end", () => process.exit(0)); process.stdin.resume(); setInterval(() => {}, 1e6)'], { stdio: ['pipe', 'ignore', 'ignore'], detached: true }));
+  descendants.push(spawn(process.execPath, ['-e', lifetime + 'process.stdin.on("end", () => process.exit(0)); process.stdin.resume(); setInterval(() => {}, 1e6)'], { stdio: ['pipe', 'ignore', 'ignore'], detached: true }));
 }
 const server = net.createServer().listen(0, '127.0.0.1', () => {
   console.log('ready ' + [process.pid, server.address().port, ...descendants.map((d) => d.pid)].join(' '));
@@ -59,6 +69,10 @@ beforeAll(async () => {
   fixtures = await mkdtemp(join(tmpdir(), 'hotsheet-owned-server-'));
   await writeFile(join(fixtures, 'runner.cjs'), RUNNER);
   await writeFile(join(fixtures, 'server.cjs'), SERVER);
+  // HS2-XH1S69: every ownership check reads the process table. Without it (a command sandbox that
+  // denies `ps`), fixtures would start but never be recorded, so stop before starting any.
+  if (!(await processInfo(process.pid)))
+    throw new Error('owned-server e2e cannot read the process table (`ps` unavailable); run it unsandboxed.');
   // Take the process-table helper's PowerShell cold start before any test's bounds start (HS2-S5BQRD).
   if (windows) await windowsProcessTable().warm();
 }, 150_000);
@@ -79,7 +93,25 @@ afterEach(async () => {
         /* already gone */
       }
   for (const handle of handles.splice(0)) handle.kill('SIGKILL');
+  sweepGroups();
 });
+
+/** SIGKILL every process group this file created and forget it; an empty group is already gone. */
+function sweepGroups() {
+  for (const group of groups) {
+    groups.delete(group);
+    try {
+      process.kill(-group, 'SIGKILL');
+    } catch {
+      /* no member left */
+    }
+  }
+}
+
+/** Remember a detached POSIX group leader this file started, before anything can fail. */
+function ownGroup(pid) {
+  if (!windows && pid) groups.add(pid);
+}
 
 async function processInfo(pid) {
   if (windows) {
@@ -171,6 +203,7 @@ function startRunner(command) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   handles.push(runner);
+  ownGroup(runner.pid);
   let output = '';
   const waiters = [];
   const onData = (chunk) => {
@@ -213,6 +246,8 @@ function launch(serverArgs, launcherArgs = ['--exit-on-stdin-eof']) {
 async function startOwned(mode, launcherArgs) {
   const run = startRunner(launch(mode, launcherArgs));
   const [, launcherPid] = await run.line(/launcher (\d+)/);
+  // The launcher leads its own detached group; own it before the process-table read can fail.
+  ownGroup(Number(launcherPid));
   const owned = { launcher: await record(Number(launcherPid)) };
   const ready = await run.line(/ready ([\d ]+)\n/);
   const [serverPid, port, ...descendantPids] = ready[1].trim().split(' ').map(Number);
@@ -228,6 +263,8 @@ async function startForeign() {
     stdio: ['ignore', 'pipe', 'ignore'],
   });
   handles.push(foreign);
+  // Its same-group descendant ignores SIGTERM, and killing the leader alone orphans it (HS2-XH1S69).
+  ownGroup(foreign.pid);
   const ready = await new Promise((resolveReady) => {
     let output = '';
     foreign.stdout.on('data', (chunk) => {
@@ -373,6 +410,7 @@ it('stops the real Vite fixture server and its esbuild service when the runner i
           },
     );
     const [, launcherPid] = await run.line(/launcher (\d+)/);
+    ownGroup(Number(launcherPid));
     await run.line(/ready in/i);
     expect(await listening(port)).toBe(true);
     const tree = await Promise.all([Number(launcherPid), ...(await descendantsOf(Number(launcherPid)))].map(record));
@@ -390,3 +428,44 @@ it('stops the real Vite fixture server and its esbuild service when the runner i
     await rm(cacheDir, { recursive: true, force: true });
   }
 }, 60_000);
+
+if (!windows)
+  it('sweeps an unrecorded foreign fixture and its SIGTERM-ignoring descendant by group (HS2-XH1S69)', async () => {
+    // A fixture whose pids never reached `recorded` (the process-table read failed) must still end.
+    const foreign = spawn(process.execPath, [join(fixtures, 'server.cjs'), 'descendants'], {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    handles.push(foreign);
+    ownGroup(foreign.pid);
+    const pids = await new Promise((resolveReady) => {
+      let output = '';
+      foreign.stdout.on('data', (chunk) => {
+        output += chunk;
+        const match = /ready ([\d ]+)\n/.exec(output);
+        if (match) resolveReady(match[1].trim().split(' ').map(Number));
+      });
+    });
+    const [serverPid, port, ...descendantPids] = pids;
+    const entries = await Promise.all([serverPid, ...descendantPids].map(processInfo));
+    const tree = [serverPid, ...descendantPids].map((pid, index) => ({ pid, ...entries[index] }));
+    expect(tree.every((entry) => entry.started)).toBe(true);
+    // Leader first, as afterEach does with its handles, then the group sweep.
+    foreign.kill('SIGKILL');
+    sweepGroups();
+    await eventually(
+      () => allExited(tree),
+      'the unrecorded foreign group to exit',
+      15_000,
+      () => survivors(tree),
+    );
+    expect(await listening(port)).toBe(false);
+  });
+
+it('gives every fixture a bounded lifetime (HS2-XH1S69)', () => {
+  // A hard-killed test run skips afterEach; each fixture still exits on its own.
+  expect(RUNNER).toContain(`setTimeout(() => process.exit(0), ${FIXTURE_LIFETIME_MS}).unref()`);
+  expect(SERVER.match(/process\.exit\(0\), \d+\)\.unref\(\)/gu)).toHaveLength(2);
+  expect(SERVER.match(/\['-e', lifetime \+/gu)).toHaveLength(2);
+  expect(FIXTURE_LIFETIME_MS).toBeGreaterThan(60_000);
+});

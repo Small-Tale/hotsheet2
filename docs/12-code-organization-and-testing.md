@@ -1733,7 +1733,12 @@ launches them (detached `sh -c` child, stdin pipe from a runner):
 - a real Vite server's whole recorded descendant tree, including esbuild, exits when its runner is
   killed, and the port is released
 
-Fixtures are matched by pid and start time before any cleanup signal.
+Fixtures are matched by pid and start time before any cleanup signal. The file never leaks its own
+fixtures (HS2-XH1S69). It refuses to start when `ps` cannot read the process table, as in a command
+sandbox, because unrecorded fixtures could not be cleaned up. `afterEach` also SIGKILLs every POSIX
+group the file created (runners, launchers and foreign fixtures). A pgid cannot be reused while any
+member lives, so that sweep needs no process-table read. Every fixture also exits on its own after
+five minutes, so a hard-killed run that skips `afterEach` still ends them.
 `scripts/owned-server.test.mjs` covers the stop transitions with fake processes.
 `src/playwright-config.test.ts` pins the launcher command.
 
