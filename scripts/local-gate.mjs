@@ -386,6 +386,30 @@ export function browserEvidence(repo, selected, deferred) {
 }
 
 /** HS2-A4HD9X: only directly changed packages receive their measured baseline. */
+/**
+ * HS2-K1WG2E: watcher sources feed live invalidation. Under the CI First budget the full Rust
+ * stage can stop before reaching the HTTP watcher contract, so a watcher change runs that contract
+ * as a forced, retries-off stage ahead of the long suites.
+ */
+export const WATCHER_SOURCE =
+  /^crates\/hotsheet-server\/src\/(?:watcher|store_watch_scope|target_store_watch|code_ref_watch)\.rs$/;
+export const WATCHER_CONTRACT_COMMAND =
+  "cargo nextest run -p hotsheet-server --test http --retries 0 -E 'test(/watcher|registered_store_gets_its_own_watcher/)'";
+
+export function watcherStages(changes) {
+  if (!changes.some((path) => WATCHER_SOURCE.test(path))) return [];
+  return [
+    {
+      cwd: '.',
+      group: 'rust',
+      selected: true,
+      force: true,
+      command: WATCHER_CONTRACT_COMMAND,
+      reasons: ['HS2-K1WG2E: watcher sources changed; run the HTTP watcher invalidation contract first'],
+    },
+  ];
+}
+
 export function performanceStages(changes) {
   const stages = [];
   if (changes.some((path) => /^crates\/|^Cargo\.(toml|lock)$|^scripts\/perf-ticketing\.mjs$/.test(path)))
@@ -607,6 +631,7 @@ export function prepare(repo, baseRef, full = false, versions, options = {}) {
   }
   const highImpactBrowser = highImpactBrowserChange(state.changes);
   let affected = [
+    ...watcherStages(state.changes),
     ...selected.stages.filter((stage) => stage.selected),
     ...browserStages(
       state.changes,

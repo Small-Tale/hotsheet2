@@ -15,6 +15,8 @@ import {
   prepare,
   runGate,
   smokeStages,
+  watcherStages,
+  WATCHER_CONTRACT_COMMAND,
 } from './local-gate.mjs';
 import {
   catalogSpecimenCount,
@@ -114,6 +116,33 @@ test('HS2-PDNJA0 router and OpenAPI edits run the real-server browser contract l
     );
     assert.ok(!p.deferred.some((stage) => stage.command.includes('tests/contracts.spec.ts')), changed);
     assert.ok(!p.checks.some((stage) => stage.command.includes('tests/shell-composition.spec.ts')), changed);
+  }
+});
+
+test('HS2-K1WG2E watcher source edits run the HTTP watcher contract first, retries off', (t) => {
+  assert.deepEqual(watcherStages(['crates/hotsheet-server/src/routes/tickets.rs', 'clients/web/src/app.ts']), []);
+  for (const changed of [
+    'crates/hotsheet-server/src/watcher.rs',
+    'crates/hotsheet-server/src/store_watch_scope.rs',
+    'crates/hotsheet-server/src/target_store_watch.rs',
+  ]) {
+    const [stage] = watcherStages([changed]);
+    assert.equal(stage.command, WATCHER_CONTRACT_COMMAND, changed);
+    assert.equal(stage.force, true, changed);
+    assert.match(stage.command, /--retries 0/);
+    const f = fixture(t);
+    f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    f.put(changed, 'synthetic watcher change\n');
+    f.git('add', changed);
+    f.git('commit', '--quiet', '-m', 'synthetic watcher change');
+    const p = prepare(f.repo, undefined, false, f.options.versions);
+    const index = p.checks.findIndex((check) => check.command === WATCHER_CONTRACT_COMMAND);
+    assert.ok(index >= 0, `${changed}: ${p.checks.map((check) => check.command).join(', ')}`);
+    assert.equal(p.checks[index].floor, true, changed);
+    const fullRust = p.checks.findIndex((check) => check.command.startsWith('cargo nextest run --all-features'));
+    // Under CI First an unstarted stage is deferred once the budget is spent: run the contract first.
+    assert.ok(fullRust === -1 || index < fullRust, `${changed}: contract must precede the full Rust suite`);
+    assert.ok(!p.deferred.some((check) => check.command === WATCHER_CONTRACT_COMMAND), changed);
   }
 });
 

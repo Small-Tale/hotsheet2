@@ -20,6 +20,14 @@ real-server `contracts.spec.ts` browser check and its fixture as mandatory local
 work. A router-only or OpenAPI-only edit does not pull in shell composition. This
 closes the selection gap exposed by HS2-F1QJ03's missing note-doctor contract.
 
+HS2-K1WG2E makes an edit to a server watcher source (`watcher.rs`,
+`store_watch_scope.rs`, `target_store_watch.rs`, `code_ref_watch.rs`) select the HTTP
+watcher invalidation contract (`cargo nextest run -p hotsheet-server --test http
+--retries 0 -E 'test(/watcher|registered_store_gets_its_own_watcher/)'`) as a forced
+stage ahead of the long Rust suite. A CI First run that spends its budget inside the
+full Rust stage has therefore already proved the contract. Linux-only watcher cases
+are not covered by this macOS stage (HS2-E13GV2).
+
 ## Read-only dependency edge preview (HS2-55MWQ9)
 
 `scripts/check.sh --plan` also reports an `edgePreview`. This is a candidate
