@@ -3238,6 +3238,8 @@ discard flow remains covered by its existing real-router test.
 - Behavior: `coordination merge-pending-prune` reports, and with `--apply` deletes, `<remote>/merge-pending/<SLUG>[-<label>]` branches whose commits `git cherry` finds on the shipping ref (merged or patch-equivalent) and whose ticket is completed, verified, archived or deleted; others are kept with a reason. Dry run by default, idempotent, never opens the pool.
 - Unit: `crates/hotsheet-cli/src/merge_pending_tests.rs # hs2_ztg8fd_*` drives a temp clone and bare remote through merged, cherry-picked, partially integrated, open-ticket, moved-ticket, unknown-slug and malformed branches, a dry run, an apply, an idempotent rerun, a later close-and-finish that prunes the rest, an unreachable remote (`fetch_error` plus `delete_failed`), and an unresolvable shipping ref; slug and label parsing covers malformed names.
 - E2E: `crates/hotsheet-cli/tests/cli.rs # hs2_ztg8fd_merge_pending_prune_cli_uses_store_ticket_status` runs the real CLI against an initialized store and a bare remote.
+- Manual: none.
+
 ### AI completion commits on the remote (HS2-R8ZH4K)
 
 - Behavior: an `ai` completion through CLI `edit`/`close`, MCP update/close and the git-backed server routes is refused (`commit_not_on_remote`, `commits_not_found`, `commit_remote_unverified`, `commit_invalid`) unless its slug-first or named commits are on a remote-tracking ref or patch-equivalent to a remote commit; `--no-commit`/`no_commit` records an opt-out activity note; no known code checkout skips with a warning.
