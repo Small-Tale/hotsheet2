@@ -89,7 +89,12 @@ execution primitive; orchestration does not add a second claim coordinator.
 ## 26.2 Shared target declaration and local binding
 
 The orchestration checkout declares targets in a versioned
-`.hotsheet2/orchestration.json` file beside its project settings. Version 1 has
+`.hotsheet2/orchestration.json` file beside its project settings. It is committed with
+the project, as are the shared plan (`orchestration-plan.json`), the policy
+(`orchestration-policy.json`), the validation profiles (`validation-profiles.json`), and
+the project resource-claim registry (`resource-claims.json`). The managed project
+`.gitignore` block re-includes each of them, while the rest of `.hotsheet2/` stays
+machine-local (HS2-GY8C2D, [04](04-core-server-cli.md) §4.7.0). Version 1 has
 `schema_version: 1`, an opaque canonical ULID `revision`, and a `targets` list. Each entry has an immutable random ULID
 `target_id`, `state: active|removed`, a human label, and optional normalized,
 credential-free expected repository identity. A label or repository URL is

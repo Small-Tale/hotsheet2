@@ -2285,12 +2285,25 @@ file the same way. It owns one delimited block:
 /.hotsheet2/*
 !/.hotsheet2/settings.json
 !/.hotsheet2/groups/
+!/.hotsheet2/orchestration.json
+!/.hotsheet2/orchestration-plan.json
+!/.hotsheet2/orchestration-policy.json
+!/.hotsheet2/validation-profiles.json
+!/.hotsheet2/resource-claims.json
 # <<< Hot Sheet 2 <<<
 ```
 
-- Everything under `.hotsheet2/` is machine-local except the shared settings file and the
-  group registry ([02](02-ticket-storage.md) §2.7.1). A new machine-local file
-  needs no new ignore line.
+- Everything under `.hotsheet2/` is machine-local except the paths in
+  `project_gitignore::SHARED_PROJECT_PATHS`: the shared settings file, the group registry
+  ([02](02-ticket-storage.md) §2.7.1), and the shared orchestration files: the target
+  manifest, the shared plan, the policy, the validation profiles, and the project
+  resource-claim registry (HS2-GY8C2D). A new machine-local file needs no new ignore line.
+  A new shared file must be added to that list. A policy test fails when an orchestration
+  `Storage::shared_named` writer or a shared-path constant names a file the list misses,
+  and checks with `git check-ignore` that every listed path is committable.
+- A project whose block, or equivalent hand-written rules, predates a newly listed path
+  gets the current block from the next writer (setup, settings, link, or init). Until then
+  the probes report each hidden shared file as a conflict.
 - Lines outside the block are never changed. The only exception is the exact
   single-file lines earlier releases appended (`.hotsheet2/settings.local.json`,
   `.hotsheet2/store`); the block replaces them.
