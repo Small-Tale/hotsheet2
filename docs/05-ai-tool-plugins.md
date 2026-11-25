@@ -1137,8 +1137,14 @@ install --server <bundled hotsheet-server>` before it starts the local bridge. T
     application data and the operating system releases their lock on process exit.
     If initial broker readiness exhausts its existing probe window, its diagnostic names
     the spawned PID, observed exit status or still-running state, and last probe error
-    kind/numeric OS error (HS2-C8J6WS). No raw child output, command or environment is
-    logged. A healthy Pong still succeeds even if this launch's contender exited; startup
+    kind/numeric OS error (HS2-C8J6WS). Direct launches capture the broker's startup
+    stderr in a private temporary file and include at most 4 KiB in the local startup
+    error if the child exits (HS2-8GVYHQ). The broker disconnects that file once it
+    binds, and the server removes it after an ordinary attempt. An abrupt server kill
+    can leave a private 0600 capture file in the per-user broker socket directory;
+    inspect and remove it locally during crash recovery. Commands,
+    environments, and this diagnostic are not sent to telemetry. A healthy Pong still
+    succeeds even if this launch's contender exited; startup
     does not change ownership. The intermittent historical failure's cause remains tracked
     separately in HS2-2ETGGC.
     The readiness window follows the spawned broker (HS2-KCM23W), at server startup and when
