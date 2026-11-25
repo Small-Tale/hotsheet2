@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { announcerItem } from './announcer-reel';
-import { announcerSpokenText, commandPhrase, speakableProse } from './announcer-speech';
+import { announcerSpokenText, commandPhrase, speakableProse, toolCallPhrase } from './announcer-speech';
 
 const command = (text: string, summary = `claude ran \`${text}\``) =>
   announcerSpokenText({ tool: 'claude', kind: 'command', summary, detail: { command: text } });
@@ -167,5 +167,36 @@ describe('announcer speech for other events (HS2-R5Q2GY)', () => {
     });
     expect(item.narration).toBe('claude ran `cat > notes.md`');
     expect(item.spoken).toBe('claude wrote notes.md.');
+  });
+});
+
+describe('announcer speech for tool calls (HS2-NKE7RB)', () => {
+  it('names what a tool does instead of its raw id', () => {
+    expect(toolCallPhrase('mcp__hotsheet__hotsheet_update')).toBe('updated a ticket');
+    expect(toolCallPhrase('mcp__hotsheet__hotsheet_claim_next')).toBe('claimed a ticket');
+    expect(toolCallPhrase('hotsheet.hotsheet_query')).toBe('listed tickets');
+    expect(toolCallPhrase('hotsheet.hotsheet_targets')).toBe('worked on orchestration targets');
+    expect(toolCallPhrase('mcp__hotsheet__hotsheet_annotate_attachment')).toBe('used Hot Sheet');
+    expect(toolCallPhrase('mcp__claude_in_chrome__navigate')).toBe('used claude in chrome tools');
+    expect(toolCallPhrase('github.create_issue')).toBe('used github tools');
+    expect(toolCallPhrase('Read')).toBe('read a file');
+    expect(toolCallPhrase('Grep')).toBe('searched the code');
+    expect(toolCallPhrase('WebFetch')).toBe('read a web page');
+    expect(toolCallPhrase('web search')).toBe('searched the web');
+    expect(toolCallPhrase('Task')).toBe('started a sub-agent');
+    expect(toolCallPhrase('AskUserQuestion')).toBe('asked you a question');
+    expect(toolCallPhrase('NotebookRead')).toBe('used notebook read');
+    expect(toolCallPhrase('')).toBe('used a tool');
+    expect(toolCallPhrase('x/../../etc')).toBe('used a tool');
+  });
+
+  it('replaces only the default summary and keeps custom tool-call prose', () => {
+    const spoken = (summary: string, name?: string) =>
+      announcerSpokenText({ tool: 'claude', kind: 'tool_call', summary, detail: name ? { name } : null });
+    expect(spoken('claude called mcp__hotsheet__hotsheet_get', 'mcp__hotsheet__hotsheet_get')).toBe(
+      'claude read a ticket.',
+    );
+    expect(spoken('claude used a tool')).toBe('claude used a tool.');
+    expect(spoken('Fetched the release notes', 'WebFetch')).toBe('Fetched the release notes');
   });
 });

@@ -650,6 +650,59 @@ test('HS2-R5Q2GY speaks a summary instead of the literal command', async ({ page
     .toEqual(['claude wrote ft.md.']);
 });
 
+test('HS2-NKE7RB speaks what a tool call does, not its raw tool id', async ({ page }) => {
+  await page.addInitScript(() => {
+    const spoken: string[] = [];
+    Object.defineProperty(window, '__announcerSpoken', { value: spoken });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: class {
+        onend?: () => void;
+        constructor(readonly text: string) {}
+      },
+    });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel() {},
+        speak(utterance: { text: string; onend?: () => void }) {
+          spoken.push(utterance.text);
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  const literal = 'mcp__hotsheet__hotsheet_update';
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: [
+        {
+          store_id: 'synthetic-store',
+          event: {
+            id: 'cmd-1',
+            ts: '2026-11-01T01:00:00Z',
+            tool: 'claude',
+            kind: 'tool_call',
+            summary: `claude called ${literal}`,
+            detail: { name: literal },
+            importance: 'high',
+          },
+        },
+      ],
+    }),
+  );
+  await page.getByRole('button', { name: 'Announcer', exact: true }).click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  // The display keeps the precise tool id; speech says what it did.
+  await expect(overlay.locator('[data-component="markdown-preview"]')).toContainText(literal);
+  await overlay.getByRole('button', { name: 'Play Narration' }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
+    .toEqual(['claude updated a ticket.']);
+});
+
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {
   const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
   const settleViewport = async (mobile: boolean) => {

@@ -119,7 +119,12 @@ The `activity` capability turns native signals → events; the host owns the str
   changes", "pushed changes to main"), the ticket action ("claimed a ticket", "completed a
   ticket"), a file read, written, or deleted by its base name ("read notes.md"), and a search by
   its word when the pattern is a plain word. An unknown program is "ran <program>"; only an empty
-  or unreadable line is "ran a command". Paths, flags, quoted arguments, and code are never
+  or unreadable line is "ran a command".
+  A tool-call event whose summary is the default (`<tool> called <name>`) is spoken by what
+  the tool does (HS2-NKE7RB): Hot Sheet's MCP tools by their ticket action ("updated a
+  ticket", "claimed a ticket"), built-in agent tools by their effect ("read a file", "searched
+  the web", "started a sub-agent"), another MCP server by its name ("used github tools"), and
+  any other plain name as words; a custom tool-call summary keeps its prose. Paths, flags, quoted arguments, and code are never
   spoken. Other events keep their prose,
   with inline code read as a short name or "a command", and code blocks and links
   replaced by plain words. A default edit summary is read by file name,

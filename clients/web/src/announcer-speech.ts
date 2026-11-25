@@ -8,6 +8,9 @@ import type { ActivityEvent } from './api';
 export function announcerSpokenText(event: Pick<ActivityEvent, 'tool' | 'kind' | 'summary' | 'detail'>): string {
   const tool = event.tool.trim() || 'The agent';
   if (event.kind === 'command') return `${tool} ${commandPhrase(commandText(event))}.`;
+  // A default tool-call summary names a raw tool id; say what the tool does instead (HS2-NKE7RB).
+  if (event.kind === 'tool_call' && /^\S+ (?:called \S+|used a tool)$/.test(event.summary.trim()))
+    return `${tool} ${toolCallPhrase(detailString(event.detail, 'name') ?? '')}.`;
   if (event.kind === 'edit') {
     const path = detailString(event.detail, 'path');
     if (path && /^\S+ edited /.test(event.summary.trim())) return `${tool} edited ${basename(path)}.`;
@@ -340,6 +343,74 @@ export function commandPhrase(command: string): string {
   }
   if (phrases.length === 0) return 'ran a command';
   return phrases.slice(0, 2).join(' and ');
+}
+
+/** Hot Sheet's own MCP tools by what they do to tickets. */
+const HOT_SHEET_TOOLS: ReadonlyArray<[RegExp, string]> = [
+  [/^(?:query|ls|list)$/, 'listed tickets'],
+  [/^(?:get|show)$/, 'read a ticket'],
+  [/^(?:update|edit|batch)$/, 'updated a ticket'],
+  [/^(?:claim|claim_next)$/, 'claimed a ticket'],
+  [/^release$/, 'released a ticket'],
+  [/^renew$/, 'renewed a ticket claim'],
+  [/^(?:create|new)$/, 'created a ticket'],
+  [/^close$/, 'closed a ticket'],
+  [/^targets$/, 'worked on orchestration targets'],
+];
+
+/** Built-in agent tools (Claude Code's and Codex's) by what they do. */
+const BUILT_IN_TOOLS: Readonly<Record<string, string>> = {
+  read: 'read a file',
+  view: 'read a file',
+  grep: 'searched the code',
+  search: 'searched the code',
+  glob: 'looked for files',
+  ls: 'listed files',
+  webfetch: 'read a web page',
+  websearch: 'searched the web',
+  'web search': 'searched the web',
+  task: 'started a sub-agent',
+  agent: 'started a sub-agent',
+  todowrite: 'updated its task list',
+  askuserquestion: 'asked you a question',
+  exitplanmode: 'finished planning',
+  'image view': 'looked at an image',
+};
+
+/** A tool or server name as words a voice can say (`code_review` → `code review`), or undefined. */
+function toolWords(name: string): string | undefined {
+  const words = name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_.-]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return /^[a-z][a-z ]{1,30}$/.test(words) ? words : undefined;
+}
+
+/**
+ * A spoken phrase for a tool call (HS2-NKE7RB): Hot Sheet's ticket tools by their ticket action, the
+ * agent's built-in tools by what they do, another MCP server by its name, and anything else by its
+ * plain-word name. Arguments are never spoken; an unspeakable name is "used a tool".
+ */
+export function toolCallPhrase(name: string): string {
+  const trimmed = name.trim();
+  // `mcp__server__tool` (Claude) or `server.tool` (Codex).
+  const mcp = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(trimmed) ?? /^([\w-]+)\.([\w-]+)$/.exec(trimmed);
+  const server = mcp?.[1],
+    tool = mcp?.[2] ?? trimmed;
+  if (server === 'hotsheet' || /^hotsheet_/.test(tool)) {
+    const action = tool.replace(/^hotsheet_/, '');
+    for (const [pattern, phrase] of HOT_SHEET_TOOLS) if (pattern.test(action)) return phrase;
+    return 'used Hot Sheet';
+  }
+  if (server) {
+    const words = toolWords(server);
+    return words ? `used ${words} tools` : 'used a tool';
+  }
+  const builtIn = BUILT_IN_TOOLS[trimmed.toLowerCase()];
+  if (builtIn) return builtIn;
+  const words = toolWords(trimmed);
+  return words ? `used ${words}` : 'used a tool';
 }
 
 /** Summary prose fit to say aloud: inline code becomes its plain name or "a command". */
