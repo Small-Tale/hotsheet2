@@ -763,7 +763,13 @@ fn hs2_76vmyg_expired_claim_or_availability_never_reassigns_existing_work() {
 fn hs2_76vmyg_qualified_refs_and_unknown_provider_queue_do_not_imply_empty() {
     let (root, c) = fixture();
     assert!(
-        Coordinator::open(&root.path().join("project"), &root.path().join("project")).is_err(),
+        // HS2-67N8SJ: an isolated registry home, since a source mismatch consults it.
+        Coordinator::open_with_registry_home(
+            &root.path().join("project"),
+            &root.path().join("project"),
+            root.path().join("home"),
+        )
+        .is_err(),
         "the same project cannot silently switch source scopes"
     );
     register(&c, Role::Integrator, "i", "generation-1", NOW);

@@ -1378,6 +1378,10 @@ correction assignments using existing fields and a schema-three semantic fence
 pruning integrated `merge-pending/<SLUG>` remote branches of closed tickets (HS2-ZTG8FD),
 `retire.rs` backs `coordination retire-finished`, retiring records whose ticket is
 closed with a ticket inspection note and an additive `retirement_note` (HS2-V9BXWF),
+`identity.rs` proves and migrates a pool's pre-move `project_id`/`source_id` from the
+checkout registry (`CheckoutRegistry::checkout_identity_at_root`: relocated durable id,
+`sourceAliases` chain) inside `change()` and backs `coordination repair-identity
+[--dry-run]`, logging to `identity-migrations.log` (HS2-67N8SJ),
 `snapshot.rs` source-scoped queue facts/cursors (including `finished_assignments`), and `wait.rs` filesystem-event waits
 and known lease deadlines. `authority.rs` owns the single assignment authority
 (integrator or dispatcher), the integrator's published integration report, dispatcher
@@ -1409,7 +1413,10 @@ gate defaults; `scripts/gate-ticket-profile.mjs` reads an explicit setting for
 local gate selection and enforces custom minimums. Under CI First,
 `scripts/gate-budget.mjs` and `scripts/local-gate.mjs` run a best-effort budgeted gate
 that defers unstarted stages to CI, and `scripts/main-integration-window.mjs`
-(`ciFirstPush`) lets `scripts/push.sh` push main without a receipt.
+(`ciFirstPush`) lets `scripts/push.sh` push main without a receipt. Its
+`selectedSourceStore` falls back to the shipping checkout's `.hotsheet2/store` link
+from a linked worktree, and `authorizeMainState` names `coordination repair-identity`
+on a pool id mismatch (`identityRepairHint`, HS2-67N8SJ).
 HS2-NBDXPW exposes that route in Project Settings through
 `clients/web/src/components/development-strategy-settings.tsx` and its interaction
 module. `clients/web/src/app/runtime.tsx` keeps project-scoped drafts, previews and

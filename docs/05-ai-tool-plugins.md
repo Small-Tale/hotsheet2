@@ -2662,6 +2662,31 @@ refuse the upgraded state. Stop old waiters and switch all members to the verifi
 schema-three artifact before any live pool open; checking `coordination --help`
 alone does not prove this capability (HS2-A1F615/HS2-AEBJYN).
 
+**Moved checkouts and stores (HS2-67N8SJ).** The pool's `project_id` and `source_id`
+derive from the checkout and store paths. Moving either one changes the recomputed ids.
+Every open, under the pool lock, migrates the stored ids only when the machine's
+checkout registry (`$HOTSHEET_HOME/checkouts.json`, read-only here) proves both.
+
+- **Project:** the stored project id is this checkout's id, or the durable registry id
+  of the checkout registered at this shipping root. `checkouts relocate` keeps that id.
+- **Source:** following that checkout's `sourceAliases` from the stored source's
+  connection id reaches a Git source the checkout links at the current store path.
+  The connection id is the 16-hex prefix of the stored hash. Following stops on a cycle.
+
+A migration rewrites only the two ids and appends one provenance line to
+`hotsheet-coordination/identity-migrations.log`; the pool schema does not change.
+Any other mismatch is refused as before ("incompatible coordination state" or "bound to
+another source"), and the error names the headless recovery:
+`hotsheet-cli -C <store> coordination --project <repo> repair-identity [--dry-run]`.
+That command prints the stored and current ids, the evidence, and whether they are
+equivalent. Without `--dry-run` it migrates a proven pool with the same proof. It
+never creates a pool. It exits nonzero for an unproven pool and leaves the pool unchanged;
+it never force-rebinds. `scripts/push.sh` refuses a mismatched pool with
+`Incompatible coordination pool or ticket source`, naming the same command. In a linked
+worktree without its own `.hotsheet2/store` link, `push.sh` resolves the source store
+through the shipping checkout's link before falling back to the repo path, so
+`--source-store` is no longer needed there.
+
 Use the same prefix, with `--project` before the subcommand:
 
 | Command                                                                                                                                                                                                                                                        | Effect                                                                                                                                                                             |

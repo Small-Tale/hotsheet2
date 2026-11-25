@@ -7,8 +7,8 @@ use clap::{Args, Subcommand};
 use hotsheet_cli::coordination::development_strategy::CustomDevelopmentStrategy;
 use hotsheet_cli::coordination::{
     Assignment, Authority, CAPABILITIES, Coordinator, DevelopmentPolicy, DevelopmentPreset,
-    HandoffEvidence, IntegrationStrategy, IntegrationSuspension, NextPlanEntry, Phase,
-    PreferenceRequest, PrerequisiteGate, RefusalReason, ReservationCheck, ReturnRoute, Role,
+    HandoffEvidence, IdentityStatus, IntegrationStrategy, IntegrationSuspension, NextPlanEntry,
+    Phase, PreferenceRequest, PrerequisiteGate, RefusalReason, ReservationCheck, ReturnRoute, Role,
     StrategyPolicy, StrategyRequest, TicketFilter, WaitRequest, WorkerPreferences,
 };
 use hotsheet_ticketing::TicketRef;
@@ -216,6 +216,15 @@ enum CoordinationCmd {
         /// Use the current remote-tracking refs without `git fetch --prune` first.
         #[arg(long)]
         no_fetch: bool,
+    },
+    /// Report the pool's stored and current project/source ids and, unless --dry-run,
+    /// migrate ids that predate a checkout or store move the checkout registry proves
+    /// (relocated checkout id, source alias chain). Refuses anything else and never
+    /// rebinds a pool (HS2-67N8SJ). Exits nonzero when refused.
+    RepairIdentity {
+        /// Report only; never write the pool.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Retire every non-done assignment whose ticket is closed (completed, verified,
     /// archived, deleted or moved), including review returns and findings handoffs.
@@ -828,6 +837,23 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&report)?);
         return Ok(());
     }
+    // HS2-67N8SJ: identity repair must read a pool that an ordinary open refuses.
+    if let CoordinationCmd::RepairIdentity { dry_run } = &args.command {
+        let report = Coordinator::repair_identity(
+            &args.project,
+            &ctx.path,
+            hotsheet_plugins::hotsheet_home(),
+            *dry_run,
+        )?;
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        if report.status == IdentityStatus::Refused {
+            anyhow::bail!(
+                "coordination pool identity is not provably this checkout and ticket store; it was left unchanged: {}",
+                report.refusal.as_deref().unwrap_or("no proof")
+            );
+        }
+        return Ok(());
+    }
     // HS2-NEY1QH: the strategy policy is committed project settings, not pool state.
     if strategy_policy(&args.project, &args.command)? {
         return Ok(());
@@ -942,7 +968,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         | CoordinationCmd::StrategyAllow { .. }
         | CoordinationCmd::StrategyDisallow { .. }
         | CoordinationCmd::StrategyDefault { .. }
-        | CoordinationCmd::MergePendingPrune { .. } => {
+        | CoordinationCmd::MergePendingPrune { .. }
+        | CoordinationCmd::RepairIdentity { .. } => {
             unreachable!("handled before opening the pool")
         }
         CoordinationCmd::BatchPlan { .. }

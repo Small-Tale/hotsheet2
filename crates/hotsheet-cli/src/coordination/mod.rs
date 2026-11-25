@@ -16,6 +16,9 @@ pub mod development_strategy;
 mod development_strategy_tests;
 #[cfg(test)]
 mod findings_review_return_tests;
+mod identity;
+#[cfg(test)]
+mod identity_tests;
 mod next_plan;
 #[cfg(test)]
 mod next_plan_tests;
@@ -64,6 +67,7 @@ pub use contract::{
     TransitionKind, WaitRequest,
 };
 pub use development_strategy::{DevelopmentPolicy, DevelopmentPreset};
+pub use identity::{IdentityReport, IdentityStatus};
 pub use preferences::{
     PreferenceRequest, RefusalReason, RequestRefusal, TicketFilter, WorkerMatch, WorkerPreferences,
 };
@@ -118,6 +122,13 @@ impl Coordinator {
         source: &Path,
         registry_home: PathBuf,
     ) -> Result<Self> {
+        let this = Self::locate(project, source, registry_home)?;
+        this.change(|_| Ok(()))?;
+        Ok(this)
+    }
+
+    /// Resolve the shipping checkout, pool directory and current ids without reading the pool.
+    fn locate(project: &Path, source: &Path, registry_home: PathBuf) -> Result<Self> {
         let project = hotsheet_sync::paths::canonicalize(project)?;
         let output = hotsheet_ticketing::git::launch("git")
             .arg("-C")
@@ -135,39 +146,44 @@ impl Coordinator {
         let project_id = checkouts::checkout_id(shipping)?;
         let directory = common.join("hotsheet-coordination");
         fs::create_dir_all(&directory)?;
-        let this = Self {
+        let source = hotsheet_sync::paths::canonicalize(source)?;
+        Ok(Self {
             directory,
             project: shipping.to_path_buf(),
-            source: hotsheet_sync::paths::canonicalize(source)?,
+            source_id: format!("{:x}", Sha256::digest(source.to_string_lossy().as_bytes())),
+            source,
             registry_home,
             project_id,
-            source_id: format!(
-                "{:x}",
-                Sha256::digest(
-                    hotsheet_sync::paths::canonicalize(source)?
-                        .to_string_lossy()
-                        .as_bytes()
-                )
-            ),
             #[cfg(test)]
             before_dispatcher_register: std::sync::Mutex::new(None),
             #[cfg(test)]
             after_dispatcher_register: std::sync::Mutex::new(None),
             #[cfg(test)]
             waiting_unregistered: std::sync::Mutex::new(None),
-        };
-        this.change(|_| Ok(()))?;
-        Ok(this)
+        })
     }
 
-    fn change<T>(&self, update: impl FnOnce(&mut State) -> Result<T>) -> Result<T> {
+    fn lock(&self) -> Result<FileLock> {
         let file = OpenOptions::new()
             .create(true)
             .truncate(false)
             .read(true)
             .write(true)
             .open(self.directory.join("state.lock"))?;
-        let _lock = FileLock::acquire(file)?;
+        Ok(FileLock::acquire(file)?)
+    }
+
+    fn write_state(&self, state: &State, path: &Path) -> Result<()> {
+        let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)?;
+        serde_json::to_writer_pretty(&mut temporary, state)?;
+        temporary.write_all(b"\n")?;
+        temporary.as_file().sync_all()?;
+        hotsheet_sync::files::persist(temporary, path)?;
+        Ok(())
+    }
+
+    fn change<T>(&self, update: impl FnOnce(&mut State) -> Result<T>) -> Result<T> {
+        let _lock = self.lock()?;
         let path = self.directory.join("state.json");
         let mut state = match fs::read(&path) {
             Ok(bytes) => serde_json::from_slice::<State>(&bytes)?,
@@ -183,10 +199,14 @@ impl Coordinator {
         // an integrator records a non-serial strategy (HS2-NEY1QH); schema nine only once a
         // worker states ticket preferences (HS2-6WFCZR). Newer is refused.
         ensure!(
-            matches!(state.version, 1..=9) && state.project_id == self.project_id,
-            "incompatible coordination state"
+            matches!(state.version, 1..=9),
+            "incompatible coordination state: pool schema {} is not supported by this executable",
+            state.version
         );
         let before = state.clone();
+        // HS2-67N8SJ: a pool whose ids predate a proven checkout or store move follows it
+        // here, under the lock; any other id mismatch is refused naming the repair command.
+        let migration = self.reconcile_identity(&mut state)?;
         if state.version == 1 {
             for assignment in state.assignments.values_mut() {
                 if let Some(commit) = assignment.commit.as_ref() {
@@ -200,19 +220,14 @@ impl Coordinator {
         // Upgrade before exposing any state so those older mutators refuse this pool.
         // A schema-four pool is never lowered (HS2-TWZW7X).
         state.version = state.version.max(3);
-        ensure!(
-            state.source_id == self.source_id,
-            "coordination pool is bound to another source; use the same explicit -C source as the integrator"
-        );
         let result = update(&mut state)?;
         Self::schema_fence(&state)?;
         if state != before || !path.exists() {
             state.revision += 1;
-            let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)?;
-            serde_json::to_writer_pretty(&mut temporary, &state)?;
-            temporary.write_all(b"\n")?;
-            temporary.as_file().sync_all()?;
-            hotsheet_sync::files::persist(temporary, &path)?;
+            self.write_state(&state, &path)?;
+        }
+        if let Some(line) = migration {
+            self.record_migration(&line)?;
         }
         Ok(result)
     }

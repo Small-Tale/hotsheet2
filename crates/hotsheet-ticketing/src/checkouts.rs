@@ -205,6 +205,9 @@ impl Checkout {
     }
 }
 
+/// Historical connection id to the current connection id, for one checkout.
+pub type SourceAliases = BTreeMap<String, String>;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct RegistryFile {
     #[serde(default = "registry_schema_version", rename = "schemaVersion")]
@@ -1441,6 +1444,29 @@ impl CheckoutRegistry {
         })?;
         validate_linked_store_identity(&checkout, &source)?;
         Ok((checkout, source))
+    }
+
+    /// HS2-67N8SJ: the checkout registered at exactly `root` (canonical path, never an id
+    /// prefix or alias) and the historical connection ids retained for it. Read-only, so a
+    /// coordination pool can prove a relocated checkout's identity without changing links.
+    /// `None` when nothing is registered at that root.
+    pub fn checkout_identity_at_root(
+        &self,
+        root: &Path,
+    ) -> Result<Option<(Checkout, SourceAliases)>, CheckoutError> {
+        let canonical = hotsheet_sync::paths::canonicalize(root)
+            .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+        let text = canonical.to_string_lossy();
+        let mut file = self.read()?;
+        let mut matches = file.checkouts.iter().filter(|entry| entry.root == text);
+        let Some(checkout) = matches.next().cloned() else {
+            return Ok(None);
+        };
+        if matches.next().is_some() {
+            return Err(CheckoutError::Ambiguous(text.into_owned()));
+        }
+        let aliases = file.source_aliases.remove(&checkout.id).unwrap_or_default();
+        Ok(Some((checkout, aliases)))
     }
 
     fn read(&self) -> Result<RegistryFile, CheckoutError> {
