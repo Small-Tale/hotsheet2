@@ -397,23 +397,54 @@ async fn hs2_s3fkj7_http_mcp_and_cli_read_the_same_target_lines_and_wait_by_vers
         assert_eq!(other["version"], planned["version"]);
         assert_eq!(other["lines"][0]["item"]["step_id"], step);
     }
-    // A dispatch ends a waiting read with the new version: the work is running.
+    // A dispatch ends a waiting read with a new version. It can first expose an
+    // intermediate ready line before the run reaches the target follower (HS2-4XGZDW).
     let waiting = {
         let router = router.clone();
         let path = format!("{lines}?after={version}&wait_ms=15000");
         tokio::spawn(async move { api(router, "GET", &path, Value::Null, true).await })
     };
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     let run = call(json!({"action":"run_dispatch","target_id":TARGET,
         "ticket":{"native_id":goal.slug},"connection_id":connection,
         "native_id":first.slug,"operation_id":"op-lines","worker_id":"mcp-worker"}));
     assert_eq!(run["state"], "dispatched");
-    let (status, changed) = tokio::time::timeout(std::time::Duration::from_secs(14), waiting)
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(14);
+    let (status, mut changed) = tokio::time::timeout_at(deadline, waiting)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(status, StatusCode::OK);
     assert_ne!(changed["version"], planned["version"]);
+    let mut observed = vec![(
+        changed["version"].as_str().unwrap().to_owned(),
+        changed["lines"][0]["item"]["state"]
+            .as_str()
+            .unwrap()
+            .to_owned(),
+    )];
+    while changed["lines"][0]["item"]["state"] != "running" {
+        let after = changed["version"].as_str().unwrap().to_owned();
+        let wait_ms = deadline
+            .saturating_duration_since(tokio::time::Instant::now())
+            .as_millis() as u64;
+        let path = format!("{lines}?after={after}&wait_ms={wait_ms}");
+        let (status, next) = tokio::time::timeout_at(
+            deadline,
+            api(router.clone(), "GET", &path, Value::Null, true),
+        )
+        .await
+        .unwrap_or_else(|_| panic!("target line did not reach running; observed {observed:?}"));
+        assert_eq!(status, StatusCode::OK);
+        assert_ne!(next["version"], changed["version"], "observed {observed:?}");
+        observed.push((
+            next["version"].as_str().unwrap().to_owned(),
+            next["lines"][0]["item"]["state"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        ));
+        changed = next;
+    }
     assert_eq!(changed["lines"][0]["item"]["state"], "running");
     assert_eq!(changed["lines"][0]["proposed"], false);
     // MCP and the CLI wait the same way and answer at once for an older version.

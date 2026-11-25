@@ -13017,14 +13017,18 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
     .unwrap();
     // External writes are reflected by the production watcher, not a reader-side scan.
     // The create and the close are separate writes, so the create's event can arrive before
-    // the close is indexed: re-check after each event for this ticket (HS2-868RZV).
+    // the close is indexed. R6 startup reconciliation may instead send one store-scoped
+    // changed event with an empty id: re-check the authoritative backlink after either.
     let legacy_backlinks_uri = format!(
         "/checkouts/{target_project}/tickets/{}/duplicate-backlinks",
         target["qualified_id"].as_str().unwrap()
     );
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            if external_updates.recv().await.unwrap().id != legacy_id.to_string() {
+            let event = external_updates.recv().await.unwrap();
+            if event.id != legacy_id.to_string()
+                && !(event.kind == "changed" && event.id.is_empty())
+            {
                 continue;
             }
             let indexed = body_json(

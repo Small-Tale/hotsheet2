@@ -1128,10 +1128,10 @@ pub(crate) fn watch_loop(
                 .entry
                 .index
                 .lock_or_recover()
-                .reconcile(&target.entry.store)
+                .reconcile_with_invalidations(&target.entry.store)
             {
-                Ok((upserted, deleted)) => {
-                    index_changed = upserted + deleted > 0;
+                Ok((upserted, deleted, corrupt_source_changed)) => {
+                    index_changed = upserted + deleted > 0 || corrupt_source_changed;
                     if index_changed {
                         // Files may have appeared before the replacement native watch.
                         // An aggregate invalidation makes every client reread the index.
@@ -1981,6 +1981,17 @@ mod freshness_tests {
         }
     }
 
+    fn movable_watch_scopes() -> &'static [bool] {
+        // HS2-VN96J5: on NTFS a watcher beneath the store prevents its parent
+        // directory from moving. Windows production watches the root for that
+        // reason; the tickets scope is movable only on Unix.
+        if cfg!(windows) {
+            &[true]
+        } else {
+            &[false, true]
+        }
+    }
+
     /// Drives the real watch loop with hand-fed events, walking the freshness states:
     /// starting → live → event queued → applied → events lost → rescanned → stopped.
     #[test]
@@ -2177,8 +2188,73 @@ mod freshness_tests {
     }
 
     #[test]
+    fn hs2_r6fz54_rearm_resync_invalidates_a_corrupt_source_hash() {
+        let (_dir, store) = store();
+        let ticket = create(&store, "healthy before rearm");
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let mut events = target.events.subscribe();
+        let healthy_hash = entry
+            .index
+            .lock()
+            .unwrap()
+            .content_hash(&ticket.id)
+            .unwrap();
+        let corrupt_bytes = format!(
+            "{}unexpected trailing content\n",
+            hotsheet_model::to_file_string(&ticket)
+        );
+        std::fs::write(store.ticket_path(&ticket.id), corrupt_bytes.as_bytes()).unwrap();
+
+        let (raw, rx) = std::sync::mpsc::channel();
+        let tx = QueuedSender {
+            tx: raw,
+            freshness: entry.freshness.clone(),
+        };
+        let looping = std::thread::spawn(move || watch_loop(rx, target));
+        tx.send(Ok(resync_event(
+            &store.root().join("tickets"),
+            REARM_RESYNC,
+        )));
+        let corrupt_hash = hotsheet_index::hash_bytes(corrupt_bytes.as_bytes());
+        assert_ne!(healthy_hash.as_deref(), Some(corrupt_hash.as_str()));
+        wait_for("corrupt source hash to be recorded during rearm", || {
+            entry.freshness.in_sync()
+                && entry
+                    .index
+                    .lock()
+                    .unwrap()
+                    .content_hash(&ticket.id)
+                    .unwrap()
+                    .as_deref()
+                    == Some(corrupt_hash.as_str())
+        });
+        assert_eq!(
+            entry
+                .index
+                .lock()
+                .unwrap()
+                .slug_candidates(&ticket.slug)
+                .unwrap(),
+            vec![ticket.id],
+            "the last healthy row stays indexed"
+        );
+        wait_for("corrupt source hash to invalidate clients", || {
+            while let Ok(event) = events.try_recv() {
+                if event.kind == "changed" && event.id.is_empty() {
+                    return true;
+                }
+            }
+            false
+        });
+        drop(tx);
+        looping.join().unwrap();
+    }
+
+    #[test]
     fn hs2_r6fz54_native_watcher_rearms_after_store_recreation() {
-        for watch_root in [false, true] {
+        for &watch_root in movable_watch_scopes() {
             let parent = tempfile::tempdir().unwrap();
             let root = parent.path().join("store");
             let away = parent.path().join("away");
@@ -2261,6 +2337,8 @@ mod freshness_tests {
     fn hs2_r6fz54_recreation_during_native_startup_replaces_the_watched_directory() {
         for (watch_root, before_identity_sample) in
             [(false, false), (false, true), (true, false), (true, true)]
+                .into_iter()
+                .filter(|(watch_root, _)| movable_watch_scopes().contains(watch_root))
         {
             let parent = tempfile::tempdir().unwrap();
             let root = parent.path().join("store");

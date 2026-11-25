@@ -30,6 +30,12 @@ struct Feed {
 }
 impl Feed {
     fn push(&self, connection: &str, ticket: &Ticket) {
+        self.push_native(connection, &ticket.id.to_string());
+    }
+    fn invalidate_store(&self, connection: &str) {
+        self.push_native(connection, "");
+    }
+    fn push_native(&self, connection: &str, native: &str) {
         let cursor = self.cursor.fetch_add(1, Ordering::SeqCst) as u64 + 1;
         self.events
             .lock()
@@ -37,7 +43,7 @@ impl Feed {
             .push(TargetTicketEvent {
                 cursor,
                 connection_id: connection.into(),
-                native_id: ticket.id.to_string(),
+                native_id: native.into(),
             });
     }
     /// HS2-257Q2Z: a hosted session ended or finished a turn.
@@ -327,6 +333,22 @@ fn hs2_7qhwhj_a_watch_is_idle_without_runs_and_syncs_only_changed_tickets() {
         .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
     assert!(other.synced.is_empty());
     assert_eq!(state.cursor(), Some(2));
+    // A store-scoped reconciliation invalidates every run in that connection,
+    // while the same signal from another connection is irrelevant (HS2-R6FZ54).
+    feed.invalidate_store("another-source");
+    assert!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx)
+            .synced
+            .is_empty()
+    );
+    feed.invalidate_store(&m.target_connection());
+    assert_eq!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx)
+            .synced,
+        [run_one.clone(), run_two.clone()]
+    );
     // The first run's ticket completes on the target: only that run is synced, and
     // it completes without anyone asking for a sync.
     complete(&m, &first);
@@ -1252,6 +1274,20 @@ fn hs2_tma4ya_a_planned_ticket_without_a_run_is_followed_and_publishes_its_level
             .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx)
             .refreshed,
         0
+    );
+    feed.invalidate_store("another-source");
+    assert_eq!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx)
+            .refreshed,
+        0
+    );
+    feed.invalidate_store(&m.target_connection());
+    assert_eq!(
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx)
+            .refreshed,
+        2
     );
     // The prerequisite completes on the target with no run on it: the change is read
     // and the step's new level is published, with nobody asking for a refresh.

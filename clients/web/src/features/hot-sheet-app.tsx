@@ -215,7 +215,7 @@ export interface HotSheetAppDependencies {
   syncRepositoryPaginationObserver: () => void;
   syncTerminalDrawerMaximum: () => void;
   syncTerminalRailNavStack: () => void;
-  syncTerminalViewportMounts: () => void;
+  syncTerminalViewportMounts: (focusedInput?: HTMLElement) => void;
   terminalCopy: Signal<TerminalCopyState | undefined>;
   terminalDashboardLoading: Signal<boolean>;
   terminalDashboardSizeObserver: TrackedSizeObserver;
@@ -400,6 +400,15 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
   let renderedTicketCollectionKey = initialRenderedTicketCollectionKey;
   function HotSheetApp() {
     void permissionRevision.value;
+    // Capture before Kerf morphs the magnified terminal. Moving its live viewport or presenting its
+    // top-layer popover can drop the xterm input's focus (HS2-PSV7BG).
+    const active = document.activeElement;
+    const focusedTerminalInput =
+      active instanceof HTMLElement &&
+      appRoot.contains(active) &&
+      active.matches('[data-component="terminal-viewport"][data-display-mode="interactive"] .xterm-helper-textarea')
+        ? active
+        : undefined;
     // WebKit can zero independently scrolling board columns after a top-layer permission dialog is
     // removed, one frame after the render's normal scroll restore. Capture the live position while
     // the dialog still exists so the browser's delayed layout step can be corrected (HS2-0M3DS2).
@@ -441,7 +450,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         });
       }
       animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
-      syncTerminalViewportMounts();
+      syncTerminalViewportMounts(focusedTerminalInput);
       syncTerminalRailNavStack();
       syncRepositoryNavStack();
       terminalDrawerSizeObserver.sync();
