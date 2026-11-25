@@ -200,12 +200,17 @@ pub(super) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
                     .map(|source| source.code())
                     .into();
                 // HS2-17HVNP: whether a Buildkite or CircleCI token is configured, and
-                // HS2-7H0S8R a Jenkins one, HS2-JZ1DD2 an Azure DevOps one.
+                // HS2-7H0S8R a Jenkins one, HS2-JZ1DD2 an Azure DevOps one, HS2-BWF72S a
+                // Bitbucket one.
                 for (key, provider) in [
                     ("buildkite_token", super::job_ci_rest::BUILDKITE),
                     ("circleci_token", super::job_ci_rest::CIRCLECI),
                     ("jenkins_token", super::job_ci_rest::JENKINS),
                     ("azure_pipelines_token", super::job_ci_rest::AZURE_PIPELINES),
+                    (
+                        "bitbucket_pipelines_token",
+                        super::job_ci_rest::BITBUCKET_PIPELINES,
+                    ),
                 ] {
                     status[key] = provider.token_source().into();
                 }
@@ -563,6 +568,10 @@ fn register_sources(monitor: &mut Monitor, home: &Path) {
     // HS2-JZ1DD2: Azure Pipelines builds, through the same REST port.
     monitor.register(Box::new(hotsheet_jobs::AzurePipelinesSource::new(
         super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::AZURE_PIPELINES),
+    )));
+    // HS2-BWF72S: Bitbucket Pipelines, through the same REST port.
+    monitor.register(Box::new(hotsheet_jobs::BitbucketPipelinesSource::new(
+        super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::BITBUCKET_PIPELINES),
     )));
     // A file-backed source so process tests can drive a real monitor offline. It is not
     // compiled into release builds.

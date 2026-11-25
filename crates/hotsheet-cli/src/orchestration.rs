@@ -255,6 +255,8 @@ impl OrchestrationRuntime {
                 Arc::new(GithubActionsGates::jenkins(&home)),
                 // HS2-JZ1DD2: Azure Pipelines builds, likewise.
                 Arc::new(GithubActionsGates::azure_pipelines(&home)),
+                // HS2-BWF72S: Bitbucket Pipelines, likewise.
+                Arc::new(GithubActionsGates::bitbucket_pipelines(&home)),
             ],
             sessions: Arc::new(NoSessionHost),
             session_executor: Arc::new(ExecutorUnavailable),

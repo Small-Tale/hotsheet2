@@ -24,6 +24,12 @@
 //!   `AZURE_DEVOPS_EXT_PAT` (the Azure CLI's variable) as HTTP Basic with an empty user
 //!   (<https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate>).
 //!   A spent limit answers 429 with `Retry-After`.
+//! - HS2-BWF72S: Bitbucket Cloud REST 2.0
+//!   (<https://developer.atlassian.com/cloud/bitbucket/rest/intro/#authentication>):
+//!   root `https://api.bitbucket.org/2.0` (`HOTSHEET_BITBUCKET_API_URL`). A repository or
+//!   workspace access token `BITBUCKET_ACCESS_TOKEN` goes as `Authorization: Bearer`;
+//!   otherwise `BITBUCKET_USERNAME` with `BITBUCKET_API_TOKEN` (an Atlassian API token or
+//!   an app password) goes as HTTP Basic.
 
 use base64::Engine;
 use hotsheet_extsync::github::{GitHubTransport, UreqGitHubTransport};
@@ -106,6 +112,26 @@ pub(super) const AZURE_PIPELINES: RestProvider = RestProvider {
         header: "Authorization",
         scheme: Scheme::Basic { user_env: None },
     }],
+};
+
+/// HS2-BWF72S: Bitbucket Cloud, an access token first, else a user and API token.
+pub(super) const BITBUCKET_PIPELINES: RestProvider = RestProvider {
+    default_api: Some("https://api.bitbucket.org/2.0"),
+    url_env: "HOTSHEET_BITBUCKET_API_URL",
+    credentials: &[
+        Credential {
+            token_env: "BITBUCKET_ACCESS_TOKEN",
+            header: "Authorization",
+            scheme: Scheme::Bearer,
+        },
+        Credential {
+            token_env: "BITBUCKET_API_TOKEN",
+            header: "Authorization",
+            scheme: Scheme::Basic {
+                user_env: Some("BITBUCKET_USERNAME"),
+            },
+        },
+    ],
 };
 
 /// A trimmed, non-empty environment value.
@@ -239,7 +265,13 @@ mod tests {
 
     #[test]
     fn hs2_17hvnp_a_token_is_only_ever_sent_over_https_or_to_this_machine() {
-        for provider in [BUILDKITE, CIRCLECI, JENKINS, AZURE_PIPELINES] {
+        for provider in [
+            BUILDKITE,
+            CIRCLECI,
+            JENKINS,
+            AZURE_PIPELINES,
+            BITBUCKET_PIPELINES,
+        ] {
             assert_eq!(api_base(provider, None).as_deref(), provider.default_api);
             assert_eq!(
                 api_base(provider, Some("http://127.0.0.1:9/v2/")).as_deref(),
@@ -269,6 +301,53 @@ mod tests {
                 "value-of-CIRCLECI_TOKEN".to_owned(),
                 "CIRCLECI_TOKEN"
             ))
+        );
+    }
+
+    #[test]
+    fn hs2_bwf72s_bitbucket_prefers_an_access_token_then_user_and_api_token() {
+        let lookup = |pairs: &'static [(&'static str, &'static str)]| {
+            move |name: &str| {
+                pairs
+                    .iter()
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| (*value).to_owned())
+            }
+        };
+        let all = lookup(&[
+            ("BITBUCKET_ACCESS_TOKEN", "acc"),
+            ("BITBUCKET_USERNAME", "ci-bot"),
+            ("BITBUCKET_API_TOKEN", "t0ken"),
+        ]);
+        assert_eq!(
+            BITBUCKET_PIPELINES.authorization(all),
+            Some((
+                "Authorization",
+                "Bearer acc".to_owned(),
+                "BITBUCKET_ACCESS_TOKEN"
+            ))
+        );
+        let basic = lookup(&[
+            ("BITBUCKET_USERNAME", "ci-bot"),
+            ("BITBUCKET_API_TOKEN", "t0ken"),
+        ]);
+        assert_eq!(
+            BITBUCKET_PIPELINES.authorization(basic),
+            Some((
+                "Authorization",
+                // base64("ci-bot:t0ken")
+                "Basic Y2ktYm90OnQwa2Vu".to_owned(),
+                "BITBUCKET_API_TOKEN"
+            ))
+        );
+        // An API token without its user is not a credential.
+        assert_eq!(
+            BITBUCKET_PIPELINES.authorization(lookup(&[("BITBUCKET_API_TOKEN", "t0ken")])),
+            None
+        );
+        assert_eq!(
+            api_base(BITBUCKET_PIPELINES, None).as_deref(),
+            Some("https://api.bitbucket.org/2.0")
         );
     }
 

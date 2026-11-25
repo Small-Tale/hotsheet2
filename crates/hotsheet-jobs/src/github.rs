@@ -40,6 +40,9 @@ pub const CIRCLECI_KIND: &str = "circleci";
 pub const JENKINS_KIND: &str = "jenkins";
 /// HS2-JZ1DD2: the Job kind name and the `external.system` of an Azure Pipelines watch.
 pub const AZURE_PIPELINES_KIND: &str = "azure-pipelines";
+/// HS2-BWF72S: the Job kind name and the `external.system` of a Bitbucket Pipelines
+/// watch.
+pub const BITBUCKET_PIPELINES_KIND: &str = "bitbucket-pipelines";
 
 /// HS2-TPAHYA: which CI provider a watch observes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -55,6 +58,8 @@ pub enum CiProvider {
     Jenkins,
     /// HS2-JZ1DD2: Azure Pipelines builds of one pipeline definition.
     AzurePipelines,
+    /// HS2-BWF72S: Bitbucket Pipelines of one repository.
+    BitbucketPipelines,
 }
 
 impl CiProvider {
@@ -67,16 +72,18 @@ impl CiProvider {
             Self::Circleci => CIRCLECI_KIND,
             Self::Jenkins => JENKINS_KIND,
             Self::AzurePipelines => AZURE_PIPELINES_KIND,
+            Self::BitbucketPipelines => BITBUCKET_PIPELINES_KIND,
         }
     }
 
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::GithubActions,
         Self::GitlabCi,
         Self::Buildkite,
         Self::Circleci,
         Self::Jenkins,
         Self::AzurePipelines,
+        Self::BitbucketPipelines,
     ];
 
     pub fn from_kind(kind: &str) -> Option<Self> {
@@ -101,7 +108,8 @@ pub struct CiTarget {
     /// for Buildkite `organization/pipeline` (slugs); for CircleCI the project slug
     /// `vcs/organization/project`, for example `gh/acme/widgets` (HS2-17HVNP); for
     /// Jenkins the job's full name, `[folder/…]job` (HS2-7H0S8R); for Azure Pipelines
-    /// `organization/project/definition-id` (HS2-JZ1DD2).
+    /// `organization/project/definition-id` (HS2-JZ1DD2); for Bitbucket Pipelines
+    /// `workspace/repo_slug` (HS2-BWF72S).
     pub repo: String,
     /// Full 40-character commit SHA, lowercase.
     pub sha: String,
@@ -257,6 +265,30 @@ impl CiTarget {
         Self::checked(CiProvider::AzurePipelines, pipeline, sha, workflow, branch)
     }
 
+    /// HS2-BWF72S: a Bitbucket Pipelines target: `repository` is `workspace/repo_slug`.
+    /// Its pipelines have no workflow of their own here, so `workflow` must be `*`.
+    pub fn bitbucket_pipelines(
+        repository: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        match repository.split_once('/') {
+            Some((workspace, slug)) if part(workspace) && part(slug) => {}
+            _ => return Err(crate::JobError::Invalid("ci.repo")),
+        }
+        if workflow != "*" {
+            return Err(crate::JobError::Invalid("ci.workflow"));
+        }
+        Self::checked(
+            CiProvider::BitbucketPipelines,
+            repository,
+            sha,
+            workflow,
+            branch,
+        )
+    }
+
     /// HS2-17HVNP: the target of any provider, as its own constructor validates it.
     pub fn for_provider(
         provider: CiProvider,
@@ -272,6 +304,9 @@ impl CiTarget {
             CiProvider::Circleci => Self::circleci(repo, sha, workflow, branch),
             CiProvider::Jenkins => Self::jenkins(repo, sha, workflow, branch),
             CiProvider::AzurePipelines => Self::azure_pipelines(repo, sha, workflow, branch),
+            CiProvider::BitbucketPipelines => {
+                Self::bitbucket_pipelines(repo, sha, workflow, branch)
+            }
         }
     }
 

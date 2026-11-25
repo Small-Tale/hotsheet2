@@ -25,6 +25,7 @@
 //! [`IdSource`].
 
 mod azure;
+mod bitbucket;
 mod buildkite;
 mod ci;
 mod circleci;
@@ -47,6 +48,7 @@ mod store;
 pub mod watch;
 
 pub use azure::AzurePipelinesSource;
+pub use bitbucket::BitbucketPipelinesSource;
 pub use buildkite::BuildkiteSource;
 pub use ci::{
     CiArtifact, CiOutcome, CiRun, CiWatchOptions, GateReading, GateState, ci_outcome,
@@ -60,9 +62,10 @@ pub use feed::{
 };
 pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
 pub use github::{
-    AZURE_PIPELINES_KIND, ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, BUILDKITE_KIND,
-    CIRCLECI_KIND, CiProvider, CiTarget, GITHUB_ACTIONS_KIND, GITLAB_CI_KIND, GithubActionsSource,
-    GithubApi, JENKINS_KIND, RunFloor, UNKNOWN_COMMIT_LIMIT_MS, repo_from_remote,
+    AZURE_PIPELINES_KIND, ApiMethod, ApiRequest, ApiResponse, ApiUnavailable,
+    BITBUCKET_PIPELINES_KIND, BUILDKITE_KIND, CIRCLECI_KIND, CiProvider, CiTarget,
+    GITHUB_ACTIONS_KIND, GITLAB_CI_KIND, GithubActionsSource, GithubApi, JENKINS_KIND, RunFloor,
+    UNKNOWN_COMMIT_LIMIT_MS, repo_from_remote,
 };
 pub use gitlab::GitlabCiSource;
 pub use jenkins::JenkinsSource;

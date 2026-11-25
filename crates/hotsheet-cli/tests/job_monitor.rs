@@ -173,7 +173,8 @@ fn start_and_stop_are_idempotent() {
             "buildkite_token": null,
             "circleci_token": null,
             "jenkins_token": null,
-            "azure_pipelines_token": null
+            "azure_pipelines_token": null,
+            "bitbucket_pipelines_token": null
         })
     );
     // Stopping when nothing runs is a successful no-op and creates no monitor.

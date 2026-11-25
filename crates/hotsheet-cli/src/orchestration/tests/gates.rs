@@ -1661,6 +1661,13 @@ fn hs2_jz1dd2_an_azure_pipelines_gate_is_watched_and_read_like_github() {
     );
 }
 
+/// HS2-BWF72S: a Bitbucket Pipelines gate likewise, its repository
+/// `workspace/repo_slug`.
+#[test]
+fn hs2_bwf72s_a_bitbucket_pipelines_gate_is_watched_and_read_like_github() {
+    exact_coverage_gate("bitbucket-pipelines", "acme/widgets", "widgets", 'c', 45);
+}
+
 /// Link a gate of an exact-coverage provider, judge its watch Job green, and read the
 /// evidence back; a repository the provider cannot address (`odd`) is refused.
 fn exact_coverage_gate(provider: &str, repository: &str, odd: &str, commit_char: char, run: u64) {
