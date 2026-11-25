@@ -6,6 +6,8 @@ import {
   findTimelineItem,
   machineLabel,
   orchestrationLine,
+  runAttention,
+  runStateText,
   startBlockedInSettings,
   startBlockedReason,
   startColumnId,
@@ -304,5 +306,76 @@ describe('provisional work words its ledger state as a worker’s card does (HS2
     expect(
       targetLineOrchestration({ owner_checkout_id: 'a', owner_label: 'A', proposed: false, item: atRisk }).stateTone,
     ).toBe('warning');
+  });
+});
+
+describe('HS2-FXY5QM a run nobody is plainly working on says so', () => {
+  const running = item('step-3');
+  const withRun = (run: Partial<NonNullable<TimelineItem['run']>>, state: TimelineItem['state'] = 'running') => ({
+    ...running,
+    state,
+    run: { ...running.run!, ...run },
+  });
+
+  it('words each run condition with its tone, the most urgent first', () => {
+    expect(running.state).toBe('running');
+    expect(runAttention(running.run)).toBeUndefined();
+    expect(runAttention(undefined)).toBeUndefined();
+    const rows = [
+      [{ state: 'intervened' }, 'No worker holds it', 'warning'],
+      [{ paused: true }, 'Paused', 'neutral'],
+      [{ cancel_requested: true }, 'Cancelling', 'neutral'],
+      [{ unreachable_since_ms: 5 }, 'Project unreachable', 'warning'],
+      // Several at once: unreachable, then cancelling, then no worker, then paused.
+      [
+        { state: 'intervened', paused: true, cancel_requested: true, unreachable_since_ms: 5 },
+        'Project unreachable',
+        'warning',
+      ],
+      [{ state: 'intervened', paused: true, cancel_requested: true }, 'Cancelling', 'neutral'],
+      [{ state: 'intervened', paused: true }, 'No worker holds it', 'warning'],
+    ] as const;
+    for (const [run, label, tone] of rows) {
+      const attention = runAttention({ ...running.run!, ...run });
+      expect([attention?.label, attention?.tone]).toEqual([label, tone]);
+      expect(attention?.next).toBeTruthy();
+    }
+    // A finished run asks nothing of a person, whatever flags it kept.
+    for (const state of ['completed', 'failed', 'cancelled'])
+      expect(runAttention({ ...running.run!, state, paused: true, unreachable_since_ms: 5 })).toBeUndefined();
+  });
+
+  it('puts it on the card line instead of the busy Working state, and back once the worker returns', () => {
+    const timeline = demoTimeline('running');
+    const healthy = timelineCard(running, timeline, undefined, demoClock);
+    expect([healthy.busy, healthy.startedPhase, healthy.orchestration?.state]).toEqual([true, 'working', undefined]);
+    const gone = timelineCard(withRun({ state: 'intervened' }), timeline, undefined, demoClock);
+    expect([gone.busy, gone.startedPhase, gone.status]).toEqual([false, undefined, 'started']);
+    expect([gone.orchestration?.state, gone.orchestration?.stateTone]).toEqual(['No worker holds it', 'warning']);
+    // Its worker claims it again: dispatched, working, no line.
+    const back = timelineCard(withRun({ state: 'dispatched' }), timeline, undefined, demoClock);
+    expect([back.busy, back.orchestration?.state]).toEqual([true, undefined]);
+    // Provisional work: the run's condition comes before the ledger's words.
+    expect(orchestrationLine(withRun({ paused: true }, 'provisional'), false).state).toBe('Paused');
+    // A step that is not running ignores a stale run.
+    expect(orchestrationLine(withRun({ state: 'intervened' }, 'ready'), false).state).toBe('Ready');
+  });
+
+  it('words every run state for the inspector, never the code', () => {
+    expect(
+      ['requested', 'queued', 'dispatched', 'intervened', 'completed', 'failed', 'cancelled'].map((state) =>
+        runStateText({ state, paused: false }),
+      ),
+    ).toEqual([
+      'Requested; its project has not been asked yet',
+      'Queued for its project’s dispatcher',
+      'Dispatched to a worker',
+      'No worker holds it',
+      'Completed',
+      'Failed',
+      'Cancelled',
+    ]);
+    expect(runStateText({ state: 'dispatched', paused: true })).toBe('Dispatched to a worker, paused');
+    expect(runStateText({ state: 'new_state', paused: false })).toBe('New state');
   });
 });

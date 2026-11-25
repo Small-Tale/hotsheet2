@@ -13,6 +13,7 @@ import type {
   OrchestrationTargetLine,
   OrchestrationTimeline,
   TimelineItem,
+  TimelineRun,
   TimelineWave,
 } from './orchestration-timeline';
 import { priorityFromWire } from './priority-wire';
@@ -97,6 +98,45 @@ function ledgerWords(item: TimelineItem): { label: string; tone: SemanticTone } 
   return line?.state && line.stateTone ? { label: line.state, tone: line.stateTone } : undefined;
 }
 
+/**
+ * HS2-FXY5QM: an unfinished run that is not plainly at work: its project stopped answering, a cancel waits
+ * for the project, nobody holds its claim any more (`intervened`: the worker let go, or a person or another
+ * worker took it), or a person paused it. Undefined for healthy work and for a finished run.
+ */
+export function runAttention(
+  run: TimelineRun | undefined,
+): { label: string; tone: SemanticTone; next?: string } | undefined {
+  if (!run || ['completed', 'failed', 'cancelled'].includes(run.state)) return undefined;
+  if (run.unreachable_since_ms !== undefined)
+    return { label: 'Project unreachable', tone: 'warning', next: 'It is checked again when the project answers.' };
+  if (run.cancel_requested)
+    return { label: 'Cancelling', tone: 'neutral', next: 'The project has not confirmed the cancel yet.' };
+  if (run.state === 'intervened')
+    return {
+      label: 'No worker holds it',
+      tone: 'warning',
+      next: 'Hand it off, record what happened with Correct…, or cancel the run.',
+    };
+  if (run.paused) return { label: 'Paused', tone: 'neutral', next: 'Resume it to let its worker continue.' };
+  return undefined;
+}
+
+const RUN_STATES: Readonly<Record<string, string>> = {
+  requested: 'Requested; its project has not been asked yet',
+  queued: 'Queued for its project’s dispatcher',
+  dispatched: 'Dispatched to a worker',
+  intervened: 'No worker holds it',
+  completed: 'Completed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
+
+/** HS2-FXY5QM: a run's state in words for the inspector, never the bare code. */
+export function runStateText(run: Pick<TimelineRun, 'state' | 'paused'>): string {
+  const text = RUN_STATES[run.state] ?? run.state.replaceAll('_', ' ').replace(/^./, (first) => first.toUpperCase());
+  return run.paused ? `${text}, paused` : text;
+}
+
 /** The badge an inspector shows for an item's state. */
 export function stateBadge(item: TimelineItem): { label: string; tone: SemanticTone } {
   switch (item.state) {
@@ -170,7 +210,9 @@ function cardStatus(item: TimelineItem): TicketStatus {
  * {@link targetLineOrchestration}, a target project's List and Columns (HS2-S3FKJ7).
  */
 export function orchestrationLine(item: TimelineItem, proposed: boolean): TicketRowOrchestration {
-  const words = ledgerWords(item) ?? stateWords(item, proposed),
+  const working = item.state === 'running' || item.state === 'provisional',
+    attention = working ? runAttention(item.run) : undefined,
+    words = attention ?? ledgerWords(item) ?? stateWords(item, proposed),
     tool = toolLabel(item.tool);
   return {
     state: words?.label,
@@ -222,7 +264,8 @@ export function timelineCard(
   selectedStep: string | undefined,
   clock: ClockFormat = clockTime,
 ): TicketRowProps {
-  const working = item.state === 'running' || item.state === 'provisional',
+  // HS2-FXY5QM: a run nobody is plainly working on says so on its line, without the busy spinner.
+  const working = (item.state === 'running' || item.state === 'provisional') && !runAttention(item.run),
     tool = toolLabel(item.tool),
     slug = itemSlug(item),
     orchestration = orchestrationLine(item, timeline.phase === 'proposed');
@@ -237,7 +280,7 @@ export function timelineCard(
     tags: [],
     upNextEligible: false,
     blocked: item.state === 'waits_for_prerequisite' && timeline.phase !== 'proposed',
-    busy: item.state === 'running' || item.state === 'provisional',
+    busy: working,
     agentName: tool,
     remoteClaim: working && item.location === 'remote',
     updatedLabel: cardTime(item, timeline, clock),

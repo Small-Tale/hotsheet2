@@ -327,6 +327,17 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
       }),
     );
     expect(paused).toContain('data-control="resume"');
+    // HS2-FXY5QM: the run's state in words, and what a person can do when no worker holds it.
+    expect(paused).toContain('Dispatched to a worker, paused');
+    const gone = String(
+      OrchestrationInspector({
+        item: { ...item('step-3'), run: { ...item('step-3').run!, state: 'intervened' } },
+        timeline: demoTimeline('running'),
+      }),
+    );
+    expect(gone).toContain('No worker holds it');
+    expect(gone).toContain('Hand it off, record what happened with Correct…, or cancel the run.');
+    expect(gone).not.toContain('Intervened');
   });
 
   it('HS2-PR984R Where It Runs names the site the scheduler chose and its machine', () => {

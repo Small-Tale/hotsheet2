@@ -5938,7 +5938,12 @@ A read on the server also starts the target followers of §26.9.
   first" (warning, naming the prerequisites whose gate is red) or "Reopened · the fix
   invalidated it" (warning). The timeline item carries that record as `provisional`
   (the ledger `state` and each gate's prerequisite, slug and `result`); confirmed work
-  keeps the plan's words.
+  keeps the plan's words. A running card whose run is not plainly at work says so on that
+  line instead of the busy Working state (HS2-FXY5QM): "Project unreachable" (warning),
+  "Cancelling", "No worker holds it" (warning; the run is `intervened`: its worker let go
+  of the claim, or a person or another worker took it) and "Paused", in that order when
+  several hold. The inspector's Run section words the run state ("Dispatched to a
+  worker", "No worker holds it") and adds a **Next** row with what a person can do.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
