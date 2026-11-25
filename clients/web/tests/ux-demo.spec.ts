@@ -575,7 +575,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['toolbar-text', 3],
     ['toolbar-control-group', 8],
     ['value-table', 1],
-    ['hs1-migration-banner', 7],
+    ['hs1-migration-banner', 8],
     ['notifications-paused-banner', 2],
     ['floating-toolbar', 1],
     ['tab-bar-item', 1],
