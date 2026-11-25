@@ -70,13 +70,7 @@ impl CommandModelCatalog {
     }
 
     fn safe_program(&self) -> Result<PathBuf, String> {
-        match self.identity_policy.as_deref() {
-            None => Ok(PathBuf::from(&self.program)),
-            Some("native-default-install") => native_default_install(&self.program),
-            Some(policy) => Err(format!(
-                "unsupported catalog executable identity policy '{policy}'"
-            )),
-        }
+        trusted_program(&self.program, self.identity_policy.as_deref())
     }
 
     fn output(&self, args: &[String], cwd: Option<&Path>) -> Result<String, String> {
@@ -139,6 +133,19 @@ impl RuntimeModelCatalogSource for CommandModelCatalog {
                 parse_command_catalog(&output, &self.effort_levels, self.default_effort.as_deref())
             },
         )
+    }
+}
+
+/// The executable a plugin's read-only command probe may run, under its declared
+/// identity policy (`model_catalog_identity`). HS2-JM0GVB: the usage-reset query uses the
+/// same check, so an IDE launcher of the same name is never run.
+pub fn trusted_program(program: &str, identity_policy: Option<&str>) -> Result<PathBuf, String> {
+    match identity_policy {
+        None => Ok(PathBuf::from(program)),
+        Some("native-default-install") => native_default_install(program),
+        Some(policy) => Err(format!(
+            "unsupported catalog executable identity policy '{policy}'"
+        )),
     }
 }
 

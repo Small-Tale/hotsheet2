@@ -438,6 +438,9 @@ pub struct AppState {
     pub(crate) feedback_primary_choices: routes::feedback_session::PrimaryChoices,
     /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
     terminal_ai_last_reports: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
+    /// HS2-2AN9C8: Claude and Codex turn state their hooks and rollouts report, which
+    /// overrides the OSC 133 busy inference neither tool feeds.
+    terminal_hook_turns: Arc<Mutex<routes::terminals::hook_turns::HookTurns>>,
     /// Per-terminal follows of a Codex session's own rollout, for halt detection and usage
     /// (HS2-CYHAWB). Dropping an entry stops its watcher.
     codex_session_watches: Arc<
@@ -708,6 +711,7 @@ impl AppState {
             claude_usage_follows: Arc::default(),
             feedback_primary_choices: Arc::default(),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_hook_turns: Arc::default(),
             codex_session_watches: Arc::default(),
             target_store_watches: Arc::default(),
             code_ref_watches: Arc::default(),
@@ -2291,6 +2295,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/targets/{target}",
             axum::routing::patch(routes::orchestration::write).delete(routes::orchestration::write),
         )
+        // HS2-NAA3HV: make a site the home of its project.
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/make-home",
+            post(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{owner}/orchestration/targets/{target}/binding",
             get(routes::orchestration::read)
@@ -2976,6 +2985,7 @@ mod terminal_permission_route_tests {
             effort: None,
             session_role: None,
             initial_prompt: None,
+            launch_within_ms: None,
         }
     }
 

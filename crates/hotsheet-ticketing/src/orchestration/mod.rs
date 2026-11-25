@@ -64,13 +64,13 @@ pub use capabilities::{
     requirement_misses, valid_toolchain, validate_toolchains,
 };
 pub use capacity::{
-    AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRequest,
-    AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB, CAPACITY_LOAD_STEP_PERCENT,
-    CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot, CpuCapacity,
-    DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim, HostObservation,
-    MAX_CLAIM_NAMESPACES, MAX_CLAIM_PAGES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, PoolState,
-    SessionFootprint, TargetSpeculation, ToolAvailability, UnreadableNamespace, capacity_version,
-    decide_admission, effective_limits, estimated_footprint,
+    AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRefusal,
+    AdmissionRequest, AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB,
+    CAPACITY_LOAD_STEP_PERCENT, CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot,
+    CpuCapacity, DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim,
+    HostObservation, MAX_CLAIM_NAMESPACES, MAX_CLAIM_PAGES, MAX_SESSION_FOOTPRINT_MB,
+    MemoryCapacity, PoolState, SessionFootprint, TargetSpeculation, ToolAvailability,
+    UnreadableNamespace, capacity_version, decide_admission, effective_limits, estimated_footprint,
 };
 pub use contract::*;
 pub use gates::{
@@ -165,9 +165,11 @@ pub use runs::{
 };
 pub use scheduler::{
     Blocker, DecisionEntry, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
-    DecisionRecord, HeldResource, MAX_SCHEDULE_SESSIONS, MAX_SCHEDULE_WORK, Placement,
-    PlacementAction, PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason,
-    REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, SITE_NOT_CHOSEN,
+    DecisionRecord, HeldResource, INTEGRATOR_CI_PENDING, INTEGRATOR_HANDOFF_PENDING,
+    INTEGRATOR_IDLE, INTEGRATOR_POLICY_OPT_OUT, INTEGRATOR_QUEUE, INTEGRATOR_TARGET_DISABLED,
+    INTEGRATOR_WORKER_RUN, MAX_SCHEDULE_SESSIONS, MAX_SCHEDULE_WORK, Placement, PlacementAction,
+    PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason, REFUSAL_BACKOFF_BASE_MS,
+    REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, RoleBlocker, RoleUnplaced, SITE_NOT_CHOSEN,
     Schedule, ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts, SessionActivity,
     SitePass, Standing, TargetState, TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation,
     is_capacity_refusal, lift_capacity_refusal, plan, refusal_backoff_ms, remember,
@@ -284,6 +286,22 @@ pub enum OrchestrationError {
     /// HS2-SHH7WW: a site of a project does not fit the project it names.
     #[error("orchestration site refused the request: {}", .0.code())]
     Site(SiteError),
+    /// HS2-061YTB: a dispatch of a planned ticket whose target machine does not meet
+    /// a requirement of its plan step (`unmet`) or did not report it (`unknown`).
+    /// `requirement` names it, such as `os:windows`.
+    #[error(
+        "orchestration dispatch refused: the target's machine {} requirement `{requirement}`",
+        if *.state == RequirementState::Unmet { "does not meet" } else { "did not report" }
+    )]
+    Requirement {
+        state: RequirementState,
+        requirement: String,
+    },
+    /// HS2-8Z9VHH: the session's machine refused admission. Its code stays
+    /// `session_admission_refused`; the refusal names the reason, the limit and the
+    /// observed value, so a person learns what to change.
+    #[error("the machine refused the session: {}", .0.describe())]
+    AdmissionRefused(Box<AdmissionRefusal>),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -316,6 +334,28 @@ impl OrchestrationError {
             Self::Readiness(error) => error.code(),
             Self::Session(error) => error.code(),
             Self::Site(error) => error.code(),
+            Self::Requirement { state, .. } => match state {
+                RequirementState::Unmet => "requirement_unmet",
+                RequirementState::Unknown => "requirement_unknown",
+            },
+            Self::AdmissionRefused(_) => SessionError::AdmissionRefused.code(),
+        }
+    }
+
+    /// HS2-061YTB: a refusal's detail that is not a record to answer: the step
+    /// requirement a dispatch's target machine misses, as `("requirement", name)`.
+    pub fn refusal_detail(&self) -> Option<(&'static str, &str)> {
+        match self {
+            Self::Requirement { requirement, .. } => Some(("requirement", requirement)),
+            _ => None,
+        }
+    }
+
+    /// HS2-8Z9VHH: the admission refusal behind a `session_admission_refused` error.
+    pub fn admission_refusal(&self) -> Option<&AdmissionRefusal> {
+        match self {
+            Self::AdmissionRefused(refusal) => Some(refusal),
+            _ => None,
         }
     }
 
@@ -498,6 +538,8 @@ mod gate_tests;
 mod hosted_audit_tests;
 #[cfg(test)]
 mod hosted_validation_tests;
+#[cfg(test)]
+mod integrator_session_tests;
 #[cfg(test)]
 mod joining_tests;
 #[cfg(test)]

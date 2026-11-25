@@ -90,7 +90,7 @@ describe('orchestration settings model (HS2-W27N1D)', () => {
     expect(tabProjectIdOf(remoteDestination, serving)).toBeUndefined();
     // A local settings tab keeps the existing mapping.
     expect(tabProjectIdOf(local('web-1').destination!, 'orch-1')).toBe('web-1');
-    const rows = projectRows(manifest, { T1: local('api-1'), T2: local('web-1') }, {}, undefined, serving);
+    const rows = projectRows(manifest, { T1: local('api-1'), T2: local('web-1') }, {}, undefined, undefined, serving);
     expect(rows.find((row) => row.targetId === 'T1')?.tabProjectId).toBe(`remote:${REMOTE}:api-1`);
   });
 
@@ -113,6 +113,26 @@ describe('orchestration settings model (HS2-W27N1D)', () => {
     expect(rows[1]).toMatchObject({ location: 'unbound', where: 'Not bound on this computer' });
     expect(rows[2].connection).toEqual({ label: 'Unreachable', tone: 'danger' });
     expect(projectRows(undefined, {}, {})).toEqual([]);
+  });
+
+  it('names the serving server on the rows of a project open from another server (HS2-DXAB4K)', () => {
+    const bindings = { T1: local('api-1'), T4: { ...local('x'), destination: null } };
+    const rows = projectRows(manifest, bindings, {}, undefined, 'build.example');
+    expect(rows.map((row) => [row.label, row.where])).toEqual([
+      ['API', 'On build.example'],
+      ['Unbound', 'Not bound on build.example'],
+      ['Web', ''],
+    ]);
+    expect(rows[0].place).toBe('On build.example');
+    // Its icon is the remote one + Add Project's Open on <server> choices use.
+    expect(rows.map((row) => row.location)).toEqual(['remote', 'unbound', 'remote']);
+    expect(rows.map((row) => row.where).join()).not.toContain('This Computer');
+    // Served here, the same bindings read as this computer's.
+    expect(projectRows(manifest, bindings, {}).map((row) => row.where)).toEqual([
+      'Local on This Computer',
+      'Not bound on this computer',
+      '',
+    ]);
   });
 
   it('lists each project with its other sites after it (HS2-SHH7WW)', () => {

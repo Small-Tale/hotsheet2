@@ -1,5 +1,6 @@
 import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -8,7 +9,13 @@ import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Sparkles, X } from '
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
-import { type ClockFormat, clockTime, startBlockedReason, timelineStatus } from '../orchestration-timeline-board';
+import {
+  type ClockFormat,
+  clockTime,
+  plannerWorkingLabel,
+  startBlockedReason,
+  timelineStatus,
+} from '../orchestration-timeline-board';
 import type { OrchestrationProposeAvailability } from './orchestration-timeline-view';
 
 export interface OrchestrationToolbarProps {
@@ -116,13 +123,29 @@ export function OrchestrationToolbar({
     switch (timeline.phase) {
       case 'no_projects':
         return undefined;
-      case 'no_plan':
+      case 'no_plan': {
+        // HS2-2Z4M6M: while the press is on its way or the planner starts or works, the button shows
+        // that state (busy, with the state as its name) instead of an idle Propose Plan.
+        const working = plannerWorkingLabel(planning, busy);
+        if (working)
+          return (
+            <Button
+              emphasis="primary"
+              shape="pill"
+              disabled
+              rootAttributes={{ 'data-planner-state': working }}
+              title={propose.available ? 'Starting the planning session' : propose.reason}
+              icon={<LoadingSpinner size="s" />}
+            >
+              {working}
+            </Button>
+          );
         return (
           <Button
             emphasis="primary"
             shape="pill"
             action={ORCHESTRATION_ACTIONS.proposeOrchestrationPlan.value}
-            disabled={busy || !propose.available}
+            disabled={!propose.available}
             title={
               propose.available
                 ? defaultGoal
@@ -135,6 +158,7 @@ export function OrchestrationToolbar({
             Propose Plan
           </Button>
         );
+      }
       case 'running':
         return (
           <Button

@@ -689,6 +689,7 @@ fn hs2_ycjdeb_each_concurrency_cap_denies_exactly_at_its_bound() {
         tool_sessions: tool,
         account: Some("team".into()),
         account_sessions: account,
+        integrator: false,
     };
     // Caps: target 2, machine 3, tool 2, account "team" 1.
     assert_eq!(run(team(1, 2, 1, 0)), V::Allowed);
@@ -882,6 +883,7 @@ fn hs2_n3hwp9_admission_treats_auto_as_machine_bounded_and_zero_as_off() {
         tool_sessions: tool,
         account: None,
         account_sessions: 0,
+        integrator: false,
     };
     let mut body = policy();
     body.tools.clear();

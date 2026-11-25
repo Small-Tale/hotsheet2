@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::readiness::{Prerequisite, ReadinessLevel, StepReadiness, TicketKey, ticket_key};
-use super::{OrchestratedSession, Run, RunState, RunTarget, RunTicket, SessionState};
+use super::{OrchestratedSession, ProjectSites, Run, RunState, RunTarget, RunTicket, SessionState};
 
 /// The wave length assumed until a run of this owner has finished (minutes).
 pub const DEFAULT_WAVE_MINUTES: u64 = 60;
@@ -251,6 +251,10 @@ pub struct TimelineInput<'a> {
     /// HS2-6GE7WM: the runs the scheduler dispatched for each step, by step id. Such a
     /// run may be on another site of the step's project than the one the step names.
     pub step_runs: &'a BTreeMap<String, BTreeSet<String>>,
+    /// HS2-CQ0PNT: which targets are sites of one project, so a run, a label and a
+    /// prerequisite are joined to a step through whichever site names the ticket, as
+    /// readiness joins them. An empty grouping compares targets exactly.
+    pub sites: &'a ProjectSites,
     pub sessions: &'a [OrchestratedSession],
     pub hints: &'a BTreeMap<String, PlacementHint>,
     pub permissions: &'a BTreeMap<String, PermissionWait>,
@@ -420,15 +424,18 @@ fn measured_minutes(runs: &[Run]) -> Option<u64> {
     Some((leads[leads.len() / 2] / 60_000).max(1))
 }
 
-/// The most recent run of a step: one on its target ticket, or one the scheduler
-/// dispatched for it on any site (HS2-6GE7WM). An unfinished one first.
+/// The most recent run of a step: one on its target ticket through any site of the
+/// step's project (HS2-CQ0PNT), or one the scheduler dispatched for it on any site
+/// (HS2-6GE7WM). An unfinished one first.
 fn run_of<'a>(input: &TimelineInput<'a>, step_id: &str, target: &RunTarget) -> Option<&'a Run> {
     let placed = input.step_runs.get(step_id);
     input
         .runs
         .iter()
         .filter(|run| {
-            run.target == *target || placed.is_some_and(|placed| placed.contains(&run.run_id))
+            run.target == *target
+                || input.sites.same_ticket(&run.target, target)
+                || placed.is_some_and(|placed| placed.contains(&run.run_id))
         })
         .max_by_key(|run| {
             (
@@ -465,10 +472,15 @@ fn state_of(
 /// Each unfinished step's depth over the unfinished steps it waits on. A running
 /// timeline counts running steps as 0 and a step with nothing unfinished before it
 /// as 1; a proposed plan counts both as 0. A cycle sinks to the last wave.
-fn ranks(steps: &[TimelineStep], running_timeline: bool) -> BTreeMap<String, usize> {
+fn ranks(
+    steps: &[TimelineStep],
+    running_timeline: bool,
+    sites: &ProjectSites,
+) -> BTreeMap<String, usize> {
+    // HS2-CQ0PNT: one ticket of a project, whichever site names it.
     let by_ticket: BTreeMap<TicketKey, &TimelineStep> = steps
         .iter()
-        .map(|step| (ticket_key(&step.readiness.step.target), step))
+        .map(|step| (sites.ticket_key(&step.readiness.step.target), step))
         .collect();
     let open = |step: &TimelineStep| step.readiness.level != ReadinessLevel::Finished;
     let before: BTreeMap<&str, Vec<&str>> = steps
@@ -481,7 +493,7 @@ fn ranks(steps: &[TimelineStep], running_timeline: bool) -> BTreeMap<String, usi
                 .prerequisites
                 .iter()
                 .filter_map(Prerequisite::ticket_key)
-                .filter_map(|key| by_ticket.get(&key).copied())
+                .filter_map(|key| by_ticket.get(&sites.canonical(&key)).copied())
                 .filter(|other| {
                     open(other) && other.readiness.step.step_id != step.readiness.step.step_id
                 })
@@ -577,6 +589,19 @@ fn kick_off(input: &TimelineInput<'_>, phase: TimelinePhase) -> KickOff {
     }
 }
 
+/// HS2-CQ0PNT: a ticket's label, read through the site that names it or, failing
+/// that, through any other site of its project.
+fn label_of<'a>(input: &TimelineInput<'a>, key: &TicketKey) -> Option<&'a TicketLabel> {
+    input.tickets.get(key).or_else(|| {
+        let canonical = input.sites.canonical(key);
+        input
+            .tickets
+            .iter()
+            .find(|(known, _)| input.sites.canonical(known) == canonical)
+            .map(|(_, label)| label)
+    })
+}
+
 fn item(
     input: &TimelineInput<'_>,
     step: &TimelineStep,
@@ -631,8 +656,8 @@ fn item(
                 continue;
             }
             waits_on.push(WaitsOn {
-                slug: input.tickets.get(&key).and_then(|label| label.slug.clone()),
-                step_id: by_ticket.get(&key).cloned(),
+                slug: label_of(input, &key).and_then(|label| label.slug.clone()),
+                step_id: by_ticket.get(&input.sites.canonical(&key)).cloned(),
                 reason: reason.code.clone(),
                 target_id: key.0,
                 connection_id: key.1,
@@ -648,9 +673,7 @@ fn item(
         goal_slug: goal.and_then(|goal| goal.slug.clone()),
         goal_title: goal.and_then(|goal| goal.title.clone()),
         target: plan.target.clone(),
-        ticket: input
-            .tickets
-            .get(&ticket_key(&plan.target))
+        ticket: label_of(input, &ticket_key(&plan.target))
             .cloned()
             .unwrap_or_default(),
         site_id: site.clone(),
@@ -716,7 +739,7 @@ fn item(
                         gate.connection_id.clone(),
                         gate.native_id.clone(),
                     );
-                    gate.slug = input.tickets.get(&key).and_then(|label| label.slug.clone());
+                    gate.slug = label_of(input, &key).and_then(|label| label.slug.clone());
                 }
                 provisional
             }),
@@ -745,13 +768,13 @@ fn version(timeline: &Timeline) -> String {
 pub fn timeline(input: &TimelineInput<'_>) -> Timeline {
     let phase = phase(input);
     let running_timeline = matches!(phase, TimelinePhase::Running | TimelinePhase::Paused);
-    let ranks = ranks(input.steps, running_timeline);
+    let ranks = ranks(input.steps, running_timeline, input.sites);
     let by_ticket: BTreeMap<TicketKey, String> = input
         .steps
         .iter()
         .map(|step| {
             (
-                ticket_key(&step.readiness.step.target),
+                input.sites.ticket_key(&step.readiness.step.target),
                 step.readiness.step.step_id.clone(),
             )
         })

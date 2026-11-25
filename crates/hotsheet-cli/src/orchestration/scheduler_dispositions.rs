@@ -152,6 +152,8 @@ impl OrchestrationRuntime {
             worker_label: None,
             lease_minutes: None,
             override_readiness: false,
+            override_requirements: false,
+            requirements_checked: false,
         };
         match self.run_dispatch(owner_id, request, actor, tx) {
             Ok(view) => outcome.outcome = state_code(view.run.state),

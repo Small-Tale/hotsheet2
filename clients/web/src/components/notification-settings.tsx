@@ -47,8 +47,6 @@ export interface NotificationSettingsProps {
   deliveries?: readonly NotificationDelivery[];
   /** The last failure, shown until the next change. */
   message?: string;
-  /** The last success, such as "Channel added." */
-  status?: string;
   /** Channels with a test, toggle, trust, or removal in flight. */
   busyChannels?: readonly string[];
   channelEditor?: ChannelEditorState;
@@ -97,7 +95,6 @@ export function NotificationSettings({
   config,
   deliveries,
   message = '',
-  status = '',
   busyChannels = [],
   channelEditor,
   ruleEditor,
@@ -332,9 +329,12 @@ export function NotificationSettings({
             </Text>
           )}
         </List>
-        <Text variant="span" tone={message ? 'danger' : 'quiet'} size="compact" role="status">
-          {message || status}
-        </Text>
+        {/* HS2-1K6122: a change's outcome is a toast; only a failure stays here as its record. */}
+        {message ? (
+          <Text variant="span" tone="danger" size="compact" role="alert">
+            {message}
+          </Text>
+        ) : null}
       </List>
       {channelEditor && notifiers ? (
         <NotificationChannelDialog

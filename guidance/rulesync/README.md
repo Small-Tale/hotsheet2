@@ -28,7 +28,7 @@ when a project manages Rulesync inputs directly rather than through the picker.
 
 The committed [example configuration](rulesync.jsonc) selects all available rules from
 ai-playbook's `main` branch. Its committed [lockfile](rulesync.lock) pins the exact
-reviewed commit (`d44c052a…`) and all rule artifact hashes. Frozen installs do
+reviewed commit (`81c442ba…`) and all rule artifact hashes. Frozen installs do
 not advance that pin.
 Copy both files to the consuming project's root.
 To select only some rules, replace `rules: ["*"]` with, for example:

@@ -780,6 +780,7 @@ impl GitHubProvider {
             claim_started_at: None,
             started_phase_since: None,
             started_phase_estimate_ms: None,
+            claim_standing: None,
             worker_label: None,
             claim_origin: None,
             legacy_number: None,

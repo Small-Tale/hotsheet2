@@ -3000,6 +3000,108 @@ async fn hs2_5ycgh5_an_interactive_claude_terminal_session_is_narrated() {
     );
 }
 
+/// HS2-2AN9C8: Claude emits no OSC 133, so its terminal's `busy` and `idle_since_ms`
+/// follow its prompt and stop hooks once it reports one, through the listing every
+/// session host reads; ending the session returns the terminal to byte inference.
+#[tokio::test]
+async fn hs2_2an9c8_claude_hooks_drive_the_terminal_busy_state() {
+    let (dir, state) = state();
+    let router = app(state);
+    let transcript_dir = dir.path().join("projects").join("fixture");
+    std::fs::create_dir_all(&transcript_dir).unwrap();
+    let path = transcript_dir
+        .join("turn-session.jsonl")
+        .to_string_lossy()
+        .to_string();
+    let send = |method: &'static str, uri: String, body: Option<String>| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, &uri, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    let turn = |event: &str| {
+        Some(
+            serde_json::json!({
+                "event": event, "session_id": "turn-session", "transcript_path": path
+            })
+            .to_string(),
+        )
+    };
+    let listed = || async {
+        let terminals = body_json(send("GET", "/terminals".into(), None).await).await;
+        let terminal = terminals
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|terminal| terminal["id"] == "claude-turns")
+            .unwrap()
+            .clone();
+        (terminal["busy"].clone(), terminal["idle_since_ms"].clone())
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals".into(),
+            Some(r#"{"command":"cat","id":"claude-turns"}"#.into())
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/claude-turns/ai-connection".into(),
+            Some(r#"{"agent":"claude","session_id":"turn-session"}"#.into())
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let endpoint = || "/terminals/claude-turns/claude-turn".to_owned();
+    // Before any hook the byte inference stands: `cat` prints no OSC 133, so idle.
+    assert_eq!(listed().await.0, false);
+    // UserPromptSubmit: mid-turn.
+    assert_eq!(
+        send("POST", endpoint(), turn("start")).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        listed().await,
+        (serde_json::json!(true), serde_json::Value::Null)
+    );
+    // Stop: idle since the stop, kept through a duplicate Stop.
+    send("POST", endpoint(), turn("stop")).await;
+    let (busy, idle_since) = listed().await;
+    assert_eq!(busy, false);
+    let idle_since = idle_since.as_u64().unwrap();
+    send("POST", endpoint(), turn("stop")).await;
+    assert_eq!(listed().await.1, idle_since);
+    // A turn that fails (StopFailure) also ends the busy stretch.
+    send("POST", endpoint(), turn("start")).await;
+    assert_eq!(listed().await.0, true);
+    send("POST", endpoint(), turn("failure")).await;
+    assert_eq!(listed().await.0, false);
+    // A new prompt while the session ends: the ended session forgets its turn.
+    send("POST", endpoint(), turn("start")).await;
+    assert_eq!(listed().await.0, true);
+    assert_eq!(
+        send(
+            "DELETE",
+            "/terminals/claude-turns/ai-connection?session_id=turn-session".into(),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(listed().await.0, false);
+    send("DELETE", "/terminals/claude-turns".into(), None).await;
+}
+
 #[tokio::test]
 async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim() {
     let (dir, state) = state();
@@ -4044,6 +4146,72 @@ async fn terminal_ai_connection_ignores_stale_session_end_after_clear() {
     let ended = body_json(send("GET", "/terminals", None).await).await;
     assert!(ended[0].get("ai_connection").is_none());
     assert!(ended[0].get("halt").is_none());
+}
+
+/// HS2-62099G: a launch whose caller's window has passed before the terminal spawns
+/// starts nothing, so a caller that gave up never leaves a terminal running untracked;
+/// within its window, or without one, the same launch starts.
+#[tokio::test]
+#[cfg(unix)]
+async fn hs2_62099g_a_launch_past_its_window_starts_nothing() {
+    let (_dir, st) = state();
+    let router = app(st);
+    let late = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"late","launch_within_ms":0}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(late.status(), StatusCode::CONFLICT);
+    let listed = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed, serde_json::json!([]), "nothing spawned: {listed}");
+    for (id, body) in [
+        (
+            "in-window",
+            r#"{"command":"cat","id":"in-window","launch_within_ms":600000}"#,
+        ),
+        ("unfenced", r#"{"command":"cat","id":"unfenced"}"#),
+    ] {
+        let opened = router
+            .clone()
+            .oneshot(authed("POST", "/terminals", Some(body)))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK, "{id}");
+    }
+    let listed = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let mut ids: Vec<_> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|terminal| terminal["id"].as_str().unwrap().to_owned())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, ["in-window", "unfenced"]);
+    for id in ids {
+        router
+            .clone()
+            .oneshot(authed("DELETE", &format!("/terminals/{id}"), None))
+            .await
+            .unwrap();
+    }
 }
 
 #[tokio::test]
@@ -12849,14 +13017,18 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
     .unwrap();
     // External writes are reflected by the production watcher, not a reader-side scan.
     // The create and the close are separate writes, so the create's event can arrive before
-    // the close is indexed: re-check after each event for this ticket (HS2-868RZV).
+    // the close is indexed. R6 startup reconciliation may instead send one store-scoped
+    // changed event with an empty id: re-check the authoritative backlink after either.
     let legacy_backlinks_uri = format!(
         "/checkouts/{target_project}/tickets/{}/duplicate-backlinks",
         target["qualified_id"].as_str().unwrap()
     );
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            if external_updates.recv().await.unwrap().id != legacy_id.to_string() {
+            let event = external_updates.recv().await.unwrap();
+            if event.id != legacy_id.to_string()
+                && !(event.kind == "changed" && event.id.is_empty())
+            {
                 continue;
             }
             let indexed = body_json(

@@ -473,7 +473,11 @@ JUnit report and the ordinary failure exit status. Before using that report to
 retry individual cases, the gate checks that nextest selected and ran the same
 number of tests, that the report contains that many distinct cases, and that none
 was interrupted (HS2-664XN4). A missing count or incomplete report requires a full
-stage rerun. Playwright and Vitest stages set no failure limit.
+stage rerun. Playwright can report an interrupted test or one that did not run
+under its aggregate skipped status. The gate checks the recorded attempts and
+requires an expected skip with a skipped result before treating a case as
+intentionally skipped. A shell exit that encodes a signal also invalidates the
+retry record (HS2-7KCRKQ). Playwright and Vitest stages set no failure limit.
 
 Receipts live under the Git common directory's `hotsheet-local-gate` directory.
 The existing per-worktree `hotsheet-root-gate/<tree>` compatibility marker is written

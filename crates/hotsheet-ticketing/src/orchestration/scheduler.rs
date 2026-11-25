@@ -527,8 +527,19 @@ pub enum PlacementReason {
     /// HS2-HV9ED3. Wind down: a person cancelled the run it works.
     RunCancelled,
     /// HS2-TK9ADC. Start: the target needs a dispatcher or integrator and its pool
-    /// shows none live. Keep: a role session its target still needs.
+    /// shows none live. Keep: a role session its target still needs. HS2-4JQ41V: a
+    /// dispatcher's; an integrator's decisions have reasons of their own.
     RoleNeeded,
+    /// HS2-4JQ41V. Start: the project's home pool shows handoffs pending and no
+    /// integrator is live or starting; detail `handoff_pending`.
+    IntegratorStarted,
+    /// HS2-4JQ41V. Keep: the integrator is still needed; detail `queue` (handoffs wait
+    /// to be integrated), `ci_pending` (an integrated commit waits on its CI gate) or
+    /// `worker_run` (a worker it serves still has a run).
+    IntegratorKept,
+    /// HS2-4JQ41V. Wind down: nothing needed it for `wind_down.idle_minutes`; detail
+    /// `idle`.
+    IntegratorWoundDown,
 }
 
 impl PlacementReason {
@@ -553,6 +564,9 @@ impl PlacementReason {
             Self::RolePromptFailed => "role_prompt_failed",
             Self::RunCancelled => "run_cancelled",
             Self::RoleNeeded => "role_needed",
+            Self::IntegratorStarted => "integrator_started",
+            Self::IntegratorKept => "integrator_kept",
+            Self::IntegratorWoundDown => "integrator_wound_down",
         }
     }
 }
@@ -708,6 +722,54 @@ pub struct Unplaced {
     pub sites: Vec<SitePass>,
 }
 
+/// HS2-4JQ41V: the detail of an integrator start.
+pub const INTEGRATOR_HANDOFF_PENDING: &str = "handoff_pending";
+/// HS2-4JQ41V: the details of a kept integrator.
+pub const INTEGRATOR_QUEUE: &str = "queue";
+pub const INTEGRATOR_CI_PENDING: &str = "ci_pending";
+pub const INTEGRATOR_WORKER_RUN: &str = "worker_run";
+/// HS2-4JQ41V: the detail of an integrator wound down, and of one not started because
+/// the project's `placement.role_sessions` entry leaves the integrator out.
+pub const INTEGRATOR_IDLE: &str = "idle";
+pub const INTEGRATOR_POLICY_OPT_OUT: &str = "policy_opt_out";
+pub const INTEGRATOR_TARGET_DISABLED: &str = "target_disabled";
+
+/// HS2-4JQ41V: why a project with handoffs pending has no integrator starting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoleBlocker {
+    /// This pass could not start one; `detail` is a [`Blocker`] code (`target_cap`,
+    /// `machine_refused`, `no_tool_available`, `cooldown`, `refusal_backoff`,
+    /// `target_unavailable`), `target_disabled` or `policy_opt_out`.
+    IntegratorNotStarted,
+    /// The scheduler's integrators failed to take up their role until their
+    /// replacements were exhausted; none is started again before `retry_at_ms`.
+    IntegratorUnavailable,
+}
+
+impl RoleBlocker {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::IntegratorNotStarted => "integrator_not_started",
+            Self::IntegratorUnavailable => "integrator_unavailable",
+        }
+    }
+}
+
+/// HS2-4JQ41V: a role session a project needs that this pass does not start, on the
+/// project's home site.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoleUnplaced {
+    pub target_id: String,
+    pub role: SessionRole,
+    pub reason: RoleBlocker,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_at_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ranked {
@@ -730,6 +792,10 @@ pub struct Schedule {
     /// started on without its claims being readable.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contention: Vec<ResourceContention>,
+    /// HS2-4JQ41V: each project whose pending handoffs get no integrator in this pass,
+    /// and why.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roles_unplaced: Vec<RoleUnplaced>,
 }
 
 /// Where one piece of work stands in a schedule.
@@ -1634,7 +1700,18 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 })
                 .count()
         };
-        while staying(&fates) > policy.target_cap(target) as usize {
+        // HS2-4JQ41V: an integrator may run one over the cap, so its slot is not a
+        // worker's to give up.
+        let cap = policy.target_cap(target);
+        let allowance = u32::from(
+            cap > 0
+                && sessions.iter().any(|session| {
+                    session.target_id == target.target_id
+                        && session.role == Some(SessionRole::Integrator)
+                        && !session.winding_down
+                }),
+        );
+        while staying(&fates) > (cap + allowance) as usize {
             let pick = sessions
                 .iter()
                 .enumerate()
@@ -1708,6 +1785,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
     let mut contention = ContentionLog::default();
     let mut starts = Vec::new();
     let mut unplaced = Vec::new();
+    let mut roles_unplaced: Vec<RoleUnplaced> = Vec::new();
 
     // ---- HS2-TK9ADC: role sessions a target needs, before any worker ----
     // Work a session could be placed for, as the work loop below decides it.
@@ -1739,11 +1817,22 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
     // HS2-R2N33M: a project the policy does not list is Auto: the home of every
     // project with plan work or a running session may get both roles, each only when
     // it helps below.
+    // HS2-4JQ41V: so is the home of a project whose pool shows handoffs pending, so
+    // its integrator starts after the workers that handed off have gone.
     let homes: BTreeSet<&str> = input
         .work
         .iter()
         .map(|item| item.target_id.as_str())
         .chain(sessions.iter().map(|session| session.target_id.as_str()))
+        .chain(
+            input
+                .targets
+                .iter()
+                .filter(|state| {
+                    pool_of(&state.target_id).is_some_and(|pool| pool.handoffs_pending > 0)
+                })
+                .map(|state| state.target_id.as_str()),
+        )
         .map(|target_id| input.sites.home_of(target_id))
         .filter(|home| policy.placement.role_session_entry(home).is_none())
         .collect();
@@ -1763,7 +1852,26 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             continue;
         }
         let target = policy.target(target_id);
+        // HS2-4JQ41V: handoffs wait and no integrator is live or on its way, so a pass
+        // that starts none says why.
+        let integrator_wanted = pool_of(target_id)
+            .is_some_and(|pool| pool.handoffs_pending > 0 && !pool.integrator_live)
+            && !sessions.iter().any(|session| {
+                session.target_id == target_id && session.role == Some(SessionRole::Integrator)
+            });
+        let mut not_started = |detail: &str, retry: Option<u64>| {
+            if integrator_wanted {
+                roles_unplaced.push(RoleUnplaced {
+                    target_id: target_id.to_owned(),
+                    role: SessionRole::Integrator,
+                    reason: RoleBlocker::IntegratorNotStarted,
+                    detail: Some(detail.to_owned()),
+                    retry_at_ms: retry,
+                });
+            }
+        };
         if !target.enabled {
+            not_started(INTEGRATOR_TARGET_DISABLED, None);
             continue;
         }
         let target_cap = policy.target_cap(&target);
@@ -1816,7 +1924,16 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             })
         };
         for kind in RoleSessionKind::ALL {
+            let integrator = kind == RoleSessionKind::Integrator;
+            // Reports only an integrator's reasons; a dispatcher's are not recorded.
+            let mut blocked = |detail: &str, retry: Option<u64>| {
+                if integrator {
+                    not_started(detail, retry);
+                }
+            };
             if !entry.roles.contains(&kind) {
+                // HS2-4JQ41V: the person's entry leaves the integrator out.
+                blocked(INTEGRATOR_POLICY_OPT_OUT, None);
                 continue;
             }
             let role = kind.role();
@@ -1840,7 +1957,11 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             }
             let target_sessions = on_target.get(target_id).copied().unwrap_or(0)
                 + planned_target.get(target_id).copied().unwrap_or(0);
-            if target_sessions + 1 > target_cap {
+            // HS2-4JQ41V: workers filling the cap never starve integration: the
+            // integrator may run one over it. A cap of 0 still starts nothing.
+            let reserve = u32::from(integrator && target_cap > 0);
+            if target_sessions + 1 > target_cap + reserve {
+                blocked(Blocker::TargetCap.code(), None);
                 continue;
             }
             let remembered = memory(target_id);
@@ -1855,6 +1976,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 if !evented {
                     earliest(&mut retry_at, until, now);
                 }
+                blocked(Blocker::RefusalBackoff.code(), (!evented).then_some(until));
                 continue;
             }
             if let Some(until) = remembered
@@ -1863,6 +1985,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 .filter(|until| *until > now)
             {
                 earliest(&mut retry_at, until, now);
+                blocked(Blocker::Cooldown.code(), Some(until));
                 continue;
             }
             let Some(snapshot) = input
@@ -1871,6 +1994,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 .find(|state| state.target_id == target_id)
                 .and_then(|state| state.capacity.as_ref())
             else {
+                blocked(Blocker::TargetUnavailable.code(), None);
                 continue;
             };
             let selection = select(
@@ -1886,7 +2010,8 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 },
                 support,
             );
-            if selection.denied.is_some() {
+            if selection.denied.is_some() || selection.candidates.is_empty() {
+                blocked(Blocker::NoTool.code(), None);
                 continue;
             }
             let limits = policy.machine_limits(target_id);
@@ -1919,6 +2044,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                     .then_some((candidate, model, admission))
             });
             let Some((candidate, model, admission)) = placed else {
+                blocked(Blocker::MachineRefused.code(), None);
                 continue;
             };
             let account = candidate.account.as_deref();
@@ -1930,8 +2056,19 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 account: candidate.account.clone(),
                 model,
                 session_id: None,
-                reason: R::RoleNeeded,
-                detail: Some(role.code().to_owned()),
+                reason: if integrator {
+                    R::IntegratorStarted
+                } else {
+                    R::RoleNeeded
+                },
+                detail: Some(
+                    if integrator {
+                        INTEGRATOR_HANDOFF_PENDING
+                    } else {
+                        role.code()
+                    }
+                    .to_owned(),
+                ),
                 provisional: false,
                 steps: Vec::new(),
                 score: None,
@@ -2129,6 +2266,20 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         let dependent = sessions.iter().any(|other| {
             in_project(&other.target_id) && is_worker(other) && other.run_id.is_some()
         });
+        let integrator = session.role == Some(SessionRole::Integrator);
+        // HS2-4JQ41V: why an integrator is still needed, most pressing first.
+        let integrator_need = || {
+            let pool = pool_of(target_id).unwrap_or_default();
+            if pool.handoffs_pending > pool.ci_pending {
+                Some(INTEGRATOR_QUEUE)
+            } else if pool.ci_pending > 0 {
+                Some(INTEGRATOR_CI_PENDING)
+            } else if dependent {
+                Some(INTEGRATOR_WORKER_RUN)
+            } else {
+                None
+            }
+        };
         let needed = match session.role {
             Some(SessionRole::Dispatcher) => {
                 dependent
@@ -2137,14 +2288,19 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                         .iter()
                         .any(|item| in_project(&item.target_id) && placeable(item))
             }
-            Some(SessionRole::Integrator) => {
-                dependent || pool_of(target_id).is_some_and(|pool| pool.handoffs_pending > 0)
-            }
+            Some(SessionRole::Integrator) => integrator_need().is_some(),
             // A planner is a person's, through planning; the scheduler never stops it.
             _ => true,
         };
         let detail = session.role.map(|role| role.code().to_owned());
-        fates[index] = if needed {
+        fates[index] = if needed && integrator {
+            Fate::Decided(
+                A::Keep,
+                R::IntegratorKept,
+                integrator_need().map(str::to_owned),
+                None,
+            )
+        } else if needed {
             Fate::Decided(A::Keep, R::RoleNeeded, detail, None)
         } else if session.activity != SessionActivity::Idle {
             Fate::Decided(A::Keep, R::Busy, detail, None)
@@ -2163,6 +2319,13 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             } else if !session.safe_point {
                 // The host's safe point counts every unfinished assignment of the pool.
                 Fate::Decided(A::Keep, R::AwaitingSafePoint, detail, None)
+            } else if integrator {
+                Fate::Decided(
+                    A::WindDown,
+                    R::IntegratorWoundDown,
+                    Some(INTEGRATOR_IDLE.to_owned()),
+                    None,
+                )
             } else {
                 Fate::Decided(A::WindDown, R::Idle, detail, None)
             }
@@ -2237,6 +2400,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             .collect(),
         retry_at_ms: retry_at,
         contention: contention.finish(),
+        roles_unplaced,
     }
 }
 
@@ -2265,6 +2429,9 @@ pub enum DecisionKind {
     /// HS2-AH8CRS: a run's reconciliation disposition the pass acted on: a dispatch
     /// repeated under its retained operation id, or a person told on the goal ticket.
     Reconcile,
+    /// HS2-4JQ41V: a project's integrator the pass did not start although handoffs
+    /// wait: `integrator_not_started` or `integrator_unavailable` with its detail.
+    RoleUnplaced,
 }
 
 /// What one pass read, as counts and identifiers.

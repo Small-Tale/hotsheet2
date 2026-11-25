@@ -1137,8 +1137,14 @@ install --server <bundled hotsheet-server>` before it starts the local bridge. T
     application data and the operating system releases their lock on process exit.
     If initial broker readiness exhausts its existing probe window, its diagnostic names
     the spawned PID, observed exit status or still-running state, and last probe error
-    kind/numeric OS error (HS2-C8J6WS). No raw child output, command or environment is
-    logged. A healthy Pong still succeeds even if this launch's contender exited; startup
+    kind/numeric OS error (HS2-C8J6WS). Direct launches capture the broker's startup
+    stderr in a private temporary file and include at most 4 KiB in the local startup
+    error if the child exits (HS2-8GVYHQ). The broker disconnects that file once it
+    binds, and the server removes it after an ordinary attempt. An abrupt server kill
+    can leave a private 0600 capture file in the per-user broker socket directory;
+    inspect and remove it locally during crash recovery. Commands,
+    environments, and this diagnostic are not sent to telemetry. A healthy Pong still
+    succeeds even if this launch's contender exited; startup
     does not change ownership. The intermittent historical failure's cause remains tracked
     separately in HS2-2ETGGC.
     The readiness window follows the spawned broker (HS2-KCM23W), at server startup and when
@@ -1244,6 +1250,15 @@ and reads only that line's typed members (`status`, an HTTP or gRPC code, `retry
 `short_error`). A limit becomes the failed turn's `error_type` (`rate_limit` or
 `usage_limit_exceeded`), never a search of its text.
 
+It may also name **`usage_query_args`** (HS2-JM0GVB): arguments that make the drive's
+`program` print its usage report as JSON without an agent turn or quota spend (Antigravity:
+`["-p", "/usage", "--output-format", "json"]`, which answers
+`command.data.groups[].buckets[]`). When a driven turn fails on a typed usage limit, the host
+runs it once in the background, under the same `model_catalog_identity` check as the model
+catalog, and only when AI-tool probes are enabled (`HOTSHEET_AI_TOOL_PROBES`). It reads each
+bucket's typed `remaining_fraction` and `reset_time`, never names or descriptions; the latest
+reset of a spent bucket still ahead becomes the limit's reset time. Nothing polls it.
+
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
 `usage_limit_errors`, `reset_times`, `usage_events` and `cost` is `"reported"` or `"unknown"`, and
@@ -1251,7 +1266,8 @@ an omitted key or section is `unknown`. No value means that a limit never happen
 cannot report a limit is never assumed to be available. The loader refuses an unknown key or value,
 `reset_times` without a reported limit error, and `cost` without reported `usage_events`. Claude
 and Codex declare all five (Codex's request-rate limits since HS2-2BAVAM); OpenCode only
-`usage_events`; Antigravity rate and usage limit errors (HS2-86MK1Y). Orchestration reads the declaration when it judges tool capacity
+`usage_events`; Antigravity rate and usage limit errors (HS2-86MK1Y) and reset times (from
+`usage_query_args`, HS2-JM0GVB). Orchestration reads the declaration when it judges tool capacity
 ([26](26-orchestration-projects.md) §26.11). A plugin changes its declaration in the same change
 that adds or removes the detection it describes.
 
@@ -1369,6 +1385,18 @@ declarative.
      markers through unchanged, but it drops an OSC sequence that arrives as typed
      input. Windows has no tty echo that would turn input back into output
      (HS2-YM55P3, confirmed on Windows 11 ARM64).
+  3. **Turn reports for Claude and Codex (HS2-2AN9C8).** Neither tool writes OSC 133,
+     so their terminals' `busy` and `idle_since_ms` come from the turn boundaries the
+     server already receives: Claude's `UserPromptSubmit` opens a turn and `Stop` or
+     `StopFailure` ends it (the `claude-turn` report), and a watched Codex rollout's
+     `task_started` opens one and `task_complete` ends it, with or without an error.
+     Once a terminal's session has reported a boundary, that report is the terminal's
+     busy state in `GET /terminals`, the broker listing, the connection registry and
+     every session host's safe-point facts; a repeated boundary keeps the original
+     time, and ending the session returns the terminal to byte inference. The state is
+     in memory only, so after a server restart a terminal reads inferred busy until its
+     next boundary. Claude runs no `Stop` hook when a person interrupts a turn, so such
+     a terminal reads busy until its next prompt (HS2-HZ294D).
      The registry exposes `isBusy(connection)`; the UI shows "X working / X idle."
 
 **Ticket-level active work.** Connection busy state answers whether a tool connection is
@@ -1563,7 +1591,12 @@ explicit Always answer returns 503 without resolving the pending request. Once
 the authenticated vault loads, its rules become available without replacing
 in-session or checkout answers, and a rule-change event notifies open clients;
 a load failure leaves the legacy vault locked. Health and unrelated routes
-remain available during an OS credential prompt.
+remain available during an OS credential prompt. No vault operation holds a
+vault file lock, the shared master-creation lock, or the process credential cache
+while an OS credential read may wait on a person; the shared lock is taken only to
+create a missing master. A terminal launch registers its checkout vault in the
+background, so launches never wait on a credential prompt; a permission request for
+that checkout still loads the vault before it can auto-answer (HS2-55P61R).
 Legacy fingerprint-only rules
 are discarded and require fresh approval; no migration guesses an action.
 Rules are personal machine state, stored per linked ticket store under
@@ -2610,6 +2643,7 @@ Use the same prefix, with `--project` before the subcommand:
 | `recover --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                                                                     | Fence a stale reservation only after inspecting and preserving its ticket/worktree/commit. The selected local source must have no live claim and must contain the inspection note. |
 | `review-return --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                                                               | Preserve a reviewed handoff and fence its integration, permitting a new stable correction assignment (HS2-65ETRJ).                                                                 |
 | `retire-finished --id <integrator> --session <generation> [--dry-run]`                                                                                                                                                                                         | Retire every non-done assignment whose selected-source ticket is closed, including review returns and findings handoffs, with an inspection note on each ticket (HS2-V9BXWF).      |
+| `merge-pending-prune [--remote <name>] [--shipping <ref>] [--apply] [--no-fetch]`                                                                                                                                                                              | Report, and with `--apply` delete, integrated `merge-pending/<SLUG>` branches of closed tickets; no pool (HS2-ZTG8FD).                                                             |
 | `finish --id <integrator> --session <generation> --reason <reason>`                                                                                                                                                                                            | End the run only when no work/handoff/CI remains in flight; waiting workers receive the outcome.                                                                                   |
 | `leave --role <role> --id <id> --session <generation>`                                                                                                                                                                                                         | Withdraw availability on final exit without erasing assignments or handoffs. `setup --resume` explicitly reopens a stopped run.                                                    |
 
@@ -2939,6 +2973,22 @@ reports their count as `past_workers`; `coordination workers --include-past`, th
 route's `include_past=true`, and MCP `hotsheet_workers` with `include_past: true`
 (HS2-7R945V) list them too. An assignment on another source keeps its
 phase, because its ticket status is not read here.
+
+`merge-pending-prune` cleans up the remote `merge-pending/<SLUG>[-<label>]` branches
+that the workflow requires for completed work not yet on the shipping branch
+(HS2-8HCBA1, HS2-ZTG8FD). It runs `git fetch --prune <remote>` (skipped with
+`--no-fetch`; a failed fetch is reported as `fetch_error` and the last fetched refs are
+used), then evaluates every `<remote>/merge-pending/*` branch against the shipping ref
+(`--shipping`, else `<remote>/HEAD`, else `<remote>/main`). `git cherry` counts commits
+that are neither on the shipping branch nor patch-equivalent there, so merged and
+cherry-picked branches both count as integrated. A branch is eligible only when that
+count is zero and its slug resolves to a completed, verified, archived or deleted
+ticket in the selected store. Otherwise it is kept with a reason:
+`malformed_name`, `unknown_slug`, `unintegrated_commits` (with the count), `ticket_open`
+or `ticket_moved`. The default is a dry run (`would_delete`); `--apply` runs
+`git push <remote> --delete` and reports `deleted` or `delete_failed` with the Git
+error. A rerun is a no-op. The integration ticket runs it for its own branch before
+completion; an integrator or maintainer can run it for every branch.
 
 `retire-finished` is the one supported step that retires these records, so an
 integrator never edits the pool file. It needs the exact live integrator session. For

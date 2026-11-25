@@ -348,6 +348,95 @@ fn hs2_wjf0d8_reconcile_reports_a_claim_lost_to_another_machine() {
     );
 }
 
+/// HS2-ZR8B4N: the wire standing of one ticket's claim through every transition: none,
+/// provisional while offline, lost once another machine wins, none once the loser was told,
+/// provisional again on a new offline claim, and none once that claim is confirmed or
+/// released. An exclusive claim never reads as provisional.
+#[test]
+fn hs2_zr8b4n_claim_standing_follows_provisional_lost_and_confirmed_claims() {
+    let f = fleet(2, OfflinePolicy::Provisional);
+    let (id, other) = (f.tickets[0], f.tickets[1]);
+    let standing = |store: &FsStore, id: &Ulid| {
+        let ticket = store.read_ticket(id).unwrap();
+        let live = ticket
+            .claim_lease_expires_at
+            .as_ref()
+            .is_some_and(|at| at.chronological_cmp(&now()) == Some(std::cmp::Ordering::Greater));
+        ClaimStandings::read(store).of(&id.to_string(), ticket.claimed_by.as_deref(), live)
+    };
+    assert_eq!(standing(&f.a, &id), None);
+    // Online: an exclusive claim has no standing.
+    claim(&f.a, &other, "worker-a").unwrap();
+    assert_eq!(standing(&f.a, &other), None);
+
+    go_offline(&f.a);
+    claim(&f.a, &id, "worker-a").unwrap();
+    assert_eq!(standing(&f.a, &id), Some(ClaimStanding::Provisional));
+    assert_eq!(
+        standing(&f.a, &other),
+        None,
+        "only the offline claim is provisional"
+    );
+
+    claim(&f.b, &id, "worker-b").unwrap();
+    go_online(&f, &f.a);
+    reconcile(&f.a, &now()).unwrap();
+    match standing(&f.a, &id) {
+        Some(ClaimStanding::Lost { worker, holder, .. }) => {
+            assert_eq!((worker.as_str(), holder.as_str()), ("worker-a", "worker-b"));
+        }
+        other => panic!("expected a lost claim: {other:?}"),
+    }
+    // Reading again changes nothing: the loss stays until the session is told.
+    assert!(matches!(
+        standing(&f.a, &id),
+        Some(ClaimStanding::Lost { .. })
+    ));
+    acknowledge_conflicts(&f.a, &[id]);
+    assert_eq!(
+        standing(&f.a, &id),
+        None,
+        "the holder's claim reads as theirs"
+    );
+
+    // A new offline claim on the other ticket, then confirmed: provisional, then none.
+    ops::release(&f.a, &other, now(), "worker-a", false).unwrap();
+    go_offline(&f.a);
+    claim(&f.a, &other, "worker-a").unwrap();
+    assert_eq!(standing(&f.a, &other), Some(ClaimStanding::Provisional));
+    go_online(&f, &f.a);
+    ops::renew(&f.a, &other, now(), lease(60), "worker-a").unwrap();
+    assert_eq!(standing(&f.a, &other), None);
+
+    // A provisional record whose claim is no longer the ticket's live claim is ignored.
+    let records = ClaimStandings {
+        provisional: BTreeMap::from([(
+            other,
+            ProvisionalClaim {
+                claim_id: "x".into(),
+                worker: "worker-gone".into(),
+            },
+        )]),
+        lost: BTreeMap::new(),
+        now: now(),
+    };
+    assert_eq!(records.of(&other.to_string(), Some("worker-a"), true), None);
+    assert_eq!(
+        records.of(&other.to_string(), Some("worker-gone"), false),
+        None
+    );
+    assert_eq!(
+        records.of(&other.to_string(), Some("worker-gone"), true),
+        Some(ClaimStanding::Provisional)
+    );
+    assert_eq!(records.of("not-a-ulid", Some("worker-gone"), true), None);
+    // The wire shape.
+    assert_eq!(
+        serde_json::to_value(ClaimStanding::Provisional).unwrap(),
+        serde_json::json!({"kind": "provisional"})
+    );
+}
+
 #[test]
 fn hs2_wjf0d8_claim_next_skips_a_ticket_another_machine_holds() {
     let f = fleet(2, OfflinePolicy::FailClosed);

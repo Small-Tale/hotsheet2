@@ -73,16 +73,35 @@ pub struct ProjectSites {
 impl ProjectSites {
     /// The grouping the declarations describe, removed ones included so that their
     /// history still counts for their project.
+    ///
+    /// HS2-NAA3HV: a removed site keeps the `site_of` it had, so after a re-home it can
+    /// name the old home, now a site of the new one. Each target's project follows
+    /// `site_of` to the end of that chain, so its history still counts for the project.
     pub fn of(targets: &[TargetDeclaration]) -> Self {
+        let direct: BTreeMap<&str, &str> = targets
+            .iter()
+            .filter_map(|target| {
+                target
+                    .site_of
+                    .as_deref()
+                    .map(|project| (target.target_id.as_str(), project))
+            })
+            .collect();
+        let resolve = |start: &str| {
+            let mut project = start;
+            // Bounded: a merged manifest may hold a cycle, which ends where it repeats.
+            for _ in 0..direct.len() {
+                match direct.get(project) {
+                    Some(next) if *next != start => project = next,
+                    _ => break,
+                }
+            }
+            project.to_owned()
+        };
         Self {
-            project_of: targets
-                .iter()
-                .filter_map(|target| {
-                    target
-                        .site_of
-                        .clone()
-                        .map(|project| (target.target_id.clone(), project))
-                })
+            project_of: direct
+                .keys()
+                .map(|site| ((*site).to_owned(), resolve(site)))
                 .collect(),
             connections: BTreeMap::new(),
         }

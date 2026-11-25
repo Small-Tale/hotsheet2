@@ -104,6 +104,8 @@ export function OrchestrationTimelineViewDemo() {
         selectedStep={orchestrationDemoSettings.selected.value}
         collapsedGroups={orchestrationDemoSettings.collapsed.value}
         propose={propose()}
+        planning={orchestrationDemoSettings.planning.value}
+        busy={orchestrationDemoSettings.busy.value}
         clock={demoClock}
       />
     );

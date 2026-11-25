@@ -84,9 +84,15 @@ impl TerminalBroker {
             }
             Err(error) => return Err(error.into()),
         };
-        match spawned {
-            SpawnedBroker::Direct(mut child) => wait_for_broker_startup(&socket, &mut child)?,
-            SpawnedBroker::Relayed { pid } => wait_for_relayed_startup(&socket, pid)?,
+        let mut spawned = spawned;
+        match &mut spawned {
+            SpawnedBroker::Direct { child, stderr } => {
+                let pid = child.id();
+                wait_for_startup(&socket, pid, "spawned", BROKER_STARTUP, || {
+                    child_state_with_stderr(child, stderr.path())
+                })?;
+            }
+            SpawnedBroker::Relayed { pid } => wait_for_relayed_startup(&socket, *pid)?,
         }
         warn_on_dead_namespace(&socket, "spawned");
         Ok(Self {
@@ -226,12 +232,44 @@ impl TerminalBroker {
 impl StartupContender for SpawnedBroker {
     fn state(&mut self) -> ContenderState {
         match self {
-            Self::Direct(child) => tracked_child_state(child),
+            Self::Direct { child, stderr } => child_state_with_stderr(child, stderr.path()),
             Self::Relayed { pid } => relayed_state(*pid),
         }
     }
 }
 
+fn child_state_with_stderr(
+    child: &mut impl hotsheet_process_journal::ObservedChild,
+    stderr_path: &Path,
+) -> ContenderState {
+    let state = tracked_child_state(child);
+    match state {
+        ContenderState::Exited(reason) => {
+            use std::io::Read;
+            let stderr = std::fs::File::open(stderr_path)
+                .and_then(|file| {
+                    let mut bytes = Vec::new();
+                    file.take(4_096).read_to_end(&mut bytes)?;
+                    Ok(bytes)
+                })
+                .unwrap_or_default();
+            let stderr = String::from_utf8_lossy(&stderr);
+            let stderr = stderr
+                .chars()
+                .filter(|ch| !ch.is_control() || matches!(ch, '\n' | '\t'))
+                .collect::<String>();
+            let stderr = stderr.trim();
+            if stderr.is_empty() {
+                ContenderState::Exited(reason)
+            } else {
+                ContenderState::Exited(format!("{reason}; broker stderr: {stderr}"))
+            }
+        }
+        state => state,
+    }
+}
+
+#[cfg(test)]
 fn wait_for_broker_startup(
     socket: &Path,
     child: &mut impl hotsheet_process_journal::ObservedChild,
@@ -499,8 +537,13 @@ fn is_live(socket: &Path) -> std::io::Result<bool> {
 
 /// A broker this server started: its own child, or one the launch relay started for it.
 enum SpawnedBroker {
-    Direct(hotsheet_process_journal::DetachedChild),
-    Relayed { pid: u32 },
+    Direct {
+        child: hotsheet_process_journal::DetachedChild,
+        stderr: tempfile::NamedTempFile,
+    },
+    Relayed {
+        pid: u32,
+    },
 }
 
 /// Spawn the broker detached with stdio disconnected from the server. Prefer the dedicated
@@ -534,10 +577,10 @@ fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<SpawnedBroker> 
         "HOTSHEET_PROCESS_JOURNAL_HOME",
         hotsheet_plugins::hotsheet_home(),
     );
-    command
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
+    command.env(hotsheet_terminals::STARTUP_STDERR_ENV, "1");
+    let stderr = tempfile::Builder::new()
+        .prefix("broker-startup-")
+        .tempfile_in(socket.parent().expect("prepared broker socket parent"))?;
     hotsheet_process_journal::LaunchContext {
         journal: hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home()),
         supervisor: "hotsheet-server",
@@ -549,8 +592,8 @@ fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<SpawnedBroker> 
     // Retaining the handle permits startup diagnostics. Dropping it does not wait or
     // kill: the broker keeps its existing detached lifetime on successful startup, so it
     // inherits no stray descriptor of the server's (HS2-ETMKCW).
-    .spawn_detached(&mut command)
-    .map(SpawnedBroker::Direct)
+    .spawn_detached_with_stderr_file(&mut command, stderr.path())
+    .map(|child| SpawnedBroker::Direct { child, stderr })
 }
 
 /// The broker's command-line arguments for a sibling broker binary or a self-hosting server.

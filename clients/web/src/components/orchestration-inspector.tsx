@@ -23,7 +23,7 @@ import {
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { BuiltAheadView } from '../orchestration-built-ahead';
 import { reconciliationRows, type RunReconciliation } from '../orchestration-run-checks';
-import type { SchedulerExplanation } from '../orchestration-scheduler';
+import { chosenSite, type SchedulerExplanation } from '../orchestration-scheduler';
 import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import {
   cardTime,
@@ -166,24 +166,29 @@ function RunControls({ item, busy }: { item: TimelineItem; busy: boolean }) {
   );
 }
 
+const placeText = (site: { label: string; location: TimelineItem['location'] }) =>
+  `${site.label} (${site.location === 'unbound' ? 'not bound here' : site.location})`;
+
 function WhereItRuns({
   item,
   timeline,
   clock,
+  explanation,
 }: {
   item: TimelineItem;
   timeline: OrchestrationTimeline;
   clock: ClockFormat;
+  explanation?: SchedulerExplanation;
 }) {
   const working = item.state === 'running' || item.state === 'provisional';
+  // HS2-PR984R: once the scheduler chose another site of the project, the chosen site and its machine lead.
+  const site = chosenSite(item, timeline, explanation);
   return (
     <OrchestrationInspectorSection label="Where It Runs">
       <ValueTable label="Where it runs" density="compact" stackBelow="narrow">
-        <ValueTableRow
-          label="Project"
-          value={`${item.project_label} (${item.location === 'unbound' ? 'not bound here' : item.location})`}
-        />
-        <ValueTableRow label="Machine" value={machineLabel(item)} />
+        <ValueTableRow label="Project" value={placeText(site)} />
+        {site.own ? <ValueTableRow label="Step's site" value={placeText(site.own)} /> : undefined}
+        <ValueTableRow label="Machine" value={machineLabel(site)} />
         <ValueTableRow label="Tool" value={toolLabel(item.tool) ?? 'Chosen when the work is placed'} />
         <ValueTableRow
           label="Session"
@@ -437,7 +442,7 @@ export function OrchestrationInspector({
           ) : undefined}
         </Row>
       </List>
-      <WhereItRuns item={item} timeline={timeline} clock={clock} />
+      <WhereItRuns item={item} timeline={timeline} clock={clock} explanation={details?.explanation} />
       {stateDetail(item, timeline, clock, details)}
       <OrchestrationPlanSection item={item} timeline={timeline} />
       {item.state === 'provisional' || details?.builtAhead ? (

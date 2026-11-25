@@ -194,10 +194,12 @@ impl OrchestrationRuntime {
         });
         // One reading per work item. A second run of the same item is asked only when
         // an earlier one could not be read, so a readable target is preferred.
+        // HS2-CQ0PNT: a ticket reached through two sites of a project is one item.
+        let sites = self.project_sites(owner_id)?;
         let mut costs: BTreeMap<WorkItemKey, Metric<CostReading>> = BTreeMap::new();
         let mut asked: BTreeSet<(String, WorkItemKey)> = BTreeSet::new();
         for run in &runs {
-            let key = WorkItemKey::of(run);
+            let key = WorkItemKey::in_project(run, &sites);
             if costs.get(&key).is_some_and(|cost| cost.known().is_some())
                 || !asked.insert((run.target.target_id.clone(), key.clone()))
             {
@@ -221,6 +223,7 @@ impl OrchestrationRuntime {
             events: &events,
             events_trimmed,
             costs: &costs,
+            sites: &sites,
         });
         let (decisions, decisions_trimmed) = self.summary_decisions(owner_id)?;
         summary.utilization =

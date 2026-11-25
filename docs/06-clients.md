@@ -4006,6 +4006,8 @@ the magnified variant receives the remaining stage width; the preview demonstrat
 80×24 grid while the magnified terminal scales the same grid into that available stage. Its initial terminal focus is one-shot: later
 xterm paints, including cursor blinking, never steal focus from catalog controls or close an
 open Web Awesome popup.
+If a render moves or re-presents the same live magnified viewport, it keeps a focused xterm
+input focused afterward. A deliberate move to another control still wins (HS2-PSV7BG).
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.

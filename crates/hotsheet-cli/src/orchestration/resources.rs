@@ -65,11 +65,28 @@ pub struct ClaimsUnreachable {
 /// service; tests script one.
 pub trait ClaimSource: Send + Sync {
     /// The live claims of one namespace: a namespace, a resource and an expiry each,
-    /// never a holder, a token or metadata.
-    fn held(&self, namespace: &str) -> Result<Vec<HeldClaim>, ClaimsUnreachable>;
+    /// never a holder, a token or metadata. HS2-AP8KPT: `project` is the hosted
+    /// checkout's root, whose own bindings (`.hotsheet2/resource-claims.json`) win over
+    /// the machine's; `None` reads the machine's bindings alone.
+    fn held(
+        &self,
+        namespace: &str,
+        project: Option<&Path>,
+    ) -> Result<Vec<HeldClaim>, ClaimsUnreachable>;
     /// Block until the resource is free or the timeout passes, woken by the
-    /// backend's own signal. True when it is free.
-    fn wait_free(&self, namespace: &str, resource: &str, timeout: Duration) -> bool;
+    /// backend's own signal. True when it is free. `project` as for [`Self::held`].
+    fn wait_free(
+        &self,
+        namespace: &str,
+        resource: &str,
+        timeout: Duration,
+        project: Option<&Path>,
+    ) -> bool;
+    /// HS2-AP8KPT: whether `project`'s own registry binds `namespace`, so its claims
+    /// live in that project's backend rather than the machine's.
+    fn project_binds(&self, _namespace: &str, _project: &Path) -> bool {
+        false
+    }
     /// HS2-YDZAFH: every namespace with claim state on this machine. A source that
     /// cannot enumerate answers unreachable, so a capacity read that named no namespace
     /// reports its claims as unknown rather than as none.
@@ -82,9 +99,11 @@ pub trait ClaimSource: Send + Sync {
 
 /// The claim service of this machine (`hotsheet_resource_claims`). A namespace is
 /// served by the backend its machine binding names (HS2-JJWESD), or the machine's local
-/// backend when it is unbound. HS2-KCEHVR: a namespace whose backend cannot be read
-/// reports its configuration's offline policy; an unbound namespace, the local backend,
-/// and a configuration registry that cannot itself be read fail closed.
+/// backend when it is unbound. HS2-AP8KPT: read for a hosted checkout, the checkout's
+/// project bindings win, as they do for the sessions working there. HS2-KCEHVR: a
+/// namespace whose backend cannot be read reports its configuration's offline policy;
+/// an unbound namespace, the local backend, and a configuration registry that cannot
+/// itself be read fail closed.
 pub struct MachineClaims {
     home: PathBuf,
 }
@@ -95,21 +114,35 @@ impl MachineClaims {
 
     /// HS2-KCEHVR: what the configuration bound to `namespace` says to do while its
     /// backend cannot be read.
-    fn offline(&self, namespace: &Namespace) -> ClaimsUnreachable {
+    fn offline(&self, namespace: &Namespace, project: Option<&Path>) -> ClaimsUnreachable {
         ClaimsUnreachable {
-            offline: hotsheet_resource_claims::offline_policy(&self.home, None, namespace)
+            offline: hotsheet_resource_claims::offline_policy(&self.home, project, namespace)
                 .unwrap_or(OfflinePolicy::FailClosed),
+        }
+    }
+
+    /// HS2-AP8KPT: the claim service as a session in `project` sees it.
+    fn service(&self, project: Option<&Path>) -> ClaimService {
+        let service = ClaimService::new(&self.home);
+        match project {
+            Some(project) => service.with_project(project),
+            None => service,
         }
     }
 }
 impl ClaimSource for MachineClaims {
-    fn held(&self, namespace: &str) -> Result<Vec<HeldClaim>, ClaimsUnreachable> {
+    fn held(
+        &self,
+        namespace: &str,
+        project: Option<&Path>,
+    ) -> Result<Vec<HeldClaim>, ClaimsUnreachable> {
         let parsed = Namespace::parse(namespace).map_err(|_| ClaimsUnreachable {
             offline: OfflinePolicy::FailClosed,
         })?;
-        Ok(ClaimService::new(&self.home)
+        Ok(self
+            .service(project)
             .list(&parsed)
-            .map_err(|_| self.offline(&parsed))?
+            .map_err(|_| self.offline(&parsed, project))?
             .into_iter()
             .map(|claim| HeldClaim {
                 namespace: namespace.to_owned(),
@@ -127,12 +160,23 @@ impl ClaimSource for MachineClaims {
             })
     }
 
-    fn wait_free(&self, namespace: &str, resource: &str, timeout: Duration) -> bool {
+    fn wait_free(
+        &self,
+        namespace: &str,
+        resource: &str,
+        timeout: Duration,
+        project: Option<&Path>,
+    ) -> bool {
         ResourceRef::parse(&format!("{namespace}/{resource}"))
-            .and_then(|target| {
-                hotsheet_resource_claims::wait_until_free(&self.home, &target, timeout)
-            })
+            .and_then(|target| self.service(project).wait_free(&target, timeout))
             .is_ok_and(|outcome| outcome == WaitOutcome::Free)
+    }
+
+    fn project_binds(&self, namespace: &str, project: &Path) -> bool {
+        Namespace::parse(namespace)
+            .ok()
+            .and_then(|parsed| self.service(Some(project)).resolve(&parsed).ok())
+            .is_some_and(|resolved| resolved.binding_scope == Some("project"))
     }
 }
 
@@ -176,16 +220,41 @@ impl OrchestrationRuntime {
         resource: &str,
         wait_ms: u64,
     ) -> Result<ResourceWait, OrchestrationError> {
-        self.owner(checkout_id)?;
+        let checkout = self.owner(checkout_id)?;
         ResourceRef::parse(&format!("{namespace}/{resource}"))
             .map_err(|_| OrchestrationError::Invalid("a namespace and resource are required"))?;
         Ok(ResourceWait {
+            // HS2-AP8KPT: in the backend the checkout's own bindings choose.
             free: self.claims.wait_free(
                 namespace,
                 resource,
                 Duration::from_millis(wait_ms.min(MAX_RESOURCE_WAIT_MS)),
+                Some(Path::new(&checkout.root)),
             ),
         })
+    }
+
+    /// HS2-AP8KPT: the root of the owner's first active target checkout on this
+    /// machine whose project binds `namespace` itself, in declaration order. `None`
+    /// when no such checkout is bound here: the machine's bindings serve it.
+    fn local_claim_project(&self, owner_id: &str, namespace: &str) -> Option<PathBuf> {
+        let declarations = self.declarations(owner_id).ok()?;
+        declarations
+            .targets
+            .into_iter()
+            .filter(|declaration| declaration.state == DeclarationState::Active)
+            .filter_map(|declaration| Self::target_ref(owner_id, &declaration.target_id).ok())
+            .filter_map(|target| {
+                let binding = Self::binding_at(&self.home, &target).ok()?;
+                match binding.destination? {
+                    TargetDestination::Local { checkout_id, .. } => {
+                        self.owner(&checkout_id).ok().map(|checkout| checkout.root)
+                    }
+                    TargetDestination::Remote { .. } => None,
+                }
+            })
+            .map(PathBuf::from)
+            .find(|root| self.claims.project_binds(namespace, root))
     }
 
     /// HS2-G1PKK2: the owner's active target bound to a checkout on `server_id`, the
@@ -337,13 +406,16 @@ impl OrchestrationRuntime {
             let spawned = match remote {
                 None => {
                     let claims = self.claims.clone();
+                    // HS2-AP8KPT: a target checkout here whose project binds the
+                    // namespace was read in that project's backend; wait there too.
+                    let project = self.local_claim_project(owner_id, &entry.namespace);
                     std::thread::Builder::new()
                         .name("orchestration-claim-wait".into())
                         .spawn(move || {
                             let (home, _, namespace, resource) = &thread_key;
                             // Free or not, the next pass reads the claim again and,
                             // when it is still held, waits again.
-                            claims.wait_free(namespace, resource, MAX_WAIT);
+                            claims.wait_free(namespace, resource, MAX_WAIT, project.as_deref());
                             watches().remove(&thread_key);
                             Self::scheduler_wake_at(home);
                         })

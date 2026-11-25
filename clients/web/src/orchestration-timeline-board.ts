@@ -330,3 +330,13 @@ export function startBlockedReason(timeline: OrchestrationTimeline): string | un
       return timeline.kick_off.start_blocked satisfies never;
   }
 }
+
+/**
+ * HS2-2Z4M6M: the name Propose Plan's place takes while the press is on its way (`starting`) or a
+ * planner starts or works; `replannable` keeps the button, so a press re-plans (HS2-FDS95D).
+ */
+export function plannerWorkingLabel(planning: string | undefined, busy: boolean): string | undefined {
+  if (planning === 'planning') return 'Planning';
+  if (planning === 'waiting') return 'Planner Waiting';
+  return busy ? 'Starting Planner' : undefined;
+}

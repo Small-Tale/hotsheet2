@@ -251,6 +251,11 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
         Verdict::Resolved,
     ),
     (
+        "hotsheet-aitools/src/usage_resets.rs",
+        "cwd=1",
+        Verdict::Resolved,
+    ),
+    (
         "hotsheet-cli/src/coordination/development_strategy.rs",
         "cwd=1",
         Verdict::Safe("bare `git` without a PATH change"),
@@ -319,7 +324,7 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
     ),
     (
         "hotsheet-server/src/terminal_broker.rs",
-        "detached=1",
+        "detached=1 env_dynamic=1",
         Verdict::Spawned,
     ),
     (
@@ -368,7 +373,8 @@ fn fork_triggers(compact: &str) -> String {
             count(".detached(")
                 + count(".spawn_detached(")
                 + count(".detached_as(")
-                + count(".spawn_detached_as("),
+                + count(".spawn_detached_as(")
+                + count(".spawn_detached_with_stderr_file("),
         ),
         ("env_clear", count(".env_clear()")),
         ("env_dynamic", followed(".env(", '"') + count(".envs(")),
@@ -454,7 +460,8 @@ fn hs2_e5b0k0_every_fork_trigger_is_resolved_safe_or_a_tracked_fork() {
                     if !(compact.contains(".detached(")
                         || compact.contains(".detached_as(")
                         || compact.contains(".spawn_detached(")
-                        || compact.contains(".spawn_detached_as(")) =>
+                        || compact.contains(".spawn_detached_as(")
+                        || compact.contains(".spawn_detached_with_stderr_file(")) =>
                 {
                     problems.push(format!(
                         "{file}: spawned, yet not through the journal's detached launch"

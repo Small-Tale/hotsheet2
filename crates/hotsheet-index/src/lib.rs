@@ -730,6 +730,17 @@ impl Index {
     /// `(upserted, deleted)`. Cheaper than a full rebuild on a warm index — this is
     /// what makes "restore from disk on launch" fast (`docs/03` §3.4).
     pub fn reconcile(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
+        let (upserted, deleted, _) = self.reconcile_with_invalidations(store)?;
+        Ok((upserted, deleted))
+    }
+
+    /// As [`Self::reconcile`], also report when a corrupt file's source hash
+    /// changed while its last healthy row was retained. A watcher must invalidate
+    /// clients for that transition even though no row was upserted (HS2-R6FZ54).
+    pub fn reconcile_with_invalidations(
+        &self,
+        store: &FsStore,
+    ) -> Result<(usize, usize, bool), IndexError> {
         // One IMMEDIATE write transaction: each ticket's upsert is several statements (row
         // upsert, then delete + reinsert of its tags/assignees/reviews), so two openers
         // reconciling the same file must not interleave them. The later reconciler waits
@@ -739,12 +750,18 @@ impl Index {
             &self.conn,
             rusqlite::TransactionBehavior::Immediate,
         )?;
-        let result = self.reconcile_in_transaction(store)?;
+        let mut corrupt_source_changed = false;
+        let (upserted, deleted) =
+            self.reconcile_in_transaction(store, &mut corrupt_source_changed)?;
         transaction.commit()?;
-        Ok(result)
+        Ok((upserted, deleted, corrupt_source_changed))
     }
 
-    fn reconcile_in_transaction(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
+    fn reconcile_in_transaction(
+        &self,
+        store: &FsStore,
+        corrupt_source_changed: &mut bool,
+    ) -> Result<(usize, usize), IndexError> {
         // Once an index has a Git baseline, reconcile the union of the committed HEAD
         // delta, current worktree delta, and the previous worktree delta. The last set is
         // essential when a dirty file is reverted or removed: it must be refreshed even
@@ -780,13 +797,13 @@ impl Index {
                     ids.extend(self.previous_dirty_ids()?);
                     ids.sort();
                     ids.dedup();
-                    let result = self.reconcile_ids(store, ids)?;
+                    let result = self.reconcile_ids(store, ids, corrupt_source_changed)?;
                     self.write_git_state(&baseline)?;
                     return Ok(result);
                 }
             }
         }
-        let result = self.reconcile_full(store)?;
+        let result = self.reconcile_full(store, corrupt_source_changed)?;
         self.record_git_state(store)?;
         Ok(result)
     }
@@ -795,6 +812,7 @@ impl Index {
         &self,
         store: &FsStore,
         ids: impl IntoIterator<Item = Ulid>,
+        corrupt_source_changed: &mut bool,
     ) -> Result<(usize, usize), IndexError> {
         let mut upserted = 0;
         let mut deleted = 0;
@@ -810,6 +828,7 @@ impl Index {
                             Ok(ticket) => ticket,
                             Err(error) => {
                                 self.record_source_hash(&id, &hash)?;
+                                *corrupt_source_changed = true;
                                 eprintln!(
                                     "warning: skipping unparseable ticket {}: {error}",
                                     path.display()
@@ -882,11 +901,19 @@ impl Index {
 
     /// Full hash-walk reconcile: re-read every ticket file, upsert those whose content
     /// changed, delete index rows whose file is gone. Always correct (the fallback).
-    fn reconcile_full(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
-        self.reconcile_full_paths(ticket_files(store)?)
+    fn reconcile_full(
+        &self,
+        store: &FsStore,
+        corrupt_source_changed: &mut bool,
+    ) -> Result<(usize, usize), IndexError> {
+        self.reconcile_full_paths(ticket_files(store)?, corrupt_source_changed)
     }
 
-    fn reconcile_full_paths(&self, paths: Vec<PathBuf>) -> Result<(usize, usize), IndexError> {
+    fn reconcile_full_paths(
+        &self,
+        paths: Vec<PathBuf>,
+        corrupt_source_changed: &mut bool,
+    ) -> Result<(usize, usize), IndexError> {
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut upserted = 0;
         for path in paths {
@@ -917,6 +944,7 @@ impl Index {
                     Ok(ticket) => ticket,
                     Err(error) => {
                         self.record_source_hash(&id, &hash)?;
+                        *corrupt_source_changed = true;
                         eprintln!(
                             "warning: skipping unparseable ticket {}: {error}",
                             path.display()
@@ -1372,6 +1400,7 @@ impl Index {
                     claim_started_at: r.get(25)?,
                     started_phase_since: r.get(28)?,
                     started_phase_estimate_ms: None,
+                    claim_standing: None,
                     worker_label: r.get(20)?,
                     // HS2-DQJPW0: relative to the host reading the index.
                     claim_origin: hotsheet_ticketing::claim_host::origin(

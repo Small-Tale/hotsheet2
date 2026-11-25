@@ -1531,6 +1531,8 @@ const terminalOptional: Record<string, Check> = {
   // HS2-H3S7YQ: a person chose this primary; the session may be chosen.
   feedback_primary_chosen: isBoolean,
   feedback_eligible: isBoolean,
+  // HS2-G2X7RT: an orchestrator's session whose tool has not reported its start.
+  tool_ready: isBoolean,
   // HS2-6MNMVB: the hosted orchestrator session behind the tab.
   orchestrator: (value) =>
     isRecord(value) &&
@@ -1803,7 +1805,7 @@ export const parseHostedOrchestrationProjectChoice = shape<HostedOrchestrationPr
   'hosted project',
   { checkout_id: isString, name: isString, added: isBoolean },
   {},
-  { target_id: isString },
+  { target_id: isString, checkout_authority: isString },
 );
 export const parseRemovedOrchestrationProject = shape<RemovedOrchestrationProject>('removed project', {
   target_id: isString,

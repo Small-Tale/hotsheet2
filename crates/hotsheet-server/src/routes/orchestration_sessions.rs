@@ -61,6 +61,8 @@ impl SessionHost for ServerSessions {
             effort: launch.effort.clone(),
             session_role: Some(launch.role.code().to_owned()),
             initial_prompt: Some(launch.role_prompt.clone()),
+            // The in-process host waits for its own launch, so nothing is fenced.
+            launch_within_ms: None,
         };
         self.runtime
             .block_on(crate::open_terminal(

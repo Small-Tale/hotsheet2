@@ -2342,3 +2342,129 @@ fn hs2_ncmats_the_redo_asks_permission_and_a_denial_falls_back_to_the_ask() {
         }
     }
 }
+
+/// HS2-DBCN9N: the redo of a reopened run that an orchestrator-owned session works
+/// (one the scheduler placed) asks `session_start` for that session's tool, not
+/// `work_start`. Walked through its transitions: a remembered `session_start` rule
+/// lets the redo cancel at once with nothing asked; without one, the permission card
+/// asks `session_start` under the redo's operation and nothing is done while it is
+/// unanswered, however often it is reconciled; Allow Once then cancels at the next
+/// reconciliation; a denial falls back to the HS2-2K0DM8 ask, once. `work_start`
+/// rules are forgotten throughout, so only the session's rule can answer.
+#[test]
+fn hs2_dbcn9n_the_redo_of_a_scheduler_session_run_asks_session_start() {
+    use hotsheet_ticketing::orchestration::{NewSession, RunState, SessionRole};
+    // None: the rule is remembered. Some(answer): it is asked and answered so.
+    for answer in [
+        None,
+        Some(PermissionAnswer::AllowOnce),
+        Some(PermissionAnswer::Deny),
+    ] {
+        tx!(tx);
+        let t = two(
+            Some(&Opt {
+                redo: true,
+                ..Opt::on()
+            }),
+            &mut tx,
+        );
+        let owner = t.owner();
+        let run_b = t.dispatch_b(&mut tx).unwrap().run.run_id;
+        // The scheduler placed a session on target 2 for the run.
+        let (session, _) =
+            t.m.runtime
+                .session_registry()
+                .begin(
+                    &owner,
+                    NewSession {
+                        operation_id: format!("sched-start-{}", t.step_b),
+                        target_id: id(2),
+                        role: SessionRole::Worker,
+                        tool: "codex".into(),
+                        model: None,
+                        effort: None,
+                        account: None,
+                        run_id: Some(run_b.clone()),
+                        replaces: None,
+                    },
+                    Some("worker-1".into()),
+                    &mut tx,
+                )
+                .unwrap();
+        assert!(session.state.is_active());
+        let forget = |action: PermissionAction, tx: &mut Transaction<'_>| {
+            let rules = t.m.runtime.permission_list(&owner, tx).unwrap().rules;
+            for rule in rules.iter().filter(|rule| {
+                rule.rule.key.target.target_id == id(2) && rule.rule.key.action == action
+            }) {
+                t.m.runtime
+                    .permission_forget(&owner, &rule.rule.rule_id, Some(&human()), tx)
+                    .unwrap();
+            }
+        };
+        forget(PermissionAction::WorkStart, &mut tx);
+        if answer.is_some() {
+            forget(PermissionAction::SessionStart, &mut tx);
+        }
+        let pending = |tx: &mut Transaction<'_>| {
+            t.m.runtime
+                .permission_list(&owner, tx)
+                .unwrap()
+                .requests
+                .into_iter()
+                .filter(|request| request.request.state == PermissionState::Pending)
+                .map(|request| request.request)
+                .collect::<Vec<_>>()
+        };
+        t.ci_says(&t.run_a, &sha('a'), GateState::Failed, 1, &mut tx);
+        reopen_b(&t, &mut tx).unwrap();
+        let Some(answer) = answer else {
+            // Remembered: cancelled at once as the redo, nobody asked.
+            let run = run_of(&t, &run_b);
+            assert_eq!(run.state, RunState::Cancelled, "remembered rule");
+            assert_eq!(
+                run.history.last().unwrap().reason.as_deref(),
+                Some(crate::orchestration::provisional::REDO_REASON)
+            );
+            assert!(pending(&mut tx).is_empty());
+            assert!(redo_asks(&t).is_empty());
+            // Repeated reconciliation does nothing more.
+            t.m.runtime.provisional_reconcile(&owner, &mut tx).unwrap();
+            assert!(pending(&mut tx).is_empty());
+            continue;
+        };
+        // Asked under `session_start` for the session's tool, under the redo operation.
+        let asked = pending(&mut tx);
+        assert_eq!(asked.len(), 1, "{asked:#?}");
+        assert_eq!(asked[0].key.action, PermissionAction::SessionStart);
+        assert_eq!(asked[0].key.tool.as_deref(), Some("codex"));
+        assert!(asked[0].operation_id.starts_with("redo-"));
+        for _ in 0..2 {
+            t.m.runtime.provisional_reconcile(&owner, &mut tx).unwrap();
+            assert!(!run_of(&t, &run_b).state.is_terminal());
+            assert_eq!(pending(&mut tx).len(), 1, "one request, asked again");
+            assert!(redo_asks(&t).is_empty());
+        }
+        t.m.runtime
+            .permission_answer(
+                &owner,
+                &asked[0].request_id,
+                answer,
+                Some(&human()),
+                &mut tx,
+            )
+            .unwrap();
+        for _ in 0..2 {
+            t.m.runtime.provisional_reconcile(&owner, &mut tx).unwrap();
+        }
+        let run = run_of(&t, &run_b);
+        if answer == PermissionAnswer::Deny {
+            assert!(!run.state.is_terminal(), "a denial does nothing to the run");
+            assert_eq!(redo_asks(&t).len(), 1, "the person is asked once");
+        } else {
+            assert_eq!(run.state, RunState::Cancelled);
+            assert!(!crate::orchestration::cancel_hold::person_cancelled(&run));
+            assert!(redo_asks(&t).is_empty());
+        }
+    }
+}

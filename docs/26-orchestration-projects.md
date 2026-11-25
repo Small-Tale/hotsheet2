@@ -172,6 +172,24 @@ several machines (HS2-ZKJX16). Each declaration is a **site** of one project:
   `target add --site-of`, `target rename --site-of` (also to move a site to another
   project) and `target rename --clear-site-of`. A removed site keeps its `site_of` in
   its tombstone, so its history still counts for its project.
+- **Making a site the home site (HS2-NAA3HV).** `POST …/targets/{site}/make-home` with
+  `{expected_revision}` (`target make-home <site>`, MCP `hotsheet_targets` action
+  `make_home`) re-homes a project at one manifest revision: the site loses `site_of`,
+  and the old home and every other active site of the project name it. It is refused
+  for a target that is already a home (`invalid_request`), a removed or unknown target,
+  a stale revision, and with the site codes of any grouping change (`site_chain`,
+  `site_plan_conflict`, `site_run_conflict`, `site_store_mismatch`,
+  `site_repository_mismatch`). Plan steps and runs keep the concrete site they name and
+  read through the new grouping. A removed site's tombstone still names the old home;
+  the project key follows `site_of` to the end of that chain, so its history stays with
+  the project. **Policy entries move with the home** (the maintainer's default
+  decision): the `targets[]`, `placement.resources` and `placement.role_sessions`
+  entries keyed by the old home and those keyed by the new home swap ids, in one policy
+  write right after the manifest write. Should that write fail, the manifest is put back
+  by re-homing the old home. Changing the policy is a person's act, so an AI actor is
+  refused when the policy names either site; otherwise any actor that may rename a
+  target may re-home. The answer is the manifest plus `previous_home` and
+  `policy_revision`, and the change is audited as `target_make_home`.
 - **Adding an open project as a site (HS2-E9VVQF)** declares and binds it in one step:
   `POST …/orchestration/projects` with `site_of` (`orchestration project add
 --site-of`), the same workflow as Settings › Orchestration's Add a Site. The candidate
@@ -212,6 +230,18 @@ they name; comparisons go through the project key:
   edge to the step planned through another, an active run or a confirmed read through
   any site counts for the ticket, and cycles that close only through another site are
   found.
+- **Read models join the same way (HS2-CQ0PNT).** The timeline (§26.26) attaches to a
+  step its run through any site of the project, not only one the scheduler placed,
+  and finds a ticket's label and a prerequisite's step through any site, so a step
+  moved to another site while its run stands keeps its run, label and dependents.
+  Target lines show, on a checkout bound as one site, the steps planned through
+  every site of its project, the ticket named by that checkout's own connection id,
+  one line per ticket. A gate roll-up asked for a target and commit
+  (`commit_gate_state`, `GET …/gates?target_id=`) covers the gates of every site of
+  the project, which builds the same commits. The progress summary (§26.18) counts a
+  ticket reached through two sites as one work item under the home site's connection
+  id, attributed to its earliest run's target. Each run still names the site it went
+  through.
 
 **One ticket, one id per machine (HS2-3JGPDR).** A Git source's connection id is a hash
 of the store's local path, so the store every site shares has another connection id on
@@ -304,6 +334,8 @@ hotsheet-cli -C <configured-host-source> orchestration target add --project <own
 hotsheet-cli -C <configured-host-source> orchestration target rename <target-id> --project <owner> \
   --label "Widgets on the build host" --site-of <project-target-id> | --clear-site-of \
   --expected-revision <revision>
+hotsheet-cli -C <configured-host-source> orchestration target make-home <site-target-id> \
+  --project <owner> --expected-revision <revision>
 hotsheet-cli -C <configured-host-source> orchestration target sites --project <owner> [--capabilities]
 ```
 
@@ -1054,6 +1086,10 @@ transition. A person's correction is the one exception to the edges (§26.14).
 - **Readiness.** A target ticket that a plan step works is dispatched only when that
   step is `confirmed`, or when a person overrides it for the exact operation
   (§26.15). A ticket no step works is not gated.
+- **Requirements (HS2-061YTB).** When that step declares requirements, the target's
+  machine must meet them: it is read through the gate and a miss refuses with 409
+  `requirement_unmet` or `requirement_unknown` naming the requirement, unless
+  `override_requirements` lets the exact operation through (§26.15).
 - **Refusals.** The target ticket is read first, so a ticket that does not exist is
   never recorded as a run. A definitive target refusal ends the run as `failed` with
   the target's code; a failure that may be transient leaves it `requested` so the
@@ -1169,6 +1205,11 @@ first request until no follower has asked for ten minutes. Each changed ticket f
 recorded in the change log as a `target_store_changed` event that carries only the
 ticket id and is read only by the feed, so cursors and replay work as they do for hosted
 stores (HS2-G5FYP6).
+
+When a hosted store is recreated, its watcher may reconcile several files in one
+pass and publish a store-scoped `changed` event with an empty ticket id. The target
+feed preserves that connection-scoped invalidation; a follower refreshes every
+planned ticket and syncs every run of that connection (HS2-R6FZ54).
 
 **Planned tickets without a run (HS2-TMA4YA).** A target is also followed while an
 unfinished plan step names one of its tickets: a prerequisite, or the step's own
@@ -1402,6 +1443,13 @@ many) or `refused`, with the limits that were enforced and one reason code:
 | `below_ram_floor`     | Free RAM minus the floor fits no session, or fewer than asked             |
 | `capacity_unknown`    | A needed measurement is `null` and the owner did not set `allow_unknown`  |
 
+A refused or reduced answer also carries `refusal` (HS2-8Z9VHH): the reason with the
+machine limit behind it (`setting`: `max_sessions`, `max_cpu_percent`,
+`min_free_disk_mb` or `min_free_ram_mb`), that limit's enforced value (`limit`) and
+what the machine measured (`observed`: running AI sessions, CPU percent, free disk or
+free RAM in MB). A tool reason carries `tool` instead; `capacity_unknown` carries the
+reason only.
+
 A limit that a known measurement breaks always refuses with its own reason. Unknown
 measurements are listed in `unknown` and refuse as `capacity_unknown` unless the owner
 set `allow_unknown`, in which case that check is skipped. `reduced` names the tighter
@@ -1493,7 +1541,7 @@ declare exactly what the existing detection observes:
 | Claude      | reported          | reported           | reported    | reported     | reported |
 | Codex       | reported          | reported           | reported    | reported     | reported |
 | OpenCode    | unknown           | unknown            | unknown     | reported     | unknown  |
-| Antigravity | reported          | reported           | unknown     | unknown      | unknown  |
+| Antigravity | reported          | reported           | reported    | unknown      | unknown  |
 
 Codex reports a request-rate limit as its own `CodexErrorInfo` variant,
 `rate_limit_exceeded`, beside `usage_limit_exceeded` (HS2-2BAVAM). The rollout halt path
@@ -1514,10 +1562,24 @@ turn carries that error type, and the dist work loop's limit sink and the client
 runner record it through the same halt path, unattributed like driven usage. **The real
 quota-hit payload is unconfirmed:** the observed line was a print timeout
 (`DEADLINE_EXCEEDED`), and the limit values are assumed until one is captured
-(HS2-GETFE4). Antigravity reports no reset time (agy's `/usage` buckets carry one,
-HS2-JM0GVB) and no usage events, so before anything is observed it is `unknown`
-(`not_observed`), and after a limit without a reset time it stays `degraded` until a
-`recovered` signal (HS2-WTSYQJ).
+(HS2-GETFE4). A usage limit's reset time comes from agy's own usage report (HS2-JM0GVB):
+when a driven turn fails on `usage_limit_exceeded`, the host runs the plugin's
+`usage_query_args` (`agy -p "/usage" --output-format json`, no agent turn or quota spend;
+observed on agy 1.5.10 with zero turns and zero tokens) once in the background and records
+the limit again with the latest `reset_time` of a bucket whose `remaining_fraction` is 0.
+The report does not say which bucket the failed turn drew on, so the latest reset is the
+one that cannot end the limit early. With no spent bucket, a failed or untrusted query, or
+AI-tool probes off, the registry's backoff stands; a rate limit asks nothing. **A spent
+bucket at a real limit is unconfirmed:** the observed report had none spent. Antigravity
+reports no usage events, so nothing observed is `unknown` (`not_observed`).
+A completed driven turn confirms it instead (HS2-WTSYQJ): the dist work loop's limit sink
+and the client-drive runner record a `recovered` signal, unattributed, when a turn of a
+tool whose plugin reports limits but no usage events completes. Its first completed turn
+makes it `available`. After a limit without a reset time it is `limited` for the backoff,
+then `degraded` (`recovery_unconfirmed`) until a probe turn completes and makes it
+`available` again, resetting the backoff sequence; a probe that hits the limit again
+backs off for the next, longer step. A tool that reports usage events confirms recovery
+through them and records nothing here.
 
 ### Signals
 
@@ -1536,7 +1598,8 @@ provider message a second way:
   reads from the message, or absent. This covers Claude's `StopFailure` hook and the
   Codex rollout watch, which share one halt path.
 - When a session halted on a limit takes a new turn (the tool's resume hook, or a new
-  Codex turn), a `recovered` signal is recorded. Ending the session, closing its
+  Codex turn), a `recovered` signal is recorded. A completed driven turn of a tool that
+  reports limits but no usage events records one too (HS2-WTSYQJ). Ending the session, closing its
   terminal, or a person dismissing the stopped state proves nothing and records
   nothing.
 - A halt that is not a limit, and a halt whose tool is not known, record nothing.
@@ -2833,7 +2896,9 @@ are not prerequisites: readiness ignores them, and the scheduler waits on them.
 
 A step may also declare **requirements** (HS2-ZY4Z4G): what the target's machine must
 be for its work. Like resources, readiness ignores them; the scheduler places the work
-only where every one is met (§26.17).
+only where every one is met (§26.17), and a manual `run dispatch` of the step's ticket
+is refused on a machine that misses one (HS2-061YTB, "Dispatch guard and override"
+below).
 
 | Requirement     | Met when the machine's capabilities (§26.10) show                                                 |
 | --------------- | ------------------------------------------------------------------------------------------------- |
@@ -2841,6 +2906,7 @@ only where every one is met (§26.17).
 | `arch[]`        | Any listed architecture, normalized (`amd64` is `x86_64`, `aarch64` is `arm64`)                   |
 | `tools[]`       | Every listed AI tool installed and enabled for the checkout (the snapshot's `tools[]`)            |
 | `toolchains[]`  | Every listed toolchain installed. One the machine's owner did not declare is unknown, not missing |
+| `name>=version` | A tool or toolchain entry with a minimum version: also at least that version (HS2-ZH9C6W)         |
 | `min_memory_gb` | `memory.total_mb` at least fifteen sixteenths of that many GiB, because every OS reserves some    |
 | `gpu`           | `any` GPU, or one of the vendor `amd`, `apple`, `intel`, `nvidia`, `qualcomm`, `other`            |
 
@@ -2853,6 +2919,18 @@ the machine does not meet it answers `unmet`, and for one the machine did not re
 `<kind>:<value>` (`os:windows`, `arch:arm64`, `tool:codex`, `toolchain:cargo`,
 `min_memory_gb:32`, `gpu:nvidia`). Choosing among several machines for one step is
 HS2-9FKTB3.
+
+**Minimum versions (HS2-ZH9C6W).** A `tools[]` or `toolchains[]` entry may name a
+minimum version as `name>=version`: `toolchain=node>=20`, `tool=codex>=0.40` with
+`--require`, or the same strings in the JSON lists. A version is 1 to 4 dotted whole
+numbers. It is stored without leading zeros or trailing `.0` parts (`node>=20.0` is
+`node>=20`), and one entry per name keeps the highest minimum, a bare name being the
+lowest. The machine's reported version (`capabilities.ai_tools[].version`,
+`capabilities.toolchains[].version`) is read as its first run of dotted digits, so
+`v20.11.1` and `codex-cli 0.41.0` compare as numbers, part by part with missing parts
+as 0. A lower version is `unmet`; no reported version, or one without a number, is
+`unknown`; a tool that is not usable, or a toolchain not installed, is `unmet` whatever
+its version. The miss names the whole entry (`toolchain:node>=20`).
 
 ### Levels
 
@@ -2942,6 +3020,25 @@ is ready needs and asks nothing. The audit journal records each answer under
 note naming the step, the level, the operation and who decided, by identifiers only.
 The scheduler never sets the flag.
 
+**Requirements (HS2-061YTB).** A dispatch of a planned ticket whose step declares
+requirements also reads the target's capacity snapshot through the gate (an
+observation, which never asks) and checks it with `requirement_misses`. A machine that
+misses a requirement refuses with 409 `requirement_unmet`, and one that did not report
+it with 409 `requirement_unknown`: nothing on a guess. The refusal names the first
+miss in the order of the table above (`requirement`, such as `os:windows`; the route
+body's `requirement` field and the CLI's error line), and nothing is claimed or
+recorded. A ticket no step names, a step without requirements and a repeat of an
+admitted dispatch read nothing; the scheduler's own dispatch is not read again,
+because the pass placed it against the same snapshot. `override_requirements` (CLI
+`--override-requirements`, MCP `override_requirements`) lets one exact operation
+through as `override_readiness` does: a person's own override proceeds, an AI's is a
+judgment call on the orchestration ticket ("Start anyway" / "Wait until it is
+ready") answering 403 `decision_required` until a person responds, and a "wait"
+answer refuses with the requirement again. The audit journal records each under
+`requirement_override` with the operation id and the code overridden
+(`requirement_unmet`, `requirement_unknown`) or `decision_required`,
+`decision_wait`. The scheduler never sets the flag.
+
 ### Reevaluation and events
 
 Readiness is recomputed where the things it reads change: wherever a run event is
@@ -3012,7 +3109,8 @@ prerequisite as JSON for what the flags do not say, such as a pinned `commit`.
 
 MCP `hotsheet_targets` adds `readiness_define` (with `requirements`, HS2-ZY4Z4G),
 `readiness_show`, `readiness_plan`, `readiness_ready`, `readiness_refresh` and
-`readiness_remove`, and `run_dispatch` takes `override_readiness`. The route body and
+`readiness_remove`, and `run_dispatch` takes `override_readiness` and
+`override_requirements` (HS2-061YTB). The route body and
 `ReadyItem` carry `requirements` as the JSON object of the table above. Plan steps are the orchestration project's own records: defining, refreshing and
 removing one reads the target at most and never asks. Removing a step needs an
 identified actor and is audited (`readiness_remove`; HS2-TZT505, settled by
@@ -3094,7 +3192,11 @@ person took over still runs, so it still counts until it stops.
    `session_cap_reached`, or a session code) and the caller gets
    `session_admission_refused`, `session_role_active`, `session_start_failed` or
    `session_host_unavailable`. A failure that may be transient leaves the session
-   `requested`, and the same request repeats it.
+   `requested`, and the same request repeats it. HS2-8Z9VHH: the host's reply keeps
+   the admission `refusal` (above) as `admission`, so a `session_admission_refused`
+   error body carries `admission` with the reason, limit and observed value, and the
+   CLI and MCP message says it in words (for example "this machine already runs 2 AI
+   sessions; its limit (max_sessions) is 2"). An older host sends only the reason.
 
 **Tool setup in the target checkout (HS2-WEFJV8).** The tool starts in the target
 checkout and reads its MCP, instruction and hook configuration from there. The
@@ -3136,6 +3238,8 @@ test reads it in the real drawer at wide and narrow widths, in both color scheme
 middle of its label and keeps everything after the last `: ` (the run suffix or role)
 visible, so two sessions of one project stay distinguishable; the full label is the tab's
 accessible name and its title while truncated (HS2-8KZF59, Kerf `nameTruncate="middle"`). The
+Project grid tile's `project › label` caption does the same through Kerf `Text`
+`truncate="middle"` with the same kept suffix (HS2-3RBYJK). The
 link from the orchestration workspace is HS2-HSMH2Q.
 
 **Roles.** A session joins the target's existing role model
@@ -3228,20 +3332,36 @@ this: Codex's bootstrap paste reads `delivered` while Codex is still stuck. A ho
 report on a hosted terminal also publishes `orchestration_session`, so views read the
 session again without polling. Answering the question stays a person's act.
 
+The orchestrating machine carries the same answer (HS2-G2X7RT). A session start, sync
+or safe-point read copies the host's `tool_ready` into its answer
+(`orchestration session sync|safe-point|start`, MCP `session_sync` and
+`session_safe_point`), so a placed worker, dispatcher or integrator stuck on a
+first-run question says so where it was placed from. It is never stored in the
+machine-local record, so `session list` and `show`, which ask no host, omit it. On the
+hosting machine the terminal listing (`GET /terminals`) carries `tool_ready` for an
+orchestrator's live session whose tool reports its start, and the drawer tab of one
+with `tool_ready: false` shows the glance surfaces' waiting-on-you glyph (Lucide
+`hand`, `pop` tone) titled "Waiting for an answer in this terminal", the tab's form of
+the Orchestration header's "Planner waiting in its terminal". A halt or an exited tool
+outranks it, and it clears live when the hook reports in. Decision: the tab reuses the
+existing waiting-on-you state glyph rather than a new mark, so one state keeps one icon
+(docs/34 §34.10); it is limited to orchestrator-started sessions, whose launch nobody
+watched.
+
 ### Safe points and winding down
 
 Only the hosting machine can say whether a session is at a safe point. It establishes
 five facts, and anything it cannot establish counts against the session:
 
-| Blocker                               | When                                                                                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `mid_turn`                            | The tool is in the middle of a turn                                                                                                       |
-| `held_claim`                          | A live ticket claim in one of the checkout's git stores is held under the session's worker id                                             |
-| `uncommitted_changes`                 | A worktree the session owns has uncommitted changes, untracked files included (HS2-TRP2MJ, below)                                         |
-| `pending_handoff`                     | An assignment of the session in the target's coordination pool is not `done`; a dispatcher or integrator answers for every unfinished one |
-| `session_unknown`                     | The terminal host could not be asked                                                                                                      |
-| `claims_unknown`                      | A ticket store could not be read                                                                                                          |
-| `worktree_unknown`, `handoff_unknown` | The checkout is not a git work tree, git could not answer, or the pool's state file could not be read (for a worker, both)                |
+| Blocker                               | When                                                                                                                                                                                                           |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mid_turn`                            | The tool is in the middle of a turn                                                                                                                                                                            |
+| `held_claim`                          | A live ticket claim in one of the checkout's git stores is held under the session's worker id                                                                                                                  |
+| `uncommitted_changes`                 | A worktree the session owns has uncommitted changes, untracked files included (HS2-TRP2MJ, below)                                                                                                              |
+| `pending_handoff`                     | An assignment of the session in the target's coordination pool is not `done`; a dispatcher or integrator the pool names in its role answers for every unfinished one, one it never named for none (HS2-4JQ41V) |
+| `session_unknown`                     | The terminal host could not be asked                                                                                                                                                                           |
+| `claims_unknown`                      | A ticket store could not be read                                                                                                                                                                               |
+| `worktree_unknown`, `handoff_unknown` | The checkout is not a git work tree, git could not answer, or the pool's state file could not be read (for a worker, both)                                                                                     |
 
 The answer lists every blocker at once in that order, with the counts it found. A
 session whose process is already gone has nothing left to interrupt and is safe. The
@@ -3512,7 +3632,13 @@ A server that cannot be connected to within 5 seconds is no host
 (`session_host_unavailable`). A launch the server took is awaited for up to 10
 minutes. If its answer is lost, the server's terminal listing decides: a live
 terminal with the reserved id is the launch and is recorded as started, so it is
-never left running untracked. A real-process test proposes a plan with
+never left running untracked. The launch is also fenced on the server
+(HS2-62099G): its body carries `launch_within_ms`, 30 seconds shorter than the
+headless wait, and a server that reaches the spawn point after that window,
+measured from the request's arrival, refuses with 409 and starts nothing. A caller
+that exits drops its request before the spawn point. A terminal that does spawn is
+therefore always one the headless side still awaits or finds in the listing; a
+launch it gave up on never runs untracked. A real-process test proposes a plan with
 `hotsheet-cli` against a running `hotsheet-server` whose permission vault is held
 during the launch, and the planner starts on the first press.
 
@@ -3682,6 +3808,10 @@ with why it was passed over: its own blocker code and detail (`requirement_unmet
 Work placed nowhere is `not_placed` with the reason of the site the step names, and
 `sites` gives every other site's reason. `scheduler explain`, the decision log
 records and the Orchestration view's Why It Is Not Running rows carry the same list.
+The view words each reason and each known detail (a policy limit such as
+`policy_target_not_permitted` reads "the site is not one the policy lists"); a
+requirement or resource detail keeps the name the step gives, and a detail code the
+view cannot word is left out rather than shown (HS2-MFS7FY).
 A resource another site was waiting on is listed in `contention` only when the work
 was placed nowhere, and a retry time counts only from the chosen site or, unplaced,
 from every site.
@@ -3988,7 +4118,8 @@ scheduler decides anything.
   so nothing is interrupted. A start for a changed tool, model or account ends it at
   once instead (HS2-7VV79Q, below).
 - **Idle time (HS2-RG91SK).** A host says since when a session has been idle: its
-  terminal stamps the moment a turn finishes (the OSC 133 prompt after command output),
+  terminal stamps the moment a turn finishes (the OSC 133 prompt after command output,
+  or for Claude and Codex the turn end their hooks and rollouts report, HS2-2AN9C8),
   or its launch, and clears it while a turn runs. The time travels as `idle_since_ms` on
   the terminal listing (`GET /terminals`, the broker's terminal info) and in the safe
   point's facts, and the scheduler uses it, so a turn that began and ended between two
@@ -4309,16 +4440,28 @@ work is never started on the same unverified resource in one pass, and when the
 backend returns, the claim the session took is read like any other. A provisional
 claim is never treated as exclusive.
 
-The policy is the one the namespace's machine binding names (§36.7, HS2-JJWESD),
-read through `hotsheet_resource_claims::offline_policy` when its backend cannot be
-read (HS2-KCEHVR). An unbound namespace is served by the local machine backend; it,
+The policy is the one the namespace's binding names (§36.7, HS2-JJWESD), read
+through `hotsheet_resource_claims::offline_policy` when its backend cannot be read
+(HS2-KCEHVR). An unbound namespace is served by the local machine backend; it,
 a local configuration, and a configuration registry that cannot itself be read fail
 closed. Each unreadable namespace is decided by its own policy: on one machine a
 `provisional` namespace can start work while a `fail_closed` one defers its work,
 and the namespaces that were read are held or free as usual. An older peer that
 reports only one policy for all of them is read that way, and one that reports no
-policy fails closed. The capacity read uses the machine's bindings, not a hosted
-project's own (HS2-AP8KPT).
+policy fails closed.
+
+**The hosted project's own bindings (HS2-AP8KPT).** A project can bind a namespace in
+its own `.hotsheet2/resource-claims.json`, which wins over the machine's and keeps its
+own state (§36.13). The sessions working a target checkout claim through that
+project's bindings, so the orchestrator reads them the same way: the hosted capacity
+read of a checkout lists each named namespace's claims, and takes its offline policy,
+from the backend the checkout's project bindings choose (the machine's for a
+namespace the project does not bind). The hosted resource wait
+(`/target-resource-wait`) waits in that backend, and a release watch on this machine
+waits in the backend of the first active target checkout here whose project binds
+the namespace, else the machine's. A claim of the same name in the machine's backend
+is not the project's. A capacity read that names no namespace still enumerates the
+machine's claim state only (HS2-YDZAFH); ready work always names its namespaces.
 
 ### Reading contention
 
@@ -4816,7 +4959,10 @@ orchestration ticket, and the person answers with the run's existing controls.
   - The cancel needs the permission a replacement start needs. When an
     orchestrator-owned session works the run, that is `session_start` for the session's
     tool; otherwise it is `work_start`. The existing permission card and remembered
-    rules answer it, under one operation id per reopen (`redo-<assignment>-<n>`).
+    rules answer it, under one operation id per reopen (`redo-<assignment>-<n>`). The
+    `session_start` check carries the load the replacement would start under, with the
+    replaced session not counted, so the policy's caps judge it as they judge the
+    scheduler's own start (HS2-DBCN9N; before, it carried none and was always refused).
   - Until a person answers, nothing is done to the run. Each reconciliation repeats the
     same request, and an answer wakes the scheduler, whose pass reconciles.
   - A denial, or a policy that refuses that start, falls back to the `FEEDBACK NEEDED`
@@ -5311,8 +5457,9 @@ ends its turn but keeps its terminal open. A person who then adds a goal or answ
 `FEEDBACK NEEDED` question expects Propose Plan to plan again, so the press pushes the
 planner prompt, naming the new proposal id, into that planner through its session push
 (the role prompt's path, §26.16). It does not stop the planner and start a fresh one.
-The busy state both would rest on is inferred from OSC 133 markers, which Claude and
-Codex do not emit, so those tools always read as not busy. Winding the planner down
+The busy state both would rest on was inferred from OSC 133 markers, which Claude and
+Codex do not emit, so those tools always read as not busy; since HS2-2AN9C8 their turn
+reports supply it. Winding the planner down
 could then stop one that is still at work, while a push only gives it one more prompt.
 The push also keeps the planner's terminal and context for the person, and planning is
 idempotent by goal and target ticket. Only a delivered push is recorded: the hosted
@@ -5328,8 +5475,8 @@ declares no target), `plan_goal_not_open` (the named goal is closed) or, only fo
 project with no git ticket source to open the default goal in, `plan_no_goals`, all
 HTTP 409. A host that cannot launch answers as a
 session start does (`session_host_unavailable`, `session_start_failed`,
-`session_admission_refused`) and leaves nothing reserved, so the same press can be
-repeated. A press needs an identified actor and is audited as `plan_propose` with its
+`session_admission_refused`, with its `admission` detail, HS2-8Z9VHH) and leaves
+nothing reserved, so the same press can be repeated. A press needs an identified actor and is audited as `plan_propose` with its
 operation id and `plan_started`, `plan_replanned`, `plan_existing` or the refusal code.
 
 `goal` names one goal ticket (slug or id, with its `connection_id` when the project
@@ -5341,6 +5488,19 @@ and `placement_automatic`, so a view can say the plan is a dry run. The planner'
 hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestration
 view's header reads `Planner waiting in its terminal`, and Propose Plan
 says the planning session waits for an answer in its terminal tab (HS2-5RYXNN).
+
+**Propose Plan feedback (HS2-2Z4M6M, HS2-8Z9VHH).** The press never goes silent. While
+it is on its way the button becomes a busy `Starting Planner`; while the planner works
+or waits it is a busy `Planning` or `Planner Waiting` with the reason as its title, in
+the header and in the No Plan Yet empty state alike (a planner that finished its turn
+keeps Propose Plan, so a press re-plans). A refusal is a toast on the first press,
+worded from the shared refusal map (`clients/web/src/orchestration-refusals.ts`): a
+refused admission names the machine's count and limit and the setting to change, for
+example "The machine already runs 2 AI sessions; its limit is 2. Close a session, or
+raise Sessions per Machine in Settings › Orchestration › Machine Defaults.", with the
+code after it as secondary detail. Every refusal code of the orchestration, session and
+remote surfaces has an entry there; a policy test fails on an unmapped code. Run
+controls, Start or Pause, reopen and plan-health actions use the same words.
 
 ### The default goal (HS2-YSRT6Y)
 
@@ -5695,7 +5855,11 @@ A read on the server also starts the target followers of §26.9.
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
   §26.14, each a person's act with a confirmation where undo cannot help), then the
-  run's gates, validation steps and latest events.
+  run's gates, validation steps and latest events. The maintainer's default decision
+  (HS2-PR984R): once the scheduler has placed or would place the step on another site of
+  its project (`scheduler explain`'s `site`), Where It Runs names that chosen site and its
+  machine, with a **Step's site** row naming the site the step itself names, so it agrees
+  with Why It Is Not Running.
 - **Show Request** (HS2-DBQSWB) opens the request the step waits on where every
   permission request is answered: the project's Notifications, Pending, with keyboard
   focus on that exact card (found by the orchestrator request id the card carries). The
@@ -5844,11 +6008,17 @@ the type changes to Software while it shows.
   edge cases, each marked _Another ticket store_ or _Ticket store unknown_ where it
   applies; the server's refusal (`site_store_mismatch` and the other site codes) shows in
   the message line. **Open Another Project…** there runs the regular open flow and adds
-  the project it opens as a site. A site row's menu has **Separate from <project>**,
-  which clears `site_of` at the stored manifest revision without asking: adding it as a
-  site again undoes it. Both are offered only for an orchestration project served on this
-  machine; one open from another server adds through the hosted route, which cannot
-  inspect a store (HS2-89YNGN).
+  the project it opens as a site. A site row's menu has **Make <site> the Home Site**
+  (HS2-NAA3HV, a Lucide house), which re-homes the project at the stored manifest
+  revision without asking (the same action on the old home undoes it; the result shows
+  in the status line and a refusal with its site code in the message line), and
+  **Separate from <project>**, which clears `site_of` at the stored manifest revision
+  without asking: adding it as a site again undoes it. For an orchestration project open
+  from another server (HS2-89YNGN), Add a Site lists that server's open checkouts
+  (machine _Build host_), compared by the `checkout_authority` each hosted choice
+  reports, with no Open Another Project… (nothing new is opened on that server), and adds
+  through the hosted route with `site_of`; + Add Project there asks the same duplicate
+  question.
 - **+ Add Project.** The other open projects first, local and remote with their machine,
   checked when already added; then **Open Another Project…**, which runs the regular
   open-project flow (HS2-BT4KN6). The project it opens appears in its own tab, is added,
@@ -5942,7 +6112,12 @@ through `/checkouts/{owner}/orchestration/hosted-projects`:
 - `GET` lists the serving machine's open checkouts (registered, present and resolving,
   as `/remote-checkouts` reports them available), other than the orchestration project
   itself, each with `added` and its `target_id` when added.
-- `POST {checkout_id, label?, target_id?}` is the same workflow as adding a project
+- HS2-89YNGN: each listed choice also reports `checkout_authority`, the non-secret
+  digest of the ticket store it reaches (the one a binding records, from the same
+  machine-local inspection; absent when its sources cannot be read), so a client on
+  another machine can offer the open checkouts of one project's store as its sites and
+  ask about a duplicate, as a local client compares its own inspections.
+- `POST {checkout_id, label?, target_id?, site_of?}` is the same workflow as adding a project
   with a local destination on that server: a person's act (an AI actor is refused), a
   repeat returns the same project with `added: false`, and it is announced as
   `orchestration_changed`. A checkout the server does not have open is refused with 403
@@ -5959,9 +6134,13 @@ through `/checkouts/{owner}/orchestration/hosted-projects`:
   write fence. For a project opened from another server, a row's and the detail's Stop
   Orchestrating… ask with the same shared confirmation and then use this route.
 - If the list cannot be read, + Add Project is disabled and the category says why.
+- **Rows name the serving machine (HS2-DXAB4K).** The bindings such a project shows are
+  the serving machine's, so a project bound to a checkout there reads _On <server>_
+  (the tab's server name, as _Open on <server>_ names it) with the remote icon, and an
+  unbound one _Not bound on <server>_; never _Local on This Computer_.
 - Headless, on the serving machine: `hotsheet-cli ... orchestration project hosted
 --project <owner>` and `project add-hosted <checkout> [--label] [--target-id]
---project <owner>`, and `project remove-hosted <target> --project <owner>` (HS2-0G80WD), through the same route.
+--project <owner>` (with `--site-of <project-target>` to add it as a site, HS2-89YNGN; refused with `site_store_mismatch` before anything is declared when it reaches another store), and `project remove-hosted <target> --project <owner>` (HS2-0G80WD), through the same route.
 
 ### Live updates
 
@@ -6275,7 +6454,7 @@ Before any worker, for each listed role of a target whose policy entry is enable
 | Role       | Started when                                                        | Room needed                                                     |
 | ---------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
 | dispatcher | the target has placeable work and the pool shows no live dispatcher | itself, and a site that can take a worker for that work (below) |
-| integrator | the pool shows handoffs pending and no live integrator              | itself                                                          |
+| integrator | the pool shows handoffs pending and no live integrator              | itself; may run one over the target's cap (HS2-4JQ41V)          |
 
 Neither starts while a session of that role already runs on the target (one the pool
 has not seen join yet included), while the target waits out a refusal backoff or a
@@ -6296,7 +6475,8 @@ dispatcher at all and stays unplaced with each site's reason in its standing. Th
 checks requirements and caps, not resources, which change from pass to pass.
 
 The placement is a `start` with reason `role_needed`, detail and `role` naming the
-role, and no steps. It is applied under operation id `sched-role-<role>-<target>`
+role, and no steps. An integrator's start has reason `integrator_started` with detail
+`handoff_pending` instead (HS2-4JQ41V, below). It is applied under operation id `sched-role-<role>-<target>`
 (stable, so a repeated start is the same session), dispatches no run, passes the gate
 as a session start (`session_start` for its tool, §26.28), and launches in its role
 through the hosting machine's drawer like any orchestrator session (§26.16).
@@ -6313,11 +6493,78 @@ target's cooldown, then wound down at its safe point. The host's safe point for 
 session counts every unfinished assignment of the pool (§26.16), so a role session is
 never stopped while a handoff it serves remains.
 
+An integrator's decisions carry reasons of their own (HS2-4JQ41V): kept with
+`integrator_kept` and detail `queue`, `ci_pending` or `worker_run`, and wound down with
+`integrator_wound_down` and detail `idle`. Its other keeps (`idle_grace`, `cooldown`,
+`awaiting_safe_point`, `busy`) are as above.
+
 A typical target walks: no work, nothing runs; work arrives, the dispatcher starts
 before the worker; the worker runs, both kept; the work is handed off, the integrator
 starts and the idle dispatcher waits out its grace; the handoff is integrated and
 nothing is pending, so both wind down at their safe points; new work starts the
 dispatcher again.
+
+### The integrator on demand (HS2-4JQ41V)
+
+Integration is required before any orchestrated ticket can complete, so a project gets
+its integrator when work waits to be integrated, without configuration.
+
+- **Start on demand.** A project `placement.role_sessions` does not list is Auto: its
+  home gets an integrator when the home's pool shows handoffs pending, no integrator is
+  live there and no integrator session of the owner runs there (one starting, or
+  winding down, counts). That holds also once the workers that handed off have gone:
+  the pass reads the pool of every Auto home with work, with an unfinished run the
+  scheduler dispatched (`sched-run-…`) or with a running session, and a home whose pool
+  shows a handoff joins the Auto homes. A run a person dispatched by hand adds no read.
+- **One per project.** At most one integrator session of the owner per home, so two
+  handoffs arriving together start one, and merges into the shipping branch stay
+  serialized.
+- **Keep while needed.** It is kept with `integrator_kept` while handoffs are queued
+  (detail `queue`: pending handoffs not yet at CI), while an integrated commit waits on
+  its CI gate (detail `ci_pending`: assignments in phase `ci`, which the pool snapshot
+  reports as `pool.ci_pending`, written only when not zero) or while a worker it serves
+  has a run (detail `worker_run`). It holds a claim only at a safe point the host
+  refuses, so a claim keeps it as `awaiting_safe_point`. With none of those it waits
+  out `wind_down.idle_minutes` and the cooldown, then is wound down at its safe point
+  (`integrator_wound_down`, `idle`); a later handoff starts a new one, as a new
+  generation of its operation id.
+- **Not starved.** Workers filling `targets[].max_sessions` never block it: an
+  integrator may run **one over the target's cap**. The machine's, tool's and account's
+  caps still count it. A cap of 0 still starts nothing. The policy gate applies the
+  same allowance: a start's load carries `integrator: true` (`SessionLoad.integrator`,
+  written only when set), and a lowered cap does not wind a worker down for the
+  integrator's extra slot.
+- **Opt-out.** A `placement.role_sessions` entry for the home that does not list
+  `integrator` (for example `policy role-sessions --target <home> --role dispatcher`,
+  or no role at all) is the per-project opt-out: the project integrates by hand. No
+  separate `integrator: "never"` field exists. Listing `integrator` keeps the on-demand
+  rule above; a listed role is not kept warm without a handoff.
+- **Failure handling.** A scheduler-started integrator whose role prompt failed, or
+  that has not joined the pool within `placement.join_minutes`, is wound down at once
+  (`role_prompt_failed` or `never_joined`, detail `integrator`) and a new generation
+  starts on a later pass. A role session the pool never named in its role answers for
+  no pool assignment at its safe point, so it can be stopped while handoffs still wait.
+  After `MAX_JOIN_REPLACEMENTS` (2) replacements failed in a row the last is wound
+  down too, with detail `replacements_exhausted`, never kept in its slot, and the
+  project reports `integrator_unavailable` (detail `replacements_exhausted`, with
+  `retry_at_ms`). No integrator is started for it for an hour after that stop
+  (`INTEGRATOR_UNAVAILABLE_MS`); the loop wakes then and tries again.
+- **Explainability.** Each pass lists in `roles_unplaced` every home whose handoffs wait
+  for an integrator this pass does not start: `{target_id, role: "integrator", reason,
+detail, retry_at_ms}` with reason `integrator_not_started` and detail `target_cap`,
+  `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
+  `machine_refused`, `target_disabled` or `policy_opt_out`, or reason
+  `integrator_unavailable`. The decision log records each as kind `role_unplaced`, and
+  `scheduler_explain` of a running step adds `integrator`: the project's integrator in
+  a fresh pass (`standing` `start`, `keep`, `wind_down`, `not_started` or `none`, with
+  reason, detail, session and retry time). An unknown pool reports nothing: nothing
+  starts on a guess.
+
+The states and events are pinned in `integrator_session_tests.rs` (none, starting,
+live, idle, winding down and failed against a handoff arriving, the queue emptying, a
+CI gate resolving, the cap filling and the opt-out toggling), the failure path through
+the real pass in the CLI's `hs2_4jq41v_an_integrator_that_never_takes_its_role_is_replaced_then_reported`,
+and the start for a handoff and the wind-down in the two-server `e2e_roles.rs`.
 
 ### Surfaces
 
@@ -6380,7 +6627,8 @@ grouping (`ScheduleInput.sites`):
   keeping a free slot after the dispatcher (HS2-70Z2Z6, **The dispatcher's room rule**
   above).
 - The home's **integrator** starts when the home's pool shows handoffs pending. A
-  handoff another site's own pool shows starts nothing.
+  handoff another site's own pool shows starts nothing. It may run one over the
+  home's cap (HS2-4JQ41V).
 - **Keeping:** a role session on the home is kept while a worker on any site of the
   project has a run, while any site has placeable work (dispatcher), or while handoffs
   are pending in the home's pool (integrator). A role session on another site, for

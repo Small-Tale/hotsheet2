@@ -128,6 +128,7 @@ fn hs2_tk9adc_role_sessions_follow_a_target_from_no_work_to_wound_down() {
             dispatcher_live: true,
             integrator_live: false,
             handoffs_pending: 1,
+            ci_pending: 0,
         }),
     );
     let schedule = world.now();
@@ -142,9 +143,10 @@ fn hs2_tk9adc_role_sessions_follow_a_target_from_no_work_to_wound_down() {
     let later = T0 + 120 * MIN;
     let schedule = world.at(later);
     assert!(started(&schedule).is_empty());
+    // HS2-4JQ41V: kept for its queue.
     assert_eq!(
         decided(&schedule, "integrator"),
-        ("keep", "role_needed", Some("integrator".into()))
+        ("keep", "integrator_kept", Some("queue".into()))
     );
     assert_eq!(decided(&schedule, "dispatcher").0, "wind_down");
 
@@ -161,7 +163,7 @@ fn hs2_tk9adc_role_sessions_follow_a_target_from_no_work_to_wound_down() {
     world.sessions[1].safe_point = true;
     assert_eq!(
         decided(&world.at(later), "integrator"),
-        ("wind_down", "idle", Some("integrator".into()))
+        ("wind_down", "integrator_wound_down", Some("idle".into()))
     );
     // Empty, then work again: the dispatcher is placed again.
     world.sessions.clear();
@@ -180,9 +182,12 @@ fn hs2_tk9adc_a_role_session_is_kept_while_a_worker_on_its_target_has_a_run() {
         session("worker", 1, SessionActivity::Busy),
     ];
     let later = T0 + 600 * MIN;
-    for name in ["dispatcher", "integrator"] {
-        assert_eq!(decided(&world.at(later), name).1, "role_needed", "{name}");
-    }
+    assert_eq!(decided(&world.at(later), "dispatcher").1, "role_needed");
+    // HS2-4JQ41V: the integrator says what it is kept for.
+    assert_eq!(
+        decided(&world.at(later), "integrator"),
+        ("keep", "integrator_kept", Some("worker_run".into()))
+    );
     // The run finished: nothing depends on them any more.
     world.sessions[2] = session("worker", 1, SessionActivity::Idle);
     let schedule = world.at(later);
@@ -316,9 +321,12 @@ fn hs2_tk9adc_role_sessions_count_against_the_target_cap() {
         // A running worker: the dispatcher takes the last slot, the new work waits.
         (2, true, 0, vec!["role:dispatcher"]),
         (1, true, 0, vec![]),
-        // An integrator needs only its own slot.
-        (2, true, 1, vec!["role:dispatcher"]),
+        // An integrator needs only its own slot. HS2-4JQ41V: it may take one over
+        // the cap, so a full target still integrates; a cap of 0 starts nothing.
+        (2, true, 1, vec!["role:dispatcher", "role:integrator"]),
         (3, true, 1, vec!["role:dispatcher", "role:integrator"]),
+        (1, true, 1, vec!["role:integrator"]),
+        (0, false, 1, vec![]),
     ];
     for (cap, worker, handoffs, expected) in cases {
         let mut world = World::new(&[(1, cap)]);
@@ -341,7 +349,11 @@ fn hs2_tk9adc_role_sessions_count_against_the_target_cap() {
             "cap {cap}, worker {worker}, handoffs {handoffs}"
         );
         let total = world.sessions.len() + started(&schedule).len();
-        assert!(total <= cap as usize, "cap {cap} exceeded: {schedule:#?}");
+        let reserve = usize::from(started(&schedule).iter().any(|s| s == "role:integrator"));
+        assert!(
+            total <= cap as usize + reserve,
+            "cap {cap} exceeded: {schedule:#?}"
+        );
     }
 }
 
@@ -362,17 +374,20 @@ fn hs2_tk9adc_a_role_session_is_never_refilled_with_worker_work() {
     assert!(kept.steps.is_empty());
     assert_ne!(kept.reason, PlacementReason::Refill);
     assert_eq!(kept.role, Some(SessionRole::Integrator));
-    // A lowered cap trims workers, never the role session.
+    // A lowered cap trims workers, never the role session. HS2-4JQ41V: the
+    // integrator is the one session allowed over the cap, so one worker stays.
     let mut world = World::new(&[(1, 1)]);
     world.sessions = vec![
         role_session("integrator", SessionRole::Integrator),
         session("worker", 1, SessionActivity::Idle),
+        session("worker2", 1, SessionActivity::Idle),
     ];
     let schedule = world.now();
-    assert_eq!(
-        decided(&schedule, "worker"),
-        ("wind_down", "over_cap", None)
-    );
+    let trimmed: Vec<_> = ["worker", "worker2"]
+        .into_iter()
+        .filter(|name| decided(&schedule, name) == ("wind_down", "over_cap", None))
+        .collect();
+    assert_eq!(trimmed.len(), 1, "{schedule:#?}");
     assert_ne!(decided(&schedule, "integrator").1, "over_cap");
 }
 

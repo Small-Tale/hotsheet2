@@ -37,7 +37,6 @@ const BASELINE: &[(&str, usize)] = &[
     ("hotsheet-server/src/commands.rs", 1),
     ("hotsheet-server/src/request_performance_tests.rs", 1),
     ("hotsheet-server/src/routes/terminals/launch.rs", 10),
-    ("hotsheet-server/src/terminal_broker_startup_tests.rs", 3),
     ("hotsheet-server/tests/terminal_launch_relay.rs", 1),
     ("hotsheet-terminals/src/launch_agent_tests.rs", 3),
     ("hotsheet-ticketing/src/groups/git_sync/tests.rs", 4),

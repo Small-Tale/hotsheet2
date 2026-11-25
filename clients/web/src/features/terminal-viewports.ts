@@ -383,7 +383,7 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     return terminalViewportObserver;
   }
 
-  function syncTerminalViewportMounts() {
+  function syncTerminalViewportMounts(focusedInput?: HTMLElement) {
     const elements = new Set(
         Array.from(document.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"]')).filter(
           (element) => element.dataset.parked !== 'true',
@@ -499,6 +499,21 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     for (const host of releasedHosts) considerTerminalViewportMount(host);
     trimWarmTerminalLimit();
     promoteTilePreviews();
+    // A render can move a live viewport or re-present its magnified popover, leaving body focused
+    // even though the same xterm input survives. Restore only that interrupted focus (HS2-PSV7BG).
+    if (focusedInput)
+      queueMicrotask(() => {
+        // The top-layer observer may need to present a newly rendered magnified popover first.
+        const active = document.activeElement;
+        if (
+          focusedInput.isConnected &&
+          (active === document.body ||
+            active === document.documentElement ||
+            active === focusedInput.closest('[data-top-layer-overlay]')) &&
+          !focusedInput.closest('[hidden], [inert]')
+        )
+          focusedInput.focus({ preventScroll: true });
+      });
   }
 
   function considerTerminalViewportMount(element: HTMLElement) {

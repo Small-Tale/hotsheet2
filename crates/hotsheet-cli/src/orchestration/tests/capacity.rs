@@ -1029,7 +1029,11 @@ fn hs2_ydzafh_an_unnamed_capacity_read_lists_every_held_claim_or_none_at_all() {
         listed: Mutex<Vec<String>>,
     }
     impl ClaimSource for Source {
-        fn held(&self, namespace: &str) -> Result<Vec<HeldClaim>, ClaimsUnreachable> {
+        fn held(
+            &self,
+            namespace: &str,
+            _: Option<&std::path::Path>,
+        ) -> Result<Vec<HeldClaim>, ClaimsUnreachable> {
             self.listed.lock().unwrap().push(namespace.to_owned());
             Ok(vec![HeldClaim {
                 namespace: namespace.to_owned(),
@@ -1037,7 +1041,13 @@ fn hs2_ydzafh_an_unnamed_capacity_read_lists_every_held_claim_or_none_at_all() {
                 expires_at_ms: 1,
             }])
         }
-        fn wait_free(&self, _: &str, _: &str, _: std::time::Duration) -> bool {
+        fn wait_free(
+            &self,
+            _: &str,
+            _: &str,
+            _: std::time::Duration,
+            _: Option<&std::path::Path>,
+        ) -> bool {
             true
         }
         fn namespaces(&self) -> Result<Vec<String>, ClaimsUnreachable> {
@@ -1183,4 +1193,108 @@ fn hs2_30vkv9_a_projects_own_admission_uses_its_checked_in_machine_limits() {
         .update(|config| config.max_sessions = Some(64))
         .unwrap();
     assert_eq!(check(&m.owner.id).limits.max_sessions, 10);
+}
+
+/// HS2-AP8KPT: a capacity read and a resource wait for a hosted checkout use that
+/// checkout's project bindings, which win over the machine's (HS2-JJWESD): a claim a
+/// session there took in its project's backend is seen as held and is waited on
+/// there, and a claim of the same name in the machine's backend is not this project's.
+/// A configured backend that cannot be read reports the project configuration's
+/// offline policy. A checkout whose project binds nothing reads the machine's, as
+/// before.
+#[test]
+fn hs2_ap8kpt_a_hosted_checkouts_project_bindings_choose_its_claim_backend() {
+    use hotsheet_resource_claims::{ClaimService, ResourceRef};
+    use hotsheet_ticketing::claim_backends::{BackendConfiguration, BackendKind, Scope};
+    use hotsheet_ticketing::orchestration::OfflinePolicy;
+    let m = machine(10, false, unsupported);
+    let root = std::path::PathBuf::from(&m.target.root);
+    let named = |names: &[&str]| {
+        names
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<Vec<_>>()
+    };
+    let held = |names: &[&str]| {
+        m.runtime
+            .hosted_capacity(&m.target.id, &named(names))
+            .unwrap()
+            .claims
+            .map(|claims| {
+                claims
+                    .into_iter()
+                    .map(|claim| format!("{}/{}", claim.namespace, claim.resource))
+                    .collect::<Vec<_>>()
+            })
+    };
+    let target = ResourceRef::parse("vm/runner").unwrap();
+    let take = |service: ClaimService| {
+        service
+            .acquire(
+                &target,
+                std::time::Duration::from_secs(600),
+                None,
+                &std::collections::BTreeMap::new(),
+            )
+            .unwrap()
+    };
+    // Unbound: the machine's backend, as before.
+    let machine_grant = take(ClaimService::new(&m.home));
+    assert_eq!(held(&["vm"]), Some(vec!["vm/runner".to_owned()]));
+    // The project binds `vm` to a configuration of its own: its state is separate.
+    Scope::Project { root: root.clone() }
+        .update(|registry| {
+            registry.upsert_configuration(BackendConfiguration::new("box", BackendKind::Local)?)?;
+            registry.bind_namespace("vm", "box");
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(
+        held(&["vm"]),
+        Some(Vec::new()),
+        "the machine's claim is not the project's"
+    );
+    let wait = |ms: u64| {
+        m.runtime
+            .hosted_resource_wait(&m.target.id, "vm", "runner", ms)
+            .unwrap()
+            .free
+    };
+    assert!(wait(0), "free in the project's backend");
+    // A session in the project takes it: held, and waited on, there.
+    let project_grant = take(ClaimService::new(&m.home).with_project(&root));
+    assert_eq!(held(&["vm"]), Some(vec!["vm/runner".to_owned()]));
+    assert!(!wait(0));
+    ClaimService::new(&m.home)
+        .with_project(&root)
+        .release(&project_grant.renewal_token, Some(&target))
+        .unwrap();
+    assert!(wait(0));
+    assert_eq!(held(&["vm"]), Some(Vec::new()));
+    drop(machine_grant);
+    // A project-bound backend that cannot be read reports the project's policy.
+    Scope::Project { root: root.clone() }
+        .update(|registry| {
+            let mut unreachable = BackendConfiguration::new("remote", BackendKind::GitRef)?;
+            unreachable.credential = Some(BackendConfiguration::default_credential("remote"));
+            unreachable.offline = OfflinePolicy::Provisional;
+            registry.upsert_configuration(unreachable)?;
+            registry.bind_namespace("gpu", "remote");
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = m
+        .runtime
+        .hosted_capacity(&m.target.id, &named(&["gpu", "vm"]))
+        .unwrap();
+    assert_eq!(snapshot.claims, None);
+    assert_eq!(snapshot.claims_offline, Some(OfflinePolicy::Provisional));
+    assert_eq!(
+        snapshot
+            .claims_unreadable
+            .iter()
+            .map(|entry| (entry.namespace.as_str(), entry.offline))
+            .collect::<Vec<_>>(),
+        [("gpu", OfflinePolicy::Provisional)]
+    );
 }

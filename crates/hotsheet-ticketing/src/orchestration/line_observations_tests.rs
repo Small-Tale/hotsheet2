@@ -253,6 +253,7 @@ fn hs2_kb2y51_pushed_lines_merge_after_this_machines_own_by_rank() {
         owner_label: "Here",
         target_ids: &api,
         timeline: &view,
+        sites: &ProjectSites::default(),
     }];
     let a = [line("launch", "s1", "t1", "running", SOURCE)];
     let b = [

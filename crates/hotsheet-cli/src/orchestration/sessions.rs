@@ -9,13 +9,13 @@
 use hotsheet_ticketing::actor::{ActorRole, MutationActor};
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
-    AdmissionOutcome, AdmissionRequest, AuditOutcome, AuditRecord, DenialReason, ExternalWork,
-    HostedRef, HostedSession, HostedSessionRegistry, MachineLimits, NewHostedSession, NewSession,
-    Observed, OrchestratedSession, RecordedRequest, RunEvent, RunEventKind, RunEventSource,
-    SafePoint, SafePointFacts, SessionControl, SessionError, SessionLoad, SessionOrigin,
-    SessionOwner, SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate,
-    StopRequest, TargetAction, TargetDestination, TargetOpError, Withdrawal, decide_hand_back,
-    decide_safe_point, decide_stop,
+    AdmissionOutcome, AdmissionRefusal, AdmissionRequest, AuditOutcome, AuditRecord, DenialReason,
+    ExternalWork, HostedRef, HostedSession, HostedSessionRegistry, MachineLimits, NewHostedSession,
+    NewSession, Observed, OrchestratedSession, RecordedRequest, RunEvent, RunEventKind,
+    RunEventSource, SafePoint, SafePointFacts, SessionControl, SessionError, SessionLoad,
+    SessionOrigin, SessionOwner, SessionRegistry, SessionRequest, SessionRole, SessionState,
+    SessionUpdate, StopRequest, TargetAction, TargetDestination, TargetOpError, Withdrawal,
+    decide_hand_back, decide_safe_point, decide_stop,
 };
 pub use hotsheet_ticketing::orchestration::{PushAttempt, RequestKind, RolePrompt};
 use serde::{Deserialize, Serialize};
@@ -419,6 +419,31 @@ const HOST_ANSWER: std::time::Duration = std::time::Duration::from_secs(60);
 /// the headless path waits as well, within a bound.
 pub const LAUNCH_ANSWER: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
+/// HS2-62099G: how long before this side stops waiting the server must have spawned
+/// the terminal. The server measures the window from the request's arrival, which is
+/// later than this side's send; the margin keeps its fence inside this side's wait, so
+/// a terminal that spawns is always one this side can still see and record.
+pub const LAUNCH_FENCE_MARGIN: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// HS2-62099G: the `POST /terminals` body for a hosted launch. It carries the fence
+/// window, so a launch the server reaches only after this side gave up (or exited)
+/// starts nothing rather than a terminal no session records.
+pub fn launch_body(root: &str, launch: &HostLaunch) -> Value {
+    serde_json::json!({
+        "connect": launch.tool,
+        "id": launch.session_id,
+        "cwd": root,
+        "model": launch.model,
+        "effort": launch.effort,
+        "session_role": launch.role.code(),
+        "initial_prompt": launch.role_prompt,
+        "launch_within_ms": u64::try_from(
+            LAUNCH_ANSWER.saturating_sub(LAUNCH_FENCE_MARGIN).as_millis()
+        )
+        .unwrap_or(u64::MAX),
+    })
+}
+
 /// HS2-YWN8JT: why a request to a local server did not succeed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostCall {
@@ -476,15 +501,7 @@ impl SessionHost for LocalServerSessions {
         let prompt_at_launch = plugin_role_paths(&launch.tool, &hotsheet_plugins::default_dirs())
             .is_some_and(|(at_launch, _)| at_launch);
         for server in self.servers() {
-            let body = serde_json::json!({
-                "connect": launch.tool,
-                "id": launch.session_id,
-                "cwd": checkout.root,
-                "model": launch.model,
-                "effort": launch.effort,
-                "session_role": launch.role.code(),
-                "initial_prompt": launch.role_prompt,
-            });
+            let body = launch_body(&checkout.root, launch);
             let launched =
                 match Self::call_within(&server, "POST", "/terminals", Some(body), LAUNCH_ANSWER) {
                     Ok(_) => Ok(()),
@@ -711,6 +728,31 @@ pub struct HostedStartReply {
     /// HS2-WEFJV8: what the checkout's tool setup wrote before this launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_setup: Option<ToolSetup>,
+    /// HS2-8Z9VHH: a refused admission's limit and observed value. An older host
+    /// sends only `reason`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admission: Option<AdmissionRefusal>,
+}
+
+impl HostedStartReply {
+    /// HS2-8Z9VHH: the error a refused start answers with. A session code is reported
+    /// as itself; an admission reason as a refused admission that keeps the reason and,
+    /// from a current host, its limit and observed value.
+    pub(crate) fn refusal_error(&self, reason: &str) -> OrchestrationError {
+        if let Some(error) = SessionError::from_code(reason) {
+            return OrchestrationError::Session(error);
+        }
+        if reason == TOOL_SETUP_FAILED {
+            // The machine had room; the start itself could not be made.
+            return OrchestrationError::Session(SessionError::StartFailed);
+        }
+        let refusal = self
+            .admission
+            .clone()
+            .filter(|admission| admission.reason == reason)
+            .unwrap_or_else(|| AdmissionRefusal::bare(reason));
+        OrchestrationError::AdmissionRefused(Box::new(refusal))
+    }
 }
 
 /// Whether the target's pool already has a live session in each single-holder role.
@@ -866,6 +908,12 @@ pub struct SessionView {
     pub tool_setup: Option<ToolSetup>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_point: Option<SafePoint>,
+    /// HS2-G2X7RT: the host's answer for whether the session's tool is ready (see
+    /// [`HostedSessionView::tool_ready`]), as of this answer. `false` while its terminal
+    /// runs and its tool has not reported its session start, so it may wait on a
+    /// first-run question only a person answers there. Never stored in the record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_ready: Option<bool>,
     /// Names of external state this answer could not verify, such as `target_session`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unverified: Vec<&'static str>,
@@ -880,6 +928,7 @@ impl From<OrchestratedSession> for SessionView {
             request_prompt: None,
             tool_setup: None,
             safe_point: None,
+            tool_ready: None,
             unverified: Vec::new(),
         }
     }
@@ -1001,10 +1050,17 @@ pub(super) fn hosted_pool(
             )
         })
         .count();
+    // HS2-4JQ41V: integrated and waiting on the CI gate, as opposed to queued.
+    let ci = state
+        .assignments
+        .values()
+        .filter(|assignment| assignment.phase == Phase::Ci)
+        .count();
     Some(hotsheet_ticketing::orchestration::PoolState {
         dispatcher_live: state.dispatcher.is_some_and(|lease| lease.expires_at > now),
         integrator_live: state.integrator.is_some_and(|lease| lease.expires_at > now),
         handoffs_pending: u32::try_from(handed_off).unwrap_or(u32::MAX),
+        ci_pending: u32::try_from(ci).unwrap_or(u32::MAX),
     })
 }
 
@@ -1075,15 +1131,26 @@ impl OrchestrationRuntime {
 
     /// Assignments of the pool this session still has a part in. A worker answers for
     /// its own; the dispatcher and the integrator answer for every unfinished one.
+    /// HS2-4JQ41V: a role session the pool never named in its role (its role prompt
+    /// failed, or it never joined) answers for none, so it can be stopped and its slot
+    /// freed while the handoffs it never took up still wait.
     fn pending_handoffs(checkout: &Checkout, session: &HostedSession, worker: &str) -> Option<u32> {
         let Some(state) = coordination_state(Path::new(&checkout.root)).ok()? else {
             return Some(0);
+        };
+        let named = |holder: Option<&crate::coordination::Session>| {
+            holder.is_some_and(|holder| holder.id == worker)
+        };
+        let holds_role = match session.role {
+            SessionRole::Dispatcher => named(state.dispatcher.as_ref()),
+            SessionRole::Integrator => named(state.integrator.as_ref()),
+            SessionRole::Worker | SessionRole::Planner => false,
         };
         let pending = state
             .assignments
             .values()
             .filter(|assignment| assignment.phase != crate::coordination::Phase::Done)
-            .filter(|assignment| session.role.is_role_session() || assignment.worker == worker)
+            .filter(|assignment| holds_role || assignment.worker == worker)
             .count();
         u32::try_from(pending).ok()
     }
@@ -1276,6 +1343,7 @@ impl OrchestrationRuntime {
             session: None,
             role_prompt: None,
             tool_setup: None,
+            admission: None,
         };
         let (reserved, _) =
             match registry.reserve_with(&checkout.id, &request.session, &request.resources, tx) {
@@ -1293,11 +1361,12 @@ impl OrchestrationRuntime {
                 session: Some(self.hosted_view(&checkout, session, live.as_deref(), false, tx)),
                 role_prompt: None,
                 tool_setup: None,
+                admission: None,
             });
         }
         // Nothing runs for this reservation yet, so a refusal forgets it and the same
         // request can be made again later.
-        let refuse = |reason: &str| {
+        let refuse_with = |reason: &str, admission: Option<AdmissionRefusal>| {
             registry.release(&checkout.id, &reserved.operation_id)?;
             Ok(HostedStartReply {
                 outcome: HostedStartOutcome::Refused,
@@ -1305,8 +1374,10 @@ impl OrchestrationRuntime {
                 session: None,
                 role_prompt: None,
                 tool_setup: None,
+                admission,
             })
         };
+        let refuse = |reason: &str| refuse_with(reason, None);
         if reserved.role.is_role_session() {
             let roles = Self::hosted_roles(&checkout, tx.clock.now_ms());
             let taken = match reserved.role {
@@ -1345,12 +1416,14 @@ impl OrchestrationRuntime {
             }
         };
         if decision.outcome == AdmissionOutcome::Refused || decision.admitted == 0 {
-            return refuse(
+            // HS2-8Z9VHH: the refusal keeps its limit and observed value.
+            return refuse_with(
                 decision
                     .reason
                     .map_or(SessionError::AdmissionRefused.code(), |reason| {
                         reason.code()
                     }),
+                decision.refusal.clone(),
             );
         }
         // The capacity reading is shared for a few seconds, so a burst of starts could
@@ -1363,7 +1436,13 @@ impl OrchestrationRuntime {
                 .iter()
                 .any(|state| state.session_id == reserved.session_id)
         {
-            return refuse("session_cap_reached");
+            return refuse_with(
+                "session_cap_reached",
+                Some(AdmissionRefusal::session_cap(
+                    decision.limits.max_sessions,
+                    u64::try_from(live.len()).unwrap_or(u64::MAX),
+                )),
+            );
         }
         // HS2-WEFJV8: the tool starts in the target checkout, so that is where its MCP,
         // instruction and hook configuration has to be. The launch path sets up the
@@ -1441,6 +1520,7 @@ impl OrchestrationRuntime {
             session: Some(self.hosted_view(&checkout, started, live.as_deref(), false, tx)),
             role_prompt,
             tool_setup: Some(tool_setup),
+            admission: None,
         })
     }
 
@@ -2401,6 +2481,8 @@ impl OrchestrationRuntime {
             load.tool_sessions = load.tool_sessions.saturating_sub(1);
             load.account_sessions = load.account_sessions.saturating_sub(1);
         }
+        // HS2-4JQ41V: an integrator may run one over the target's cap.
+        load.integrator = role == SessionRole::Integrator;
         if let Some(decided) = placed.and_then(|placed| placed.load) {
             // HS2-95SWQ4: the scheduler decided on a count that includes sessions these
             // records do not hold (other owners' and people's on the machine), and
@@ -2503,25 +2585,17 @@ impl OrchestrationRuntime {
                 // same request can be repeated.
                 Err(error) => return Err(error),
             };
-            let Some(hosted) = reply
-                .session
-                .filter(|_| reply.outcome != HostedStartOutcome::Refused)
-            else {
+            let refused = reply.outcome == HostedStartOutcome::Refused;
+            let Some(hosted) = reply.session.clone().filter(|_| !refused) else {
                 let reason = reply
                     .reason
+                    .clone()
                     .filter(|reason| identifier(reason, "code").is_ok())
                     .unwrap_or_else(|| SessionError::AdmissionRefused.code().into());
                 fail(&reason, tx)?;
                 // A session code is reported as itself; an admission reason as a
                 // refused admission, with the reason in the session's history.
-                return Err(OrchestrationError::Session(
-                    SessionError::from_code(&reason).unwrap_or(if reason == TOOL_SETUP_FAILED {
-                        // The machine had room; the start itself could not be made.
-                        SessionError::StartFailed
-                    } else {
-                        SessionError::AdmissionRefused
-                    }),
-                ));
+                return Err(reply.refusal_error(&reason));
             };
             if hosted.session.ended_at_ms.is_some() {
                 // The host launched it for an earlier request that never heard back,
@@ -2551,6 +2625,7 @@ impl OrchestrationRuntime {
                 tx,
             )?;
             Ok(SessionView {
+                tool_ready: hosted.tool_ready,
                 label: Some(hosted.label),
                 role_prompt: reply.role_prompt,
                 tool_setup: reply.tool_setup,
@@ -2785,6 +2860,8 @@ impl OrchestrationRuntime {
             let after = self.session_observe(&session, hosted.as_ref(), tx)?;
             Ok(SessionView {
                 label: hosted.as_ref().map(|hosted| hosted.label.clone()),
+                // HS2-G2X7RT: carried from the host's answer; the record never keeps it.
+                tool_ready: hosted.as_ref().and_then(|hosted| hosted.tool_ready),
                 safe_point: match &hosted {
                     Some(hosted) => hosted.safe_point.clone(),
                     None => with_safe_point.then(|| {

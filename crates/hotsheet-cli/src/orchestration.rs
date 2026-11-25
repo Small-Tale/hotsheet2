@@ -126,11 +126,12 @@ pub use sessions::{
     HAND_BACK_OWNER_REMOTE, HOSTED_SESSION_SIGNAL_DIRECTORY, HandBackSession, HostCall, HostLaunch,
     HostSessionState, HostedControlReply, HostedRoles, HostedSessionControl, HostedSessionList,
     HostedSessionStart, HostedSessionStop, HostedSessionView, HostedStartOutcome, HostedStartReply,
-    HostedStopReply, LAUNCH_ANSWER, Launched, LocalServerSessions, NoSessionHost, PushAttempt,
-    RolePrompt, SessionHost, SessionHostError, SessionSyncFailure, SessionSyncSummary, SessionView,
-    StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession, ToolSetup, classify_transport,
-    launch_outcome, planner_prompt_text, plugin_reports_start, plugin_role_paths, pool_joined,
-    role_prompt_text, setup_store, target_tool_setup, tool_ready,
+    HostedStopReply, LAUNCH_ANSWER, LAUNCH_FENCE_MARGIN, Launched, LocalServerSessions,
+    NoSessionHost, PushAttempt, RolePrompt, SessionHost, SessionHostError, SessionSyncFailure,
+    SessionSyncSummary, SessionView, StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession,
+    ToolSetup, classify_transport, launch_body, launch_outcome, planner_prompt_text,
+    plugin_reports_start, plugin_role_paths, pool_joined, role_prompt_text, setup_store,
+    target_tool_setup, tool_ready,
 };
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use ticket_list::{
@@ -637,6 +638,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 | E::DeploymentScriptUntracked => 409,
             }
         }
+        // HS2-8Z9VHH: a refused admission, with its reason and limit.
+        OrchestrationError::AdmissionRefused(_) => 409,
         OrchestrationError::Session(error) => {
             use hotsheet_ticketing::orchestration::SessionError as E;
             match error {
@@ -660,6 +663,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
             404
         }
         OrchestrationError::Site(_) => 409,
+        // HS2-061YTB: the target's machine is not what the plan step requires.
+        OrchestrationError::Requirement { .. } => 409,
         OrchestrationError::TargetOperation(error) => {
             use hotsheet_ticketing::orchestration::TargetOpError as E;
             match error {

@@ -594,6 +594,8 @@ impl OrchestrationRuntime {
             &GateFilter {
                 target_id: Some(target_id.into()),
                 commit: Some(commit.to_ascii_lowercase()),
+                // HS2-CQ0PNT: the commit's gates on every site of the project.
+                sites: Some(self.project_sites(owner_id)?),
                 ..GateFilter::default()
             },
         )

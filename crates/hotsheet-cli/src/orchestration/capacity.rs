@@ -189,11 +189,11 @@ impl OrchestrationRuntime {
     /// ones (HS2-2FG91X), so a reader that knows no more never takes a partial list
     /// as complete. HS2-KCEHVR: it also names each unreadable namespace with its own
     /// policy and gives the claims of the rest, for a reader that defers only those.
-    fn held_claims(&self, namespaces: &[String]) -> ClaimsRead {
+    fn held_claims(&self, namespaces: &[String], project: &Path) -> ClaimsRead {
         if namespaces.is_empty() {
             return ClaimsRead::default();
         }
-        self.held_in(namespaces)
+        self.held_in(namespaces, project)
     }
 
     /// HS2-YDZAFH: the namespaces a capacity read covers: the named ones, or, when none
@@ -211,11 +211,13 @@ impl OrchestrationRuntime {
         }
     }
 
-    fn held_in(&self, namespaces: &[String]) -> ClaimsRead {
+    /// HS2-AP8KPT: read as a session in `project` (the hosted checkout) sees them: its
+    /// project's bindings win over the machine's.
+    fn held_in(&self, namespaces: &[String], project: &Path) -> ClaimsRead {
         let mut held = Vec::new();
         let mut unreadable = Vec::new();
         for name in namespaces {
-            match self.claims.held(name) {
+            match self.claims.held(name, Some(project)) {
                 Ok(claims) => held.extend(claims),
                 Err(unreachable) => unreadable.push(UnreadableNamespace {
                     namespace: name.clone(),
@@ -255,7 +257,7 @@ impl OrchestrationRuntime {
                 },
             ),
             Ok(scope) => {
-                let read = self.held_claims(&scope);
+                let read = self.held_claims(&scope, Path::new(&checkout.root));
                 (scope, read)
             }
             // Unknown, exactly as a read that named nothing reported before.

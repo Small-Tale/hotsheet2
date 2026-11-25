@@ -67,6 +67,10 @@ enum ProjectCmd {
         label: Option<String>,
         #[arg(long)]
         target_id: Option<String>,
+        /// HS2-89YNGN: add it as another site of this project target; a checkout of
+        /// another ticket store is refused before anything is declared.
+        #[arg(long)]
+        site_of: Option<String>,
     },
     /// HS2-0G80WD: stop orchestrating one project the way a read-write client on
     /// another machine does: a person only; a repeat changes nothing.
@@ -133,10 +137,11 @@ pub(super) fn project_route(
             checkout_id,
             label,
             target_id,
+            site_of,
         } => (
             "POST",
             format!("/checkouts/{owner}/orchestration/hosted-projects"),
-            json!({"checkout_id": checkout_id, "label": label, "target_id": target_id}),
+            json!({"checkout_id": checkout_id, "label": label, "target_id": target_id, "site_of": site_of}),
         ),
         ProjectCmd::RemoveHosted { target_id } => (
             "DELETE",

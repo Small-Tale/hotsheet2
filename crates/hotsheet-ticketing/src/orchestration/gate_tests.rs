@@ -1076,3 +1076,69 @@ fn hs2_gd3nnk_a_review_gate_is_requested_then_approved_or_sent_back() {
         (GateState::AwaitingApproval, REVIEW_REQUESTED)
     );
 }
+
+/// HS2-CQ0PNT: a roll-up asked for one target and commit covers every site of the
+/// target's project, which builds the same commits: a run dispatched through the
+/// other site still counts after its step moved. Without the grouping, or for a
+/// target of another project, only that target's own gates count.
+#[test]
+fn hs2_cq0pnt_a_target_roll_up_covers_every_site_of_its_project() {
+    let a = sha('a');
+    let mut fixture = Fixture::new();
+    // Run 10 went through target 1; run 11 through target 2, a site of target 1's
+    // project; run 12 through target 3, another project.
+    let on = |run: u128, target: u128| NewGate {
+        target_id: id(target),
+        ..ci(run, &a)
+    };
+    let home = fixture.link(on(10, 1)).unwrap().gate.gate_id;
+    let site = fixture.link(on(11, 2)).unwrap().gate.gate_id;
+    fixture.link(on(12, 3)).unwrap();
+    let list = |fixture: &Fixture, target: u128, sites: Option<ProjectSites>| {
+        let mut ids: Vec<String> = fixture
+            .registry
+            .list(
+                OWNER,
+                &GateFilter {
+                    target_id: Some(id(target)),
+                    commit: Some(a.clone()),
+                    sites,
+                    ..GateFilter::default()
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .map(|gate| gate.gate_id)
+            .collect();
+        ids.sort();
+        ids
+    };
+    let mut both = vec![home.clone(), site.clone()];
+    both.sort();
+    // Exactly as before without the grouping.
+    assert_eq!(list(&fixture, 1, None), std::slice::from_ref(&home));
+    assert_eq!(list(&fixture, 2, None), std::slice::from_ref(&site));
+    let grouped = ProjectSites::default().with_site(&id(2), &id(1));
+    // Through either site, the project's gates of that commit; never another project's.
+    assert_eq!(list(&fixture, 1, Some(grouped.clone())), both);
+    assert_eq!(list(&fixture, 2, Some(grouped.clone())), both);
+    assert_eq!(list(&fixture, 3, Some(grouped)).len(), 1);
+    // The run through the site passes: the roll-up through the home sees it.
+    fixture.apply(&site, verdict(GateState::Passed, 1, 1, &a));
+    let rolled = summarize(
+        fixture
+            .registry
+            .list(
+                OWNER,
+                &GateFilter {
+                    target_id: Some(id(1)),
+                    commit: Some(a.clone()),
+                    sites: Some(ProjectSites::default().with_site(&id(2), &id(1))),
+                    current_only: true,
+                    ..GateFilter::default()
+                },
+            )
+            .unwrap(),
+    );
+    assert_eq!(rolled.gates.len(), 2);
+}

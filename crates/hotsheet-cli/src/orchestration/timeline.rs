@@ -79,7 +79,8 @@ fn hints(records: &[DecisionRecord]) -> BTreeMap<String, PlacementHint> {
             DecisionKind::Tick
             | DecisionKind::WindDown
             | DecisionKind::Assignment
-            | DecisionKind::Reconcile => continue,
+            | DecisionKind::Reconcile
+            | DecisionKind::RoleUnplaced => continue,
         };
         let Some(step_id) = &record.step_id else {
             continue;
@@ -336,7 +337,10 @@ impl OrchestrationRuntime {
                 (step_id.clone(), placed)
             })
             .collect();
+        // HS2-CQ0PNT: runs, labels and prerequisites join a step through any site.
+        let sites = self.project_sites(owner_id)?;
         let input = TimelineInput {
+            sites: &sites,
             owner_checkout_id: owner_id,
             now_ms,
             declared,

@@ -437,7 +437,6 @@ export async function startHotSheetWebClient() {
   const developmentReports = signal<Record<string, DevelopmentStrategyReport | undefined>>({}),
     developmentDrafts = signal<Record<string, DevelopmentStrategyDraft | undefined>>({}),
     developmentMessages = signal<Record<string, string>>({}),
-    developmentStatuses = signal<Record<string, string>>({}),
     developmentLoading = signal<Record<string, boolean>>({}),
     developmentSaving = signal<Record<string, boolean>>({});
   const { corruptRecovery, revealCorruptTicket, queueCorruptTicketRepair } = createCorruptTicketRecoveryController({
@@ -1874,6 +1873,7 @@ export async function startHotSheetWebClient() {
   // App Settings → Notifications (HS2-DPBJJA): machine-wide channels and rules, loaded each time the
   // category opens; every change re-reads what the server stored. Nothing polls.
   const notificationSettings = createNotificationSettings({
+    notify: showToast,
     api: () => {
       const current = project();
       return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
@@ -2131,7 +2131,6 @@ export async function startHotSheetWebClient() {
           : changeDevelopmentStrategyField(draft, field, value),
     };
     developmentMessages.value = { ...developmentMessages.value, [current.id]: '' };
-    developmentStatuses.value = { ...developmentStatuses.value, [current.id]: '' };
   }
   async function saveDevelopmentStrategy() {
     const current = project();
@@ -2151,12 +2150,12 @@ export async function startHotSheetWebClient() {
       if (developmentDrafts.value[id] === draft) {
         developmentDrafts.value = { ...developmentDrafts.value, [id]: draftFromDevelopmentReport(saved) };
       }
-      developmentStatuses.value = { ...developmentStatuses.value, [id]: 'Development strategy saved.' };
+      // HS2-1K6122: a save's outcome is a toast; a failure also stays beside the form until the next change.
+      showToast('Development strategy saved.');
     } catch (error) {
-      developmentMessages.value = {
-        ...developmentMessages.value,
-        [id]: error instanceof Error ? error.message : String(error),
-      };
+      const reason = error instanceof Error ? error.message : String(error);
+      developmentMessages.value = { ...developmentMessages.value, [id]: reason };
+      showToast(`The development strategy could not be saved. ${reason}`);
     } finally {
       developmentSaving.value = { ...developmentSaving.value, [id]: false };
     }
@@ -2670,7 +2669,8 @@ export async function startHotSheetWebClient() {
     if (review?.state === 'not_started' || !review?.preview.outbound_prompt) return;
     try {
       await copyText(review.preview.outbound_prompt);
-      guidanceMessage.value = 'Interview prompt copied. Share it with an AI tool you choose.';
+      // HS2-1K6122: an action's outcome is a toast, never the inline status line.
+      showToast('Interview prompt copied. Share it with an AI tool you choose.');
     } catch (error) {
       guidanceInterviewError.value = error instanceof Error ? error.message : String(error);
     }
@@ -2700,7 +2700,7 @@ export async function startHotSheetWebClient() {
       );
       if (generation === guidanceInterviewGeneration && project()?.id === current.id) {
         guidanceInterview.value = result;
-        guidanceMessage.value = 'AI advice recorded for review. Guidance selection is unchanged.';
+        showToast('AI advice recorded for review. Guidance selection is unchanged.');
       }
     } catch (error) {
       if (generation === guidanceInterviewGeneration && project()?.id === current.id)
@@ -2726,10 +2726,11 @@ export async function startHotSheetWebClient() {
       if (generation !== guidanceRecommendationsGeneration || project()?.id !== current.id) return;
       guidanceOverview.value = overview;
       void refreshGuidanceInterview(current);
-      guidanceMessage.value =
+      showToast(
         decision.decision === 'accepted'
           ? 'Suggestion selected. Apply Selected Guidance when ready.'
-          : 'Suggestion dismissed for this evidence.';
+          : 'Suggestion dismissed for this evidence.',
+      );
     } catch (error) {
       if (generation === guidanceRecommendationsGeneration && project()?.id === current.id)
         guidanceRecommendationsError.value = error instanceof Error ? error.message : String(error);
@@ -2751,19 +2752,24 @@ export async function startHotSheetWebClient() {
         guidanceRulePreview.value = undefined;
         void refreshGuidanceRecommendations(current);
         if (action.action === 'register' || action.action === 'register_batch') void checkGuidanceUpdates(true);
-        guidanceMessage.value = {
-          register: 'Source pinned. Review the selection, then apply.',
-          register_batch: 'Reviewed source revisions pinned. Review the selection, then apply.',
-          select: 'Selection updated. Apply to install it.',
-          cache_rule_version: 'Older rule version cached. Choose it, preview changes, then apply.',
-          choose_rule_version: 'Rule version selected. Preview changes, then apply.',
-          owner: 'Instruction writer selected. Apply when ready.',
-          apply: 'Selected guidance applied.',
-        }[action.action];
+        showToast(
+          {
+            register: 'Source pinned. Review the selection, then apply.',
+            register_batch: 'Reviewed source revisions pinned. Review the selection, then apply.',
+            select: 'Selection updated. Apply to install it.',
+            cache_rule_version: 'Older rule version cached. Choose it, preview changes, then apply.',
+            choose_rule_version: 'Rule version selected. Preview changes, then apply.',
+            owner: 'Instruction writer selected. Apply when ready.',
+            apply: 'Selected guidance applied.',
+          }[action.action],
+        );
       }
     } catch (error) {
-      if (generation === guidanceLoadGeneration)
+      if (generation === guidanceLoadGeneration) {
+        // The failure also stays on the page until the next change (its persistent record).
         guidanceMessage.value = error instanceof Error ? error.message : String(error);
+        showToast(`The guidance could not be changed. ${guidanceMessage.value}`);
+      }
     } finally {
       if (generation === guidanceLoadGeneration) guidanceLoading.value = false;
     }
@@ -4022,6 +4028,7 @@ export async function startHotSheetWebClient() {
     phaseEstimate: phaseEstimatePresentation(ticket, claimEtaClock.value),
     agentName: claimHolderName(ticket),
     remoteClaim: ticket.claim_origin === 'remote',
+    claimStanding: ticket.claim_standing?.kind,
     updatedLabel: ago(ticket.updated_at),
     latestConfidence: ticket.latest_confidence,
     aiCreatorLabel: aiCreatorLabel(ticket.created_by),
@@ -5929,6 +5936,7 @@ export async function startHotSheetWebClient() {
     },
     remoteServerLabels: async () =>
       Object.fromEntries((await listDesktopRemoteServers()).map((server) => [server.id, server.label])),
+    showToast,
   });
   orchestrationSurfaceRef.current = orchestrationSurface;
   const { settingsWorkspace } = createSettingsSurface({
@@ -5950,7 +5958,6 @@ export async function startHotSheetWebClient() {
         loading: developmentLoading.value[projectId] ?? false,
         saving: developmentSaving.value[projectId] ?? false,
         message: developmentMessages.value[projectId] ?? '',
-        status: developmentStatuses.value[projectId] ?? '',
         cadence: currentStream
           ? Object.entries(workerViews.value)
               .filter(([source, view]) => sourceIds.has(source) && view.cadence)
@@ -6042,7 +6049,6 @@ export async function startHotSheetWebClient() {
       config: notificationSettings.config.value,
       deliveries: notificationSettings.deliveries.value,
       message: notificationSettings.message.value,
-      status: notificationSettings.status.value,
       busyChannels: notificationSettings.busyChannels.value,
       channelEditor: notificationSettings.channelEditor.value,
       ruleEditor: notificationSettings.ruleEditor.value,
@@ -6695,6 +6701,7 @@ export async function startHotSheetWebClient() {
       selectedStep: orchestrationView.selectedStep.value,
       collapsedGroups: orchestrationView.collapsedGroups(),
       propose: orchestrationView.proposeAvailability(),
+      planning: orchestrationView.planning.value,
     }),
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({

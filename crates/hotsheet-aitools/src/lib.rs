@@ -49,6 +49,7 @@ pub mod spawn;
 pub mod structured_failure;
 pub mod system;
 pub mod tool_progress;
+pub mod usage_resets;
 #[cfg(target_os = "macos")]
 mod vnode_watch;
 

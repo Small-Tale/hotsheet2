@@ -855,6 +855,11 @@ export interface TicketRow {
   /** Whether a live claim's worker belongs to this Hot Sheet server or a separate one seen through
    * the synced store (HS2-DQJPW0); absent without a claim or when the claim predates host records. */
   claim_origin?: 'local' | 'remote';
+  /**
+   * HS2-ZR8B4N: how this server's store sees the live claim beside it: provisional (taken offline, not confirmed,
+   * never exclusive) or lost to another machine while the losing session has not been told. Absent otherwise.
+   */
+  claim_standing?: ClaimStanding;
   legacy_number?: string;
   claim_count: number;
   /** Derived completion confidence of a completed/verified ticket (HS2-RD4M29). */
@@ -871,6 +876,9 @@ export interface TicketRow {
   details?: string;
   notes?: Note[];
 }
+/** HS2-ZR8B4N: a ticket's claim standing (`ClaimStanding` in the contract). */
+export type ClaimStanding =
+  { kind: 'provisional' } | { kind: 'lost'; worker: string; holder: string; detected_at: string };
 export interface ClaimEvent {
   id: string;
   kind: 'claim' | 'renew' | 'release';
@@ -1184,6 +1192,8 @@ export interface HostedOrchestrationProjectChoice {
   name: string;
   added: boolean;
   target_id?: string;
+  /** HS2-89YNGN: the ticket store it reaches (non-secret digest), absent when the server could not read it. */
+  checkout_authority?: string;
 }
 /** `DELETE /checkouts/{owner}/orchestration/projects/{target}` (HS2-W27N1D). */
 export interface RemovedOrchestrationProject {
@@ -1511,6 +1521,11 @@ export interface TerminalInfo {
   feedback_eligible?: boolean;
   /** HS2-6MNMVB: an orchestrator started this terminal's session on this machine. */
   orchestrator?: TerminalOrchestrator;
+  /**
+   * HS2-G2X7RT: for an orchestrator's live session whose tool reports its session start, whether it has;
+   * `false` while it may wait on a first-run question a person answers in this terminal. Absent otherwise.
+   */
+  tool_ready?: boolean;
 }
 /** HS2-6MNMVB: the hosted orchestrator session in a terminal, which a person may take over. */
 export interface TerminalOrchestrator {
@@ -2030,6 +2045,31 @@ type HostParsedRequest = <T>(parse: ResponseParser<T>, path: string, requested?:
  */
 export const ORCHESTRATION_APP_ACTOR = 'hotsheet-app';
 
+/** HS2-8Z9VHH: an admission refusal's values, from the server's `admission` detail. */
+export interface AdmissionRefusalDetail {
+  reason: string;
+  setting?: string;
+  limit?: number;
+  observed?: number;
+  tool?: string;
+}
+
+/** Reads the `admission` object of a failure body; anything malformed is ignored. */
+export function parseAdmissionRefusal(value: unknown): AdmissionRefusalDetail | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.reason !== 'string' || !record.reason) return undefined;
+  const number = (key: string) => (typeof record[key] === 'number' ? record[key] : undefined);
+  const text = (key: string) => (typeof record[key] === 'string' ? record[key] : undefined);
+  return {
+    reason: record.reason,
+    setting: text('setting'),
+    limit: number('limit'),
+    observed: number('observed'),
+    tool: text('tool'),
+  };
+}
+
 export class ApiHttpError extends Error {
   constructor(
     message: string,
@@ -2038,6 +2078,8 @@ export class ApiHttpError extends Error {
     readonly code?: string,
     /** HS2-9XJEZC: the orchestrator permission request a `permission_required` refusal waits on. */
     readonly requestId?: string,
+    /** HS2-8Z9VHH: a `session_admission_refused` failure's reason, limit and observed value. */
+    readonly admission?: AdmissionRefusalDetail,
   ) {
     super(message);
   }
@@ -2117,6 +2159,7 @@ export class Api {
           response.status,
           errorCodeOf(failure),
           requestIdOf(failure),
+          parseAdmissionRefusal((failure as { admission?: unknown } | null | undefined)?.admission),
         );
       }
       onResponse?.(response);
@@ -3270,6 +3313,16 @@ export class Api {
         body: JSON.stringify({ expected_revision: expectedRevision, label, clear_site_of: true }),
       },
     );
+  /** HS2-NAA3HV: make a site the home of its project; the old home and the other sites become its sites. */
+  makeOrchestrationHomeSite = (owner: string, target: string, expectedRevision: string) =>
+    this.parsed(
+      parseOrchestrationManifest,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/make-home`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ expected_revision: expectedRevision, actor: { role: 'human' } }),
+      },
+    );
   /** HS2-92FJXM: the serving machine's open checkouts, which a client on another machine may add. */
   hostedOrchestrationProjects = (owner: string) =>
     this.parsed(
@@ -3277,7 +3330,11 @@ export class Api {
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,
     );
   /** HS2-92FJXM: add one of them; the serving machine binds it, and a repeat is the same project. */
-  addHostedOrchestrationProject = (owner: string, request: { checkout_id: string; label: string; target_id: string }) =>
+  addHostedOrchestrationProject = (
+    owner: string,
+    // HS2-89YNGN: `site_of` adds it as another site of that project.
+    request: { checkout_id: string; label: string; target_id: string; site_of?: string },
+  ) =>
     this.parsed(
       parseOrchestrationProjectView,
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,

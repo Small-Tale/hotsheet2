@@ -40,6 +40,10 @@ fn timeline(phase: &str, items: &[serde_json::Value]) -> Timeline {
     .unwrap()
 }
 
+/// HS2-CQ0PNT: every target its own project.
+static NO_SITES: std::sync::LazyLock<ProjectSites> =
+    std::sync::LazyLock::new(ProjectSites::default);
+
 fn source<'a>(
     owner: &'a str,
     targets: &'a [String],
@@ -50,6 +54,7 @@ fn source<'a>(
         owner_label: owner,
         target_ids: targets,
         timeline,
+        sites: &NO_SITES,
     }
 }
 
@@ -193,4 +198,63 @@ fn hs2_s3fkj7_version_tracks_lines_not_the_clock_and_empty_then_refill() {
     // A source whose targets are not this checkout's contributes nothing.
     let unrelated = target_lines(&[source("launch", &[], &ready)]);
     assert_eq!(unrelated, none);
+}
+
+/// HS2-CQ0PNT: "api" is a site of the "web" project, sharing one ticket store whose
+/// connection id differs by machine. A checkout bound as "api" shows the line of a
+/// step planned through "web", its ticket named by the api checkout's own connection
+/// id, and keeps one line when the step moves between the sites. Without the
+/// grouping the web step is not the api checkout's, as before.
+#[test]
+fn hs2_cq0pnt_a_checkout_shows_the_steps_of_every_site_of_its_project() {
+    let on = |step: &str, site: &str, connection: &str, state: &str| {
+        let mut item = item(step, site, "t1", state);
+        item["target"]["connection_id"] = json!(connection);
+        item
+    };
+    let api = vec!["api".to_owned()];
+    let sites = ProjectSites::default()
+        .with_site("api", "web")
+        .with_sources([
+            ("web", vec![("web-src", "store-1")]),
+            ("api", vec![("api-src", "store-1")]),
+        ]);
+    let line_of = |plan: &Timeline, sites: &ProjectSites| {
+        target_lines(&[TargetLineSource {
+            owner_checkout_id: "launch",
+            owner_label: "launch",
+            target_ids: &api,
+            timeline: plan,
+            sites,
+        }])
+    };
+    let through_web = timeline("running", &[on("s1", "web", "web-src", "running")]);
+    // Apart: the web step is not this checkout's.
+    assert!(line_of(&through_web, &NO_SITES).lines.is_empty());
+    // One project: shown, under the api checkout's connection id.
+    let shown_web = line_of(&through_web, &sites);
+    assert_eq!(shown_web.lines.len(), 1);
+    assert_eq!(shown_web.lines[0].item.target.connection_id, "api-src");
+    assert_eq!(shown_web.lines[0].item.target.native_id, "t1");
+    // Moved to the api site while it runs: one line for the same ticket, the same key.
+    let through_api = timeline("running", &[on("s1", "api", "api-src", "running")]);
+    let shown_api = line_of(&through_api, &sites);
+    assert_eq!(shown_api.lines.len(), 1);
+    assert_eq!(shown_api.lines[0].item.target.connection_id, "api-src");
+    // Both at once (an old step and its new one): one line, the other counted.
+    let both = timeline(
+        "running",
+        &[
+            on("s1", "web", "web-src", "running"),
+            on("s2", "api", "api-src", "ready"),
+        ],
+    );
+    let folded = line_of(&both, &sites);
+    assert_eq!(
+        shown(&folded),
+        vec![("t1".into(), "launch".into(), "s1".into(), 1)]
+    );
+    // A target of another project is still not this checkout's.
+    let elsewhere = timeline("running", &[on("s3", "docs", "docs-src", "ready")]);
+    assert!(line_of(&elsewhere, &sites).lines.is_empty());
 }

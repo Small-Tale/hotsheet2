@@ -98,6 +98,11 @@ for (const width of [1280, 390]) {
       /Run hotsheet-cli hook-diagnose inside this terminal/,
     );
     await expect(tab('halted').locator('.terminal-drawer__halt[data-lucide="triangle-alert"]')).toBeVisible();
+    // HS2-G2X7RT: an orchestrator's session whose tool may be on a first-run question waits on a person.
+    await expect(tab('tool-waiting').locator('.terminal-drawer__tool-waiting[data-lucide="hand"]')).toBeVisible();
+    await expect(tab('tool-waiting').locator('.terminal-drawer__tool-waiting title')).toHaveText(
+      'Waiting for an answer in this terminal',
+    );
     // The status icons sit on the tab label's center line.
     for (const [id, name] of [
       ['connected', 'Connected'],

@@ -1508,3 +1508,194 @@ fn hs2_j7n3pq_a_lapsed_validation_is_published_at_its_deadline() {
     m.runtime.readiness(&owner, &step_id, &mut tx).unwrap();
     assert_eq!(published().len(), count);
 }
+
+/// HS2-061YTB: a manual dispatch of a planned ticket whose step names requirements
+/// reads the target's machine through the gate and is refused, naming the
+/// requirement, until the machine meets it. A person's override goes ahead and is
+/// audited; the orchestrator's waits on a decision. Unplanned tickets and steps
+/// without requirements read nothing.
+#[test]
+fn hs2_061ytb_a_manual_dispatch_checks_its_step_requirements() {
+    use hotsheet_ticketing::orchestration::{HostCapabilities, OsFamily};
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, orchestration) = setup(&READ_AND_START, &mut tx);
+    let probe = std::sync::Arc::new(super::capacity::Scripted::default());
+    probe.set(|observation| *observation = super::sessions::roomy());
+    m.runtime = m.runtime.clone().with_capacity_probe(probe.clone());
+    let owner = m.owner.id.clone();
+    let (windows, plain, loose) = (
+        target_ticket(&m, "Needs Windows"),
+        target_ticket(&m, "Runs anywhere"),
+        target_ticket(&m, "Not planned"),
+    );
+    let mut needs = define(&m, &orchestration, &windows.slug, json!([]));
+    needs.requirements = serde_json::from_value(json!({"os": ["windows"]})).unwrap();
+    m.runtime
+        .readiness_define(&owner, needs, Some(&worker()), &mut tx)
+        .unwrap();
+    m.runtime
+        .readiness_define(
+            &owner,
+            define(&m, &orchestration, &plain.slug, json!([])),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let refused = |result: Result<RunView, OrchestrationError>| match result {
+        Err(error @ OrchestrationError::Requirement { .. }) => (
+            error.code(),
+            error.refusal_detail().map(|(_, value)| value.to_owned()),
+            error_status(&error),
+        ),
+        Err(other) => panic!("expected a requirement refusal, got {other}"),
+        Ok(_) => panic!("expected a requirement refusal"),
+    };
+    let asked = || probe.asked.load(std::sync::atomic::Ordering::SeqCst);
+
+    // The machine has not said what it is: unknown, never a guess. Repeated, the same.
+    for _ in 0..2 {
+        assert_eq!(
+            refused(m.runtime.run_dispatch(
+                &owner,
+                dispatch(&m, &orchestration, &windows.slug, "op-w", json!({})),
+                Some(&human()),
+                &mut tx,
+            )),
+            ("requirement_unknown", Some("os:windows".into()), 409)
+        );
+    }
+    // A Linux machine misses it.
+    probe.set(|observation| {
+        observation.capabilities = Some(HostCapabilities::bare(OsFamily::Linux, "arm64"));
+    });
+    assert_eq!(
+        refused(m.runtime.run_dispatch(
+            &owner,
+            dispatch(&m, &orchestration, &windows.slug, "op-w", json!({})),
+            Some(&human()),
+            &mut tx,
+        )),
+        ("requirement_unmet", Some("os:windows".into()), 409)
+    );
+    assert!(m.runtime.run_list(&owner, false).unwrap().is_empty());
+    // The orchestrator's override is a judgment call: it waits on a decision.
+    match m.runtime.run_dispatch(
+        &owner,
+        dispatch(
+            &m,
+            &orchestration,
+            &windows.slug,
+            "op-ai",
+            json!({"override_requirements": true}),
+        ),
+        Some(&worker()),
+        &mut tx,
+    ) {
+        Err(OrchestrationError::DecisionRequired { .. }) => {}
+        other => panic!("expected decision_required, got {:?}", other.err()),
+    }
+    assert!(m.runtime.run_list(&owner, false).unwrap().is_empty());
+    // A person's override goes ahead, audited with what was overridden.
+    let run = m
+        .runtime
+        .run_dispatch(
+            &owner,
+            dispatch(
+                &m,
+                &orchestration,
+                &windows.slug,
+                "op-person",
+                json!({"override_requirements": true}),
+            ),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(run.run.operation_id, "op-person");
+    assert!(audited(&m, "requirement_override").contains(&(
+        AuditOutcome::Allowed,
+        Some("requirement_unmet".into()),
+        Some("op-person".into())
+    )));
+    // A repeat of the admitted dispatch is the same run and reads nothing again.
+    let before = asked();
+    let again = m
+        .runtime
+        .run_dispatch(
+            &owner,
+            dispatch(
+                &m,
+                &orchestration,
+                &windows.slug,
+                "op-person",
+                json!({"override_requirements": true}),
+            ),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(again.run.run_id, run.run.run_id);
+    assert_eq!(asked(), before);
+    // A step without requirements and an unplanned ticket never read the machine.
+    for ticket in [&plain, &loose] {
+        let before = asked();
+        m.runtime
+            .run_dispatch(
+                &owner,
+                dispatch(
+                    &m,
+                    &orchestration,
+                    &ticket.slug,
+                    &format!("op-{}", ticket.slug),
+                    json!({"worker_id": format!("w-{}", ticket.slug)}),
+                ),
+                Some(&human()),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(asked(), before, "{}", ticket.slug);
+    }
+    // Over the route the refusal names the requirement too.
+    let runs = format!("/checkouts/{owner}/orchestration/runs");
+    let mut body = serde_json::to_value(json!({
+        "ticket": {"connection_id": m.owner_connection(), "native_id": orchestration.id.to_string()},
+        "target_id": id(1), "connection_id": m.target_connection(),
+        "native_id": windows.slug, "operation_id": "op-route", "worker_id": "worker-a",
+    }))
+    .unwrap();
+    body["actor"] = json!({"role": "human", "id": "person-1"});
+    let error = m
+        .runtime
+        .request("POST", &runs, &body, &mut tx)
+        .unwrap_err();
+    assert_eq!(
+        (error.code(), error.refusal_detail(), error_status(&error)),
+        (
+            "requirement_unmet",
+            Some(("requirement", "os:windows")),
+            409
+        )
+    );
+    // The machine is Windows now: the plain dispatch starts.
+    probe.set(|observation| {
+        observation.capabilities = Some(HostCapabilities::bare(OsFamily::Windows, "x86_64"));
+    });
+    m.runtime
+        .run_dispatch(
+            &owner,
+            dispatch(&m, &orchestration, &windows.slug, "op-w2", json!({})),
+            Some(&human()),
+            &mut tx,
+        )
+        .map(|_| ())
+        .or_else(|error| match error {
+            // The person's run above already holds the ticket; the guard passed.
+            OrchestrationError::Run(_) | OrchestrationError::Readiness(_) => Ok(()),
+            other => Err(other),
+        })
+        .unwrap();
+}

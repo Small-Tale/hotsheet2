@@ -249,4 +249,107 @@ mod tests {
         }
         assert_eq!(deliver(&store, &Panics), 0);
     }
+
+    /// A recording session push, as the server keeps one per push-capable terminal.
+    struct RecordingPush {
+        sent: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl hotsheet_aitools::session_push::SessionPush for RecordingPush {
+        fn mechanism(&self) -> &'static str {
+            "codex-queue"
+        }
+        fn session_id(&self) -> Option<String> {
+            Some("synthetic-thread".into())
+        }
+        fn message(
+            &self,
+            message: &PushMessage,
+        ) -> Result<
+            hotsheet_aitools::session_push::PushReceipt,
+            hotsheet_aitools::session_push::PushError,
+        > {
+            if let PushMessage::Prompt { text, .. } = message {
+                self.sent.lock().unwrap().push(text.clone());
+            }
+            Ok(hotsheet_aitools::session_push::PushReceipt {
+                mechanism: "codex-queue",
+                session_id: None,
+                confirmed: true,
+            })
+        }
+    }
+
+    /// HS2-1639Q0: the server's own terminal path, end to end through `after_pass`: the live
+    /// terminals' claim worker ids come from the real terminal manager (a spawned terminal
+    /// launched with `HOTSHEET_WORKER_ID`), push-capable sessions from the drive registry and
+    /// its push adapter, and only the project's terminal whose worker lost the claim is told,
+    /// once. A terminal of another project with the same worker is not.
+    #[tokio::test]
+    async fn hs2_1639q0_after_pass_tells_the_losing_terminal_through_the_server_reach() {
+        use hotsheet_sync::LockExt;
+
+        let lost = conflict("HS-1", "claude-a", "Build agent");
+        let (dir, store) = store_with(std::slice::from_ref(&lost));
+        let project = dir.path().join("project");
+        let other_project = dir.path().join("other");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(&other_project).unwrap();
+        let app = crate::AppState::new(
+            FsStore::init(dir.path().join("app-store"), &StoreMetadata::new("HS")).unwrap(),
+            "secret".into(),
+        )
+        .unwrap()
+        .with_machine_home(dir.path().join("home"));
+        let mut terminals = Vec::new();
+        let mut sent = Vec::new();
+        for (id, root, worker) in [
+            ("t-loser", &project, "claude-a"),
+            ("t-other", &project, "claude-b"),
+            ("t-elsewhere", &other_project, "claude-a"),
+        ] {
+            let mut spec = hotsheet_terminals::TermSpec::new("cat");
+            spec.env = vec![(hotsheet_aitools::WORKER_ID_ENV.into(), worker.into())];
+            terminals.push(
+                app.terminals
+                    .get_or_spawn((root.display().to_string(), id.to_string()), spec)
+                    .unwrap(),
+            );
+            app.drive_registry
+                .lock_or_recover()
+                .register(hotsheet_aitools::Connection {
+                    id: id.into(),
+                    project: root.display().to_string(),
+                    tool: "codex".into(),
+                    role: hotsheet_aitools::Role::Worker,
+                    transport: hotsheet_aitools::Transport::AppServer,
+                    pid: None,
+                    started_at_ms: 1,
+                });
+            let record = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            app.session_pushes.lock_or_recover().insert(
+                id.into(),
+                std::sync::Arc::new(RecordingPush {
+                    sent: record.clone(),
+                }),
+            );
+            sent.push((id, record));
+        }
+        assert_eq!(after_pass(&app, &project, store.root()).await, 1);
+        for (id, record) in &sent {
+            let got = record.lock().unwrap().clone();
+            if *id == "t-loser" {
+                assert_eq!(got, vec![message(&lost)]);
+            } else {
+                assert!(got.is_empty(), "{id} was told: {got:?}");
+            }
+        }
+        assert!(pending_conflicts(&store).is_empty(), "acknowledged");
+        // Told once: a second pass has nothing to deliver.
+        assert_eq!(after_pass(&app, &project, store.root()).await, 0);
+        assert_eq!(sent[0].1.lock().unwrap().len(), 1);
+        for term in terminals {
+            term.kill().unwrap();
+        }
+    }
 }

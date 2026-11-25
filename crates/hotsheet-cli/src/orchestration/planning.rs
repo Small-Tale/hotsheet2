@@ -12,14 +12,14 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
     AuditOutcome, AuditRecord, NewHostedSession, PlannerFacts, PlanningState, ProposeDecision,
-    ReadinessError, SessionError, SessionOrigin, SessionRole, TargetOpError, current_planner,
-    decide_propose, planning_state,
+    ReadinessError, SessionOrigin, SessionRole, TargetOpError, current_planner, decide_propose,
+    planning_state,
 };
 use serde::{Deserialize, Serialize};
 
 use super::sessions::{
-    HostedSessionStart, HostedSessionView, HostedStartOutcome, PushAttempt, RolePrompt,
-    TOOL_SETUP_FAILED, ToolSetup, planner_prompt_text, project_name,
+    HostedSessionStart, HostedSessionView, HostedStartOutcome, PushAttempt, RolePrompt, ToolSetup,
+    planner_prompt_text, project_name,
 };
 use super::tickets::identifier;
 use super::*;
@@ -496,20 +496,12 @@ impl OrchestrationRuntime {
             },
             tx,
         )?;
-        let Some(view) = reply
-            .session
-            .filter(|_| reply.outcome != HostedStartOutcome::Refused)
-        else {
-            let reason = reply.reason.unwrap_or_default();
+        let refused = reply.outcome == HostedStartOutcome::Refused;
+        let Some(view) = reply.session.clone().filter(|_| !refused) else {
+            let reason = reply.reason.clone().unwrap_or_default();
             // A session code is reported as itself; an admission reason as a refused
-            // admission, as for a target session.
-            return Err(OrchestrationError::Session(
-                SessionError::from_code(&reason).unwrap_or(if reason == TOOL_SETUP_FAILED {
-                    SessionError::StartFailed
-                } else {
-                    SessionError::AdmissionRefused
-                }),
-            ));
+            // admission with its limit (HS2-8Z9VHH), as for a target session.
+            return Err(reply.refusal_error(&reason));
         };
         let proposal_id = match &decision {
             ProposeDecision::Reuse(planner) => answered(planner),

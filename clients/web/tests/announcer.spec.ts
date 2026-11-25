@@ -533,6 +533,8 @@ test('HS2-7YD7S9 grows the current item instead of listing history', async ({ pa
   await overlay.getByRole('button', { name: 'Pop Out Announcer' }).click();
   await page.locator('#announcer-floating').getByRole('button', { name: 'Expand Announcer' }).click();
   await expect(overlay).toHaveAttribute('data-expanded', 'true');
+  // HS2-F880FN: the moved manual popover reopens after the expanded render settles.
+  await expect(page.locator('#announcer-floating:popover-open')).toBeVisible();
   await expect(overlay.getByRole('list')).toHaveCount(0);
   await expect(overlay.getByRole('button', { name: /synthetic choice/ })).toHaveCount(0);
   const panel = await overlay.locator('.announcer__panel').boundingBox();

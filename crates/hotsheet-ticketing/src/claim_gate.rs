@@ -532,6 +532,133 @@ pub fn pending_conflicts(store: &FsStore) -> Vec<ClaimConflict> {
         .unwrap_or_default()
 }
 
+/// HS2-ZR8B4N: how this machine sees a ticket's claim beside its frontmatter, on the ticket
+/// and row wire (`claim_standing`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ClaimStanding {
+    /// The live claim was taken while the backend was unreachable and is not confirmed: it
+    /// is advisory, and another machine may hold the ticket.
+    Provisional,
+    /// A claim this host's `worker` held was given to another machine; `holder` is the
+    /// readable holder (its label, or [`UNREADABLE_HOLDER`]), never a keyed digest.
+    Lost {
+        worker: String,
+        holder: String,
+        detected_at: String,
+    },
+}
+
+/// HS2-ZR8B4N: one read of a store's provisional claims and pending conflicts, so a list
+/// marks every row from the same two files.
+#[derive(Debug)]
+pub struct ClaimStandings {
+    provisional: BTreeMap<Ulid, ProvisionalClaim>,
+    lost: BTreeMap<Ulid, ClaimConflict>,
+    /// When the records were read: a provisional claim counts only while its lease is live.
+    now: Timestamp,
+}
+
+impl ClaimStandings {
+    /// Read both machine-local records of `store`. A store without them (no Git directory,
+    /// no bound claim backend, nothing recorded) reads as empty.
+    pub fn read(store: &FsStore) -> Self {
+        Self::read_at(
+            store,
+            Timestamp::from_datetime(time::OffsetDateTime::now_utc()),
+        )
+    }
+
+    /// [`Self::read`] as of `now`.
+    pub fn read_at(store: &FsStore, now: Timestamp) -> Self {
+        let read = |name: &'static str| store_git_path(store, name);
+        let provisional: BTreeMap<Ulid, ProvisionalClaim> = read(PROVISIONAL_FILE)
+            .map(|path| read_json(&path))
+            .unwrap_or_default();
+        let conflicts: Vec<ClaimConflict> = read(CONFLICTS_FILE)
+            .map(|path| read_json(&path))
+            .unwrap_or_default();
+        // The newest conflict of a ticket wins.
+        let lost = conflicts.into_iter().map(|c| (c.ticket, c)).collect();
+        Self {
+            provisional,
+            lost,
+            now,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.provisional.is_empty() && self.lost.is_empty()
+    }
+
+    /// The standing of one ticket's claim. A pending loss wins: the frontmatter already
+    /// names the new holder. A provisional record counts only while the ticket's live
+    /// claim is still that attempt's worker.
+    pub fn of(
+        &self,
+        ticket: &str,
+        claimed_by: Option<&str>,
+        lease_live: bool,
+    ) -> Option<ClaimStanding> {
+        let id: Ulid = ticket.parse().ok()?;
+        if let Some(conflict) = self.lost.get(&id) {
+            return Some(ClaimStanding::Lost {
+                worker: conflict.worker.clone(),
+                holder: conflict.holder.clone(),
+                detected_at: conflict.detected_at.as_str().to_owned(),
+            });
+        }
+        let provisional = self.provisional.get(&id)?;
+        (lease_live && claimed_by == Some(provisional.worker.as_str()))
+            .then_some(ClaimStanding::Provisional)
+    }
+
+    /// Mark a list row (HS2-ZR8B4N).
+    pub fn apply_row(&self, row: &mut crate::TicketRow) {
+        if self.is_empty() {
+            return;
+        }
+        let live = lease_live(row.claim_lease_expires_at.as_deref(), &self.now);
+        row.claim_standing = self.of(&row.id, row.claimed_by.as_deref(), live);
+    }
+
+    /// Mark a full ticket (HS2-ZR8B4N).
+    pub fn apply_ticket(&self, ticket: &mut crate::wire::ApiTicket) {
+        if self.is_empty() {
+            return;
+        }
+        let live = lease_live(ticket.claim_lease_expires_at.as_deref(), &self.now);
+        ticket.claim_standing = self.of(&ticket.id, ticket.claimed_by.as_deref(), live);
+    }
+}
+
+fn lease_live(expires: Option<&str>, now: &Timestamp) -> bool {
+    expires.is_some_and(|at| {
+        Timestamp::new(at).chronological_cmp(now) == Some(std::cmp::Ordering::Greater)
+    })
+}
+
+/// [`git_path`] memoized per store root and file name: a list reads these records on every
+/// request, and asking Git for its directory each time would cost a process per read. A
+/// store's Git directory does not move while the server runs; a store that is not a Git
+/// repository has no claim backend (HS2-ZR8B4N).
+fn store_git_path(store: &FsStore, name: &'static str) -> Option<PathBuf> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    type Cache = Mutex<HashMap<(PathBuf, &'static str), Option<PathBuf>>>;
+    static CACHE: OnceLock<Cache> = OnceLock::new();
+    let key = (store.root().to_path_buf(), name);
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(found) = cache.lock().ok().and_then(|map| map.get(&key).cloned()) {
+        return found;
+    }
+    let found = git_path(store, name);
+    if let Ok(mut map) = cache.lock() {
+        map.insert(key, found.clone());
+    }
+    found
+}
+
 /// Forget the conflicts recorded for `tickets`, after their losing sessions were told.
 pub fn acknowledge_conflicts(store: &FsStore, tickets: &[Ulid]) {
     let Some(path) = git_path(store, CONFLICTS_FILE) else {

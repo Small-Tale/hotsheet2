@@ -159,9 +159,10 @@ fn hs2_5p112z_role_sessions_follow_a_project_from_work_on_a_site_to_wound_down()
     world
         .sessions
         .push(role_session("integrator", 1, SessionRole::Integrator));
+    // HS2-4JQ41V: the integrator's own reason.
     assert_eq!(
         decided(&world.at(later), "integrator"),
-        ("keep", "role_needed")
+        ("keep", "integrator_kept")
     );
     pool(&mut world, 1, Some(PoolState::default()));
     let schedule = world.at(later);

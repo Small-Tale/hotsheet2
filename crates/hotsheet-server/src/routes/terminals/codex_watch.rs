@@ -78,6 +78,10 @@ pub(crate) fn sync_codex_session_watch(
     if watched_session(state, id).is_some_and(|(watched, _)| watched == session_id) {
         return;
     }
+    // A different Codex session in this terminal starts with no turn reported.
+    if watched_session(state, id).is_some() {
+        super::forget_hook_turn(state, id);
+    }
     stop_codex_session_watch(state, id);
     let codex_home = codex_home
         .map(PathBuf::from)
@@ -170,6 +174,12 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
                         message,
                     } => {
                         flush(&mut batches);
+                        // HS2-2AN9C8: a turn that ended on an error ends the busy stretch.
+                        super::note_hook_turn(
+                            &signal_state,
+                            &signal_id,
+                            super::hook_turns::TurnBoundary::Ended,
+                        );
                         record_terminal_halt(
                             &signal_state,
                             &signal_id,
@@ -180,6 +190,12 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
                     }
                     RolloutSignal::Resumed => {
                         flush(&mut batches);
+                        // HS2-2AN9C8: `task_started` opens the turn.
+                        super::note_hook_turn(
+                            &signal_state,
+                            &signal_id,
+                            super::hook_turns::TurnBoundary::Started,
+                        );
                         clear_terminal_halt_on_resume(&signal_state, &signal_id);
                         let started = target();
                         // The new turn opens the session's narration (HS2-WH40WD).
@@ -194,6 +210,15 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
                     }
                     RolloutSignal::Activity(item) => {
                         flush(&mut batches);
+                        // HS2-2AN9C8: `task_complete` without an error ends the turn.
+                        if item.get("type").and_then(serde_json::Value::as_str) == Some("turn_end")
+                        {
+                            super::note_hook_turn(
+                                &signal_state,
+                                &signal_id,
+                                super::hook_turns::TurnBoundary::Ended,
+                            );
+                        }
                         let target = turn_target.get_or_insert_with(target).clone();
                         narrate_codex(&signal_state, &signal_id, &signal_session, &target, &item);
                     }
@@ -497,6 +522,88 @@ mod tests {
         stop_codex_session_watch(&state, "t1");
         assert!(!kept.exists());
         assert!(!is_current(&state, "t1", session));
+    }
+
+    /// HS2-2AN9C8: a watched Codex rollout's `task_started` makes the terminal busy and its
+    /// `task_complete`, with or without an error, idle again. Synthetic rollout records only.
+    #[test]
+    fn hs2_2an9c8_codex_rollout_turns_drive_the_terminal_busy_state() {
+        use std::io::Write;
+        let root = tempfile::tempdir().unwrap();
+        let state = state(root.path());
+        let home = root.path().join("codex");
+        let session = "00000000-0000-0000-0000-0000000000e1";
+        let day = home.join("sessions/2026/11/12");
+        std::fs::create_dir_all(&day).unwrap();
+        let rollout = day.join(format!("rollout-2026-11-12T00-00-00-{session}.jsonl"));
+        let line = |value: serde_json::Value| format!("{value}\n");
+        let event = |at: &str, payload: serde_json::Value| {
+            line(serde_json::json!({"timestamp":at,"type":"event_msg","payload":payload}))
+        };
+        std::fs::write(
+            &rollout,
+            line(serde_json::json!({"timestamp":"2026-11-12T00:00:00Z","type":"session_meta","payload":{"id":session}}))
+                + &event("2026-11-12T00:00:02Z", serde_json::json!({"type":"task_started","turn_id":"t1"})),
+        )
+        .unwrap();
+        write_record(
+            &state,
+            "tb.json",
+            serde_json::json!({"terminal":"tb","session_id":session,"codex_home":home,"reported_at":"2026-11-12T00:00:01Z"}),
+        );
+        resume_codex_session_watches(&state, &["tb".to_owned()]);
+        let wait = |busy: bool| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            while state
+                .terminal_hook_turns
+                .lock_or_recover()
+                .get("tb")
+                .map(|turn| turn.busy)
+                != Some(busy)
+            {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the turn never became busy={busy}"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        };
+        let append = |text: String| {
+            let mut file = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&rollout)
+                .unwrap();
+            file.write_all(text.as_bytes()).unwrap();
+            file.sync_all().unwrap();
+        };
+        wait(true);
+        assert!(super::super::hook_busy_or(&state, "tb", false));
+        append(event(
+            "2026-11-12T00:00:03Z",
+            serde_json::json!({"type":"task_complete","turn_id":"t1","last_agent_message":"done"}),
+        ));
+        wait(false);
+        assert!(
+            state
+                .terminal_hook_turns
+                .lock_or_recover()
+                .get("tb")
+                .unwrap()
+                .idle_since_ms
+                .is_some()
+        );
+        append(event(
+            "2026-11-12T00:00:04Z",
+            serde_json::json!({"type":"task_started","turn_id":"t2"}),
+        ));
+        wait(true);
+        append(event(
+            "2026-11-12T00:00:05Z",
+            serde_json::json!({"type":"task_complete","turn_id":"t2","error":{
+                "codex_error_info":"usage_limit_exceeded","message":"synthetic limit"}}),
+        ));
+        wait(false);
+        stop_codex_session_watch(&state, "tb");
     }
 
     /// HS2-D0QTGB: a question in the watched rollout becomes the terminal's in-app prompt, and

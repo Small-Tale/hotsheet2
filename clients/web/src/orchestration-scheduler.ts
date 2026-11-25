@@ -5,7 +5,7 @@
  * as their words. Identifiers and codes only, as the decision log holds.
  */
 import { parseRequiredResources, type ResourceStandingView } from './orchestration-resources';
-import type { OrchestrationTimeline } from './orchestration-timeline';
+import type { OrchestrationTimeline, TimelineItem } from './orchestration-timeline';
 import { type ClockFormat, toolLabel } from './orchestration-timeline-board';
 
 /** One decision log record (`DecisionRecord`), as much of it as the view shows. */
@@ -90,7 +90,41 @@ const NOT_CHOSEN: Readonly<Record<string, string>> = {
 export function sitePassText(pass: SchedulerSitePass): string {
   if (pass.reason === 'not_chosen') return (pass.detail && NOT_CHOSEN[pass.detail]) || 'another site was chosen';
   const reason = schedulerReasonText(pass.reason);
-  return pass.detail ? `${reason} (${pass.detail})` : reason;
+  const detail = sitePassDetail(pass);
+  return detail ? `${reason} (${detail})` : reason;
+}
+
+/**
+ * HS2-MFS7FY: the policy limit behind a `policy_denied` pass (`PolicyDenial::code`) and the other detail codes
+ * a passed-over site can carry, in words. Row copy never shows an internal code (Kerf "Lists and selection").
+ */
+const SITE_PASS_DETAILS: Readonly<Record<string, string>> = {
+  policy_absent: 'there is no policy',
+  policy_target_not_permitted: 'the site is not one the policy lists',
+  policy_target_disabled: 'the site is turned off in the policy',
+  policy_tool_not_permitted: 'no AI tool it may use is allowed there',
+  policy_model_not_permitted: 'its model is not allowed there',
+  policy_load_unknown: 'the sessions already running could not be counted',
+  policy_target_cap: 'the site’s session limit is reached',
+  policy_machine_cap: 'the machine’s session limit is reached',
+  policy_tool_cap: 'the AI tool’s session limit is reached',
+  policy_account_not_permitted: 'no AI tool account it may use is allowed there',
+  policy_account_cap: 'the AI tool account’s session limit is reached',
+  policy_speculation_not_allowed: 'provisional work is not allowed there',
+  policy_project_software: 'the project is a Software project',
+  capacity_not_read: 'its machine has not been read yet',
+};
+
+/**
+ * HS2-MFS7FY: a pass's detail as words, or nothing. A requirement or resource reason's detail is the name the
+ * step itself gives (such as `os:windows`), so it stays; any other code the view cannot word is left out.
+ */
+export function sitePassDetail(pass: SchedulerSitePass): string | undefined {
+  if (!pass.detail) return undefined;
+  const worded = SITE_PASS_DETAILS[pass.detail];
+  if (worded) return worded;
+  if (pass.reason.startsWith('requirement_') || pass.reason.startsWith('resource_')) return pass.detail;
+  return undefined;
 }
 
 /** A site by its project label on the timeline; a short id when the timeline does not show it. */
@@ -238,5 +272,36 @@ export function parseExplanation(value: Record<string, unknown> | undefined): Sc
           ]
         : [],
     ),
+  };
+}
+
+/** HS2-PR984R: the site Where It Runs names, and the step's own site when the scheduler chose another. */
+export interface WhereItRunsSite {
+  label: string;
+  location: TimelineItem['location'];
+  machine_label?: string;
+  own?: { label: string; location: TimelineItem['location'] };
+}
+
+/**
+ * HS2-PR984R: the site the card's Where It Runs names. Once the scheduler placed or would place the step on another
+ * site of its project than the one the card shows (`scheduler explain`'s `site`), that chosen site and its machine
+ * lead, and `own` keeps the step's own site for a secondary row. Otherwise the card's own site, unchanged.
+ */
+export function chosenSite(
+  item: Pick<TimelineItem, 'site_id' | 'target' | 'project_label' | 'location' | 'machine_label'>,
+  timeline: OrchestrationTimeline | undefined,
+  explanation: SchedulerExplanation | undefined,
+): WhereItRunsSite {
+  const shown = { label: item.project_label, location: item.location, machine_label: item.machine_label };
+  const site = explanation?.site;
+  if (!site || site === (item.site_id ?? item.target.target_id)) return shown;
+  const chosen = timeline?.targets.find((target) => target.target_id === site);
+  if (!chosen) return shown;
+  return {
+    label: chosen.label,
+    location: chosen.location,
+    machine_label: chosen.machine_label,
+    own: { label: item.project_label, location: item.location },
   };
 }

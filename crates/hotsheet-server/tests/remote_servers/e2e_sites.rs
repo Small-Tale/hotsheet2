@@ -214,8 +214,13 @@ async fn role_started(fleet: &Fleet, role: &str) -> Placed {
             |entry| {
                 entry["kind"] == "start"
                     && entry["outcome"] == "started"
-                    && entry["reason"] == "role_needed"
-                    && entry["detail"] == role
+                    // HS2-4JQ41V: an integrator's start names the handoff it is for.
+                    && if role == "integrator" {
+                        entry["reason"] == "integrator_started"
+                            && entry["detail"] == "handoff_pending"
+                    } else {
+                        entry["reason"] == "role_needed" && entry["detail"] == role
+                    }
             },
             3 * MINUTE,
         )

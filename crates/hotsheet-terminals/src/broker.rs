@@ -45,6 +45,7 @@ pub const DEFAULT_IDLE_GRACE: Duration = Duration::from_secs(5 * 60);
 
 /// The machine home under which the broker journals the child processes it starts.
 pub const PROCESS_JOURNAL_HOME_ENV: &str = "HOTSHEET_PROCESS_JOURNAL_HOME";
+pub const STARTUP_STDERR_ENV: &str = "HOTSHEET_BROKER_CAPTURE_STARTUP_STDERR";
 
 /// Pure resolution of [`PROCESS_JOURNAL_HOME_ENV`]: a blank value counts as unset, so the
 /// broker never journals into a relative `""` home in its working directory (HS2-15ZN8E).
@@ -396,19 +397,38 @@ pub async fn run_broker_process(
 ) -> std::io::Result<()> {
     let socket = socket.as_ref();
     let (listener, _ownership) = crate::broker_socket::bind(socket)?;
+    let owner_pid = test_server_owner_pid()?;
+    disconnect_startup_stderr()?;
     let serve = serve_broker_with_idle(
         listener,
         project,
         Arc::new(TerminalManager::new()),
         Some(DEFAULT_IDLE_GRACE),
     );
-    if let Some(owner_pid) = test_server_owner_pid()? {
+    if let Some(owner_pid) = owner_pid {
         tokio::select! {
             () = serve => {},
             () = wait_for_test_server_owner_exit(owner_pid) => {},
         }
     } else {
         serve.await;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn disconnect_startup_stderr() -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
+
+    if std::env::var_os(STARTUP_STDERR_ENV).is_none() {
+        return Ok(());
+    }
+    // The server already observed a successful bind. Restore detached behavior now so
+    // the temporary startup capture cannot grow for the broker's long lifetime.
+    let null = std::fs::OpenOptions::new().write(true).open("/dev/null")?;
+    // SAFETY: null owns a valid descriptor throughout dup2; stderr is process-local.
+    if unsafe { libc::dup2(null.as_raw_fd(), libc::STDERR_FILENO) } < 0 {
+        return Err(std::io::Error::last_os_error());
     }
     Ok(())
 }

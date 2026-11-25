@@ -139,6 +139,13 @@ export function wireOrchestrationSettings(
         });
     }),
   );
+  // HS2-NAA3HV: Make <site> the Home Site on a site row.
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.makeHomeSite.selector, (_event, target) => {
+      const id = attribute(target, 'data-target-id');
+      if (id) withProject((projectId) => void settings.makeHomeSite(projectId, id));
+    }),
+  );
   lifetime.add(
     delegate(root, 'click', ACTIONS.separateSite.selector, (_event, target) => {
       const id = attribute(target, 'data-target-id');

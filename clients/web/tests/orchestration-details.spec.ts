@@ -528,6 +528,17 @@ test('HS2-QDARNW Why It Is Not Running names the chosen site and each site passe
       labels.findIndex((label) => label.trim() === 'Not on Self'),
     );
     await expect(rows.filter({ hasText: 'Site' }).first()).toContainText('Self second site');
+    // HS2-PR984R: Where It Runs agrees: the chosen site and its machine lead, the step's own site follows.
+    const where = page.locator('[data-orchestration-inspector] [data-orchestration-section="Where It Runs"]');
+    const whereRow = (label: string) =>
+      where.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    await expect(whereRow('Project').locator('dd')).toHaveText('Self second site (local)');
+    await expect(whereRow("Step's site").locator('dd')).toHaveText('Self (local)');
+    await expect(whereRow('Machine').locator('dd')).toHaveText('This machine');
+    // HS2-MFS7FY: the passed-over site's reason is words, never the scheduler's detail code.
+    const passedOver = rows.filter({ has: page.locator('dt', { hasText: 'Not on Self' }) });
+    await expect(passedOver).toHaveCount(1);
+    expect(await passedOver.locator('dd').innerText()).not.toMatch(/[a-z]+_[a-z_]+/);
 
     // Visual QA: 1440, 1100, 390 (the card's inspector sheet), wide again, in both color schemes.
     const directory = join('target', 'visual-captures', 'hs2-qdarnw');
@@ -564,6 +575,44 @@ test('HS2-QDARNW Why It Is Not Running names the chosen site and each site passe
         });
       }
     }
+
+    // HS2-MFS7FY: with Self turned off in the policy, its pass carries the policy's detail code, which the
+    // row words instead of printing.
+    const current = (await send(server, 'GET', `${base}/policy`)) as { revision: string };
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: current.revision,
+      policy: {
+        machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+        tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 4 }],
+        targets: [
+          { target_id: TARGET, enabled: false },
+          { target_id: SITE, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 2 },
+        ],
+        placement: { automatic: false, actor: 'scheduler-1' },
+      },
+      actor: person,
+    });
+    await send(server, 'POST', `${base}/scheduler/tick`, { dry_run: true, actor: scheduler });
+    const disabled = (await send(server, 'POST', `${base}/scheduler/explain`, {
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: plan.first.id,
+      actor: scheduler,
+    })) as { sites?: { target_id: string; reason: string; detail?: string }[] };
+    expect(disabled.sites, JSON.stringify(disabled)).toEqual([
+      { target_id: TARGET, reason: 'policy_denied', detail: 'policy_target_disabled' },
+    ]);
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.reload();
+    await card.click();
+    const worded = why.locator('dl > div').filter({ has: page.locator('dt', { hasText: 'Not on Self' }) });
+    await expect(worded.locator('dd')).toHaveText(
+      'The policy does not allow it (the site is turned off in the policy)',
+    );
+    await why.scrollIntoViewIfNeeded();
+    await settle();
+    await page.screenshot({ path: join(directory, `hs2-mfs7fy-why-1440-light-${browserName}.png`) });
   } finally {
     await server.stop(page);
   }

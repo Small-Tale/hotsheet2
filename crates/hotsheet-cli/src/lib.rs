@@ -18,6 +18,7 @@ pub mod import;
 mod import_completion;
 pub mod import_recovery;
 pub mod launched_env;
+pub mod merge_pending;
 pub mod migration_progress;
 pub mod notify_watch;
 pub mod orchestration;

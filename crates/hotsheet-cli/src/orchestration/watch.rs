@@ -37,6 +37,12 @@ pub struct TargetTicketEvent {
     pub native_id: String,
 }
 
+/// HS2-R6FZ54: a store reconciliation has no single ticket id. Its empty-id
+/// event invalidates every followed ticket from that connection.
+fn affects_ticket(event: &TargetTicketEvent, connection: &str, native: &str) -> bool {
+    event.connection_id == connection && (event.native_id.is_empty() || event.native_id == native)
+}
+
 /// HS2-257Q2Z: a session an orchestrator started on the host ended or finished a
 /// turn. `session_id` is the host's id for it (its terminal in that server's drawer).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,8 +356,7 @@ impl OrchestrationRuntime {
             .filter(|ticket| {
                 caught_up
                     || page.events.iter().any(|event| {
-                        event.connection_id == ticket.connection_id
-                            && event.native_id == ticket.native_id
+                        affects_ticket(event, &ticket.connection_id, &ticket.native_id)
                     })
             })
             .cloned()
@@ -374,8 +379,7 @@ impl OrchestrationRuntime {
                 .iter()
                 .filter(|run| {
                     page.events.iter().any(|event| {
-                        event.connection_id == run.target.connection_id
-                            && event.native_id == run.target.native_id
+                        affects_ticket(event, &run.target.connection_id, &run.target.native_id)
                     })
                 })
                 .collect();
@@ -428,8 +432,7 @@ fn wakes_scheduler(
     if page.events.iter().any(|event| {
         runs.iter().any(|run| {
             super::assignment::site_handoff_waiting(run).is_some()
-                && event.connection_id == run.target.connection_id
-                && event.native_id == run.target.native_id
+                && affects_ticket(event, &run.target.connection_id, &run.target.native_id)
         })
     }) {
         return true;

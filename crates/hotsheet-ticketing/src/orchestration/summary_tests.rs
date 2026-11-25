@@ -179,6 +179,8 @@ struct World {
     events: Vec<RunEvent>,
     events_trimmed: bool,
     costs: BTreeMap<WorkItemKey, Metric<CostReading>>,
+    /// HS2-CQ0PNT
+    sites: ProjectSites,
 }
 
 impl World {
@@ -205,6 +207,7 @@ impl World {
             events: &self.events,
             events_trimmed: self.events_trimmed,
             costs: &self.costs,
+            sites: &self.sites,
         })
     }
 }
@@ -1054,5 +1057,45 @@ fn hs2_s13719_every_state_and_reason_has_a_stable_code_and_round_trips() {
     assert_eq!(
         serde_json::from_str::<ProgressSummary>(&text).unwrap(),
         summary
+    );
+}
+
+/// HS2-CQ0PNT: target 2 is a site of target 1's project and names the shared ticket
+/// source by its own connection id. A ticket dispatched through target 1 and again
+/// through target 2, after its step moved, is one work item: one redispatch, its cost
+/// counted once under the home's connection id, attributed to the earliest run's
+/// target. Without the grouping the two connection ids are two work items, as before.
+#[test]
+fn hs2_cq0pnt_a_ticket_reached_through_two_sites_is_one_work_item() {
+    let first = finished(1, 1, 5, 10, 20);
+    let mut second = finished(2, 2, 5, 30, 40);
+    second.target.connection_id = "source-on-site".into();
+    let mut world = World::of(vec![first, second]).cost(5, usd(2.0, 1, 0));
+    // Apart: two items, the second without a cost reading.
+    let apart = world.at(100);
+    assert_eq!(apart.work_items.len(), 2);
+    // One project, with the site's id for the source joined to the home's.
+    world.sites = ProjectSites::default()
+        .with_site(&id(2), &id(1))
+        .with_sources([
+            (id(1).as_str(), vec![(SOURCE, "store-1")]),
+            (id(2).as_str(), vec![("source-on-site", "store-1")]),
+        ]);
+    let joined = world.at(100);
+    assert_eq!(joined.work_items.len(), 1, "{:#?}", joined.work_items);
+    let item = &joined.work_items[0];
+    assert_eq!(item.connection_id, SOURCE);
+    assert_eq!(item.redispatches, 1);
+    assert_eq!(item.attributed_target_id, id(1));
+    assert_eq!(item.target_ids, [id(1), id(2)]);
+    assert_eq!(item.cost.known().map(|cost| cost.cost_usd), Some(2.0));
+    // Each run still says which site it went through.
+    assert_eq!(
+        joined
+            .runs
+            .iter()
+            .map(|run| run.target_id.clone())
+            .collect::<Vec<_>>(),
+        [id(1), id(2)]
     );
 }
