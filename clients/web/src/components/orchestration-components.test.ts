@@ -545,12 +545,70 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
       }),
     );
     const order = [...markup.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
-    expect(order).toEqual(['Progress', 'Projects', 'Scheduler', 'Resources', 'Latest Decisions']);
+    expect(order).toEqual([
+      'Progress',
+      'Projects',
+      'Scheduler',
+      'Coordination Sessions',
+      'Resources',
+      'Latest Decisions',
+    ]);
     expect(markup).toContain('2 of 10');
     expect(markup).toContain('5 (2 for you)');
     expect(markup).toContain('$12.40 so far · partial: 1 work item has no cost (no usage recorded)');
     expect(markup).toContain('cost unknown (no usage recorded)');
     expect(markup).not.toContain('$0.00');
+  });
+
+  it('HS2-65AD6J says whether a running card’s integrator runs and lists each project’s coordination sessions', () => {
+    const now = demoTimeline('running').now_ms;
+    // A card with a run: Integration after Run, with the home site when the card's site is another one.
+    const running = inspector('step-3', {
+      details: {
+        loading: false,
+        integrator: {
+          target_id: 'web',
+          role: 'integrator',
+          standing: 'not_started',
+          reason: 'integrator_not_started',
+          detail: 'policy_opt_out',
+        },
+      },
+    });
+    const order = [...running.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
+    expect(order.indexOf('Integration')).toBe(order.indexOf('Run') + 1);
+    expect(running).toContain('Not started');
+    expect(running).toContain('integrates by hand');
+    expect(running).toContain('Home Site');
+    // Not read, or a card without a run: no Integration section.
+    expect(inspector('step-3', { details: { loading: false } })).not.toContain('"Integration"');
+    expect(
+      inspector('step-8', {
+        details: { loading: false, integrator: { target_id: 'web', role: 'integrator', standing: 'none' } },
+      }),
+    ).not.toContain('"Integration"');
+    const overview = (roles?: object[]) =>
+      String(
+        OrchestrationInspector({ timeline: demoTimeline('running'), clock: demoClock, overview: { roles } as never }),
+      );
+    const listed = overview([
+      { target_id: 'api', role: 'integrator', standing: 'keep', reason: 'integrator_kept', detail: 'ci_pending' },
+      {
+        target_id: 'web',
+        role: 'dispatcher',
+        standing: 'not_started',
+        reason: 'dispatcher_unavailable',
+        detail: 'replacements_exhausted',
+        retry_at_ms: now,
+      },
+    ]);
+    expect(listed).toContain('API Integrator');
+    expect(listed).toContain('Running: an integrated commit waits on its CI gate');
+    expect(listed).toContain('Web Dispatcher');
+    expect(listed).toContain('Unavailable: the dispatchers the scheduler started did not take up their role');
+    expect(listed).toContain('looked at again by 14:00');
+    expect(overview([])).toContain('No integrator runs now, and no coordination session waits to start.');
+    expect(overview()).toContain('Reading whether each project’s integrator runs…');
   });
 
   it('HS2-77SRHC lists the whole log newest first with Load Earlier while older decisions remain', () => {

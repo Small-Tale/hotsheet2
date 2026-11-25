@@ -4,10 +4,17 @@ import {
   chosenSite,
   decisionText,
   explanationRows,
+  integratorRows,
   lastPassText,
   latestDecisions,
   parseDecisionPage,
   parseExplanation,
+  parseIntegratorStanding,
+  parseRoleStandings,
+  roleReasonPhrase,
+  roleStandingRows,
+  type RoleStandingView,
+  roleStatusText,
   type SchedulerDecision,
   schedulerReasonText,
   siteLabel,
@@ -223,5 +230,271 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
     });
     // A site the timeline does not list cannot be named, so the card's own site stays.
     expect(chosenSite(step, timeline, { standing: 'start', reason: 'ready_work', site: 'gone' }).label).toBe('Web');
+  });
+});
+
+describe('why integration is or is not running (HS2-65AD6J)', () => {
+  const standing = (rest: Partial<RoleStandingView>): RoleStandingView => ({
+    target_id: 'api',
+    role: 'integrator',
+    standing: 'none',
+    ...rest,
+  });
+  const why = (rest: Partial<RoleStandingView>) => roleReasonPhrase(standing(rest));
+
+  it('names each standing, with a dry run saying it would act', () => {
+    expect(roleStatusText(standing({ standing: 'start' }))).toBe('Starts on the next pass');
+    expect(roleStatusText(standing({ standing: 'start', mode: 'dry_run' }))).toBe(
+      'Would start on the next pass (dry run)',
+    );
+    expect(roleStatusText(standing({ standing: 'keep', mode: 'dry_run' }))).toBe('Running');
+    expect(roleStatusText(standing({ standing: 'wind_down' }))).toBe('Winding down');
+    expect(roleStatusText(standing({ standing: 'wind_down', mode: 'dry_run' }))).toBe('Would wind down (dry run)');
+    expect(roleStatusText(standing({ standing: 'not_started', reason: 'integrator_not_started' }))).toBe('Not started');
+    expect(roleStatusText(standing({ standing: 'not_started', reason: 'integrator_unavailable' }))).toBe('Unavailable');
+    expect(roleStatusText(standing({ standing: 'not_started', reason: 'dispatcher_unavailable' }))).toBe('Unavailable');
+    expect(roleStatusText(standing({ standing: 'none' }))).toBe('Not running');
+    expect(roleStatusText(standing({ standing: 'brand_new_standing' }))).toBe('Brand new standing');
+  });
+
+  it('says why an integrator starts, is kept or winds down', () => {
+    expect(why({ standing: 'none' })).toBe('no handoff waits to be integrated');
+    expect(why({ standing: 'start', reason: 'integrator_started', detail: 'handoff_pending' })).toBe(
+      'a handoff waits to be integrated',
+    );
+    expect(why({ standing: 'keep', reason: 'integrator_kept', detail: 'queue' })).toBe(
+      'handoffs wait to be integrated',
+    );
+    expect(why({ standing: 'keep', reason: 'integrator_kept', detail: 'ci_pending' })).toBe(
+      'an integrated commit waits on its CI gate',
+    );
+    expect(why({ standing: 'keep', reason: 'integrator_kept', detail: 'worker_run' })).toBe(
+      'a worker it serves still has a run',
+    );
+    expect(why({ standing: 'keep', reason: 'integrator_kept', detail: 'new_need' })).toBe('its project still needs it');
+    expect(why({ standing: 'wind_down', reason: 'integrator_wound_down', detail: 'idle' })).toBe(
+      'nothing has needed it for a while',
+    );
+    expect(why({ standing: 'keep', reason: 'awaiting_safe_point' })).toBe('it stops at its next safe point');
+    expect(why({ standing: 'keep', reason: 'idle_grace' })).toContain('kept a while');
+    expect(why({ standing: 'wind_down', reason: 'role_prompt_failed', detail: 'integrator' })).toContain(
+      'role prompt failed',
+    );
+    expect(why({ standing: 'wind_down', reason: 'never_joined', detail: 'integrator' })).toContain('in time');
+    expect(why({ standing: 'keep', reason: 'never_joined', detail: 'replacements_exhausted' })).toContain(
+      'left for a person',
+    );
+    expect(why({ standing: 'keep' })).toBeUndefined();
+  });
+
+  it('says why an integrator or dispatcher is not started, each detail in words', () => {
+    const notStarted = (detail?: string) => why({ standing: 'not_started', reason: 'integrator_not_started', detail });
+    expect(notStarted('target_cap')).toBe('the project’s session limit is reached');
+    expect(notStarted('refusal_backoff')).toBe('its machine refused recently and is asked again later');
+    expect(notStarted('cooldown')).toBe('its project is cooling down after a recent start');
+    expect(notStarted('target_unavailable')).toBe('its project could not be reached');
+    expect(notStarted('no_tool_available')).toBe('no AI tool account can take it now');
+    expect(notStarted('machine_refused')).toBe('its machine has no room');
+    expect(notStarted('target_disabled')).toBe('its project is turned off in the policy');
+    expect(notStarted('policy_opt_out')).toContain('integrates by hand');
+    expect(notStarted(undefined)).toBe('this pass could not start one');
+    expect(notStarted('brand_new_detail')).toBe('brand new detail');
+    expect(why({ standing: 'not_started', reason: 'integrator_unavailable', detail: 'replacements_exhausted' })).toBe(
+      'the integrators the scheduler started did not take up their role, so none starts for a while',
+    );
+    expect(
+      why({
+        role: 'dispatcher',
+        standing: 'not_started',
+        reason: 'dispatcher_unavailable',
+        detail: 'replacements_exhausted',
+      }),
+    ).toBe('the dispatchers the scheduler started did not take up their role, so none starts for a while');
+    expect(why({ standing: 'not_started', reason: 'brand_new_reason' })).toBe('brand new reason');
+    // No code ever reaches a person as a code.
+    for (const detail of ['target_cap', 'cooldown', 'policy_opt_out', 'target_disabled', 'machine_refused'])
+      expect(notStarted(detail)).not.toContain('_');
+  });
+
+  it('lists a running card’s Integration rows, naming the home site only when it is another site', () => {
+    expect(
+      integratorRows(
+        standing({ standing: 'keep', reason: 'integrator_kept', detail: 'queue', session_id: 'sched-role-1' }),
+        clock,
+        timeline,
+        'api',
+      ),
+    ).toEqual([
+      { label: 'Integrator', value: 'Running' },
+      { label: 'Why', value: 'Handoffs wait to be integrated' },
+      { label: 'Session', value: 'sched-role-1' },
+    ]);
+    expect(
+      integratorRows(
+        standing({ standing: 'not_started', reason: 'integrator_not_started', detail: 'cooldown', retry_at_ms: 7 }),
+        clock,
+        timeline,
+        'web',
+      ),
+    ).toEqual([
+      { label: 'Integrator', value: 'Not started' },
+      { label: 'Why', value: 'Its project is cooling down after a recent start' },
+      { label: 'Home Site', value: 'API' },
+      { label: 'Next', value: 'Looked at again by t7' },
+    ]);
+    expect(integratorRows(standing({}), clock)).toEqual([
+      { label: 'Integrator', value: 'Not running' },
+      { label: 'Why', value: 'No handoff waits to be integrated' },
+    ]);
+  });
+
+  it('lists the overview’s Coordination Sessions rows per project role session', () => {
+    expect(
+      roleStandingRows(
+        [
+          standing({ standing: 'start', reason: 'integrator_started', detail: 'handoff_pending', mode: 'dry_run' }),
+          standing({
+            target_id: 'web',
+            role: 'dispatcher',
+            standing: 'not_started',
+            reason: 'dispatcher_unavailable',
+            detail: 'replacements_exhausted',
+            retry_at_ms: 3,
+          }),
+          standing({ target_id: 'gone-site-123456', standing: 'keep' }),
+        ],
+        clock,
+        timeline,
+      ),
+    ).toEqual([
+      { label: 'API Integrator', value: 'Would start on the next pass (dry run): a handoff waits to be integrated' },
+      {
+        label: 'Web Dispatcher',
+        value:
+          'Unavailable: the dispatchers the scheduler started did not take up their role, so none starts for a while; looked at again by t3',
+      },
+      { label: 'site 123456 Integrator', value: 'Running' },
+    ]);
+  });
+
+  it('reads `scheduler explain`’s integrator, leaving out what is not that shape', () => {
+    expect(
+      parseIntegratorStanding({
+        standing: 'running',
+        reason: 'in_progress',
+        mode: 'applied',
+        integrator: {
+          target_id: 'api',
+          standing: 'keep',
+          reason: 'integrator_kept',
+          detail: 'ci_pending',
+          session_id: 'sched-role-integrator-api',
+          retry_at_ms: 9,
+        },
+      }),
+    ).toEqual({
+      target_id: 'api',
+      role: 'integrator',
+      standing: 'keep',
+      reason: 'integrator_kept',
+      detail: 'ci_pending',
+      session_id: 'sched-role-integrator-api',
+      retry_at_ms: 9,
+      mode: 'applied',
+    });
+    expect(
+      parseIntegratorStanding({ standing: 'running', integrator: { target_id: 'api', standing: 'none' } }),
+    ).toEqual({
+      target_id: 'api',
+      role: 'integrator',
+      standing: 'none',
+      reason: undefined,
+      detail: undefined,
+      session_id: undefined,
+      retry_at_ms: undefined,
+      mode: undefined,
+    });
+    expect(parseIntegratorStanding(undefined)).toBeUndefined();
+    expect(parseIntegratorStanding({ standing: 'running' })).toBeUndefined();
+    expect(parseIntegratorStanding({ integrator: { standing: 'keep' } })).toBeUndefined();
+    expect(
+      parseIntegratorStanding({ integrator: { target_id: 'api', standing: 'keep', retry_at_ms: -1 } })?.retry_at_ms,
+    ).toBeUndefined();
+  });
+
+  it('reads `scheduler plan`’s integrator placements and roles not started, leaving out malformed entries', () => {
+    expect(
+      parseRoleStandings({
+        mode: 'dry_run',
+        placements: [
+          {
+            action: 'start',
+            target_id: 'api',
+            role: 'integrator',
+            reason: 'integrator_started',
+            detail: 'handoff_pending',
+          },
+          { action: 'keep', target_id: 'web', role: 'dispatcher', reason: 'role_needed' },
+          { action: 'start', target_id: 'docs', reason: 'ready_work' },
+          { target_id: 'docs', role: 'integrator' },
+        ],
+        roles_unplaced: [
+          { target_id: 'web', role: 'integrator', reason: 'integrator_not_started', detail: 'policy_opt_out' },
+          { target_id: 'docs', role: 'dispatcher', reason: 'dispatcher_unavailable', retry_at_ms: 5 },
+          { target_id: 'docs', reason: 'integrator_unavailable' },
+          'not an entry',
+        ],
+      }),
+    ).toEqual([
+      {
+        target_id: 'api',
+        role: 'integrator',
+        standing: 'start',
+        reason: 'integrator_started',
+        detail: 'handoff_pending',
+        session_id: undefined,
+        retry_at_ms: undefined,
+        mode: 'dry_run',
+      },
+      {
+        target_id: 'web',
+        role: 'integrator',
+        standing: 'not_started',
+        reason: 'integrator_not_started',
+        detail: 'policy_opt_out',
+        retry_at_ms: undefined,
+        mode: 'dry_run',
+      },
+      {
+        target_id: 'docs',
+        role: 'dispatcher',
+        standing: 'not_started',
+        reason: 'dispatcher_unavailable',
+        detail: undefined,
+        retry_at_ms: 5,
+        mode: 'dry_run',
+      },
+    ]);
+    expect(parseRoleStandings(undefined)).toEqual([]);
+    expect(parseRoleStandings({ placements: 'x', roles_unplaced: {} })).toEqual([]);
+  });
+
+  it('words a `role_unplaced` decision of the log', () => {
+    const role = (rest: Partial<SchedulerDecision>) =>
+      decisionText(decision({ kind: 'role_unplaced', ...rest }), timeline);
+    expect(role({ target_id: 'api', reason: 'integrator_not_started', detail: 'target_cap' })).toBe(
+      'Did not start the integrator of API: the project’s session limit is reached',
+    );
+    expect(role({ target_id: 'web', reason: 'dispatcher_unavailable', detail: 'replacements_exhausted' })).toBe(
+      'Did not start the dispatcher of Web: the dispatchers the scheduler started did not take up their role, so none starts for a while',
+    );
+    expect(role({})).toBe('Did not start the integrator of a project');
+    expect(
+      parseDecisionPage({
+        entries: [
+          { seq: 2, record: { at_ms: 1, kind: 'role_unplaced', target_id: 'api', reason: 'integrator_unavailable' } },
+        ],
+      }).entries[0].target_id,
+    ).toBe('api');
   });
 });

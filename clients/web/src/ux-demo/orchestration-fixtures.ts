@@ -4,7 +4,7 @@
  * Every name, id and time is invented; nothing is read from a server or a real project.
  */
 import type { CostTotals, ProgressSummaryView } from '../orchestration-progress';
-import type { SchedulerDecisionPage } from '../orchestration-scheduler';
+import type { RoleStandingView, SchedulerDecisionPage } from '../orchestration-scheduler';
 import type {
   OrchestrationTimeline,
   TimelineItem,
@@ -361,6 +361,72 @@ export function demoContention() {
       state: 'held',
       expires_at_ms: DEMO_NOW + 40 * MINUTE,
       waiting: ['step-8'],
+    },
+  ];
+}
+
+/**
+ * HS2-65AD6J: the API project's integrator in each standing `scheduler explain` gives a running card, keyed by
+ * the demo's Integrator setting. Unavailable is `integrator_unavailable` after its replacements were used up.
+ */
+export function demoIntegrator(state: string): RoleStandingView | undefined {
+  const api = { target_id: 'api', role: 'integrator' };
+  switch (state) {
+    case 'start':
+      return { ...api, standing: 'start', reason: 'integrator_started', detail: 'handoff_pending' };
+    case 'keep':
+      return {
+        ...api,
+        standing: 'keep',
+        reason: 'integrator_kept',
+        detail: 'ci_pending',
+        session_id: 'sched-role-integrator-api',
+      };
+    case 'wind_down':
+      return { ...api, standing: 'wind_down', reason: 'integrator_wound_down', detail: 'idle' };
+    case 'not_started':
+      return {
+        ...api,
+        standing: 'not_started',
+        reason: 'integrator_not_started',
+        detail: 'target_cap',
+        retry_at_ms: DEMO_NOW + 10 * MINUTE,
+      };
+    case 'opt_out':
+      return { ...api, standing: 'not_started', reason: 'integrator_not_started', detail: 'policy_opt_out' };
+    case 'unavailable':
+      return {
+        ...api,
+        standing: 'not_started',
+        reason: 'integrator_unavailable',
+        detail: 'replacements_exhausted',
+        retry_at_ms: DEMO_NOW + 60 * MINUTE,
+      };
+    case 'none':
+      return { ...api, standing: 'none' };
+    default:
+      return undefined;
+  }
+}
+
+/** HS2-65AD6J: the overview's coordination sessions: API integrates, Web's dispatchers never joined. */
+export function demoRoles(): RoleStandingView[] {
+  return [
+    { target_id: 'api', role: 'integrator', standing: 'keep', reason: 'integrator_kept', detail: 'queue' },
+    {
+      target_id: 'web',
+      role: 'dispatcher',
+      standing: 'not_started',
+      reason: 'dispatcher_unavailable',
+      detail: 'replacements_exhausted',
+      retry_at_ms: DEMO_NOW + 60 * MINUTE,
+    },
+    {
+      target_id: 'docs',
+      role: 'integrator',
+      standing: 'not_started',
+      reason: 'integrator_not_started',
+      detail: 'policy_opt_out',
     },
   ];
 }

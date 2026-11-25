@@ -23,7 +23,12 @@ import {
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { BuiltAheadView } from '../orchestration-built-ahead';
 import { reconciliationRows, type RunReconciliation } from '../orchestration-run-checks';
-import { chosenSite, type SchedulerExplanation } from '../orchestration-scheduler';
+import {
+  chosenSite,
+  integratorRows,
+  type RoleStandingView,
+  type SchedulerExplanation,
+} from '../orchestration-scheduler';
 import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import {
   cardTime,
@@ -54,6 +59,8 @@ export interface OrchestrationInspectorDetails {
   builtAhead?: BuiltAheadView;
   /** HS2-77SRHC: `scheduler explain` for a ready card. */
   explanation?: SchedulerExplanation;
+  /** HS2-65AD6J: for a card with a run, its project's integrator in a fresh pass (`scheduler explain`). */
+  integrator?: RoleStandingView;
   /** HS2-9XJEZC: the card's validation steps with their latest evidence. */
   validations?: readonly ValidationStepView[];
   /** HS2-9XJEZC: Run Validation requests that wait on a person's answer. */
@@ -264,6 +271,29 @@ function RunSection({
   );
 }
 
+/** HS2-65AD6J: whether the project's integrator runs for the card's work once it is handed off, and why. */
+function IntegrationSection({
+  item,
+  timeline,
+  standing,
+  clock,
+}: {
+  item: TimelineItem;
+  timeline: OrchestrationTimeline;
+  standing: RoleStandingView;
+  clock: ClockFormat;
+}) {
+  return (
+    <OrchestrationInspectorSection label="Integration">
+      <ValueTable label="Integration" density="compact" stackBelow="narrow">
+        {integratorRows(standing, clock, timeline, item.site_id ?? item.target.target_id).map((row) => (
+          <ValueTableRow label={row.label} value={row.value} />
+        ))}
+      </ValueTable>
+    </OrchestrationInspectorSection>
+  );
+}
+
 function stateDetail(
   item: TimelineItem,
   timeline: OrchestrationTimeline,
@@ -405,7 +435,8 @@ function Evidence({
 /**
  * HS2-J89JC7: the inspector of one Orchestration view card: its goal, where it runs, its run with the
  * person's controls, what it waits on with a link to the request or the goal ticket's decision, and
- * the run's gates, validation, and events.
+ * the run's gates, validation, and events. HS2-65AD6J: a card with a run says whether its project's
+ * integrator runs for it, and why.
  */
 export function OrchestrationInspector({
   item,
@@ -449,6 +480,9 @@ export function OrchestrationInspector({
         <OrchestrationBuiltAheadSection work={details?.builtAhead} timeline={timeline} busy={busy} />
       ) : undefined}
       {item.run && <RunSection item={item} busy={busy} clock={clock} details={details} />}
+      {item.run && details?.integrator ? (
+        <IntegrationSection item={item} timeline={timeline} standing={details.integrator} clock={clock} />
+      ) : undefined}
       {item.run && details && <Evidence details={details} clock={clock} busy={busy} />}
     </List>
   );

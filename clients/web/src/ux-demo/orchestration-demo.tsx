@@ -15,7 +15,15 @@ import type { TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
-import { demoClock, demoContention, demoDecisions, demoSummary, demoTimeline } from './orchestration-fixtures';
+import {
+  demoClock,
+  demoContention,
+  demoDecisions,
+  demoIntegrator,
+  demoRoles,
+  demoSummary,
+  demoTimeline,
+} from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
 
 /** HS2-J89JC7: the Orchestration view's production components with synthetic timelines. */
@@ -30,6 +38,8 @@ export const orchestrationDemoSettings = {
   defaultGoal: signal(false),
   /** HS2-R2N33M: placement runs because the policy leaves it Auto and a plan exists. */
   autoPlacement: signal(false),
+  /** HS2-65AD6J: how the project's integrator stands for a card with a run; '' shows no Integration section. */
+  integrator: signal('keep'),
   collapsed: signal<string[]>([]),
 };
 
@@ -52,6 +62,17 @@ const PLANNING = [
   { value: 'asked', label: 'Asked a Question' },
 ];
 
+const INTEGRATOR = [
+  { value: '', label: 'Not Read' },
+  { value: 'start', label: 'Starts' },
+  { value: 'keep', label: 'Running' },
+  { value: 'wind_down', label: 'Winding Down' },
+  { value: 'not_started', label: 'Not Started: Session Limit' },
+  { value: 'opt_out', label: 'Not Started: Integrates by Hand' },
+  { value: 'unavailable', label: 'Unavailable' },
+  { value: 'none', label: 'Not Needed' },
+];
+
 const SELECTIONS = [
   { value: 'step-3', label: 'API-12 Running' },
   { value: 'step-5', label: 'DOC-7 Provisional' },
@@ -71,10 +92,16 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.busy.value = false;
   settings.defaultGoal.value = false;
   settings.autoPlacement.value = false;
+  settings.integrator.value = 'keep';
   settings.collapsed.value = [];
   if (root)
     syncSettingsControls(root, 'orchestration', {
-      values: { phase: settings.phase.value, selected: settings.selected.value, planning: settings.planning.value },
+      values: {
+        phase: settings.phase.value,
+        selected: settings.selected.value,
+        planning: settings.planning.value,
+        integrator: settings.integrator.value,
+      },
       checked: {
         'propose-available': settings.proposeAvailable.value,
         busy: settings.busy.value,
@@ -224,6 +251,8 @@ export function OrchestrationInspectorDemo() {
               { step_id: 'e2e-login', check: 'profile', state: 'skipped', reason: 'prerequisite_not_passed' },
             ],
             runRead: true,
+            // HS2-65AD6J: the project's integrator for a card with a run.
+            integrator: demoIntegrator(orchestrationDemoSettings.integrator.value),
             // HS2-77SRHC, HS2-5GRXFN: DOC-9 is ready and waits for the VM someone holds.
             explanation:
               orchestrationDemoSettings.selected.value === 'step-8'
@@ -279,7 +308,12 @@ export function OrchestrationInspectorDemo() {
           timeline={timeline}
           projectName="Launch"
           clock={demoClock}
-          overview={{ decisions: demoDecisions(), contention: demoContention(), summary: demoSummary() }}
+          overview={{
+            decisions: demoDecisions(),
+            contention: demoContention(),
+            summary: demoSummary(),
+            roles: demoRoles(),
+          }}
         />
       </CatalogExample>
       <CatalogExample label="No Timeline Yet" viewport={{ width: 'compact', height: 'app', frame: 'solid' }}>
@@ -306,6 +340,7 @@ export function OrchestrationDemoSettings() {
       <Select name="selected" label="Selected Card" value={settings.selected.value} choices={SELECTIONS} />
       <Checkbox name="propose-available" checked={settings.proposeAvailable.value} label="Planner Available" />
       <Select name="planning" label="Planning Session" value={settings.planning.value} choices={PLANNING} />
+      <Select name="integrator" label="Integrator" value={settings.integrator.value} choices={INTEGRATOR} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />
@@ -328,6 +363,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'selected') settings.selected.value = control.value;
       if (name === 'propose-available') settings.proposeAvailable.value = control.checked;
       if (name === 'planning') settings.planning.value = control.value;
+      if (name === 'integrator') settings.integrator.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
       if (name === 'auto-placement') settings.autoPlacement.value = control.checked;

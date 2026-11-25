@@ -21,7 +21,14 @@ import { describeRefusal } from '../orchestration-refusals';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseContention, type ResourceContentionView } from '../orchestration-resources';
 import { parseRunReconciliation } from '../orchestration-run-checks';
-import { parseDecisionPage, parseExplanation, type SchedulerDecisionPage } from '../orchestration-scheduler';
+import {
+  parseDecisionPage,
+  parseExplanation,
+  parseIntegratorStanding,
+  parseRoleStandings,
+  type RoleStandingView,
+  type SchedulerDecisionPage,
+} from '../orchestration-scheduler';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import {
@@ -376,6 +383,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     | {
         decisions?: SchedulerDecisionPage;
         contention?: ResourceContentionView[];
+        roles?: RoleStandingView[];
         summary?: ProgressSummaryView;
         error?: string;
       }
@@ -678,12 +686,14 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
     details.value = { ...(details.value ?? {}), loading: true };
     const client = clientFor(current);
-    const [gates, events, validations, record, readiness] = await Promise.allSettled([
+    const [gates, events, validations, record, readiness, explained] = await Promise.allSettled([
       client.orchestrationRunGates(current.id, run.run_id),
       client.orchestrationRunEvents(current.id, run.run_id),
       client.orchestrationValidations(current.id, item.goal),
       client.orchestrationRun(current.id, run.run_id),
       client.orchestrationReadiness(current.id, item.step_id),
+      // HS2-65AD6J: whether the project's integrator runs for the work, read with the run's records.
+      client.orchestrationSchedulerExplain(current.id, item.step_id, dependencies.personId()),
     ]);
     if (request !== detailsRequest) return;
     const value = <T>(result: PromiseSettledResult<T>) => (result.status === 'fulfilled' ? result.value : undefined);
@@ -701,6 +711,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         value(readiness),
       ),
       error: failed ? 'Some of this run’s records could not be read.' : undefined,
+      integrator: parseIntegratorStanding(value(explained)),
       pendingValidations: pending,
     };
   }
@@ -903,6 +914,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     overview.value = {
       decisions: page.status === 'fulfilled' ? parseDecisionPage(page.value) : overview.value?.decisions,
       contention: plan.status === 'fulfilled' ? parseContention(plan.value) : overview.value?.contention,
+      // HS2-65AD6J: each project's integrator and the role sessions this pass does not start.
+      roles: plan.status === 'fulfilled' ? parseRoleStandings(plan.value) : overview.value?.roles,
       summary: summary.status === 'fulfilled' ? parseProgressSummary(summary.value) : overview.value?.summary,
       error:
         page.status === 'rejected' || plan.status === 'rejected' || summary.status === 'rejected'

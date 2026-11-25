@@ -16,6 +16,8 @@ export interface SchedulerDecision {
   mode: string;
   kind: string;
   step_id?: string;
+  /** HS2-65AD6J: the site a `role_unplaced` decision is about. */
+  target_id?: string;
   tool?: string;
   reason?: string;
   detail?: string;
@@ -199,6 +201,13 @@ export function decisionText(decision: SchedulerDecision, timeline: Orchestratio
       return `${step}: ${words(decision.outcome ?? decision.reason ?? 'assignment')}`;
     case 'reconcile':
       return `Reconciled ${step}: ${words(decision.outcome ?? decision.reason ?? 'acted')}`;
+    case 'role_unplaced': {
+      // HS2-65AD6J: a project's integrator or dispatcher this pass does not start, and why.
+      const role = decision.reason === 'dispatcher_unavailable' ? 'dispatcher' : 'integrator';
+      const site = decision.target_id ? siteLabel(decision.target_id, timeline) : 'a project';
+      const why = roleReasonPhrase({ standing: 'not_started', reason: decision.reason, detail: decision.detail });
+      return `Did not start the ${role} of ${site}${why ? `: ${why}` : ''}`;
+    }
     default:
       return `${sentence(words(decision.kind))} ${step}`;
   }
@@ -239,6 +248,7 @@ export function parseDecisionPage(value: Record<string, unknown>): SchedulerDeci
           mode: text(record.mode) ?? 'applied',
           kind: record.kind,
           step_id: text(record.step_id),
+          target_id: text(record.target_id),
           tool: text(record.tool),
           reason: text(record.reason),
           detail: text(record.detail),
@@ -273,6 +283,209 @@ export function parseExplanation(value: Record<string, unknown> | undefined): Sc
         : [],
     ),
   };
+}
+
+/*
+ * HS2-65AD6J: why integration is or is not running (docs/26 §26.30, "Explainability"). A running card's
+ * Integration section reads `scheduler explain`'s `integrator`, the project's integrator in a fresh pass; the
+ * overview's Coordination Sessions section reads `scheduler plan`: each home's integrator placement and every
+ * role session the pass does not start (`roles_unplaced`).
+ */
+
+/** A project's integrator, or a role session a project waits on, as one pass decides it. */
+export interface RoleStandingView {
+  /** The project's home site, where its role sessions start. */
+  target_id: string;
+  /** `integrator` or `dispatcher`. */
+  role: string;
+  /** `start`, `keep`, `wind_down`, `not_started` or `none`; another code reads as its words. */
+  standing: string;
+  reason?: string;
+  detail?: string;
+  session_id?: string;
+  retry_at_ms?: number;
+  /** `dry_run` when a start or wind-down shown here would not be applied by a pass. */
+  mode?: string;
+}
+
+const textField = (field: unknown) => (typeof field === 'string' ? field : undefined);
+const timeField = (field: unknown) => (typeof field === 'number' && field >= 0 ? field : undefined);
+
+/** Read `scheduler explain`'s `integrator`, or undefined when the explanation has none or it is not that shape. */
+export function parseIntegratorStanding(value: Record<string, unknown> | undefined): RoleStandingView | undefined {
+  const found = value?.integrator as Record<string, unknown> | undefined;
+  if (!found || typeof found.target_id !== 'string' || typeof found.standing !== 'string') return undefined;
+  return {
+    target_id: found.target_id,
+    role: 'integrator',
+    standing: found.standing,
+    reason: textField(found.reason),
+    detail: textField(found.detail),
+    session_id: textField(found.session_id),
+    retry_at_ms: timeField(found.retry_at_ms),
+    mode: textField(value?.mode),
+  };
+}
+
+/**
+ * Read `scheduler plan`'s role sessions leniently: each home's integrator placement (start, keep or wind
+ * down), then every role session the pass does not start, as the server's `IntegratorStanding::of` reads
+ * them. A malformed entry is left out.
+ */
+export function parseRoleStandings(plan: Record<string, unknown> | undefined): RoleStandingView[] {
+  const list = (field: unknown) => (Array.isArray(field) ? (field as Array<Record<string, unknown>>) : []);
+  const mode = textField(plan?.mode);
+  const placed = list(plan?.placements).flatMap((placement) =>
+    placement.role === 'integrator' && typeof placement.target_id === 'string' && typeof placement.action === 'string'
+      ? [
+          {
+            target_id: placement.target_id,
+            role: 'integrator',
+            standing: placement.action,
+            reason: textField(placement.reason),
+            detail: textField(placement.detail),
+            session_id: textField(placement.session_id),
+            retry_at_ms: timeField(placement.retry_at_ms),
+            mode,
+          },
+        ]
+      : [],
+  );
+  const unplaced = list(plan?.roles_unplaced).flatMap((item) =>
+    typeof item.target_id === 'string' && typeof item.role === 'string' && typeof item.reason === 'string'
+      ? [
+          {
+            target_id: item.target_id,
+            role: item.role,
+            standing: 'not_started',
+            reason: item.reason,
+            detail: textField(item.detail),
+            retry_at_ms: timeField(item.retry_at_ms),
+            mode,
+          },
+        ]
+      : [],
+  );
+  return [...placed, ...unplaced];
+}
+
+/** What a role session is doing, as a short status. */
+export function roleStatusText(standing: Pick<RoleStandingView, 'standing' | 'reason' | 'mode'>): string {
+  const dry = standing.mode === 'dry_run';
+  switch (standing.standing) {
+    case 'start':
+      return dry ? 'Would start on the next pass (dry run)' : 'Starts on the next pass';
+    case 'keep':
+      return 'Running';
+    case 'wind_down':
+      return dry ? 'Would wind down (dry run)' : 'Winding down';
+    case 'not_started':
+      return standing.reason?.endsWith('_unavailable') ? 'Unavailable' : 'Not started';
+    case 'none':
+      return 'Not running';
+    default:
+      return sentence(words(standing.standing));
+  }
+}
+
+/** Why an integrator is still needed (`integrator_kept`) or was started (`integrator_started`). */
+const NEEDS: Readonly<Record<string, string>> = {
+  handoff_pending: 'a handoff waits to be integrated',
+  queue: 'handoffs wait to be integrated',
+  ci_pending: 'an integrated commit waits on its CI gate',
+  worker_run: 'a worker it serves still has a run',
+};
+
+/** Why a role session that runs is kept or wound down, for the placement reasons that are not its role's own. */
+const PLACEMENTS: Readonly<Record<string, string>> = {
+  busy: 'it is busy',
+  idle_grace: 'it is idle and kept a while in case work arrives',
+  cooldown: 'its project started a session too recently to wind one down',
+  awaiting_safe_point: 'it stops at its next safe point',
+  winding_down: 'a wind-down was already asked for',
+  human_takeover: 'a person took it over',
+  not_owned: 'another orchestrator started it',
+  idle: 'nothing has needed it for a while',
+  policy_not_permitted: 'the policy no longer allows it',
+  over_cap: 'its project runs more sessions than its limit allows',
+  role_prompt_failed: 'its role prompt failed, so a new one starts on a later pass',
+  never_joined: 'it did not join the project’s pool in time, so a new one starts on a later pass',
+  run_cancelled: 'a person cancelled the run it works',
+  role_needed: 'its project still needs it',
+};
+
+/** Why a role session is not started (`integrator_not_started`'s detail), beyond the scheduler's own reasons. */
+const NOT_STARTED: Readonly<Record<string, string>> = {
+  target_disabled: 'its project is turned off in the policy',
+  policy_opt_out: 'the project’s Coordination Sessions leave the integrator out, so it integrates by hand',
+};
+
+const unavailable = (role: string) =>
+  `the ${role}s the scheduler started did not take up their role, so none starts for a while`;
+
+/** Why a role session stands as it does, as a phrase; undefined when the scheduler gives no reason. */
+export function roleReasonPhrase(standing: Pick<RoleStandingView, 'standing' | 'reason' | 'detail'>) {
+  const { reason, detail } = standing;
+  if (standing.standing === 'none') return 'no handoff waits to be integrated';
+  switch (reason) {
+    case undefined:
+      return undefined;
+    case 'integrator_started':
+    case 'integrator_kept':
+      return (detail && NEEDS[detail]) || 'its project still needs it';
+    case 'integrator_wound_down':
+      return PLACEMENTS.idle;
+    case 'integrator_not_started':
+      return detail ? (NOT_STARTED[detail] ?? schedulerReasonText(detail)) : 'this pass could not start one';
+    case 'integrator_unavailable':
+      return unavailable('integrator');
+    case 'dispatcher_unavailable':
+      return unavailable('dispatcher');
+    case 'never_joined':
+      // HS2-NPTKS8: kept once its replacements are used up; a person looks at it.
+      return detail === 'replacements_exhausted'
+        ? 'it did not join the project’s pool and its replacements are used up, so it is left for a person'
+        : PLACEMENTS.never_joined;
+    default:
+      return PLACEMENTS[reason] ?? schedulerReasonText(reason);
+  }
+}
+
+/**
+ * The Integration rows of a running card: the integrator's status, why, the home site when it is not the
+ * card's own, its session, and when the scheduler looks again.
+ */
+export function integratorRows(
+  standing: RoleStandingView,
+  clock: ClockFormat,
+  timeline?: OrchestrationTimeline,
+  cardSite?: string,
+): Array<{ label: string; value: string }> {
+  const rows = [{ label: 'Integrator', value: roleStatusText(standing) }];
+  const why = roleReasonPhrase(standing);
+  if (why) rows.push({ label: 'Why', value: sentence(why) });
+  if (cardSite !== undefined && standing.target_id !== cardSite)
+    rows.push({ label: 'Home Site', value: siteLabel(standing.target_id, timeline) });
+  if (standing.session_id) rows.push({ label: 'Session', value: standing.session_id });
+  if (standing.retry_at_ms !== undefined)
+    rows.push({ label: 'Next', value: `Looked at again by ${clock(standing.retry_at_ms)}` });
+  return rows;
+}
+
+/** The overview's Coordination Sessions rows: one per project role session, "Web Integrator: Not started: …". */
+export function roleStandingRows(
+  standings: readonly RoleStandingView[],
+  clock: ClockFormat,
+  timeline?: OrchestrationTimeline,
+): Array<{ label: string; value: string }> {
+  return standings.map((standing) => {
+    const why = roleReasonPhrase(standing);
+    const next = standing.retry_at_ms === undefined ? '' : `; looked at again by ${clock(standing.retry_at_ms)}`;
+    return {
+      label: `${siteLabel(standing.target_id, timeline)} ${sentence(words(standing.role))}`,
+      value: `${roleStatusText(standing)}${why ? `: ${why}` : ''}${next}`,
+    };
+  });
 }
 
 /** HS2-PR984R: the site Where It Runs names, and the step's own site when the scheduler chose another. */

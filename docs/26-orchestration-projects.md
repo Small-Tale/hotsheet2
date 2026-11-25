@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.31, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08), provisional assignments on Workers view cards (HS2-N8H97X), a plan conflict or damaged plan named with its steps and the person's resolution (HS2-F1BKQ0),
+> inspector's Plan section (§26.31, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08), a running card's Integration and the overview's Coordination Sessions (HS2-65AD6J), provisional assignments on Workers view cards (HS2-N8H97X), a plan conflict or damaged plan named with its steps and the person's resolution (HS2-F1BKQ0),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -6571,7 +6571,10 @@ detail, retry_at_ms}` with reason `integrator_not_started` and detail `target_ca
   `scheduler_explain` of a running step adds `integrator`: the project's integrator in
   a fresh pass (`standing` `start`, `keep`, `wind_down`, `not_started` or `none`, with
   reason, detail, session and retry time). An unknown pool reports nothing: nothing
-  starts on a guess.
+  starts on a guess. The Orchestration view shows both (§26.31, "Integration and
+  coordination sessions", HS2-65AD6J): a card with a run has an **Integration**
+  section, and the overview lists **Coordination Sessions**; the decision log's
+  `role_unplaced` records read as "Did not start the integrator of Web: …".
 
 The states and events are pinned in `integrator_session_tests.rs` (none, starting,
 live, idle, winding down and failed against a handoff arriving, the queue emptying, a
@@ -6954,6 +6957,41 @@ so each involved target's claims are read through the gate as an observation, wh
 the timeline's version changes while the overview shows. A claim's holder is never
 reported (§26.20): a held resource says until when, and a resource given in a pass
 names the step it was given to.
+
+### Integration and coordination sessions (HS2-65AD6J)
+
+Why integration is or is not running shows from the scheduler's own answers (§26.30,
+"Explainability"), with no second source. A card with a run reads `scheduler explain`
+for its step together with the run's records, so it is read again on each run event
+of the existing long poll and on each timeline version, never on a timer. When the
+answer carries `integrator`, the card's **Integration** section follows **Run**:
+
+- **Integrator**: "Starts on the next pass", "Running", "Winding down", "Not
+  started", "Unavailable" (`integrator_unavailable` after the replacements were used
+  up) or "Not running" (`none`). In a dry run a start or wind-down reads "Would
+  start on the next pass (dry run)" or "Would wind down (dry run)".
+- **Why**: the reason and detail in words: "Handoffs wait to be integrated"
+  (`queue`), "An integrated commit waits on its CI gate" (`ci_pending`), "A worker it
+  serves still has a run", "Nothing has needed it for a while" (`idle`), the
+  scheduler's own reasons for a detail such as `target_cap` or `cooldown`, "Its
+  project is turned off in the policy" (`target_disabled`) and "The project's
+  Coordination Sessions leave the integrator out, so it integrates by hand"
+  (`policy_opt_out`). With no handoff waiting: "No handoff waits to be integrated".
+- **Home Site** when the integrator's site is not the card's own, **Session** when
+  one runs, and **Next** ("Looked at again by 15:40") when the pass gives a retry time.
+
+The overview's **Coordination Sessions**, after **Scheduler**, reads the `scheduler
+plan` it already reads for Resources: each home's integrator placement (`role:
+integrator`) and every entry of `roles_unplaced`, one row per project and role ("Web
+Integrator: Not started: the project's session limit is reached", "Web Dispatcher:
+Unavailable: the dispatchers the scheduler started did not take up their role, so none
+starts for a while; looked at again by 15:40"). With none it says "No integrator runs
+now, and no coordination session waits to start." Settings → Orchestration's project
+detail shows no scheduler status, so the overview is the project surface. A code the
+view does not know reads as its words; no row shows a code. Unit tests pin each
+standing, reason and detail (`orchestration-scheduler.test.ts # HS2-65AD6J`), and
+`orchestration-details.spec.ts # HS2-65AD6J` runs the shipped view against a real
+server.
 
 ### Progress and cost (HS2-XJEH08)
 

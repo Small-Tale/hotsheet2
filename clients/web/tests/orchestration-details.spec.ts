@@ -21,6 +21,7 @@ import {
   type Ticket,
   visualPass,
 } from './orchestration-real-fixtures';
+import { proxyFetch } from './proxy-fetch';
 
 const execute = promisify(execFile);
 const REPO = 'acme/synthetic-widgets';
@@ -674,6 +675,172 @@ test('HS2-5GRXFN a held resource shows on the deferred card and in the overview 
       show: why,
       check: () => expect(why).toContainText('vm/macos-vm'),
       atPhone: () => view.locator(`[data-ticket-slug="${ready.slug}"]`).click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
+ * HS2-65AD6J: why integration is or is not running. The real server answers a running step's explanation with
+ * its project's integrator (`none` here: nothing is handed off). A browser fixture cannot hand work off to a real
+ * pool, so the not-started and unavailable states are the real responses with only the server's own documented
+ * `integrator` and `roles_unplaced` shapes (docs/26 §26.30) put in: synthetic codes, no other field changed.
+ */
+test('HS2-65AD6J a running card says whether its integrator runs and the overview names role sessions not started', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: 'synthetic-tool', max_sessions: 2 }],
+        targets: [{ target_id: TARGET, tools: [{ tool: 'synthetic-tool' }], max_sessions: 2 }],
+        placement: { automatic: false, actor: 'scheduler-1' },
+      },
+      actor: { role: 'human', id: 'maintainer' },
+    });
+    await plan.dispatch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+
+    // What the server's pass would say once a handoff waits: put into the real responses.
+    const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
+    let integrator: Record<string, unknown> | undefined;
+    let explainedIntegrator: unknown;
+    const augment =
+      (change: (body: Record<string, unknown>) => Record<string, unknown>) =>
+      async (route: Parameters<Parameters<Page['route']>[1]>[0]) => {
+        const incoming = new URL(route.request().url());
+        const response = await proxyFetch(route, {
+          url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+          timeout: 60_000,
+        });
+        const body = (await response.json()) as Record<string, unknown>;
+        await route.fulfill({ response, json: change(body) });
+      };
+    await page.route(
+      '**/orchestration/scheduler/explain',
+      augment((body) => {
+        explainedIntegrator = body.integrator;
+        return integrator && body.integrator ? { ...body, integrator } : body;
+      }),
+    );
+    await page.route(
+      '**/orchestration/scheduler/plan',
+      augment((body) => ({
+        ...body,
+        roles_unplaced: [
+          {
+            target_id: TARGET,
+            role: 'integrator',
+            reason: 'integrator_unavailable',
+            detail: 'replacements_exhausted',
+            retry_at_ms: Number(body.now_ms) + 3_600_000,
+          },
+          {
+            target_id: TARGET,
+            role: 'dispatcher',
+            reason: 'dispatcher_unavailable',
+            detail: 'replacements_exhausted',
+            retry_at_ms: Number(body.now_ms) + 3_600_000,
+          },
+        ],
+      })),
+    );
+    // A change to the plan reads the timeline, and with it the overview, again.
+    const another = await server.request<{ id: string; slug: string }>('/tickets', 'POST', {
+      title: 'Add the synthetic audit log',
+    });
+    await send(server, 'POST', `${base}/readiness/define`, {
+      ticket: { native_id: plan.goal.id },
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: another.id,
+      prerequisites: [],
+      actor: scheduler,
+    });
+
+    // The overview: each role session the pass does not start, and why.
+    const roles = page.locator('[data-orchestration-overview] [data-orchestration-section="Coordination Sessions"]');
+    await expect(roles).toContainText('Self Integrator', { timeout: 30_000 });
+    await expect(roles).toContainText('Unavailable: the integrators the scheduler started did not take up their role');
+    await expect(roles).toContainText('Self Dispatcher');
+    await expect(roles).toContainText('Unavailable: the dispatchers the scheduler started did not take up their role');
+    await expect(roles).toContainText('looked at again by');
+    await expect(roles).not.toContainText('_');
+    await visualPass(page, 'hs2-65ad6j', 'overview-roles', {
+      show: roles,
+      check: () => expect(roles).toContainText('Self Dispatcher'),
+      atPhone: () => openInspector(page),
+    });
+
+    // The running card, as the real server answers it: no handoff waits, so no integrator runs.
+    const running = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const waiting = view.locator(`[data-ticket-slug="${plan.second.slug}"]`);
+    const integration = page.locator('[data-orchestration-inspector] [data-orchestration-section="Integration"]');
+    await running.click();
+    await expect(integration).toContainText('Not running');
+    await expect(integration).toContainText('No handoff waits to be integrated');
+    expect(explainedIntegrator).toMatchObject({ target_id: TARGET, standing: 'none' });
+    const order = await page
+      .locator('[data-orchestration-inspector] [data-orchestration-section]')
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-orchestration-section')));
+    expect(order.indexOf('Integration')).toBe(order.indexOf('Run') + 1);
+    // A card without a run has no Integration section.
+    await waiting.click();
+    await expect(page.locator('[data-orchestration-inspector]')).toContainText('Prerequisites');
+    await expect(integration).toHaveCount(0);
+
+    // Each standing a fresh pass can give, read again when the card is selected again.
+    const reselect = async () => {
+      await waiting.click();
+      await expect(integration).toHaveCount(0);
+      await running.click();
+    };
+    integrator = {
+      target_id: TARGET,
+      standing: 'not_started',
+      reason: 'integrator_not_started',
+      detail: 'policy_opt_out',
+    };
+    await reselect();
+    await expect(integration).toContainText('Not started');
+    await expect(integration).toContainText('integrates by hand');
+    integrator = {
+      target_id: TARGET,
+      standing: 'keep',
+      reason: 'integrator_kept',
+      detail: 'ci_pending',
+      session_id: 'sched-role-integrator-synthetic',
+    };
+    await reselect();
+    await expect(integration).toContainText('Running');
+    await expect(integration).toContainText('An integrated commit waits on its CI gate');
+    await expect(integration).toContainText('sched-role-integrator-synthetic');
+    integrator = {
+      target_id: TARGET,
+      standing: 'not_started',
+      reason: 'integrator_unavailable',
+      detail: 'replacements_exhausted',
+      retry_at_ms: Date.now() + 3_600_000,
+    };
+    await reselect();
+    await expect(integration).toContainText('Unavailable');
+    await expect(integration).toContainText('did not take up their role');
+    await expect(integration).toContainText('Looked at again by');
+    await expect(integration).not.toContainText('_');
+    await visualPass(page, 'hs2-65ad6j', 'integration-unavailable', {
+      show: integration,
+      check: () => expect(integration).toContainText('Unavailable'),
+      atPhone: () => running.click(),
     });
   } finally {
     await server.stop(page);
