@@ -3124,8 +3124,13 @@ export async function startHotSheetWebClient() {
   }
   // Switch the active project tab (shared by the desktop project tab click and the mobile project Select —
   // HS2-4C5RM7). `next` is a tab id: a project id, or a restore-failure tab id.
+  /** Wakes a project's change stream; set once the change-stream controller exists (HS2-ZTAJ1R). */
+  const wakeChangeStreamRef: { current?: (projectId?: string) => void } = {};
   function selectProjectTab(next: string) {
     projectSelectionGeneration += 1;
+    // Selecting a tab retries its change stream at once if it is backing off after an outage, so a
+    // reconnecting remote tab recovers on click; a live stream ignores the wake (HS2-ZTAJ1R).
+    wakeChangeStreamRef.current?.(next);
     exitMobileTerminalFocus();
     const projectStatsActive = shellMode.value === 'stats' && statsProjectId.value !== undefined;
     const keepProjectStats =
@@ -5005,7 +5010,11 @@ export async function startHotSheetWebClient() {
       void featureAreas.refresh();
     });
   });
-  const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
+  const {
+    syncProjectChangeStreams,
+    wakeProjectChangeStream,
+    dispose: disposeProjectChangeStreams,
+  } = createProjectChangeStreamsController({
     projects,
     project,
     shellMode,
@@ -5066,6 +5075,12 @@ export async function startHotSheetWebClient() {
     },
     liveHistory: { resync: () => statsOvernight.resync?.() ?? Promise.resolve() },
   });
+  wakeChangeStreamRef.current = wakeProjectChangeStream;
+  // The network came back: every stream backing off retries now instead of waiting out its delay.
+  const wakeChangeStreamsOnline = () => {
+    wakeProjectChangeStream();
+  };
+  window.addEventListener('online', wakeChangeStreamsOnline);
   const {
     feedbackDelivery,
     chooseFeedbackSession,
@@ -8142,6 +8157,8 @@ export async function startHotSheetWebClient() {
       workerDetailRefresh?.dispose();
       orchestrationView.dispose();
       orchestrationTargetLines.dispose();
+      window.removeEventListener('online', wakeChangeStreamsOnline);
+      wakeChangeStreamRef.current = undefined;
       disposeProjectChangeStreams();
       statsGlance.dispose();
       hostCpu.stop();

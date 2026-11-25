@@ -1563,6 +1563,10 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   its tab and loaded tickets stay; once its change stream has been down for 3 s the tab shows
   the disconnected indicator and the workspace a "Reconnecting to <host>" banner, both cleared
   when the stream (which retries on its own bounded backoff) is live again (HS2-WNK73S).
+  Selecting a project tab, and the window's `online` event for every project, wake a stream
+  that is backing off: it retries at once and its backoff starts over, through the main-thread
+  stream and the change-stream worker alike (a `wake` worker message). A live stream ignores a
+  wake, so a wake never adds a request or timer of its own (HS2-ZTAJ1R).
   A project that remains unavailable stays in the tab bar with a red title and error icon;
   selecting it presents the exact failure, known stale-server context, its remembered root,
   likely recovery steps, and an in-place retry action. Failed tabs are not draggable. They are

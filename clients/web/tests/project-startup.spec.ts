@@ -1211,6 +1211,47 @@ test('keeps an open remote tab with a reconnecting state while its host drops mi
   await expect(tab).toHaveAttribute('data-disconnected', 'false');
 });
 
+test('a click on a reconnecting remote tab retries its change stream at once, not after its backoff (HS2-ZTAJ1R)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  await remoteRegistryFixture(page, [{ id: LAPTOP, label: 'Laptop', checkouts: ['two'] }]);
+  const id = remoteProjectId(LAPTOP, 'two'),
+    host = { down: false, failedPolls: 0, sockets: [] as WebSocketRoute[] };
+  await page.routeWebSocket(/\/__hotsheet\/project-api\/remote[^/]+\/ws\/sync(?:\?.*)?$/, (socket) => {
+    if (host.down) void socket.close();
+    else host.sockets.push(socket);
+  });
+  await page.route(/\/__hotsheet\/project-api\/remote[^/]+\/ws\/poll/, (route) => {
+    if (!host.down) return route.fallback();
+    host.failedPolls += 1;
+    return route.fulfill({ status: 502, json: { error: 'Remote server unreachable.' } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const tab = page.locator(`[data-tab-kind="project"][data-project-id="${id}"]`),
+    alpha = page.locator('[data-tab-kind="project"][data-project-id="alpha"]'),
+    banner = page.locator('[data-component="remote-reconnecting-banner"]');
+  await tab.click();
+  await expect(page.getByText('Workspace restored work', { exact: true })).toBeVisible();
+  host.down = true;
+  for (const socket of host.sockets.splice(0)) await socket.close();
+  await expect(banner).toContainText('Reconnecting to Laptop', { timeout: 15_000 });
+  // Let the stream back off until its next retry is many seconds away (500 ms doubling per failure).
+  await expect.poll(() => host.failedPolls, { timeout: 60_000 }).toBeGreaterThanOrEqual(7);
+  const before = host.failedPolls;
+  host.down = false;
+  // The host is back, but the stream is asleep in its backoff; selecting the tab wakes it now.
+  await alpha.click();
+  const clicked = Date.now();
+  await tab.click();
+  await expect(banner).toHaveCount(0, { timeout: 6_000 });
+  expect(Date.now() - clicked).toBeLessThan(6_000);
+  await expect(tab).toHaveAttribute('data-disconnected', 'false');
+  expect(host.failedPolls).toBe(before);
+});
+
 test('an expired remote approval offers Renew, never reconnecting, and opens once the host renews it (HS2-4B0KSD)', async ({
   page,
 }) => {
