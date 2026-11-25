@@ -7,6 +7,8 @@ installed `@kerfjs/ui/docs/interaction-conventions.md` and its linked
 `clients/web/ai/component-catalog-extension.json` define component selection and
 geometry ownership. This file records Hot Sheet decisions and ticket evidence; it
 does not fork Kerf's guidance.
+The [Kerf consumer fitness audit](https://github.com/brianwestphal/kerf/blob/main/docs/kerf-consumer-fitness-audit.md#hot-sheet-2-adoption)
+tracks upstream gaps and Hot Sheet adoption work against a dated source snapshot.
 
 ## Product decisions
 
