@@ -745,6 +745,8 @@ pub enum RoleBlocker {
     /// The scheduler's integrators failed to take up their role until their
     /// replacements were exhausted; none is started again before `retry_at_ms`.
     IntegratorUnavailable,
+    /// HS2-TCXKEM: the same for the project's scheduler-started dispatchers.
+    DispatcherUnavailable,
 }
 
 impl RoleBlocker {
@@ -752,6 +754,7 @@ impl RoleBlocker {
         match self {
             Self::IntegratorNotStarted => "integrator_not_started",
             Self::IntegratorUnavailable => "integrator_unavailable",
+            Self::DispatcherUnavailable => "dispatcher_unavailable",
         }
     }
 }
@@ -2430,7 +2433,8 @@ pub enum DecisionKind {
     /// repeated under its retained operation id, or a person told on the goal ticket.
     Reconcile,
     /// HS2-4JQ41V: a project's integrator the pass did not start although handoffs
-    /// wait: `integrator_not_started` or `integrator_unavailable` with its detail.
+    /// wait: `integrator_not_started` or `integrator_unavailable` with its detail, or a
+    /// dispatcher held back by `dispatcher_unavailable` (HS2-TCXKEM).
     RoleUnplaced,
 }
 

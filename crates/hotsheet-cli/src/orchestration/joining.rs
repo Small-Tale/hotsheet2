@@ -17,20 +17,30 @@ use super::*;
 /// The detail of a kept session whose run had its replacements.
 pub const REPLACEMENTS_EXHAUSTED: &str = "replacements_exhausted";
 
-/// HS2-4JQ41V: how long a project's integrator is not started again by the scheduler
-/// once its integrators failed to take up the role until their replacements were
-/// exhausted. The project reports `integrator_unavailable` meanwhile.
+/// HS2-4JQ41V: how long a project's integrator (or, HS2-TCXKEM, dispatcher) is not
+/// started again by the scheduler once its sessions of that role failed to take it up
+/// until their replacements were exhausted. The project reports `integrator_unavailable`
+/// or `dispatcher_unavailable` meanwhile.
 pub const INTEGRATOR_UNAVAILABLE_MS: u64 = 60 * 60 * 1000;
 
-/// HS2-4JQ41V: the scheduler's integrators of one target, latest generation first.
-fn integrators_of(
+/// The scheduler-started roles with a bounded join check, and the reason a project
+/// reports while one is held back (HS2-4JQ41V integrator, HS2-TCXKEM dispatcher).
+const JOIN_CHECKED_ROLES: [(SessionRole, RoleBlocker); 2] = [
+    (SessionRole::Integrator, RoleBlocker::IntegratorUnavailable),
+    (SessionRole::Dispatcher, RoleBlocker::DispatcherUnavailable),
+];
+
+/// The scheduler's sessions of `role` on one target, latest generation first.
+fn role_sessions_of(
     records: &[OrchestratedSession],
+    role: SessionRole,
 ) -> BTreeMap<&str, Vec<(u32, &OrchestratedSession)>> {
     let mut by_target: BTreeMap<&str, Vec<(u32, &OrchestratedSession)>> = BTreeMap::new();
-    for session in records.iter().filter(|session| {
-        session.owner == SessionOwner::Orchestrator && session.role == SessionRole::Integrator
-    }) {
-        let base = format!("sched-role-integrator-{}", session.target_id);
+    for session in records
+        .iter()
+        .filter(|session| session.owner == SessionOwner::Orchestrator && session.role == role)
+    {
+        let base = format!("sched-role-{}-{}", role.code(), session.target_id);
         if let Some(n) = super::session_executor::generation(&base, &session.operation_id) {
             by_target
                 .entry(session.target_id.as_str())
@@ -150,22 +160,26 @@ impl OrchestrationRuntime {
                 placement.detail = Some(REPLACEMENTS_EXHAUSTED.into());
             }
         }
-        Self::integrator_joining(&records, join_ms, schedule, now_ms);
+        for (role, blocker) in JOIN_CHECKED_ROLES {
+            Self::role_joining(&records, role, blocker, join_ms, schedule, now_ms);
+        }
     }
 
-    /// HS2-4JQ41V: a scheduler-started integrator whose role prompt failed, or that
-    /// did not join its pool in time, is wound down and replaced by a new generation
-    /// once the target's cooldown allows. When replacements are exhausted the last one
-    /// is wound down as well, never kept in its slot, and the project reports
-    /// `integrator_unavailable` until [`INTEGRATOR_UNAVAILABLE_MS`] after it stopped,
-    /// starting none in that time.
-    fn integrator_joining(
+    /// HS2-4JQ41V, HS2-TCXKEM: a scheduler-started integrator or dispatcher whose role
+    /// prompt failed, or that did not join its pool in time, is wound down and replaced by
+    /// a new generation once the target's cooldown allows. When replacements are exhausted
+    /// the last one is wound down as well, never kept in its slot, and the project reports
+    /// `blocker` (`integrator_unavailable` or `dispatcher_unavailable`) until
+    /// [`INTEGRATOR_UNAVAILABLE_MS`] after it stopped, starting none of that role then.
+    fn role_joining(
         records: &[OrchestratedSession],
+        role: SessionRole,
+        blocker: RoleBlocker,
         join_ms: u64,
         schedule: &mut Schedule,
         now_ms: u64,
     ) {
-        for (target_id, sessions) in integrators_of(records) {
+        for (target_id, sessions) in role_sessions_of(records, role) {
             let Some(&(_, latest)) = sessions.first() else {
                 continue;
             };
@@ -206,7 +220,7 @@ impl OrchestrationRuntime {
                     detail: Some(if decided.exhausted {
                         REPLACEMENTS_EXHAUSTED.into()
                     } else {
-                        SessionRole::Integrator.code().into()
+                        role.code().into()
                     }),
                     steps: Vec::new(),
                     score: None,
@@ -232,19 +246,19 @@ impl OrchestrationRuntime {
             } else {
                 continue;
             };
-            // No integrator starts there in this pass; the project says why.
+            // No session of this role starts there in this pass; the project says why.
             schedule.placements.retain(|placement| {
                 !(placement.action == PlacementAction::Start
-                    && placement.role == Some(SessionRole::Integrator)
+                    && placement.role == Some(role)
                     && placement.target_id == target_id)
             });
-            schedule.roles_unplaced.retain(|entry| {
-                !(entry.target_id == target_id && entry.role == SessionRole::Integrator)
-            });
+            schedule
+                .roles_unplaced
+                .retain(|entry| !(entry.target_id == target_id && entry.role == role));
             schedule.roles_unplaced.push(RoleUnplaced {
                 target_id: target_id.to_owned(),
-                role: SessionRole::Integrator,
-                reason: RoleBlocker::IntegratorUnavailable,
+                role,
+                reason: blocker,
                 detail: Some(REPLACEMENTS_EXHAUSTED.into()),
                 retry_at_ms: Some(unavailable_until),
             });

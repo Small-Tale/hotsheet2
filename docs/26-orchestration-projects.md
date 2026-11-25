@@ -6554,6 +6554,14 @@ its integrator when work waits to be integrated, without configuration.
   project reports `integrator_unavailable` (detail `replacements_exhausted`, with
   `retry_at_ms`). No integrator is started for it for an hour after that stop
   (`INTEGRATOR_UNAVAILABLE_MS`); the loop wakes then and tries again.
+- **Dispatchers (HS2-TCXKEM).** A scheduler-started dispatcher
+  (`sched-role-dispatcher-<target>`) gets the same bounded replacement. One whose role
+  prompt failed or that did not join in time is wound down (detail `dispatcher`) and
+  replaced. When its replacements are exhausted the last is wound down too, and the
+  project lists `{role: "dispatcher", reason: "dispatcher_unavailable", detail:
+"replacements_exhausted", retry_at_ms}` in `roles_unplaced`. No dispatcher starts for
+  an hour after that stop; workers for its ready work still start. The decision log
+  records it as kind `role_unplaced`.
 - **Explainability.** Each pass lists in `roles_unplaced` every home whose handoffs wait
   for an integrator this pass does not start: `{target_id, role: "integrator", reason,
 detail, retry_at_ms}` with reason `integrator_not_started` and detail `target_cap`,

@@ -24896,10 +24896,12 @@ components:
               role:
                 enum:
                   - integrator
+                  - dispatcher
               reason:
                 enum:
                   - integrator_not_started
                   - integrator_unavailable
+                  - dispatcher_unavailable
               detail:
                 description: '`target_cap`, `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
                   `machine_refused`, `target_disabled`, `policy_opt_out` or `replacements_exhausted`.'

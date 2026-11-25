@@ -3745,6 +3745,103 @@ fn hs2_190rdx_a_plan_update_swaps_while_work_runs_and_winds_down_only_withdrawn_
     );
 }
 
+/// HS2-TCXKEM: a scheduler-started dispatcher whose role prompt fails gets the same bounded
+/// replacement as an integrator: wound down and replaced, the last wound down too once its
+/// replacements are exhausted, and the project reports `dispatcher_unavailable` with no new
+/// dispatcher until the hour is up. The step's worker is not held back.
+#[test]
+fn hs2_tcxkem_a_dispatcher_that_never_takes_its_role_is_replaced_then_reported() {
+    use hotsheet_ticketing::orchestration::{DecisionKind, RoleBlocker, RoleSessionKind};
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let mut body = policy();
+    body.placement.role_sessions[0].roles = vec![RoleSessionKind::Dispatcher];
+    f.set_policy(body, &mut tx);
+    // More ready work than workers take, so a dispatcher stays wanted throughout.
+    for n in 0..8 {
+        f.ready(&format!("Work {n}"), &mut tx);
+    }
+    let base = format!("sched-role-dispatcher-{}", id(1));
+    let unavailable = |tick: &TickView| {
+        tick.view
+            .schedule
+            .roles_unplaced
+            .iter()
+            .find(|item| item.reason == RoleBlocker::DispatcherUnavailable)
+            .map(|item| (item.role, item.detail.clone(), item.retry_at_ms))
+    };
+    let dispatcher_starts = |tick: &TickView| {
+        tick.outcomes
+            .iter()
+            .filter(|outcome| {
+                outcome.outcome == "started" && outcome.operation_id.starts_with(&base)
+            })
+            .count()
+    };
+    for generation in 1..=3 {
+        // Each dispatcher's role prompt is refused by its tool.
+        f.host
+            .push_answers
+            .lock()
+            .unwrap()
+            .extend([PushAttempt::Rejected]);
+        let tick = f.tick(&mut tx);
+        assert_eq!(
+            dispatcher_starts(&tick),
+            1,
+            "generation {generation}: {:?}",
+            tick.outcomes
+        );
+        let operation = if generation == 1 {
+            base.clone()
+        } else {
+            format!("{base}.{generation}")
+        };
+        let started = f.record(&operation);
+        assert_eq!(started.role, SessionRole::Dispatcher);
+        // Its prompt failed: learned on the next read, wound down at once.
+        let tick = f.tick(&mut tx);
+        let expected = if generation < 3 {
+            Some("dispatcher".to_owned())
+        } else {
+            Some("replacements_exhausted".to_owned())
+        };
+        assert_eq!(
+            placed(&tick, &started.session_id),
+            (PlacementAction::WindDown, "role_prompt_failed", expected),
+            "generation {generation}"
+        );
+        assert_eq!(f.record(&operation).state, SessionState::Stopped);
+        assert_eq!(unavailable(&tick).is_some(), generation == 3);
+    }
+    // Exhausted: no fourth dispatcher while the hour runs, and the reason is surfaced.
+    let stopped_at = START;
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(dispatcher_starts(&tick), 0, "{:?}", tick.outcomes);
+        let (role, detail, retry) = unavailable(&tick).expect("dispatcher_unavailable");
+        assert_eq!(role, SessionRole::Dispatcher);
+        assert_eq!(detail.as_deref(), Some("replacements_exhausted"));
+        assert_eq!(retry, Some(stopped_at + 60 * MINUTE));
+    }
+    let log =
+        f.m.runtime
+            .scheduler_decisions(&f.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries;
+    assert!(log.iter().any(|entry| {
+        entry.record.kind == DecisionKind::RoleUnplaced
+            && entry.record.reason.as_deref() == Some("dispatcher_unavailable")
+            && entry.record.target_id.as_deref() == Some(id(1).as_str())
+    }));
+    // The hour is up: a new dispatcher starts.
+    f.at(&clock, stopped_at + 60 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(dispatcher_starts(&tick), 1, "{:?}", tick.outcomes);
+    assert_eq!(f.record(&format!("{base}.4")).role, SessionRole::Dispatcher);
+    assert!(unavailable(&tick).is_none());
+}
+
 /// HS2-4JQ41V: a scheduler-started integrator whose role prompt fails is wound down
 /// and replaced; once its replacements are exhausted the last is wound down too (never
 /// kept in its slot), the project reports `integrator_unavailable` in the plan, the
