@@ -20,8 +20,10 @@ mod policy;
 mod project_type;
 mod provisional;
 mod readiness;
+// HS2-BQN0M5, HS2-G6F5BP: the automatic re-plan's machine-local memory.
 mod reconcile;
 mod reconcile_sources;
+mod replan_memory;
 mod resources;
 mod role_delivery;
 mod run_events;
@@ -146,6 +148,9 @@ pub use reconcile_sources::{
     NOTE_SESSION_STOPPED, NOTE_START_UNCONFIRMED, NOTE_WAITING_ON_GATE, NOTE_WAITING_ON_VALIDATION,
     NOTE_WATCH_ADOPTED, SessionNeed, SourceWork, ci_work, combine_work, deployment_work,
     session_work, validation_attempt, validation_work,
+};
+pub use replan_memory::{
+    MAX_REPLAN_HANDED, REPLAN_MEMORY_DIR, ReplanKey, ReplanMemory, ReplanMemoryStore,
 };
 pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,
@@ -564,6 +569,8 @@ mod readiness_tests;
 mod reconcile_source_tests;
 #[cfg(test)]
 mod reconcile_tests;
+#[cfg(test)]
+mod replan_memory_tests;
 #[cfg(test)]
 mod resource_tests;
 #[cfg(test)]

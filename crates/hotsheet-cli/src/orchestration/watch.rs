@@ -117,7 +117,9 @@ pub struct WatchState {
     /// HS2-WBREDM: the last step failed, so the next one that succeeds is a reconnect.
     reconnecting: bool,
     /// HS2-BQN0M5: tickets handed to an automatic re-plan, and those waiting for one.
-    replan: super::ReplanMemory,
+    /// HS2-G6F5BP: the in-process copy of the owner's machine-local memory, used only
+    /// while that file cannot be read.
+    replan: hotsheet_ticketing::orchestration::ReplanMemory,
 }
 
 impl WatchState {
@@ -233,6 +235,8 @@ impl OrchestrationRuntime {
             .or(planner)
             .or_else(|| replanner.clone())
         else {
+            // HS2-G6F5BP: the re-plan does not apply either; forget what it remembered.
+            self.replan_forget(owner_id, &mut state.replan);
             *state = WatchState::default();
             return WatchStep::default();
         };
@@ -390,7 +394,7 @@ impl OrchestrationRuntime {
                 let mut named = tickets.clone();
                 named.extend(runs.iter().map(|run| run.target.clone()));
                 let events: &[TargetTicketEvent] = if caught_up { &[] } else { &page.events };
-                step.replan = self.replan_step(
+                step.replan = self.replan_follow(
                     (owner_id, target_id),
                     events,
                     &named,
@@ -399,7 +403,7 @@ impl OrchestrationRuntime {
                     tx,
                 );
             }
-            _ => state.replan = super::ReplanMemory::default(),
+            _ => self.replan_forget(owner_id, &mut state.replan),
         }
         if caught_up {
             // Nothing is known about what happened before: catch every run up.

@@ -5617,8 +5617,18 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   stays open, even when the planner chose to leave it out (held for a person, or
   live-claimed elsewhere). Closing it forgets it, so reopening it re-plans once more.
   An automatic update that fails or is cancelled is not retried for the same tickets.
-  The memory is per follower and in process, so after a server restart a skipped open
-  ticket can start one more update on its next change.
+- **Remembered across restarts (HS2-G6F5BP).** The handed and pending tickets are kept
+  machine-locally per owner under `orchestration-replan/<owner checkout id>.json` in
+  the machine home (private, bounded to 4,096 handed tickets, oldest forgotten first)
+  and shared by the owner's followers under its lock. After a server restart a ticket
+  the planner left out stays left out, and a ticket that was still pending starts its
+  update at the follower's first step (its handshake hands nothing new but asks for
+  what was pending). The file is advisory: one that does not decode reads as empty and
+  is replaced, and while it cannot be read at all (another schema version, an
+  unreadable home) the follower keeps its own in-process copy and writes nothing.
+  When the re-plan stops applying the memory is forgotten, on disk as well. A ticket
+  created while no server followed the target is still not seen until it changes, as
+  for an `overflow` (HS2-04WW8B).
 - **Audit.** Each automatic update is audited as `plan_update_auto` (with
   `plan_update_started`, `plan_update_existing` or the refusal reason) instead of
   `plan_update`. Its finish and cancel are audited as for any update.

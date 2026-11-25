@@ -1865,3 +1865,121 @@ fn hs2_bqn0m5_an_update_started_after_the_ticket_covers_it() {
     );
     assert_eq!(feed.calls().len(), asked);
 }
+
+/// HS2-G6F5BP: the re-plan memory survives a restart of the follower (a fresh
+/// `WatchState`, as a server restart gives): a ticket pending when the server stopped
+/// starts its update once at the first step after, even though that step is a
+/// handshake; a ticket the planner left out stays left out; a memory file that does
+/// not decode is replaced and the re-plan carries on; pausing forgets the memory.
+#[test]
+fn hs2_g6f5bp_the_replan_memory_survives_a_restart() {
+    use super::sessions::{Probe, ScriptedHost, roomy};
+    let feed = Arc::new(Feed::default());
+    let mut m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let host = Arc::new(ScriptedHost::default());
+    let probe = Arc::new(Probe::default());
+    probe.set(|observation| *observation = roomy());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_probe(probe)
+        .with_session_host(host.clone());
+    let mut rng = Rng(9_300);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let owner = m.owner.id.clone();
+    let memory_file = m
+        .home
+        .join(hotsheet_ticketing::orchestration::REPLAN_MEMORY_DIR)
+        .join(format!("{owner}.json"));
+    let remembered = || {
+        hotsheet_ticketing::orchestration::ReplanMemoryStore::new(&m.home, &owner)
+            .unwrap()
+            .read()
+            .unwrap()
+    };
+    let proposal = m
+        .runtime
+        .plan_propose(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let planner = proposal.session.session.session_id.clone();
+    placement(&m, true);
+    let step = |state: &mut WatchState, tx: &mut Transaction<'_>| {
+        m.runtime.watch_step(&owner, &id(1), state, 8_000, tx)
+    };
+
+    // A new ticket while the planner works: pending, and nothing asked yet. Only the
+    // memory file says so.
+    let mut before = WatchState::default();
+    assert!(step(&mut before, &mut tx).active, "handshake");
+    assert!(!memory_file.exists(), "nothing remembered yet");
+    host.set_busy(&planner, true);
+    let pending = target_ticket(&m, "Pending at the restart");
+    feed.push(&m.target_connection(), &pending);
+    assert_eq!(step(&mut before, &mut tx).replan, AutoReplan::Deferred);
+    assert_eq!((remembered().pending(), remembered().handed()), (1, 1));
+    assert!(auto_replans(&m).is_empty());
+
+    // The server restarts: a fresh follower whose first step is a handshake. The
+    // planner is free by then, and the pending ticket starts its update once.
+    drop(before);
+    host.set_busy(&planner, false);
+    let mut after = WatchState::default();
+    assert_eq!(step(&mut after, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 1);
+    assert_eq!(step(&mut after, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!((remembered().pending(), remembered().handed()), (0, 1));
+    // The planner leaves it out.
+    m.runtime
+        .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+
+    // Another restart, then the left-out ticket changes: nothing.
+    drop(after);
+    let mut again = WatchState::default();
+    assert_eq!(step(&mut again, &mut tx).replan, AutoReplan::Idle);
+    feed.push(&m.target_connection(), &pending);
+    assert_eq!(step(&mut again, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!(auto_replans(&m).len(), 1);
+
+    // A memory file that does not decode reads as empty and is replaced: a new ticket
+    // still starts one update, and the file is readable again.
+    std::fs::write(&memory_file, b"{ not a memory").unwrap();
+    let fresh = target_ticket(&m, "New after a damaged memory");
+    feed.push(&m.target_connection(), &fresh);
+    assert_eq!(step(&mut again, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 2);
+    assert_eq!(
+        remembered().handed(),
+        1,
+        "replaced, holding only the new ticket"
+    );
+    m.runtime
+        .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+
+    // A missing file is an empty memory: the forgotten ticket counts as new once more.
+    std::fs::remove_file(&memory_file).unwrap();
+    feed.push(&m.target_connection(), &pending);
+    assert_eq!(step(&mut again, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 3);
+    m.runtime
+        .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+
+    // Paused: the re-plan no longer applies, and the memory is forgotten here and on
+    // disk.
+    assert!(memory_file.exists());
+    placement(&m, false);
+    step(&mut again, &mut tx);
+    assert!(!memory_file.exists(), "forgotten on pause");
+    assert_eq!(auto_replans(&m).len(), 3);
+}

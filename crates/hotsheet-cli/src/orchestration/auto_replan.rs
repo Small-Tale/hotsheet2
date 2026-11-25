@@ -19,11 +19,17 @@
 //!   so a reopened ticket counts again.
 //! - **Unknown history starts nothing.** A handshake, an overflow or a reconnect cannot
 //!   say which tickets are new, so it hands none to a re-plan.
-use std::collections::{BTreeMap, BTreeSet};
+//! - **Remembered across restarts (HS2-G6F5BP).** The memory is machine-local per
+//!   owner (`ReplanMemoryStore`), shared by the owner's followers under its lock. After
+//!   a restart a skipped ticket stays skipped, and a pending one starts its update at
+//!   the first step (a handshake hands nothing new, but settles and asks for what was
+//!   pending). A memory file that cannot be read falls back to the follower's own
+//!   in-process copy; one that does not decode is replaced.
 
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    DeclarationState, PlanningState, RunTarget, TargetOpError, current_planner, planning_state,
+    DeclarationState, PlanningState, ReplanKey, ReplanMemory, ReplanMemoryStore, RunTarget,
+    TargetOpError, current_planner, planning_state,
 };
 use serde_json::Value;
 
@@ -32,57 +38,8 @@ use super::*;
 
 /// The audit action of an Update Plan this module starts.
 pub const AUTO_REPLAN_ACTION: &str = "plan_update_auto";
-/// The most tickets one follower remembers as handed to a re-plan.
-const MAX_HANDED: usize = 4_096;
-
 /// A target ticket, by connection and canonical id.
-type Key = (String, String);
-
-/// What one follower remembers between steps (in process only).
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct ReplanMemory {
-    /// Open tickets no step named that were handed to a re-plan.
-    handed: BTreeSet<Key>,
-    /// Tickets waiting for an update, with the latest plan update when each was seen.
-    pending: BTreeMap<Key, Option<String>>,
-}
-
-impl ReplanMemory {
-    /// A read of a ticket no step names. An open one not handed yet becomes pending
-    /// (true); a closed or missing one is forgotten, so reopening it counts again.
-    pub fn observe(&mut self, key: Key, open: bool, latest: Option<&str>) -> bool {
-        if !open {
-            self.handed.remove(&key);
-            self.pending.remove(&key);
-            return false;
-        }
-        if self.handed.contains(&key) {
-            return false;
-        }
-        if self.handed.len() >= MAX_HANDED {
-            self.handed.pop_first();
-        }
-        self.handed.insert(key.clone());
-        self.pending.insert(key, latest.map(Into::into));
-        true
-    }
-
-    /// Settle what no longer needs an update: tickets a step names now, and tickets an
-    /// update newer than the one they recorded covered.
-    pub fn settle(&mut self, planned: impl Fn(&Key) -> bool, latest: Option<&str>) {
-        self.pending
-            .retain(|key, after| !planned(key) && after.as_deref() == latest);
-    }
-
-    /// An update was asked for every pending ticket.
-    pub fn asked(&mut self) {
-        self.pending.clear();
-    }
-
-    pub fn pending(&self) -> usize {
-        self.pending.len()
-    }
-}
+type Key = ReplanKey;
 
 /// What a follower step did about re-planning.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -151,11 +108,70 @@ impl OrchestrationRuntime {
             .map(|view| (view.update_id, view.state.is_open())))
     }
 
+    /// HS2-G6F5BP: [`Self::replan_step`] over the owner's machine-local memory, held
+    /// under its lock for the step so the owner's followers take turns. `cached` is the
+    /// follower's in-process copy: it is used, and nothing is written, while the file
+    /// cannot be locked or read (another schema version, an unreadable home). A file
+    /// that does not decode reads as empty and is replaced.
+    pub(super) fn replan_follow(
+        &self,
+        ids: (&str, &str),
+        events: &[super::TargetTicketEvent],
+        named: &[RunTarget],
+        access: (&Authorized, &MutationActor),
+        cached: &mut ReplanMemory,
+        tx: &mut Transaction<'_>,
+    ) -> AutoReplan {
+        let store = ReplanMemoryStore::new(&self.home, ids.0).ok();
+        let lock = store.as_ref().and_then(|store| store.lock().ok());
+        let loaded = match (&store, &lock) {
+            (Some(store), Some(_)) => match store.read() {
+                Ok(memory) => Some(memory),
+                Err(OrchestrationError::Corrupt) => Some(ReplanMemory::default()),
+                Err(_) => None,
+            },
+            _ => None,
+        };
+        let Some(before) = loaded else {
+            return self.replan_step(ids, events, named, access, cached, tx);
+        };
+        let mut memory = before.clone();
+        let outcome = self.replan_step(ids, events, named, access, &mut memory, tx);
+        if let Some(store) = store.filter(|_| memory != before) {
+            // Advisory: a failed write leaves the in-process copy to carry on.
+            let _ = store.write(&memory);
+        }
+        *cached = memory;
+        outcome
+    }
+
+    /// HS2-G6F5BP: the re-plan no longer applies (paused, an explicit goal, not
+    /// orchestrating): what it remembered is forgotten, here and on this machine, so a
+    /// later return to it starts afresh as before.
+    pub(super) fn replan_forget(&self, owner_id: &str, cached: &mut ReplanMemory) {
+        if cached.is_empty() && !self.replan_remembered(owner_id) {
+            return;
+        }
+        *cached = ReplanMemory::default();
+        if let Ok(store) = ReplanMemoryStore::new(&self.home, owner_id)
+            && let Ok(_lock) = store.lock()
+        {
+            let _ = store.write(cached);
+        }
+    }
+
+    /// Whether this machine holds a re-plan memory for the owner, without locking.
+    fn replan_remembered(&self, owner_id: &str) -> bool {
+        ReplanMemoryStore::new(&self.home, owner_id)
+            .and_then(|store| store.read())
+            .map_or(true, |memory| !memory.is_empty())
+    }
+
     /// HS2-BQN0M5: one follower step's part in re-planning. `events` are the page's
     /// ticket events (none after a handshake, an overflow or a reconnect), `named` the
     /// target tickets a step names or a run works now, `actor` the one
     /// [`Self::replan_actor`] answered for this step.
-    pub(super) fn replan_step(
+    fn replan_step(
         &self,
         (owner_id, target_id): (&str, &str),
         events: &[super::TargetTicketEvent],
@@ -261,47 +277,6 @@ impl OrchestrationRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn key(native: &str) -> Key {
-        ("conn".into(), native.into())
-    }
-
-    /// HS2-BQN0M5: the memory's transitions: new, repeated, closed then reopened,
-    /// covered by a newer update, named by a step, and asked.
-    #[test]
-    fn hs2_bqn0m5_replan_memory_transitions() {
-        let mut memory = ReplanMemory::default();
-        assert!(memory.observe(key("a"), true, None));
-        assert!(!memory.observe(key("a"), true, None), "handed once");
-        assert!(memory.observe(key("b"), true, None));
-        assert_eq!(memory.pending(), 2);
-        // A step names `a` now; `b` still waits on the same latest update.
-        memory.settle(|candidate| candidate == &key("a"), None);
-        assert_eq!(memory.pending(), 1);
-        // A newer update started after `b` was seen: it is covered.
-        memory.settle(|_| false, Some("u1"));
-        assert_eq!(memory.pending(), 0);
-        // `b` closes and reopens: it counts again, recording the current update.
-        assert!(!memory.observe(key("b"), false, Some("u1")));
-        assert!(memory.observe(key("b"), true, Some("u1")));
-        memory.settle(|_| false, Some("u1"));
-        assert_eq!(memory.pending(), 1, "the same update did not cover it");
-        memory.asked();
-        assert_eq!(memory.pending(), 0);
-        assert!(!memory.observe(key("b"), true, Some("u2")), "still handed");
-        // A closed ticket never pending.
-        assert!(!memory.observe(key("c"), false, None));
-        assert_eq!(memory.pending(), 0);
-    }
-
-    #[test]
-    fn hs2_bqn0m5_handed_tickets_are_bounded() {
-        let mut memory = ReplanMemory::default();
-        for n in 0..=MAX_HANDED {
-            memory.observe(key(&format!("{n:05}")), true, None);
-        }
-        assert_eq!(memory.handed.len(), MAX_HANDED);
-    }
 
     #[test]
     fn hs2_bqn0m5_open_statuses() {
