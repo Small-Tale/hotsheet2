@@ -248,6 +248,22 @@ owning tab's records with its composite project id.
 It excludes peers from an older binding revision or changed server identity.
 `clients/web/src/remote-projects/connections.transport.test.ts` repeats the
 cross-checkout and cross-host requests through two real localhost remote servers.
+
+HS2-HSFVHC (remote project prompt parity):
+`clients/web/src/remote-project-parity.test.ts` (binaries Vitest project, always on)
+runs one real fixture server with the detached terminal broker, pairs a read-write
+device over the real pair/approve/redeem routes, and opens two of its checkouts as
+remote tabs through `openReviewedRemoteProject` and the real `proxyProjectRequest`
+remote transport (only the two keychain-backed CLI reads are replaced). Each case
+runs for a local tab and a remote tab of the same server: a terminal launched through
+the tab, the host hook's question, the tab's `terminal_question` change event and
+terminal snapshot (`launch_cwd` in tab terms), the tab's answer reaching the hook's
+poll, and an **Answer in terminal** release; then a host permission ask that only its
+owning tab claims (`permissionBelongsToProject`), answered through that tab back to the
+blocked hook. `clients/web/src/remote-projects/permissions.test.ts` covers the
+permission ownership projection. `clients/web/tests/remote-question-prompt.spec.ts`
+answers a remote tab's question card in the shipped app at 1440, 900 and 390 px
+against the real server and asserts the hook's answer.
 `clients/web/tests/remote-drawer-create.spec.ts` creates a Claude chat through
 the shipped remote drawer, checks its native checkout and live turn reply,
 and verifies that the second remote tab sees none of its sessions

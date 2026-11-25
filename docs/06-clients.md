@@ -266,6 +266,16 @@ membership, even when two tabs share that store. A different descendant director
 is not a connection owner. Peer tabs from an older binding revision or a changed
 server identity do not participate in ownership. Write operations still require
 the remote host's read-write approval.
+**Remote AI prompts (HS2-HSFVHC).** A remote tab answers its AI prompts exactly as a
+local tab does: a Claude `AskUserQuestion` card (and **Answer in terminal**) posts
+`POST /terminals/{id}/question/answer` through the tab's project API to the hosting
+server, whose hook poll receives the answer; a permission answer posts
+`POST /permissions/{id}` the same way. A host lists every pending permission request
+it holds, named by its own checkout identity (`checkout:<host checkout id>`), which the
+browser cannot match to a composite tab id. The bridge therefore relabels each request
+whose checkout, root, or linked store belongs to an open remote tab on the same reviewed
+binding with that tab's id, so only that tab shows it. A request no open tab owns passes
+through unchanged, as a local request does.
 On a remote-mode host the `/__hotsheet/remotes` routes are host-only: a session
 with the **local** grant manages the registry like the host's own browser, and
 any other session gets 404 and is never offered Remote Project (HS2-HBM3JN). The
