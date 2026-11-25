@@ -235,6 +235,14 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     // HS2-1K6122: a change's outcome is a toast, never an inline status line.
     if (change.status) dependencies.notify?.(change.status);
   };
+  /**
+   * HS2-40CTDS: a failed change is toasted like its success and keeps its inline record until the next change
+   * (HS2-1K6122). A read failure or a draft's own validation stays inline only.
+   */
+  const failed = (projectId: string, message: string) => {
+    put(projectId, { message });
+    dependencies.notify?.(message);
+  };
   const busy = (projectId: string, key: string, on: boolean) => {
     const list = stateOf(projectId).busy.filter((item) => item !== key);
     put(projectId, { busy: on ? [...list, key] : list });
@@ -437,11 +445,12 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       });
       await loadSettings(projectId);
     } catch (reason) {
-      put(projectId, {
-        message: site
+      failed(
+        projectId,
+        site
           ? `Could not add ${label} as a site of ${site.label}. ${siteFailure(reason)}`
           : `Could not add ${label}. ${messageOf(reason)}`,
-      });
+      );
     } finally {
       busy(projectId, 'add', false);
     }
@@ -477,9 +486,10 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       put(ownerId, { status: `${declaration.label} is its own project again.` });
       await loadSettings(ownerId);
     } catch (reason) {
-      put(ownerId, {
-        message: `Could not separate ${declaration.label} from ${project ?? 'its project'}. ${siteFailure(reason)}`,
-      });
+      failed(
+        ownerId,
+        `Could not separate ${declaration.label} from ${project ?? 'its project'}. ${siteFailure(reason)}`,
+      );
     } finally {
       busy(ownerId, targetId, false);
     }
@@ -502,9 +512,10 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       put(ownerId, { status: `${declaration.label} is the home site of the project now.` });
       await loadSettings(ownerId);
     } catch (reason) {
-      put(ownerId, {
-        message: `Could not make ${declaration.label} the home site of ${project ?? 'its project'}. ${siteFailure(reason)}`,
-      });
+      failed(
+        ownerId,
+        `Could not make ${declaration.label} the home site of ${project ?? 'its project'}. ${siteFailure(reason)}`,
+      );
     } finally {
       busy(ownerId, targetId, false);
     }
@@ -559,11 +570,12 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       });
       await loadSettings(ownerId);
     } catch (reason) {
-      put(ownerId, {
-        message: site
+      failed(
+        ownerId,
+        site
           ? `Could not add ${choice.name} as a site of ${site.label}. ${siteFailure(reason)}`
           : `Could not add ${choice.name}. ${messageOf(reason)}`,
-      });
+      );
     } finally {
       busy(ownerId, 'add', false);
     }
@@ -665,7 +677,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       if (selected.value[projectId] === targetId) closeDetail(projectId);
       await loadSettings(projectId);
     } catch (reason) {
-      put(projectId, { message: `Could not remove ${label}. ${messageOf(reason)}` });
+      failed(projectId, `Could not remove ${label}. ${messageOf(reason)}`);
     } finally {
       busy(projectId, targetId, false);
     }
@@ -824,7 +836,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       }
       put(projectId, { status: 'Session stopped.' });
     } catch (reason) {
-      put(projectId, { message: `Could not stop the session. ${messageOf(reason)}` });
+      failed(projectId, `Could not stop the session. ${messageOf(reason)}`);
     } finally {
       busy(projectId, sessionId, false);
       const target = selected.value[projectId];
@@ -849,7 +861,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       await api.takeOverOrchestrationSession(projectId, sessionId);
       put(projectId, { status: 'Session taken over.' });
     } catch (reason) {
-      put(projectId, { message: `Could not take over the session. ${messageOf(reason)}` });
+      failed(projectId, `Could not take over the session. ${messageOf(reason)}`);
     } finally {
       busy(projectId, sessionId, false);
       const target = selected.value[projectId];
@@ -927,10 +939,10 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       });
       void loadDetail(projectId, target);
     } catch (reason) {
-      putDetail(projectId, target, {
-        limitsSaving: false,
-        limitsMessage: `Could not save the limits. ${messageOf(reason)}`,
-      });
+      const limitsMessage = `Could not save the limits. ${messageOf(reason)}`;
+      putDetail(projectId, target, { limitsSaving: false, limitsMessage });
+      // HS2-40CTDS: toasted like the save, and kept beside the limits until the next change.
+      dependencies.notify?.(limitsMessage);
     }
   }
 
@@ -956,7 +968,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       const target = selected.value[projectId];
       if (target) syncLimits(projectId, target);
     } catch (reason) {
-      put(projectId, { message: `Could not save the policy. ${messageOf(reason)}` });
+      failed(projectId, `Could not save the policy. ${messageOf(reason)}`);
     } finally {
       busy(projectId, 'policy', false);
     }

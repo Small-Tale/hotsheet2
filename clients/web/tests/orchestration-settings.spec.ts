@@ -575,7 +575,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     };
     await captureModels('limits-draft-1440');
     await limits.getByRole('button', { name: 'Apply Limits' }).click();
-    // The status line already says the first save; wait for the stored policy itself.
+    // The toast already says the first save; wait for the stored policy itself.
     type WithResources = Stored & {
       policy: {
         placement?: { resources?: { target_id: string; resources: { namespace: string; resource: string }[] }[] };
@@ -1066,6 +1066,78 @@ test('HS2-89YNGN a remote orchestration project adds a site from the projects op
     ]);
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(1)).toContainText('Site of Web');
+    await capture('added-1440-light');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
+ * HS2-40CTDS: a Settings › Orchestration change's outcome is the app's toast. A refused add is toasted and also
+ * kept in the message line until the next change; a success is a toast only, with nothing inlined under
+ * + Add Project. The refusal is the server's own failure body, answered once in place of the real route.
+ */
+test('HS2-40CTDS a refused add toasts and keeps its record; a success is only a toast', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(180_000);
+  const { server } = await openRemoteOrchestration(page);
+  try {
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await page.goto('/');
+    await page.getByRole('tab', { name: /Launch/ }).click();
+    await showProjectSettings(page, 'General');
+    await orchestrationNav(page).click();
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const add = settings.getByRole('button', { name: 'Add Project' });
+    await expect(add).toBeEnabled();
+    let refused = false;
+    await page.route(/\/orchestration\/hosted-projects$/, async (route) => {
+      if (route.request().method() !== 'POST' || refused) return route.fallback();
+      refused = true;
+      await route.fulfill({
+        status: 409,
+        json: { error: 'orchestration declaration changed', code: 'revision_conflict' },
+      });
+    });
+    await add.click();
+    await page.getByRole('menu').getByRole('menuitemcheckbox', { name: 'Docs' }).click();
+    const failure = 'Could not add Docs. orchestration declaration changed';
+    await expect(page.locator('.app-toast').filter({ hasText: failure })).toBeVisible();
+    // The refusal stays in the message line after its toast.
+    const record = settings.getByText(failure);
+    await expect(record).toBeVisible();
+    const directory = join('target', 'visual-captures', 'hs2-40ctds');
+    await mkdir(directory, { recursive: true });
+    const capture = (name: string) =>
+      page.screenshot({ path: join(directory, `hs2-40ctds-${name}-${browserName}.png`), animations: 'disabled' });
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+        await page.setViewportSize(size);
+        if (size.width === 390) {
+          const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+          if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        }
+        await expect(record).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await capture(`refused-${String(size.width)}${index === 3 ? '-after-390' : ''}-${scheme}`);
+      }
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+    // The next change clears the record; its success is the toast, and nothing is inlined under + Add Project.
+    const box = await add.boundingBox();
+    await add.click();
+    await page.getByRole('menu').getByRole('menuitemcheckbox', { name: 'Docs' }).click();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Docs added.' })).toBeVisible();
+    await expect(settings.locator('[data-orchestration-project]').filter({ hasText: 'Docs' })).toBeVisible();
+    await expect(record).toHaveCount(0);
+    await expect(settings.getByText('Docs added.')).toHaveCount(0);
+    expect(await add.boundingBox()).toEqual(box);
     await capture('added-1440-light');
   } finally {
     await server.stop(page);

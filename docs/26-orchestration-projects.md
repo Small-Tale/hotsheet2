@@ -6048,12 +6048,13 @@ the type changes to Software while it shows.
   with the store a bound site of the project reaches. **Show All Projects**, a checked
   choice that keeps the submenu open, lists every open project not added yet for the
   edge cases, each marked _Another ticket store_ or _Ticket store unknown_ where it
-  applies; the server's refusal (`site_store_mismatch` and the other site codes) shows in
-  the message line. **Open Another Project…** there runs the regular open flow and adds
+  applies; the server's refusal (`site_store_mismatch` and the other site codes) is a
+  toast and stays in the message line until the next change (HS2-40CTDS). **Open Another Project…** there runs the regular open flow and adds
   the project it opens as a site. A site row's menu has **Make <site> the Home Site**
   (HS2-NAA3HV, a Lucide house), which re-homes the project at the stored manifest
-  revision without asking (the same action on the old home undoes it; the result shows
-  in the status line and a refusal with its site code in the message line), and
+  revision without asking (the same action on the old home undoes it; the result is a
+  toast, and a refusal with its site code is a toast that also stays in the message
+  line), and
   **Separate from <project>**, which clears `site_of` at the stored manifest revision
   without asking: adding it as a site again undoes it. For an orchestration project open
   from another server (HS2-89YNGN), Add a Site lists that server's open checkouts

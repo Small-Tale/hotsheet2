@@ -199,6 +199,8 @@ describe('Settings → Orchestration (HS2-W27N1D)', () => {
     expect(t.settings.selected.value[DEMO_OWNER]).toBeUndefined();
     expect(state(t).manifest?.targets.filter((target) => target.state === 'active')).toHaveLength(2);
     expect(state(t).status).toBe('Web removed.');
+    // HS2-40CTDS: the outcome is one toast.
+    expect(t.toasts).toEqual(['Web removed.']);
   });
 });
 
@@ -337,6 +339,8 @@ describe('a project detail (HS2-W27N1D)', () => {
     await t.settings.stopSession(DEMO_OWNER, worker);
     expect(t.api.stopOrchestrationSession).toHaveBeenLastCalledWith(DEMO_OWNER, worker, true);
     expect(state(t).status).toBe('Session stopped.');
+    // HS2-40CTDS: the cancelled stop says nothing; the one that stops is one toast.
+    expect(t.toasts).toEqual(['Session stopped.']);
   });
 
   it('takes a session over after confirmation and shows one in its drawer', async () => {
@@ -354,6 +358,7 @@ describe('a project detail (HS2-W27N1D)', () => {
     await t.settings.takeOverSession(DEMO_OWNER, '01JSYNTHSESSION00000000001');
     expect(t.asked[0].title).toBe('Take over this session?');
     expect(state(t).status).toBe('Session taken over.');
+    expect(t.toasts).toEqual(['Session taken over.']);
   });
 });
 
@@ -365,6 +370,8 @@ describe('the policy form (HS2-W27N1D)', () => {
     await t.settings.applyPolicy(DEMO_OWNER);
     expect(state(t).message).toBe('CPU Ceiling must be 1 to 100.');
     expect(t.api.setOrchestrationPolicy).not.toHaveBeenCalled();
+    // HS2-40CTDS: a draft's own validation stays beside the form, not in a toast.
+    expect(t.toasts).toEqual([]);
     t.settings.changePolicy(DEMO_OWNER, 'machine.max_cpu_percent', '80');
     await t.settings.applyPolicy(DEMO_OWNER);
     expect(t.api.setOrchestrationPolicy).toHaveBeenCalledWith(
@@ -373,6 +380,7 @@ describe('the policy form (HS2-W27N1D)', () => {
       expect.objectContaining({ machine: expect.objectContaining({ max_cpu_percent: 80 }) }),
     );
     expect(state(t).status).toBe('Policy saved.');
+    expect(t.toasts).toEqual(['Policy saved.']);
     expect(state(t).draft?.machine.max_cpu_percent).toBe('80');
   });
 });
@@ -417,6 +425,7 @@ describe("a project's limits and tool accounts (HS2-7WF6JD)", () => {
       max_sessions: 2,
     });
     expect(state(t).status).toBe('Limits for API saved.');
+    expect(t.toasts).toEqual(['Limits for API saved.']);
     // Saved: the form follows the stored policy again, and admission is asked for the new tool.
     await vi.waitFor(() => {
       expect(t.settings.detailOf(DEMO_OWNER)?.admissionTools).toEqual(['claude']);
@@ -444,6 +453,8 @@ describe("a project's limits and tool accounts (HS2-7WF6JD)", () => {
       limitsMessage: 'Could not save the limits. state changed',
       limits: { max_sessions: '1' },
     });
+    // HS2-40CTDS: the local refusal stays beside the limits; the server's refusal is toasted and kept there too.
+    expect(t.toasts).toEqual(['Could not save the limits. state changed']);
   });
 
   it('adds, edits and removes a tool account in the policy form', async () => {
@@ -1034,5 +1045,65 @@ describe('the Add a Site and Separate menus (HS2-E9VVQF)', () => {
     expect(served).toContain('Add a Site');
     expect(served).not.toContain('Open Another Project…');
     expect(all).toContain('Open Another Project…');
+  });
+});
+
+describe('a change’s outcome is a toast, and a failure keeps its record (HS2-40CTDS)', () => {
+  const refused = () => new ApiHttpError('state changed', 409, 'conflict');
+
+  it('toasts each failed change once and keeps it in the message line until the next change', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.web);
+    await vi.waitFor(() => {
+      expect(t.settings.detailOf(DEMO_OWNER)?.sessions).toHaveLength(2);
+    });
+    const failures: Array<[() => Promise<unknown>, keyof OrchestrationApi, string]> = [
+      [
+        () => t.settings.removeProject(DEMO_OWNER, DEMO_TARGETS.docs),
+        'removeOrchestrationProject',
+        'Could not remove Docs. state changed',
+      ],
+      [
+        () => t.settings.stopSession(DEMO_OWNER, '01JSYNTHSESSION00000000002'),
+        'stopOrchestrationSession',
+        'Could not stop the session. state changed',
+      ],
+      [
+        () => t.settings.takeOverSession(DEMO_OWNER, '01JSYNTHSESSION00000000002'),
+        'takeOverOrchestrationSession',
+        'Could not take over the session. state changed',
+      ],
+      [() => t.settings.applyPolicy(DEMO_OWNER), 'setOrchestrationPolicy', 'Could not save the policy. state changed'],
+    ];
+    for (const [run, call, message] of failures) {
+      vi.mocked(t.api[call] as (...args: unknown[]) => unknown).mockRejectedValueOnce(refused());
+      await run();
+      expect(state(t).message).toBe(message);
+      expect(state(t).status).toBe('');
+      expect(t.toasts.at(-1)).toBe(message);
+    }
+    expect(t.toasts).toEqual(failures.map(([, , message]) => message));
+    // The next change clears the record, and its success is the only new toast.
+    await t.settings.applyPolicy(DEMO_OWNER);
+    expect(state(t).message).toBe('');
+    expect(t.toasts.slice(failures.length)).toEqual(['Policy saved.']);
+  });
+
+  it('toasts a refused add, and a refused site change, in words', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    vi.mocked(t.api.addOrchestrationProject).mockRejectedValueOnce(refused());
+    await t.settings.addOpenProject(DEMO_OWNER, 'web-0000000000ab');
+    expect(state(t).message).toBe('Could not add Web. state changed');
+    expect(t.toasts).toEqual(['Could not add Web. state changed']);
+  });
+
+  it('reads a failed read into the message line only', async () => {
+    const t = setup();
+    vi.mocked(t.api.orchestrationTargets).mockRejectedValueOnce(new Error('offline'));
+    await t.settings.loadSettings(DEMO_OWNER);
+    expect(state(t).message).toBe('Could not read the orchestration settings. offline');
+    expect(t.toasts).toEqual([]);
   });
 });
