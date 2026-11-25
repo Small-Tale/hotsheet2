@@ -56,10 +56,11 @@ for (const width of [1440, 900, 390])
           });
           if (path === '/terminals' && request.method() === 'GET' && response.ok()) {
             const terminals = (await response.json()) as Array<Record<string, unknown>>;
-            return await route.fulfill({
+            await route.fulfill({
               response,
               json: terminals.map((terminal) => ({ ...terminal, launch_cwd: remoteId })),
             });
+            return;
           }
           await route.fulfill({ response });
         } catch {

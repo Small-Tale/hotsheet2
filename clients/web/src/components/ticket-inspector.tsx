@@ -31,14 +31,7 @@ import {
 } from 'lucide';
 
 import type { PhaseEstimatePresentation } from '../active-ticket-work';
-import type {
-  CodeReview,
-  DuplicateBacklink,
-  FeedbackDelivery,
-  ProviderOutboxOperation,
-  StartedPhase,
-  TicketCloseReason,
-} from '../api';
+import type { CodeReview, DuplicateBacklink, ProviderOutboxOperation, StartedPhase, TicketCloseReason } from '../api';
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { type FeatureId, featureOn } from '../feature-areas';
