@@ -79,26 +79,47 @@ function ProjectTabActivityRing({ count }: { count: number }) {
   );
 }
 
-export function ProjectTab({
-  id,
-  name,
-  location,
-  selected = false,
+/** The project status a tab draws; the Restore Project menu draws the same fields for a minimized project (HS2-R64JXA). */
+export type ProjectStatusProps = Pick<
+  ProjectTabProps,
+  | 'location'
+  | 'busy'
+  | 'disconnected'
+  | 'attention'
+  | 'attentionLabel'
+  | 'pending'
+  | 'notificationCount'
+  | 'upNextCount'
+  | 'activeTicketCount'
+  | 'countsPartial'
+  | 'operation'
+>;
+
+/**
+ * The location icon a project tab leads with: the cloud for a remote project, nothing for a local one.
+ * Shared with the Restore Project menu so a minimized remote project reads the same (HS2-R64JXA).
+ */
+export function projectLocationIcon(location: ProjectTabLocation) {
+  return location === 'remote' ? <LucideIcon icon={Cloud} name="cloud" /> : undefined;
+}
+
+/**
+ * The project tab's trailing status: the operation chip, attention and disconnected icons, the
+ * notification bell, the Up Next badge with its active-ticket ring, and the busy/opening spinner. The
+ * tab and the Restore Project menu row render this one presentation so they cannot drift (HS2-R64JXA).
+ */
+export function projectStatusIndicators({
   busy = false,
   disconnected = false,
   attention = false,
   attentionLabel,
-  restoreFailure = false,
   pending = false,
-  closable = true,
-  draggable = true,
   notificationCount = 0,
   upNextCount = 0,
   activeTicketCount = 0,
   countsPartial = false,
   operation,
-  dropTarget,
-}: ProjectTabProps) {
+}: ProjectStatusProps) {
   const normalizedUpNextCount = Math.max(0, Math.trunc(upNextCount)),
     normalizedActiveTicketCount = Math.max(0, Math.trunc(activeTicketCount));
   const workLabel = [
@@ -173,6 +194,44 @@ export function ProjectTab({
   ) : attention ? (
     attentionIcon
   ) : undefined;
+  return operation ? (
+    <Row gap="2xs" vAlign="middle" className="project-tab__indicators">
+      <span
+        class="project-tab__operation"
+        data-state={operation.state}
+        aria-label={operation.label}
+        title={operation.label}
+      >
+        <LucideIcon icon={ArchiveRestore} name="archive-restore" />
+        {operation.percent !== undefined && <small aria-hidden="true">{Math.floor(operation.percent)}%</small>}
+      </span>
+      {trailing}
+    </Row>
+  ) : (
+    trailing
+  );
+}
+
+export function ProjectTab({
+  id,
+  name,
+  location,
+  selected = false,
+  busy = false,
+  disconnected = false,
+  attention = false,
+  attentionLabel,
+  restoreFailure = false,
+  pending = false,
+  closable = true,
+  draggable = true,
+  notificationCount,
+  upNextCount,
+  activeTicketCount,
+  countsPartial,
+  operation,
+  dropTarget,
+}: ProjectTabProps) {
   return (
     <TabBarItem
       id={id}
@@ -192,25 +251,20 @@ export function ProjectTab({
       selectAction="select-project-tab"
       closeAction="close-project-tab"
       closeIcon={<LucideIcon icon={X} name="x" />}
-      leading={location === 'remote' ? <LucideIcon icon={Cloud} name="cloud" /> : undefined}
-      trailing={
-        operation ? (
-          <Row gap="2xs" vAlign="middle" className="project-tab__indicators">
-            <span
-              class="project-tab__operation"
-              data-state={operation.state}
-              aria-label={operation.label}
-              title={operation.label}
-            >
-              <LucideIcon icon={ArchiveRestore} name="archive-restore" />
-              {operation.percent !== undefined && <small aria-hidden="true">{Math.floor(operation.percent)}%</small>}
-            </span>
-            {trailing}
-          </Row>
-        ) : (
-          trailing
-        )
-      }
+      leading={projectLocationIcon(location)}
+      trailing={projectStatusIndicators({
+        location,
+        busy,
+        disconnected,
+        attention,
+        attentionLabel,
+        pending,
+        notificationCount,
+        upNextCount,
+        activeTicketCount,
+        countsPartial,
+        operation,
+      })}
       rootAttributes={{
         'data-tab-kind': 'project',
         'data-project-id': id,

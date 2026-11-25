@@ -1,5 +1,5 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ChartNoAxesCombined, Folder, Grid3X3, ListChevronsUpDown, Plus } from 'lucide';
 
@@ -7,6 +7,7 @@ import { featureOn } from '../feature-areas';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
+import { projectLocationIcon, projectStatusIndicators, type ProjectStatusProps } from './project-tab';
 
 /** The shell mode the project strip's dashboard switcher reflects. */
 export type ProjectStripMode = 'project' | 'terminals' | 'stats';
@@ -66,15 +67,37 @@ export function ProjectDashboardModes({
 }
 
 /**
- * The strip's Add-project action: one native button in a single borderless compact
- * `ToolbarControlGroup` (declared `rendersAs @kerfjs/ui:toolbar-control-group`, HS2-PNCDAE).
+ * A minimized project in the Restore Project menu: the same status fields its tab draws (location,
+ * counts, attention, disconnected, notifications, operation) plus a disambiguating description
+ * (HS2-R64JXA).
  */
-export interface MinimizedProjectChoice {
+export interface MinimizedProjectChoice extends ProjectStatusProps {
   id: string;
   name: string;
   description?: string;
 }
 
+/**
+ * One Restore Project row. It reuses the project tab's own presentation: the tab's name, its location
+ * icon (the cloud for a remote project; a folder keeps a local row's icon column), and its trailing
+ * status indicators as the item's details, so a row and a tab cannot drift apart (HS2-R64JXA).
+ */
+export function minimizedProjectMenuItem(item: MinimizedProjectChoice): PopupMenuItem {
+  return {
+    label: item.name,
+    description: item.description,
+    icon: projectLocationIcon(item.location) ?? <LucideIcon icon={Folder} name="folder" />,
+    details: projectStatusIndicators(item),
+    action: TERMINALS_ACTIONS.restoreMinimizedProject.value,
+    attributes: { 'data-project-id': item.id, 'data-location': item.location },
+  };
+}
+
+/**
+ * The strip's Add-project action: one native button in a single borderless compact
+ * `ToolbarControlGroup` (declared `rendersAs @kerfjs/ui:toolbar-control-group`, HS2-PNCDAE), with
+ * the Restore Project menu beside it while any project is minimized.
+ */
 export function AddProjectAction({
   minimizedProjects = [],
 }: { minimizedProjects?: readonly MinimizedProjectChoice[] } = {}) {
@@ -96,16 +119,7 @@ export function AddProjectAction({
           icon={<LucideIcon size="s" icon={ListChevronsUpDown} name="list-chevrons-up-down" />}
           caret={false}
           rootAttributes={{ 'data-minimized-projects': 'true' }}
-          items={[
-            { kind: 'heading', label: 'Restore Project' },
-            ...minimizedProjects.map((item) => ({
-              label: item.name,
-              description: item.description,
-              icon: <LucideIcon icon={Folder} name="folder" />,
-              action: TERMINALS_ACTIONS.restoreMinimizedProject.value,
-              attributes: { 'data-project-id': item.id },
-            })),
-          ]}
+          items={[{ kind: 'heading', label: 'Restore Project' }, ...minimizedProjects.map(minimizedProjectMenuItem)]}
         />
       )}
       <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.chooseProject.attrs} aria-label="Add Project">

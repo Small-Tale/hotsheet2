@@ -908,6 +908,14 @@ HS2-7DWS3S pins the Restore Project menu to Kerf's default popup inset:
 `project-tab-bar.test.ts` checks the restore group's `menuInset` in the desktop,
 all-minimized, and phone strips, and `project-minimization.spec.ts` measures the
 open menu's computed padding and its first row's inset from the menu border.
+HS2-R64JXA covers Restore Project rows sharing the project tab presentation:
+`components/project-strip-actions.test.ts` checks the row's name, cloud/folder icon,
+and that its details equal the tab's `projectStatusIndicators` output (badge, ring,
+attention, disconnected, notification, partial counts, operation); and
+`project-restore-menu-status.spec.ts` restores a selected local project, a minimized
+local project whose workers claim tickets over its live stream, and a minimized remote
+project, then asserts the menu's work badge, ring, and cloud at wide, medium, narrow,
+and wide again in light and dark (Chromium and WebKit), and the restored remote tab's cloud.
 
 HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
 the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the

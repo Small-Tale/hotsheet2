@@ -619,6 +619,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   Minimized Projects appears immediately before Add Project while any project is hidden.
   Its restore menu lists projects in their original tab order, adds a host or path when
   names collide, and restores a chosen project to its original slot and activates it.
+  Each restore row shows its project tab's own presentation (HS2-R64JXA): the tab name, the
+  cloud for a remote project (a folder for a local one), and the tab's trailing status (Up
+  Next badge with its active-ticket ring, attention, disconnected, notification, and
+  migration indicators), drawn by the same shared helpers as the tab. The menu keeps Kerf's
+  default popup inset (HS2-7DWS3S).
   Hiding the selected tab activates the next visible tab, then the previous one; hiding a
   background tab leaves the workspace alone. When all tabs are hidden, Workspace Grid or
   a neutral workspace still exposes restore and add controls. Bulk close commands act on
