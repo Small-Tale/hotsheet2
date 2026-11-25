@@ -300,7 +300,10 @@ may not have open at once):
    commits Hot Sheet's own store `.gitignore` when it differs from `HEAD`. A store an
    older build left with an uncommitted ignore line therefore backs up without manual
    Git work. Hosting a new import adds no such line, because the store's managed ignore
-   rules already list its machine-local runtime directories (§2, HS2-HSHT2G). Any other
+   rules already list its machine-local runtime directories (§2, HS2-HSHT2G). AI-tool
+   probes never run in the store, so an HS1 channel server that a tool such as `agy`
+   starts from its user-scope MCP configuration writes nothing there (HS2-BNDRYP,
+   [05](05-ai-tool-plugins.md)). Any other
    uncommitted file still blocks backup, and the error names up to five of them. A
    stat-only rewrite with identical bytes is not uncommitted work. Git
    reports object counts and, when available, bytes sent and transfer rate. These are

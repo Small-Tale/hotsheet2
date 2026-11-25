@@ -1566,10 +1566,9 @@ fn parse_close_reason(s: &str) -> Result<CloseReason> {
 }
 
 fn discovered_ai_tools() -> Vec<hotsheet_plugins::AiToolDescriptor> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    // HS2-BNDRYP: probes run in a private workspace, never this directory.
     hotsheet_aitools::discover_ai_tool_descriptors(
         &hotsheet_plugins::default_dirs(),
-        &cwd,
         &mut hotsheet_aitools::ModelCatalogCache::default(),
         false,
     )

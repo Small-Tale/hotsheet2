@@ -221,8 +221,10 @@ enum Verdict {
 /// `exec` (HS2-H1EK8R). A new trigger fails this test until its site is settled here.
 const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
     (
+        // HS2-BNDRYP: the version probe runs in the scan's private workspace; the
+        // program is resolved to an absolute path first, so the cwd change is safe.
         "hotsheet-aitools/src/appserver.rs",
-        "env_dynamic=1",
+        "cwd=1 env_dynamic=1",
         Verdict::Resolved,
     ),
     (

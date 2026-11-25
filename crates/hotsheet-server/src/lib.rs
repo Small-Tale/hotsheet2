@@ -1572,14 +1572,13 @@ impl AppState {
     }
 
     /// Replace AI-tool discovery's memo lifetime and scan (hermetic tests; HS2-BK350W).
-    /// The scan receives the plugin search dirs, project root, model catalogs, and the
-    /// refresh flag, exactly like the production
-    /// [`hotsheet_aitools::discover_ai_tool_descriptors`]. Resets the memo.
+    /// The scan receives the plugin search dirs, model catalogs, and the refresh flag,
+    /// exactly like the production [`hotsheet_aitools::discover_ai_tool_descriptors`].
+    /// Resets the memo.
     pub fn with_ai_tool_discovery<F>(mut self, ttl: std::time::Duration, scanner: F) -> Self
     where
         F: Fn(
                 &[std::path::PathBuf],
-                &FsPath,
                 &mut hotsheet_aitools::ModelCatalogCache,
                 bool,
             ) -> Vec<hotsheet_plugins::AiToolDescriptor>

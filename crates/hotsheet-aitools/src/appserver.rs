@@ -128,12 +128,13 @@ impl AppServerModelCatalog {
 }
 
 impl RuntimeModelCatalogSource for AppServerModelCatalog {
-    fn version(&self) -> Result<String, String> {
+    fn version(&self, cwd: &Path) -> Result<String, String> {
         // HS2-E5B0K0: resolved for the child's own PATH (posix_spawn, no fork).
         let search = hotsheet_ticketing::git::child_path(self.env.iter().map(|(k, v)| (k, v)));
         let mut command =
-            hotsheet_ticketing::git::launch_resolved(&self.program, search.as_deref(), None);
-        command.arg("--version");
+            hotsheet_ticketing::git::launch_resolved(&self.program, search.as_deref(), Some(cwd));
+        // HS2-BNDRYP: in the scan's private probe workspace, never a ticket store.
+        command.arg("--version").current_dir(cwd);
         for (key, value) in &self.env {
             command.env(key, value);
         }
@@ -307,7 +308,7 @@ mod catalog_probe_tests {
         let dir = tempfile::tempdir().unwrap();
         let (program, pid_file) = wedged_codex(dir.path());
         let catalog = AppServerModelCatalog::new(program, Vec::new());
-        assert_eq!(catalog.version().unwrap(), "codex-test 1.0");
+        assert_eq!(catalog.version(dir.path()).unwrap(), "codex-test 1.0");
         let started = Instant::now();
         let error = catalog.discover(dir.path()).unwrap_err();
         assert!(error.contains("initialize"), "{error}");

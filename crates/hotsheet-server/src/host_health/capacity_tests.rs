@@ -681,7 +681,7 @@ mod server {
             .state
             .clone()
             .with_capacity_cache(Duration::ZERO)
-            .with_ai_tool_discovery(Duration::ZERO, move |_, _, _, _| {
+            .with_ai_tool_discovery(Duration::ZERO, move |_, _, _| {
                 counted.fetch_add(1, Ordering::SeqCst);
                 vec![descriptor(
                     "codex",

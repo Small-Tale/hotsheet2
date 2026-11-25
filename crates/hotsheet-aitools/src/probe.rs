@@ -311,6 +311,21 @@ pub fn in_flight_probes() -> usize {
     IN_FLIGHT.lock_or_recover().as_ref().map_or(0, HashMap::len)
 }
 
+/// A fresh, private, empty working directory for AI-tool probes (HS2-BNDRYP).
+///
+/// A probe never runs in a ticket store or a caller's directory. Some tools start
+/// every MCP server registered at their user scope in their own working directory
+/// before answering (`agy models` does, even signed out), and such a server may write
+/// runtime files there: HS1's channel left `.hotsheet/mcp.log` and `channel-port*`
+/// in a newly hosted store, which then failed the HS1 backup readiness check. The
+/// directory is removed when the returned guard drops, taking anything a probe wrote
+/// with it, and no other user can have prepared it.
+pub fn probe_workspace() -> std::io::Result<tempfile::TempDir> {
+    tempfile::Builder::new()
+        .prefix("hotsheet-ai-probe-")
+        .tempdir()
+}
+
 /// Run `command` to completion within [`probe_timeout`], capturing stdout and stderr.
 /// stdin is closed. On timeout the child's whole process group is killed and an error
 /// names the deadline.

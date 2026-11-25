@@ -35,7 +35,7 @@ fn hs2_7w3d7v_test_discovery_detects_tools_without_executing_them() {
     unsafe { std::env::set_var("PATH", &bin) };
     let discover = || {
         let mut cache = hotsheet_aitools::ModelCatalogCache::default();
-        hotsheet_aitools::discover_ai_tool_descriptors(&[], temp.path(), &mut cache, true)
+        hotsheet_aitools::discover_ai_tool_descriptors(&[], &mut cache, true)
     };
 
     let offline = discover();

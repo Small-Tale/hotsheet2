@@ -762,7 +762,6 @@ pub(crate) fn discovered_ai_tools(
         &state.ai_tool_generation,
         &state.ai_tool_discovery,
         &state.plugin_dirs,
-        state.store.root(),
         refresh,
         std::time::Instant::now(),
     )
@@ -778,7 +777,6 @@ fn discover_ai_tools_memoized(
     generation: &AtomicU64,
     config: &ai_tool_discovery::AiToolDiscoveryConfig,
     plugin_dirs: &[std::path::PathBuf],
-    root: &FsPath,
     refresh: bool,
     arrived: std::time::Instant,
 ) -> Vec<hotsheet_plugins::AiToolDescriptor> {
@@ -789,7 +787,7 @@ fn discover_ai_tools_memoized(
         generation,
         config.ttl,
         refresh,
-        |catalogs, refresh| (config.scanner)(plugin_dirs, root, catalogs, refresh),
+        |catalogs, refresh| (config.scanner)(plugin_dirs, catalogs, refresh),
         std::time::Instant::now,
     )
 }
@@ -827,7 +825,6 @@ pub(crate) async fn discovered_ai_tools_off_runtime(
     let generation = state.ai_tool_generation.clone();
     let config = state.ai_tool_discovery.clone();
     let plugin_dirs = state.plugin_dirs.clone();
-    let root = state.store.root().to_path_buf();
     let arrived = std::time::Instant::now();
     // A detached thread, not the blocking pool (HS2-NPBZJ9): the scan runs installed tools'
     // `--version`/catalog subprocesses with no deadline of their own, and the runtime waits
@@ -842,7 +839,6 @@ pub(crate) async fn discovered_ai_tools_off_runtime(
                 &generation,
                 &config,
                 &plugin_dirs,
-                &root,
                 refresh,
                 arrived,
             ));

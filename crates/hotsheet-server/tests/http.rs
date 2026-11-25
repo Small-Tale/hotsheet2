@@ -1405,7 +1405,7 @@ fn a_hanging_catalog_scan_never_holds_the_runtime_open() {
     let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
     let entered_tx = std::sync::Mutex::new(entered_tx);
     let release_rx = std::sync::Mutex::new(release_rx);
-    let state = state.with_ai_tool_discovery(Duration::from_secs(3600), move |_, _, _, _| {
+    let state = state.with_ai_tool_discovery(Duration::from_secs(3600), move |_, _, _| {
         let _ = entered_tx.lock().unwrap().send(());
         // Bounded so a failed run never leaves the thread parked forever.
         let _ = release_rx
@@ -1518,7 +1518,7 @@ async fn hs2_xz3tth_requests_queued_behind_a_slow_scan_share_it() {
     let ttl = Duration::from_millis(200);
     let router = app(state
         .with_machine_home(_dir.path().join("machine-home"))
-        .with_ai_tool_discovery(ttl, move |_, _, _, _| {
+        .with_ai_tool_discovery(ttl, move |_, _, _| {
             if scan_count.fetch_add(1, Ordering::SeqCst) == 0 {
                 let _ = entered_tx.send(());
                 // Bounded so a failed run never leaves the thread parked forever.
@@ -1595,7 +1595,7 @@ async fn ai_tool_discovery_is_memoized_with_refresh_and_setup_invalidation() {
         .with_plugin_dirs(vec![plugins.path().to_path_buf()])
         .with_ai_tool_discovery(
             std::time::Duration::from_secs(3600),
-            move |dirs, _root, _catalogs, refresh| {
+            move |dirs, _catalogs, refresh| {
                 scan_log.lock().unwrap().push(refresh);
                 dirs.iter()
                     .flat_map(|dir| hotsheet_plugins::load_dir(dir))

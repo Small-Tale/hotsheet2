@@ -3823,6 +3823,16 @@ still detects installed tools on `PATH`, but every provider keeps its bundled ca
 and no tool is executed. Any other value, or no value, leaves probing on. The Rust test
 environment forces it off so tests never run the developer's installed tools
 (HS2-7W3D7V).
+Every probe (`--version`, the model catalog, the Codex catalog app-server and
+`usage_query_args`) runs in a fresh private empty directory made for that scan or query
+and removed afterwards, never in a hosted ticket store or the caller's directory
+(HS2-BNDRYP). `agy models` starts every MCP server registered at Antigravity's user scope
+(`~/.gemini/config/mcp_config.json`) in its working directory, even signed out. A
+leftover HS1 `hotsheet-channel` entry there wrote `.hotsheet/mcp.log` and `channel-port*`
+into a newly hosted store, which then failed the HS1 backup readiness check. If the
+directory cannot be made, discovery keeps the bundled catalogs and runs nothing. The store
+ignore rules deliberately do not list `.hotsheet/`: Hot Sheet does not run tools there, and
+`.hotsheet/` is the HS1 project marker that migration detects.
 The provenance review (HS2-3VHPFR, 2026-10-08) found no documented offline check
 strong enough to prove an installed `agy` is the agent CLI across supported platforms.
 Google's current [Unix installer](https://antigravity.google/cli/install.sh) and

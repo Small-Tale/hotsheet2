@@ -83,7 +83,7 @@ fn main() {
     }
     let mut cache = hotsheet_aitools::ModelCatalogCache::default();
     let discover = |cache: &mut hotsheet_aitools::ModelCatalogCache, refresh| {
-        hotsheet_aitools::discover_ai_tool_descriptors(&[], temp.path(), cache, refresh)
+        hotsheet_aitools::discover_ai_tool_descriptors(&[], cache, refresh)
             .into_iter()
             .find(|tool| tool.id == "antigravity")
             .unwrap()
@@ -279,7 +279,7 @@ fn main() {
     }
     let mut cache = hotsheet_aitools::ModelCatalogCache::default();
     let discover = |cache: &mut hotsheet_aitools::ModelCatalogCache| {
-        hotsheet_aitools::discover_ai_tool_descriptors(&[], temp.path(), cache, false)
+        hotsheet_aitools::discover_ai_tool_descriptors(&[], cache, false)
             .into_iter()
             .find(|tool| tool.id == "antigravity")
             .unwrap()

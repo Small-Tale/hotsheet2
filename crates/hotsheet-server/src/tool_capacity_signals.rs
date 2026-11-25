@@ -120,11 +120,14 @@ pub(crate) fn record_driven_outcome(
         if !hotsheet_aitools::model_catalog::ai_tool_probes_enabled() {
             return None;
         }
+        // HS2-BNDRYP: a private empty directory, so MCP servers the tool starts there
+        // never write into a store or a shared temp directory.
+        let workspace = hotsheet_aitools::probe::probe_workspace().ok()?;
         hotsheet_aitools::usage_resets::query_reset(
             &drive.program,
             &drive.usage_query_args,
             drive.model_catalog_identity.as_deref(),
-            &std::env::temp_dir(),
+            workspace.path(),
             at,
         )
     });

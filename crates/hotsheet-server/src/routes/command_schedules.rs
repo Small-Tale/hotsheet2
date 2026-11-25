@@ -1663,7 +1663,7 @@ mod tests {
 
     fn with_scheduled_backend(state: AppState, backend: ScheduledFakeDrive) -> AppState {
         state
-            .with_ai_tool_discovery(std::time::Duration::from_secs(3600), |_, _, _, _| {
+            .with_ai_tool_discovery(std::time::Duration::from_secs(3600), |_, _, _| {
                 vec![
                     hotsheet_plugins::AiToolDescriptor {
                         id: "codex".into(),
