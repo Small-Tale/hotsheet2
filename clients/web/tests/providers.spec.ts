@@ -35311,6 +35311,56 @@ test('keeps a ticket view chosen during a held activation refresh when the sessi
   await expect(queue).not.toHaveAttribute('aria-current', 'page');
 });
 
+test('keeps a ticket selected between the session restores of a project activated twice while it opens (HS2-CN0CS7)', async ({
+  page,
+}) => {
+  // The project has a parked session with nothing selected.
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'hotsheet.workspace.project-session.v1.demo-checkout',
+      JSON.stringify({ selectedView: 'all', selectedTicketSlugs: [], composer: { open: false } }),
+    );
+  });
+  await mockProject(page);
+  // Hold the startup remote-tab restore and the opening project's wiring, so the startup's
+  // "reveal a tab when idle" step activates the project while its own open is still wiring it.
+  const held = new Map<string, Route>();
+  await page.route('**/__hotsheet/remotes/selected-projects', (route) => {
+    held.set('remotes', route);
+  });
+  await page.route('**/permission-automation', (route) => {
+    if (route.request().method() !== 'GET' || held.has('automation')) return route.fallback();
+    held.set('automation', route);
+  });
+  await page.goto('/');
+  await expect.poll(() => held.has('remotes')).toBe(true);
+  // HS2-GDBK53: the open is driven by hand because this test holds the activation requests (HS2-CN0CS7).
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect.poll(() => held.has('automation')).toBe(true);
+  // The first activation: startup reveals the wired tab and restores its parked session.
+  const firstList = ticketListLoaded(page);
+  await held.get('remotes')!.fulfill({ json: [] });
+  await firstList;
+  let network = trackNetworkQuietExceptChangePolls(page);
+  await network.quiet();
+  // The user selects a ticket between the two activations.
+  const inspector = page.locator('#app-right-rail'),
+    selected = page.getByRole('option', { name: /^HS2-DEMO01: / });
+  await page.getByText('Use real project tickets').click();
+  await expect(selected).toHaveAttribute('aria-selected', 'true');
+  await expect(inspector.getByRole('button', { name: 'Open Ticket Reader' })).toBeVisible();
+  // The open finishes wiring and activates the project again; its session restore runs after the
+  // refresh. It must keep the user's ticket, not the parked empty selection.
+  network = trackNetworkQuietExceptChangePolls(page);
+  await held.get('automation')!.fallback();
+  await network.quiet();
+  await expect(selected).toHaveAttribute('aria-selected', 'true');
+  await expect(inspector.getByRole('button', { name: 'Open Ticket Reader' })).toBeVisible();
+  await expect(inspector.getByText('Select a ticket to see and edit its details')).toHaveCount(0);
+});
+
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus', async ({
   page,
 }) => {

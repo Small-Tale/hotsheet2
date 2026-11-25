@@ -2202,7 +2202,10 @@ checkout name>`, where the host is the machine name the peer last reported on th
   activation refresh. The project's parked session is restored after that refresh, but a
   ticket the user selects during the refresh keeps its selection (HS2-VDJJEY), as an opened
   composer stays open (HS2-T1F2VT), a chosen section tab stays chosen (HS2-KBM5QK), and a ticket
-  view chosen meanwhile is not switched back to the parked view (HS2-123CV9). This bounds full ticket and corrupt-ticket reads while keeping the
+  view chosen meanwhile is not switched back to the parked view (HS2-123CV9). Each of these
+  holds across every restore of one activation: a project the startup reveals while its own
+  open is still wiring it is activated twice and restores twice, and a ticket selected between
+  the two restores stays selected (HS2-CN0CS7). This bounds full ticket and corrupt-ticket reads while keeping the
   latest state current (HS2-B5SJMJ). Startup stays active-only (see the remembered-project startup rules
   above): a project becomes warm on its first visit, or when a live-refreshed background
   snapshot fits spare warm capacity; that first visit is an ordinary cold load. Activating a

@@ -311,6 +311,7 @@ import { remoteFailureKind, remoteFailureText } from '../remote-session-lifetime
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { parseGuidanceSourceUpdates } from '../server-response-parsers';
+import { restoreSectionTabs, selectionRestorable, type SessionSectionTabs } from '../session-restore-guard';
 import { interleaveByRank } from '../tab-order';
 import {
   TERMINAL_GRID_DEFAULT_ACROSS,
@@ -1099,11 +1100,13 @@ export async function startHotSheetWebClient() {
     restoringProjectSession = false,
     projectSessionDirtyDuringRestore = false,
     projectSessionInteractionVersion = 0,
-    // The selection an activation applied; a different array later means the user selected since (HS2-VDJJEY).
+    // The selection the activation or its latest session restore applied; a different array later means the
+    // user selected since (HS2-VDJJEY). It outlives each restore, since one activation can restore twice
+    // (HS2-CN0CS7).
     activationTicketSelection: string[] | undefined,
-    // The section tabs and ticket view when an activation began; a different value later means the user
-    // chose one (HS2-KBM5QK, HS2-123CV9).
-    activationSectionTabs: { inspector: InspectorTab; reader: InspectorTab; view: TicketView } | undefined;
+    // The section tabs and ticket view the activation or its latest restore applied; a different value
+    // later means the user chose one (HS2-KBM5QK, HS2-123CV9, HS2-CN0CS7).
+    activationSectionTabs: SessionSectionTabs | undefined;
   const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-left-rail')),
     inspectorSize = signal(loadAppRegionSize(localStorage, 'app-right-rail'));
   const detailsMode = signal<MarkdownEditorMode>('preview'),
@@ -3666,16 +3669,21 @@ export async function startHotSheetWebClient() {
       // A section tab or ticket view the user chose during the activation's async refresh window wins
       // over the parked session; resetting it left the clicked tab focused but unselected (HS2-KBM5QK),
       // and reverted a view switch to Queue under load (HS2-123CV9).
-      const tabsAtActivation = activationSectionTabs;
-      activationSectionTabs = undefined;
-      if (!tabsAtActivation || selectedView.value === tabsAtActivation.view)
-        selectedView.value =
-          stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
+      const tabs = restoreSectionTabs(
+        activationSectionTabs,
+        { inspector: inspectorTab.value, reader: readerTab.value, view: selectedView.value },
+        {
+          inspector: stored.inspectorTab,
+          reader: stored.readerTab,
+          view: stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView,
+        },
+      );
+      activationSectionTabs = tabs.applied;
+      selectedView.value = tabs.show.view;
       // Search was restored during activation; a delayed network refresh must not undo a new edit.
       searchMatchKeys.value = undefined;
-      if (!tabsAtActivation || inspectorTab.value === tabsAtActivation.inspector)
-        inspectorTab.value = stored.inspectorTab;
-      if (!tabsAtActivation || readerTab.value === tabsAtActivation.reader) readerTab.value = stored.readerTab;
+      inspectorTab.value = tabs.show.inspector;
+      readerTab.value = tabs.show.reader;
       if (!composerOpenedByUser && canRestoreComposer) {
         composerExpanded.value = false;
         composerTitle.value = stored.composer.title;
@@ -3719,15 +3727,14 @@ export async function startHotSheetWebClient() {
       }
       // A ticket the user selected during this activation's async refresh window wins over the parked
       // session, like the composer above (HS2-VDJJEY); its stored per-ticket drafts belong elsewhere.
-      const userSelected =
-        activationTicketSelection !== undefined && selectedTicketSlugs.value !== activationTicketSelection;
-      activationTicketSelection = undefined;
+      const userSelected = !selectionRestorable(activationTicketSelection, selectedTicketSlugs.value);
       const live = new Set(tickets.value.map((ticket) => ticket.slug)),
         selection = userSelected
           ? selectedTicketSlugs.value
           : stored.selectedTicketSlugs.filter((slug) => live.has(slug));
       if (!userSelected) {
         selectedTicketSlugs.value = selection;
+        activationTicketSelection = selection;
         ticketSelectionAnchor = selection[0];
       }
       if (!userSelected && selection.length === 1) {
