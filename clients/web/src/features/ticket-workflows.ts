@@ -31,6 +31,7 @@ import type { TicketCloseDialogState } from '../components/ticket-close-dialog';
 import type { InspectorTab } from '../components/ticket-inspector';
 import type { TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { isPlainTicketReselection, updateTicketSelection } from '../components/ticket-selection';
+import type { Confirm } from '../confirmation';
 import { copyWithSelection } from '../copy-text';
 import {
   createDebouncedAutosave,
@@ -162,6 +163,12 @@ interface TicketWorkflowMutableState {
 }
 
 export interface TicketWorkflowDependencies {
+  /** The shared in-app confirmation, offering to open a link's unopened remote project (HS2-4JTETR). */
+  confirm?: Confirm;
+  /** Opens a paired remote host's checkout as a tab (HS2-4JTETR). */
+  openRemoteHostCheckout?: (bindingId: string, checkoutId: string) => Promise<Project>;
+  /** A paired host's name for one of its checkouts; `null` when it lists none (HS2-4JTETR). */
+  remoteHostCheckoutName?: (bindingId: string, checkoutId: string) => Promise<string | null | undefined>;
   state: TicketWorkflowMutableState;
   CLOSED_NOT_WORKING_TARGET: NotWorkingTarget;
   projects: Signal<Project[]>;
@@ -2452,13 +2459,41 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     if (reference) {
       // The reference names a checkout on the source ticket's own server (HS2-4SPTA4).
       const source = project(),
-        target = relationTargetProject(projects.value, reference.project_id, source?.id);
+        sourceRemote = source ? parseRemoteProjectId(source.id) : undefined;
+      let target = relationTargetProject(projects.value, reference.project_id, source?.id);
+      if (!target && sourceRemote && source?.remoteHost) {
+        // HS2-4JTETR: the project is on the same paired host but not open here; offer to open it.
+        const host = source.remoteHost,
+          name = await dependencies.remoteHostCheckoutName?.(sourceRemote.bindingId, reference.project_id);
+        if (name === null) {
+          showToast(`That project is not available on ${host}.`);
+          return;
+        }
+        if (
+          dependencies.confirm &&
+          dependencies.openRemoteHostCheckout &&
+          (await dependencies.confirm({
+            title: `Open ${name ?? reference.project_id} from ${host}?`,
+            message: `This ticket is in a project on ${host} that is not open here. It opens in a new tab.`,
+            confirmLabel: 'Open Project',
+          }))
+        ) {
+          try {
+            target = await dependencies.openRemoteHostCheckout(sourceRemote.bindingId, reference.project_id);
+          } catch (reason) {
+            showToast(
+              `Could not open that project on ${host}. ${reason instanceof Error ? reason.message : String(reason)}`,
+            );
+            return;
+          }
+        } else {
+          if (!dependencies.confirm || !dependencies.openRemoteHostCheckout)
+            showToast(`Open that project on ${host} to view this ticket.`);
+          return;
+        }
+      }
       if (!target) {
-        showToast(
-          source?.remoteHost && parseRemoteProjectId(source.id)
-            ? `Open that project on ${source.remoteHost} to view this ticket.`
-            : `Open project ${reference.project_id} to view this duplicate target.`,
-        );
+        showToast(`Open project ${reference.project_id} to view this duplicate target.`);
         return;
       }
       try {

@@ -1410,6 +1410,43 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
   }
 
+  /**
+   * Opens a checkout of an already paired remote host as a tab, without the Remote Project dialog,
+   * and returns it (HS2-4JTETR). A tab already open for it is returned as is. Throws when the host
+   * refuses or cannot be reached.
+   */
+  async function openRemoteHostCheckout(bindingId: string, checkoutId: string): Promise<Project> {
+    const existing = projects.value.find((project) => {
+      const remote = parseRemoteProjectId(project.id);
+      return remote?.bindingId === bindingId && remote.checkoutId === checkoutId;
+    });
+    if (existing) return existing;
+    const remote = await desktopRemoteOpen(bindingId, checkoutId);
+    await wireOpenedProject(remote.root, {
+      ok: true,
+      project: remote,
+      providers: await new Api(remote.apiPath).providers().catch(() => []),
+    });
+    dependencies.startPermissionUpdates();
+    dependencies.syncProjectChangeStreams();
+    return projects.value.find((project) => project.id === remote.id) ?? remote;
+  }
+
+  /**
+   * The name a paired host gives one of its checkouts, `null` when the host lists no such checkout,
+   * or `undefined` when the host cannot be asked (HS2-4JTETR).
+   */
+  async function remoteHostCheckoutName(bindingId: string, checkoutId: string): Promise<string | null | undefined> {
+    try {
+      const discovery = await desktopRemoteDiscover(bindingId);
+      // A host that lists no checkouts at all (unreachable or unapproved) cannot say either way.
+      if (!discovery.checkouts) return undefined;
+      return discovery.checkouts.find((item) => item.id === checkoutId)?.name ?? null;
+    } catch {
+      return undefined;
+    }
+  }
+
   async function removeDesktopRemoteServer(id: string, revision: number) {
     if (desktopRemoteBusy.value) return;
     desktopRemoteBusy.value = true;
@@ -1553,6 +1590,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     openDesktopRemoteCheckout,
     removeDesktopRemoteServer,
     openRemoteProjectDialog,
+    openRemoteHostCheckout,
+    remoteHostCheckoutName,
     openRemoteCheckout,
   };
 }

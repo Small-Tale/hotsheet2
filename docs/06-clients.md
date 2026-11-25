@@ -3063,8 +3063,12 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   Clicking a follow-up or duplicate-target reference opens the target ticket. The
   reference's project id is read on the source ticket's own server: in a remote project
   tab it names that host's checkout and opens in that host's tab, never a tab of another
-  server with the same checkout id. When that checkout is not open from the host, a toast
-  says to open it on that host (HS2-4SPTA4).
+  server with the same checkout id (HS2-4SPTA4). When that checkout is not open, the shared
+  confirmation asks "Open <project> from <host>?", naming the project as the host lists it.
+  Open Project opens it as a new tab of the same paired host, with no Remote Project dialog,
+  and then opens the ticket there; Cancel opens nothing. A checkout the host does not list
+  toasts that the project is not available on that host, and a refused open toasts the
+  host's reason (HS2-4JTETR).
   If creation returns a target with `follow_up_link_error`, the client retries
   only the idempotent source-link request and retains the created ticket even
   if repair remains unavailable (HS2-2Z11A5).

@@ -5178,6 +5178,11 @@ export async function startHotSheetWebClient() {
     submitNewTicket,
     submitNotWorking,
   } = createTicketWorkflows({
+    confirm: (options) => confirmation.request(options),
+    openRemoteHostCheckout: (bindingId, checkoutId) =>
+      projectLifecycleController.openRemoteHostCheckout(bindingId, checkoutId),
+    remoteHostCheckoutName: (bindingId, checkoutId) =>
+      projectLifecycleController.remoteHostCheckoutName(bindingId, checkoutId),
     state: {
       get blockedReasonDraftBase() {
         return blockedReasonDraftBase;

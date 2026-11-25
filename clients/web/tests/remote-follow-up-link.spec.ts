@@ -78,7 +78,9 @@ const source = {
       { project_id: 'elsewhere-d4e5f6', connection_id: 'git-local', native_id: 'remote-other' },
     ],
   },
-  target = row('remote-target', 'HS2-RMTTGT', 'Synthetic remote follow-up target');
+  target = row('remote-target', 'HS2-RMTTGT', 'Synthetic remote follow-up target'),
+  // HS2-4JTETR: a ticket in another checkout of the same host, not open here at first.
+  other = row('remote-other', 'HS2-RMTOTH', 'Synthetic follow-up in a project not open here');
 const full = (ticket: typeof target) => ({
   ...ticket,
   details: '',
@@ -137,9 +139,32 @@ async function remoteFixture(page: Page) {
         json: {
           remote: server,
           host_name: 'studio',
-          checkouts: [{ id: checkout, name: 'Workspace', state: 'available', sources: [] }],
+          checkouts: [
+            { id: checkout, name: 'Workspace', state: 'available', sources: [] },
+            { id: 'elsewhere-d4e5f6', name: 'Elsewhere', state: 'available', sources: [] },
+          ],
         },
       });
+    if (path === `/__hotsheet/remotes/${binding}/projects/elsewhere-d4e5f6/open`) {
+      const id = remoteProjectId(binding, 'elsewhere-d4e5f6');
+      return route.fulfill({
+        status: 201,
+        json: {
+          id,
+          root: id,
+          name: 'studio · Elsewhere',
+          remoteHost: 'studio',
+          stores: [],
+          apiPath: `/__hotsheet/project-api/${encodeURIComponent(id)}`,
+          compatibility,
+          needsTicketSetup: false,
+          needsHs1Migration: false,
+          hs1ImportCompleted: false,
+          hs1CleanupEligible: false,
+          hs1RegistrationRepairAvailable: false,
+        },
+      });
+    }
     if (path === `/__hotsheet/remotes/${binding}/projects/${checkout}/open`)
       // The bridge's remote open reply (project-bridge.ts), with the remote machine's name.
       return route.fulfill({
@@ -172,7 +197,10 @@ async function remoteFixture(page: Page) {
           },
         ],
       });
-    const remote = decodeURIComponent(path).startsWith(`/__hotsheet/project-api/${remoteId}/`);
+    const remote = decodeURIComponent(path).startsWith(`/__hotsheet/project-api/${remoteId}/`),
+      elsewhere = decodeURIComponent(path).startsWith(
+        `/__hotsheet/project-api/${remoteProjectId(binding, 'elsewhere-d4e5f6')}/`,
+      );
     const review = /\/tickets\/([^/]+)\/code-review$/.exec(path);
     if (review && request.method() === 'GET') {
       const id = decodeURIComponent(review[1]);
@@ -182,7 +210,7 @@ async function remoteFixture(page: Page) {
     if (single && request.method() === 'GET') {
       const id = decodeURIComponent(single[1]);
       ticketReads.push(id);
-      const ticket = [source, target].find((item) =>
+      const ticket = (elsewhere ? [other] : [source, target]).find((item) =>
         [item.id, item.qualified_id, item.native_id, item.slug].includes(id),
       );
       return ticket
@@ -190,7 +218,7 @@ async function remoteFixture(page: Page) {
         : route.fulfill({ status: 404, json: { error: 'ticket not found' } });
     }
     if (path.endsWith('/tickets') && request.method() === 'GET') {
-      const items = remote ? [source, target] : [];
+      const items = remote ? [source, target] : elsewhere ? [other] : [];
       return route.fulfill({
         json: {
           items,
@@ -267,11 +295,34 @@ test('a remote tab opens a follow-up recorded with the host checkout id (HS2-4SP
   expect(ticketReads).toContain('git-local:remote-target');
   await expect(toasts.filter({ hasText: 'Open project' })).toHaveCount(0);
 
-  // A checkout that is not open on this host names the host, not a raw checkout id.
+  // A checkout of the same host that is not open here is offered by host name (HS2-4JTETR).
   await page.keyboard.press('Escape');
   await expect(linked).toHaveCount(0);
   await expect(reader).toBeVisible();
+  const offer = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: /from studio\?/ }));
   await rows.filter({ hasText: 'HS2-RMTOTH' }).click();
-  await expect(toasts.filter({ hasText: 'Open that project on studio to view this ticket.' })).toBeVisible();
+  await expect(offer).toContainText('Open Elsewhere from studio?');
+  for (const [name, width, height] of [
+    ['wide', 1440, 900],
+    ['medium', 1024, 768],
+    ['narrow', 390, 844],
+    ['wide-again', 1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(offer.getByRole('button', { name: 'Open Project' })).toBeInViewport();
+    await page.screenshot({ path: `target/visual-captures/hs2-4jtetr-offer-${name}.png`, animations: 'disabled' });
+  }
+  // Cancel opens nothing.
+  await offer.getByRole('button', { name: 'Cancel' }).click();
+  await expect(offer).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /studio · Elsewhere/ })).toHaveCount(0);
+  // Opening it adds the host's project as a tab and opens the ticket there.
+  await rows.filter({ hasText: 'HS2-RMTOTH' }).click();
+  await offer.getByRole('button', { name: 'Open Project' }).click();
+  await expect(page.getByRole('tab', { name: /studio · Elsewhere/ })).toBeVisible({ timeout: 20_000 });
+  const opened = page.getByRole('dialog', { name: `Read and edit ${other.slug}` });
+  await expect(opened).toBeVisible({ timeout: 20_000 });
+  await expect(opened).toContainText(other.title);
+  expect(ticketReads).toContain('git-local:remote-other');
   await expect(toasts.filter({ hasText: 'Open project' })).toHaveCount(0);
 });
