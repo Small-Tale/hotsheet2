@@ -74,8 +74,8 @@ pub use model::{
     Lease, LeaseToken, Liveness, Outcome, ProducerFamily, RECORD_VERSION, Status, TicketLink,
 };
 pub use monitor::{
-    CancelReply, Monitor, MonitorConfig, MonitorControl, MonitorExit, Observation, Observed, Poll,
-    Tick, WATCH_STATE_KEY, Wake, WatchError, WatchSource,
+    CURRENT_STEP_KEY, CancelReply, Monitor, MonitorConfig, MonitorControl, MonitorExit,
+    Observation, Observed, Poll, Tick, WATCH_STATE_KEY, Wake, WatchError, WatchSource,
 };
 pub use probe::{JournalProbe, NoProbe, OwnerProbe, OwnerState};
 pub use signal::{ChangeWaiter, KeptWaiter};

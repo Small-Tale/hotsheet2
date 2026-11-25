@@ -107,7 +107,8 @@ serve, lease renewal between polls, steps that write nothing, backoff on
 unchanged and failed polls, a vanished operation, outcomes in two checkouts with
 idle exit, every cancel answer, stop watching, takeover of a dead monitor's Job,
 reattach after `lost`, release on stop, the file-backed fixture source, and the
-change waiter. `slot.rs` unit tests cover the single monitor slot and addressed
+change waiter, and a final reading clearing the current step unless it names
+the failed one (HS2-HR83E5). `slot.rs` unit tests cover the single monitor slot and addressed
 stop requests. `hotsheet-cli/tests/job_monitor.rs` spawns the built CLI on a
 temporary machine home: idempotent start and stop, four racing starts, a watch
 Job reported to its outcome followed by idle exit, a monitor killed with
