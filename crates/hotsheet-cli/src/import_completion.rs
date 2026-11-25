@@ -93,6 +93,88 @@ pub fn verify_backup(store: &Path) -> Result<String> {
     Ok(revision.to_string())
 }
 
+/// HS2-8SEWHJ: the store's Git config key that records the origin URL Hot Sheet itself
+/// saved for a backup. Only an origin equal to it may be replaced by a later backup URL;
+/// an origin the user configured is never replaced.
+pub const SAVED_ORIGIN_KEY: &str = "hotsheet.backupOrigin";
+
+fn git_optional(store: &Path, args: &[&str]) -> Option<String> {
+    let output = hotsheet_ticketing::git::command()
+        .arg("-C")
+        .arg(store)
+        .args(args)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+/// Save `url` as the store's `origin` before anything else can fail, so the URL the
+/// user entered is kept even when readiness or the push fails (HS2-8SEWHJ). Adds a
+/// missing origin, keeps a matching one, replaces only an origin Hot Sheet saved
+/// earlier, and refuses any other existing origin.
+fn save_backup_origin(store: &Path, url: &str) -> Result<()> {
+    let url = url.trim();
+    if url.is_empty() || url.starts_with('-') || url.contains(['\r', '\n']) {
+        bail!("enter a valid Git remote URL");
+    }
+    let existing = git_optional(store, &["remote", "get-url", "origin"]);
+    match existing.as_deref() {
+        Some(current) if current == url => return Ok(()),
+        Some(current) => {
+            if git_optional(store, &["config", "--get", SAVED_ORIGIN_KEY]).as_deref()
+                != Some(current)
+            {
+                bail!(
+                    "origin is already configured as {current}; refusing to replace a remote Hot Sheet did not save. Use that remote, or remove or rename it first"
+                );
+            }
+            git(store, &["remote", "set-url", "origin", url])
+                .context("saving the backup remote as origin")?;
+        }
+        None => {
+            git(store, &["remote", "add", "origin", url])
+                .context("saving the backup remote as origin")?;
+        }
+    }
+    git(store, &["config", SAVED_ORIGIN_KEY, url])?;
+    Ok(())
+}
+
+/// The headless counterpart of the bridge's backup job (HS2-8SEWHJ): save the origin,
+/// commit Hot Sheet's own ignore rules and require a clean store, push, and record the
+/// same verified backup proof. Rerunning it with the same URL is a no-op push and a
+/// fresh verification.
+pub fn back_up(store: &Path, url: &str) -> Result<String> {
+    let store = hotsheet_sync::paths::canonicalize(store)?;
+    save_backup_origin(&store, url)?;
+    prepare_backup(&store)?;
+    let path = proof_path(&store, BACKUP)?;
+    match std::fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let output = hotsheet_ticketing::git::command()
+        .arg("-C")
+        .arg(&store)
+        .args(["push", "-u", "origin", "HEAD"])
+        .output()?;
+    // Git's own diagnostics stay on stderr so machine stdout stays parseable.
+    eprint!("{}", String::from_utf8_lossy(&output.stdout));
+    eprint!("{}", String::from_utf8_lossy(&output.stderr));
+    if !output.status.success() {
+        bail!(
+            "pushing the imported ticket store failed; origin is saved as {}. Fix access to the remote and rerun the backup",
+            url.trim()
+        );
+    }
+    verify_backup(&store)
+}
+
 /// The step before a backup push (HS2-HSHT2G): commit Hot Sheet's own store
 /// `.gitignore`, then require a clean store with no pending attachment import. The
 /// bridge's backup job and the headless backup share it.

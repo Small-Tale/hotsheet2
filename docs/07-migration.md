@@ -312,8 +312,11 @@ may not have open at once):
    network; origin existence alone never enables cleanup. The destructive DELETE
    endpoint independently rechecks the proof, clean state, origin URL, and current
    remote ancestry before removing any source data. An unavailable, stale, or replaced
-   backup refuses deletion. A matching existing origin can be retried; failed setup
-   removes only the origin added by that attempt, provided its URL has not changed.
+   backup refuses deletion. The entered URL is saved as `origin` before the readiness
+   check and push, and a failure keeps it, with an error that says so (HS2-8SEWHJ).
+   Retry reuses it. Change backup replaces only an origin Hot Sheet saved, recorded as
+   `hotsheet.backupOrigin` in the store's Git config; a different origin the user
+   configured is refused.
    Cleanup requires confirmation and refuses to start while a registered HS1 channel,
    project lock, or saved-list app instance is still live, because that process can
    recreate its database after removal. Project-tagged channel entries owned by another
@@ -450,6 +453,13 @@ Like the background job, verification first commits Hot Sheet's own store `.giti
 (HS2-HSHT2G). `hotsheet-migrate -C <ticket-store> --prepare-backup` runs only that step
 and the readiness check, naming any other uncommitted file, so it is safe to run before
 a manual push.
+
+The headless path also does the whole backup step: `hotsheet-migrate -C <ticket-store>
+--backup-remote <url>` saves the URL as `origin` under the same rules as the app, commits
+Hot Sheet's ignore rules, checks readiness, pushes with `-u origin HEAD`, and records the
+verified backup proof (HS2-8SEWHJ). Given with the `.hotsheet` directory, it runs after
+the import. A failed push keeps the saved origin and says so, and rerunning the command
+is idempotent.
 
 ## 7.4 What is and isn't migrated
 

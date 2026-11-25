@@ -16,8 +16,13 @@ use clap::Parser;
 )]
 struct Cli {
     /// The old project's `.hotsheet` directory.
-    #[arg(required_unless_present_any = ["verify_backup", "prepare_backup", "hold_job_lock"])]
+    #[arg(required_unless_present_any = ["verify_backup", "prepare_backup", "backup_remote", "hold_job_lock"])]
     hotsheet_dir: Option<PathBuf>,
+    /// Save this URL as the store's `origin`, push the import, and record the verified
+    /// backup. With a `.hotsheet` directory it runs after the import. An origin Hot Sheet
+    /// saved earlier is replaced; a different user-configured origin is refused.
+    #[arg(long, value_name = "URL", conflicts_with_all = ["verify_backup", "prepare_backup", "progress_json"])]
+    backup_remote: Option<String>,
     /// Verify a manually pushed origin and record cleanup eligibility, without importing.
     #[arg(long, conflicts_with = "hotsheet_dir")]
     verify_backup: bool,
@@ -82,9 +87,12 @@ fn main() -> Result<()> {
         println!("Verified Hot Sheet 1 backup for import {revision}.");
         return Ok(());
     }
-    let source = cli
-        .hotsheet_dir
-        .expect("clap requires the HS1 source for migration");
+    let Some(source) = cli.hotsheet_dir else {
+        let url = cli
+            .backup_remote
+            .expect("clap requires the HS1 source or a backup remote");
+        return back_up(&cli.path, &url);
+    };
     let result = hotsheet_cli::run_migrate_with_progress(
         &cli.path,
         &source,
@@ -124,6 +132,19 @@ fn main() -> Result<()> {
     println!(
         "Imported {} ticket(s) ({} attachment file(s)), skipped {} already present.",
         summary.written, summary.attachments, summary.skipped
+    );
+    match &cli.backup_remote {
+        Some(url) => back_up(&cli.path, url),
+        None => Ok(()),
+    }
+}
+
+/// HS2-8SEWHJ: the headless counterpart of the app's backup step.
+fn back_up(store: &std::path::Path, url: &str) -> Result<()> {
+    let revision = hotsheet_cli::back_up_hs1_import(store, url)?;
+    println!(
+        "Saved {} as origin, pushed, and verified the Hot Sheet 1 backup for import {revision}.",
+        url.trim()
     );
     Ok(())
 }

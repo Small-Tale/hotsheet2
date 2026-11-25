@@ -294,37 +294,39 @@ describe('HS1 backup and cleanup through real Git and the local HTTP endpoint', 
     }
   });
 
-  it('rolls back only its own origin, preserves existing origins on failure, and rejects legacy receipt-only evidence', async () => {
+  it('HS2-8SEWHJ keeps the saved origin on failure, replaces only its own origin, and rejects legacy receipt-only evidence', async () => {
     const { parent, root, store, remote } = await realFixture();
+    const origin = () => backupGit(store, ['remote', 'get-url', 'origin']);
     const failPush = async (command: string, args: string[]) => {
       if (args.includes('push')) throw new Error('Simulated push failure');
       await runGitCommand(command, args);
     };
     try {
-      await expect(connectGitTicketStoreRemote(store, remote, failPush)).rejects.toThrow(/Simulated push failure/);
-      await expect(backupGit(store, ['remote', 'get-url', 'origin'])).rejects.toThrow();
+      await expect(connectGitTicketStoreRemote(store, remote, failPush)).rejects.toThrow(
+        /^Saved .* as the ticket repository’s origin\. .*Simulated push failure/,
+      );
+      expect(await origin()).toBe(remote);
       expect(await hasHs1Backup(store, root)).toBe(false);
-      await backupGit(store, ['remote', 'add', 'origin', remote]);
-      await expect(connectGitTicketStoreRemote(store, remote, failPush)).rejects.toThrow(/Simulated push failure/);
-      expect(await backupGit(store, ['remote', 'get-url', 'origin'])).toBe(remote);
+      // Retry reuses the saved origin.
       await connectGitTicketStoreRemote(store, remote);
       expect(await hasHs1Backup(store, root)).toBe(true);
       // The headless verifier writes the same proof that the HTTP cleanup gate reads.
       await rm(resolve(store, '.git/hotsheet-hs1-backup.json'));
       await runGitCommand(migrateBin, ['-C', store, '--verify-backup']);
       await expect(requireHs1Backup(store, root)).resolves.toBeUndefined();
-      await backupGit(store, ['remote', 'remove', 'origin']);
-      await expect(
-        connectGitTicketStoreRemote(store, remote, async (command, args) => {
-          if (args.includes('push')) {
-            await backupGit(store, ['remote', 'set-url', 'origin', `${remote}.changed`]);
-            throw new Error('Origin changed during failed push');
-          }
-          await runGitCommand(command, args);
-        }),
-      ).rejects.toThrow(/Origin changed/);
-      expect(await backupGit(store, ['remote', 'get-url', 'origin'])).toBe(`${remote}.changed`);
+      // Change backup: a mistyped URL replaces the origin Hot Sheet saved and stays after
+      // its push fails; the corrected URL replaces it again.
+      await expect(connectGitTicketStoreRemote(store, `${remote}.typo`)).rejects.toThrow(/^Saved .*\.typo/);
+      expect(await origin()).toBe(`${remote}.typo`);
       expect(await hasHs1Backup(store, root)).toBe(false);
+      await connectGitTicketStoreRemote(store, remote);
+      expect(await origin()).toBe(remote);
+      expect(await hasHs1Backup(store, root)).toBe(true);
+      // An origin the user configured is never replaced.
+      await backupGit(store, ['config', '--unset', 'hotsheet.backupOrigin']);
+      await backupGit(store, ['remote', 'set-url', 'origin', `${remote}.user`]);
+      await expect(connectGitTicketStoreRemote(store, remote)).rejects.toThrow(/already has an origin/);
+      expect(await origin()).toBe(`${remote}.user`);
       await backupGit(store, ['remote', 'set-url', 'origin', remote]);
       await connectGitTicketStoreRemote(store, remote);
       await rm(resolve(store, '.git/hotsheet-hs1-import-completed.json'));

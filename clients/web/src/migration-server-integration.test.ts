@@ -140,6 +140,9 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
       expect(job.status).toBe('running');
       await waitForTerminal();
       expect(job.status, job.error).toBe('succeeded');
+      // HS2-8SEWHJ: the URL entered for the backup is the store's saved origin.
+      expect(await backupGit(store, ['remote', '-v'])).toContain(`origin\t${remote} (push)`);
+      expect(await backupGit(store, ['config', '--get', 'hotsheet.backupOrigin'])).toBe(remote);
       expect(await hasHs1Backup(store, root)).toBe(true);
       expect(await readFile(resolve(root, '.hotsheet/attachments/proof.txt'), 'utf8')).toBe('ACTUAL PAYLOAD');
       expect((await app.request(`/__hotsheet/projects/${session.id}/hs1-data`, { method: 'DELETE' })).status).toBe(200);

@@ -313,6 +313,82 @@ fn hs2_hsht2g_backup_preparation_commits_hot_sheet_ignore_rules_and_names_real_c
     assert_eq!(git_in(&store, &["rev-parse", "HEAD"]), head);
 }
 
+/// HS2-8SEWHJ: the headless import saves the backup remote it is given as `origin`,
+/// keeps it when the push fails, replaces only an origin Hot Sheet saved, refuses a
+/// user's own origin, and is idempotent on rerun.
+#[test]
+fn hs2_8sewhj_headless_backup_remote_is_saved_pushed_and_verified() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("project/.hotsheet");
+    let store = root.path().join("tickets.hs2");
+    let missing = root.path().join("missing.git");
+    let remote = root.path().join("backup.git");
+    std::fs::create_dir_all(&source).unwrap();
+    let exporter = fake_exporter(root.path());
+    git_in(
+        root.path(),
+        &["init", "-q", "--bare", remote.to_str().unwrap()],
+    );
+    let origin = || {
+        git_in(&store, &["remote", "get-url", "origin"])
+            .trim()
+            .to_owned()
+    };
+    let backup = |url: &std::path::Path| {
+        let mut command = Command::new(workspace_bin::path("hotsheet-migrate"));
+        command
+            .env("HOTSHEET_HOME", &home)
+            .env("GIT_AUTHOR_NAME", "Hot Sheet test")
+            .env("GIT_AUTHOR_EMAIL", "hotsheet@example.invalid")
+            .env("GIT_COMMITTER_NAME", "Hot Sheet test")
+            .env("GIT_COMMITTER_EMAIL", "hotsheet@example.invalid")
+            .args([
+                "-C",
+                store.to_str().unwrap(),
+                "--backup-remote",
+                url.to_str().unwrap(),
+            ]);
+        command
+    };
+
+    // Import and back up in one headless command; the push fails, the URL stays saved.
+    migration_command(&source, &store, &exporter)
+        .env("HOTSHEET_HOME", &home)
+        .args(["--backup-remote", missing.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Imported 1 ticket(s)"))
+        .stderr(predicate::str::contains("origin is saved as"));
+    assert_eq!(origin(), missing.to_str().unwrap());
+    let proof = store.join(".git/hotsheet-hs1-backup.json");
+    assert!(!proof.exists());
+
+    // A corrected URL replaces the origin Hot Sheet saved, pushes, and verifies.
+    backup(&remote)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Saved"));
+    assert_eq!(origin(), remote.to_str().unwrap());
+    assert!(git_in(&store, &["remote", "-v"]).contains(remote.to_str().unwrap()));
+    assert_eq!(
+        git_in(&store, &["rev-parse", "HEAD"]),
+        git_in(&remote, &["rev-parse", "HEAD"])
+    );
+    assert!(proof.is_file());
+    // Rerunning is idempotent.
+    backup(&remote).assert().success();
+    assert_eq!(origin(), remote.to_str().unwrap());
+
+    // An origin the user configured is never replaced.
+    git_in(&store, &["config", "--unset", "hotsheet.backupOrigin"]);
+    backup(&missing)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("refusing to replace"));
+    assert_eq!(origin(), remote.to_str().unwrap());
+}
+
 #[cfg(unix)]
 #[test]
 fn repeated_migration_rejects_failed_commits_and_invalidates_cleanup_proof() {

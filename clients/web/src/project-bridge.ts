@@ -1064,21 +1064,29 @@ export async function connectGitTicketStoreRemote(
   const store = await realpath(storeInput.trim());
   if (!(await exists(resolve(store, 'hotsheet-store.json'))))
     throw new Error('The ticket repository is no longer available.');
-  await prepare?.(store);
-  const completion = await readImportCompletion(store, git),
-    existing = await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined);
-  let added = false;
-  if (existing && existing !== remote)
-    throw describeGitRemoteFailure(new Error('remote origin already exists.'), 'add');
-  if (completion) await invalidateHs1Backup(store, git);
-  if (!existing) {
+  // HS2-8SEWHJ: save the entered URL first, so a later readiness or push failure cannot
+  // discard it. Hot Sheet records the origin it saved; only that origin may be replaced
+  // by a corrected URL, and a user's own different origin is refused.
+  const existing = await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined);
+  if (existing !== remote) {
+    const saved = await git(store, ['config', '--get', SAVED_BACKUP_ORIGIN_KEY]).catch(() => undefined);
+    if (existing && existing !== saved)
+      throw describeGitRemoteFailure(new Error('remote origin already exists.'), 'add');
     try {
-      await runner('git', ['-C', store, 'remote', 'add', 'origin', remote]);
-      added = true;
+      await runner('git', ['-C', store, 'remote', existing ? 'set-url' : 'add', 'origin', remote]);
+      await runner('git', ['-C', store, 'config', SAVED_BACKUP_ORIGIN_KEY, remote]);
     } catch (error) {
       throw describeGitRemoteFailure(error, 'add');
     }
   }
+  let completion: Awaited<ReturnType<typeof readImportCompletion>>;
+  try {
+    await prepare?.(store);
+    completion = await readImportCompletion(store, git);
+  } catch (error) {
+    throw savedOriginError(remote, error);
+  }
+  if (completion) await invalidateHs1Backup(store, git);
   try {
     if (observe) {
       await observe({ version: 1, phase: 'push_start' });
@@ -1100,12 +1108,18 @@ export async function connectGitTicketStoreRemote(
     await observe?.({ version: 1, phase: 'verify_backup' });
     if (completion) await recordHs1Backup(store, completion, git);
   } catch (error) {
-    // A failed first push must remain retryable from the setup screen. Roll back only
-    // the origin this operation just added; never leave a half-configured repository.
-    if (added && (await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined)) === remote)
-      await runner('git', ['-C', store, 'remote', 'remove', 'origin']).catch(() => undefined);
-    throw describeGitRemoteFailure(error, 'push');
+    // The saved origin stays (HS2-8SEWHJ): Retry reuses it, and Change backup replaces it.
+    throw savedOriginError(remote, describeGitRemoteFailure(error, 'push'));
   }
+}
+
+/** The store Git config key naming the origin Hot Sheet saved for a backup (HS2-8SEWHJ). */
+export const SAVED_BACKUP_ORIGIN_KEY = 'hotsheet.backupOrigin';
+
+/** Say that the entered URL is kept when a step after saving it fails (HS2-8SEWHJ). */
+export function savedOriginError(remote: string, error: unknown): Error {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new Error(`Saved ${remote} as the ticket repository’s origin. ${detail}`);
 }
 
 export function gitTicketStoreConnectionId(path: string): string {

@@ -1180,7 +1180,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   and work with ordinary repositories and Git worktrees. `--prepare-backup`
   (`import_completion::prepare_backup`) commits Hot Sheet's own store `.gitignore`
   (`FsStore::commit_ignore_rules`) and names any other uncommitted file; the bridge's
-  backup job runs it before its readiness check (HS2-HSHT2G).
+  backup job runs it before its readiness check (HS2-HSHT2G). `--backup-remote <url>`
+  (`import_completion::back_up`) is the headless backup: it saves the origin, prepares,
+  pushes and verifies. Both it and `connectGitTicketStoreRemote` save the entered URL
+  first and record it as `hotsheet.backupOrigin`, the only origin they may replace
+  (HS2-8SEWHJ).
 
 ## Build / test
 

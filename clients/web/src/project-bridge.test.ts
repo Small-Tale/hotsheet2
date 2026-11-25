@@ -1206,13 +1206,62 @@ describe('Git ticket-store remote setup', () => {
       });
       expect(calls).toEqual([
         ['git', ['-C', store, 'remote', 'add', 'origin', 'git@example.com:team/tickets.git']],
+        ['git', ['-C', store, 'config', 'hotsheet.backupOrigin', 'git@example.com:team/tickets.git']],
         ['git', ['-C', store, 'push', '-u', 'origin', 'HEAD']],
       ]);
     } finally {
       await rm(store, { recursive: true, force: true });
     }
   });
-  it('removes the just-added origin and preserves unknown push diagnostics for a retry', async () => {
+  it('HS2-8SEWHJ saves the origin before readiness, replaces only an origin Hot Sheet saved, and refuses a user origin', async () => {
+    const store = await realpath(await mkdtemp(resolve(tmpdir(), 'hotsheet-remote-'))),
+      calls: string[][] = [];
+    let origin: string | undefined = 'git@example.com:team/typo.git',
+      saved: string | undefined = origin;
+    const runner = async (_command: string, args: string[]) => {
+        calls.push(args.slice(2));
+        if (args[2] === 'remote') origin = args[5];
+        if (args[2] === 'config') saved = args[4];
+      },
+      git = async (_store: string, args: string[]) => {
+        if (args[0] === 'remote') {
+          if (!origin) throw new Error('No origin');
+          return origin;
+        }
+        if (args[0] === 'config') {
+          if (!saved) throw new Error('Unset');
+          return saved;
+        }
+        throw new Error(`unexpected git ${args.join(' ')}`);
+      };
+    try {
+      await writeFile(resolve(store, 'hotsheet-store.json'), '{}');
+      // A readiness failure after saving keeps the corrected URL and says so.
+      await expect(
+        connectGitTicketStoreRemote(store, 'git@example.com:team/tickets.git', runner, git, undefined, async () => {
+          throw new Error('Commit these ticket-store changes before backup or Hot Sheet 1 cleanup: notes.txt.');
+        }),
+      ).rejects.toThrow(
+        'Saved git@example.com:team/tickets.git as the ticket repository’s origin. Commit these ticket-store changes',
+      );
+      expect(calls).toEqual([
+        ['remote', 'set-url', 'origin', 'git@example.com:team/tickets.git'],
+        ['config', 'hotsheet.backupOrigin', 'git@example.com:team/tickets.git'],
+      ]);
+      expect(origin).toBe('git@example.com:team/tickets.git');
+      // An origin the user configured is never replaced.
+      saved = undefined;
+      calls.length = 0;
+      await expect(connectGitTicketStoreRemote(store, 'git@example.com:team/other.git', runner, git)).rejects.toThrow(
+        /already has an origin/,
+      );
+      expect(calls).toEqual([]);
+      expect(origin).toBe('git@example.com:team/tickets.git');
+    } finally {
+      await rm(store, { recursive: true, force: true });
+    }
+  });
+  it('keeps the saved origin and preserves unknown push diagnostics for a retry', async () => {
     const store = await realpath(await mkdtemp(resolve(tmpdir(), 'hotsheet-remote-'))),
       calls: Array<[string, string[]]> = [];
     let origin: string | undefined;
@@ -1228,8 +1277,11 @@ describe('Git ticket-store remote setup', () => {
           if (!origin) throw new Error('No origin');
           return origin;
         }),
-      ).rejects.toThrow(/could not push.*Git details: remote helper reported an unfamiliar failure/i);
-      expect(calls.at(-1)).toEqual(['git', ['-C', store, 'remote', 'remove', 'origin']]);
+      ).rejects.toThrow(
+        /^Saved git@example\.com:team\/tickets\.git as the ticket repository’s origin\. .*could not push.*Git details: remote helper reported an unfamiliar failure/i,
+      );
+      expect(calls.at(-1)).toEqual(['git', ['-C', store, 'push', '-u', 'origin', 'HEAD']]);
+      expect(origin).toBe('git@example.com:team/tickets.git');
     } finally {
       await rm(store, { recursive: true, force: true });
     }

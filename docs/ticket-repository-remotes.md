@@ -13,8 +13,11 @@ and adds next steps for common cases: an existing `origin`, a missing or inacces
 repository, SSH/token authentication, SSH host-key trust, network/DNS failures, a
 non-empty remote, or a repository with no commit yet. An unrecognized Git failure is
 shown with its operation context and original diagnostic instead of being reduced to an
-exit status. A failed first push removes only the `origin` that attempt just added, so
-correcting the URL or credentials and choosing **Connect & push** again is safe.
+exit status. Hot Sheet saves the entered URL as `origin` before pushing and keeps it when
+the push or a later check fails, and the error says so (HS2-8SEWHJ). Choosing
+**Connect & push** again with the same URL reuses it. A corrected URL replaces an origin
+Hot Sheet saved (recorded as `hotsheet.backupOrigin` in the store's Git config), while an
+`origin` you configured yourself is never replaced.
 New stores receive an initial committed schema baseline before this screen is shown, so
 the first push never depends on a later ticket mutation creating `HEAD`.
 
@@ -25,6 +28,7 @@ job. The setup dialog closes after acceptance; the banner and project tab show G
 reported object counts and byte/rate values where available. Other projects remain
 usable, and reload restores the running or failed attempt. Waiting for the remote and
 verifying the intended import revision remain indeterminate phases. Retry retains
-its owning store and remote; failure still removes only an origin created by that
-attempt. Successful push is followed by authoritative backup verification before the
+its owning store and remote. The remote is saved as `origin` before the readiness check
+and push, so a failure keeps it, and Change backup replaces it with a corrected URL.
+Successful push is followed by authoritative backup verification before the
 old-source cleanup action becomes available. See [migration ownership and progress](07-migration.md#background-ownership-and-progress-protocol).

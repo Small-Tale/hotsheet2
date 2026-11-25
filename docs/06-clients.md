@@ -1836,8 +1836,11 @@ checkout name>`, where the host is the machine name the peer last reported on th
   allowed because connection identity is independent from provider kind. Clicking an
   existing connection row opens that same dialog with its editable non-secret values.
   After creating a standalone git ticket store, the dialog asks for a clone URL and can
-  add `origin` plus perform the first push without exposing shell commands. A failed first
-  push rolls back that newly added origin so the same form remains retryable. Inline help
+  add `origin` plus perform the first push without exposing shell commands. The entered
+  URL is saved as `origin` before the push, and a failed push keeps it: the error says it
+  was saved, retrying reuses it, and a corrected URL replaces an origin Hot Sheet saved
+  (recorded as `hotsheet.backupOrigin` in the store's Git config). A different origin the
+  user configured is never replaced (HS2-8SEWHJ). Inline help
   links to [host-specific remote setup guidance](ticket-repository-remotes.md), including
   the distinction between Git hosts and issue-only providers such as Jira.
   Remote failures keep Git's diagnostic text and add specific recovery guidance for an
