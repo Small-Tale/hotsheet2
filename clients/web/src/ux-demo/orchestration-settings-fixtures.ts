@@ -295,6 +295,26 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
       };
       return Promise.resolve(structuredClone(manifest));
     },
+    // HS2-NAA3HV: the site becomes the home; the old home and the other sites name it, as the server does.
+    makeOrchestrationHomeSite: (_owner, target, expectedRevision) => {
+      if (expectedRevision !== manifest.revision)
+        return Promise.reject(new ApiHttpError('orchestration declaration changed', 409, 'conflict'));
+      const home = manifest.targets.find((item) => item.target_id === target)?.site_of;
+      if (!home) return Promise.reject(new ApiHttpError('already the home', 400, 'invalid'));
+      counter += 1;
+      manifest = {
+        ...manifest,
+        revision: `01JSYNTHREVISION00000000${String(counter)}`,
+        targets: manifest.targets.map((item) =>
+          item.target_id === target
+            ? { ...item, site_of: undefined }
+            : item.target_id === home || item.site_of === home
+              ? { ...item, site_of: target }
+              : item,
+        ),
+      };
+      return Promise.resolve(structuredClone(manifest));
+    },
     addOrchestrationProject: (_owner, request) => {
       const existing = Object.entries(bindings).find(
         ([, binding]) => binding.destination?.checkout_id === request.destination.checkout_id,

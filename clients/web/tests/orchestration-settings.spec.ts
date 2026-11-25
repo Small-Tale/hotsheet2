@@ -1401,6 +1401,120 @@ test('HS2-D4G81Q Settings shows each site OS and tools', async ({ page, browserN
 });
 
 /**
+ * HS2-NAA3HV: a site row's Make <site> the Home Site through the real shell and the real workflow: the
+ * site becomes the project's home at one manifest revision, the old home becomes its site, and the policy's
+ * per-target entry moves with the home. Captured wide, medium, narrow and wide again in both schemes.
+ */
+test('HS2-NAA3HV makes a site the home site of its project from Settings', async ({ page, browserName }) => {
+  test.setTimeout(240_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner, web, docs] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    const person = { role: 'human' };
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: person });
+    const widgets = (
+      await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+        destination: { kind: 'local', checkout_id: web.id },
+        label: 'Widgets',
+        actor: person,
+      })
+    ).target_id;
+    const laptop = (
+      await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+        destination: { kind: 'local', checkout_id: docs.id },
+        label: 'Widgets laptop',
+        site_of: widgets,
+        actor: person,
+      })
+    ).target_id;
+    await server.request(`${base}/policy`, 'PUT', {
+      expected_revision: null,
+      actor: person,
+      policy: { targets: [{ target_id: widgets, max_sessions: 1 }] },
+    });
+    const declared = async () =>
+      (await server.request<{ targets: { target_id: string; site_of?: string }[] }>(`${base}/targets`)).targets.map(
+        (target) =>
+          `${target.target_id === widgets ? 'Widgets' : 'Laptop'}<${target.site_of === widgets ? 'Widgets' : target.site_of === laptop ? 'Laptop' : ''}`,
+      );
+    expect(await declared()).toEqual(['Widgets<', 'Laptop<Widgets']);
+
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'Orchestration');
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const rows = settings.locator('[data-orchestration-project]');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(1)).toContainText('Site of Widgets');
+    const directory = join('target', 'visual-captures', 'hs2-naa3hv');
+    await mkdir(directory, { recursive: true });
+    // A project row has no Make … the Home Site; a site row has it beside Separate from Widgets.
+    await rows
+      .nth(0)
+      .getByRole('button', { name: /^Actions for / })
+      .click();
+    await expect(page.getByRole('menuitem', { name: /the Home Site/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    const openSiteMenu = async () => {
+      await rows.nth(1).getByRole('button', { name: 'Actions for Widgets laptop' }).click();
+      const menu = page.getByRole('menu', { name: 'Actions for Widgets laptop' });
+      await expect(menu.getByRole('menuitem', { name: 'Make Widgets laptop the Home Site' })).toBeVisible();
+      await expect(menu.getByRole('menuitem', { name: 'Separate from Widgets' })).toBeVisible();
+      return menu;
+    };
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+        await page.setViewportSize(size);
+        if (size.width === 390)
+          for (const name of ['Hide Settings Sidebar', 'Hide Project Detail']) {
+            const hide = page.getByRole('button', { name, exact: true });
+            if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+          }
+        const menu = await openSiteMenu();
+        const box = await menu.boundingBox();
+        expect(box!.x + box!.width).toBeLessThanOrEqual(size.width + 1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.screenshot({
+          path: join(
+            directory,
+            `hs2-naa3hv-menu-${String(size.width)}${index === 3 ? '-after-390' : ''}-${scheme}-${browserName}.png`,
+          ),
+          animations: 'disabled',
+        });
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+      }
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize(wide);
+    const menu = await openSiteMenu();
+    await menu.getByRole('menuitem', { name: 'Make Widgets laptop the Home Site' }).click();
+    // No confirmation: the same action on the old home undoes it.
+    await expect(settings.getByRole('status')).toHaveText('Widgets laptop is the home site of the project now.');
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    expect(await declared()).toEqual(['Widgets<Laptop', 'Laptop<']);
+    await expect(rows.nth(0)).toContainText('Widgets laptop');
+    await expect(rows.nth(0)).toContainText('2 sites');
+    await expect(rows.nth(1)).toContainText('Site of Widgets laptop');
+    // The policy's entry for the old home moved with the home.
+    const policy = await server.request<{ policy: { targets: { target_id: string }[] } }>(`${base}/policy`);
+    expect(policy.policy.targets.map((target) => target.target_id)).toEqual([laptop]);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.screenshot({
+        path: join(directory, `hs2-naa3hv-made-home-1440-${scheme}-${browserName}.png`),
+        animations: 'disabled',
+      });
+    }
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
  * HS2-E9VVQF: Add a Site on a project row, Separate from <project> on a site row, and + Add Project's
  * duplicate question, through the real shell and the real workflows. Launch orchestrates; Web, Docs and
  * Clone are checkouts of one ticket store and Other of a second one.

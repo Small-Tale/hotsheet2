@@ -1423,3 +1423,144 @@ fn hs2_s5rpar_an_extra_external_source_on_one_site_is_not_another_ticket_store()
     let refused = bind(&flow, &stores, 3, &at_other, &mut tx).unwrap_err();
     assert_eq!(refused.code(), "site_store_mismatch");
 }
+
+/// HS2-NAA3HV: making a site the home of its project swaps the grouping at one manifest
+/// revision, keeps a removed site's history with the project, leaves other projects
+/// alone, and refuses a home, a removed or unknown target and a stale revision.
+#[test]
+fn hs2_naa3hv_make_home_swaps_the_project_at_one_revision() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ManifestStore::new(root.path());
+    let clock = Clock(100);
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let mut view = store
+        .add(None, target(1, "Widgets", None), &mut tx)
+        .unwrap();
+    for (value, label, site_of) in [
+        (2, "Widgets laptop", Some(1)),
+        (3, "Widgets build host", Some(1)),
+        (4, "Widgets old box", Some(1)),
+        (5, "Gadgets", None),
+        (6, "Gadgets laptop", Some(5)),
+    ] {
+        view = store
+            .add(view.revision, target(value, label, site_of), &mut tx)
+            .unwrap();
+    }
+    view = store
+        .remove(view.revision.unwrap(), &id(4), &mut tx)
+        .unwrap();
+    let before = view.revision.clone().unwrap();
+    // A home, a removed site, an unknown target and a stale revision are refused.
+    assert!(matches!(
+        store.make_home(before.clone(), &id(1), &mut tx),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    assert!(matches!(
+        store.make_home(before.clone(), &id(4), &mut tx),
+        Err(OrchestrationError::Removed)
+    ));
+    assert!(matches!(
+        store.make_home(before.clone(), &id(99), &mut tx),
+        Err(OrchestrationError::NotFound)
+    ));
+    assert!(matches!(
+        store.make_home("01ARZ3NDEKTSV4RRFFQ69G5FAV".into(), &id(2), &mut tx),
+        Err(OrchestrationError::Conflict)
+    ));
+    assert_eq!(
+        store.read().unwrap().revision.unwrap(),
+        before,
+        "nothing was written"
+    );
+
+    let (view, previous) = store.make_home(before.clone(), &id(2), &mut tx).unwrap();
+    assert_eq!(previous, id(1));
+    assert_ne!(view.revision.clone().unwrap(), before, "one new revision");
+    let site_of = |value: u128| {
+        view.targets
+            .iter()
+            .find(|target| target.target_id == id(value))
+            .unwrap()
+            .site_of
+            .clone()
+    };
+    assert_eq!(site_of(2), None, "the new home");
+    assert_eq!(site_of(1), Some(id(2)), "the old home is its site");
+    assert_eq!(site_of(3), Some(id(2)), "every other site re-points");
+    assert_eq!(site_of(4), Some(id(1)), "a tombstone keeps what it named");
+    assert_eq!(site_of(6), Some(id(5)), "another project is untouched");
+    let sites = store.sites().unwrap();
+    assert_eq!(sites.home_of(&id(3)), id(2));
+    assert_eq!(sites.home_of(&id(1)), id(2));
+    assert_eq!(
+        sites.project_of(&id(4)),
+        id(2),
+        "the removed site's history counts for the project through the chain"
+    );
+    assert_eq!(sites.sites_of(&id(2)), vec![id(2), id(1), id(3), id(4)]);
+    assert!(sites.same_ticket(&ticket(4, "T-1"), &ticket(1, "T-1")));
+    assert_eq!(version(root.path()), 2);
+
+    // And back: making the old home the home again restores the grouping.
+    let (back, previous) = store
+        .make_home(view.revision.clone().unwrap(), &id(1), &mut tx)
+        .unwrap();
+    assert_eq!(previous, id(2));
+    for value in [2, 3] {
+        assert_eq!(
+            back.targets
+                .iter()
+                .find(|target| target.target_id == id(value))
+                .unwrap()
+                .site_of,
+            Some(id(1))
+        );
+    }
+    assert_eq!(store.sites().unwrap().project_of(&id(4)), id(1));
+}
+
+/// HS2-NAA3HV: the policy's per-target entries move with the home: those keyed by the old
+/// home and by the new home swap, other projects' entries stay, and a policy naming
+/// neither is unchanged.
+#[test]
+fn hs2_naa3hv_policy_entries_move_with_the_home() {
+    let body: PolicyBody = serde_json::from_value(serde_json::json!({
+        "targets": [
+            {"target_id": id(1), "max_sessions": 3},
+            {"target_id": id(2), "max_sessions": 1},
+            {"target_id": id(5), "max_sessions": 2}
+        ],
+        "placement": {
+            "resources": [{"target_id": id(1), "resources": [{"namespace": "vm", "resource": "macos"}]}],
+            "role_sessions": [{"target_id": id(1), "roles": ["dispatcher"]}]
+        }
+    }))
+    .unwrap();
+    let moved = body.with_home_moved(&id(1), &id(2)).unwrap();
+    let cap = |policy: &PolicyBody, value: u128| {
+        policy
+            .targets
+            .iter()
+            .find(|target| target.target_id == id(value))
+            .and_then(|target| target.max_sessions)
+    };
+    assert_eq!(cap(&moved, 2), Some(3), "the home's entry follows it");
+    assert_eq!(
+        cap(&moved, 1),
+        Some(1),
+        "the new home's own entry goes to the old"
+    );
+    assert_eq!(cap(&moved, 5), Some(2));
+    assert_eq!(moved.placement.resources[0].target_id, id(2));
+    assert_eq!(moved.placement.role_sessions[0].target_id, id(2));
+    // Moving entries adds no problem the policy did not have.
+    assert_eq!(moved.problems(None).len(), body.problems(None).len());
+    // Moving back restores it, and a policy naming neither site is left alone.
+    assert_eq!(moved.with_home_moved(&id(2), &id(1)), Some(body.clone()));
+    assert_eq!(body.with_home_moved(&id(7), &id(8)), None);
+}

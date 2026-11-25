@@ -201,6 +201,58 @@ impl ManifestStore {
         )
     }
 
+    /// HS2-NAA3HV: make the site `target_id` the home of its project, at one manifest
+    /// revision: it loses `site_of`, and the old home and every other active site of the
+    /// project become its sites. Tombstones keep what they name (they read through
+    /// [`ProjectSites`]); plan steps and runs keep the concrete site they name. The same
+    /// static and machine checks as any grouping change refuse it with their site codes.
+    /// Returns the view and the old home's id.
+    pub fn make_home(
+        &self,
+        expected_revision: String,
+        target_id: &str,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(ManifestView, String), OrchestrationError> {
+        let _lock = self.storage.lock()?;
+        let current = self.document()?.ok_or(OrchestrationError::NotFound)?;
+        if current.revision != expected_revision {
+            return Err(OrchestrationError::Conflict);
+        }
+        let site = current
+            .targets
+            .iter()
+            .find(|target| target.target_id == target_id)
+            .ok_or(OrchestrationError::NotFound)?;
+        if site.state == DeclarationState::Removed {
+            return Err(OrchestrationError::Removed);
+        }
+        let old_home = site.site_of.clone().ok_or(OrchestrationError::Invalid(
+            "the target is already the home of its project",
+        ))?;
+        active_project(&current.targets, &old_home)?;
+        let mut targets = current.targets;
+        for target in &mut targets {
+            if target.state != DeclarationState::Active {
+                continue;
+            }
+            if target.target_id == target_id {
+                target.site_of = None;
+            } else if target.target_id == old_home
+                || target.site_of.as_deref() == Some(old_home.as_str())
+            {
+                target.site_of = Some(target_id.to_owned());
+            }
+        }
+        let view = self.replace_locked(
+            ReplaceTargets {
+                expected_revision: Some(expected_revision),
+                targets,
+            },
+            tx,
+        )?;
+        Ok((view, old_home))
+    }
+
     pub fn remove(
         &self,
         expected_revision: String,

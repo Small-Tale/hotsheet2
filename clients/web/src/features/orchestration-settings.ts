@@ -50,6 +50,7 @@ export type OrchestrationApi = Pick<
   | 'addOrchestrationProject'
   | 'inspectOrchestrationTarget'
   | 'separateOrchestrationSite'
+  | 'makeOrchestrationHomeSite'
   | 'removeOrchestrationProject'
   | 'hostedOrchestrationProjects'
   | 'addHostedOrchestrationProject'
@@ -466,6 +467,31 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     } catch (reason) {
       put(ownerId, {
         message: `Could not separate ${declaration.label} from ${project ?? 'its project'}. ${siteFailure(reason)}`,
+      });
+    } finally {
+      busy(ownerId, targetId, false);
+    }
+  }
+
+  /**
+   * HS2-NAA3HV: a site row's Make <site> the Home Site. The old home and every other site become its sites, and
+   * the policy's per-target entries move with the home. Undoable the same way, so it does not ask.
+   */
+  async function makeHomeSite(ownerId: string, targetId: string) {
+    const api = dependencies.api(ownerId),
+      state = stateOf(ownerId),
+      declaration = state.manifest?.targets.find((target) => target.target_id === targetId),
+      project = declaration?.site_of ? targetLabel(ownerId, declaration.site_of) : undefined;
+    if (!api || !declaration?.site_of || !state.manifest?.revision || state.busy.includes(targetId)) return;
+    busy(ownerId, targetId, true);
+    put(ownerId, { message: '', status: '' });
+    try {
+      await api.makeOrchestrationHomeSite(ownerId, targetId, state.manifest.revision);
+      put(ownerId, { status: `${declaration.label} is the home site of the project now.` });
+      await loadSettings(ownerId);
+    } catch (reason) {
+      put(ownerId, {
+        message: `Could not make ${declaration.label} the home site of ${project ?? 'its project'}. ${siteFailure(reason)}`,
       });
     } finally {
       busy(ownerId, targetId, false);
@@ -911,6 +937,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     addHostedProject,
     addSite,
     separateSite,
+    makeHomeSite,
     toggleAllSites,
     loadStores,
     openAnother,

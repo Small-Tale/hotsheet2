@@ -11,6 +11,7 @@ import {
   Cloud,
   FolderOpen,
   Group,
+  House,
   Laptop,
   MoreHorizontal,
   Plus,
@@ -300,6 +301,14 @@ export function OrchestrationSettings({
                           // HS2-E9VVQF: a project adds a site; a site separates from its project.
                           ...(row.siteOf
                             ? [
+                                // HS2-NAA3HV: the site becomes the project's home; the old home becomes its site.
+                                {
+                                  label: `Make ${row.label} the Home Site`,
+                                  action: ACTIONS.makeHomeSite.value,
+                                  icon: <LucideIcon icon={House} name="house" />,
+                                  disabled: busy.includes(row.targetId),
+                                  attributes,
+                                },
                                 {
                                   label: `Separate from ${labels.get(row.siteOf) ?? 'Project'}`,
                                   action: ACTIONS.separateSite.value,

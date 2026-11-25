@@ -348,3 +348,133 @@ fn hs2_d4g81q_sites_view_reads_each_bound_sites_machine_when_asked() {
         ));
     }
 }
+
+/// HS2-NAA3HV: `POST …/targets/{target}/make-home` through the shared runtime the CLI,
+/// server and MCP use: one manifest revision, the policy's per-target entries moved with
+/// the home, a person's act when the policy changes, and a stale revision refused.
+#[test]
+fn hs2_naa3hv_make_home_route_moves_the_home_and_its_policy_entries() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(300);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let prefix = format!("/checkouts/{}/orchestration/targets", m.owner.id);
+    let make_home = format!("{prefix}/{}/make-home", id(2));
+    assert!(is_path(&make_home));
+    assert!(
+        !is_machine_path(&make_home),
+        "like a rename, any device role may ask"
+    );
+    let first = m
+        .runtime
+        .request(
+            "POST",
+            &prefix,
+            &json!({"expected_revision":null,"target_id":id(1),"label":"Widgets"}),
+            &mut tx,
+        )
+        .unwrap();
+    let added = m
+        .runtime
+        .request(
+            "POST",
+            &prefix,
+            &json!({"expected_revision":first["revision"],"target_id":id(2),"label":"Widgets laptop","site_of":id(1)}),
+            &mut tx,
+        )
+        .unwrap();
+    let person = json!({"role":"human","id":"maintainer"});
+    let policy_path = format!("/checkouts/{}/orchestration/policy", m.owner.id);
+    m.runtime
+        .request(
+            "PUT",
+            &policy_path,
+            &json!({"expected_revision":null,"actor":person,"policy":{
+                "targets":[{"target_id":id(1),"max_sessions":1}],
+                "placement":{"role_sessions":[{"target_id":id(1),"roles":["dispatcher"]}]}
+            }}),
+            &mut tx,
+        )
+        .unwrap();
+    // The policy names the old home, so moving it is a person's act.
+    let ai = m
+        .runtime
+        .request(
+            "POST",
+            &make_home,
+            &json!({"expected_revision":added["revision"],"actor":{"role":"ai","id":"claude-1"}}),
+            &mut tx,
+        )
+        .unwrap_err();
+    assert_eq!(
+        m.runtime.declarations(&m.owner.id).unwrap().revision,
+        added["revision"].as_str().map(str::to_owned),
+        "a refused re-home writes nothing: {ai:?}"
+    );
+    // A stale revision is a conflict.
+    assert!(matches!(
+        m.runtime.request(
+            "POST",
+            &make_home,
+            &json!({"expected_revision":first["revision"],"actor":person}),
+            &mut tx,
+        ),
+        Err(OrchestrationError::Conflict)
+    ));
+    let made = m
+        .runtime
+        .request(
+            "POST",
+            &make_home,
+            &json!({"expected_revision":added["revision"],"actor":person}),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(made["previous_home"], id(1));
+    assert_ne!(made["revision"], added["revision"]);
+    assert_eq!(made["targets"][0]["site_of"], id(2));
+    assert_eq!(made["targets"][1]["site_of"], Value::Null);
+    let policy = m
+        .runtime
+        .request("GET", &policy_path, &Value::Null, &mut tx)
+        .unwrap();
+    assert_eq!(made["policy_revision"], policy["revision"]);
+    assert_eq!(policy["policy"]["targets"][0]["target_id"], id(2));
+    assert_eq!(
+        policy["policy"]["placement"]["role_sessions"][0]["target_id"],
+        id(2)
+    );
+    // The new home is a home now: asking again is refused, and nothing changes.
+    assert!(matches!(
+        m.runtime.request(
+            "POST",
+            &make_home,
+            &json!({"expected_revision":made["revision"],"actor":person}),
+            &mut tx,
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    // Back again, without any policy entry for either site, an AI actor may do it too.
+    m.runtime
+        .request(
+            "PUT",
+            &policy_path,
+            &json!({"expected_revision":policy["revision"],"actor":person,"policy":{}}),
+            &mut tx,
+        )
+        .unwrap();
+    let back = m
+        .runtime
+        .request(
+            "POST",
+            &format!("{prefix}/{}/make-home", id(1)),
+            &json!({"expected_revision":made["revision"],"actor":{"role":"ai","id":"claude-1"}}),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(back["previous_home"], id(2));
+    assert_eq!(back["targets"][1]["site_of"], id(1));
+    assert_eq!(back["targets"][0]["site_of"], Value::Null);
+}

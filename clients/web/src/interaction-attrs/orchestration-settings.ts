@@ -15,6 +15,8 @@ export const ORCHESTRATION_SETTINGS_ACTIONS = {
   openAnotherSite: action('open-another-orchestration-site'),
   /** HS2-E9VVQF: a site row's Separate from <project>. */
   separateSite: action('separate-orchestration-site'),
+  /** HS2-NAA3HV: a site row's Make <site> the Home Site. */
+  makeHomeSite: action('make-orchestration-home-site'),
   openSessionActions: action('open-orchestration-session-actions'),
   showSession: action('show-orchestration-session'),
   takeOverSession: action('take-over-orchestration-session'),

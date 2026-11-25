@@ -172,6 +172,24 @@ several machines (HS2-ZKJX16). Each declaration is a **site** of one project:
   `target add --site-of`, `target rename --site-of` (also to move a site to another
   project) and `target rename --clear-site-of`. A removed site keeps its `site_of` in
   its tombstone, so its history still counts for its project.
+- **Making a site the home site (HS2-NAA3HV).** `POST …/targets/{site}/make-home` with
+  `{expected_revision}` (`target make-home <site>`, MCP `hotsheet_targets` action
+  `make_home`) re-homes a project at one manifest revision: the site loses `site_of`,
+  and the old home and every other active site of the project name it. It is refused
+  for a target that is already a home (`invalid_request`), a removed or unknown target,
+  a stale revision, and with the site codes of any grouping change (`site_chain`,
+  `site_plan_conflict`, `site_run_conflict`, `site_store_mismatch`,
+  `site_repository_mismatch`). Plan steps and runs keep the concrete site they name and
+  read through the new grouping. A removed site's tombstone still names the old home;
+  the project key follows `site_of` to the end of that chain, so its history stays with
+  the project. **Policy entries move with the home** (the maintainer's default
+  decision): the `targets[]`, `placement.resources` and `placement.role_sessions`
+  entries keyed by the old home and those keyed by the new home swap ids, in one policy
+  write right after the manifest write. Should that write fail, the manifest is put back
+  by re-homing the old home. Changing the policy is a person's act, so an AI actor is
+  refused when the policy names either site; otherwise any actor that may rename a
+  target may re-home. The answer is the manifest plus `previous_home` and
+  `policy_revision`, and the change is audited as `target_make_home`.
 - **Adding an open project as a site (HS2-E9VVQF)** declares and binds it in one step:
   `POST …/orchestration/projects` with `site_of` (`orchestration project add
 --site-of`), the same workflow as Settings › Orchestration's Add a Site. The candidate
@@ -304,6 +322,8 @@ hotsheet-cli -C <configured-host-source> orchestration target add --project <own
 hotsheet-cli -C <configured-host-source> orchestration target rename <target-id> --project <owner> \
   --label "Widgets on the build host" --site-of <project-target-id> | --clear-site-of \
   --expected-revision <revision>
+hotsheet-cli -C <configured-host-source> orchestration target make-home <site-target-id> \
+  --project <owner> --expected-revision <revision>
 hotsheet-cli -C <configured-host-source> orchestration target sites --project <owner> [--capabilities]
 ```
 
@@ -5850,9 +5870,12 @@ the type changes to Software while it shows.
   edge cases, each marked _Another ticket store_ or _Ticket store unknown_ where it
   applies; the server's refusal (`site_store_mismatch` and the other site codes) shows in
   the message line. **Open Another Project…** there runs the regular open flow and adds
-  the project it opens as a site. A site row's menu has **Separate from <project>**,
-  which clears `site_of` at the stored manifest revision without asking: adding it as a
-  site again undoes it. Both are offered only for an orchestration project served on this
+  the project it opens as a site. A site row's menu has **Make <site> the Home Site**
+  (HS2-NAA3HV, a Lucide house), which re-homes the project at the stored manifest
+  revision without asking (the same action on the old home undoes it; the result shows
+  in the status line and a refusal with its site code in the message line), and
+  **Separate from <project>**, which clears `site_of` at the stored manifest revision
+  without asking: adding it as a site again undoes it. Both are offered only for an orchestration project served on this
   machine; one open from another server adds through the hosted route, which cannot
   inspect a store (HS2-89YNGN).
 - **+ Add Project.** The other open projects first, local and remote with their machine,

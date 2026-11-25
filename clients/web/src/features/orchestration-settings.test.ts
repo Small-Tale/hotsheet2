@@ -781,6 +781,31 @@ describe('Add a Site and Separate from <project> (HS2-E9VVQF)', () => {
     await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, 'closed-0000000000ab');
     expect(t.api.addOrchestrationProject).toHaveBeenCalledTimes(2);
 
+    // HS2-NAA3HV: Make Mobile the Home Site: API becomes Mobile's site, with no question asked.
+    const before = t.asked.length;
+    (t.api.makeOrchestrationHomeSite as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new ApiHttpError('plan conflict', 409, 'site_plan_conflict'),
+    );
+    await t.settings.makeHomeSite(DEMO_OWNER, site!.target_id);
+    expect(state(t).message).toBe(
+      'Could not make Mobile the home site of API. The plan would have two steps on one ticket of the project.',
+    );
+    expect(state(t).busy).not.toContain(site!.target_id);
+    await t.settings.makeHomeSite(DEMO_OWNER, site!.target_id);
+    expect(t.asked).toHaveLength(before);
+    expect(t.api.makeOrchestrationHomeSite).toHaveBeenLastCalledWith(DEMO_OWNER, site!.target_id, expect.any(String));
+    expect(state(t).message).toBe('');
+    expect(state(t).status).toBe('Mobile is the home site of the project now.');
+    const declared = (id: string) => state(t).manifest?.targets.find((target) => target.target_id === id);
+    expect(declared(site!.target_id)?.site_of).toBeUndefined();
+    expect(declared(DEMO_TARGETS.api)?.site_of).toBe(site!.target_id);
+    // A home has nothing to move; and API is made the home again.
+    await t.settings.makeHomeSite(DEMO_OWNER, site!.target_id);
+    expect(t.api.makeOrchestrationHomeSite).toHaveBeenCalledTimes(2);
+    await t.settings.makeHomeSite(DEMO_OWNER, DEMO_TARGETS.api);
+    expect(declared(DEMO_TARGETS.api)?.site_of).toBeUndefined();
+    expect(declared(site!.target_id)?.site_of).toBe(DEMO_TARGETS.api);
+
     // A stale revision: the refusal shows with the project's name, and the site stays.
     (t.api.separateOrchestrationSite as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new ApiHttpError('orchestration declaration changed', 409, 'conflict'),

@@ -316,6 +316,26 @@ impl Orchestration {
         )
     }
 
+    /// HS2-NAA3HV: make a site the home of its project ([`ManifestStore::make_home`]).
+    pub fn make_home<O: TargetObserver>(
+        &self,
+        target: &TargetRef,
+        expected_revision: String,
+        observer: &O,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(ManifestView, String), OrchestrationError> {
+        self.check_owner(target)?;
+        observer.with_source_guard(
+            &self.owner_checkout_id,
+            self.manifest.storage.anchor(),
+            None,
+            || {
+                self.manifest
+                    .make_home(expected_revision, &target.target_id, tx)
+            },
+        )
+    }
+
     pub fn remove<O: TargetObserver>(
         &self,
         target: &TargetRef,

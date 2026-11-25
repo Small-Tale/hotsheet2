@@ -3268,6 +3268,16 @@ export class Api {
         body: JSON.stringify({ expected_revision: expectedRevision, label, clear_site_of: true }),
       },
     );
+  /** HS2-NAA3HV: make a site the home of its project; the old home and the other sites become its sites. */
+  makeOrchestrationHomeSite = (owner: string, target: string, expectedRevision: string) =>
+    this.parsed(
+      parseOrchestrationManifest,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/make-home`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ expected_revision: expectedRevision, actor: { role: 'human' } }),
+      },
+    );
   /** HS2-92FJXM: the serving machine's open checkouts, which a client on another machine may add. */
   hostedOrchestrationProjects = (owner: string) =>
     this.parsed(
