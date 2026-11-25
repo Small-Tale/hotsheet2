@@ -1463,14 +1463,11 @@ async fn send_drive_turn_inner(
                     // capacity; HS2-WTSYQJ: a completed turn of a tool that reports limits
                     // but no usage confirms its recovery. A client drive has no terminal,
                     // so both are unattributed.
-                    crate::tool_capacity_signals::record(
+                    // HS2-JM0GVB: a usage limit also reads the tool's reset time once.
+                    crate::tool_capacity_signals::record_driven_outcome(
                         &thread_state,
-                        crate::tool_capacity_signals::driven_outcome_signal(
-                            &tool,
-                            reason,
-                            hotsheet_plugins::capacity_signals(&tool, &thread_state.plugin_dirs),
-                            time::OffsetDateTime::now_utc(),
-                        ),
+                        &tool,
+                        reason,
                     );
                     event.clone()
                 }

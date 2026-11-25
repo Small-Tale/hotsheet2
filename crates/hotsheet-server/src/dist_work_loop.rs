@@ -251,15 +251,8 @@ pub type LimitSink =
 pub fn live_state_limit_sink(state: &crate::AppState) -> LimitSink {
     let state = state.clone();
     std::sync::Arc::new(move |tool, done| {
-        crate::tool_capacity_signals::record(
-            &state,
-            crate::tool_capacity_signals::driven_outcome_signal(
-                tool,
-                done,
-                hotsheet_plugins::capacity_signals(tool, &state.plugin_dirs),
-                time::OffsetDateTime::now_utc(),
-            ),
-        );
+        // HS2-JM0GVB: a usage limit also reads the tool's reset time once.
+        crate::tool_capacity_signals::record_driven_outcome(&state, tool, done);
     })
 }
 
@@ -892,6 +885,117 @@ mod tests {
             .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default())
             .collect::<String>();
         assert!(!stored.contains("Synthetic quota message"));
+    }
+
+    /// HS2-JM0GVB: a driven usage limit of a tool that declares a usage query reads it
+    /// once in the background and records the spent bucket's reset; a rate limit, a
+    /// completed turn and an unanswered query never change the backoff.
+    #[test]
+    fn hs2_jm0gvb_a_usage_limit_reads_the_reset_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init_git(dir.path().join("t.hs2"), &StoreMetadata::new("HS")).unwrap();
+        let home = dir.path().join("machine-home");
+        let state = crate::AppState::new(store, SECRET.into())
+            .unwrap()
+            .with_machine_home(home.clone());
+        let entry = || {
+            hotsheet_ticketing::orchestration::ToolCapacityRegistry::new(&home)
+                .entries()
+                .unwrap()
+                .into_iter()
+                .find(|entry| entry.tool == "antigravity")
+        };
+        let failed = |error_type: &str| DoneReason::Failed {
+            exit_code: 3,
+            message: Some("Synthetic.".into()),
+            error_type: Some(error_type.into()),
+        };
+        let at = time::OffsetDateTime::now_utc()
+            .replace_nanosecond(0)
+            .unwrap();
+        let reset = at + time::Duration::days(6);
+        let queries = std::sync::Arc::new(AtomicUsize::new(0));
+        let query = |answer: Option<time::OffsetDateTime>| {
+            let queries = queries.clone();
+            move |drive: &hotsheet_plugins::DriveSpec, limited: time::OffsetDateTime| {
+                assert_eq!(
+                    drive.usage_query_args,
+                    ["-p", "/usage", "--output-format", "json"]
+                );
+                assert_eq!(limited, at);
+                queries.fetch_add(1, Ordering::SeqCst);
+                answer
+            }
+        };
+        // A rate limit and a completed turn ask nothing.
+        for done in [failed("rate_limit"), DoneReason::Completed] {
+            assert!(
+                crate::tool_capacity_signals::record_driven_outcome_with(
+                    &state,
+                    "antigravity",
+                    &done,
+                    at,
+                    query(Some(reset))
+                )
+                .is_none()
+            );
+        }
+        assert_eq!(queries.load(Ordering::SeqCst), 0);
+        // A usage limit: the guessed backoff first, then the reported reset.
+        let later = at + time::Duration::minutes(1);
+        let query_later = {
+            let queries = queries.clone();
+            move |_: &hotsheet_plugins::DriveSpec, _| {
+                queries.fetch_add(1, Ordering::SeqCst);
+                Some(reset)
+            }
+        };
+        crate::tool_capacity_signals::record_driven_outcome_with(
+            &state,
+            "antigravity",
+            &failed("usage_limit_exceeded"),
+            later,
+            query_later,
+        )
+        .expect("the query starts")
+        .join()
+        .unwrap();
+        assert_eq!(queries.load(Ordering::SeqCst), 1, "asked exactly once");
+        let limited = entry().unwrap().limit.unwrap();
+        assert!(limited.reset_reported);
+        assert_eq!(
+            limited.until_ms,
+            u64::try_from(reset.unix_timestamp() * 1000).unwrap()
+        );
+        // An unanswered query keeps the backoff.
+        let quiet = crate::AppState::new(
+            FsStore::init_git(dir.path().join("q.hs2"), &StoreMetadata::new("HS")).unwrap(),
+            SECRET.into(),
+        )
+        .unwrap()
+        .with_machine_home(dir.path().join("quiet-home"));
+        crate::tool_capacity_signals::record_driven_outcome_with(
+            &quiet,
+            "antigravity",
+            &failed("usage_limit_exceeded"),
+            at,
+            query(None),
+        )
+        .unwrap()
+        .join()
+        .unwrap();
+        let guessed = hotsheet_ticketing::orchestration::ToolCapacityRegistry::new(
+            &dir.path().join("quiet-home"),
+        )
+        .entries()
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.tool == "antigravity")
+        .unwrap()
+        .limit
+        .unwrap();
+        assert!(!guessed.reset_reported);
     }
 
     const SECRET: &str = "test-secret";

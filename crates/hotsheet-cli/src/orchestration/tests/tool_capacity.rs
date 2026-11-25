@@ -176,7 +176,7 @@ fn hs2_ahg7hw_each_plugins_declared_signals_drive_its_capacity_state() {
             ),
             (
                 "antigravity".to_owned(),
-                json!({"limits":true,"reset_times":false,"usage":false,"cost":false})
+                json!({"limits":true,"reset_times":true,"usage":false,"cost":false})
             ),
         ]
     );

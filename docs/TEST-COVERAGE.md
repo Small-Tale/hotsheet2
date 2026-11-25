@@ -4387,6 +4387,12 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   `tool_capacity_signals.rs # hs2_ahg7hw` maps it to a `rate_limit` signal with and
   without a reset time; `codex_rollout_watch.rs # hs2_cyhawb` reads the variant from a
   failed turn; the plugin table pins Codex's new declaration.
+- HS2-JM0GVB: `usage_resets.rs # hs2_jm0gvb` parses the observed agy 1.5.10 `/usage`
+  shape (synthetic values), picks the latest reset of a spent bucket still ahead, rejects
+  malformed reports, and runs a fake query once (failing, missing and untrusted programs
+  yield nothing); `dist_work_loop.rs # hs2_jm0gvb_a_usage_limit_reads_the_reset_once`
+  records the reported reset through the host path and asks nothing for a rate limit or a
+  completed turn; the plugin and capacity tables pin Antigravity's `reset_times`.
 - HS2-WTSYQJ: `tool_capacity_tests.rs # hs2_wtsyqj` walks a limits-only tool through
   limit, backoff end, completed probe (available, sequence reset) and a failed probe
   (longer backoff, then a completed one); `tool_capacity_signals.rs # hs2_wtsyqj` maps a

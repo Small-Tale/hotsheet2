@@ -1244,6 +1244,15 @@ and reads only that line's typed members (`status`, an HTTP or gRPC code, `retry
 `short_error`). A limit becomes the failed turn's `error_type` (`rate_limit` or
 `usage_limit_exceeded`), never a search of its text.
 
+It may also name **`usage_query_args`** (HS2-JM0GVB): arguments that make the drive's
+`program` print its usage report as JSON without an agent turn or quota spend (Antigravity:
+`["-p", "/usage", "--output-format", "json"]`, which answers
+`command.data.groups[].buckets[]`). When a driven turn fails on a typed usage limit, the host
+runs it once in the background, under the same `model_catalog_identity` check as the model
+catalog, and only when AI-tool probes are enabled (`HOTSHEET_AI_TOOL_PROBES`). It reads each
+bucket's typed `remaining_fraction` and `reset_time`, never names or descriptions; the latest
+reset of a spent bucket still ahead becomes the limit's reset time. Nothing polls it.
+
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
 `usage_limit_errors`, `reset_times`, `usage_events` and `cost` is `"reported"` or `"unknown"`, and
@@ -1251,7 +1260,8 @@ an omitted key or section is `unknown`. No value means that a limit never happen
 cannot report a limit is never assumed to be available. The loader refuses an unknown key or value,
 `reset_times` without a reported limit error, and `cost` without reported `usage_events`. Claude
 and Codex declare all five (Codex's request-rate limits since HS2-2BAVAM); OpenCode only
-`usage_events`; Antigravity rate and usage limit errors (HS2-86MK1Y). Orchestration reads the declaration when it judges tool capacity
+`usage_events`; Antigravity rate and usage limit errors (HS2-86MK1Y) and reset times (from
+`usage_query_args`, HS2-JM0GVB). Orchestration reads the declaration when it judges tool capacity
 ([26](26-orchestration-projects.md) §26.11). A plugin changes its declaration in the same change
 that adds or removes the detection it describes.
 

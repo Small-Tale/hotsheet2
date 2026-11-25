@@ -1493,7 +1493,7 @@ declare exactly what the existing detection observes:
 | Claude      | reported          | reported           | reported    | reported     | reported |
 | Codex       | reported          | reported           | reported    | reported     | reported |
 | OpenCode    | unknown           | unknown            | unknown     | reported     | unknown  |
-| Antigravity | reported          | reported           | unknown     | unknown      | unknown  |
+| Antigravity | reported          | reported           | reported    | unknown      | unknown  |
 
 Codex reports a request-rate limit as its own `CodexErrorInfo` variant,
 `rate_limit_exceeded`, beside `usage_limit_exceeded` (HS2-2BAVAM). The rollout halt path
@@ -1514,8 +1514,16 @@ turn carries that error type, and the dist work loop's limit sink and the client
 runner record it through the same halt path, unattributed like driven usage. **The real
 quota-hit payload is unconfirmed:** the observed line was a print timeout
 (`DEADLINE_EXCEEDED`), and the limit values are assumed until one is captured
-(HS2-GETFE4). Antigravity reports no reset time (agy's `/usage` buckets carry one,
-HS2-JM0GVB) and no usage events, so nothing observed is `unknown` (`not_observed`).
+(HS2-GETFE4). A usage limit's reset time comes from agy's own usage report (HS2-JM0GVB):
+when a driven turn fails on `usage_limit_exceeded`, the host runs the plugin's
+`usage_query_args` (`agy -p "/usage" --output-format json`, no agent turn or quota spend;
+observed on agy 1.5.10 with zero turns and zero tokens) once in the background and records
+the limit again with the latest `reset_time` of a bucket whose `remaining_fraction` is 0.
+The report does not say which bucket the failed turn drew on, so the latest reset is the
+one that cannot end the limit early. With no spent bucket, a failed or untrusted query, or
+AI-tool probes off, the registry's backoff stands; a rate limit asks nothing. **A spent
+bucket at a real limit is unconfirmed:** the observed report had none spent. Antigravity
+reports no usage events, so nothing observed is `unknown` (`not_observed`).
 A completed driven turn confirms it instead (HS2-WTSYQJ): the dist work loop's limit sink
 and the client-drive runner record a `recovered` signal, unattributed, when a turn of a
 tool whose plugin reports limits but no usage events completes. Its first completed turn

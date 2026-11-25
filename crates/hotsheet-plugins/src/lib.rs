@@ -318,6 +318,13 @@ pub struct DriveSpec {
     /// members to tell a rate or usage limit from another failure; never its text.
     #[serde(default)]
     pub error_line: Option<String>,
+    /// Spawn transport only (HS2-JM0GVB): arguments that make `program` print its usage
+    /// report as JSON without an agent turn or quota spend (agy `-p /usage
+    /// --output-format json`). The host runs it once when a driven turn fails on a typed
+    /// usage limit, under `model_catalog_identity`, and reads only each quota bucket's
+    /// typed `remaining_fraction` and `reset_time`. Empty: no query.
+    #[serde(default)]
+    pub usage_query_args: Vec<String>,
     /// Plugin-owned model catalog. Clients consume this declaration rather than
     /// hard-coding provider/model names.
     #[serde(default)]
