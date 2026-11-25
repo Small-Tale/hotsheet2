@@ -560,7 +560,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/server-clock.ts # Per-project server-clock estimate from stamped turn envelopes and the connections snapshot's `Date` header for remote clients' turn timing (HS2-GA5ASE, HS2-FMZSNY)
     src/toast-clearance.ts # Lifts the root toast stack above the media gallery footer (HS2-DSW9TY) or the collapsed terminal drawer's restore button (HS2-T90WCZ) while a toast shows
     src/toast-modal-host.ts # Hosts the root toast stack inside the topmost open modal dialog while a toast shows so it stays dismissible, and back on the body after (HS2-M2G31B)
-    src/toast-lifetime.ts # Root toast's 2.5-second replacement and dismissal state machine (HS2-KEHG7H)
+    src/toast-lifetime.ts # Root toast's reading-time lifetime (300 ms a word, 2.5–20 s; HS2-PC7VRA) and replacement/dismissal state machine (HS2-KEHG7H)
     src/toast-presentation.ts # Generation-aware asynchronous public Toast.create handoff and disposal (HS2-QHH1ZP)
     src/github-attachment-settings.ts # HS1-compatible GitHub assets-repository setting keys carried through a connection-dialog edit (HS2-HSA64D)
     src/github-sign-in-origin.ts # Typed sign-in origin validation without collapsing an explicit default port or aliasing configured hosts (HS2-VKNA12)

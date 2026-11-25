@@ -141,7 +141,7 @@ import {
   type TicketView,
 } from '../ticket-views';
 import { timelineStageEstimate, typicalPhaseDurations } from '../timeline-stage-estimate';
-import { trashEmptyLeftTickets, trashEmptySummary, trashEmptyToastDuration } from '../trash-empty-summary';
+import { trashEmptyLeftTickets, trashEmptySummary } from '../trash-empty-summary';
 import { ensureVideoPoster } from '../video-posters';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { reconcileWorkerTicketSelection } from '../worker-ticket-refresh';
@@ -285,7 +285,7 @@ export interface TicketWorkflowDependencies {
   scheduleClaimLeaseExpiry: () => void;
   scheduleProjectSessionPersistence: () => void;
   persistWorkspacePreferences: () => void;
-  showToast: (message: string, duration?: number) => void;
+  showToast: (message: string) => void;
   showFieldConflict: (conflict: TicketFieldConflict) => void;
   reconcileRefreshedSelected: (previous: FullTicket, refreshed: FullTicket) => void;
   openTicketLinkMatch: (match: TicketLinkMatch) => Promise<void>;
@@ -1584,7 +1584,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           await refreshTicketCollection('trash');
         }
       } else if (project()?.id === current.id) await refreshTicketCollection('all');
-      showToast(trashEmptySummary(result), trashEmptyToastDuration(result));
+      showToast(trashEmptySummary(result));
     } catch (reason) {
       if (!projects.value.some((item) => item.id === current.id)) return;
       setProjectTicketRows(current.id, beforeRows);

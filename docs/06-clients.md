@@ -148,9 +148,8 @@ loading Queue while the request runs; success reconciles that Queue and removes 
 Trash destination, while failure restores Trash and presents a persistent server error. When
 an external provider keeps some tickets (its connection may not permanently delete them, or
 it could not be reached), the workspace returns to Trash and the toast names up to three
-kept tickets and counts the rest, with each distinct reason. That toast stays up for reading
-time (about 300 ms a word, at most 20 seconds) instead of the default 2.5 seconds, and can
-be dismissed sooner (GH-5, HS2-DBKM89). The
+kept tickets and counts the rest, with each distinct reason. Like every toast, it stays up
+for its reading time and can be dismissed sooner (GH-5, HS2-DBKM89, HS2-PC7VRA). The
 header action keeps its icon and label on one line at every supported size.
 The server
 purges Trash tickets after the project's shared retention period (30 days by default);
@@ -1385,9 +1384,12 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   so component selectors cannot drift back into the global sheet (HS2-JH0112).
   Root loading follows the active operation through a neutral Kerf `StateBanner` and
   labeled `LoadingSpinner`; application failures use a dismissible danger `StateBanner`.
-  Short confirmations use Web Awesome Toast/ToastItem, with Hot Sheet owning the 2.5-second
-  lifetime and replacement/dismissal state so an older hide cannot clear a newer message
-  (HS2-KEHG7H). The root uses the public asynchronous `Toast.create()` factory so a
+  Short confirmations use Web Awesome Toast/ToastItem, with Hot Sheet owning the lifetime
+  and replacement/dismissal state so an older hide cannot clear a newer message
+  (HS2-KEHG7H). Every toast stays up for its message's reading time: 300 ms a word, never
+  less than 2.5 seconds or more than 20 seconds. The rule is central, so no call opts in; a
+  caller may still pass an explicit lifetime, or a persistent one that stays until dismissed
+  or replaced (HS2-PC7VRA). The root uses the public asynchronous `Toast.create()` factory so a
   first bottom-end toast enters at its placement rather than crossing the workspace;
   pending factory results are guarded against replacement, expiration and disposal (HS2-QHH1ZP).
   While a toast shows over the media gallery, the stack's bottom edge follows the measured top of

@@ -34038,6 +34038,44 @@ test('copies one or every selected ticket ID from row and More actions menus (HS
   await captureMenu('hs2-f0xzax-multiple-phone');
 });
 
+// HS2-PC7VRA: every toast stays up for its message's reading time (300 ms a word, at least 2.5 s,
+// at most 20 s) without its call opting in. A copy failure with a long synthetic browser reason
+// goes through the ordinary `showToast` call, so it proves the central rule.
+test('keeps a long toast past the 2.5-second floor for its reading time (HS2-PC7VRA)', async ({ page }) => {
+  const reason = 'The clipboard is held by another application, so this browser could not write to it right now.';
+  await page.addInitScript((message) => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error(message)) },
+    });
+    document.execCommand = () => false;
+  }, reason);
+  await mockProject(page);
+  await page.clock.install();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openMockedProject(page);
+  const toast = page.locator('wa-toast-item .app-toast'),
+    expected = `Copy failed: ${reason}`,
+    readingTime = expected.split(/\s+/).length * 300;
+  expect(readingTime).toBeGreaterThan(5_000);
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click({ button: 'right' });
+  await page
+    .locator('[data-context-menu="ticket"]')
+    .getByRole('menuitem', { name: 'Copy ticket ID', exact: true })
+    .click();
+  await expect(toast).toHaveText(expected);
+  // Past the old fixed 2.5-second lifetime the message is still there to read.
+  await page.clock.runFor(3_000);
+  await expect(toast).toHaveText(expected);
+  await page.screenshot({ path: 'target/visual-captures/hs2-pc7vra-long-toast-after-3s-1440.png' });
+  await page.clock.runFor(readingTime - 3_000 - 500);
+  await expect(toast).toHaveText(expected);
+  // It still leaves on its own once its reading time is over.
+  await page.clock.runFor(1_000);
+  await expect(toast).toHaveCount(0);
+});
+
 for (const surface of ['workspace', 'rail'] as const) {
   for (const theme of ['light', 'dark'] as const) {
     test(`projects native tri-state toolbar stars through ${surface} in ${theme} (HS2-WP15AF)`, async ({ page }) => {
