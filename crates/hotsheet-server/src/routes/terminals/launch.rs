@@ -887,6 +887,8 @@ fn register_broker_terminal_connection(
 /// Wake subscribed clients when an AI PTY closes so a failed launch's retained
 /// diagnostic tab appears without client network polling (HS2-JRQG1T).
 fn announce_terminal_exit(state: &AppState, id: &str) {
+    // HS2-H3S7YQ: an exited terminal's feedback-primary choice ends with it.
+    super::signals::forget_feedback_primary(state, id);
     state.emit(crate::ChangeEvent {
         live: None,
         cursor: None,

@@ -381,6 +381,8 @@ describe('TerminalDrawer', () => {
     expect(own.match(/data-context-menu="terminal"/g)).toHaveLength(1);
     expect(own).toContain('data-action="open-terminal-project" data-item-id="project:one"');
     expect(own).not.toContain('data-action="hide-dashboard-terminal"');
+    // HS2-H3S7YQ: the drawer grid offers the feedback-primary command too.
+    expect(own).toContain('data-action="set-feedback-primary"');
     // A menu opened for a tile in another grid (e.g. the workspace dashboard) is not duplicated here.
     expect(withMenu('elsewhere:one')).not.toContain('data-context-menu="terminal"');
     // The dedicated (non-grid) view has no tiles, so it never renders the menu.

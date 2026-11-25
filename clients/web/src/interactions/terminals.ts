@@ -46,6 +46,7 @@ import {
   terminalSelectionCopyKey,
   writeClipboardText,
 } from '../terminal-clipboard';
+import { type FeedbackPrimaryCommand, feedbackPrimaryMenuItem } from '../terminal-feedback-primary';
 import {
   adjustTerminalFit,
   TERMINAL_GRID_MAX_PHONE,
@@ -94,6 +95,8 @@ export interface TerminalInteractionsDependencies {
   terminalPreviewClickTimer: number | undefined;
   readonly terminalSession: (key?: string) => TerminalDashboardSession | undefined;
   readonly clearTerminalHalt: (key: string) => Promise<void>;
+  /** HS2-H3S7YQ: choose or clear a terminal as its project's feedback-primary session. */
+  readonly setFeedbackPrimary: (key: string, command: FeedbackPrimaryCommand) => Promise<void>;
   pendingTerminalFocus: TerminalFocusRequest | undefined;
   readonly magnifiedTerminalKey: Signal<string | undefined>;
   readonly openTerminalInProject: (key: string) => void;
@@ -202,6 +205,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalFitPhone,
     terminalSession,
     clearTerminalHalt,
+    setFeedbackPrimary,
     magnifiedTerminalKey,
     openTerminalInProject,
     terminalContextMenu,
@@ -384,6 +388,10 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       clearHalt: (key) => {
         terminalContextMenu.value = undefined;
         if (key) void clearTerminalHalt(key);
+      },
+      feedbackPrimary: (key, command) => {
+        terminalContextMenu.value = undefined;
+        if (key) void setFeedbackPrimary(key, command);
       },
     }),
   );
@@ -1112,22 +1120,28 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
             : kind === 'ai-chat'
               ? data(target).chatId!
               : data(target).terminalId!;
-      // HS2-6MNMVB: an orchestrator-started terminal offers a person's takeover.
-      const orchestrator =
+      const terminal =
         kind === 'terminal'
           ? terminalGroups.value
               .find((group) => group.projectId === project()?.id)
-              ?.sessions.find((session) => session.id === id)?.orchestrator
+              ?.sessions.find((session) => session.id === id)
           : undefined;
+      // HS2-6MNMVB: an orchestrator-started terminal offers a person's takeover.
+      const orchestrator = terminal?.orchestrator;
+      // HS2-H3S7YQ: a terminal tab offers choosing its session for feedback notifications.
+      const feedback = kind === 'terminal' && terminal ? feedbackPrimaryMenuItem(terminal) : undefined;
       appTabContextMenu.value = {
         kind,
         id,
         direction: pointer.altKey ? 'left' : 'right',
         ...(kind === 'project' ? { restoreFailure: data(target).restoreFailure === 'true' } : {}),
         ...(orchestrator ? { orchestrator: { owner: orchestrator.owner } } : {}),
+        ...(feedback ? { feedback } : {}),
         ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-          width: 256,
-          height: orchestrator?.owner === 'orchestrator' ? 266 : orchestrator ? 234 : 202,
+          width: 296,
+          height:
+            (orchestrator?.owner === 'orchestrator' ? 266 : orchestrator ? 234 : 202) +
+            (feedback ? (feedback.description && !feedback.disabledReason ? 52 : 32) : 0),
         }),
       };
     }),
@@ -1156,6 +1170,18 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         if ((action === 'orchestrator-takeover' || action === 'orchestrator-pause') && menu.kind === 'terminal') {
           appTabContextMenu.value = undefined;
           void takeOverHostedSession(menu.id, action === 'orchestrator-pause');
+          return;
+        }
+        if ((action === 'feedback-primary-choose' || action === 'feedback-primary-clear') && menu.kind === 'terminal') {
+          // A disabled command explains itself in its tooltip and does nothing.
+          if (target.getAttribute('aria-disabled') === 'true') return;
+          appTabContextMenu.value = undefined;
+          const projectId = project()?.id;
+          if (projectId)
+            void setFeedbackPrimary(
+              `${projectId}:${menu.id}`,
+              action === 'feedback-primary-clear' ? 'clear' : 'choose',
+            );
           return;
         }
         if (action === 'orchestrator-hand-back' && menu.kind === 'terminal') {

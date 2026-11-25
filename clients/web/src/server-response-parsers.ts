@@ -1528,6 +1528,9 @@ const terminalOptional: Record<string, Check> = {
   last_hook_report: isObject,
   mcp_connected: isBoolean,
   feedback_primary: isBoolean,
+  // HS2-H3S7YQ: a person chose this primary; the session may be chosen.
+  feedback_primary_chosen: isBoolean,
+  feedback_eligible: isBoolean,
   // HS2-6MNMVB: the hosted orchestrator session behind the tab.
   orchestrator: (value) =>
     isRecord(value) &&

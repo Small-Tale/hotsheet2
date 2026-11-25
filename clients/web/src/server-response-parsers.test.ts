@@ -589,6 +589,17 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseTerminalInfo.list, [{ id: 't', alive: true, busy: false }]],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, mcp_connected: true }],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, feedback_primary: true }],
+    [
+      parseTerminalInfo,
+      {
+        id: 't',
+        alive: true,
+        busy: false,
+        feedback_primary: true,
+        feedback_primary_chosen: true,
+        feedback_eligible: true,
+      },
+    ],
     [parseTerminalRead, { id: 't', alive: true, busy: false, scrollback: '' }],
     [parseCommandRun, { id: 'r', command_id: 'c', state: 'running', output: [] }],
     // A recorded shell or AI launch carries its start time and destination (HS2-PWNPM2).
@@ -646,6 +657,8 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseCommandRun, { id: 'r', command_id: 'c', state: 'completed', output: [], started_at: 7 }],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, mcp_connected: 'yes' }],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, feedback_primary: 'yes' }],
+    [parseTerminalInfo, { id: 't', alive: true, busy: false, feedback_primary_chosen: 'yes' }],
+    [parseTerminalInfo, { id: 't', alive: true, busy: false, feedback_eligible: 1 }],
     [parsePermissionDecision, { connection: 'c', decision: 'maybe' }],
     [
       parsePermissionRequest,

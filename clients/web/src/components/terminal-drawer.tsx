@@ -150,8 +150,8 @@ export interface TerminalDrawerSearch {
   hasQuery?: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
-// Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
-const DRAWER_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'clear-halt'];
+// Terminal visibility is scoped to the workspace dashboard, so the drawer grid never offers Hide.
+const DRAWER_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'clear-halt', 'feedback-primary'];
 
 /**
  * The New drawer item menu's AI shell entry (HS2-3HT4PA): with one provider it is named for that

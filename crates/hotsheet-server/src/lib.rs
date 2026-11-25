@@ -199,15 +199,16 @@ pub use routes::terminals::{
     stop_claude_usage_follows,
 };
 pub(crate) use routes::terminals::{
-    answer_terminal_question, ask_terminal_question, attach_terminal, clear_terminal,
-    clear_terminal_halt, connect_terminal_ai, disconnect_terminal_ai,
-    get_checkout_terminal_settings, get_checkout_trash_settings, get_terminal_limits,
-    get_terminal_settings, halt_terminal, kill_terminal, list_permission_rules, list_terminals,
-    open_terminal, poll_terminal_question_answer, put_checkout_terminal_settings,
-    put_checkout_trash_settings, put_terminal_limits, put_terminal_settings, read_terminal,
-    reconcile_terminal_limits, remember_permission_after_allow, rename_terminal,
-    report_claude_activity, report_claude_turn, resolve_permission, resolve_terminal_question,
-    revoke_permission_rule, update_permission_rule, write_terminal,
+    answer_terminal_question, ask_terminal_question, attach_terminal, choose_feedback_primary,
+    clear_feedback_primary, clear_terminal, clear_terminal_halt, connect_terminal_ai,
+    disconnect_terminal_ai, get_checkout_terminal_settings, get_checkout_trash_settings,
+    get_terminal_limits, get_terminal_settings, halt_terminal, kill_terminal,
+    list_permission_rules, list_terminals, open_terminal, poll_terminal_question_answer,
+    put_checkout_terminal_settings, put_checkout_trash_settings, put_terminal_limits,
+    put_terminal_settings, read_terminal, reconcile_terminal_limits,
+    remember_permission_after_allow, rename_terminal, report_claude_activity, report_claude_turn,
+    resolve_permission, resolve_terminal_question, revoke_permission_rule, update_permission_rule,
+    write_terminal,
 };
 use routes::ticket_writes::{
     add_store, add_ticket_attachment, assign_ticket, batch_update, close_ticket, create_ticket,
@@ -433,6 +434,8 @@ pub struct AppState {
             std::collections::HashMap<String, routes::terminals::claude_usage::ClaudeUsageFollow>,
         >,
     >,
+    /// HS2-H3S7YQ: each project's person-chosen feedback-primary terminal, in memory only.
+    pub(crate) feedback_primary_choices: routes::feedback_session::PrimaryChoices,
     /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
     terminal_ai_last_reports: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
     /// Per-terminal follows of a Codex session's own rollout, for halt detection and usage
@@ -703,6 +706,7 @@ impl AppState {
             terminal_questions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
             claude_usage_follows: Arc::default(),
+            feedback_primary_choices: Arc::default(),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
             codex_session_watches: Arc::default(),
             target_store_watches: Arc::default(),
@@ -2750,6 +2754,11 @@ pub fn app(state: AppState) -> Router {
         // Shared clear (HS2-HA0Z3A): the replay restarts at the cursor's line for every viewer.
         .route("/terminals/{id}/clear", post(clear_terminal))
         .route("/terminals/{id}/name", put(rename_terminal))
+        // HS2-H3S7YQ: choose or clear the project's feedback-primary AI session.
+        .route(
+            "/terminals/{id}/feedback-primary",
+            put(choose_feedback_primary).delete(clear_feedback_primary),
+        )
         .route(
             "/terminals/{id}/halt",
             post(halt_terminal).delete(clear_terminal_halt),

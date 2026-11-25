@@ -1690,11 +1690,24 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(menu).toHaveCount(0);
   const first = dashboard.locator('[data-component="terminal-tile"]').first();
   await first.getByRole('button', { name: /More Actions/ }).click();
-  await expect(menu.getByRole('menuitem')).toHaveCount(2);
+  // Receive Feedback Notifications (HS2-H3S7YQ), Open, and Hide.
+  await expect(menu.getByRole('menuitem')).toHaveCount(3);
   await expect(menu.getByText('Open')).toBeVisible();
   await expect(menu.getByText('Hide Terminal')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
+  // HS2-H3S7YQ: choosing the Review session moves the primary heart to it, and clearing returns it.
+  const primaryOf = (id: string) => dashboard.locator(`[data-terminal-key="demo:${id}"] [data-ai-primary="true"]`);
+  const review = dashboard.locator('[data-terminal-key="demo:mcp-missing"]');
+  await expect(primaryOf('shell')).toHaveCount(1);
+  await review.getByRole('button', { name: /More Actions/ }).click();
+  await menu.getByRole('menuitem', { name: 'Receive Feedback Notifications' }).click();
+  await expect(primaryOf('mcp-missing')).toHaveCount(1);
+  await expect(primaryOf('shell')).toHaveCount(0);
+  await review.getByRole('button', { name: /More Actions/ }).click();
+  await menu.getByRole('menuitem', { name: 'Stop Receiving Feedback Notifications' }).click();
+  await expect(primaryOf('shell')).toHaveCount(1);
+  await expect(primaryOf('mcp-missing')).toHaveCount(0);
   await first.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });

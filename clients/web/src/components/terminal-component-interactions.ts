@@ -3,6 +3,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
+import type { FeedbackPrimaryCommand } from '../terminal-feedback-primary';
 import type { TerminalModifier, TerminalSpecialKey } from '../terminal-keys';
 
 /**
@@ -176,9 +177,11 @@ export interface TerminalDashboardMenuBindings {
   readonly open: (menu: TerminalDashboardMenuRequest) => void;
   /** Clear a halted session from its menu; the helper reports the menu's terminal key. */
   readonly clearHalt: (key: string | undefined) => void;
+  /** HS2-H3S7YQ: choose or clear the menu's terminal as its project's feedback-primary session. */
+  readonly feedbackPrimary?: (key: string | undefined, command: FeedbackPrimaryCommand) => void;
 }
 
-const TERMINAL_MENU_SIZE = { width: 224, height: 104 };
+const TERMINAL_MENU_SIZE = { width: 296, height: 176 };
 const menuAt = (key: string, x: number, y: number): TerminalDashboardMenuRequest => ({
   key,
   ...viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, TERMINAL_MENU_SIZE),
@@ -211,6 +214,13 @@ export function wireTerminalDashboardMenu(root: HTMLElement, bindings: TerminalD
   lifetime.add(
     delegate(root, 'click', TERMINALS_ACTIONS.clearTerminalHalt.selector, (_event, target) => {
       bindings.clearHalt((target as HTMLElement).dataset.itemId);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', TERMINALS_ACTIONS.setFeedbackPrimary.selector, (_event, target) => {
+      if (target.getAttribute('aria-disabled') === 'true') return;
+      const item = (target as HTMLElement).dataset;
+      bindings.feedbackPrimary?.(item.itemId, item.feedbackCommand === 'clear' ? 'clear' : 'choose');
     }),
   );
   return () => {

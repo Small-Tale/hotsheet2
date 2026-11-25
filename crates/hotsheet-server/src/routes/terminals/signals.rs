@@ -68,7 +68,7 @@ fn with_terminal_names(
     let connections = state.terminal_ai_connections.lock_or_recover().clone();
     let mut last_reports = state.terminal_ai_last_reports.lock_or_recover();
     let mcp = state.mcp_presence.lock_or_recover().clone();
-    let primaries = crate::routes::feedback_session::feedback_primaries(state, live);
+    let roles = crate::routes::feedback_session::feedback_roles(state, live);
     // HS2-6MNMVB: sessions orchestrators started here, so the drawer can offer takeover.
     let hosted =
         hotsheet_ticketing::orchestration::HostedSessionRegistry::new(state.machine_home())
@@ -102,7 +102,9 @@ fn with_terminal_names(
             .flatten();
         info.last_hook_report = last_reports.get(&info.id).cloned();
         info.mcp_connected = info.alive && mcp.terminal_connected(&info.id);
-        info.feedback_primary = info.alive && primaries.contains(&info.id);
+        info.feedback_primary = info.alive && roles.primaries.contains(&info.id);
+        info.feedback_primary_chosen = info.feedback_primary && roles.chosen.contains(&info.id);
+        info.feedback_eligible = info.alive && roles.eligible.contains(&info.id);
     }
     infos
 }
@@ -1060,6 +1062,95 @@ fn emit_terminal_renamed(state: &AppState, id: &str, name: Option<String>) {
     });
 }
 
+/// `PUT /terminals/{id}/feedback-primary` (HS2-H3S7YQ): a person chooses this live terminal as
+/// its project's feedback-primary session, so proactive feedback with no live claim goes here
+/// instead of to the oldest terminal. Only a live terminal whose AI session accepts pushed
+/// messages is eligible. The choice lives in memory while the terminal lives; choosing the
+/// current choice again is a no-op without an event.
+pub(crate) async fn choose_feedback_primary(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<FeedbackPrimaryResp>, ApiError> {
+    let live = live_terminal_infos(&state)
+        .await
+        .into_iter()
+        .filter(|info| info.alive)
+        .map(|info| info.id)
+        .collect::<std::collections::HashSet<_>>();
+    if !live.contains(&id) {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "no such terminal"));
+    }
+    let Some(terminal) =
+        crate::routes::feedback_session::push_capable_terminals(&state, Some(&live))
+            .into_iter()
+            .find(|terminal| terminal.id == id)
+    else {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "this terminal's session cannot receive pushed messages, so it cannot receive \
+             feedback notifications",
+        )
+        .with_code(FEEDBACK_PRIMARY_INELIGIBLE_CODE));
+    };
+    let previous = state
+        .feedback_primary_choices
+        .lock_or_recover()
+        .insert(terminal.project.clone(), id.clone());
+    if previous.as_deref() != Some(id.as_str()) {
+        emit_feedback_primary(&state, &id);
+    }
+    Ok(Json(FeedbackPrimaryResp {
+        id,
+        project: terminal.project,
+        feedback_primary: true,
+    }))
+}
+
+/// The `code` of the 409 refusing a terminal that cannot receive pushed messages (HS2-H3S7YQ).
+pub(crate) const FEEDBACK_PRIMARY_INELIGIBLE_CODE: &str = "feedback_primary_ineligible";
+
+#[derive(Serialize)]
+pub(crate) struct FeedbackPrimaryResp {
+    id: String,
+    /// The checkout root whose feedback-primary session this terminal now is.
+    project: String,
+    feedback_primary: bool,
+}
+
+/// `DELETE /terminals/{id}/feedback-primary` (HS2-H3S7YQ): forget the person's choice, so the
+/// derived oldest-terminal rule applies again. Clearing a terminal that is not chosen is a
+/// no-op without an event.
+pub(crate) async fn clear_feedback_primary(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> StatusCode {
+    forget_feedback_primary(&state, &id);
+    StatusCode::NO_CONTENT
+}
+
+/// Forget a terminal's feedback-primary choice and tell every client, which refetches its
+/// terminals to move the primary indicator without polling (HS2-H3S7YQ).
+pub(crate) fn forget_feedback_primary(state: &AppState, id: &str) {
+    if crate::routes::feedback_session::forget_primary_choice(state, id) {
+        emit_feedback_primary(state, id);
+    }
+}
+
+fn emit_feedback_primary(state: &AppState, id: &str) {
+    state.emit(ChangeEvent {
+        live: None,
+        cursor: None,
+        store: String::new(),
+        kind: "terminal_feedback_primary".into(),
+        id: id.to_owned(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
+}
+
 /// A killed terminal's id can be reused by a later terminal, which must not inherit the old
 /// tab name.
 fn forget_terminal_name(state: &AppState, id: &str) {
@@ -1209,6 +1300,7 @@ pub(crate) async fn kill_terminal(
             hotsheet_terminals::BrokerResponse::Ok
             | hotsheet_terminals::BrokerResponse::NotFound => {
                 forget_terminal_name(&state, &id);
+                forget_feedback_primary(&state, &id);
                 if forget_terminal_halt(&state, &id) {
                     emit_terminal_halted(&state, &id, None);
                 }
@@ -1229,6 +1321,7 @@ pub(crate) async fn kill_terminal(
         .kill(&term_key(&state, &id))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     forget_terminal_name(&state, &id);
+    forget_feedback_primary(&state, &id);
     if forget_terminal_halt(&state, &id) {
         emit_terminal_halted(&state, &id, None);
     }

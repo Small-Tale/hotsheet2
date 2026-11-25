@@ -7,7 +7,7 @@ import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
@@ -21,6 +21,8 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Heart,
+  HeartOff,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -35,6 +37,7 @@ import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { aiConnectionIcon, aiConnectionLabel, type AiConnectionState, aiPrimaryIcon } from '../terminal-ai-connection';
+import { feedbackPrimaryMenuItem } from '../terminal-feedback-primary';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
   TERMINAL_TILE_VERTICAL_CHROME,
@@ -77,6 +80,10 @@ export interface TerminalDashboardSession {
   mcp_connected?: boolean;
   /** The project's primary session for proactive feedback delivery (HS2-YHQM67). */
   feedback_primary?: boolean;
+  /** HS2-H3S7YQ: a person chose this session as the primary. */
+  feedback_primary_chosen?: boolean;
+  /** HS2-H3S7YQ: the session accepts pushed messages, so it may be chosen as the primary. */
+  feedback_eligible?: boolean;
   /** Whether the terminal's AI session reaches Hot Sheet, derived by `deriveAiConnectionStates`. */
   aiConnection?: AiConnectionState;
   /** The server advertises session push for this live terminal connection. */
@@ -147,10 +154,35 @@ export interface TerminalDashboardProps {
    */
   contextMenuActions?: readonly TerminalContextMenuAction[];
 }
-export type TerminalContextMenuAction = 'open' | 'hide' | 'clear-halt';
-const ALL_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'hide', 'clear-halt'];
+export type TerminalContextMenuAction = 'open' | 'hide' | 'clear-halt' | 'feedback-primary';
+const ALL_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = [
+  'open',
+  'hide',
+  'clear-halt',
+  'feedback-primary',
+];
 
 const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${session.id}`;
+/** The tile menu's feedback-primary command (HS2-H3S7YQ), shared with the drawer tab menu's rule. */
+function feedbackPrimaryEntry(session: TerminalDashboardSession, key: string): PopupMenuEntry {
+  const item = feedbackPrimaryMenuItem(session);
+  return {
+    label: item.label,
+    action: TERMINALS_ACTIONS.setFeedbackPrimary.value,
+    icon:
+      item.command === 'clear' ? (
+        <LucideIcon icon={HeartOff} name="heart-off" />
+      ) : (
+        <LucideIcon icon={Heart} name="heart" />
+      ),
+    ...(item.disabledReason
+      ? { disabled: true, disabledReason: item.disabledReason }
+      : item.description
+        ? { description: item.description }
+        : {}),
+    attributes: { 'data-item-id': key, 'data-feedback-command': item.command },
+  };
+}
 const chatKeyFor = (chat: WorkspaceGridChat) => `${chat.projectId}:${chat.id}`;
 export const WORKSPACE_CHAT_PREVIEW_NATURAL_WIDTH = 300;
 export const WORKSPACE_CHAT_PREVIEW_NATURAL_HEIGHT = 180;
@@ -946,6 +978,10 @@ export function TerminalDashboard({
                     attributes: { 'data-item-id': contextMenu.key },
                   },
                 ]
+              : []),
+            // HS2-H3S7YQ: choose this AI session for the project's feedback notifications, or clear it.
+            ...(contextMenuActions.includes('feedback-primary') && menuSession
+              ? [feedbackPrimaryEntry(menuSession, contextMenu.key)]
               : []),
             ...(contextMenuActions.includes('open')
               ? [

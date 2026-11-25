@@ -34,6 +34,8 @@ export const TERMINALS_ACTIONS = {
   cycleMobileTerminalColumns: action('cycle-mobile-terminal-columns'),
   hideDashboardTerminal: action('hide-dashboard-terminal'),
   clearTerminalHalt: action('clear-terminal-halt'),
+  /** HS2-H3S7YQ: a tile menu's Receive / Stop Receiving Feedback Notifications. */
+  setFeedbackPrimary: action('set-feedback-primary'),
   openTerminalVisibility: action('open-terminal-visibility'),
   selectTerminalVisibilityTab: action('select-terminal-visibility-tab'),
   addTerminalVisibilityGroup: action('add-terminal-visibility-group'),

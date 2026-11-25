@@ -1116,7 +1116,9 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   await more.tap();
   const menu = page.locator('[data-context-menu="terminal"]');
   await expect(menu.getByRole('menu', { name: 'Terminal Actions' })).toBeVisible();
-  await expect(menu.locator('.kui-popup-menu__item')).toHaveCount(1);
+  // Open plus Receive Feedback Notifications (HS2-H3S7YQ); never Hide.
+  await expect(menu.locator('.kui-popup-menu__item')).toHaveCount(2);
+  await expect(menu.locator('[data-action="set-feedback-primary"]')).toHaveCount(1);
   await expect(menu.getByText('Hide Terminal')).toHaveCount(0);
   // The menu must be painted in front of the terminal grid, not merely present in the DOM.
   const inFront = await menu.evaluate((node) => {

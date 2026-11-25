@@ -528,7 +528,9 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await drawer.getByRole('button', { name: 'More Actions for nano' }).click();
   const drawerMenu = drawer.locator('[data-context-menu="terminal"]');
   await expect(drawerMenu.getByRole('menu').first()).toBeVisible();
-  await expect(drawerMenu.locator('.kui-popup-menu__item')).toHaveCount(1);
+  // Open plus Receive Feedback Notifications (HS2-H3S7YQ); never Hide.
+  await expect(drawerMenu.locator('.kui-popup-menu__item')).toHaveCount(2);
+  await expect(drawerMenu.locator('[data-action="set-feedback-primary"]')).toHaveCount(1);
   await expect(drawerMenu.getByText('Hide Terminal')).toHaveCount(0);
   await expect(page.locator('[data-context-menu="terminal"]')).toHaveCount(1);
   await drawerMenu.getByText('Open').click();

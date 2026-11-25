@@ -816,6 +816,40 @@ describe('application shell components', () => {
     for (const tab of [terminal, project, chat]) expect(tab).not.toContain('Hand Back');
   });
 
+  it('offers a terminal tab its feedback-primary command (HS2-H3S7YQ)', () => {
+    const menu = (
+      feedback: Parameters<typeof AppTabContextMenu>[0]['feedback'],
+      kind: 'terminal' | 'project' = 'terminal',
+    ) => String(AppTabContextMenu({ kind, id: 'term', x: 10, y: 20, feedback }));
+    const choose = menu({
+      command: 'choose',
+      label: 'Receive Feedback Notifications',
+      description: 'Instead of the oldest AI session.',
+    });
+    expect(choose).toContain('data-tab-action="feedback-primary-choose"');
+    expect(choose).toContain('Receive Feedback Notifications');
+    expect(choose).toContain('Instead of the oldest AI session.');
+    expect(choose).toContain('data-lucide="heart"');
+    expect(choose.indexOf('Rename…')).toBeLessThan(choose.indexOf('Receive Feedback Notifications'));
+    const clear = menu({ command: 'clear', label: 'Stop Receiving Feedback Notifications' });
+    expect(clear).toContain('data-tab-action="feedback-primary-clear"');
+    expect(clear).toContain('heart-off');
+    const disabled = menu({
+      command: 'choose',
+      label: 'Receive Feedback Notifications',
+      description: 'hidden while disabled',
+      disabledReason: 'A shell terminal cannot receive feedback notifications.',
+    });
+    expect(disabled).toMatch(/data-tab-action="feedback-primary-choose"[^>]*aria-disabled="true"/);
+    expect(disabled).toContain('A shell terminal cannot receive feedback notifications.');
+    expect(disabled).not.toContain('hidden while disabled');
+    // No command without a terminal session, and never on a project tab.
+    expect(menu(undefined)).not.toContain('feedback-primary');
+    expect(menu({ command: 'choose', label: 'Receive Feedback Notifications' }, 'project')).not.toContain(
+      'feedback-primary',
+    );
+  });
+
   it('clamps and projects accessible splitters in both axes', () => {
     expect(clampRegionSize(100, 180, 420)).toBe(180);
     expect(clampRegionSize(300.6, 180, 420)).toBe(301);

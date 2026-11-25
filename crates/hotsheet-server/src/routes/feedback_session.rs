@@ -156,35 +156,93 @@ pub(crate) fn push_capable_terminals(
         .collect()
 }
 
+/// HS2-H3S7YQ: the terminal a person chose as each project's feedback-primary session, keyed by
+/// the checkout root a terminal's registry connection names. The choice lives in memory on this
+/// server instance while the chosen terminal lives: it is forgotten when that terminal exits or
+/// is killed, and is never persisted, so a restart returns every project to the derived rule.
+pub(crate) type PrimaryChoices = Arc<Mutex<std::collections::HashMap<String, String>>>;
+
 /// HS2-DB2FQ2: the primary AI session of each project, the one proactive feedback delivery
 /// goes to when no claim names a session: the oldest push-capable live terminal (registry
-/// start time, then id). It is derived, never stored, so closing the primary promotes the
-/// next oldest and opening another terminal never takes the role (HS2-DB2FQ2).
+/// start time, then id). Closing the primary promotes the next oldest and opening another
+/// terminal never takes the role (HS2-DB2FQ2). HS2-H3S7YQ: a person's `chosen` terminal for a
+/// project takes the role while it is among that project's eligible terminals; once it is not,
+/// the derived rule applies again.
 pub(crate) fn primary_terminals<'a>(
     terminals: impl IntoIterator<Item = (&'a str, &'a str, u64)>,
+    chosen: &std::collections::HashMap<String, String>,
 ) -> HashSet<String> {
     let mut best: std::collections::HashMap<&str, (u64, &str)> = std::collections::HashMap::new();
+    let mut picked: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
     for (id, project, started_at_ms) in terminals {
         let entry = best.entry(project).or_insert((started_at_ms, id));
         if (started_at_ms, id) < *entry {
             *entry = (started_at_ms, id);
         }
+        if chosen.get(project).is_some_and(|choice| choice == id) {
+            picked.insert(project, id);
+        }
     }
-    best.into_values().map(|(_, id)| id.to_string()).collect()
+    best.into_iter()
+        .map(|(project, (_, id))| picked.get(project).copied().unwrap_or(id).to_string())
+        .collect()
 }
 
-/// The ids of every project's primary terminal among `live_ids` (HS2-DB2FQ2); `None` trusts
-/// the registry's own lifecycle for liveness.
-pub(crate) fn feedback_primaries(
+/// Every live terminal's feedback role (HS2-DB2FQ2, HS2-H3S7YQ).
+#[derive(Debug, Default)]
+pub(crate) struct FeedbackRoles {
+    /// Push-capable live terminals: the only ones that can hold or be given the primary role.
+    pub(crate) eligible: HashSet<String>,
+    /// Each project's primary terminal.
+    pub(crate) primaries: HashSet<String>,
+    /// Primaries that hold the role because a person chose them.
+    pub(crate) chosen: HashSet<String>,
+}
+
+/// The feedback roles of every terminal among `live_ids` (HS2-DB2FQ2); `None` trusts the
+/// registry's own lifecycle for liveness.
+pub(crate) fn feedback_roles(
     state: &AppState,
     live_ids: Option<&HashSet<String>>,
-) -> HashSet<String> {
+) -> FeedbackRoles {
     let terminals = push_capable_terminals(state, live_ids);
-    primary_terminals(
+    let choices = state.feedback_primary_choices.lock_or_recover().clone();
+    let primaries = primary_terminals(
         terminals
             .iter()
             .map(|t| (t.id.as_str(), t.project.as_str(), t.started_at_ms)),
-    )
+        &choices,
+    );
+    let chosen = terminals
+        .iter()
+        .filter(|t| {
+            primaries.contains(&t.id) && choices.get(&t.project).is_some_and(|id| *id == t.id)
+        })
+        .map(|t| t.id.clone())
+        .collect();
+    FeedbackRoles {
+        eligible: terminals.into_iter().map(|t| t.id).collect(),
+        primaries,
+        chosen,
+    }
+}
+
+/// The terminal a person chose as `project`'s feedback-primary session, if any (HS2-H3S7YQ).
+pub(crate) fn chosen_primary(state: &AppState, project: &str) -> Option<String> {
+    state
+        .feedback_primary_choices
+        .lock_or_recover()
+        .get(project)
+        .cloned()
+}
+
+/// Forget a terminal's feedback-primary choice once it exits or is killed, since its id may be
+/// reused by a later terminal (HS2-H3S7YQ). Returns whether a choice was removed.
+pub(crate) fn forget_primary_choice(state: &AppState, id: &str) -> bool {
+    let mut choices = state.feedback_primary_choices.lock_or_recover();
+    let before = choices.len();
+    choices.retain(|_, chosen| chosen != id);
+    choices.len() != before
 }
 
 async fn candidates(state: &AppState, checkout: &Checkout, source: &str) -> Vec<Candidate> {
@@ -539,13 +597,20 @@ pub(crate) async fn after_human_note(
     let note_id = note.id.to_string();
     let response = note.response_to.is_some();
     let all = candidates(state, checkout, source).await;
+    let chosen = chosen_primary(state, &checkout.root);
     let claim = (!ops::claim_available(ticket, &now()))
         .then_some(ticket.claimed_by.as_deref())
         .flatten()
         // HS2-N5BDE4: without a live claim, the answer goes back to the AI that asked,
         // such as an orchestration planner waiting on a goal ticket's question.
         .or_else(|| asker(ticket, note));
-    match route(&checkout.root, source, claim, all.clone()) {
+    match route(
+        &checkout.root,
+        source,
+        claim,
+        chosen.as_deref(),
+        all.clone(),
+    ) {
         Route::Direct(candidate) => {
             let text = message(&ticket.slug, response);
             match deliver(
@@ -565,7 +630,13 @@ pub(crate) async fn after_human_note(
                         .filter(|other| other.id != candidate.id)
                         .collect::<Vec<_>>();
                     Some(
-                        match route(&checkout.root, source, None, remaining.clone()) {
+                        match route(
+                            &checkout.root,
+                            source,
+                            None,
+                            chosen.as_deref(),
+                            remaining.clone(),
+                        ) {
                             Route::Direct(next) => {
                                 match deliver(state, Some((entry, ticket.id)), &note_id, next, text)
                                     .await
@@ -614,6 +685,7 @@ pub(crate) async fn after_provider_note(
     let note_id = note.id.clone();
     let text = message(&ticket.slug, note.response_to.is_some());
     let all = candidates(state, checkout, source).await;
+    let chosen = chosen_primary(state, &checkout.root);
     let claim = {
         let (state, checkout_id, source, native_id) = (
             state.clone(),
@@ -634,7 +706,13 @@ pub(crate) async fn after_provider_note(
         .flatten()
     };
     Some(
-        match route(&checkout.root, source, claim.as_deref(), all.clone()) {
+        match route(
+            &checkout.root,
+            source,
+            claim.as_deref(),
+            chosen.as_deref(),
+            all.clone(),
+        ) {
             Route::Direct(candidate) => {
                 match deliver(state, None, &note_id, candidate.clone(), text.clone()).await {
                     Ok(delivery) => delivery,
@@ -644,7 +722,7 @@ pub(crate) async fn after_provider_note(
                             .into_iter()
                             .filter(|other| other.id != candidate.id)
                             .collect::<Vec<_>>();
-                        match route(&checkout.root, source, None, remaining) {
+                        match route(&checkout.root, source, None, chosen.as_deref(), remaining) {
                             Route::Direct(next) => deliver(state, None, &note_id, next, text)
                                 .await
                                 .unwrap_or(Delivery::NotShared { note_id }),
@@ -784,6 +862,7 @@ pub(crate) fn route(
     project: &str,
     source: &str,
     live_claim_worker: Option<&str>,
+    chosen_primary: Option<&str>,
     candidates: impl IntoIterator<Item = Candidate>,
 ) -> Route {
     let mut scoped = candidates
@@ -805,14 +884,21 @@ pub(crate) fn route(
     match scoped.len() {
         0 => Route::Start,
         1 => Route::Direct(scoped.remove(0)),
-        // HS2-DB2FQ2: no claim names a session, so the project's primary (the oldest
-        // push-capable terminal, see [`primary_terminals`]) receives it. Only client-owned drives
-        // with no terminal still ask the human to choose.
+        // HS2-DB2FQ2: no claim names a session, so the project's primary (the terminal a
+        // person chose, HS2-H3S7YQ, else the oldest push-capable terminal, see
+        // [`primary_terminals`]) receives it. Only client-owned drives with no terminal still
+        // ask the human to choose.
         _ => match scoped
             .iter()
             .filter(|candidate| candidate.channel == Channel::Terminal)
-            .min_by(|left, right| {
-                (left.started_at_ms, &left.id).cmp(&(right.started_at_ms, &right.id))
+            .find(|candidate| chosen_primary.is_some_and(|chosen| candidate.id == chosen))
+            .or_else(|| {
+                scoped
+                    .iter()
+                    .filter(|candidate| candidate.channel == Channel::Terminal)
+                    .min_by(|left, right| {
+                        (left.started_at_ms, &left.id).cmp(&(right.started_at_ms, &right.id))
+                    })
             }) {
             Some(primary) => Route::Direct(primary.clone()),
             None => Route::Choose(scoped),
@@ -922,6 +1008,7 @@ mod tests {
                 "/project",
                 "source",
                 asker(&ticket, &answer),
+                Some("primary"),
                 [primary, planner.clone()]
             ),
             Route::Direct(planner)
@@ -946,36 +1033,143 @@ mod tests {
 
     #[test]
     fn hs2_db2fq2_primary_is_the_oldest_terminal_per_project_across_open_close_reopen() {
+        let no_choice = std::collections::HashMap::new();
         // One terminal: it is the primary.
         assert_eq!(
-            primary_terminals([("b", "/p", 20)]),
+            primary_terminals([("b", "/p", 20)], &no_choice),
             HashSet::from(["b".to_string()])
         );
         // A newer terminal opens: the older one stays primary.
         assert_eq!(
-            primary_terminals([("b", "/p", 20), ("c", "/p", 30)]),
+            primary_terminals([("b", "/p", 20), ("c", "/p", 30)], &no_choice),
             HashSet::from(["b".to_string()])
         );
         // The primary closes: the remaining terminal is promoted.
         assert_eq!(
-            primary_terminals([("c", "/p", 30)]),
+            primary_terminals([("c", "/p", 30)], &no_choice),
             HashSet::from(["c".to_string()])
         );
         // A reopened terminal is newer, so the promoted primary keeps the role.
         assert_eq!(
-            primary_terminals([("c", "/p", 30), ("b2", "/p", 40)]),
+            primary_terminals([("c", "/p", 30), ("b2", "/p", 40)], &no_choice),
             HashSet::from(["c".to_string()])
         );
         // Equal start times break by id, and projects never share a primary.
         assert_eq!(
-            primary_terminals([("z", "/p", 5), ("a", "/p", 5), ("q", "/other", 99)]),
+            primary_terminals(
+                [("z", "/p", 5), ("a", "/p", 5), ("q", "/other", 99)],
+                &no_choice
+            ),
             HashSet::from(["a".to_string(), "q".to_string()])
         );
         // Empty, then refilled.
-        assert!(primary_terminals([]).is_empty());
+        assert!(primary_terminals([], &no_choice).is_empty());
         assert_eq!(
-            primary_terminals([("n", "/p", 1)]),
+            primary_terminals([("n", "/p", 1)], &no_choice),
             HashSet::from(["n".to_string()])
+        );
+    }
+
+    /// HS2-H3S7YQ: the selection rule across choose, the chosen terminal exiting, choosing again,
+    /// clearing, and two projects with their own choices.
+    #[test]
+    fn hs2_h3s7yq_a_chosen_terminal_holds_the_primary_until_it_leaves_or_is_cleared() {
+        let set = |ids: &[&str]| {
+            ids.iter()
+                .map(|id| (*id).to_string())
+                .collect::<HashSet<_>>()
+        };
+        let mut choices = std::collections::HashMap::new();
+        let two = [("old", "/p", 10), ("new", "/p", 20)];
+        // Nothing chosen: the oldest terminal is primary.
+        assert_eq!(primary_terminals(two, &choices), set(&["old"]));
+        // Choose the newer terminal: it takes the role.
+        choices.insert("/p".to_string(), "new".to_string());
+        assert_eq!(primary_terminals(two, &choices), set(&["new"]));
+        // A third, newer terminal opens: the choice keeps the role.
+        assert_eq!(
+            primary_terminals(
+                [("old", "/p", 10), ("new", "/p", 20), ("third", "/p", 30)],
+                &choices
+            ),
+            set(&["new"])
+        );
+        // The chosen terminal exits (it is no longer eligible): the derived rule takes over even
+        // before its choice is forgotten.
+        assert_eq!(
+            primary_terminals([("old", "/p", 10), ("third", "/p", 30)], &choices),
+            set(&["old"])
+        );
+        // Choose again: a different terminal.
+        choices.insert("/p".to_string(), "third".to_string());
+        assert_eq!(
+            primary_terminals([("old", "/p", 10), ("third", "/p", 30)], &choices),
+            set(&["third"])
+        );
+        // Clear: back to the oldest.
+        choices.remove("/p");
+        assert_eq!(
+            primary_terminals([("old", "/p", 10), ("third", "/p", 30)], &choices),
+            set(&["old"])
+        );
+        // Two projects: each choice applies only to its own project, and a choice naming another
+        // project's terminal never moves the role across projects.
+        choices.insert("/p".to_string(), "p-new".to_string());
+        choices.insert("/q".to_string(), "p-old".to_string());
+        assert_eq!(
+            primary_terminals(
+                [
+                    ("p-old", "/p", 1),
+                    ("p-new", "/p", 2),
+                    ("q-old", "/q", 1),
+                    ("q-new", "/q", 2)
+                ],
+                &choices
+            ),
+            set(&["p-new", "q-old"])
+        );
+        // Empty, then refilled with the chosen id: the choice applies again.
+        assert!(primary_terminals([], &choices).is_empty());
+        assert_eq!(
+            primary_terminals([("p-new", "/p", 5)], &choices),
+            set(&["p-new"])
+        );
+    }
+
+    /// HS2-H3S7YQ: routing sends feedback to the chosen terminal, a live claim still wins, a
+    /// failed chosen terminal falls back to the oldest, and a stale choice is ignored.
+    #[test]
+    fn hs2_h3s7yq_routing_prefers_the_chosen_terminal_after_the_claim() {
+        let at = |id: &str, started_at_ms: u64| Candidate {
+            started_at_ms,
+            ..candidate(id, "/project", None)
+        };
+        let (old, new) = (at("old", 10), at("new", 20));
+        let both = [old.clone(), new.clone()];
+        assert_eq!(
+            route("/project", "source", None, Some("new"), both.clone()),
+            Route::Direct(new.clone())
+        );
+        // A live claim names its own session over the chosen primary.
+        assert_eq!(
+            route(
+                "/project",
+                "source",
+                Some("codex-old"),
+                Some("new"),
+                both.clone()
+            ),
+            Route::Direct(old.clone())
+        );
+        // The chosen terminal was dropped after a failed delivery: the oldest remains.
+        assert_eq!(
+            route("/project", "source", None, Some("new"), [old.clone()]),
+            Route::Direct(old.clone())
+        );
+        // A choice naming no candidate (exited, or another project's terminal) is ignored.
+        assert_eq!(
+            route("/project", "source", None, Some("gone"), both),
+            Route::Direct(old)
         );
     }
 
@@ -1180,16 +1374,28 @@ mod tests {
             candidate("two", "/project", None),
         ];
         assert_eq!(
-            route("/project", "source", Some("codex-two"), sessions.clone()),
+            route(
+                "/project",
+                "source",
+                Some("codex-two"),
+                None,
+                sessions.clone()
+            ),
             Route::Direct(sessions[1].clone())
         );
         // HS2-DB2FQ2: without a live claim the deterministic primary receives it.
         assert_eq!(
-            route("/project", "source", None, sessions.clone()),
+            route("/project", "source", None, None, sessions.clone()),
             Route::Direct(sessions[0].clone())
         );
         assert_eq!(
-            route("/project", "source", Some("stale-worker"), sessions.clone()),
+            route(
+                "/project",
+                "source",
+                Some("stale-worker"),
+                None,
+                sessions.clone()
+            ),
             Route::Direct(sessions[0].clone())
         );
     }
@@ -1203,7 +1409,13 @@ mod tests {
         let (first, second, reopened) = (at("z-first", 10), at("a-second", 20), at("m-reopen", 30));
         // Two terminals: the older one is primary even though its id sorts later.
         assert_eq!(
-            route("/project", "source", None, [second.clone(), first.clone()]),
+            route(
+                "/project",
+                "source",
+                None,
+                None,
+                [second.clone(), first.clone()]
+            ),
             Route::Direct(first.clone())
         );
         // A claim still names its own waiting session over the primary.
@@ -1212,13 +1424,14 @@ mod tests {
                 "/project",
                 "source",
                 Some("codex-a-second"),
+                None,
                 [first.clone(), second.clone()]
             ),
             Route::Direct(second.clone())
         );
         // The primary closes (or its delivery failed and it was dropped): the next is promoted.
         assert_eq!(
-            route("/project", "source", None, [second.clone()]),
+            route("/project", "source", None, None, [second.clone()]),
             Route::Direct(second.clone())
         );
         // A reopened terminal is newer, so the promoted primary keeps the role.
@@ -1227,19 +1440,20 @@ mod tests {
                 "/project",
                 "source",
                 None,
+                None,
                 [reopened.clone(), second.clone()]
             ),
             Route::Direct(second.clone())
         );
         // Every terminal closed: start a session.
-        assert_eq!(route("/project", "source", None, []), Route::Start);
+        assert_eq!(route("/project", "source", None, None, []), Route::Start);
         // Several client-owned drives with no terminal still ask the human.
         let drives = [
             candidate("drive-1", "/project", Some("source")),
             candidate("drive-2", "/project", Some("source")),
         ];
         assert_eq!(
-            route("/project", "source", None, drives.clone()),
+            route("/project", "source", None, None, drives.clone()),
             Route::Choose(drives.to_vec())
         );
         // A terminal beside a drive is the primary.
@@ -1247,6 +1461,7 @@ mod tests {
             route(
                 "/project",
                 "source",
+                None,
                 None,
                 [drives[0].clone(), reopened.clone()]
             ),
@@ -1263,13 +1478,14 @@ mod tests {
                 "/project",
                 "source",
                 Some("codex-foreign"),
+                None,
                 [foreign, wrong_source]
             ),
             Route::Start
         );
         let ours = candidate("ours", "/project", Some("source"));
         assert_eq!(
-            route("/project", "source", None, [ours.clone()]),
+            route("/project", "source", None, None, [ours.clone()]),
             Route::Direct(ours)
         );
     }
