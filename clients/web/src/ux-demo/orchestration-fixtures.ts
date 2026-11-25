@@ -392,6 +392,15 @@ export function demoIntegrator(state: string): RoleStandingView | undefined {
         detail: 'target_cap',
         retry_at_ms: DEMO_NOW + 10 * MINUTE,
       };
+    case 'no_model':
+      // HS2-747WQA: the project's Models pattern resolves to no model its machine reports.
+      return {
+        ...api,
+        standing: 'not_started',
+        reason: 'integrator_not_started',
+        detail: 'model_unresolved',
+        retry_at_ms: DEMO_NOW + 10 * MINUTE,
+      };
     case 'opt_out':
       return { ...api, standing: 'not_started', reason: 'integrator_not_started', detail: 'policy_opt_out' };
     case 'unavailable':

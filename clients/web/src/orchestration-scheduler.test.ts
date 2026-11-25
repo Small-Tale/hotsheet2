@@ -17,6 +17,7 @@ import {
   roleStatusText,
   type SchedulerDecision,
   schedulerReasonText,
+  schedulerReasonWithModel,
   siteLabel,
   sitePassDetail,
   sitePassText,
@@ -496,5 +497,85 @@ describe('why integration is or is not running (HS2-65AD6J)', () => {
         ],
       }).entries[0].target_id,
     ).toBe('api');
+  });
+});
+
+describe('a pattern-only Models list that resolves to no model, in words (HS2-747WQA)', () => {
+  const unresolved = 'its machine has not reported the AI tool’s models, so no allowed model can be picked';
+  const noMatch = 'no model its machine reports is an allowed model';
+
+  it('words both codes in place of no_tool_available’s phrase, and leaves other details alone', () => {
+    expect(schedulerReasonWithModel('no_tool_available', 'model_unresolved')).toBe(unresolved);
+    expect(schedulerReasonWithModel('no_tool_available', 'no_matching_model')).toBe(noMatch);
+    expect(schedulerReasonWithModel('no_tool_available', undefined)).toBe('no AI tool account can take it now');
+    expect(schedulerReasonWithModel('requirement_unmet', 'os:windows')).toBe(schedulerReasonText('requirement_unmet'));
+  });
+
+  it('says why a passed-over site started nothing', () => {
+    expect(sitePassDetail({ target_id: 'x', reason: 'no_tool_available', detail: 'model_unresolved' })).toBe(
+      unresolved,
+    );
+    expect(sitePassText({ target_id: 'x', reason: 'no_tool_available', detail: 'no_matching_model' })).toBe(noMatch);
+  });
+
+  it('says it in the Why It Is Not Running Scheduler row and keeps the other rows', () => {
+    const rows = explanationRows(
+      { standing: 'not_placed', reason: 'no_tool_available', detail: 'model_unresolved', retry_at_ms: 9 },
+      clock,
+      5,
+    );
+    expect(rows).toEqual([
+      { label: 'Scheduler', value: `Waits: ${unresolved} (last pass t5)` },
+      { label: 'Next', value: 'Looked at again by t9' },
+    ]);
+    const sites = explanationRows(
+      {
+        standing: 'not_placed',
+        reason: 'no_tool_available',
+        detail: 'no_matching_model',
+        site: 'web',
+        sites: [{ target_id: 'api', reason: 'no_tool_available', detail: 'model_unresolved' }],
+      },
+      clock,
+      undefined,
+      timeline,
+    );
+    expect(sites[0]).toEqual({ label: 'Scheduler', value: `Waits: ${noMatch}` });
+    expect(sites).toContainEqual({
+      label: 'Not on API',
+      value: 'Its machine has not reported the AI tool’s models, so no allowed model can be picked',
+    });
+    for (const row of [...rows, ...sites]) expect(row.value).not.toContain('_');
+  });
+
+  it('says it for a deferred decision and a role session that is not started', () => {
+    expect(
+      decisionText(
+        decision({ kind: 'unplaced', step_id: 'step-8', reason: 'no_tool_available', detail: 'no_matching_model' }),
+        timeline,
+      ),
+    ).toBe(`Deferred DOC-9: ${noMatch}`);
+    for (const [detail, text] of [
+      ['model_unresolved', unresolved],
+      ['no_matching_model', noMatch],
+    ] as const)
+      expect(roleReasonPhrase({ standing: 'not_started', reason: 'integrator_not_started', detail })).toBe(text);
+    const [row] = roleStandingRows(
+      [
+        {
+          target_id: 'web',
+          role: 'integrator',
+          standing: 'not_started',
+          reason: 'integrator_not_started',
+          detail: 'model_unresolved',
+        },
+      ],
+      clock,
+      timeline,
+    );
+    expect(row).toEqual({
+      label: 'Web Integrator',
+      value: `Not started: ${unresolved}`,
+    });
   });
 });

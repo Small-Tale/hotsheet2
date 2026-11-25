@@ -40,6 +40,8 @@ export const orchestrationDemoSettings = {
   autoPlacement: signal(false),
   /** HS2-65AD6J: how the project's integrator stands for a card with a run; '' shows no Integration section. */
   integrator: signal('keep'),
+  /** HS2-747WQA: what the ready DOC-9 waits for: a held resource, or a Models pattern that resolves to no model. */
+  docWait: signal('resource_held'),
   collapsed: signal<string[]>([]),
 };
 
@@ -69,8 +71,16 @@ const INTEGRATOR = [
   { value: 'wind_down', label: 'Winding Down' },
   { value: 'not_started', label: 'Not Started: Session Limit' },
   { value: 'opt_out', label: 'Not Started: Integrates by Hand' },
+  // HS2-747WQA: the project's Models pattern resolves to no model its machine reports.
+  { value: 'no_model', label: 'Not Started: No Model Resolves' },
   { value: 'unavailable', label: 'Unavailable' },
   { value: 'none', label: 'Not Needed' },
+];
+
+const DOC_WAITS = [
+  { value: 'resource_held', label: 'A Held Resource' },
+  { value: 'model_unresolved', label: 'Models Not Reported' },
+  { value: 'no_matching_model', label: 'No Matching Model' },
 ];
 
 const SELECTIONS = [
@@ -93,6 +103,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.defaultGoal.value = false;
   settings.autoPlacement.value = false;
   settings.integrator.value = 'keep';
+  settings.docWait.value = 'resource_held';
   settings.collapsed.value = [];
   if (root)
     syncSettingsControls(root, 'orchestration', {
@@ -101,6 +112,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
         selected: settings.selected.value,
         planning: settings.planning.value,
         integrator: settings.integrator.value,
+        'doc-wait': settings.docWait.value,
       },
       checked: {
         'propose-available': settings.proposeAvailable.value,
@@ -255,21 +267,30 @@ export function OrchestrationInspectorDemo() {
             integrator: demoIntegrator(orchestrationDemoSettings.integrator.value),
             // HS2-77SRHC, HS2-5GRXFN: DOC-9 is ready and waits for the VM someone holds.
             explanation:
-              orchestrationDemoSettings.selected.value === 'step-8'
-                ? {
-                    standing: 'not_placed',
-                    reason: 'resource_held',
-                    retry_at_ms: timeline.now_ms + 40 * 60_000,
-                    resources: [
-                      {
-                        namespace: 'vm',
-                        resource: 'macos-vm',
-                        state: 'held',
-                        expires_at_ms: timeline.now_ms + 40 * 60_000,
-                      },
-                    ],
-                  }
-                : undefined,
+              orchestrationDemoSettings.selected.value !== 'step-8'
+                ? undefined
+                : orchestrationDemoSettings.docWait.value !== 'resource_held'
+                  ? {
+                      // HS2-747WQA: a pattern-only Models list on both of Docs's sites resolves to no model.
+                      standing: 'not_placed',
+                      reason: 'no_tool_available',
+                      detail: orchestrationDemoSettings.docWait.value,
+                      retry_at_ms: timeline.now_ms + 10 * 60_000,
+                      sites: [{ target_id: 'api', reason: 'no_tool_available', detail: 'model_unresolved' }],
+                    }
+                  : {
+                      standing: 'not_placed',
+                      reason: 'resource_held',
+                      retry_at_ms: timeline.now_ms + 40 * 60_000,
+                      resources: [
+                        {
+                          namespace: 'vm',
+                          resource: 'macos-vm',
+                          state: 'held',
+                          expires_at_ms: timeline.now_ms + 40 * 60_000,
+                        },
+                      ],
+                    },
             // HS2-0D60T8: DOC-7 was built ahead of WEB-33's CI, which failed.
             builtAhead:
               orchestrationDemoSettings.selected.value === 'step-5'
@@ -341,6 +362,7 @@ export function OrchestrationDemoSettings() {
       <Checkbox name="propose-available" checked={settings.proposeAvailable.value} label="Planner Available" />
       <Select name="planning" label="Planning Session" value={settings.planning.value} choices={PLANNING} />
       <Select name="integrator" label="Integrator" value={settings.integrator.value} choices={INTEGRATOR} />
+      <Select name="doc-wait" label="DOC-9 Waits For" value={settings.docWait.value} choices={DOC_WAITS} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />
@@ -364,6 +386,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'propose-available') settings.proposeAvailable.value = control.checked;
       if (name === 'planning') settings.planning.value = control.value;
       if (name === 'integrator') settings.integrator.value = control.value;
+      if (name === 'doc-wait') settings.docWait.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
       if (name === 'auto-placement') settings.autoPlacement.value = control.checked;

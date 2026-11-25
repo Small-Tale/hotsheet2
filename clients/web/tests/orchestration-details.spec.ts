@@ -619,6 +619,69 @@ test('HS2-QDARNW Why It Is Not Running names the chosen site and each site passe
   }
 });
 
+/**
+ * HS2-747WQA (HS2-0VTQFF): a project whose tool lists only a model pattern no reported model matches starts
+ * nothing. The card's Why It Is Not Running says why in words, never the scheduler's model code.
+ */
+test('HS2-747WQA Why It Is Not Running words a Models pattern that resolves to no model', async ({ page }) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const person = { role: 'human', id: 'maintainer' };
+    await send(server, 'POST', `${base}/permission-rules`, { target_id: TARGET, action: 'work_start', actor: person });
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: SYNTHETIC_TOOL,
+      actor: person,
+    });
+    const plan = await planTwoSteps(server);
+    // Only a pattern, which no model the machine reports for the synthetic tool matches.
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+        tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 4 }],
+        targets: [{ target_id: TARGET, tools: [{ tool: SYNTHETIC_TOOL, models: ['syn-none-*'] }], max_sessions: 2 }],
+        placement: { automatic: false, actor: 'scheduler-1' },
+      },
+      actor: person,
+    });
+    await send(server, 'POST', `${base}/scheduler/tick`, { dry_run: true, actor: scheduler });
+    const explained = (await send(server, 'POST', `${base}/scheduler/explain`, {
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: plan.first.id,
+      actor: scheduler,
+    })) as { standing: string; reason: string; detail?: string };
+    expect(explained, JSON.stringify(explained)).toMatchObject({
+      standing: 'not_placed',
+      reason: 'no_tool_available',
+      detail: 'no_matching_model',
+    });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    await card.click();
+    const why = page.locator('[data-orchestration-inspector] [data-orchestration-section="Why It Is Not Running"]');
+    const scheduled = why.locator('dl > div').filter({ has: page.locator('dt', { hasText: 'Scheduler' }) });
+    const words = 'no model its machine reports is an allowed model';
+    await expect(scheduled.locator('dd')).toContainText(`Waits: ${words}`);
+    expect(await why.innerText()).not.toMatch(/model_unresolved|no_matching_model/);
+    await visualPass(page, 'hs2-747wqa', 'why-not-running', {
+      show: why,
+      check: () => expect(scheduled.locator('dd')).toContainText(words),
+      atPhone: () => card.click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-5GRXFN a held resource shows on the deferred card and in the overview with who waits', async ({ page }) => {
   test.setTimeout(150_000);
   const server = await realTicketServer();

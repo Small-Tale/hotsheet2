@@ -80,6 +80,21 @@ export function schedulerReasonText(code: string): string {
   return REASONS[code] ?? words(code);
 }
 
+/**
+ * HS2-747WQA: why a pattern-only Models list resolved to no model at launch (HS2-0VTQFF), the detail of a
+ * `no_tool_available` block on a step, a passed-over site or a role session the pass does not start. It says
+ * the cause itself, so it stands in for the reason's own phrase.
+ */
+const MODEL_DETAILS: Readonly<Record<string, string>> = {
+  model_unresolved: 'its machine has not reported the AI tool’s models, so no allowed model can be picked',
+  no_matching_model: 'no model its machine reports is an allowed model',
+};
+
+/** HS2-747WQA: a scheduler reason as a phrase, or its model-resolution detail in its place when it has one. */
+export function schedulerReasonWithModel(code: string, detail: string | undefined): string {
+  return (detail && MODEL_DETAILS[detail]) || schedulerReasonText(code);
+}
+
 /** HS2-9FKTB3: why a site that could have taken the work was not chosen. */
 const NOT_CHOSEN: Readonly<Record<string, string>> = {
   free_session: 'another site has a free session for it',
@@ -91,6 +106,7 @@ const NOT_CHOSEN: Readonly<Record<string, string>> = {
 /** HS2-9FKTB3: why one site of the project was passed over, as a phrase. */
 export function sitePassText(pass: SchedulerSitePass): string {
   if (pass.reason === 'not_chosen') return (pass.detail && NOT_CHOSEN[pass.detail]) || 'another site was chosen';
+  if (pass.detail && MODEL_DETAILS[pass.detail]) return MODEL_DETAILS[pass.detail];
   const reason = schedulerReasonText(pass.reason);
   const detail = sitePassDetail(pass);
   return detail ? `${reason} (${detail})` : reason;
@@ -115,6 +131,7 @@ const SITE_PASS_DETAILS: Readonly<Record<string, string>> = {
   policy_speculation_not_allowed: 'provisional work is not allowed there',
   policy_project_software: 'the project is a Software project',
   capacity_not_read: 'its machine has not been read yet',
+  ...MODEL_DETAILS,
 };
 
 /**
@@ -152,7 +169,7 @@ export function explanationRows(
 ): Array<{ label: string; value: string }> {
   const standing =
     explanation.standing === 'not_placed'
-      ? `Waits: ${schedulerReasonText(explanation.reason)}`
+      ? `Waits: ${schedulerReasonWithModel(explanation.reason, explanation.detail)}`
       : (STANDINGS[explanation.standing] ?? sentence(words(explanation.standing)));
   const rows = [
     { label: 'Scheduler', value: lastPassMs === undefined ? standing : `${standing} (last pass ${clock(lastPassMs)})` },
@@ -196,7 +213,7 @@ export function decisionText(decision: SchedulerDecision, timeline: Orchestratio
     case 'wind_down':
       return `${dry ? 'Would wind down' : 'Wound down'} a session${decision.reason ? `: ${words(decision.reason)}` : ''}`;
     case 'unplaced':
-      return `Deferred ${step}${decision.reason ? `: ${schedulerReasonText(decision.reason)}` : ''}`;
+      return `Deferred ${step}${decision.reason ? `: ${schedulerReasonWithModel(decision.reason, decision.detail)}` : ''}`;
     case 'assignment':
       return `${step}: ${words(decision.outcome ?? decision.reason ?? 'assignment')}`;
     case 'reconcile':
@@ -436,7 +453,10 @@ export function roleReasonPhrase(standing: Pick<RoleStandingView, 'standing' | '
     case 'integrator_wound_down':
       return PLACEMENTS.idle;
     case 'integrator_not_started':
-      return detail ? (NOT_STARTED[detail] ?? schedulerReasonText(detail)) : 'this pass could not start one';
+      if (!detail) return 'this pass could not start one';
+      // HS2-747WQA: a model-resolution detail says why no AI tool can start it.
+      if (MODEL_DETAILS[detail]) return MODEL_DETAILS[detail];
+      return NOT_STARTED[detail] ?? schedulerReasonText(detail);
     case 'integrator_unavailable':
       return unavailable('integrator');
     case 'dispatcher_unavailable':

@@ -939,7 +939,8 @@ session runs a matching model rather than the tool's own default:
   detect) starts nothing on a guess: the work is blocked `no_tool_available` with detail
   `model_unresolved`. A reported catalog with no match blocks with `no_matching_model`.
   The next allowed tool is tried first; a role session that cannot start says the same
-  code as its `roles_unplaced` detail.
+  code as its `roles_unplaced` detail. The Orchestration view says both codes
+  in words (HS2-747WQA).
 - An exact or mixed list keeps its first exact model, and a list with no models still
   names none (any model). A step's own preferred model the patterns allow is named as is.
 - A remote target's machine fills `tools[].models` through its own hosted capacity
@@ -3847,7 +3848,12 @@ records and the Orchestration view's Why It Is Not Running rows carry the same l
 The view words each reason and each known detail (a policy limit such as
 `policy_target_not_permitted` reads "the site is not one the policy lists"); a
 requirement or resource detail keeps the name the step gives, and a detail code the
-view cannot word is left out rather than shown (HS2-MFS7FY).
+view cannot word is left out rather than shown (HS2-MFS7FY). A `no_tool_available`
+whose detail is a model-resolution code says the cause in place of the generic phrase,
+on the Scheduler row, a passed-over site, a deferred decision and a role session not
+started alike: `model_unresolved` reads "its machine has not reported the AI tool's
+models, so no allowed model can be picked" and `no_matching_model` reads "no model its
+machine reports is an allowed model" (HS2-747WQA).
 A resource another site was waiting on is listed in `contention` only when the work
 was placed nowhere, and a retry time counts only from the chosen site or, unplaced,
 from every site.
