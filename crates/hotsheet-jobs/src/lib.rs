@@ -24,6 +24,8 @@
 //! Nothing in the Job core reads the wall clock or a random source except through [`Clock`] and
 //! [`IdSource`].
 
+mod azure;
+mod bitbucket;
 mod buildkite;
 mod ci;
 mod circleci;
@@ -33,6 +35,7 @@ mod feed;
 mod fixture;
 mod github;
 mod gitlab;
+mod jenkins;
 mod lock;
 mod model;
 mod monitor;
@@ -44,6 +47,8 @@ mod steps;
 mod store;
 pub mod watch;
 
+pub use azure::AzurePipelinesSource;
+pub use bitbucket::BitbucketPipelinesSource;
 pub use buildkite::BuildkiteSource;
 pub use ci::{
     CiArtifact, CiOutcome, CiRun, CiWatchOptions, GateReading, GateState, ci_outcome,
@@ -57,11 +62,13 @@ pub use feed::{
 };
 pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
 pub use github::{
-    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, BUILDKITE_KIND, CIRCLECI_KIND, CiProvider,
-    CiTarget, GITHUB_ACTIONS_KIND, GITLAB_CI_KIND, GithubActionsSource, GithubApi, RunFloor,
+    AZURE_PIPELINES_KIND, ApiMethod, ApiRequest, ApiResponse, ApiUnavailable,
+    BITBUCKET_PIPELINES_KIND, BUILDKITE_KIND, CIRCLECI_KIND, CiProvider, CiTarget,
+    GITHUB_ACTIONS_KIND, GITLAB_CI_KIND, GithubActionsSource, GithubApi, JENKINS_KIND, RunFloor,
     UNKNOWN_COMMIT_LIMIT_MS, repo_from_remote,
 };
 pub use gitlab::GitlabCiSource;
+pub use jenkins::JenkinsSource;
 pub use model::{
     ActiveStatus, Capabilities, Eta, EtaSource, ExternalRef, FeedState, FinalStatus, Job, JobKind,
     Lease, LeaseToken, Liveness, Outcome, ProducerFamily, RECORD_VERSION, Status, TicketLink,

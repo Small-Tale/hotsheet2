@@ -33,7 +33,7 @@ pub(crate) fn definition() -> Value {
         "repository":{"type":"string","description":"gate_link: the provider repository as owner/name; defaults to, and must agree with, the GitHub repository the target declares"},
         "workflow":{"type":"string","description":"gate_link: the workflow name (default CI)"},
         "branch":{"type":"string","description":"gate_link: the shipping branch whose runs count (default main)"},
-        "gate_provider":{"type":"string","description":"gate_link: the CI provider adapter, github-actions (default), gitlab-ci, buildkite or circleci; deployment_request: the deployment adapter (default target-script)"},
+        "gate_provider":{"type":"string","description":"gate_link: the CI provider adapter, github-actions (default), gitlab-ci, buildkite, circleci, jenkins, azure-pipelines or bitbucket-pipelines; deployment_request: the deployment adapter (default target-script)"},
         "ci_artifact":{"type":"string","description":"gate_link: the artifact whose digest a passed verdict records, by name; needed when the workflow builds several (HS2-TQG6AT)"},
         "gate_id":{"type":"string","description":"gate_show: the gate's id"},
         "environment":{"type":"string","description":"deployment_request: the environment name"},

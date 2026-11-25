@@ -401,6 +401,112 @@ stays pending until the commit's own build is judged.
   `HOTSHEET_CIRCLECI_API_URL` (default `https://circleci.com/api/v2`), HTTPS except
   loopback HTTP. A 429 waits for `Retry-After`, or for Buildkite's `RateLimit-Reset`.
 
+## 33.11b Jenkins watch as shipped (HS2-7H0S8R)
+
+`jenkins` watch Jobs follow one commit's CI gate like §33.11a, through the same machine
+monitor, CI gate API and REST port, with **exact coverage only**. Jenkins has no
+build-list-by-commit filter and exposes no repository ancestry.
+
+- **Target.** `repository` is the job's full name, one to ten `/`-separated folder and
+  job names (letters, digits, `-`, `_`, `.`), and the workflow is always `*`.
+- **Reads** ([remote access API](https://www.jenkins.io/doc/book/using/remote-access-api/)).
+  Each poll reads `job/<a>/job/<b>/api/json` with a `tree` filter for `_class` and the
+  30 newest builds' `number`, `result`, `building`, `url` and the Git plugin's
+  `BuildData` (`lastBuiltRevision.SHA1`, `branch[].name`). When `_class` is a
+  multibranch project, the branch job `…/job/<branch>` is read instead (a `/` in the
+  branch becomes `%2F` in its name); the class is read once per watch. A branch job
+  that is not indexed yet leaves the gate pending.
+- **Coverage.** A build counts when one of its `BuildData` actions recorded exactly the
+  commit; a pipeline that also checks out a shared library has several. In a plain
+  (not multibranch) job that action must also name the branch as `main`,
+  `refs/heads/main`, `origin/main` or `refs/remotes/<remote>/main`. A later commit's
+  success never covers the commit.
+- **Verdict.** A `SUCCESS` build of the commit is green; otherwise the newest build
+  decides: `FAILURE` and `UNSTABLE` are red, `ABORTED` is cancelled, and `building`,
+  `NOT_BUILT` or an unknown result wait. A rebuild is a new build number, so a rewatch
+  ignores a judged build by number. No steps are reported: Jenkins core exposes no
+  stage data (HS2-SSKBRB).
+- **Cancel** is `POST <job>/<number>/stop` (a redirect counts as accepted), sent only
+  for the commit's own unfinished build.
+- **Errors.** 404 for the job ends the watch without a verdict (`unknown`); 401, 403,
+  429 and server errors are retried with backoff and keep the last observation.
+- **Credentials.** Every Jenkins is self-hosted: `HOTSHEET_JENKINS_URL` names the
+  controller (HTTPS, or loopback HTTP), and without it nothing is sent. `JENKINS_USER`
+  and the API token `JENKINS_API_TOKEN` go as HTTP Basic, which needs no CSRF crumb.
+  They are kept in memory only; `job watch status` reports `jenkins_token` as
+  `JENKINS_API_TOKEN` when both are set, otherwise `null`.
+
+## 33.11c Azure Pipelines watch as shipped (HS2-JZ1DD2)
+
+`azure-pipelines` watch Jobs follow one commit's CI gate like §33.11a, through the same
+machine monitor, CI gate API and REST port, with **exact coverage only**: the Build
+REST API exposes no repository ancestry.
+
+- **Target.** `repository` is `organization/project/definition-id`: the organization
+  name, the project name (letters, digits, spaces, `-`, `_`, `.`) and the pipeline
+  definition's numeric id. The workflow is always `*`.
+- **Reads** ([Builds - List](https://learn.microsoft.com/en-us/rest/api/azure/devops/build/builds/list?view=azure-devops-rest-7.1)).
+  Each poll lists `{org}/{project}/_apis/build/builds?definitions=<id>&branchName=refs/heads/<branch>`
+  newest first (`queryOrder=queueTimeDescending`, `$top=30`, `api-version=7.1`) and
+  keeps the builds whose `sourceVersion` is the commit on that `sourceBranch`; a
+  `pullRequest` build never counts. The current build's
+  [timeline](https://learn.microsoft.com/en-us/rest/api/azure/devops/build/timeline/get?view=azure-devops-rest-7.1)
+  gives the steps (its `Stage` records, or its `Job` records when it has no stages)
+  and the current step.
+- **Verdict.** A `completed` + `succeeded` build of the commit is green; otherwise the
+  newest decides: `failed` and `partiallySucceeded` are red, `canceled` is cancelled,
+  `inProgress` and `cancelling` run, and `notStarted`, `postponed`, `none` or an
+  unknown value wait. A result is read only once the build is `completed`.
+- **Retries.** Rerunning failed stages keeps the build id, so `run_attempt` is the
+  timeline's highest record `attempt`. A rewatch ignores the judged build until it is
+  retried (a higher attempt) and judges any newer build.
+- **Cancel** is `PATCH …/_apis/build/builds/<id>` with `{"status": "cancelling"}`
+  ([Update Build](https://learn.microsoft.com/en-us/rest/api/azure/devops/build/builds/update-build?view=azure-devops-rest-7.1)),
+  sent only for the commit's own unfinished build.
+- **Errors.** 404 ends the watch without a verdict (`unknown`). 203 (Azure DevOps'
+  sign-in page for a credential it does not accept), 401, 403, 429 and server errors
+  are retried with backoff and keep the last observation.
+- **Credentials.** The personal access token `AZURE_DEVOPS_EXT_PAT` (the Azure CLI's
+  variable; Build read, and Build read and execute to cancel) goes as HTTP Basic with
+  an empty user, kept in memory only. The root is `HOTSHEET_AZURE_DEVOPS_API_URL`
+  (default `https://dev.azure.com`), HTTPS except loopback HTTP. `job watch status`
+  reports `azure_pipelines_token`.
+
+## 33.11d Bitbucket Pipelines watch as shipped (HS2-BWF72S)
+
+`bitbucket-pipelines` watch Jobs follow one commit's CI gate like §33.11a, through the
+same machine monitor, CI gate API and REST port, with **exact coverage only**:
+Bitbucket's API exposes no repository ancestry.
+
+- **Target.** `repository` is `workspace/repo_slug`; the workflow is always `*`.
+- **Reads** ([pipelines API](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pipelines/)).
+  The API does not filter by commit, so each poll lists
+  `repositories/<workspace>/<slug>/pipelines/?target.ref_name=<branch>&sort=-created_on&pagelen=30`
+  and keeps the branch pipelines (`pipeline_ref_target`, `ref_type` `branch`) whose
+  `target.commit.hash` is the commit. Pull request and custom (manually run)
+  pipelines never count. A commit whose pipeline drops out of the branch's 30 newest
+  before it is judged stays pending (HS2-EFCEJG). The current pipeline's steps
+  (`…/pipelines/<uuid>/steps/`) are the Job's steps.
+- **Verdict.** A `COMPLETED` + `SUCCESSFUL` pipeline of the commit is green; otherwise
+  the newest decides: `FAILED`, `ERROR` and `EXPIRED` are red, `STOPPED` is cancelled,
+  `IN_PROGRESS` runs, and `PENDING` or an unknown value waits. A result is read only
+  once the pipeline is `COMPLETED`.
+- **Reruns.** A rerun of the whole pipeline is a new build number; rerunning failed
+  steps keeps it and raises `run_number`, which is `run_attempt`. A rewatch ignores
+  the judged run and judges either.
+- **Cancel** is `POST …/pipelines/<uuid>/stopPipeline` (204), sent only for the
+  commit's own unfinished pipeline.
+- **Outcome.** The API answers no web link for a pipeline, so `run_url` is the
+  Bitbucket Cloud page `https://bitbucket.org/<workspace>/<slug>/pipelines/results/<n>`.
+- **Errors.** 404 ends the watch without a verdict (`unknown`); 401, 403, 429 and
+  server errors are retried with backoff and keep the last observation.
+- **Credentials.** A repository or workspace access token `BITBUCKET_ACCESS_TOKEN` goes
+  as `Authorization: Bearer`; otherwise `BITBUCKET_USERNAME` with `BITBUCKET_API_TOKEN`
+  (an Atlassian API token or an app password) goes as HTTP Basic. They are kept in
+  memory only. The root is `HOTSHEET_BITBUCKET_API_URL` (default
+  `https://api.bitbucket.org/2.0`), HTTPS except loopback HTTP. `job watch status`
+  reports `bitbucket_pipelines_token` as the variable used.
+
 ## 33.12 Validation and deployment runners (HS2-BWAPSX)
 
 A hosted validation step or deployment that runs in a detached runner

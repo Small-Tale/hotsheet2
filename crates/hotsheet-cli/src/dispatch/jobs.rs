@@ -199,12 +199,20 @@ pub(super) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
                 status["gitlab_token"] = super::job_gitlab::token_source(&home)
                     .map(|source| source.code())
                     .into();
-                // HS2-17HVNP: whether a Buildkite or CircleCI token is configured.
+                // HS2-17HVNP: whether a Buildkite or CircleCI token is configured, and
+                // HS2-7H0S8R a Jenkins one, HS2-JZ1DD2 an Azure DevOps one, HS2-BWF72S a
+                // Bitbucket one.
                 for (key, provider) in [
                     ("buildkite_token", super::job_ci_rest::BUILDKITE),
                     ("circleci_token", super::job_ci_rest::CIRCLECI),
+                    ("jenkins_token", super::job_ci_rest::JENKINS),
+                    ("azure_pipelines_token", super::job_ci_rest::AZURE_PIPELINES),
+                    (
+                        "bitbucket_pipelines_token",
+                        super::job_ci_rest::BITBUCKET_PIPELINES,
+                    ),
                 ] {
-                    status[key] = provider.has_token().then_some(provider.token_env()).into();
+                    status[key] = provider.token_source().into();
                 }
                 print_json(&status)
             }
@@ -552,6 +560,18 @@ fn register_sources(monitor: &mut Monitor, home: &Path) {
     )));
     monitor.register(Box::new(hotsheet_jobs::CircleciSource::new(
         super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::CIRCLECI),
+    )));
+    // HS2-7H0S8R: Jenkins builds, through the same REST port.
+    monitor.register(Box::new(hotsheet_jobs::JenkinsSource::new(
+        super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::JENKINS),
+    )));
+    // HS2-JZ1DD2: Azure Pipelines builds, through the same REST port.
+    monitor.register(Box::new(hotsheet_jobs::AzurePipelinesSource::new(
+        super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::AZURE_PIPELINES),
+    )));
+    // HS2-BWF72S: Bitbucket Pipelines, through the same REST port.
+    monitor.register(Box::new(hotsheet_jobs::BitbucketPipelinesSource::new(
+        super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::BITBUCKET_PIPELINES),
     )));
     // A file-backed source so process tests can drive a real monitor offline. It is not
     // compiled into release builds.

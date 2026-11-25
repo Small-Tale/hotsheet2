@@ -1638,81 +1638,109 @@ fn hs2_tpahya_a_gitlab_ci_gate_is_watched_and_read_like_github() {
 /// their evidence is exact coverage.
 #[test]
 fn hs2_17hvnp_buildkite_and_circleci_gates_are_watched_and_read_like_github() {
-    for (provider, repository, default_workflow, commit_char, run_number) in [
-        ("buildkite", "acme/widgets", "*", 'c', 41u64),
-        ("circleci", "gh/acme/widgets", "*", 'd', 42),
-    ] {
-        let mut rng = Rng(100);
-        let mut tx = Transaction {
-            clock: &Clock,
-            rng: &mut rng,
-        };
-        let (m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
-        let (commit, owner) = (sha(commit_char), m.owner.id.clone());
-        let linked = m
-            .runtime
-            .gate_link(
-                &owner,
-                &run,
-                serde_json::from_value(json!({"commit": commit, "provider": provider,
-                    "repository": repository}))
-                .unwrap(),
-                Some(&worker()),
-                &mut tx,
-            )
-            .unwrap();
-        assert_eq!(linked.gate.provider, provider);
-        let scope = linked.gate.ci.clone().unwrap();
-        assert_eq!(
-            (scope.repository.as_str(), scope.workflow.as_str()),
-            (repository, default_workflow)
-        );
-        let jobs = JobStore::at(&m.home).list(&owner).unwrap().jobs;
-        assert_eq!(jobs.len(), 1, "{provider}");
-        assert_eq!(jobs[0].kind.name, provider);
-        assert_eq!(jobs[0].external.as_ref().unwrap().system, provider);
-        judge(
-            &m.home,
+    exact_coverage_gate("buildkite", "acme/widgets", "widgets", 'c', 41);
+    exact_coverage_gate("circleci", "gh/acme/widgets", "widgets", 'd', 42);
+}
+
+/// HS2-7H0S8R: a Jenkins gate likewise, its repository the job's full name.
+#[test]
+fn hs2_7h0s8r_a_jenkins_gate_is_watched_and_read_like_github() {
+    exact_coverage_gate("jenkins", "team/widgets", "wid gets", 'c', 43);
+}
+
+/// HS2-JZ1DD2: an Azure Pipelines gate likewise, its repository
+/// `organization/project/definition-id`.
+#[test]
+fn hs2_jz1dd2_an_azure_pipelines_gate_is_watched_and_read_like_github() {
+    exact_coverage_gate(
+        "azure-pipelines",
+        "acme/Widget Team/12",
+        "acme/widgets",
+        'c',
+        44,
+    );
+}
+
+/// HS2-BWF72S: a Bitbucket Pipelines gate likewise, its repository
+/// `workspace/repo_slug`.
+#[test]
+fn hs2_bwf72s_a_bitbucket_pipelines_gate_is_watched_and_read_like_github() {
+    exact_coverage_gate("bitbucket-pipelines", "acme/widgets", "widgets", 'c', 45);
+}
+
+/// Link a gate of an exact-coverage provider, judge its watch Job green, and read the
+/// evidence back; a repository the provider cannot address (`odd`) is refused.
+fn exact_coverage_gate(provider: &str, repository: &str, odd: &str, commit_char: char, run: u64) {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (m, run_id) = with_run(&[TargetAction::GatesObserve], &mut tx);
+    let (commit, owner) = (sha(commit_char), m.owner.id.clone());
+    let linked = m
+        .runtime
+        .gate_link(
             &owner,
-            linked.gate.watch_ref.as_deref().unwrap(),
-            "green",
-            &commit,
-            run_number,
-        );
-        let green = m
-            .runtime
-            .gate_sync(
-                &owner,
-                &run,
-                &SyncGates { wait_ms: 0 },
-                Some(&worker()),
-                &mut tx,
-            )
-            .unwrap();
-        assert_eq!(green.summary.ci, GateState::Passed, "{provider}");
-        let evidence = green.summary.gates[0].evidence.clone().unwrap();
-        assert_eq!(
-            (
-                evidence.provider.as_str(),
-                evidence.reference.as_str(),
-                evidence.coverage
-            ),
-            (provider, run_number.to_string().as_str(), Coverage::Exact)
-        );
-        // A pipeline or project slug the provider cannot address is refused, and no
-        // declared repository identity names one: the link must.
-        let odd: LinkGate = serde_json::from_value(
-            json!({"commit": sha('e'), "provider": provider, "repository": "widgets"}),
+            &run_id,
+            serde_json::from_value(json!({"commit": commit, "provider": provider,
+                "repository": repository}))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
         )
         .unwrap();
-        assert_eq!(
-            gate_error(
-                m.runtime
-                    .gate_link(&owner, &run, odd, Some(&worker()), &mut tx)
-            ),
-            GateError::ProviderUnsupported
-        );
-    }
+    assert_eq!(linked.gate.provider, provider);
+    let scope = linked.gate.ci.clone().unwrap();
+    assert_eq!(
+        (scope.repository.as_str(), scope.workflow.as_str()),
+        (repository, "*")
+    );
+    let jobs = JobStore::at(&m.home).list(&owner).unwrap().jobs;
+    assert_eq!(jobs.len(), 1, "{provider}");
+    assert_eq!(jobs[0].kind.name, provider);
+    assert_eq!(jobs[0].external.as_ref().unwrap().system, provider);
+    judge(
+        &m.home,
+        &owner,
+        linked.gate.watch_ref.as_deref().unwrap(),
+        "green",
+        &commit,
+        run,
+    );
+    let green = m
+        .runtime
+        .gate_sync(
+            &owner,
+            &run_id,
+            &SyncGates { wait_ms: 0 },
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(green.summary.ci, GateState::Passed, "{provider}");
+    let evidence = green.summary.gates[0].evidence.clone().unwrap();
+    assert_eq!(
+        (
+            evidence.provider.as_str(),
+            evidence.reference.as_str(),
+            evidence.coverage
+        ),
+        (provider, run.to_string().as_str(), Coverage::Exact)
+    );
+    // A repository the provider cannot address is refused, and no declared repository
+    // identity names one: the link must.
+    let odd: LinkGate = serde_json::from_value(
+        json!({"commit": sha('e'), "provider": provider, "repository": odd}),
+    )
+    .unwrap();
+    assert_eq!(
+        gate_error(
+            m.runtime
+                .gate_link(&owner, &run_id, odd, Some(&worker()), &mut tx)
+        ),
+        GateError::ProviderUnsupported
+    );
 }
 
 fn paused_error<T>(result: Result<T, OrchestrationError>) {
