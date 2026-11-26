@@ -1276,7 +1276,11 @@ the feed keeps one file watcher on that store's `tickets` directory, from a foll
 first request until no follower has asked for ten minutes. Each changed ticket file is
 recorded in the change log as a `target_store_changed` event that carries only the
 ticket id and is read only by the feed, so cursors and replay work as they do for hosted
-stores (HS2-G5FYP6).
+stores (HS2-G5FYP6). A new shard directory under `tickets` can report its own event
+before its watch is armed (Linux inotify), so a ticket renamed into it just afterwards
+reports nothing. Each burst of new-directory events therefore reads the store once more
+a second later: local files only, and each write recorded once (HS2-268461, as
+HS2-ZER3MA does for hosted stores).
 
 When a hosted store is recreated, its watcher may reconcile several files in one
 pass and publish a store-scoped `changed` event with an empty ticket id. The target
