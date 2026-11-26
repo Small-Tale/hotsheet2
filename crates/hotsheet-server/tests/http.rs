@@ -9330,6 +9330,103 @@ args = ["--path", "{store}"]
 }
 
 #[tokio::test]
+async fn hs2_52x9pn_opening_project_reports_a_refused_tool_config_and_refreshes_the_rest() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    std::fs::write(
+        checkout.join("AGENTS.md"),
+        "<!-- BEGIN hotsheet:fixture -->\nstale\n<!-- END hotsheet:fixture -->\n\n<!-- BEGIN hotsheet:oc -->\nstale oc\n<!-- END hotsheet:oc -->\n",
+    )
+    .unwrap();
+    let broken = "{ \"mcp\": { \"other\": } }";
+    std::fs::write(checkout.join("opencode.json"), broken).unwrap();
+    std::fs::write(
+        ticket_store.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["fixture","oc"]}"#,
+    )
+    .unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    for (id, mcp) in [
+        (
+            "fixture",
+            "target = \".fixture/mcp.json\"\nformat = \"claude-json\"",
+        ),
+        (
+            "oc",
+            "target = \"opencode.json\"\nformat = \"opencode-json\"",
+        ),
+    ] {
+        let dir = plugins.path().join(id);
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(dir.join("instructions.md"), format!("Current {id}.\n")).unwrap();
+        std::fs::write(dir.join("SKILL.md"), "Skill.\n").unwrap();
+        std::fs::write(
+            dir.join("manifest.toml"),
+            format!(
+                "id = \"{id}\"\ndisplay_name = \"{id}\"\nproduct_name = \"{id}\"\ntier = \"cli-agent\"\n[detection]\nbinaries = [\"definitely-not-installed-hotsheet-{id}\"]\n[instructions]\ntarget = \"AGENTS.md\"\nsection = \"instructions.md\"\n[skills]\ntarget = \".{id}/skills/hotsheet/SKILL.md\"\nsource = \"SKILL.md\"\n[mcp]\n{mcp}\nserver_name = \"hotsheet\"\ncommand = \"hotsheet-mcp\"\nargs = [\"--path\", \"{{store}}\"]\n"
+            ),
+        )
+        .unwrap();
+    }
+    let registry = tempfile::tempdir().unwrap();
+    let (st, mut refresh) = OpenBackgroundGate::install(
+        st.with_checkout_registry(registry.path().join("checkouts.json"))
+            .with_plugin_dirs(vec![plugins.path().to_path_buf()]),
+        hotsheet_server::OpenBackgroundWork::SetupRefreshStarted,
+        hotsheet_server::OpenBackgroundWork::SetupRefreshFinished,
+    );
+    let application = app(st);
+    let opened = body_json(
+        application
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout,"stores":[ticket_store]}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    refresh.release_and_finish().await;
+
+    // The broken config is untouched and the other tool still refreshed.
+    assert_eq!(
+        std::fs::read_to_string(checkout.join("opencode.json")).unwrap(),
+        broken
+    );
+    assert!(checkout.join(".fixture/mcp.json").is_file());
+    let instructions = std::fs::read_to_string(checkout.join("AGENTS.md")).unwrap();
+    assert!(instructions.contains("Current fixture."), "{instructions}");
+    assert!(instructions.contains("stale oc"), "{instructions}");
+    assert!(!checkout.join(".oc").exists());
+
+    // The client's inbox for this checkout carries the refusal and the headless rerun.
+    let listed = body_json(
+        application
+            .oneshot(authed(
+                "GET",
+                &format!("/notifications?checkout={checkout_id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let notices = listed.as_array().unwrap();
+    assert_eq!(notices.len(), 1, "{listed}");
+    let message = notices[0]["message"].as_str().unwrap();
+    assert_eq!(notices[0]["severity"], "warning");
+    assert!(message.contains("opencode.json"), "{message}");
+    assert!(message.contains("hotsheet-cli setup oc"), "{message}");
+}
+
+#[tokio::test]
 async fn opening_project_migrates_per_tool_copies_into_one_shared_section() {
     // HS2-329EED: the project-open refresh runs the same core writer as `setup --refresh`,
     // so tools sharing AGENTS.md with identical bodies converge on one shared section.
@@ -11382,11 +11479,21 @@ async fn hs2_sy15vs_synced_unsafe_attachment_filename_cannot_escape_through_rout
             .oneshot(authed("GET", &path, None))
             .await
             .unwrap();
-        assert_ne!(response.status(), StatusCode::OK, "{path}");
+        // HS2-Z8X4XP: a typed 409 naming the repair, not the catch-all 500.
+        assert_eq!(response.status(), StatusCode::CONFLICT, "{path}");
         let body = response.into_body().collect().await.unwrap().to_bytes();
         assert!(
             !body.windows(14).any(|window| window == b"outside secret"),
             "{path} served the outside file"
+        );
+        let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(error["code"], "unsafe_attachment_filename", "{path}");
+        assert!(
+            error["error"]
+                .as_str()
+                .unwrap()
+                .contains("hotsheet-cli doctor --repair-attachment-names"),
+            "{error}"
         );
     }
     let deleted = app
@@ -11394,7 +11501,7 @@ async fn hs2_sy15vs_synced_unsafe_attachment_filename_cannot_escape_through_rout
         .oneshot(authed("DELETE", &url, None))
         .await
         .unwrap();
-    assert!(!deleted.status().is_success());
+    assert_eq!(deleted.status(), StatusCode::CONFLICT);
     assert_eq!(std::fs::read(&outside).unwrap(), b"outside secret");
 }
 

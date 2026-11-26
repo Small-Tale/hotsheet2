@@ -108,6 +108,8 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
         );
     let plugin_dirs = state.plugin_dirs.as_ref().clone();
     let observer = state.open_background_observer();
+    let state = state.clone();
+    let checkout_id = id.clone();
     tokio::task::spawn_blocking(move || {
         observer.notify(crate::OpenBackgroundWork::SetupRefreshStarted);
         if let Err(error) = settings.migrate_existing() {
@@ -121,14 +123,68 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
                 .flatten()
                 .as_ref(),
         );
-        let _ =
-            hotsheet_plugins::refresh_setup_in(&store, &project, enabled.as_ref(), &plugin_dirs);
+        refresh_setup_reporting_refusals(
+            &state,
+            &checkout_id,
+            &store,
+            &project,
+            enabled.as_ref(),
+            &plugin_dirs,
+        );
         {
             let mut active = active.lock_or_recover();
             active.remove(&id);
         }
         observer.notify(crate::OpenBackgroundWork::SetupRefreshFinished);
     });
+}
+
+/// The project-open AI-tool refresh (HS2-52X9PN). A tool whose existing config setup
+/// refuses to replace ([`hotsheet_plugins::SetupError::UnreadableConfig`]) is held for
+/// this run, so every other tool still refreshes, and each refusal is logged and
+/// published as a checkout-scoped warning in the notification inbox the client shows.
+/// Any other refusal stops the run (nothing was written) and is reported the same way.
+/// The message names the file and the headless `hotsheet-cli setup <tool>` rerun.
+fn refresh_setup_reporting_refusals(
+    state: &AppState,
+    checkout_id: &str,
+    store: &FsPath,
+    project: &FsPath,
+    enabled: Option<&std::collections::HashSet<String>>,
+    plugin_dirs: &[std::path::PathBuf],
+) {
+    let mut held = std::collections::HashSet::new();
+    loop {
+        let error = match hotsheet_plugins::refresh_setup_holding(
+            store,
+            project,
+            enabled,
+            plugin_dirs,
+            &held,
+        ) {
+            Ok(_) => return,
+            Err(error) => error,
+        };
+        let (key, retry) = match &error {
+            hotsheet_plugins::SetupError::UnreadableConfig { tool, path, .. } => {
+                (format!("{tool}:{path}"), held.insert(tool.clone()))
+            }
+            _ => ("refresh".to_string(), false),
+        };
+        tracing::warn!(checkout = %checkout_id, %error, "AI tool setup refresh refused");
+        state.publish_notification(crate::notifications::NewNotification {
+            message: format!("AI tool setup refresh\n{error}"),
+            severity: "warning".into(),
+            checkout: Some(checkout_id.to_string()),
+            store: None,
+            ticket: None,
+            recipient: None,
+            dedupe_key: Some(format!("setup-refresh:{checkout_id}:{key}")),
+        });
+        if !retry {
+            return;
+        }
+    }
 }
 
 /// Keep the generated checkout projection fresh without making project opening wait for a

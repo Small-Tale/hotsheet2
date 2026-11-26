@@ -1773,6 +1773,7 @@ hotsheet screensaver install|status|uninstall [--bundle <HotSheet.saver>] [--jso
 hotsheet serve --stop --force  # also stop a server owned by the pinned production host
 hotsheet reindex       # drop + rebuild the index from disk; prune idle older-schema index files
 hotsheet doctor --project .  # store health + read-only tool/HS1 onboarding guidance
+hotsheet doctor --repair-attachment-names  # first rename attachment names HS2-SY15VS refuses (HS2-Z8X4XP, 17-ticket-file-format.md)
 hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-ticket-storage.md §2.7)
 ```
 

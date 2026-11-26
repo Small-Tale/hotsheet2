@@ -179,7 +179,7 @@ impl ClaimBackend for GitRefBackend {
         match self.cas.acquire(&Self::refname(target), marker, now) {
             Ok(Acquired::Won(marker)) => Ok(Grant {
                 claim: Self::view(target, &marker),
-                renewal_token,
+                renewal_token: renewal_token.into(),
             }),
             Ok(Acquired::Held(holder)) => Err(ClaimError::HeldBy {
                 holder: Box::new(Self::view(target, &holder)),

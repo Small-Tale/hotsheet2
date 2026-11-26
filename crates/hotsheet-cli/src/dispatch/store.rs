@@ -97,7 +97,15 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             }
             _ => cmd_sync(path, status, json, abort_stalled_rebase, adopt.as_deref()),
         },
-        Cmd::Doctor { project } => cmd_doctor(path, &project),
+        Cmd::Doctor {
+            project,
+            repair_attachment_names,
+        } => {
+            if repair_attachment_names {
+                cmd_repair_attachment_names(path)?;
+            }
+            cmd_doctor(path, &project)
+        }
         Cmd::Reindex { index } => cmd_reindex(path, index),
         Cmd::Worklist => cmd_worklist(path, &ctx.cwd),
         Cmd::PurgeTrash {
@@ -806,6 +814,42 @@ pub(crate) fn cmd_sync(
                 render_sync_health(&health).trim_end()
             )
         }
+    }
+    Ok(())
+}
+
+/// `doctor --repair-attachment-names` (HS2-Z8X4XP): rename refused attachment names
+/// before the ordinary doctor report, which then lists anything still corrupt.
+fn cmd_repair_attachment_names(path: &Path) -> Result<()> {
+    use hotsheet_ticketing::RepairedPayload;
+    let store = FsStore::open(path)?;
+    let report = store.repair_unsafe_attachment_names(now_ts())?;
+    if report.repaired.is_empty() && report.refused.is_empty() {
+        println!("Attachment names: nothing to repair");
+    }
+    for ticket in &report.repaired {
+        println!("Repaired attachment names in {}:", ticket.slug);
+        for rename in &ticket.renames {
+            let payload = match rename.payload {
+                RepairedPayload::MovedFromNested | RepairedPayload::MovedFromLegacy => {
+                    "payload moved"
+                }
+                RepairedPayload::AlreadyInPlace => "payload already in place",
+                RepairedPayload::NotFound => "no payload file found",
+            };
+            println!(
+                "  - attachment {}: '{}' -> '{}' ({payload})",
+                rename.attachment_id, rename.from, rename.to
+            );
+        }
+    }
+    for refused in &report.refused {
+        let slug = refused.slug.as_deref().unwrap_or("unknown");
+        println!(
+            "  ! not repaired {} (slug {slug}): {}",
+            refused.path.display(),
+            refused.reason
+        );
     }
     Ok(())
 }

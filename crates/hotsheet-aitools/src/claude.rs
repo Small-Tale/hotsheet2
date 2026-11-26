@@ -12,7 +12,7 @@
 //! spawns the real `claude`, while tests inject a **scripted claude** so the whole engine
 //! is exercised with no live tool (`docs/05` §5.10).
 
-use hotsheet_sync::LockExt;
+use hotsheet_sync::{CondvarExt, LockExt};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -153,6 +153,8 @@ fn start_reader(transport: Box<dyn RpcTransport>, timing: ChannelTiming) -> Arc<
         cost_baseline_usd: Mutex::new(None),
     });
     let ri = inner.clone();
+    // Detached on purpose (HS2-GSW2AA): the reader ends when the child's stdout closes, that
+    // is when the child exits or is terminated.
     std::thread::spawn(move || {
         loop {
             match reader.recv() {
@@ -724,7 +726,7 @@ impl ClaudeTurn {
                 self.finish(reason);
                 return self.pending.pop_front().map(|event| self.emit(event));
             }
-            let (g, _) = inner.cvar.wait_timeout(events, remaining).unwrap();
+            let (g, _) = inner.cvar.wait_timeout_or_recover(events, remaining);
             events = g;
         }
     }

@@ -70,6 +70,8 @@ notify = "6"
 # needs notify 8's batched path changes. Linux and Windows stay on notify 6.
 notify-batched = { package = "notify", version = "8.2.1" }
 toml = "0.8"
+# Format-preserving edits of user TOML configs (HS2-3MH5FH); the version `toml` 0.8 locks.
+toml_edit = "0.22"
 include_dir = "0.7"
 portable-pty = "0.8"
 tracing = "0.1"

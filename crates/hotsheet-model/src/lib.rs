@@ -20,7 +20,9 @@ pub mod ticket_ref;
 pub mod timestamp;
 
 pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Status};
-pub use format::{ParseError, parse_file, to_file_string};
+pub use format::{
+    ParseError, parse_file, parse_file_allowing_unsafe_attachment_names, to_file_string,
+};
 pub use group::{
     GROUP_ID_LEN, GROUP_NAME_MAX_CHARS, GroupNameError, GroupValue, group_filter_keys, group_key,
     group_key_of_input, group_placeholder_name, group_value_key, is_group_id, new_group_id,

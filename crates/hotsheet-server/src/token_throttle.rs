@@ -18,6 +18,8 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Mutex;
+
+use hotsheet_sync::LockExt;
 use std::time::{Duration, Instant};
 
 /// Failures one peer may cause per window before it is throttled.
@@ -51,7 +53,7 @@ impl FailureBudget {
 
     /// `Err(retry_after)` when `peer` has used its budget in the current window.
     pub fn check(&self, peer: IpAddr, now: Instant) -> Result<(), Duration> {
-        let peers = self.peers.lock().unwrap();
+        let peers = self.peers.lock_or_recover();
         match peers.get(&peer) {
             Some((failures, started))
                 if now < *started + self.window && *failures >= self.budget =>
@@ -64,7 +66,7 @@ impl FailureBudget {
 
     /// Record one failed attempt by `peer`.
     pub fn failed(&self, peer: IpAddr, now: Instant) {
-        let mut peers = self.peers.lock().unwrap();
+        let mut peers = self.peers.lock_or_recover();
         if peers.len() >= MAX_PEERS && !peers.contains_key(&peer) {
             peers.retain(|_, (_, started)| now < *started + self.window);
             if peers.len() >= MAX_PEERS
@@ -86,7 +88,7 @@ impl FailureBudget {
     /// How many peers are remembered (for tests).
     #[cfg(test)]
     pub fn tracked(&self) -> usize {
-        self.peers.lock().unwrap().len()
+        self.peers.lock_or_recover().len()
     }
 }
 
@@ -172,5 +174,24 @@ mod tests {
             u8::try_from(newest % 256).unwrap(),
         ]);
         assert!(budget.check(newest, t0 + Duration::from_secs(1)).is_err());
+    }
+
+    #[test]
+    fn hs2_gsw2aa_a_poisoned_budget_keeps_counting_instead_of_panicking() {
+        let budget = std::sync::Arc::new(FailureBudget::new(1, Duration::from_secs(60)));
+        let t0 = Instant::now();
+        budget.failed(ip(1), t0);
+        let poisoner = budget.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoner.peers.lock();
+            panic!("poison the peer table");
+        })
+        .join();
+        assert!(budget.peers.is_poisoned());
+        // The failure recorded before the panic still throttles; a new peer is still counted.
+        assert!(budget.check(ip(1), t0 + Duration::from_secs(1)).is_err());
+        assert!(budget.check(ip(2), t0).is_ok());
+        budget.failed(ip(2), t0);
+        assert!(budget.check(ip(2), t0 + Duration::from_secs(1)).is_err());
     }
 }

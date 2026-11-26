@@ -71,8 +71,42 @@ next step: fix the file or move it aside, then rerun `hotsheet-cli setup <tool>`
 OpenCode reads JSONC, so `opencode.json` may contain comments and trailing commas:
 setup edits only Hot Sheet's `mcp` member in place, keeps every other byte including
 the comments, verifies the edited text parses to the intended value, and leaves a
-current file untouched. Disabling OpenCode leaves its entry in a commented
-`opencode.json` in place rather than rewriting the file (lossless removal: HS2-DWS3NS).
+current file untouched. Codex's `config.toml` is edited the same way (HS2-3MH5FH):
+setup replaces only the `[mcp_servers.hotsheet]` table where it stands, keeping the
+comments above its header and every other comment, key order and blank line; a
+current entry leaves the file byte-identical, and an edit whose result would not
+re-parse to exactly the intended config is refused rather than rewritten. Disabling
+Codex removes only that table (and an emptied `mcp_servers`); the file is deleted
+only when nothing of the user's, not even a comment, remains. Disabling OpenCode
+splices only Hot Sheet's `mcp` member (and an emptied `mcp`) out of a commented
+`opencode.json`, together with its separator and a comment trailing it on its line,
+so a file setup merged into is restored byte for byte (HS2-DWS3NS). The result must
+re-parse to exactly the intended value or the file is left untouched, and the file
+is deleted only when nothing but `$schema` remains and no user comment survives.
+
+**Unreadable instruction files are never rewritten (HS2-HXMGN8).** The same rule covers
+the Markdown writers: the instruction target, the canonical target (`AGENTS.md` for
+tools that import it), refresh's reconciled instruction targets, and this checkout's
+`.git/info/exclude`. Only a missing file starts empty. A file that exists but cannot be
+read, because it is not UTF-8 or cannot be opened, stops setup, refresh, and diagnosis
+before the first write. The error names the file, says Hot Sheet left it unchanged, and
+ends with "fix the file (or move it aside), then rerun `hotsheet-cli setup --refresh`".
+Such a file can be shared by several tools, so the project-open refresh reports this as
+one warning and does not hold a single tool. Removing a disabled tool's section skips an
+unreadable file without writing it.
+
+**Project open reports each refused config (HS2-52X9PN).** The server's project-open
+refresh treats a refusal like this per tool rather than for the whole run. It holds the
+tool whose config was refused and refreshes every other tool. A held tool is not a
+disabled one, so none of its files are written, removed or edited, and it keeps its place
+in any shared instruction section. Each refusal is logged and published as a `warning`
+notification scoped to the checkout. The app's notification inbox shows it, and so does
+`GET /notifications?checkout=<id>`. The message is the same error text, naming the file
+and the `hotsheet-cli setup <tool>` rerun. Each checkout and file gets one notification
+until it is acknowledged. Any other refusal still stops that refresh before it writes
+anything and is reported the same way. Explicit `hotsheet-cli setup` and
+`setup --refresh` keep the whole-run refusal, so the headless path fails with that message
+and a nonzero exit.
 
 **Read-only diagnosis (HS2-9N8KVR).** `hotsheet-cli setup --diagnose
 [--tool <plugin-id>] [--project <directory>] [--json]` computes the same refresh

@@ -198,7 +198,7 @@ impl Drop for Machine {
 
 fn get(info: &InstanceInfo, path: &str) -> Value {
     ureq::get(&format!("{}{path}", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap_or_else(|error| panic!("GET {path}: {error}"))
         .into_string()
@@ -208,7 +208,7 @@ fn get(info: &InstanceInfo, path: &str) -> Value {
 
 fn send(info: &InstanceInfo, method: &str, path: &str, body: &Value) -> Value {
     ureq::request(method, &format!("{}{path}", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .set("content-type", "application/json")
         .send_string(&body.to_string())
         .unwrap_or_else(|error| panic!("{method} {path}: {error}"))
@@ -267,7 +267,7 @@ fn hs2_qpjq7a_local_clients_reach_a_server_that_serves_remote_peers_only_over_mt
         listed.contains(&format!("  remote listener: {remote}")),
         "{listed}"
     );
-    assert!(!listed.contains(&info.secret), "{listed}");
+    assert!(!listed.contains(info.secret.expose()), "{listed}");
     // A CLI read the server answers.
     site.cli_ok(&["-C", site.store_arg(), "live-state"]);
 
@@ -309,7 +309,11 @@ fn hs2_qpjq7a_local_clients_reach_a_server_that_serves_remote_peers_only_over_mt
     });
     let route: Vec<&str> = route.split('|').collect();
     assert_eq!(route[0], info.url, "the session's HOTSHEET_SERVER");
-    assert_eq!(route[1], info.secret, "the session's HOTSHEET_SECRET");
+    assert_eq!(
+        route[1],
+        info.secret.expose(),
+        "the session's HOTSHEET_SECRET"
+    );
 
     // That session's permission hook raises its prompt in Hot Sheet and gets the answer.
     let mut hook = site.cli_command(&["permission-hook", "--agent", "claude"]);
@@ -363,7 +367,7 @@ fn hs2_qpjq7a_local_clients_reach_a_server_that_serves_remote_peers_only_over_mt
         "allow"
     );
     ureq::delete(&format!("{}/terminals/{terminal_id}", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap();
 }

@@ -8,7 +8,7 @@
 //!
 //! [`SharedPermissionBridge`]: crate::permission::SharedPermissionBridge
 
-use hotsheet_sync::LockExt;
+use hotsheet_sync::{CondvarExt, LockExt};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;
@@ -68,6 +68,10 @@ struct Inner {
     /// Set by a Stop request from another thread. A turn blocked waiting on a human answer
     /// emits no events, so its owner acts on this from inside the wait (HS2-K6HH96).
     interrupt_wake: AtomicBool,
+    /// Set when the [`AcpSession`] is dropped (HS2-GSW2AA). The peer may outlive it, so an ask
+    /// arriving afterwards is answered `cancelled` instead of reaching the bridge with no
+    /// session left to withdraw it.
+    ended: AtomicBool,
 }
 impl Inner {
     fn request(&self, method: &str, params: Value) -> Result<Value, DriveError> {
@@ -162,6 +166,10 @@ impl Inner {
         if self.closed.load(Ordering::SeqCst) {
             return;
         }
+        if self.ended.load(Ordering::SeqCst) {
+            self.reply(&rpc_id, json!({"outcome":{"outcome":"cancelled"}}));
+            return;
+        }
         let options = params
             .get("options")
             .and_then(Value::as_array)
@@ -186,8 +194,21 @@ impl Inner {
                 bridge_id: None,
             },
         );
+        // HS2-GSW2AA: the session may have ended between the check above and the insert, after
+        // its drop withdrew every ask it could see. `Drop` sets `ended` before taking `asks`,
+        // so either it saw this entry or this load sees `ended`; whoever removes the entry
+        // answers it.
+        if self.ended.load(Ordering::SeqCst) {
+            if self.asks.lock_or_recover().remove(&key).is_some() {
+                self.reply(&rpc_id, json!({"outcome":{"outcome":"cancelled"}}));
+            }
+            return;
+        }
         let (tool, action) = permission_subject(&params);
         let inner = self.clone();
+        // Detached on purpose: it ends when the bridge answers, times out, or is cancelled.
+        // `cancel_asks` (session drop, peer exit, `session/cancel`) cancels its bridge request,
+        // so the ask never outlives its session (HS2-GSW2AA).
         std::thread::spawn(move || {
             let AcpPermission { policy, agent } = permission;
             let bridge = policy.bridge.clone();
@@ -360,8 +381,10 @@ fn connect(transport: Box<dyn RpcTransport>, turn_timeout: Duration) -> Arc<Inne
         asks: Default::default(),
         ask_settled_at: Mutex::new(None),
         interrupt_wake: AtomicBool::new(false),
+        ended: AtomicBool::new(false),
     });
     let r = inner.clone();
+    // Detached on purpose (HS2-GSW2AA): the reader ends when the peer's stdout closes.
     std::thread::spawn(move || {
         loop {
             match reader.recv() {
@@ -425,6 +448,7 @@ impl AcpSession {
 impl Drop for AcpSession {
     /// The session is ending: answer and withdraw any ask still on the bridge.
     fn drop(&mut self) {
+        self.inner.ended.store(true, Ordering::SeqCst);
         self.inner.cancel_asks(None, true);
     }
 }
@@ -534,8 +558,7 @@ impl AcpTurn {
             let _ = self
                 .inner
                 .cvar
-                .wait_timeout(guard, Duration::from_millis(100))
-                .unwrap();
+                .wait_timeout_or_recover(guard, Duration::from_millis(100));
         }
     }
 }
@@ -631,6 +654,8 @@ impl AcpClient for AcpSession {
         let d = done.clone();
         let r = response.clone();
         let prompt = content.to_owned();
+        // Detached on purpose (HS2-GSW2AA): `request_for` returns on the peer's response, its
+        // deadline, or the peer closing, and the turn reads the result from `done`.
         std::thread::spawn(move || {
             let result = i.request_for(
                 "session/prompt",
@@ -1417,6 +1442,28 @@ mod permission_tests {
         assert_eq!(reply["result"]["outcome"], json!({"outcome":"cancelled"}));
         assert_eq!(removed.recv_timeout(WAIT).unwrap().id, request.id);
         assert!(bridge.pending().is_empty());
+    }
+
+    #[test]
+    fn hs2_gsw2aa_an_ask_after_the_session_ends_is_cancelled_and_never_queued() {
+        let h = harness(Some(WAIT), REQUEST_TIMEOUT);
+        let Harness {
+            session,
+            to_client,
+            from_client,
+            bridge,
+            asked,
+            ..
+        } = h;
+        drop(session);
+        // The peer outlives the session and asks again: nothing can withdraw that ask later,
+        // so it is answered at once and never reaches the bridge.
+        to_client.send(ask(9, "git push")).unwrap();
+        let reply = from_client.recv_timeout(WAIT).unwrap();
+        assert_eq!(reply["id"], 9);
+        assert_eq!(reply["result"]["outcome"], json!({"outcome":"cancelled"}));
+        assert!(bridge.pending().is_empty());
+        assert!(asked.try_recv().is_err(), "the ask never reached a human");
     }
 
     #[test]

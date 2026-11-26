@@ -39,6 +39,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use base64::Engine;
+use hotsheet_sync::secret::SecretString;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ulid::Ulid;
@@ -147,7 +148,7 @@ pub struct PendingDevice {
 
 #[derive(Clone, Debug)]
 pub struct IssuedSession {
-    pub token: String,
+    pub token: SecretString,
     pub csrf: String,
     pub device: Device,
 }
@@ -787,7 +788,7 @@ impl RemoteAuth {
                 csrf_hash: digest(&csrf),
             });
             Ok(Ok(IssuedSession {
-                token,
+                token: token.into(),
                 csrf,
                 device: Device::from(&device).at(now),
             }))
@@ -991,7 +992,7 @@ impl RemoteAuth {
             entry.csrf_hash = digest(&new_csrf);
             touch(&mut entry.device, now);
             Ok(Ok(IssuedSession {
-                token: new_token,
+                token: new_token.into(),
                 csrf: new_csrf,
                 device: Device::from(&entry.device).at(now),
             }))
@@ -1134,7 +1135,7 @@ mod tests {
         );
         assert_eq!(
             auth.authorize(
-                &issued.token,
+                issued.token.expose(),
                 None,
                 Some("http://localhost:4175"),
                 true,
@@ -1144,29 +1145,48 @@ mod tests {
             AuthFailure::ReadOnly
         );
         assert!(
-            auth.authorize(&issued.token, None, None, false, 106)?
+            auth.authorize(issued.token.expose(), None, None, false, 106)?
                 .is_ok()
         );
         let file = fs::read_to_string(&path)?;
         assert!(!file.contains(&pair.challenge));
-        assert!(!file.contains(&issued.token));
+        assert!(!file.contains(issued.token.expose()));
         assert!(!file.contains(&issued.csrf));
         let reopened = RemoteAuth::open(&path, "synthetic-server")?;
         assert_eq!(reopened.server_id(), issued.device.server_id);
         assert!(
             reopened
-                .authorize(&issued.token, None, None, false, 107)?
+                .authorize(issued.token.expose(), None, None, false, 107)?
                 .is_ok()
         );
         assert!(reopened.revoke(&issued.device.id)?);
         assert_eq!(
             reopened
-                .authorize(&issued.token, None, None, false, 108)?
+                .authorize(issued.token.expose(), None, None, false, 108)?
                 .unwrap_err(),
             AuthFailure::Revoked
         );
         let file = fs::read_to_string(&path)?;
-        assert!(!file.contains(&issued.token));
+        assert!(!file.contains(issued.token.expose()));
+        Ok(())
+    }
+
+    #[test]
+    fn hs2_9zmc7n_issued_session_debug_redacts_the_token() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let auth = RemoteAuth::open(dir.path().join("remote-auth.json"), "synthetic-server")?;
+        let pair = auth
+            .request("Synthetic tablet", "http://localhost:4175", 100)?
+            .unwrap();
+        auth.approve(&pair.id, Role::ReadOnly, Grants::default(), 101)?
+            .unwrap();
+        let issued = auth
+            .redeem(&pair.id, &pair.challenge, "http://localhost:4175", 102)?
+            .unwrap();
+        assert!(!issued.token.is_empty());
+        let printed = format!("{issued:?} {issued:#?}");
+        assert!(!printed.contains(issued.token.expose()), "{printed}");
+        assert!(printed.contains("token: <redacted>"), "{printed}");
         Ok(())
     }
 
@@ -1250,7 +1270,7 @@ mod tests {
 
         let reopened = RemoteAuth::open(&path, "synthetic-server")?;
         let device = reopened
-            .authorize(&issued.token, None, None, false, 1004)?
+            .authorize(issued.token.expose(), None, None, false, 1004)?
             .unwrap();
         assert!(device.admin && device.local);
         let changed = reopened
@@ -1369,10 +1389,10 @@ mod tests {
             .unwrap();
         assert!(advanced(&auth));
         // Idle-activity persistence and credential rotation are not list changes.
-        auth.authorize(&issued.token, None, None, false, 500)?
+        auth.authorize(issued.token.expose(), None, None, false, 500)?
             .unwrap();
         let rotated = auth
-            .rotate(&issued.token, &issued.csrf, origin, 501)?
+            .rotate(issued.token.expose(), &issued.csrf, origin, 501)?
             .unwrap();
         assert!(!advanced(&auth));
         auth.change(
@@ -1418,27 +1438,45 @@ mod tests {
         let issued = issue(&auth, ORIGIN, 100)?;
         // The browser form still needs both proofs for a write.
         assert_eq!(
-            auth.authorize(&issued.token, None, None, true, 101)?
+            auth.authorize(issued.token.expose(), None, None, true, 101)?
                 .unwrap_err(),
             AuthFailure::Invalid
         );
         assert_eq!(
-            auth.authorize(&issued.token, None, Some(ORIGIN), true, 101)?
+            auth.authorize(issued.token.expose(), None, Some(ORIGIN), true, 101)?
                 .unwrap_err(),
             AuthFailure::Csrf
         );
         assert_eq!(
-            auth.authorize(&issued.token, Some("wrong"), Some(ORIGIN), true, 101)?
-                .unwrap_err(),
+            auth.authorize(
+                issued.token.expose(),
+                Some("wrong"),
+                Some(ORIGIN),
+                true,
+                101
+            )?
+            .unwrap_err(),
             AuthFailure::Csrf
         );
         assert!(
-            auth.authorize(&issued.token, Some(&issued.csrf), Some(ORIGIN), true, 101)?
-                .is_ok()
+            auth.authorize(
+                issued.token.expose(),
+                Some(&issued.csrf),
+                Some(ORIGIN),
+                true,
+                101
+            )?
+            .is_ok()
         );
         // The bearer form reads and writes with neither.
-        assert!(auth.authorize_bearer(&issued.token, false, 102)?.is_ok());
-        assert!(auth.authorize_bearer(&issued.token, true, 102)?.is_ok());
+        assert!(
+            auth.authorize_bearer(issued.token.expose(), false, 102)?
+                .is_ok()
+        );
+        assert!(
+            auth.authorize_bearer(issued.token.expose(), true, 102)?
+                .is_ok()
+        );
         // An unknown bearer, or the CSRF token presented as one, is not a session.
         assert_eq!(
             auth.authorize_bearer("not-a-session", true, 102)?
@@ -1457,21 +1495,24 @@ mod tests {
         let reader = auth
             .redeem(&pair.id, &pair.challenge, ORIGIN, 103)?
             .unwrap();
-        assert!(auth.authorize_bearer(&reader.token, false, 104)?.is_ok());
+        assert!(
+            auth.authorize_bearer(reader.token.expose(), false, 104)?
+                .is_ok()
+        );
         assert_eq!(
-            auth.authorize_bearer(&reader.token, true, 104)?
+            auth.authorize_bearer(reader.token.expose(), true, 104)?
                 .unwrap_err(),
             AuthFailure::ReadOnly
         );
         // Expiry and revocation hold for the bearer form.
         assert_eq!(
-            auth.authorize_bearer(&issued.token, false, 102 + SESSION_TTL + 1)?
+            auth.authorize_bearer(issued.token.expose(), false, 102 + SESSION_TTL + 1)?
                 .unwrap_err(),
             AuthFailure::SessionExpired
         );
         assert!(auth.revoke(&issued.device.id)?);
         assert_eq!(
-            auth.authorize_bearer(&issued.token, true, 105)?
+            auth.authorize_bearer(issued.token.expose(), true, 105)?
                 .unwrap_err(),
             AuthFailure::Revoked
         );
@@ -1496,7 +1537,7 @@ mod tests {
                 auth = RemoteAuth::open(&path, "synthetic-server")?;
             }
             let device = auth
-                .authorize(&issued.token, None, None, false, now)?
+                .authorize(issued.token.expose(), None, None, false, now)?
                 .unwrap_or_else(|error| panic!("{}: {error:?}", now - start));
             assert_eq!(device.last_used_at, now);
             // Use never moves the absolute end.
@@ -1505,8 +1546,14 @@ mod tests {
         assert!(now - start > IDLE_TTL);
         // The cap holds however recently the device was used.
         assert_eq!(
-            auth.authorize(&issued.token, None, None, false, start + SESSION_TTL)?
-                .unwrap_err(),
+            auth.authorize(
+                issued.token.expose(),
+                None,
+                None,
+                false,
+                start + SESSION_TTL
+            )?
+            .unwrap_err(),
             AuthFailure::SessionExpired
         );
         let listed = auth.list(start + SESSION_TTL);
@@ -1523,12 +1570,18 @@ mod tests {
         // One second short of the idle limit still counts, and restarts the idle clock.
         let last = 100 + IDLE_TTL - 1;
         assert!(
-            auth.authorize(&issued.token, None, None, false, last)?
+            auth.authorize(issued.token.expose(), None, None, false, last)?
                 .is_ok()
         );
         assert!(
-            auth.authorize(&issued.token, None, None, false, last + IDLE_TTL - 1)?
-                .is_ok()
+            auth.authorize(
+                issued.token.expose(),
+                None,
+                None,
+                false,
+                last + IDLE_TTL - 1
+            )?
+            .is_ok()
         );
         let last = last + IDLE_TTL - 1;
         // Durable: a restart, later requests and a rotation all stay expired.
@@ -1536,14 +1589,19 @@ mod tests {
         for at in [last + IDLE_TTL, last + IDLE_TTL + 1, last + 3 * IDLE_TTL] {
             assert_eq!(
                 reopened
-                    .authorize(&issued.token, None, None, false, at)?
+                    .authorize(issued.token.expose(), None, None, false, at)?
                     .unwrap_err(),
                 AuthFailure::SessionExpired
             );
         }
         assert_eq!(
             reopened
-                .rotate(&issued.token, &issued.csrf, ORIGIN, last + IDLE_TTL + 2)?
+                .rotate(
+                    issued.token.expose(),
+                    &issued.csrf,
+                    ORIGIN,
+                    last + IDLE_TTL + 2
+                )?
                 .unwrap_err(),
             AuthFailure::SessionExpired
         );
@@ -1569,7 +1627,7 @@ mod tests {
         )?;
         // Before expiry: day 80, while in use.
         for day in [25, 50, 75, 80] {
-            auth.authorize(&issued.token, None, None, false, day * DAY)?
+            auth.authorize(issued.token.expose(), None, None, false, day * DAY)?
                 .unwrap();
         }
         let renewed = auth.renew(&issued.device.id, 80 * DAY)?.unwrap();
@@ -1581,7 +1639,7 @@ mod tests {
         // The same token and CSRF proof keep working past the original cap.
         assert!(
             auth.authorize(
-                &issued.token,
+                issued.token.expose(),
                 Some(&issued.csrf),
                 Some(ORIGIN),
                 true,
@@ -1592,28 +1650,33 @@ mod tests {
         // After expiry (idle past 30 days): the device asks, the host renews, it works again.
         let idle = 100 * DAY + IDLE_TTL + 1;
         assert_eq!(
-            auth.authorize(&issued.token, None, None, false, idle)?
+            auth.authorize(issued.token.expose(), None, None, false, idle)?
                 .unwrap_err(),
             AuthFailure::SessionExpired
         );
         assert_eq!(
-            auth.request_renewal(&issued.token, "wrong", ORIGIN, idle)?
+            auth.request_renewal(issued.token.expose(), "wrong", ORIGIN, idle)?
                 .unwrap_err(),
             AuthFailure::Csrf
         );
         assert_eq!(
-            auth.request_renewal(&issued.token, &issued.csrf, "http://elsewhere:1", idle)?
-                .unwrap_err(),
+            auth.request_renewal(
+                issued.token.expose(),
+                &issued.csrf,
+                "http://elsewhere:1",
+                idle
+            )?
+            .unwrap_err(),
             AuthFailure::Invalid
         );
         let asked = auth
-            .request_renewal(&issued.token, &issued.csrf, ORIGIN, idle)?
+            .request_renewal(issued.token.expose(), &issued.csrf, ORIGIN, idle)?
             .unwrap();
         assert_eq!(asked.renewal_requested_at, Some(idle));
         // Asking again is idempotent and writes nothing.
         let before = writes(&auth);
         let again = auth
-            .request_renewal(&issued.token, &issued.csrf, ORIGIN, idle + 5)?
+            .request_renewal(issued.token.expose(), &issued.csrf, ORIGIN, idle + 5)?
             .unwrap();
         assert_eq!(again.renewal_requested_at, Some(idle));
         assert_eq!(writes(&auth), before);
@@ -1621,7 +1684,7 @@ mod tests {
         let renewed = reopened.renew(&issued.device.id, idle + 60)?.unwrap();
         assert_eq!(renewed.renewal_requested_at, None);
         let device = reopened
-            .authorize(&issued.token, None, None, false, idle + 61)?
+            .authorize(issued.token.expose(), None, None, false, idle + 61)?
             .unwrap();
         assert_eq!(device.id, issued.device.id);
         assert!(device.admin);
@@ -1665,7 +1728,7 @@ mod tests {
         for second in 0..ACTIVITY_PERSIST_INTERVAL {
             for _ in 0..20 {
                 assert!(
-                    auth.authorize(&issued.token, None, None, false, 1_000 + second)?
+                    auth.authorize(issued.token.expose(), None, None, false, 1_000 + second)?
                         .is_ok()
                 );
             }
@@ -1673,7 +1736,7 @@ mod tests {
         assert_eq!(writes(&auth), before);
         // Each later interval of continuous use costs exactly one write.
         for second in ACTIVITY_PERSIST_INTERVAL..ACTIVITY_PERSIST_INTERVAL * 11 {
-            auth.authorize(&issued.token, None, None, false, 1_000 + second)?
+            auth.authorize(issued.token.expose(), None, None, false, 1_000 + second)?
                 .unwrap();
         }
         assert_eq!(writes(&auth), before + 10);
@@ -1684,8 +1747,14 @@ mod tests {
                 .is_err()
         );
         assert!(
-            auth.authorize(&issued.token, None, None, false, 1_000 + SESSION_TTL)?
-                .is_err()
+            auth.authorize(
+                issued.token.expose(),
+                None,
+                None,
+                false,
+                1_000 + SESSION_TTL
+            )?
+            .is_err()
         );
         assert_eq!(writes(&auth), failed);
         Ok(())
@@ -1699,20 +1768,20 @@ mod tests {
         let issued = issue(&auth, ORIGIN, 100)?;
         let kept = issue(&auth, ORIGIN, 100)?;
         for at in [200, 300, 400] {
-            auth.authorize(&issued.token, None, None, false, at)?
+            auth.authorize(issued.token.expose(), None, None, false, at)?
                 .unwrap();
         }
         assert!(auth.revoke(&issued.device.id)?);
         assert!(!auth.revoke(&issued.device.id)?);
         for at in [451, 500, 100 + SESSION_TTL] {
             assert_eq!(
-                auth.authorize(&issued.token, None, None, false, at)?
+                auth.authorize(issued.token.expose(), None, None, false, at)?
                     .unwrap_err(),
                 AuthFailure::Revoked
             );
         }
         assert_eq!(
-            auth.request_renewal(&issued.token, &issued.csrf, ORIGIN, 500)?
+            auth.request_renewal(issued.token.expose(), &issued.csrf, ORIGIN, 500)?
                 .unwrap_err(),
             AuthFailure::Revoked
         );
@@ -1724,7 +1793,7 @@ mod tests {
         let reopened = RemoteAuth::open(&path, "synthetic-server")?;
         assert_eq!(
             reopened
-                .authorize(&issued.token, None, None, false, 600)?
+                .authorize(issued.token.expose(), None, None, false, 600)?
                 .unwrap_err(),
             AuthFailure::Revoked
         );
@@ -1734,7 +1803,7 @@ mod tests {
         assert_eq!(listed[0].id, kept.device.id);
         assert!(
             reopened
-                .authorize(&kept.token, None, None, false, 600)?
+                .authorize(kept.token.expose(), None, None, false, 600)?
                 .is_ok()
         );
         // An unknown token stays invalid, distinct from revoked.

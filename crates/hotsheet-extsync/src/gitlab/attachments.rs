@@ -18,6 +18,7 @@
 //! rendition and rewrites only the marker note; the original upload is never replaced.
 
 use hotsheet_model::{AttachmentActor, AttachmentPurpose, ImageCrop, MediaAnnotation};
+use hotsheet_sync::secret::SecretString;
 use hotsheet_ticketing::store::AttachmentMarkup;
 use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{ApiTicket, ProviderError, TicketProvider};
@@ -37,14 +38,14 @@ use crate::github_attachments::{
 pub struct GitLabAttachmentMarker {
     pub filename: String,
     /// The upload's 32-character secret path segment.
-    pub secret: String,
+    pub secret: SecretString,
     /// The upload's stored file name (the last URL segment GitLab returned).
     pub upload_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upload_id: Option<u64>,
     /// A derived crop rendition; `secret`/`upload_name` always name the original.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rendition_secret: Option<String>,
+    pub rendition_secret: Option<SecretString>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendition_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,15 +71,15 @@ impl GitLabAttachmentMarker {
 
     fn visible(&self) -> (&str, &str) {
         match (&self.rendition_secret, &self.rendition_name) {
-            (Some(secret), Some(name)) => (secret, name),
-            _ => (&self.secret, &self.upload_name),
+            (Some(secret), Some(name)) => (secret.expose(), name),
+            _ => (self.secret.expose(), &self.upload_name),
         }
     }
 
     fn valid(&self) -> bool {
-        valid_upload(&self.secret, &self.upload_name)
+        valid_upload(self.secret.expose(), &self.upload_name)
             && match (&self.rendition_secret, &self.rendition_name) {
-                (Some(secret), Some(name)) => valid_upload(secret, name),
+                (Some(secret), Some(name)) => valid_upload(secret.expose(), name),
                 (None, None) => true,
                 _ => false,
             }
@@ -273,7 +274,7 @@ impl GitLabProvider {
         let (upload_id, secret, upload_name) = self.upload(&stored, &attachment.id, &bytes)?;
         let marker = GitLabAttachmentMarker {
             filename: attachment.filename,
-            secret,
+            secret: secret.into(),
             upload_name,
             upload_id,
             rendition_secret: None,
@@ -307,7 +308,7 @@ impl GitLabProvider {
         let (secret, name) = if visible {
             marker.visible()
         } else {
-            (marker.secret.as_str(), marker.upload_name.as_str())
+            (marker.secret.expose(), marker.upload_name.as_str())
         };
         self.download(secret, name)
     }
@@ -350,7 +351,7 @@ impl GitLabProvider {
         {
             match markup.crop {
                 Some(crop) => {
-                    let original = self.download(&marker.secret, &marker.upload_name)?;
+                    let original = self.download(marker.secret.expose(), &marker.upload_name)?;
                     let rendered =
                         attachment_crop::render(&ticket, &marker.filename, &original, crop)?;
                     marker.crop = rendered.crop;
@@ -359,7 +360,7 @@ impl GitLabProvider {
                             let stored = format!("{attachment_id}-{name}");
                             let seed = format!("{attachment_id}-{}", &name[5..25]);
                             let (_, secret, upload_name) = self.upload(&stored, &seed, &bytes)?;
-                            marker.rendition_secret = Some(secret);
+                            marker.rendition_secret = Some(secret.into());
                             marker.rendition_name = Some(upload_name);
                         }
                         None => {
@@ -597,6 +598,39 @@ mod tests {
         bytes.into_inner()
     }
 
+    /// HS2-9ZMC7N: the upload secret is a capability (whoever knows `/uploads/<secret>/…` can
+    /// fetch the file wherever GitLab serves uploads without sign-in), so `Debug` redacts both
+    /// the original and the rendition secret. The hidden marker JSON keeps its exact shape.
+    #[test]
+    fn hs2_9zmc7n_marker_secrets_are_redacted_and_the_marker_json_is_unchanged() {
+        let json = format!(
+            r#"{{"filename":"shot.png","secret":"{:032x}","upload_name":"a-shot.png","upload_id":9,"rendition_secret":"{:032x}","rendition_name":"a-crop.png"}}"#,
+            0xabc, 0xdef
+        );
+        let marker: GitLabAttachmentMarker = serde_json::from_str(&json).unwrap();
+        assert_eq!(marker.secret.expose(), format!("{:032x}", 0xabc));
+        assert_eq!(serde_json::to_string(&marker).unwrap(), json);
+        let printed = format!("{marker:?} {marker:#?}");
+        assert!(
+            !printed.contains("abc") && !printed.contains("def"),
+            "{printed}"
+        );
+        assert!(printed.contains("secret: <redacted>"), "{printed}");
+        assert!(
+            printed.contains("rendition_secret: Some(<redacted>)"),
+            "{printed}"
+        );
+        assert_eq!(
+            marker.link(),
+            format!("/uploads/{:032x}/a-crop.png", 0xdef),
+            "the visible link still carries the real secret"
+        );
+
+        let body = compose_marked_comment(ATTACHMENT_ID, "shot.png", &marker.link(), &marker);
+        let (_, back) = parse_marked_comment::<GitLabAttachmentMarker>(&body).unwrap();
+        assert_eq!(back, marker);
+    }
+
     #[test]
     fn gitlab_reports_native_attachments_without_edit() {
         let capabilities = provider(Arc::default()).descriptor().capabilities;
@@ -798,7 +832,7 @@ mod tests {
             .unwrap()
             .to_owned();
         let (_, marker) = parse_marked_comment::<GitLabAttachmentMarker>(&body).unwrap();
-        assert_eq!(marker.secret, format!("{:032x}", 1));
+        assert_eq!(marker.secret.expose(), format!("{:032x}", 1));
         assert!(body.starts_with(&format!(
             "![shot.png](/uploads/{:032x}/{ATTACHMENT_ID}-crop-",
             2

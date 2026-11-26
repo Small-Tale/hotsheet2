@@ -780,6 +780,12 @@ enum Cmd {
         /// Code-project directory to inspect for installed-tool setup and HS1 data.
         #[arg(long, default_value = ".")]
         project: PathBuf,
+        /// First rename attachment entries whose stored filename is not one safe path
+        /// component (for example `shots\a.png`), and their payload files, so those
+        /// tickets read again. Idempotent; a ticket whose new names would collide is
+        /// refused without any write (HS2-Z8X4XP).
+        #[arg(long)]
+        repair_attachment_names: bool,
     },
     /// List bounded machine-local child-process provenance for orphan investigation.
     Processes,

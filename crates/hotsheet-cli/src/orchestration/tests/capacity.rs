@@ -1270,7 +1270,7 @@ fn hs2_ap8kpt_a_hosted_checkouts_project_bindings_choose_its_claim_backend() {
     assert!(!wait(0));
     ClaimService::new(&m.home)
         .with_project(&root)
-        .release(&project_grant.renewal_token, Some(&target))
+        .release(project_grant.renewal_token.expose(), Some(&target))
         .unwrap();
     assert!(wait(0));
     assert_eq!(held(&["vm"]), Some(Vec::new()));

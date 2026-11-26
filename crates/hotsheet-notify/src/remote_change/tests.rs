@@ -1062,6 +1062,42 @@ fn hs2_8x2s08_reloading_restarts_only_what_changed_and_unbinding_stops_a_connect
 }
 
 #[test]
+fn hs2_gsw2aa_a_poisoned_hub_keeps_connecting_delivering_and_shuts_down() {
+    let r = rig();
+    r.adapter.sessions.lock().unwrap().push_back(Session {
+        events: vec![connected(false)],
+        end: End::Block,
+    });
+    r.connect("c1", &[("store:tickets", "shared", "acme/app")]);
+    let hub = &r.hub;
+    r.recorder.wait("c1 connected", |_| {
+        matches!(hub.health().get("c1"), Some(Health::Connected { .. }))
+    });
+    // A panic in any thread holding the hub state used to make every later call panic.
+    hub.poison_state_for_test();
+    assert!(matches!(
+        hub.health().get("c1"),
+        Some(Health::Connected { .. })
+    ));
+    assert!(hub.ignored().is_empty());
+    // A reload, a new connection thread and the parked dispatcher all recover the lock.
+    r.adapter.sessions.lock().unwrap().push_back(Session {
+        events: vec![connected(false), push("other", "acme/web", TIP_A, "e1")],
+        end: End::Block,
+    });
+    r.connect("c2", &[("checkout:web", "other", "acme/web")]);
+    r.recorder.wait("the delivery after the poison", |rec| {
+        rec.changes
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|change| change.source == "checkout:web")
+    });
+    // Shutdown takes the poisoned lock too, and joins every thread.
+    hub.shutdown();
+}
+
+#[test]
 fn hs2_8x2s08_an_unconfigured_hub_does_nothing_and_shutdown_joins_every_thread() {
     let r = rig();
     r.hub.reload().unwrap();

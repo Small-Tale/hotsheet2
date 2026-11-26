@@ -892,3 +892,157 @@ test('an open details edit survives a refresh that drops its ticket from the lis
     .toBe(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-qw3pge-edit-survives-prune.png' });
 });
+
+// HS2-41KEQD: a bulk Archive, chosen from the keyboard, is in flight while the user reopens Details and
+// types. When its response moves the ticket out of the open view, the selection prune must save that
+// edit to the archived ticket, exactly once, instead of cancelling it with the deselect.
+test('an open details edit survives a bulk change that moves its ticket out of view (HS2-41KEQD)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let token = 'T0',
+    tokenSeq = 0,
+    details = 'Intro',
+    status = 'started',
+    releaseBatch!: () => void;
+  const batchHeld = new Promise<void>((resolve) => {
+    releaseBatch = resolve;
+  });
+  const patches: Array<{ id: string; details?: string; status?: string }> = [];
+  const batches: Array<Array<{ id: string; status?: string }>> = [];
+  const otherRow = { ...listRow, native_id: '02', qualified_id: 'git-local:02', id: '02', slug: 'HS2-OTHER' };
+  const full = () => ({
+    store: 'git-local',
+    ...listRow,
+    status,
+    details,
+    blocked_reason: null,
+    notes: [],
+    attachments: [],
+    concurrency_token: token,
+  });
+  await page.route(appRequests, async (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
+      method = request.method();
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
+    if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'Hot Sheet Git',
+            locator: '/tickets',
+            default: true,
+            capabilities,
+          },
+        ],
+      });
+    if (path.endsWith('/batch') && method === 'POST') {
+      const updates = (request.postDataJSON() as { updates: Array<{ id: string; status?: string }> }).updates;
+      batches.push(updates);
+      await batchHeld;
+      if (updates[0]?.status) status = updates[0].status;
+      tokenSeq += 1;
+      token = `T${tokenSeq}`;
+      return route.fulfill({ json: [full()] });
+    }
+    const ticketId = /\/tickets\/(0[12])$/.exec(path)?.[1];
+    if (ticketId && method === 'PATCH') {
+      const body = request.postDataJSON() as { details?: string; status?: string };
+      patches.push({ id: ticketId, details: body.details, status: body.status });
+      if (ticketId === '01' && body.details !== undefined) details = body.details;
+      tokenSeq += 1;
+      token = `T${tokenSeq}`;
+      return route.fulfill({ json: full() });
+    }
+    if (ticketId === '01' && method === 'GET') return route.fulfill({ json: full() });
+    if (ticketId === '02' && method === 'GET')
+      return route.fulfill({
+        json: { store: 'git-local', ...otherRow, details: '', blocked_reason: null, notes: [], attachments: [] },
+      });
+    if (path.endsWith('/tickets') && method === 'GET') {
+      const items = status === 'archive' ? [otherRow] : [{ ...listRow, status }, otherRow];
+      return route.fulfill({
+        json: {
+          items,
+          counts: {
+            total: items.length,
+            queued: items.length,
+            backlog: 0,
+            archive: status === 'archive' ? 1 : 0,
+            open: items.length,
+            up_next: 0,
+            active: items.length,
+            started: items.length,
+            completed_today: 0,
+            completion_trend: [0, 0, 0, 0, 0, 0, 0],
+          },
+        },
+      });
+    }
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    // Live updates stay held after the first read: no change event reaches this test.
+    if (path.endsWith('/ws/poll')) {
+      if (url.searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+      return;
+    }
+    if (
+      path.endsWith('/terminals') ||
+      path.endsWith('/connections') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/command-runs') ||
+      path.endsWith('/views') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    return route.continue();
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  const editedRow = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]');
+  await editedRow.click();
+  const inspector = page.locator('#app-right-rail');
+  await expect(inspector.getByRole('button', { name: 'Edit Ticket details' })).toBeVisible();
+
+  // Archive the selected ticket from the keyboard: the toolbar's More menu, then its Archive item.
+  await page.getByRole('button', { name: 'More Actions for Selected Tickets' }).focus();
+  await page.keyboard.press('Enter');
+  const archive = page.locator('[data-context-menu="ticket"] [data-context-action="Archive ticket"]');
+  await expect(archive).toBeVisible();
+  await archive.focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => batches.length).toBe(1);
+  expect(batches[0]).toEqual([expect.objectContaining({ id: '01', status: 'archive' })]);
+
+  // While the archive is in flight the ticket stays open; the user reopens Details and types.
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
+  const edit = 'Intro\n- typed while the archive was in flight';
+  await editor.fill(edit);
+  await expect(editor).toBeFocused();
+  await page.waitForTimeout(300);
+  // Typing alone never writes (HS2-RE1PS6).
+  expect(patches).toEqual([]);
+
+  // The archive response moves HS2-EDIT out of the open view; the prune saves the edit before deselecting.
+  releaseBatch();
+  await expect.poll(() => details).toBe(edit);
+  await expect(editedRow).toHaveCount(0);
+  await expect(editor).toHaveCount(0);
+  expect(patches).toEqual([{ id: '01', details: edit, status: undefined }]);
+  expect(status).toBe('archive');
+  await expect(page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-OTHER"]')).toBeVisible();
+  // The committed save cleared the local recovery copy, so nothing stale restores later.
+  await expect
+    .poll(() =>
+      page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('hotsheet.ticket-draft:')).length),
+    )
+    .toBe(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-41keqd-edit-survives-bulk-prune.png' });
+});

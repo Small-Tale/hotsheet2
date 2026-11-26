@@ -2621,6 +2621,13 @@ fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+#[path = "store_attachment_name_repair.rs"]
+mod attachment_name_repair;
+pub use attachment_name_repair::{
+    AttachmentNameRepairReport, AttachmentRename, RefusedAttachmentTicket,
+    RepairedAttachmentTicket, RepairedPayload,
+};
+
 #[cfg(test)]
 #[path = "store_attachment_containment_tests.rs"]
 mod attachment_containment_tests;

@@ -455,14 +455,17 @@ fn permission_discard_hosts(
         let host = hotsheet_cli::external_launch::discover_running_server(store, home)
             .with_context(|| format!("permission host {} is unavailable", record.store_path))?;
         if let Some((url, secret)) = seen.get(&host.pid) {
-            if url != &host.url || secret != &host.secret {
+            if url != &host.url || secret.as_str() != host.secret.expose() {
                 bail!(
                     "conflicting instance records for Hot Sheet host {}",
                     host.pid
                 );
             }
         } else {
-            seen.insert(host.pid, (host.url.clone(), host.secret.clone()));
+            seen.insert(
+                host.pid,
+                (host.url.clone(), host.secret.expose().to_owned()),
+            );
             hosts.push(host);
         }
     }
@@ -997,7 +1000,7 @@ pub(crate) fn cmd_launch(
         open_body["stores"] = serde_json::json!([store]);
     }
     let opened = ureq::post(&format!("{}/projects/open", launch.server.url))
-        .set("X-Hotsheet-Secret", &launch.server.secret)
+        .set("X-Hotsheet-Secret", launch.server.secret.expose())
         .set("Content-Type", "application/json")
         .send_string(&open_body.to_string())?;
     let opened: serde_json::Value = serde_json::from_str(&opened.into_string()?)?;
@@ -1022,7 +1025,7 @@ pub(crate) fn cmd_launch(
         .args(&launch.args)
         .current_dir(&launch_dir)
         .env("HOTSHEET_SERVER", &launch.server.url)
-        .env("HOTSHEET_SECRET", &launch.server.secret)
+        .env("HOTSHEET_SECRET", launch.server.secret.expose())
         .env("HOTSHEET_PROJECT", usage_project)
         .env(
             "HOTSHEET_USAGE_STORES",
@@ -1655,7 +1658,7 @@ fn notify_running_servers(path: &str) -> Result<()> {
         };
         let endpoint = format!("{}/{path}", server.url.trim_end_matches('/'));
         if let Err(error) = ureq::post(&endpoint)
-            .set("X-Hotsheet-Secret", &server.secret)
+            .set("X-Hotsheet-Secret", server.secret.expose())
             .timeout(std::time::Duration::from_secs(10))
             .call()
         {
@@ -2004,7 +2007,7 @@ pub(crate) fn hook_server_route() -> Option<(String, String)> {
         })
         .flatten();
     current
-        .map(|server| (server.url, server.secret))
+        .map(|server| (server.url, server.secret.into_inner()))
         .or_else(|| {
             Some((
                 hotsheet_cli::launched_env::value("HOTSHEET_SERVER")?,

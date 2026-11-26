@@ -32,7 +32,7 @@ fn acquire(home: &Path, name: &str) -> Grant {
 }
 fn release(home: &Path, grant: &Grant) {
     ClaimService::new(home)
-        .release(&grant.renewal_token, None)
+        .release(grant.renewal_token.expose(), None)
         .unwrap();
 }
 fn live_claims(home: &Path, namespace: &str) -> usize {
@@ -310,7 +310,11 @@ fn hs2_2fg91x_two_tickets_need_one_resource_one_starts_the_other_after_release()
     }
     // The session renews with its own token: the time to look again moves.
     let renewed = ClaimService::new(&s.m.home)
-        .renew(&grant.renewal_token, Duration::from_secs(60 * 60), None)
+        .renew(
+            grant.renewal_token.expose(),
+            Duration::from_secs(60 * 60),
+            None,
+        )
         .unwrap();
     assert!(renewed.expires_at_ms > expires);
     assert_eq!(
@@ -1506,7 +1510,11 @@ fn hs2_g1pkk2_a_renewal_on_another_machine_keeps_the_watch_waiting() {
     assert!(until(Duration::from_secs(5), || wait_calls(&r) >= 1));
     // The holder renews before the lease lapses.
     ClaimService::new(&r.peer.hosted.home)
-        .renew(&held.renewal_token, Duration::from_secs(30 * 60), None)
+        .renew(
+            held.renewal_token.expose(),
+            Duration::from_secs(30 * 60),
+            None,
+        )
         .unwrap();
     // Past the old expiry nothing wakes the loop and the watch still waits.
     let quiet = std::time::Instant::now();

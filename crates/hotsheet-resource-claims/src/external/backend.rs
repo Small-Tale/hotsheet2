@@ -516,7 +516,7 @@ impl ClaimBackend for ExternalBackend {
         }
         Ok(Grant {
             claim,
-            renewal_token,
+            renewal_token: renewal_token.into(),
         })
     }
 

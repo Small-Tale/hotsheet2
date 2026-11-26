@@ -63,6 +63,52 @@ describe('debounced autosave', () => {
     expect(save).toHaveBeenLastCalledWith('complete');
     expect(autosave.pending()).toBe(false);
   });
+
+  it('HS2-YA6D31 reports a rejected timer save once and still serves the next edit', async () => {
+    vi.useFakeTimers();
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const save = vi
+        .fn<(value: string) => Promise<boolean>>()
+        .mockRejectedValueOnce(new Error('tags rejected'))
+        .mockResolvedValue(true);
+      const onError = vi.fn();
+      const autosave = createDebouncedAutosave(save, AUTOSAVE_DELAY_MS, onError);
+      autosave.schedule('first');
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'tags rejected' }));
+      expect(autosave.pending()).toBe(false);
+      autosave.schedule('second');
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+      expect(save).toHaveBeenLastCalledWith('second');
+      expect(onError).toHaveBeenCalledOnce();
+      // A flush has a caller, so its rejection reaches that caller rather than onError.
+      save.mockRejectedValueOnce(new Error('flush rejected'));
+      autosave.schedule('third');
+      await expect(autosave.flush()).rejects.toThrow('flush rejected');
+      expect(onError).toHaveBeenCalledOnce();
+      vi.useRealTimers();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
+  it('HS2-YA6D31 logs a rejected timer save when no handler is given', async () => {
+    vi.useFakeTimers();
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const autosave = createDebouncedAutosave(() => Promise.reject(new Error('down')));
+      autosave.schedule('value');
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+      expect(logged).toHaveBeenCalledWith('Autosave failed', expect.objectContaining({ message: 'down' }));
+    } finally {
+      logged.mockRestore();
+    }
+  });
 });
 
 describe('createFocusLossAutosave (HS2-RE1PS6)', () => {

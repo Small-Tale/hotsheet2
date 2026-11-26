@@ -262,6 +262,21 @@ requested name to the text after its last `/` or `\` and fall back to `attachmen
 nothing safe remains, so they never store a name the parser refuses; legacy payload
 discovery skips any directory entry the rule rejects.
 
+Older Unix uploads could store a name such as `shots\a.png`, because the earlier basename
+helper kept backslashes. `hotsheet-cli doctor --repair-attachment-names` (HS2-Z8X4XP) makes
+such tickets readable again, and the corrupt-ticket listing names this command. It changes
+only tickets whose sole parse failure is an unsafe attachment name. Each unsafe entry gets the
+name a writer would store (the text after the last `/` or `\`, else `attachment`). Its
+payload moves to the nested `attachments/<ticket>/<attachment>/<name>` path from the nested or
+legacy location, and `updated_at` advances. A payload moves only when the stored name is
+already one on-disk component and the file is a regular file, never a symlink. A name
+with `/`, `..` or an absolute path therefore renames the entry alone and touches no file.
+A ticket is refused with no write when a new name would match another entry
+(case-insensitively), an existing file at the target, or a legacy-layout file of that name.
+The repair is idempotent: it finishes an interrupted repair whose payload already moved, and
+a second run reports nothing to repair. The server maps the unsafe-name error to `409` with
+code `unsafe_attachment_filename` and the same fix, never a catch-all `500`.
+
 HS2-6FP1KT adds four optional, backward-compatible provenance fields: opaque `batch_id`,
 human-authored `batch_label`, `actor` (`identity`, `display_name`, and
 `role: human|ai|system|unknown`), and `purpose: problem_evidence|correctness_evidence|reference|other`.

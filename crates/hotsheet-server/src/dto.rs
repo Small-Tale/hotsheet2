@@ -5,6 +5,7 @@ use crate::opt_parse;
 use axum::http::StatusCode;
 use hotsheet_index::TicketRow;
 use hotsheet_model::{Confidence, ConfidenceError, NoteKind, Ulid};
+use hotsheet_sync::secret::SecretString;
 use hotsheet_ticketing::{ProjectTicketRef, SortKey, TicketQuery};
 use serde::{Deserialize, Serialize};
 use std::path::Path as FsPath;
@@ -478,9 +479,35 @@ pub(crate) struct RenewReq {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct WsParams {
-    pub(crate) secret: Option<String>,
+    pub(crate) secret: Option<SecretString>,
 }
 
 // The full-ticket + note wire DTOs (`ApiTicket`/`ApiNote`) and their `From<&Ticket>`
 // mapping live in `hotsheet_ticketing::wire` and are re-exported at the top of this
 // module — one definition, shared with the MCP shim (wire SSOT, `docs/04` §4.2).
+
+#[cfg(test)]
+mod hs2_9zmc7n_tests {
+    use super::WsParams;
+    use axum::extract::Query;
+    use axum::http::Uri;
+
+    /// HS2-9ZMC7N: the WebSocket query secret decodes exactly as the plain string did and
+    /// never appears in `Debug`.
+    #[test]
+    fn hs2_9zmc7n_ws_params_secret_decodes_and_is_redacted() {
+        let uri: Uri = "/ws?secret=synthetic%20secret".parse().unwrap();
+        let Query(params) = Query::<WsParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(
+            params.secret.as_ref().map(|s| s.expose()),
+            Some("synthetic secret")
+        );
+        let printed = format!("{params:?} {params:#?}");
+        assert!(!printed.contains("synthetic"), "{printed}");
+        assert!(printed.contains("Some(<redacted>)"), "{printed}");
+
+        let uri: Uri = "/ws".parse().unwrap();
+        let Query(params) = Query::<WsParams>::try_from_uri(&uri).unwrap();
+        assert!(params.secret.is_none());
+    }
+}

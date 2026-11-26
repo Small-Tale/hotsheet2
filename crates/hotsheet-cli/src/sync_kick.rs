@@ -63,7 +63,7 @@ fn kick(server: &ServerInstance, store: &Path) -> KickOutcome {
     let endpoint = format!("{}/sync/kick", server.url.trim_end_matches('/'));
     let body = serde_json::json!({ "store": store }).to_string();
     match ureq::post(&endpoint)
-        .set("X-Hotsheet-Secret", &server.secret)
+        .set("X-Hotsheet-Secret", server.secret.expose())
         .set("Content-Type", "application/json")
         .timeout(KICK_TIMEOUT)
         .send_string(&body)

@@ -7,6 +7,7 @@ use std::time::Duration;
 use std::{io::Read, io::Seek};
 
 use anyhow::{Context, Result, bail};
+use hotsheet_sync::secret::SecretString;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use serde::Deserialize;
 
@@ -15,7 +16,7 @@ use serde::Deserialize;
 pub struct ServerInstance {
     pub pid: u32,
     pub url: String,
-    pub secret: String,
+    pub secret: SecretString,
     pub store_path: String,
 }
 
@@ -291,6 +292,18 @@ mod tests {
     use super::*;
     use hotsheet_ticketing::{FsStore, StoreMetadata};
 
+    /// HS2-9ZMC7N: the server secret read from the instance record is redacted under
+    /// `Debug`, and the record's plain-string field still parses to the same value.
+    #[test]
+    fn hs2_9zmc7n_server_instance_secret_is_redacted_and_still_parses() {
+        let record = r#"{"pid":7,"url":"http://127.0.0.1:1","secret":"synthetic-bearer","store_path":"/s.hs2","index_path":"/i","started_at":"t","launcher":"cli"}"#;
+        let server: ServerInstance = serde_json::from_str(record).unwrap();
+        assert_eq!(server.secret.expose(), "synthetic-bearer");
+        let printed = format!("{server:?} {server:#?}");
+        assert!(!printed.contains("synthetic-bearer"), "{printed}");
+        assert!(printed.contains("secret: <redacted>"), "{printed}");
+    }
+
     fn write_instance(root: &Path) -> (PathBuf, PathBuf) {
         let home = root.join("home");
         let store = root.join("tickets");
@@ -351,7 +364,7 @@ mod tests {
 
         let launch = prepare(&store, "claude", vec!["--resume".into()], &home).unwrap();
         assert_eq!(launch.args, vec!["--resume"]);
-        assert_eq!(launch.server.secret, "test-secret");
+        assert_eq!(launch.server.secret.expose(), "test-secret");
     }
 
     #[test]
@@ -384,7 +397,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let (home, store) = write_instance(root.path());
         let first = discover_running_server(&store, &home).unwrap();
-        assert_eq!(first.secret, "test-secret");
+        assert_eq!(first.secret.expose(), "test-secret");
 
         let path = instance_path(&home, &store);
         std::fs::write(
@@ -400,7 +413,7 @@ mod tests {
         .unwrap();
         let replacement = discover_running_server(&store, &home).unwrap();
         assert_eq!(replacement.url, "http://127.0.0.1:9797");
-        assert_eq!(replacement.secret, "replacement-secret");
+        assert_eq!(replacement.secret.expose(), "replacement-secret");
 
         std::fs::write(
             &path,
@@ -447,7 +460,7 @@ mod tests {
         // Only a per-store host: both scopes reach it.
         for scope in [HostScope::Project, HostScope::Machine] {
             let server = discover_local_host(&store, &home, scope).unwrap();
-            assert_eq!(server.secret, "per-store");
+            assert_eq!(server.secret.expose(), "per-store");
             assert!(server.anchors(&store));
         }
 
@@ -461,13 +474,15 @@ mod tests {
         assert_eq!(
             discover_local_host(&store, &home, HostScope::Project)
                 .unwrap()
-                .secret,
+                .secret
+                .expose(),
             "per-store"
         );
         assert_eq!(
             discover_local_host(&store, &home, HostScope::Machine)
                 .unwrap()
-                .secret,
+                .secret
+                .expose(),
             "machine"
         );
     }
@@ -483,7 +498,7 @@ mod tests {
 
         for scope in [HostScope::Project, HostScope::Machine] {
             let server = discover_local_host(&store, &home, scope).unwrap();
-            assert_eq!(server.secret, "machine");
+            assert_eq!(server.secret.expose(), "machine");
             assert!(server.anchors(&machine));
             assert!(!server.anchors(&store));
         }
@@ -491,7 +506,8 @@ mod tests {
         assert_eq!(
             discover_local_host(&machine, &home, HostScope::Project)
                 .unwrap()
-                .secret,
+                .secret
+                .expose(),
             "machine"
         );
     }
@@ -519,7 +535,8 @@ mod tests {
         assert_eq!(
             discover_local_host(&store, &home, HostScope::Machine)
                 .unwrap()
-                .secret,
+                .secret
+                .expose(),
             "per-store"
         );
     }

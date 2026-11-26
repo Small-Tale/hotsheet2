@@ -436,7 +436,7 @@ fn stuck_request(info: &InstanceInfo) -> TcpStream {
         "POST /permissions/ask HTTP/1.1\r\nHost: {address}\r\nX-Hotsheet-Secret: {}\r\n\
          Content-Type: application/json\r\nContent-Length: 4096\r\n\
          Expect: 100-continue\r\n\r\n",
-        info.secret
+        info.secret.expose()
     )
     .unwrap();
     stream.flush().unwrap();
@@ -464,7 +464,7 @@ fn wait_for_pending_permission(info: &InstanceInfo) {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let pending: serde_json::Value = ureq::get(&format!("{}/permissions", info.url))
-            .set("x-hotsheet-secret", &info.secret)
+            .set("x-hotsheet-secret", info.secret.expose())
             .call()
             .unwrap()
             .into_string()
@@ -487,7 +487,7 @@ fn stop_cancels_a_held_permission_hook_with_503_and_exits_cleanly() {
         let info = info.clone();
         std::thread::spawn(move || {
             ureq::post(&format!("{}/permissions/ask", info.url))
-                .set("x-hotsheet-secret", &info.secret)
+                .set("x-hotsheet-secret", info.secret.expose())
                 .timeout(Duration::from_secs(60))
                 .set("content-type", "application/json")
                 .send_string(
@@ -525,7 +525,7 @@ fn stop_cancels_an_idle_long_poll() {
     let mut server = Server::start(60_000);
     let info = server.ready();
     let cursor = ureq::get(&format!("{}/ws/poll", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap()
         .into_string()
@@ -540,7 +540,7 @@ fn stop_cancels_an_idle_long_poll() {
                 "{}/ws/poll?since={cursor}&timeout_ms=55000",
                 info.url
             ))
-            .set("x-hotsheet-secret", &info.secret)
+            .set("x-hotsheet-secret", info.secret.expose())
             .timeout(Duration::from_secs(60))
             .call()
             .map_err(|error| error.to_string())
@@ -810,7 +810,7 @@ fn timed_request(
 ) -> (u16, Duration) {
     let started = Instant::now();
     let request = ureq::request(method, &format!("{}{path}", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .timeout(Duration::from_secs(30));
     let response = match body {
         Some(body) => request
@@ -857,7 +857,7 @@ fn assert_hanging_discovery_is_bounded(tool: SlowTool) {
         );
     }
     let tools: serde_json::Value = ureq::get(&format!("{}/ai-tools", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap()
         .into_string()
@@ -919,7 +919,7 @@ fn real_server_responses_carry_a_date_header_for_client_clock_sampling() {
     let mut server = Server::start(1_000);
     let info = server.ready();
     let response = ureq::get(&format!("{}/connections", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap();
     let date = response.header("date").expect("a Date header");
@@ -938,7 +938,7 @@ fn hs2_f0s155_in_process_terminal_writes_a_bounded_journal_record() {
     let mut server = Server::start(1_000);
     let info = server.ready();
     let response = ureq::post(&format!("{}/terminals", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .set("content-type", "application/json")
         .timeout(Duration::from_secs(30))
         .send_string(&json!({ "command": "/bin/sh", "id": "f0s155-shell" }).to_string())

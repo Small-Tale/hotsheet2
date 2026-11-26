@@ -42,6 +42,106 @@ pub(crate) fn set_member(text: &str, path: &[&str], value: &Value) -> Result<Str
     Ok(out)
 }
 
+/// Remove `root[path[0]]...[path[n-1]]` by splicing out only that member: its key and
+/// value, its separator, and a comment trailing it on its own line (HS2-DWS3NS). Comments
+/// on other lines stay. `Ok(None)` when the member does not exist. Callers verify the
+/// result re-parses to the intended value.
+pub(crate) fn remove_member(text: &str, path: &[&str]) -> Result<Option<String>, String> {
+    let (blanked, trailing) = blank_parts(text)?;
+    let bytes = blanked.as_bytes();
+    let mut pos = skip_ws(bytes, 0);
+    let mut object = parse_node(bytes, &mut pos)?;
+    let Some((last_key, parents)) = path.split_last() else {
+        return Err("empty member path".into());
+    };
+    for key in parents {
+        let Kind::Object { members, .. } = object.kind else {
+            return Ok(None);
+        };
+        let Some(member) = members.into_iter().rev().find(|member| member.key == *key) else {
+            return Ok(None);
+        };
+        object = member.value;
+    }
+    let Kind::Object { members, .. } = &object.kind else {
+        return Ok(None);
+    };
+    // Duplicate keys: the last one wins, as in the parsed value.
+    let Some(index) = members.iter().rposition(|member| member.key == *last_key) else {
+        return Ok(None);
+    };
+    let member = &members[index];
+    let is_last = index + 1 == members.len();
+
+    // The member's own separator: a real comma right after it, or a blanked trailing one.
+    let next = skip_ws(bytes, member.value.end);
+    let own_comma = if bytes.get(next) == Some(&b',') {
+        Some(next)
+    } else {
+        trailing
+            .iter()
+            .copied()
+            .find(|&i| member.value.end <= i && i < next)
+    };
+    let after = own_comma.map_or(member.value.end, |i| i + 1);
+
+    // Take whole lines when the member starts its line and nothing but whitespace or a
+    // line comment follows it there.
+    let line_start = text[..member.key_start].rfind('\n').map_or(0, |i| i + 1);
+    let starts_line = text[line_start..member.key_start]
+        .bytes()
+        .all(|byte| byte == b' ' || byte == b'\t');
+    let line_end = text[after..].find('\n').map(|i| after + i);
+    let open_block = line_end.is_some_and(|end| {
+        let rest = &text[after..end];
+        rest.rfind("/*") > rest.rfind("*/")
+    });
+    let (start, end) = match line_end {
+        Some(end)
+            if starts_line
+                && !open_block
+                && bytes[after..end].iter().all(u8::is_ascii_whitespace) =>
+        {
+            (line_start, end + 1)
+        }
+        _ => {
+            // Inline: drop the member and the spaces after its separator.
+            let spaces = text[after..]
+                .bytes()
+                .take_while(|byte| *byte == b' ' || *byte == b'\t')
+                .count();
+            let end = if own_comma.is_some() {
+                after + spaces
+            } else {
+                after
+            };
+            (member.key_start, end)
+        }
+    };
+
+    let mut out = String::with_capacity(text.len());
+    // The last member without its own comma leaves the previous separator dangling. A file
+    // that already uses trailing commas keeps it as one (so removing a member that setup
+    // appended restores the file exactly); otherwise remove that one comma and keep
+    // whatever follows it (a comment on its line).
+    let previous_comma = (is_last && own_comma.is_none() && index > 0 && trailing.is_empty())
+        .then(|| {
+            let previous = &members[index - 1];
+            let comma = skip_ws(bytes, previous.value.end);
+            (bytes.get(comma) == Some(&b',')).then_some(comma)
+        })
+        .flatten();
+    match previous_comma {
+        Some(comma) if comma < start => {
+            out.push_str(&text[..comma]);
+            out.push_str(&text[comma + 1..start]);
+        }
+        _ => out.push_str(&text[..start]),
+    }
+    out.push_str(&text[end..]);
+    Ok(Some(out))
+}
+
 /// Replace comments and trailing commas with spaces, keeping newlines and byte offsets.
 fn blank(text: &str) -> Result<String, String> {
     blank_parts(text).map(|(blanked, _)| blanked)
@@ -446,6 +546,72 @@ mod tests {
             &["mcp", "x"],
             json!({ "y": [] }),
         );
+    }
+
+    fn check_remove(text: &str, path: &[&str]) -> String {
+        let out = remove_member(text, path).unwrap().unwrap();
+        let mut expected = parse(text).unwrap();
+        let (last, parents) = path.split_last().unwrap();
+        let mut slot = &mut expected;
+        for key in parents {
+            slot = &mut slot[*key];
+        }
+        slot.as_object_mut().unwrap().remove(*last);
+        assert_eq!(parse(&out).unwrap(), expected, "{out}");
+        out
+    }
+
+    #[test]
+    fn hs2_dws3ns_removes_one_member_with_its_line_and_separator() {
+        let text = "{\n  // servers\n  \"mcp\": {\n    \"other\": { \"type\": \"local\" }, // theirs\n    \"hotsheet\": {\n      \"type\": \"local\"\n    }, // ours\n    /* third */\n    \"third\": 1\n  },\n}\n";
+        assert_eq!(
+            check_remove(text, &["mcp", "hotsheet"]),
+            "{\n  // servers\n  \"mcp\": {\n    \"other\": { \"type\": \"local\" }, // theirs\n    /* third */\n    \"third\": 1\n  },\n}\n"
+        );
+        // The last member without a trailing comma takes the previous separator, keeping
+        // the comment that follows it.
+        let last = "{\n  \"mcp\": {\n    \"other\": 1, // theirs\n    \"hotsheet\": 2\n  }\n}";
+        assert_eq!(
+            check_remove(last, &["mcp", "hotsheet"]),
+            "{\n  \"mcp\": {\n    \"other\": 1 // theirs\n  }\n}"
+        );
+        // A file that uses trailing commas keeps the dangling one as a trailing comma.
+        let styled = "{\n  \"mcp\": {\n    \"other\": 1, // theirs\n    \"hotsheet\": 2\n  },\n}";
+        assert_eq!(
+            check_remove(styled, &["mcp", "hotsheet"]),
+            "{\n  \"mcp\": {\n    \"other\": 1, // theirs\n  },\n}"
+        );
+        // With a trailing comma, the previous separator becomes the trailing one.
+        let trailing = "{\n  \"a\": 1,\n  \"hotsheet\": 2,\n}\n";
+        assert_eq!(check_remove(trailing, &["hotsheet"]), "{\n  \"a\": 1,\n}\n");
+        let first = "{\r\n  \"hotsheet\": 2,\r\n  \"a\": 1\r\n}\r\n";
+        assert_eq!(
+            check_remove(first, &["hotsheet"]),
+            "{\r\n  \"a\": 1\r\n}\r\n"
+        );
+    }
+
+    #[test]
+    fn hs2_dws3ns_removes_inline_members_and_reports_missing_ones() {
+        assert_eq!(
+            check_remove("{\"a\": 1, \"hotsheet\": 2, \"b\": 3}", &["hotsheet"]),
+            "{\"a\": 1, \"b\": 3}"
+        );
+        assert_eq!(
+            check_remove("{\"a\": 1, \"hotsheet\": 2}", &["hotsheet"]),
+            "{\"a\": 1 }"
+        );
+        assert_eq!(check_remove("{\"hotsheet\": 2}", &["hotsheet"]), "{}");
+        // A block comment opened after the member stays intact.
+        let block = check_remove(
+            "{\n  \"hotsheet\": 1, /* a\n  b */\n  \"c\": 2\n}",
+            &["hotsheet"],
+        );
+        assert!(block.contains("/* a\n  b */"), "{block}");
+        assert_eq!(remove_member("{\"a\": 1}", &["hotsheet"]).unwrap(), None);
+        assert_eq!(remove_member("{\"a\": 1}", &["mcp", "x"]).unwrap(), None);
+        assert_eq!(remove_member("{\"mcp\": 3}", &["mcp", "x"]).unwrap(), None);
+        assert!(remove_member("{ \"a\": ", &["a"]).is_err());
     }
 
     #[test]

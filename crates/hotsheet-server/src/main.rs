@@ -304,7 +304,7 @@ async fn main() -> Result<()> {
         if existing.url.starts_with("http://127.0.0.1:")
             || existing.url.starts_with("http://[::1]:")
         {
-            println!("secret: {}", existing.secret);
+            println!("secret: {}", existing.secret.expose());
         }
         return Ok(());
     }

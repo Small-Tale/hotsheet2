@@ -60,7 +60,7 @@ fn hs2_k9j1rk_live_a_release_wakes_a_parked_waiter_and_fencing_grows() {
             )
         });
         std::thread::sleep(Duration::from_secs(1));
-        backend.release(&held.renewal_token).unwrap();
+        backend.release(held.renewal_token.expose()).unwrap();
         waiter.join().unwrap()
     })
     .unwrap();
@@ -69,5 +69,5 @@ fn hs2_k9j1rk_live_a_release_wakes_a_parked_waiter_and_fencing_grows() {
         started.elapsed() < Duration::from_secs(20),
         "woken by the message, not the deadline"
     );
-    backend.release(&grant.renewal_token).unwrap();
+    backend.release(grant.renewal_token.expose()).unwrap();
 }

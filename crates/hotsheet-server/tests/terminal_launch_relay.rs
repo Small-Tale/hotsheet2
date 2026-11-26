@@ -264,7 +264,7 @@ async fn hs2_hyf56y_dead_namespace_server_gets_a_live_broker_through_the_relay()
     // A restarted server, still in a dead namespace, adopts the live broker.
     let (server, info) = fixture.start_dead_namespace_server("server-2");
     let listed = ureq::get(&format!("{}/terminals", info.url))
-        .set("X-Hotsheet-Secret", &info.secret)
+        .set("X-Hotsheet-Secret", info.secret.expose())
         .call()
         .unwrap()
         .into_string()

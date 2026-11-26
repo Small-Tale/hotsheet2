@@ -395,7 +395,12 @@ pub(crate) async fn redeem(
 
 fn issued_response(issued: IssuedSession, origin: &str) -> Response {
     let mut response = Json(issued.device).into_response();
-    set_session_cookies(&mut response, &issued.token, Some(&issued.csrf), origin);
+    set_session_cookies(
+        &mut response,
+        issued.token.expose(),
+        Some(&issued.csrf),
+        origin,
+    );
     response
 }
 

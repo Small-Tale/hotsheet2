@@ -116,6 +116,9 @@ impl ParseError {
             Self::UnsupportedSchema(marker) => format!(
                 "This ticket was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it (ticket schema: {marker})."
             ),
+            Self::UnsafeAttachmentFilename { .. } => format!(
+                "{self}. Run `hotsheet-cli doctor --repair-attachment-names` to rename it to a safe name (HS2-Z8X4XP)."
+            ),
             _ => self.to_string(),
         }
     }
@@ -166,6 +169,18 @@ pub fn to_file_string(t: &Ticket) -> String {
 
 /// Parse a ticket from its on-disk form.
 pub fn parse_file(text: &str) -> Result<Ticket, ParseError> {
+    parse_file_checked(text, true)
+}
+
+/// Parse a ticket exactly as [`parse_file`] does, except that attachment filenames
+/// are not checked. Only the unsafe-attachment-name repair uses this
+/// (HS2-Z8X4XP): it must read the entries [`parse_file`] refuses in order to rename
+/// them, and it never joins a returned filename onto a path before sanitizing it.
+pub fn parse_file_allowing_unsafe_attachment_names(text: &str) -> Result<Ticket, ParseError> {
+    parse_file_checked(text, false)
+}
+
+fn parse_file_checked(text: &str, check_attachment_names: bool) -> Result<Ticket, ParseError> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text); // tolerate a BOM
     let normalized = text.replace("\r\n", "\n");
 
@@ -192,13 +207,15 @@ pub fn parse_file(text: &str) -> Result<Ticket, ParseError> {
     let value = Value::Mapping(mapping.clone());
 
     let mut ticket: Ticket = serde_yaml::from_value(value)?;
-    for attachment in &ticket.attachments {
-        crate::ticket::safe_attachment_component(&attachment.filename).map_err(|reason| {
-            ParseError::UnsafeAttachmentFilename {
-                id: attachment.id,
-                reason,
-            }
-        })?;
+    if check_attachment_names {
+        for attachment in &ticket.attachments {
+            crate::ticket::safe_attachment_component(&attachment.filename).map_err(|reason| {
+                ParseError::UnsafeAttachmentFilename {
+                    id: attachment.id,
+                    reason,
+                }
+            })?;
+        }
     }
 
     // Retain keys the current schema doesn't know (forward-compat, docs/17 §17.4).
@@ -1910,6 +1927,14 @@ mod tests {
                 "{bad:?}: {error}"
             );
             assert_eq!(error.code(), "invalid_ticket");
+            assert!(
+                error
+                    .user_message()
+                    .contains("hotsheet-cli doctor --repair-attachment-names"),
+                "{bad:?}: the corrupt listing names the repair"
+            );
+            let lenient = parse_file_allowing_unsafe_attachment_names(&text).unwrap();
+            assert_eq!(lenient.attachments[0].filename, bad);
         }
     }
 }

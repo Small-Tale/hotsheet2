@@ -7,10 +7,17 @@ export interface DebouncedAutosave<T> {
   pending(): boolean;
 }
 
-/** Coalesces text edits while keeping blur/navigation able to flush the latest value. */
+/**
+ * Coalesces text edits while keeping blur/navigation able to flush the latest value. A save the
+ * timer started has no awaiting caller, so its rejection goes to `onError` (HS2-YA6D31); without
+ * one it is logged rather than left as an unhandled rejection. `flush()` still rejects to its caller.
+ */
 export function createDebouncedAutosave<T>(
   save: (value: T) => Promise<boolean>,
   delay = AUTOSAVE_DELAY_MS,
+  onError: (reason: unknown) => void = (reason) => {
+    console.error('Autosave failed', reason);
+  },
 ): DebouncedAutosave<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let queued: T | undefined;
@@ -43,7 +50,7 @@ export function createDebouncedAutosave<T>(
       hasQueuedValue = true;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        void persist();
+        persist().catch(onError);
       }, delay);
     },
     flush: persist,

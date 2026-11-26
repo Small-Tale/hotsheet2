@@ -356,7 +356,9 @@ async fn hs2_30xypy_a_held_resource_defers_the_step_until_its_release() {
     assert!(fleet.drawer(Side::Peer).await.is_empty());
     assert!(fleet.sessions().await.is_empty());
     // The holder releases it: the loop is woken and places the step on the peer.
-    claims.release(&grant.renewal_token, Some(&vm)).unwrap();
+    claims
+        .release(grant.renewal_token.expose(), Some(&vm))
+        .unwrap();
     let placed = super::e2e_loop::placed(&fleet, &step, Side::Peer).await;
     assert!(!placed.run_id.is_empty());
     fleet.shut_down().await;

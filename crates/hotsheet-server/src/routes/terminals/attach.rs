@@ -40,7 +40,12 @@ pub(crate) async fn attach_terminal(
 ) -> Response {
     let replay = ReplayOptions::from(&params.replay);
     let local = certificate.is_some()
-        || (params.ws.secret.as_deref() == Some(state.secret.as_str())
+        || (params
+            .ws
+            .secret
+            .as_ref()
+            .map(hotsheet_sync::secret::SecretString::expose)
+            == Some(state.secret.as_str())
             && state.local_bearer_allowed(peer.map(|info| info.0.0)));
     if !local && crate::routes::remote_auth::session(&state, &headers, true, true).is_err() {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
@@ -686,5 +691,32 @@ mod terminal_text_tests {
             terminal_replay_control(),
             Message::Text(value) if value.as_str() == r#"{"terminal_replay":"replace"}"#
         ));
+    }
+}
+
+#[cfg(test)]
+mod hs2_9zmc7n_tests {
+    use super::AttachParams;
+    use axum::extract::Query;
+    use axum::http::Uri;
+
+    /// HS2-9ZMC7N: the flattened `?secret=` still decodes to the same string beside the
+    /// replay parameters, and an absent one stays `None`.
+    #[test]
+    fn hs2_9zmc7n_attach_query_secret_still_decodes_through_the_flatten() {
+        let uri: Uri = "/terminals/t/attach?secret=syn%2Bthetic&replay_protocol=2"
+            .parse()
+            .unwrap();
+        let Query(params) = Query::<AttachParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(
+            params.ws.secret.as_ref().map(|s| s.expose()),
+            Some("syn+thetic")
+        );
+        let printed = format!("{:?}", params.ws);
+        assert!(!printed.contains("thetic"), "{printed}");
+
+        let uri: Uri = "/terminals/t/attach?replay_protocol=2".parse().unwrap();
+        let Query(params) = Query::<AttachParams>::try_from_uri(&uri).unwrap();
+        assert!(params.ws.secret.is_none());
     }
 }

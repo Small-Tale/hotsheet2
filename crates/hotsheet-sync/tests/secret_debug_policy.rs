@@ -65,47 +65,9 @@ const NOT_SECRET: &[(&str, &str, &str, &str)] = &[
     ),
 ];
 
-/// Real secrets found when this lint landed and not yet retyped. HS2-9ZMC7N owns them.
-/// This list only shrinks: retype a field to `SecretString` and delete its entry.
-const BASELINE: &[(&str, &str, &str)] = &[
-    ("hotsheet-server/src/lifecycle.rs", "InstanceInfo", "secret"),
-    (
-        "hotsheet-server/src/remote_auth.rs",
-        "IssuedSession",
-        "token",
-    ),
-    ("hotsheet-server/src/dto.rs", "WsParams", "secret"),
-    (
-        "hotsheet-server/src/routes/store_scoped.rs",
-        "PollParams",
-        "secret",
-    ),
-    (
-        "hotsheet-cli/src/external_launch.rs",
-        "ServerInstance",
-        "secret",
-    ),
-    (
-        "hotsheet-terminals/src/broker.rs",
-        "BrokerPushState",
-        "password",
-    ),
-    (
-        "hotsheet-resource-claims/src/model.rs",
-        "Grant",
-        "renewal_token",
-    ),
-    (
-        "hotsheet-extsync/src/gitlab/attachments.rs",
-        "GitLabAttachmentMarker",
-        "secret",
-    ),
-    (
-        "hotsheet-extsync/src/gitlab/attachments.rs",
-        "GitLabAttachmentMarker",
-        "rendition_secret",
-    ),
-];
+// HS2-9ZMC7N retyped the nine secrets this lint found when it landed, so there is no
+// baseline: a real secret uses `SecretString` (or a hand-written redacting `Debug`), and
+// only a field that holds no credential may be listed in `NOT_SECRET`.
 
 const SELF: &str = "hotsheet-sync/tests/secret_debug_policy.rs";
 
@@ -257,9 +219,6 @@ fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
         NOT_SECRET
             .iter()
             .any(|(file, s, field, _)| f.file == *file && f.strukt == *s && f.field == *field)
-            || BASELINE
-                .iter()
-                .any(|(file, s, field)| f.file == *file && f.strukt == *s && f.field == *field)
     };
     let offenders: Vec<String> = findings
         .iter()
@@ -273,11 +232,10 @@ fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
         offenders.join("\n")
     );
 
-    // Every exemption must still match, so a fixed or renamed field drops out of the lists.
+    // Every exemption must still match, so a fixed or renamed field drops out of the list.
     let stale: Vec<String> = NOT_SECRET
         .iter()
         .map(|(file, s, field, _)| (*file, *s, *field))
-        .chain(BASELINE.iter().copied())
         .filter(|(file, s, field)| {
             !findings
                 .iter()
@@ -290,7 +248,6 @@ fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
         "stale HS2-A8T481 exemptions:\n{}",
         stale.join("\n")
     );
-    assert!(BASELINE.len() <= 9, "the HS2-A8T481 baseline only shrinks");
 }
 
 #[test]

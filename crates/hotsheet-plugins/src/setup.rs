@@ -488,6 +488,13 @@ pub enum SetupError {
         path: String,
         reason: String,
     },
+    /// HS2-HXMGN8: an existing instruction file (or this checkout's `.git/info/exclude`)
+    /// that setup would edit cannot be read. It may be shared by several tools, so the
+    /// refusal names the file rather than one tool; nothing is written.
+    #[error(
+        "cannot update {path}: {reason}. Hot Sheet left the file unchanged. Fix the file (or move it aside), then rerun `hotsheet-cli setup --refresh`"
+    )]
+    UnreadableFile { path: String, reason: String },
 }
 
 impl SetupError {
@@ -973,11 +980,34 @@ pub fn refresh_setup_in(
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[std::path::PathBuf],
 ) -> Result<RefreshReport, SetupError> {
-    apply_setup_plan(plan_refresh_setup_in(
+    refresh_setup_holding(
         store_path,
         project_dir,
         enabled,
         plugin_dirs,
+        &HashSet::new(),
+    )
+}
+
+/// [`refresh_setup_in`] that leaves the `held` tools exactly as they are (HS2-52X9PN).
+///
+/// A held tool is neither set up nor treated as disabled: its files are not written, not
+/// removed and not edited, and it stays a member of any shared instruction section it
+/// serves. The project-open refresh holds a tool whose config setup refused
+/// ([`SetupError::UnreadableConfig`]) so the remaining tools still refresh.
+pub fn refresh_setup_holding(
+    store_path: &Path,
+    project_dir: &Path,
+    enabled: Option<&HashSet<String>>,
+    plugin_dirs: &[PathBuf],
+    held: &HashSet<String>,
+) -> Result<RefreshReport, SetupError> {
+    apply_setup_plan(plan_refresh_setup_holding(
+        store_path,
+        project_dir,
+        enabled,
+        plugin_dirs,
+        held,
     )?)
 }
 
@@ -987,6 +1017,22 @@ pub fn plan_refresh_setup_in(
     project_dir: &Path,
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[PathBuf],
+) -> Result<SetupPlan, SetupError> {
+    plan_refresh_setup_holding(
+        store_path,
+        project_dir,
+        enabled,
+        plugin_dirs,
+        &HashSet::new(),
+    )
+}
+
+fn plan_refresh_setup_holding(
+    store_path: &Path,
+    project_dir: &Path,
+    enabled: Option<&HashSet<String>>,
+    plugin_dirs: &[PathBuf],
+    held: &HashSet<String>,
 ) -> Result<SetupPlan, SetupError> {
     let mut fs = PlanFs::for_setup();
     let policy = read_push_policy(&fs, project_dir)?;
@@ -1024,6 +1070,7 @@ pub fn plan_refresh_setup_in(
         .collect();
     let plugins = plugins
         .into_iter()
+        .filter(|plugin| !held.contains(plugin.id()))
         .filter(|plugin| is_detected(plugin) || has_managed_setup(&fs, project_dir, plugin))
         .collect::<Vec<_>>();
     // Shared-section membership before this run, so a disabled sharer dropped from (or
@@ -1041,7 +1088,7 @@ pub fn plan_refresh_setup_in(
         .collect();
     let set_up = if plugins.is_empty() {
         // Nothing to set up, but a shared section whose sharers were all disabled is removed.
-        let run_ids = HashSet::new();
+        let run_ids = held.clone();
         for target in reconcile_targets.iter().filter(|_| !external_guidance) {
             write_instruction_target(&mut fs, project_dir, target, &[], Some(&run_ids))?;
             write_guidance_target(&mut fs, project_dir, target, false)?;
@@ -1054,6 +1101,7 @@ pub fn plan_refresh_setup_in(
             project_dir,
             plugins,
             Some(&reconcile_targets),
+            held,
         )?
     };
     let mut removed = Vec::new();
@@ -1528,7 +1576,15 @@ fn remove_mcp_entry(
             } else {
                 "mcp"
             };
-            let Ok(mut root) = serde_json::from_str::<serde_json::Value>(&contents) else {
+            // OpenCode reads JSONC; a file with comments or trailing commas is edited in
+            // place so they survive (HS2-DWS3NS).
+            let jsonc = format == "opencode-json" && crate::jsonc::has_extensions(&contents);
+            let parsed = if format == "opencode-json" {
+                crate::jsonc::parse(&contents).ok()
+            } else {
+                serde_json::from_str::<serde_json::Value>(&contents).ok()
+            };
+            let Some(mut root) = parsed else {
                 return Ok(None);
             };
             let Some(object) = root.as_object_mut() else {
@@ -1550,42 +1606,53 @@ fn remove_mcp_entry(
                 return Ok(None);
             }
             servers.remove(name);
-            if servers.is_empty() {
+            let emptied = servers.is_empty();
+            if emptied {
                 object.remove(key);
             }
             let hotsheet_only = object
                 .keys()
                 .all(|key| format == "opencode-json" && key == "$schema");
-            if hotsheet_only {
+            if jsonc {
+                let Some(rest) = remove_jsonc_mcp_entry(&contents, key, name, emptied)
+                    .filter(|rest| crate::jsonc::parse(rest).ok().as_ref() == Some(&root))
+                else {
+                    // Never rewrite a file the splice cannot edit losslessly.
+                    return Ok(None);
+                };
+                // The user's comments keep the file even when no user key is left.
+                if hotsheet_only && !crate::jsonc::has_extensions(&rest) {
+                    None
+                } else {
+                    Some(rest)
+                }
+            } else if hotsheet_only {
                 None
             } else {
                 Some(serde_json::to_string_pretty(&root).unwrap() + "\n")
             }
         }
         "codex-toml" => {
-            let Ok(mut root) = toml::from_str::<toml::Table>(&contents) else {
+            let Ok(root) = toml::from_str::<toml::Table>(&contents) else {
                 return Ok(None);
             };
-            let Some(servers) = root
-                .get_mut("mcp_servers")
-                .and_then(toml::Value::as_table_mut)
-            else {
-                return Ok(None);
-            };
-            let command = servers
-                .get(name)
-                .and_then(|entry| entry.get("command")?.as_str());
+            let command = root
+                .get("mcp_servers")
+                .and_then(|servers| servers.get(name)?.get("command")?.as_str());
             if !owned(command) {
                 return Ok(None);
             }
-            servers.remove(name);
-            if servers.is_empty() {
-                root.remove("mcp_servers");
-            }
-            if root.is_empty() {
+            // Remove only Hot Sheet's table, keeping the user's comments and layout
+            // (HS2-3MH5FH); a file the edit cannot preserve is left untouched.
+            let Ok(Some(rest)) = crate::toml_config::remove_table(&contents, "mcp_servers", name)
+            else {
+                return Ok(None);
+            };
+            // Delete the file only when nothing of the user's (not even a comment) is left.
+            if rest.trim().is_empty() {
                 None
             } else {
-                Some(toml::to_string_pretty(&root).unwrap())
+                Some(rest)
             }
         }
         _ => return Ok(None),
@@ -1596,6 +1663,17 @@ fn remove_mcp_entry(
             Ok(Some(Change::Edited))
         }
         None => remove_managed_file(fs, project, &spec.target, true),
+    }
+}
+
+/// Splice Hot Sheet's `<key>.<name>` member out of a JSONC config (HS2-DWS3NS), and the
+/// `<key>` container too when the removal `emptied` it. `None` when the text cannot be
+/// edited in place; the caller verifies the result.
+fn remove_jsonc_mcp_entry(contents: &str, key: &str, name: &str, emptied: bool) -> Option<String> {
+    if emptied {
+        crate::jsonc::remove_member(contents, &[key]).ok()?
+    } else {
+        crate::jsonc::remove_member(contents, &[key, name]).ok()?
     }
 }
 
@@ -1707,7 +1785,7 @@ fn canonical_instruction_plugin(
         return Ok(effective);
     };
     let native_path = project.join(&plugin.manifest.instructions.target);
-    let native = fs.read_to_string(&native_path).unwrap_or_default();
+    let native = read_existing_text(fs, project, &native_path)?.unwrap_or_default();
     let reference = instruction_reference_block(plugin);
     let native_is_reference = reference
         .as_ref()
@@ -1723,7 +1801,7 @@ fn canonical_instruction_plugin(
         return Ok(effective);
     }
     let canonical_path = project.join(&canonical.target);
-    let mut incoming = fs.read_to_string(&canonical_path).unwrap_or_default();
+    let mut incoming = read_existing_text(fs, project, &canonical_path)?.unwrap_or_default();
     let mut source_plugin = plugin.clone();
     source_plugin.manifest.instructions.target = canonical.target.clone();
     source_plugin.manifest.instructions.canonical = None;
@@ -1831,7 +1909,13 @@ fn write_instruction_reference(
     };
     let rel = &plugin.manifest.instructions.target;
     let target = project.join(rel);
-    let existing = fs.read_to_string(&target).unwrap_or_default();
+    // Retiring a reference never writes an unreadable file, matching the other removal
+    // paths; adding one refuses it (HS2-HXMGN8).
+    let existing = match read_existing_text(fs, project, &target) {
+        Ok(existing) => existing.unwrap_or_default(),
+        Err(_) if !active => return Ok(None),
+        Err(error) => return Err(error),
+    };
     let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
     let Some(block) = instruction_reference_block(plugin) else {
         return Ok(None);
@@ -1888,7 +1972,14 @@ fn setup_plugins(
     refresh_targets: Option<&[String]>,
 ) -> Result<Vec<SetupReport>, SetupError> {
     let mut fs = PlanFs::for_setup();
-    let result = setup_plugins_with_fs(&mut fs, store_path, project_dir, plugins, refresh_targets);
+    let result = setup_plugins_with_fs(
+        &mut fs,
+        store_path,
+        project_dir,
+        plugins,
+        refresh_targets,
+        &HashSet::new(),
+    );
     // Explicit setup historically leaves earlier tools' successful writes in place if a
     // later tool fails. Refresh/diagnose use the pure plan, but retain this direct path.
     apply_operations(project_dir, fs.final_operations(project_dir))?;
@@ -1901,6 +1992,7 @@ fn setup_plugins_with_fs(
     project_dir: &Path,
     plugins: Vec<Plugin>,
     refresh_targets: Option<&[String]>,
+    held: &HashSet<String>,
 ) -> Result<Vec<SetupReport>, SetupError> {
     // Absolute store path so the MCP `--path` works from wherever the tool launches.
     let store_abs = hotsheet_sync::paths::canonicalize(store_path)
@@ -1917,6 +2009,8 @@ fn setup_plugins_with_fs(
         // HS2-RMQ5XX: refuse an unreadable tool config before the first write, so the
         // refusal leaves the whole checkout unchanged rather than half set up.
         check_existing_configs(fs, project_dir, p)?;
+        // HS2-HXMGN8: the same for the instruction files and git exclude it edits.
+        check_existing_text(fs, project_dir, p, refresh_targets.unwrap_or_default())?;
     }
 
     let policy = ensure_push_policy(fs, project_dir)?;
@@ -1962,7 +2056,12 @@ fn setup_plugins_with_fs(
             });
         }
     }
-    let run_ids: HashSet<String> = plugins.iter().map(|p| p.id().to_string()).collect();
+    // A held tool (HS2-52X9PN) keeps its shared-section membership while this run skips it.
+    let run_ids: HashSet<String> = plugins
+        .iter()
+        .map(|p| p.id().to_string())
+        .chain(held.iter().cloned())
+        .collect();
     let membership = refresh_targets.map(|_| &run_ids);
 
     // Instruction targets first, grouped so tools sharing one file (e.g. AGENTS.md) can be
@@ -2518,7 +2617,7 @@ fn write_guidance_target(
     active: bool,
 ) -> Result<(), SetupError> {
     let path = project.join(rel);
-    let existing = fs.read_to_string(&path).unwrap_or_default();
+    let existing = read_existing_text(fs, project, &path)?.unwrap_or_default();
     let mut rendered = render_guidance_sections(&existing, active);
     if rel == "AGENTS.md" {
         let config = crate::guidance_sources::load(project)?;
@@ -2834,7 +2933,7 @@ fn write_instruction_target(
     refresh_members: Option<&HashSet<String>>,
 ) -> Result<(), SetupError> {
     let target = project.join(rel);
-    let existing = fs.read_to_string(&target).ok();
+    let existing = read_existing_text(fs, project, &target)?;
     if writers.is_empty() && existing.is_none() {
         return Ok(()); // never create a file just to reconcile it
     }
@@ -3315,6 +3414,52 @@ fn project_exclude_file(project: &Path) -> Option<std::path::PathBuf> {
     Some(common.join("info/exclude"))
 }
 
+/// The current text of a file setup edits in place, or `None` when it does not exist
+/// (HS2-HXMGN8). Any other read failure, including bytes that are not UTF-8, refuses: the
+/// file is never treated as empty and rewritten with only Hot Sheet's sections.
+fn read_existing_text(
+    fs: &PlanFs,
+    project: &Path,
+    path: &Path,
+) -> Result<Option<String>, SetupError> {
+    match fs.read_to_string(path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(SetupError::UnreadableFile {
+            path: path
+                .strip_prefix(project)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/"),
+            reason: if error.kind() == std::io::ErrorKind::InvalidData {
+                "it is not UTF-8 text".into()
+            } else {
+                format!("it could not be read ({error})")
+            },
+        }),
+    }
+}
+
+/// Every existing instruction file `plugin` (or this refresh) may edit, and the checkout's
+/// local git exclude, must be readable before the first write (HS2-HXMGN8).
+fn check_existing_text(
+    fs: &PlanFs,
+    project: &Path,
+    plugin: &Plugin,
+    refresh_targets: &[String],
+) -> Result<(), SetupError> {
+    let instructions = &plugin.manifest.instructions;
+    let targets = std::iter::once(&instructions.target)
+        .chain(instructions.canonical.as_ref().map(|c| &c.target))
+        .chain(refresh_targets)
+        .filter(|rel| crate::is_safe_rel_path(rel))
+        .map(|rel| project.join(rel));
+    for path in targets.chain(project_exclude_file(project)) {
+        read_existing_text(fs, project, &path)?;
+    }
+    Ok(())
+}
+
 /// Keep a wholly Hot Sheet-owned machine config out of this checkout without changing its
 /// shared `.gitignore`. Existing mixed/user-owned configs remain visible to git.
 fn ensure_local_git_exclude(fs: &mut PlanFs, project: &Path, rel: &str) -> Result<(), SetupError> {
@@ -3322,7 +3467,7 @@ fn ensure_local_git_exclude(fs: &mut PlanFs, project: &Path, rel: &str) -> Resul
         return Ok(());
     };
     let entry = format!("/{}", rel.replace('\\', "/"));
-    let existing = fs.read_to_string(&target).unwrap_or_default();
+    let existing = read_existing_text(fs, project, &target)?.unwrap_or_default();
     if existing.lines().any(|line| line == entry) {
         return Ok(());
     }
@@ -3781,19 +3926,36 @@ fn write_mcp_toml(
     command: &str,
     args: &[String],
 ) -> Result<(), SetupError> {
-    let target = config.path;
-    let mut root: toml::Table = match config.read(fs)? {
-        Some(existing) => config.parse_toml(&existing)?,
-        None => toml::Table::new(),
+    let entry = codex_mcp_entry(command, args);
+    let Some(existing) = config.read(fs)? else {
+        let mut servers = toml::Table::new();
+        servers.insert(name.to_string(), toml::Value::Table(entry));
+        let mut root = toml::Table::new();
+        root.insert("mcp_servers".into(), toml::Value::Table(servers));
+        fs.write(
+            config.path,
+            toml::to_string_pretty(&root).unwrap().as_bytes(),
+        );
+        return Ok(());
     };
-
-    let servers = root
-        .entry("mcp_servers".to_string())
-        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
-    if !servers.is_table() {
-        *servers = toml::Value::Table(toml::Table::new());
+    let root = config.parse_toml(&existing)?;
+    let current = root
+        .get("mcp_servers")
+        .and_then(|servers| servers.get(name))
+        .and_then(toml::Value::as_table);
+    if current == Some(&entry) {
+        return Ok(());
     }
+    // Only Hot Sheet's table changes; the user's comments, order and spacing stay
+    // (HS2-3MH5FH).
+    let edited = crate::toml_config::set_table(&existing, "mcp_servers", name, &entry)
+        .map_err(|reason| config.unreadable(format!("Hot Sheet could not edit it ({reason})")))?;
+    fs.write(config.path, edited.as_bytes());
+    Ok(())
+}
 
+/// Hot Sheet's Codex MCP server table.
+fn codex_mcp_entry(command: &str, args: &[String]) -> toml::Table {
     let mut entry = toml::Table::new();
     entry.insert("command".into(), toml::Value::String(command.to_string()));
     entry.insert(
@@ -3822,13 +3984,7 @@ fn write_mcp_toml(
                 .collect(),
         ),
     );
-    servers
-        .as_table_mut()
-        .unwrap()
-        .insert(name.to_string(), toml::Value::Table(entry));
-
-    fs.write(target, toml::to_string_pretty(&root).unwrap().as_bytes());
-    Ok(())
+    entry
 }
 
 /// Create `dir`, but never recreate a missing `project` root (HS2-4YEA4M). A background
@@ -6553,6 +6709,172 @@ args = ["--path", "{store}"]
         }
     }
 
+    /// HS2-HXMGN8: an instruction file or git exclude that exists but cannot be read is
+    /// never treated as empty. Explicit setup, refresh, and diagnosis all refuse before the
+    /// first write, name the file, and leave the checkout byte-identical.
+    #[test]
+    fn hs2_hxmgn8_unreadable_instruction_files_are_never_rewritten() {
+        let not_utf8: &[u8] = b"# Project notes\n\xff\xfe user text\n";
+        let cases: [(&str, &str, &str); 5] = [
+            ("codex", "AGENTS.md", "not UTF-8 text"),
+            ("claude", "AGENTS.md", "not UTF-8 text"),
+            ("claude", "CLAUDE.md", "not UTF-8 text"),
+            ("codex", ".git/info/exclude", "not UTF-8 text"),
+            // A shared file another enabled tool writes still blocks this tool's refresh.
+            ("codex", "CLAUDE.md", "not UTF-8 text"),
+        ];
+        for (tool, rel, reason) in cases {
+            let store = tempfile::tempdir().unwrap();
+            let project = tempfile::tempdir().unwrap();
+            let root = project.path();
+            std::fs::create_dir_all(root.join(".git/info")).unwrap();
+            std::fs::write(root.join(rel), not_utf8).unwrap();
+            let before = snapshot_files(root);
+            let enabled = HashSet::from(["claude".to_string(), "codex".to_string()]);
+            if tool == "codex" && rel == "CLAUDE.md" {
+                // Explicit Codex setup never edits CLAUDE.md, so it proceeds and leaves it.
+                run_setup_in(store.path(), root, Some(tool), false, None, &[]).unwrap();
+                assert_eq!(std::fs::read(root.join(rel)).unwrap(), not_utf8);
+            } else {
+                let error = run_setup_in(store.path(), root, Some(tool), false, None, &[])
+                    .unwrap_err()
+                    .to_string();
+                assert!(error.contains(&format!("cannot update {rel}")), "{error}");
+                assert!(error.contains(reason), "{error}");
+                assert!(
+                    error.contains("Hot Sheet left the file unchanged"),
+                    "{error}"
+                );
+                assert!(error.contains("hotsheet-cli setup --refresh"), "{error}");
+                assert_eq!(snapshot_files(root), before, "{tool} {rel}");
+            }
+            let before = snapshot_files(root);
+            for refused in [
+                refresh_setup_in(store.path(), root, Some(&enabled), &[]).map(|_| ()),
+                plan_refresh_setup_in(store.path(), root, Some(&enabled), &[]).map(|_| ()),
+            ] {
+                let error = refused.unwrap_err();
+                assert!(
+                    matches!(&error, SetupError::UnreadableFile { path, .. } if path == rel),
+                    "{tool} {rel}: {error}"
+                );
+            }
+            assert_eq!(snapshot_files(root), before, "{tool} {rel}");
+        }
+    }
+
+    /// HS2-HXMGN8: a file that cannot be opened refuses the same way, and a missing one is
+    /// still created.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_hxmgn8_permission_denied_refuses_and_missing_instructions_are_created() {
+        use std::os::unix::fs::PermissionsExt;
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path();
+        run_setup_in(store.path(), root, Some("codex"), false, None, &[]).unwrap();
+        assert!(
+            std::fs::read_to_string(root.join("AGENTS.md"))
+                .unwrap()
+                .contains("hotsheet")
+        );
+
+        let agents = root.join("AGENTS.md");
+        std::fs::write(&agents, "User text.\n").unwrap();
+        std::fs::set_permissions(&agents, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&agents).is_ok() {
+            // Running as a superuser: permissions cannot make the file unreadable.
+            std::fs::set_permissions(&agents, std::fs::Permissions::from_mode(0o644)).unwrap();
+            return;
+        }
+        let error = run_setup_in(store.path(), root, Some("codex"), false, None, &[])
+            .unwrap_err()
+            .to_string();
+        std::fs::set_permissions(&agents, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(error.contains("cannot update AGENTS.md"), "{error}");
+        assert!(error.contains("could not be read"), "{error}");
+        assert_eq!(std::fs::read_to_string(&agents).unwrap(), "User text.\n");
+    }
+
+    /// HS2-52X9PN: the project-open refresh holds a tool whose config setup refused. The
+    /// held tool's files stay byte-identical while every other tool still refreshes.
+    #[test]
+    fn hs2_52x9pn_refresh_holding_a_refused_tool_still_refreshes_the_others() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        for tool in ["ivy", "oscar", "toby"] {
+            fixture.setup(tool);
+        }
+        let mut expected = snapshot_files(fixture.project.path());
+        let broken = "{ \"mcp\": { \"other\": } }";
+        std::fs::write(fixture.path("opencode.json"), broken).unwrap();
+        expected.insert("opencode.json".into(), broken.as_bytes().to_vec());
+        std::fs::remove_file(fixture.path(".ivy/mcp.json")).unwrap();
+        let enabled = HashSet::from(["ivy", "oscar", "toby"].map(String::from));
+        let dirs = [fixture.plugins.path().to_path_buf()];
+
+        let refused = refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&refused, SetupError::UnreadableConfig { tool, path, .. } if tool == "oscar" && path == "opencode.json"),
+            "{refused}"
+        );
+        assert!(!fixture.path(".ivy/mcp.json").exists());
+
+        refresh_setup_holding(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+            &HashSet::from(["oscar".to_string()]),
+        )
+        .unwrap();
+        // ivy's missing MCP config is repaired; oscar's broken file and its instruction
+        // section are untouched.
+        assert_eq!(snapshot_files(fixture.project.path()), expected);
+    }
+
+    /// HS2-52X9PN: a held tool is not a disabled one. It keeps its place in a shared
+    /// instruction section, where leaving it out of `enabled_plugins` drops it.
+    #[test]
+    fn hs2_52x9pn_held_tool_keeps_its_shared_section_membership() {
+        let fixture = Sharing::new();
+        for tool in ["alpha", "beta", "gamma"] {
+            fixture.setup(tool);
+        }
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        let before = fixture.agents();
+        assert!(before.contains(&shared("alpha, beta, gamma")), "{before}");
+        let dirs = [fixture.plugins.path().to_path_buf()];
+        let all = HashSet::from(["alpha", "beta", "gamma"].map(String::from));
+        refresh_setup_holding(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&all),
+            &dirs,
+            &HashSet::from(["gamma".to_string()]),
+        )
+        .unwrap();
+        assert_eq!(fixture.agents(), before);
+        // Holding every tool still leaves the shared section in place.
+        refresh_setup_holding(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&all),
+            &dirs,
+            &all,
+        )
+        .unwrap();
+        assert_eq!(fixture.agents(), before);
+        fixture.refresh(&["alpha", "beta"]);
+        assert!(fixture.agents().contains(&shared("alpha, beta")));
+    }
+
     /// HS2-RMQ5XX: valid configs keep the user's keys, missing ones are created, and a
     /// repeated setup is byte-identical for every writer.
     #[test]
@@ -6626,10 +6948,105 @@ args = ["--path", "{store}"]
         assert_eq!(replaced["environment"], entry["environment"]);
         assert_eq!(replaced["command"][0], entry["command"][0]);
 
-        // Disabling the tool never rewrites a JSONC config it cannot edit losslessly.
+        // Disabling the tool removes only Hot Sheet's entry, restoring the user's file
+        // exactly (HS2-DWS3NS), and re-enabling puts the same entry back.
         fixture.write("opencode.json", &first);
         fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), user);
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), user);
+        fixture.setup("oscar");
         assert_eq!(fixture.read("opencode.json").unwrap(), first);
+    }
+
+    /// HS2-DWS3NS: disabling OpenCode splices Hot Sheet's entry out of a commented
+    /// `opencode.json`. An emptied `mcp` goes with it; a file whose only remaining user
+    /// content is a comment is kept, and one Hot Sheet wrote alone is deleted.
+    #[test]
+    fn hs2_dws3ns_disabling_opencode_removes_only_its_jsonc_entry() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        let user = "{\n  /* keep */\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"theme\": \"dark\" // mine\n}\n";
+        fixture.write("opencode.json", user);
+        fixture.setup("oscar");
+        let enabled = fixture.read("opencode.json").unwrap();
+        assert!(enabled.contains("\"hotsheet\""), "{enabled}");
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), user);
+
+        // Only `$schema` and a comment remain: the comment is the user's, so the file stays.
+        let commented = "// mine\n{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"mcp\": {\n    \"hotsheet\": { \"type\": \"local\", \"command\": [\"hotsheet-mcp\"] },\n  },\n}\n";
+        fixture.write("opencode.json", commented);
+        fixture.refresh(&[]);
+        let left = fixture.read("opencode.json").unwrap();
+        assert_eq!(
+            left,
+            "// mine\n{\n  \"$schema\": \"https://opencode.ai/config.json\",\n}\n"
+        );
+
+        // A foreign command under the same name is not Hot Sheet's and stays.
+        let foreign =
+            "{\n  // theirs\n  \"mcp\": { \"hotsheet\": { \"command\": [\"other-mcp\"] } },\n}\n";
+        fixture.write("opencode.json", foreign);
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), foreign);
+    }
+
+    /// HS2-3MH5FH: a valid Codex `config.toml` is edited in place. Only Hot Sheet's
+    /// `[mcp_servers.hotsheet]` table changes; the user's comments, key order and blank
+    /// lines survive setup, refresh, a stale-entry replacement, and disabling the tool.
+    #[test]
+    fn hs2_3mh5fh_codex_toml_keeps_comments_and_layout() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        let user = "# Codex settings for this project\nmodel = \"synthetic-model\"  # keep inline\napproval_policy = \"on-request\"\n\n# Their server\n[mcp_servers.other]\ncommand = \"other-mcp\"\nargs = [ \"--quiet\" ]   # spacing kept\n\n[profiles.fast]\nmodel = \"small\"\n";
+        fixture.write(".toby/config.toml", user);
+        fixture.setup("toby");
+        let first = fixture.read(".toby/config.toml").unwrap();
+        let split = user.find("[profiles.fast]").unwrap();
+        assert!(first.starts_with(&user[..split]), "{first}");
+        assert!(first.ends_with(&user[split..]), "{first}");
+        let codex: toml::Table = toml::from_str(&first).unwrap();
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["env"]["HOTSHEET_ACTOR_ROLE"].as_str(),
+            Some("ai")
+        );
+
+        // Repeated setup and refresh are byte-identical no-ops.
+        fixture.setup("toby");
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), first);
+        fixture.refresh(&["toby"]);
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), first);
+
+        // A stale Hot Sheet table is replaced where it stands, with its header comment.
+        let stale = "# top\n[mcp_servers.hotsheet]  # ours\ncommand = \"hotsheet-mcp\"\nargs = [\"--path\", \".\"]\nstale_key = true\n\n[mcp_servers.hotsheet.env]\nHOTSHEET_STALE = \"1\"\n\n# after\n[tui]\nnotifications = true\n";
+        fixture.write(".toby/config.toml", stale);
+        fixture.setup("toby");
+        let replaced = fixture.read(".toby/config.toml").unwrap();
+        assert!(
+            replaced.starts_with("# top\n[mcp_servers.hotsheet]"),
+            "{replaced}"
+        );
+        assert!(
+            replaced.ends_with("\n# after\n[tui]\nnotifications = true\n"),
+            "{replaced}"
+        );
+        assert!(!replaced.contains("stale_key") && !replaced.contains("HOTSHEET_STALE"));
+        let codex: toml::Table = toml::from_str(&replaced).unwrap();
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["env_vars"]
+                .as_array()
+                .map(Vec::len),
+            Some(CODEX_MCP_ENV_VARS.len())
+        );
+
+        // Disabling removes only Hot Sheet's table, restoring the user's file exactly.
+        fixture.write(".toby/config.toml", &first);
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), user);
+        // Re-enabling puts the same entry back in the same place.
+        fixture.setup("toby");
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), first);
     }
 
     #[test]

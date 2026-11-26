@@ -536,6 +536,8 @@ fn watch_transcript_with(
     }
     // Returns at once: the stream starts, retries and stops on its own thread.
     let watcher = BackgroundWatcher::start_with(&paths, handler, status, start);
+    // Detached on purpose (HS2-GSW2AA): it returns on the stop wake (`false`) that dropping
+    // the returned `TranscriptWatch` sends, or when its wake channel disconnects.
     std::thread::spawn(move || {
         let watcher = watcher;
         // Right away: what is already there does not wait for the native stream.

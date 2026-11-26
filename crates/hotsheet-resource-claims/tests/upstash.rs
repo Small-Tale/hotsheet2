@@ -99,9 +99,9 @@ fn hs2_k9j1rk_the_keys_hold_names_only_and_the_token_never_crosses_the_wire() {
         .acquire(&target("vms/mac-1"), &lease(60).with_metadata(metadata))
         .unwrap();
     backend
-        .renew(&grant.renewal_token, Duration::from_secs(90))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(90))
         .unwrap();
-    backend.release(&grant.renewal_token).unwrap();
+    backend.release(grant.renewal_token.expose()).unwrap();
     for key in fake.keys() {
         assert!(key.starts_with("hs2rc:v1:"), "{key}");
         assert!(!key.contains("hsrc1"), "{key}");
@@ -110,7 +110,7 @@ fn hs2_k9j1rk_the_keys_hold_names_only_and_the_token_never_crosses_the_wire() {
     assert!(evals.len() >= 3);
     for eval in &evals {
         let wire = eval.to_string();
-        assert!(!wire.contains(&grant.renewal_token), "{wire}");
+        assert!(!wire.contains(grant.renewal_token.expose()), "{wire}");
         assert!(!wire.contains("hsrc1."), "no token of any shape: {wire}");
     }
     // The fencing counter and the claim live under separate keys; the counter has no expiry.
@@ -195,7 +195,7 @@ fn hs2_k9j1rk_a_lapsed_claim_says_expired_until_its_grace_ends_and_fencing_survi
     assert!(backend.get(&target("vms/one")).unwrap().is_none());
     assert_eq!(
         backend
-            .renew(&grant.renewal_token, Duration::from_secs(30))
+            .renew(grant.renewal_token.expose(), Duration::from_secs(30))
             .unwrap_err()
             .code(),
         "expired"
@@ -205,7 +205,7 @@ fn hs2_k9j1rk_a_lapsed_claim_says_expired_until_its_grace_ends_and_fencing_survi
     fake.advance_clock(Duration::from_secs(2 * 3600));
     assert_eq!(
         backend
-            .renew(&again.renewal_token, Duration::from_secs(30))
+            .renew(again.renewal_token.expose(), Duration::from_secs(30))
             .unwrap_err()
             .code(),
         "token_invalid"
@@ -228,7 +228,7 @@ fn hs2_k9j1rk_a_wait_holds_one_stream_and_is_woken_by_the_release() {
             backend.acquire_wait(&target("vms/one"), &lease(60), Duration::from_secs(20))
         });
         std::thread::sleep(Duration::from_millis(500));
-        backend.release(&held.renewal_token).unwrap();
+        backend.release(held.renewal_token.expose()).unwrap();
         waiter.join().unwrap()
     })
     .unwrap();
@@ -391,7 +391,7 @@ fn hs2_k9j1rk_failed_streams_back_off_and_resubscribe_to_the_same_release() {
     let outcome = std::thread::scope(|scope| {
         let waiter = scope.spawn(|| backend.wait_free(&target("vms/one"), Duration::from_secs(30)));
         std::thread::sleep(Duration::from_millis(1500));
-        backend.release(&held.renewal_token).unwrap();
+        backend.release(held.renewal_token.expose()).unwrap();
         waiter.join().unwrap()
     })
     .unwrap();
@@ -436,7 +436,7 @@ fn hs2_k9j1rk_list_reads_the_resource_set_with_one_pipeline() {
     let a = backend.acquire(&target("vms/a"), &lease(60)).unwrap();
     let b = backend.acquire(&target("vms/b"), &lease(60)).unwrap();
     backend.acquire(&target("other/z"), &lease(60)).unwrap();
-    backend.release(&a.renewal_token).unwrap();
+    backend.release(a.renewal_token.expose()).unwrap();
     let before = fake.count("pipeline");
     let listed = backend.list(&Namespace::parse("vms").unwrap()).unwrap();
     assert_eq!(

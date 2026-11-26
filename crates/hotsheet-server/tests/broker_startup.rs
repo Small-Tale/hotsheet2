@@ -144,7 +144,7 @@ impl Drop for SocketFiles {
 fn request(info: &InstanceInfo, method: &str, path: &str, body: Option<Value>) -> Value {
     let request = ureq::request(method, &format!("{}{path}", info.url))
         .timeout(Duration::from_secs(5))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .set("content-type", "application/json");
     let response = match body {
         Some(body) => request.send_string(&body.to_string()),

@@ -314,7 +314,7 @@ impl ClaimBackend for UpstashBackend {
                 )?;
                 Ok(Grant {
                     claim,
-                    renewal_token,
+                    renewal_token: renewal_token.into(),
                 })
             }
             Some("held") => Err(ClaimError::HeldBy {

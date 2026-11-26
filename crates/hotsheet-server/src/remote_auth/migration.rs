@@ -216,7 +216,7 @@ mod tests {
 
     fn works(auth: &RemoteAuth, session: &IssuedSession, now: i64) -> Result<bool> {
         Ok(auth
-            .authorize(&session.token, None, None, false, now)?
+            .authorize(session.token.expose(), None, None, false, now)?
             .is_ok())
     }
 
@@ -341,7 +341,7 @@ mod tests {
         );
         assert_eq!(
             machine
-                .authorize(&foreign.token, None, None, false, now)?
+                .authorize(foreign.token.expose(), None, None, false, now)?
                 .unwrap_err(),
             AuthFailure::Invalid
         );
@@ -367,7 +367,7 @@ mod tests {
         let machine = RemoteAuth::open_machine_at(home.path(), SERVER, now)?;
         assert_eq!(
             machine
-                .authorize(&phone.token, None, None, false, now)?
+                .authorize(phone.token.expose(), None, None, false, now)?
                 .unwrap_err(),
             AuthFailure::Revoked
         );
@@ -402,7 +402,7 @@ mod tests {
         for session in [&tablet, &phone] {
             assert_eq!(
                 reopened
-                    .authorize(&session.token, None, None, false, now + 3)?
+                    .authorize(session.token.expose(), None, None, false, now + 3)?
                     .unwrap_err(),
                 AuthFailure::Revoked
             );
@@ -441,7 +441,7 @@ mod tests {
         // The warning is durable in the machine catalog, beside the merged source.
         let catalog = std::fs::read_to_string(machine_catalog_path(home.path()))?;
         assert!(catalog.contains("kept the newest renewal"));
-        assert!(!catalog.contains(&tablet.token));
+        assert!(!catalog.contains(tablet.token.expose()));
         Ok(())
     }
 
@@ -484,7 +484,7 @@ mod tests {
         assert!(second.revoke(&tablet.device.id)?);
         assert_eq!(
             first
-                .authorize(&tablet.token, None, None, false, now)?
+                .authorize(tablet.token.expose(), None, None, false, now)?
                 .unwrap_err(),
             AuthFailure::Revoked
         );

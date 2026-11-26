@@ -63,7 +63,8 @@ describe('the timeline long poll (HS2-J89JC7)', () => {
     stop();
     expect(seen).toEqual(['v1', 'v2']);
     expect(errors).toEqual(['offline', 'offline']);
-    expect(delays).toEqual([1_000, 2_000]);
+    // The unchanged v1 came back at once, so it backs off like a failure (HS2-YA6D31).
+    expect(delays).toEqual([1_000, 2_000, 4_000]);
     // The first read has no version; a failure forgets it, so the next read answers at once.
     expect(asked).toEqual([undefined, 'v1', 'v1', undefined, undefined, 'v2']);
   });

@@ -375,7 +375,7 @@ fn live_status(store: &Path, project: &Path) -> Value {
         &hotsheet_plugins::hotsheet_home(),
     )
     .ok()
-    .map(|server| (server.url, server.secret))
+    .map(|server| (server.url, server.secret.into_inner()))
     .or_else(hook_server_route);
     let Some((url, secret)) = route else {
         return json!({"server":"not_configured", "connection":"unknown"});
