@@ -112,7 +112,7 @@ test('HS2-4TKASN shows AI Chats while the AI chat feature is on', async ({ page 
   await dialog.screenshot({ path: 'target/visual-captures/hs2-4tkasn/chat-on-light-wide.png', animations: 'disabled' });
 });
 
-test('HS2-HC67SP toggles every listed item of one project from its heading', async ({ page }) => {
+test('HS2-HC67SP HS2-DZH5GH toggles every listed item of one project from its name', async ({ page, browserName }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openTwoProjects(page);
   const dialog = await openGridVisibility(page);
@@ -126,6 +126,26 @@ test('HS2-HC67SP toggles every listed item of one project from its heading', asy
   const demoHeading = dialog.getByRole('button', { name: 'Hide All demo AI Shells' });
   await expect(demoHeading).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Hide All second AI Shells' })).toBeVisible();
+  // HS2-DZH5GH: the project name itself is the button, inside the project heading, and the header has
+  // no other control, so the heading is one tab stop that keeps its outline entry.
+  const demoName = page.getByRole('button', { name: 'Hide All demo AI Shells' });
+  const demoSection = dialog.locator('section').filter({ has: demoName });
+  await expect(demoSection.getByRole('heading').filter({ has: demoName })).toHaveCount(1);
+  await expect(demoHeading).toHaveText('demo');
+  await expect(demoHeading).not.toHaveAttribute('aria-expanded', /.*/);
+  await expect(demoSection.locator('[data-component="list-header"] button')).toHaveCount(1);
+  await expect(demoSection.locator('[data-component="list-header"] svg')).toHaveCount(0);
+  // WebKit on macOS moves Tab focus between buttons only with Option held.
+  const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+  await row('Demo Agent').focus();
+  await page.keyboard.press(`Shift+${tab}`);
+  await expect(demoHeading).toBeFocused();
+  await dialog.screenshot({
+    path: 'target/visual-captures/hs2-dzh5gh/name-focus-light-wide.png',
+    animations: 'disabled',
+  });
+  await page.keyboard.press(tab);
+  await expect(row('Demo Agent')).toBeFocused();
   // All visible: the heading hides all of demo's listed items, and only those.
   await demoHeading.click();
   await expect(row('Demo Agent')).toHaveAttribute('data-state', 'hidden');
@@ -151,7 +171,7 @@ test('HS2-HC67SP toggles every listed item of one project from its heading', asy
   await typeButton(dialog, 'shell').click();
   await expect(dialog.getByRole('button', { name: 'Show All demo Items' })).toBeVisible();
   await expect(row('Demo Shell')).toHaveAttribute('data-state', 'visible');
-  const capture = 'target/visual-captures/hs2-hc67sp';
+  const capture = 'target/visual-captures/hs2-dzh5gh';
   await dialog.screenshot({ path: `${capture}/heading-light-wide.png`, animations: 'disabled' });
   await page.emulateMedia({ colorScheme: 'dark' });
   await dialog.screenshot({ path: `${capture}/heading-dark-wide.png`, animations: 'disabled' });

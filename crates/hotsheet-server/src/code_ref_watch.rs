@@ -453,7 +453,7 @@ mod tests {
         let write = |text: &[u8]| {
             let mut temporary = tempfile::NamedTempFile::new_in(&pool).unwrap();
             std::io::Write::write_all(&mut temporary, text).unwrap();
-            temporary.persist(pool.join("state.json")).unwrap();
+            hotsheet_sync::files::persist(temporary, pool.join("state.json")).unwrap();
         };
         let deadline = Instant::now() + Duration::from_secs(30);
         // The stream may start after the first write; the re-check covers that.

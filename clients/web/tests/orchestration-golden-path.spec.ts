@@ -19,7 +19,10 @@ const scheduler = { role: 'ai', id: 'scheduler-1' };
 const WORKER = 'golden-worker';
 
 async function openTwoProjects(page: Page) {
-  const server = await realTicketServer();
+  // The run starts sessions under the real default policy (2 GB free memory, 90% CPU, 5 GB free disk), which
+  // a busy CI runner may not meet; the test build's roomy capacity keeps admission independent of the
+  // machine running the test (HS2-D9KP86, as HS2-YWN8JT does for the Rust real-server tests).
+  const server = await realTicketServer({ env: { HOTSHEET_TEST_ROOMY_CAPACITY: '1' } });
   const projects = [{ id: server.checkoutId, root: server.root, name: 'Launch' }];
   const root = join(dirname(server.root), 'web');
   await mkdir(root, { recursive: true });

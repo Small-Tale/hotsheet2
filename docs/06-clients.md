@@ -2088,7 +2088,7 @@ checkout name>`, where the host is the machine name the peer last reported on th
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.135 (HS2-31HBBC). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.136 (HS2-6H9P37). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
   `npx kerfjs setup --ui --write --yes`, run from `clients/web`, installs the Kerf
   `kerf-app`, `kerf-ui`, and `kerf-ui-design-mock` skills under `clients/web/.claude/skills`
@@ -3954,11 +3954,11 @@ never pressed or applied to the grid; when a workspace's stored choice held only
 Terminals stands in until the person changes the selection, and the stored chat choice
 returns with the segment. Each project heading carries a show-all or hide-all action
 (HS2-HC67SP) that acts on that project's listed rows only. If any listed row is hidden, it
-shows them all; if all are visible, it hides them all. It is Kerf `ListHeader`'s trailing
-action: one keyboard stop named "Show All <project> <types>" or "Hide All …" (the noun is the
-single listed type, else Items). Like each row, its eye or eye-off icon reports state.
-Hide Listed and Show Listed stay in the footer. Making the project name itself the control
-waits on Kerf KF-J289N4 (HS2-DZH5GH). A **Show minimized** checkbox in the dialog footer
+shows them all; if all are visible, it hides them all. The project name itself is the
+control (HS2-DZH5GH): Kerf `ListHeader`'s title-action mode puts one native button inside
+the heading, named "Show All <project> <types>" or "Hide All …" (the noun is the single
+listed type, else Items). It is the header's only keyboard stop, with no trailing icon
+button and no disclosure state. Hide Listed and Show Listed stay in the footer. A **Show minimized** checkbox in the dialog footer
 (HS2-W1XEH7) is off by default and remembered per workspace. Off, items of minimized
 project tabs are left out: they are not listed, not shown in that workspace's grid, and not
 counted by the eye badge. On, they are listed and follow their own visibility. Hide Listed,
