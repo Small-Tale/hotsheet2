@@ -80,12 +80,19 @@ for (const field of ['details', 'note'] as const) {
             .map((key) => JSON.parse(localStorage.getItem(key)!) as { draft: string }),
         );
       expect(await recovery()).toEqual([expect.objectContaining({ draft: latest })]);
+      const oldSaved = page.waitForResponse(
+        (response) => response.request().method() === 'PATCH' && response.url().includes('/tickets/') && response.ok(),
+      );
       releaseOld();
-      // The real parent's completion closes this old edit surface after its save promise resolves.
-      await expect(editor).toBeHidden();
+      await oldSaved;
+      // The real parent's completion closes a note editor after its save promise resolves. A Details
+      // editor that still has focus and newer unsaved text stays open with that text (HS2-7D3MPP).
+      if (field === 'details') await expect(editor).toHaveValue(latest);
+      else await expect(editor).toBeHidden();
       expect(await recovery()).toEqual([expect.objectContaining({ draft: latest })]);
       releaseBridge();
       await expect.poll(() => acks).toEqual([{ request: '1', success: true }]);
+      if (field === 'details') await expect(editor).toHaveValue(latest);
       expect(await recovery()).toEqual([expect.objectContaining({ draft: latest })]);
       // Inspect a fresh origin at the ACK boundary before any old-document pagehide can repair it.
       page = await app.launch();
