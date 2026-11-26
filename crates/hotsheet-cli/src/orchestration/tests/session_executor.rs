@@ -5055,6 +5055,37 @@ fn hs2_adasy5_a_worker_that_crashes_before_joining_is_bounded_then_reported() {
             && entry.record.reason.as_deref() == Some("never_joined")
             && entry.record.detail.as_deref() == Some("replacements_exhausted")
     }));
+    // HS2-9FS7YX: the timeline card carries the hold, so it reads held, not working.
+    let view =
+        f.m.runtime
+            .orchestration_timeline(&f.owner(), None, 0, &mut tx)
+            .unwrap();
+    let card = view
+        .waves
+        .iter()
+        .flat_map(|wave| &wave.items)
+        .find(|item| item.step_id == step)
+        .expect("the held step is on the timeline");
+    let hint = card.placement.as_ref().expect("the hold is logged");
+    assert_eq!(
+        (
+            hint.decision.as_str(),
+            hint.reason.as_deref(),
+            hint.detail.as_deref(),
+            hint.retry_at_ms
+        ),
+        (
+            "unplaced",
+            Some("never_joined"),
+            Some("replacements_exhausted"),
+            Some(lost_at + 60 * MINUTE)
+        )
+    );
+    assert!(
+        card.run
+            .as_ref()
+            .is_some_and(|run| hint.at_ms >= run.created_at_ms)
+    );
     // Just before the hour: still held back. At the hour: the fourth generation, once,
     // on the same run.
     f.at(&clock, lost_at + 60 * MINUTE - 1);

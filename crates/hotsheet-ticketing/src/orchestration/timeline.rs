@@ -174,6 +174,12 @@ pub struct PlacementHint {
     pub session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outcome: Option<String>,
+    /// HS2-9FS7YX: the decision's detail code, such as `replacements_exhausted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// HS2-9FS7YX: when the scheduler looks at the step again, for a held step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_at_ms: Option<u64>,
 }
 
 /// One plan step with what the readiness evaluation says of it.

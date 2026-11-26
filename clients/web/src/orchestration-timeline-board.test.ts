@@ -8,10 +8,13 @@ import {
   machineLabel,
   orchestrationLine,
   runAttention,
+  runNotice,
   runStateText,
+  schedulerHold,
   startBlockedInSettings,
   startBlockedReason,
   startColumnId,
+  stateBadge,
   stateWords,
   stepOfCard,
   targetLineKey,
@@ -386,5 +389,95 @@ describe('HS2-FXY5QM a run nobody is plainly working on says so', () => {
     ]);
     expect(runStateText({ state: 'dispatched', paused: true })).toBe('Dispatched to a worker, paused');
     expect(runStateText({ state: 'new_state', paused: false })).toBe('New state');
+  });
+});
+
+describe('HS2-9FS7YX a running card whose step the scheduler holds back reads held, not working', () => {
+  const running = item('step-3');
+  const MINUTE = 60_000;
+  const lost = (placement: Partial<NonNullable<TimelineItem['placement']>>, rest: Partial<TimelineItem> = {}) =>
+    ({
+      ...running,
+      session_state: 'lost',
+      placement: {
+        at_ms: DEMO_NOW,
+        decision: 'unplaced',
+        reason: 'never_joined',
+        detail: 'replacements_exhausted',
+        retry_at_ms: DEMO_NOW + 60 * MINUTE,
+        ...placement,
+      },
+      ...rest,
+    }) as TimelineItem;
+  const timeline = demoTimeline('running');
+
+  it('holds an unplaced step with no live session, with its retry time, on the card and the badge', () => {
+    const held = lost({});
+    expect(schedulerHold(held, demoClock)?.label).toBe('Held until 15:00');
+    expect(schedulerHold(held, demoClock)?.next).toContain('by 15:00');
+    const card = timelineCard(held, timeline, undefined, demoClock);
+    expect([card.busy, card.startedPhase, card.status, card.remoteClaim]).toEqual([false, undefined, 'started', false]);
+    expect([card.orchestration?.state, card.orchestration?.stateTone]).toEqual(['Held until 15:00', 'warning']);
+    expect(stateBadge(held)).toEqual({ label: 'Held', tone: 'warning' });
+    // Another reason a step is left unplaced, such as a held resource, holds it too; without a retry it says so.
+    const resource = lost({ reason: 'resource_held', detail: undefined, retry_at_ms: undefined });
+    expect(schedulerHold(resource, demoClock)?.label).toBe('Held');
+    expect(schedulerHold(resource, demoClock)?.next).toContain('when what it waits on changes');
+    // No session record at all is no live session either.
+    expect(schedulerHold(lost({}, { session_state: undefined, session_id: undefined }), demoClock)).toBeDefined();
+  });
+
+  it('says a kept session that never joined is left for a person', () => {
+    const kept = lost({ decision: 'keep', retry_at_ms: undefined }, { session_state: 'running' });
+    const card = timelineCard(kept, timeline, undefined, demoClock);
+    expect([card.busy, card.orchestration?.state]).toEqual([false, 'Session did not join']);
+    expect(schedulerHold(kept)?.next).toContain('left for you');
+    // A plain keep, or a never-joined keep that still has replacements, is work going on.
+    expect(
+      schedulerHold(lost({ decision: 'keep', reason: 'running', detail: undefined }, { session_state: 'running' })),
+    ).toBeUndefined();
+    expect(schedulerHold(lost({ decision: 'keep', detail: undefined }, { session_state: 'running' }))).toBeUndefined();
+  });
+
+  it('is not held for work under way, a stale decision, a finished run or a step not running', () => {
+    expect(schedulerHold(running)).toBeUndefined();
+    expect(timelineCard(running, timeline, undefined, demoClock).busy).toBe(true);
+    // A session runs it (a person started one by hand after the hold).
+    expect(schedulerHold(lost({}, { session_state: 'running' }))).toBeUndefined();
+    // A start or keep is not a hold.
+    expect(schedulerHold(lost({ decision: 'start', reason: 'ready' }))).toBeUndefined();
+    // The decision is older than the run, so it was about an earlier run.
+    expect(schedulerHold(lost({ at_ms: running.run!.created_at_ms - 1 }))).toBeUndefined();
+    expect(schedulerHold(lost({ at_ms: running.run!.created_at_ms }))).toBeDefined();
+    for (const state of ['completed', 'failed', 'cancelled'])
+      expect(schedulerHold(lost({}, { run: { ...running.run!, state } }))).toBeUndefined();
+    expect(schedulerHold(lost({}, { run: undefined }))).toBeUndefined();
+    expect(schedulerHold(lost({}, { placement: undefined }))).toBeUndefined();
+    for (const state of ['ready', 'done', 'waits_for_prerequisite'] as const)
+      expect(schedulerHold(lost({}, { state }))).toBeUndefined();
+    expect(stateBadge(lost({}, { state: 'ready' }))).toEqual({ label: 'Ready', tone: 'success' });
+  });
+
+  it('comes after the run’s own condition and before the ledger, and lets go once a session starts again', () => {
+    expect(runNotice(lost({}, { run: { ...running.run!, paused: true } }), demoClock)?.label).toBe('Paused');
+    expect(orchestrationLine(lost({}, { state: 'provisional' }), false, demoClock).state).toBe('Held until 15:00');
+    expect(runNotice(lost({}, { state: 'ready' }))).toBeUndefined();
+    // Held, then the scheduler starts a session at the hour: a newer start, a running session, working again.
+    const again = lost(
+      { at_ms: DEMO_NOW + 60 * MINUTE, decision: 'start', reason: 'ready', detail: undefined, retry_at_ms: undefined },
+      { session_state: 'running' },
+    );
+    const card = timelineCard(again, timeline, undefined, demoClock);
+    expect([card.busy, card.startedPhase, card.orchestration?.state]).toEqual([true, 'working', undefined]);
+    expect(stateBadge(again).label).toBe('Running');
+    // It crashes too and is held again.
+    expect(
+      timelineCard(
+        lost({ at_ms: DEMO_NOW + 61 * MINUTE, retry_at_ms: DEMO_NOW + 121 * MINUTE }),
+        timeline,
+        undefined,
+        demoClock,
+      ).orchestration?.state,
+    ).toBe('Held until 16:01');
   });
 });

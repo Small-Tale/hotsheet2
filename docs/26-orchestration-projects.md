@@ -6125,8 +6125,18 @@ A read on the server also starts the target followers of §26.9.
   line instead of the busy Working state (HS2-FXY5QM): "Project unreachable" (warning),
   "Cancelling", "No worker holds it" (warning; the run is `intervened`: its worker let go
   of the claim, or a person or another worker took it) and "Paused", in that order when
-  several hold. The inspector's Run section words the run state ("Dispatched to a
-  worker", "No worker holds it") and adds a **Next** row with what a person can do.
+  several hold. After those, a running card whose step the scheduler holds back reads
+  held, not Working with the busy spinner (HS2-9FS7YX): the timeline item's `placement`
+  (the step's latest logged decision, now with its `detail` and `retry_at_ms`), made
+  after the run was created, leaves the step `unplaced` while no session runs for it
+  ("Held until 15:00", warning; "Held" without a retry time), for example once its
+  sessions ended before they took up the work until the replacements ran out
+  (`never_joined` / `replacements_exhausted`, HS2-ADASY5), or keeps a session that never
+  joined with its replacements exhausted, left for a person ("Session did not join",
+  warning). The inspector's badge then reads **Held** (warning) instead of Running, and
+  its Why It Is Not Running section says why. The inspector's Run section words the run
+  state ("Dispatched to a worker", "No worker holds it") and adds a **Next** row with
+  what a person can do, including when the scheduler starts a session again.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and

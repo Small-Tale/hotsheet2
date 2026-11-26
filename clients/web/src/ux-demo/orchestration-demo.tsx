@@ -93,13 +93,46 @@ const RUN_CONDITIONS = [
   { value: 'paused', label: 'Paused' },
   { value: 'cancelling', label: 'Cancelling' },
   { value: 'unreachable', label: 'Project Unreachable' },
+  // HS2-9FS7YX: the scheduler holds the step back: its sessions ended before they took up the work, or the last
+  // one is kept for a person.
+  { value: 'held', label: 'Held: Sessions Never Joined' },
+  { value: 'unjoined', label: 'Session Kept Without Joining' },
 ];
+
+/** HS2-9FS7YX: API-12 as the scheduler holds it back, its latest decision logged after its run started. */
+function heldItem(item: TimelineItem, condition: string): TimelineItem {
+  const at = DEMO_NOW - 60_000;
+  if (condition === 'held')
+    return {
+      ...item,
+      session_state: 'lost',
+      placement: {
+        at_ms: at,
+        decision: 'unplaced',
+        reason: 'never_joined',
+        detail: 'replacements_exhausted',
+        retry_at_ms: DEMO_NOW + 58 * 60_000,
+      },
+    };
+  return {
+    ...item,
+    placement: { at_ms: at, decision: 'keep', reason: 'never_joined', detail: 'replacements_exhausted' },
+  };
+}
 
 /** HS2-FXY5QM: the running timeline with API-12's run in the chosen condition. */
 function runningTimeline(phase: TimelinePhase = 'running') {
   const timeline = demoTimeline(phase),
     condition = orchestrationDemoSettings.runCondition.value;
   if (!condition) return timeline;
+  if (condition === 'held' || condition === 'unjoined')
+    return {
+      ...timeline,
+      waves: timeline.waves.map((wave) => ({
+        ...wave,
+        items: wave.items.map((item) => (item.step_id === 'step-3' ? heldItem(item, condition) : item)),
+      })),
+    };
   const change = (run: NonNullable<TimelineItem['run']>) => ({
     ...run,
     state: condition === 'intervened' ? 'intervened' : run.state,
@@ -343,6 +376,17 @@ export function OrchestrationInspectorDemo() {
             runRead: true,
             // HS2-65AD6J: the project's integrator for a card with a run.
             integrator: demoIntegrator(orchestrationDemoSettings.integrator.value),
+            // HS2-9FS7YX: what the scheduler says of API-12 while it holds it back.
+            held:
+              orchestrationDemoSettings.selected.value === 'step-3' &&
+              orchestrationDemoSettings.runCondition.value === 'held'
+                ? {
+                    standing: 'not_placed',
+                    reason: 'never_joined',
+                    detail: 'replacements_exhausted',
+                    retry_at_ms: DEMO_NOW + 58 * 60_000,
+                  }
+                : undefined,
             // HS2-77SRHC, HS2-5GRXFN: DOC-9 is ready and waits for the VM someone holds.
             explanation:
               orchestrationDemoSettings.selected.value !== 'step-8'

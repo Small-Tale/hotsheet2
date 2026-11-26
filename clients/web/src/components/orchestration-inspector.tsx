@@ -42,7 +42,7 @@ import {
   clockTime,
   itemSlug,
   machineLabel,
-  runAttention,
+  runNotice,
   runStateText,
   stateBadge,
   toolLabel,
@@ -255,7 +255,7 @@ function RunSection({
   details?: OrchestrationInspectorDetails;
 }) {
   const run = item.run!,
-    attention = item.state === 'running' || item.state === 'provisional' ? runAttention(run) : undefined;
+    attention = runNotice(item, clock);
   return (
     <OrchestrationInspectorSection label="Run">
       <ValueTable label="Run" density="compact" stackBelow="narrow">

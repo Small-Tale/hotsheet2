@@ -70,6 +70,10 @@ export interface TimelinePlacement {
   model?: string;
   session_id?: string;
   outcome?: string;
+  /** HS2-9FS7YX: the decision's detail code, such as `replacements_exhausted`. */
+  detail?: string;
+  /** HS2-9FS7YX: when the scheduler looks at a held step again. */
+  retry_at_ms?: number;
 }
 
 export interface TimelineItem {

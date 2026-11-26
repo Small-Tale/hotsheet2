@@ -1304,7 +1304,15 @@ test('HS2-ADASY5 a worker that crashes at launch is not restarted without bound 
     const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
     const why = page.locator('[data-orchestration-inspector] [data-orchestration-section="Why It Is Not Running"]');
     const row = (label: string) => why.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    // HS2-9FS7YX: the card reads held with when it starts again, not Working with the busy spinner, and so do the
+    // inspector's badge and its Run section.
+    await expect(card.locator('[data-orchestration-part="state"]')).toHaveText(/^Held until .+/, { timeout: 30_000 });
+    await expect(card).toHaveAttribute('data-busy', 'false');
     await card.click();
+    await expect(page.locator('[data-orchestration-inspector] [data-component="badge"]').first()).toHaveText('Held');
+    await expect(page.locator('[data-orchestration-inspector] [data-orchestration-section="Run"]')).toContainText(
+      /No session works it now; the scheduler starts one again by .+/,
+    );
     await expect(row('Scheduler').locator('dd')).toHaveText(
       /^Waits: the sessions started for it ended before they took up the work, so none starts for a while/,
       { timeout: 30_000 },
@@ -1318,6 +1326,11 @@ test('HS2-ADASY5 a worker that crashes at launch is not restarted without bound 
       show: why,
       check: () => expect(row('What to do')).toHaveCount(1),
       atPhone: () => card.click(),
+    });
+    // The board re-renders its cards at each width, so the pass scrolls nothing: the held card is in Working Now,
+    // the column every width opens on (HS2-3KHE7R).
+    await visualPass(page, 'hs2-9fs7yx', 'card-held', {
+      check: () => expect(card.locator('[data-orchestration-part="state"]')).toHaveText(/^Held until .+/),
     });
   } finally {
     await server.stop(page);

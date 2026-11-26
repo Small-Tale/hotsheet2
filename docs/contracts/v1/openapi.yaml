@@ -26904,6 +26904,13 @@ components:
           type: string
         outcome:
           type: string
+        detail:
+          description: HS2-9FS7YX. The decision's detail code, such as `replacements_exhausted`.
+          type: string
+        retry_at_ms:
+          description: HS2-9FS7YX. When the scheduler looks at a held step again.
+          type: integer
+          minimum: 0
     ProjectType:
       description: A project's type (HS2-W27N1D). `software` is the default.
       enum:
