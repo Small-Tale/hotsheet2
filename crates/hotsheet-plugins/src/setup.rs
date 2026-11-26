@@ -973,11 +973,34 @@ pub fn refresh_setup_in(
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[std::path::PathBuf],
 ) -> Result<RefreshReport, SetupError> {
-    apply_setup_plan(plan_refresh_setup_in(
+    refresh_setup_holding(
         store_path,
         project_dir,
         enabled,
         plugin_dirs,
+        &HashSet::new(),
+    )
+}
+
+/// [`refresh_setup_in`] that leaves the `held` tools exactly as they are (HS2-52X9PN).
+///
+/// A held tool is neither set up nor treated as disabled: its files are not written, not
+/// removed and not edited, and it stays a member of any shared instruction section it
+/// serves. The project-open refresh holds a tool whose config setup refused
+/// ([`SetupError::UnreadableConfig`]) so the remaining tools still refresh.
+pub fn refresh_setup_holding(
+    store_path: &Path,
+    project_dir: &Path,
+    enabled: Option<&HashSet<String>>,
+    plugin_dirs: &[PathBuf],
+    held: &HashSet<String>,
+) -> Result<RefreshReport, SetupError> {
+    apply_setup_plan(plan_refresh_setup_holding(
+        store_path,
+        project_dir,
+        enabled,
+        plugin_dirs,
+        held,
     )?)
 }
 
@@ -987,6 +1010,22 @@ pub fn plan_refresh_setup_in(
     project_dir: &Path,
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[PathBuf],
+) -> Result<SetupPlan, SetupError> {
+    plan_refresh_setup_holding(
+        store_path,
+        project_dir,
+        enabled,
+        plugin_dirs,
+        &HashSet::new(),
+    )
+}
+
+fn plan_refresh_setup_holding(
+    store_path: &Path,
+    project_dir: &Path,
+    enabled: Option<&HashSet<String>>,
+    plugin_dirs: &[PathBuf],
+    held: &HashSet<String>,
 ) -> Result<SetupPlan, SetupError> {
     let mut fs = PlanFs::for_setup();
     let policy = read_push_policy(&fs, project_dir)?;
@@ -1024,6 +1063,7 @@ pub fn plan_refresh_setup_in(
         .collect();
     let plugins = plugins
         .into_iter()
+        .filter(|plugin| !held.contains(plugin.id()))
         .filter(|plugin| is_detected(plugin) || has_managed_setup(&fs, project_dir, plugin))
         .collect::<Vec<_>>();
     // Shared-section membership before this run, so a disabled sharer dropped from (or
@@ -1041,7 +1081,7 @@ pub fn plan_refresh_setup_in(
         .collect();
     let set_up = if plugins.is_empty() {
         // Nothing to set up, but a shared section whose sharers were all disabled is removed.
-        let run_ids = HashSet::new();
+        let run_ids = held.clone();
         for target in reconcile_targets.iter().filter(|_| !external_guidance) {
             write_instruction_target(&mut fs, project_dir, target, &[], Some(&run_ids))?;
             write_guidance_target(&mut fs, project_dir, target, false)?;
@@ -1054,6 +1094,7 @@ pub fn plan_refresh_setup_in(
             project_dir,
             plugins,
             Some(&reconcile_targets),
+            held,
         )?
     };
     let mut removed = Vec::new();
@@ -1888,7 +1929,14 @@ fn setup_plugins(
     refresh_targets: Option<&[String]>,
 ) -> Result<Vec<SetupReport>, SetupError> {
     let mut fs = PlanFs::for_setup();
-    let result = setup_plugins_with_fs(&mut fs, store_path, project_dir, plugins, refresh_targets);
+    let result = setup_plugins_with_fs(
+        &mut fs,
+        store_path,
+        project_dir,
+        plugins,
+        refresh_targets,
+        &HashSet::new(),
+    );
     // Explicit setup historically leaves earlier tools' successful writes in place if a
     // later tool fails. Refresh/diagnose use the pure plan, but retain this direct path.
     apply_operations(project_dir, fs.final_operations(project_dir))?;
@@ -1901,6 +1949,7 @@ fn setup_plugins_with_fs(
     project_dir: &Path,
     plugins: Vec<Plugin>,
     refresh_targets: Option<&[String]>,
+    held: &HashSet<String>,
 ) -> Result<Vec<SetupReport>, SetupError> {
     // Absolute store path so the MCP `--path` works from wherever the tool launches.
     let store_abs = hotsheet_sync::paths::canonicalize(store_path)
@@ -1962,7 +2011,12 @@ fn setup_plugins_with_fs(
             });
         }
     }
-    let run_ids: HashSet<String> = plugins.iter().map(|p| p.id().to_string()).collect();
+    // A held tool (HS2-52X9PN) keeps its shared-section membership while this run skips it.
+    let run_ids: HashSet<String> = plugins
+        .iter()
+        .map(|p| p.id().to_string())
+        .chain(held.iter().cloned())
+        .collect();
     let membership = refresh_targets.map(|_| &run_ids);
 
     // Instruction targets first, grouped so tools sharing one file (e.g. AGENTS.md) can be
@@ -6551,6 +6605,85 @@ args = ["--path", "{store}"]
             assert!(refreshed.unwrap_err().to_string().contains(rel));
             assert_eq!(snapshot_files(fixture.project.path()), before, "{rel}");
         }
+    }
+
+    /// HS2-52X9PN: the project-open refresh holds a tool whose config setup refused. The
+    /// held tool's files stay byte-identical while every other tool still refreshes.
+    #[test]
+    fn hs2_52x9pn_refresh_holding_a_refused_tool_still_refreshes_the_others() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        for tool in ["ivy", "oscar", "toby"] {
+            fixture.setup(tool);
+        }
+        let mut expected = snapshot_files(fixture.project.path());
+        let broken = "{ \"mcp\": { \"other\": } }";
+        std::fs::write(fixture.path("opencode.json"), broken).unwrap();
+        expected.insert("opencode.json".into(), broken.as_bytes().to_vec());
+        std::fs::remove_file(fixture.path(".ivy/mcp.json")).unwrap();
+        let enabled = HashSet::from(["ivy", "oscar", "toby"].map(String::from));
+        let dirs = [fixture.plugins.path().to_path_buf()];
+
+        let refused = refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&refused, SetupError::UnreadableConfig { tool, path, .. } if tool == "oscar" && path == "opencode.json"),
+            "{refused}"
+        );
+        assert!(!fixture.path(".ivy/mcp.json").exists());
+
+        refresh_setup_holding(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+            &HashSet::from(["oscar".to_string()]),
+        )
+        .unwrap();
+        // ivy's missing MCP config is repaired; oscar's broken file and its instruction
+        // section are untouched.
+        assert_eq!(snapshot_files(fixture.project.path()), expected);
+    }
+
+    /// HS2-52X9PN: a held tool is not a disabled one. It keeps its place in a shared
+    /// instruction section, where leaving it out of `enabled_plugins` drops it.
+    #[test]
+    fn hs2_52x9pn_held_tool_keeps_its_shared_section_membership() {
+        let fixture = Sharing::new();
+        for tool in ["alpha", "beta", "gamma"] {
+            fixture.setup(tool);
+        }
+        fixture.refresh(&["alpha", "beta", "gamma"]);
+        let before = fixture.agents();
+        assert!(before.contains(&shared("alpha, beta, gamma")), "{before}");
+        let dirs = [fixture.plugins.path().to_path_buf()];
+        let all = HashSet::from(["alpha", "beta", "gamma"].map(String::from));
+        refresh_setup_holding(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&all),
+            &dirs,
+            &HashSet::from(["gamma".to_string()]),
+        )
+        .unwrap();
+        assert_eq!(fixture.agents(), before);
+        // Holding every tool still leaves the shared section in place.
+        refresh_setup_holding(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&all),
+            &dirs,
+            &all,
+        )
+        .unwrap();
+        assert_eq!(fixture.agents(), before);
+        fixture.refresh(&["alpha", "beta"]);
+        assert!(fixture.agents().contains(&shared("alpha, beta")));
     }
 
     /// HS2-RMQ5XX: valid configs keep the user's keys, missing ones are created, and a

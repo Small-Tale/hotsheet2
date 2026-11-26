@@ -74,6 +74,19 @@ the comments, verifies the edited text parses to the intended value, and leaves 
 current file untouched. Disabling OpenCode leaves its entry in a commented
 `opencode.json` in place rather than rewriting the file (lossless removal: HS2-DWS3NS).
 
+**Project open reports each refused config (HS2-52X9PN).** The server's project-open
+refresh treats a refusal like this per tool rather than for the whole run. It holds the
+tool whose config was refused and refreshes every other tool. A held tool is not a
+disabled one, so none of its files are written, removed or edited, and it keeps its place
+in any shared instruction section. Each refusal is logged and published as a `warning`
+notification scoped to the checkout. The app's notification inbox shows it, and so does
+`GET /notifications?checkout=<id>`. The message is the same error text, naming the file
+and the `hotsheet-cli setup <tool>` rerun. Each checkout and file gets one notification
+until it is acknowledged. Any other refusal still stops that refresh before it writes
+anything and is reported the same way. Explicit `hotsheet-cli setup` and
+`setup --refresh` keep the whole-run refusal, so the headless path fails with that message
+and a nonzero exit.
+
 **Read-only diagnosis (HS2-9N8KVR).** `hotsheet-cli setup --diagnose
 [--tool <plugin-id>] [--project <directory>] [--json]` computes the same refresh
 plan without applying it or migrating settings. It reports each plugin's enabled,
