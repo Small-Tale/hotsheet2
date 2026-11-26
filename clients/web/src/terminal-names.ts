@@ -193,10 +193,16 @@ export function createTerminalNameWriteQueue(): TerminalNameWriteQueue {
  * `<project>: <role>`, docs/26 §26.16), and two sessions of one project differ only after the last
  * `: `, so the tab truncates in the middle and keeps that part. Undefined when the name has no such
  * part; the caller then keeps Kerf's default end ellipsis.
+ *
+ * HS2-M4YJM4: a run suffix keeps only its run tail, not the `run ` before it. Kerf's middle
+ * truncation lets a kept suffix yield once it and the cut marker no longer fit, and the phone-width
+ * grid caption has no room for `run <tail>` plus the marker; the run tail alone is what differs.
  */
 export function orchestratorTabNameKeep(name: string): number | undefined {
   const at = name.lastIndexOf(': ');
   if (at < 0) return undefined;
   const tail = name.slice(at + 2);
-  return tail.trim() === '' ? undefined : tail.length;
+  if (tail.trim() === '') return undefined;
+  const run = /^run (\S+)$/.exec(tail);
+  return run ? run[1].length : tail.length;
 }

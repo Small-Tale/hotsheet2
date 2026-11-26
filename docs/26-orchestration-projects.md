@@ -3375,7 +3375,8 @@ serves no single run. The label is the saved tab name every client of that serve
 already shows ([06](06-clients.md), HS2-89FPV1), so the drawer needs no new component. A Playwright
 test reads it in the real drawer at wide and narrow widths, in both color schemes
 (HS2-KTHJN2). A capped drawer tab of an orchestrator-started session ellipsizes the
-middle of its label and keeps everything after the last `: ` (the run suffix or role)
+middle of its label and keeps everything after the last `: ` (the role, or for a run
+suffix only its run tail, which still fits a phone-width caption; HS2-M4YJM4)
 visible, so two sessions of one project stay distinguishable; the full label is the tab's
 accessible name and its title while truncated (HS2-8KZF59, Kerf `nameTruncate="middle"`). The
 Project grid tile's `project › label` caption does the same through Kerf `Text`

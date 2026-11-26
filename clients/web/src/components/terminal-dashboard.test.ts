@@ -224,8 +224,8 @@ describe('TerminalDashboard', () => {
     const markup = String(
       TerminalDashboard({ groups: orchestrated, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }),
     );
-    // The orchestrator's caption cuts the middle and keeps `run Q69G5FB0` whole.
-    expect(markup).toContain('class="kui-text__truncate-tail"><strong>run Q69G5FB0</strong>');
+    // The orchestrator's caption cuts the middle and keeps the run tail `Q69G5FB0` whole (HS2-M4YJM4).
+    expect(markup).toContain('class="kui-text__truncate-tail"><strong>Q69G5FB0</strong>');
     expect(markup).toContain('title="Project One › Release train: run Q69G5FB0"');
     // Another terminal keeps the ordinary end ellipsis.
     expect(markup).toContain('Project One › Plain shell: one');

@@ -218,8 +218,13 @@ describe('terminal name write queue (HS2-0E7Q6E)', () => {
 
 describe('orchestratorTabNameKeep (HS2-8KZF59)', () => {
   it('keeps the part after the last colon of an orchestrator session name', () => {
-    expect(orchestratorTabNameKeep('Release train: run Q69G5FB0')).toBe('run Q69G5FB0'.length);
     expect(orchestratorTabNameKeep('Ops: nightly: worker')).toBe('worker'.length);
+    expect(orchestratorTabNameKeep('Release train: run ')).toBe('run '.length);
+    expect(orchestratorTabNameKeep('Release train: running late')).toBe('running late'.length);
+  });
+  it('keeps only the run tail of a run suffix, which fits a phone-width caption (HS2-M4YJM4)', () => {
+    expect(orchestratorTabNameKeep('Release train: run Q69G5FB0')).toBe('Q69G5FB0'.length);
+    expect(orchestratorTabNameKeep('Ops: nightly: run Q69G5FB0')).toBe('Q69G5FB0'.length);
     expect(orchestratorTabNameKeep('Release train')).toBeUndefined();
     expect(orchestratorTabNameKeep('Release train: ')).toBeUndefined();
   });

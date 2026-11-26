@@ -103,8 +103,8 @@ describe('TerminalDrawer', () => {
     const run = { ...sessions[0], id: 'run', title: 'Release train: run Q69G5FB0', orchestrator };
     const renamed = { ...run, id: 'renamed', title: 'Build watcher', named: true };
     const markup = drawer([run, renamed, sessions[1]]);
-    expect(tab(markup, 'run')).toContain('<span class="kui-tab-bar-item__name-head">Release train: </span>');
-    expect(tab(markup, 'run')).toContain('<span class="kui-tab-bar-item__name-tail">run Q69G5FB0</span>');
+    expect(tab(markup, 'run')).toContain('<span class="kui-tab-bar-item__name-head">Release train: run </span>');
+    expect(tab(markup, 'run')).toContain('<span class="kui-tab-bar-item__name-tail">Q69G5FB0</span>');
     // A rename with no `: ` suffix and an ordinary terminal keep Kerf's default end ellipsis.
     expect(tab(markup, 'renamed')).not.toContain('kui-tab-bar-item__name-tail');
     expect(tab(markup, 'two')).not.toContain('kui-tab-bar-item__name-tail');

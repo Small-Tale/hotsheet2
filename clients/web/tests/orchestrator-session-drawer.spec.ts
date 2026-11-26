@@ -61,8 +61,8 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
         // At every width the tab names the orchestration project and the run.
         await expect(tab).toBeVisible();
         await expect(tab).toContainText(label);
-        // HS2-8KZF59: a capped tab ellipsizes the middle, so the run suffix that tells two sessions of
-        // one project apart stays wholly visible.
+        // HS2-8KZF59: a capped tab ellipsizes the middle, so the run tail that tells two sessions of
+        // one project apart stays wholly visible (HS2-M4YJM4: the tail alone, without `run `).
         await expect
           .poll(() =>
             tab.evaluate((element) => {
@@ -78,7 +78,7 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
               };
             }),
           )
-          .toEqual({ tail: `run ${RUN.slice(-8)}`, tailClipped: false, tailInside: true });
+          .toEqual({ tail: RUN.slice(-8), tailClipped: false, tailInside: true });
         // HS2-3RBYJK: the Project Grid tile's `project › terminal` caption keeps the same suffix whole.
         await expect(caption).toBeVisible();
         await expect
@@ -96,7 +96,7 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
               };
             }),
           )
-          .toEqual({ tail: `run ${RUN.slice(-8)}`, tailClipped: false, tailInside: true });
+          .toEqual({ tail: RUN.slice(-8), tailClipped: false, tailInside: true });
         await page.screenshot({ path: `target/visual-captures/hs2-kthjn2-drawer-${scheme}-${width}.png` });
       }
     }
