@@ -889,6 +889,10 @@ impl TicketProvider for JiraProvider {
         if !draft.blocked_by.is_empty() {
             return self.unsupported("dependencies");
         }
+        // HS2-K9H38S: no native Up Next mapping; reject rather than read back `false`.
+        if draft.up_next {
+            return self.unsupported("up_next");
+        }
         if let Some(transfer) = &draft.transfer
             && let Some(existing) = self.find_transfer(&transfer.operation_id)?
         {
@@ -946,6 +950,10 @@ impl TicketProvider for JiraProvider {
         }
         if patch.started_phase.is_some() {
             return self.unsupported("started_phase");
+        }
+        // HS2-K9H38S: clearing is the only state these issues can hold, so `false` is honest.
+        if patch.up_next == Some(true) {
+            return self.unsupported("up_next");
         }
         let read_started = Instant::now();
         let current = self.issue(native_id)?;
@@ -3149,6 +3157,68 @@ mod tests {
             ),
             Err(ProviderError::Conflict { .. })
         ));
+    }
+
+    #[test]
+    fn hs2_k9h38s_up_next_writes_are_explicitly_unsupported() {
+        let fake = Arc::new(Fake::default());
+        let provider = provider(fake.clone());
+        assert!(!provider.descriptor().capabilities.up_next);
+        assert!(matches!(
+            provider.create(
+                MutationContext {
+                    now: Timestamp::new("x"),
+                    generated_id: hotsheet_model::Ulid::new(),
+                },
+                ProviderDraft {
+                    group: None,
+                    title: "Queued".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    status: Status::NotStarted,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: true,
+                    blocked_by: vec![],
+                    transfer: None,
+                    created_by: None,
+                },
+            ),
+            Err(ProviderError::Unsupported {
+                capability: "up_next",
+                ..
+            })
+        ));
+        assert!(matches!(
+            provider.update(
+                "ENG-9",
+                Timestamp::new("x"),
+                ProviderPatch {
+                    up_next: Some(true),
+                    ..Default::default()
+                },
+            ),
+            Err(ProviderError::Unsupported {
+                capability: "up_next",
+                ..
+            })
+        ));
+        // Both refusals happen before any remote request.
+        assert!(fake.requests.lock_or_recover().is_empty());
+        // Clearing matches the only state these issues hold, so it is not refused; with no
+        // scripted response it reaches the transport instead.
+        assert!(!matches!(
+            provider.update(
+                "ENG-9",
+                Timestamp::new("x"),
+                ProviderPatch {
+                    up_next: Some(false),
+                    ..Default::default()
+                },
+            ),
+            Err(ProviderError::Unsupported { .. })
+        ));
+        assert_eq!(fake.requests.lock_or_recover().len(), 1);
     }
 
     #[test]
