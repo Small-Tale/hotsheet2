@@ -151,25 +151,33 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
     );
     expect(working).toContain('data-planner-state="Planning"');
     expect(working).not.toContain('data-action="propose-orchestration-plan"');
-    const blocked = String(
+    // HS2-D9KP86: no saved policy does not block Start; the banner and title say Start saves the defaults,
+    // and the banner leads to them.
+    const defaults = String(
       OrchestrationToolbar({
         timeline: {
           ...demoTimeline('proposed'),
-          kick_off: { can_start: false, can_pause: false, start_blocked: 'policy_absent' },
+          kick_off: { can_start: true, can_pause: false, default_policy: true },
         },
       }),
     );
-    expect(blocked).toContain('No policy is saved yet. Apply one in Orchestration settings first');
-    expect(blocked).toMatch(
+    expect(defaults).toContain(
+      'Start Orchestration saves the default policy shown in Orchestration settings and starts sessions within it.',
+    );
+    expect(defaults).toContain('title="Save the default policy and place sessions automatically within it"');
+    expect(defaults).not.toMatch(
       /data-action="start-orchestration"[^>]*disabled|disabled[^>]*data-action="start-orchestration"/,
     );
-    // HS2-1DC8X1: the dry-run banner offers the way to the setting.
-    expect(blocked).toContain('data-action="open-orchestration-settings"');
-    expect(blocked).toContain('Open Orchestration Settings');
+    expect(defaults).toContain('data-action="open-orchestration-settings"');
+    expect(defaults).toContain('Open Orchestration Settings');
+    // With a saved policy it starts within it, and no settings action.
+    const saved = String(OrchestrationToolbar({ timeline: demoTimeline('proposed') }));
+    expect(saved).toContain('Start Orchestration starts sessions within the Orchestration settings.');
+    expect(saved).not.toContain('open-orchestration-settings');
   });
 
   it('HS2-1DC8X1 says why a paused plan cannot start, with the way to the setting', () => {
-    const paused = (start_blocked?: 'policy_absent' | 'project_software') =>
+    const paused = (start_blocked?: 'project_software') =>
       String(
         OrchestrationToolbar({
           timeline: {
@@ -178,13 +186,6 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
           },
         }),
       );
-    const absent = paused('policy_absent');
-    expect(absent).toContain('Start Orchestration Is Unavailable');
-    expect(absent).toContain(
-      'No policy is saved yet. Apply one in Orchestration settings first. Work already running continues.',
-    );
-    expect(absent).toContain('data-orchestration-start-blocked="policy_absent"');
-    expect(absent).toContain('data-action="open-orchestration-settings"');
     // A reason changed elsewhere names it, with no Settings action.
     const software = paused('project_software');
     expect(software).toContain('Start Orchestration Is Unavailable');

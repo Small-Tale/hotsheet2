@@ -983,21 +983,28 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     );
   }
 
-  /** Start or pause by turning the policy's automatic placement on or off (HS2-ECWG50). */
+  /**
+   * Start or pause by turning the policy's automatic placement on or off (HS2-ECWG50). HS2-D9KP86: with no
+   * saved policy the press saves the default one (every member left to the server's default, which is what
+   * Settings › Orchestration › Policy shows) with placement set, at no revision, in the same press.
+   */
   async function setAutomatic(automatic: boolean) {
     const current = dependencies.project();
     if (!current || busy.value) return;
     busy.value = true;
     try {
       const client = clientFor(current),
-        stored = await client.orchestrationPolicy(current.id);
-      if (!stored.policy) {
-        dependencies.showToast('No policy is saved yet. Apply one in Orchestration settings first.');
-        return;
-      }
-      const placement = { ...(stored.policy.placement ?? {}), automatic };
-      await client.setOrchestrationPolicy(current.id, stored.revision, { ...stored.policy, placement });
-      dependencies.showToast(automatic ? 'Orchestration started.' : 'Orchestration paused. Running work continues.');
+        stored = await client.orchestrationPolicy(current.id),
+        saved = stored.policy ?? {},
+        placement = { ...(saved.placement ?? {}), automatic };
+      await client.setOrchestrationPolicy(current.id, stored.policy ? stored.revision : null, { ...saved, placement });
+      dependencies.showToast(
+        automatic
+          ? stored.policy
+            ? 'Orchestration started.'
+            : 'Saved the default policy and started orchestration.'
+          : 'Orchestration paused. Running work continues.',
+      );
     } catch (reason) {
       dependencies.showToast(`${automatic ? 'Start' : 'Pause'} failed: ${describeRefusal(reason)}`);
     } finally {

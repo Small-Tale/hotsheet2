@@ -467,3 +467,69 @@ describe('switching between orchestration and software projects (HS2-BRRSYM)', (
     t.controller.dispose();
   });
 });
+
+describe('Start Orchestration with and without a saved policy (HS2-D9KP86)', () => {
+  const project = { id: 'orch', name: 'orch', root: '/synthetic/orch', apiPath: '/api/orch' } as Project;
+  function setup(stored: { revision: string | null; policy: Record<string, unknown> | null }) {
+    const toasts: string[] = [],
+      saved: Array<{ revision: string | null; policy: Record<string, unknown> }> = [];
+    let current = stored;
+    const known: Record<string, unknown> = {
+      orchestrationPolicy: () => Promise.resolve({ enabled: current.policy !== null, ...current }),
+      setOrchestrationPolicy: (_owner: string, revision: string | null, policy: Record<string, unknown>) => {
+        saved.push({ revision, policy });
+        current = { revision: `rev-${String(saved.length)}`, policy };
+        return Promise.resolve({ enabled: true, ...current });
+      },
+    };
+    // Every other read stays pending, as a server that has not answered yet.
+    const client = new Proxy(known, {
+      get: (target, key: string) => target[key] ?? (() => new Promise<never>(() => undefined)),
+    }) as unknown as Api;
+    const controller = createOrchestrationViewController({
+      project: () => project,
+      viewMode: signal<WorkspaceViewMode>('list'),
+      fallbackViewMode: () => 'list',
+      orchestrationViewMode: signal<OrchestrationProjectViewMode>('orchestration'),
+      mobile: () => false,
+      confirm: () => Promise.resolve(false),
+      showToast: (message) => void toasts.push(message),
+      openTicket: () => Promise.resolve(),
+      showPermissionRequest: () => Promise.resolve(),
+      openOrchestrationSettings: () => undefined,
+      persistWorkspacePreferences: () => undefined,
+      planner: { propose: () => Promise.resolve({ ok: false, reason: 'synthetic' }) } as never,
+      personId: () => 'person-1',
+      createClient: () => client,
+      orchestrationProject: () => false,
+    });
+    return { controller, toasts, saved };
+  }
+
+  it('saves the default policy with placement on in one press when none is saved', async () => {
+    const t = setup({ revision: null, policy: null });
+    await t.controller.start();
+    expect(t.saved).toEqual([{ revision: null, policy: { placement: { automatic: true } } }]);
+    expect(t.toasts).toEqual(['Saved the default policy and started orchestration.']);
+    // Paused and started again: the saved policy is edited at its revision, nothing else changes.
+    await t.controller.pause();
+    await t.controller.start();
+    expect(t.saved.slice(1)).toEqual([
+      { revision: 'rev-1', policy: { placement: { automatic: false } } },
+      { revision: 'rev-2', policy: { placement: { automatic: true } } },
+    ]);
+    expect(t.toasts.slice(1)).toEqual(['Orchestration paused. Running work continues.', 'Orchestration started.']);
+    t.controller.dispose();
+  });
+
+  it('keeps every member of a saved policy and only turns placement on', async () => {
+    const policy = { machine: { max_sessions: 4 }, placement: { automatic: false, aging_minutes: 30 } };
+    const t = setup({ revision: 'stored', policy });
+    await t.controller.start();
+    expect(t.saved).toEqual([
+      { revision: 'stored', policy: { ...policy, placement: { automatic: true, aging_minutes: 30 } } },
+    ]);
+    expect(t.toasts).toEqual(['Orchestration started.']);
+    t.controller.dispose();
+  });
+});

@@ -1036,11 +1036,19 @@ hotsheet-cli -C <configured-host-source> orchestration policy show --project <ow
 hotsheet-cli -C <configured-host-source> orchestration policy validate --project <owner-checkout-id> --file policy.json
 hotsheet-cli -C <configured-host-source> orchestration policy dry-run --project <owner-checkout-id> --file policy.json
 hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy set --project <owner-checkout-id> --file policy.json
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy start --project <owner-checkout-id>
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy pause --project <owner-checkout-id>
 ```
 
 `--file` takes a policy body or the output of `policy show`, and `-` reads stdin.
 `policy set` without `--expected-revision` reads the current revision first, so a
 repeated setup run changes nothing while a concurrent edit still conflicts.
+`policy start` and `policy pause` are Start Orchestration and Pause of §26.26 (HS2-D9KP86):
+each reads the stored policy, sets `placement.automatic` on or off and stores it at the
+revision read, so every other member stays as it is. With no policy saved they save the
+default policy (every member at its default, as Settings › Orchestration › Policy shows
+it) with that placement and answer `saved_default: true`. Repeating either changes
+nothing; an AI actor is refused.
 
 | Route                                              | Methods and purpose                                                      |
 | -------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -5834,14 +5842,14 @@ readiness (§26.15), the runs (§26.9), the sessions this owner's orchestrator s
 (§26.16), the latest logged scheduler decision per step (§26.17), pending permission
 requests (§26.7), the bindings and the policy. It contacts no target, passes no gate and writes nothing.
 
-| Field          | Meaning                                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------------------------------- |
-| `declared`     | The owner has a target declaration: it is an orchestration project, even with no target yet                |
-| `phase`        | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`    |
-| `kick_off`     | `can_start`, `can_pause`, the policy revision, and why Start is refused (`start_blocked`)                  |
-| `waves`        | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on |
-| `version`      | Changes exactly when what the timeline shows changes; time alone does not change it                        |
-| `wave_minutes` | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes     |
+| Field          | Meaning                                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `declared`     | The owner has a target declaration: it is an orchestration project, even with no target yet                 |
+| `phase`        | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`     |
+| `kick_off`     | `can_start`, `can_pause`, the policy revision, why Start is refused (`start_blocked`), and `default_policy` |
+| `waves`        | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on  |
+| `version`      | Changes exactly when what the timeline shows changes; time alone does not change it                         |
+| `wave_minutes` | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes      |
 
 **Waves.** Finished steps are **Done**. Once orchestration was kicked off, a step with an
 unfinished run is **Working Now**; every other step's wave is its depth over the
@@ -5973,12 +5981,18 @@ A read on the server also starts the target followers of §26.9.
 - **Kick-off.** With no plan, **Propose Plan** starts the planning session of §26.25 in
   the tool the person drives with in this project. A proposed or paused plan has
   **Start Orchestration**, which turns `placement.automatic` on through the policy route
-  of §26.8; it is disabled, with the reason, while there is no policy or the project's
-  type is Software (`project_software`, HS2-J3ZF27). The reason is never only the disabled
+  of §26.8; it is disabled, with the reason, while the project's type is Software
+  (`project_software`, HS2-J3ZF27). With no policy saved it is enabled (HS2-D9KP86, the
+  maintainer's choice B): one press saves the default policy, the values Settings ›
+  Orchestration › Policy shows, with placement on, and the toast reads _Saved the default
+  policy and started orchestration._ The timeline says so with `kick_off.default_policy`;
+  the dry-run banner ends "Start Orchestration saves the default policy shown in
+  Orchestration settings and starts sessions within it" and offers **Open Orchestration
+  Settings** to review them first. The reason Start is refused is never only the disabled
   button's title (HS2-1DC8X1): a proposed plan's dry-run banner ends with it, and a paused
   plan that cannot start shows a **Start Orchestration Is Unavailable** banner with it.
-  When the fix is in Settings › Orchestration (no policy saved, no project added) the banner
-  offers **Open Orchestration Settings**. No placement actor is needed: the
+  When the fix is in Settings › Orchestration (no project added) the banner offers **Open
+  Orchestration Settings**. The headless equivalent is `orchestration policy start` (§26.8). No placement actor is needed: the
   orchestrator acts as the orchestration project (HS2-XYAHB4). A Software project's kept
   automatic policy does not read as running. While running, **Pause** turns it off; running work
   continues. A policy that leaves placement Auto runs once the plan has a step, and the header
@@ -6163,7 +6177,10 @@ the type changes to Software while it shows.
   **accounts** with their sessions and daily budget (HS2-7WF6JD: + Add Account and a
   remove button per row; a row without a name is dropped; the budget is typed in dollars
   and stored as whole cents, and more than two decimals is refused, never rounded),
-  wind-down and build-ahead, saved with **Apply Policy** at the stored revision. The form
+  wind-down and build-ahead, saved with **Apply Policy** at the stored revision. A save
+  that leaves placement on or Auto while a plan exists starts placing sessions, so its
+  toast then reads _Policy saved. Orchestration is placing sessions._ (HS2-D9KP86; the
+  timeline is read once after the save, and reads `running`). The form
   never shows the policy's retired `targets[].actions` or `approval.required_for`
   (HS2-XHQ1EH: the server ignores and drops them); every member it does not show is
   written back unchanged.

@@ -1474,7 +1474,8 @@ test('HS2-42TARA real readiness plan responses match the OpenAPI contract', asyn
     const timelinePath = '/checkouts/{owner}/orchestration/timeline';
     const timeline = await send('GET', `${base}/timeline`);
     matches(timelinePath, 'get', '200', timeline.body);
-    expect(timeline.body).toMatchObject({ phase: 'proposed', kick_off: { start_blocked: 'policy_absent' } });
+    // HS2-D9KP86: no saved policy does not block Start; it saves the defaults first.
+    expect(timeline.body).toMatchObject({ phase: 'proposed', kick_off: { can_start: true, default_policy: true } });
     expect((timeline.body.waves as { kind: string; items: unknown[] }[]).map((wave) => wave.items.length)).toEqual([
       1, 1,
     ]);

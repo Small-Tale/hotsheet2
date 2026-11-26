@@ -141,7 +141,12 @@ async fn hs2_j89jc7_http_mcp_and_cli_read_the_same_timeline_and_wait_by_version(
     let (status, proposed) = api(router.clone(), "GET", &timeline, Value::Null, true).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(proposed["phase"], "proposed");
-    assert_eq!(proposed["kick_off"]["start_blocked"], "policy_absent");
+    // HS2-D9KP86: Start saves the default policy, so no policy does not block it.
+    assert!(
+        proposed["kick_off"].get("start_blocked").is_none(),
+        "{proposed}"
+    );
+    assert_eq!(proposed["kick_off"]["default_policy"], true);
     assert_eq!(proposed["waves"][0]["kind"], "planned");
     assert_eq!(proposed["waves"][0]["items"][0]["step_id"], a);
     assert_eq!(proposed["waves"][0]["items"][0]["slug"], first.slug);

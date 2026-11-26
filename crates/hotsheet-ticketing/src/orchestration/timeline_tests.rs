@@ -324,7 +324,8 @@ fn hs2_j89jc7_kick_off_says_why_start_is_refused() {
             Some("no_plan"),
             false,
         ),
-        ("policy absent", absent, Some("policy_absent"), false),
+        // HS2-D9KP86: Start saves the default policy, so no policy does not block it.
+        ("policy absent", absent, None, false),
         ("software", software, Some("project_software"), false),
         ("running", Fixture::new(one()), Some("running"), true),
         ("ready", Fixture::new(one()).proposed(), None, false),
@@ -335,6 +336,7 @@ fn hs2_j89jc7_kick_off_says_why_start_is_refused() {
         assert_eq!(kick_off.can_start, blocked.is_none(), "{name}");
         assert_eq!(kick_off.can_pause, pause, "{name}");
         assert_eq!(kick_off.policy_revision.as_deref(), Some("rev-1"), "{name}");
+        assert_eq!(kick_off.default_policy, name == "policy absent", "{name}");
     }
 }
 

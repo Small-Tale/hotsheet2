@@ -583,7 +583,7 @@ describe('a pattern-only Models list that resolves to no model, in words (HS2-74
 describe('HS2-2Y535C the explain answer’s own codes and a policy block, in words', () => {
   it('words a step with no saved policy and one the pass did not rank, with no code left', () => {
     const absent = explanationRows({ standing: 'not_placed', reason: 'policy_absent' }, clock);
-    expect(absent[0].value).toBe('Waits: no policy is saved yet; apply one in Settings › Orchestration');
+    expect(absent[0].value).toBe('Waits: no policy is saved yet; Start Orchestration saves the default one');
     const unranked = explanationRows({ standing: 'not_placed', reason: 'not_considered' }, clock);
     expect(unranked[0].value).toBe('Waits: the scheduler has not looked at it yet');
     for (const rows of [absent, unranked]) for (const row of rows) expect(row.value).not.toMatch(/_|policy absent/);

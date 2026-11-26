@@ -362,3 +362,99 @@ async fn hs2_ycjdeb_cli_http_and_mcp_share_the_limits_only_policy_and_its_dry_ru
         .unwrap()
         .unwrap();
 }
+
+/// HS2-D9KP86: Start Orchestration and Pause headlessly through the owned CLI. With no
+/// policy saved, `policy start` saves the default policy with placement on, as the
+/// button does; repeated it changes nothing; `policy pause` turns placement off and
+/// keeps every other member. An AI actor is refused and nothing is written.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_d9kp86_policy_start_saves_the_defaults_and_pause_turns_placement_off() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("host-store");
+    let memory = Arc::new(Memory::default());
+    let host = state(&source, &home);
+    let owner = configured_owner(&source, &home, &root.path().join("owner"));
+    let host = host.with_orchestration_runtime(shared_runtime(&source, &home, &memory));
+    let router = app(host.clone());
+    let base = format!("/checkouts/{}/orchestration", owner.id);
+    api(
+        router.clone(),
+        "POST",
+        &format!("{base}/targets"),
+        json!({"target_id":TARGET,"label":"Synthetic","expected_revision":null}),
+        true,
+    )
+    .await;
+    let prefix = |role: &'static str, id: &'static str| {
+        vec![
+            "--actor-role",
+            role,
+            "--actor-id",
+            id,
+            "-C",
+            source.to_str().unwrap(),
+            "orchestration",
+        ]
+    };
+    let (human, ai) = (prefix("human", "maintainer"), prefix("ai", "worker-1"));
+    let command = |verb: &'static str| vec!["policy", verb, "--project", owner.id.as_str()];
+    let policy_path = Path::new(&owner.root).join(".hotsheet2/orchestration-policy.json");
+
+    // An AI actor may not start it; no policy is written.
+    assert!(cli_failure(&home, &ai, &command("start")).contains("forbidden"));
+    assert!(!policy_path.exists());
+
+    // No policy: the defaults, with placement on.
+    let started = cli_named(&home, &human, &command("start"));
+    assert_eq!(started["saved_default"], true, "{started}");
+    assert_eq!(started["policy"]["placement"]["automatic"], true);
+    assert_eq!(
+        started["policy"]["machine"],
+        json!({"max_sessions":2,"min_free_ram_mb":2048,"max_cpu_percent":90,"min_free_disk_mb":5120})
+    );
+    let (status, read) = api(
+        router.clone(),
+        "GET",
+        &format!("{base}/policy"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    assert_eq!(read["revision"], started["revision"]);
+    assert_eq!(read["policy"]["placement"]["automatic"], true);
+
+    // Again: the same revision and bytes, and a saved policy is not the default one.
+    let bytes = std::fs::read(&policy_path).unwrap();
+    let again = cli_named(&home, &human, &command("start"));
+    assert_eq!(again["revision"], started["revision"]);
+    assert_eq!(again["saved_default"], false);
+    assert_eq!(std::fs::read(&policy_path).unwrap(), bytes);
+
+    // A person's own limits survive Pause and Start.
+    let mut edited = read["policy"].clone();
+    edited["machine"]["max_sessions"] = 5.into();
+    let (status, set) = api(
+        router.clone(),
+        "PUT",
+        &format!("{base}/policy"),
+        json!({"expected_revision":read["revision"],"policy":edited}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let paused = cli_named(&home, &human, &command("pause"));
+    assert_eq!(
+        paused["policy"]["placement"]["automatic"], false,
+        "{paused}"
+    );
+    assert_eq!(paused["policy"]["machine"]["max_sessions"], 5);
+    assert_ne!(paused["revision"], set["revision"]);
+    assert!(cli_failure(&home, &ai, &command("start")).contains("forbidden"));
+    let resumed = cli_named(&home, &human, &command("start"));
+    assert_eq!(resumed["policy"]["placement"]["automatic"], true);
+    assert_eq!(resumed["policy"]["machine"]["max_sessions"], 5);
+}

@@ -15,6 +15,7 @@ import {
   plannerWorkingLabel,
   startBlockedInSettings,
   startBlockedReason,
+  startExplanation,
   timelineStatus,
 } from '../orchestration-timeline-board';
 import type { OrchestrationProposeAvailability } from './orchestration-timeline-view';
@@ -76,15 +77,17 @@ export function OrchestrationToolbar({
   const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
   const blocked = startBlockedReason(timeline);
   // HS2-1DC8X1: the reason a person can act on is a banner with the way there, never only a disabled title.
-  const openSettings = startBlockedInSettings(timeline) ? (
-    <Button
-      size="compact"
-      action={ORCHESTRATION_ACTIONS.openOrchestrationSettings.value}
-      icon={<LucideIcon size="s" icon={Settings} name="settings" />}
-    >
-      Open Orchestration Settings
-    </Button>
-  ) : undefined;
+  // HS2-D9KP86: with no saved policy the same way leads to the defaults Start Orchestration saves.
+  const openSettings =
+    startBlockedInSettings(timeline) || timeline.kick_off.default_policy === true ? (
+      <Button
+        size="compact"
+        action={ORCHESTRATION_ACTIONS.openOrchestrationSettings.value}
+        icon={<LucideIcon size="s" icon={Settings} name="settings" />}
+      >
+        Open Orchestration Settings
+      </Button>
+    ) : undefined;
   const updating = planning === 'updating';
   const answer =
     planning === 'asked' && question ? (
@@ -191,7 +194,12 @@ export function OrchestrationToolbar({
             shape="pill"
             action={ORCHESTRATION_ACTIONS.startOrchestration.value}
             disabled={busy || !timeline.kick_off.can_start}
-            title={blocked ?? 'Place sessions automatically within the Orchestration settings'}
+            title={
+              blocked ??
+              (timeline.kick_off.default_policy
+                ? 'Save the default policy and place sessions automatically within it'
+                : 'Place sessions automatically within the Orchestration settings')
+            }
             icon={<LucideIcon size="s" icon={Play} name="play" />}
           >
             Start Orchestration
@@ -219,9 +227,9 @@ export function OrchestrationToolbar({
             copyLayout="stacked"
             tone="info"
             title="This Plan Is a Dry Run"
-            detail={`Columns run from the newest work on the left to the first work on the right. Start Orchestration starts sessions within the Orchestration settings.${
-              blocked ? ` ${blocked}.` : ''
-            }`}
+            detail={`Columns run from the newest work on the left to the first work on the right. ${startExplanation(
+              timeline,
+            )}.${blocked ? ` ${blocked}.` : ''}`}
             action={openSettings}
             actionPlacement="below"
           />

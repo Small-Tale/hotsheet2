@@ -7,6 +7,7 @@ import { hostedSiteSources, projectRows, siteChoicesByProject } from '../orchest
 import { remoteProjectId } from '../remote-projects/identity';
 import { remoteTerminalList } from '../remote-projects/terminals';
 import { terminalProjectOwner } from '../terminal-project-scope';
+import { demoTimeline } from '../ux-demo/orchestration-fixtures';
 import {
   createDemoOrchestrationApi,
   DEMO_OPEN_PROJECTS,
@@ -382,6 +383,40 @@ describe('the policy form (HS2-W27N1D)', () => {
     expect(state(t).status).toBe('Policy saved.');
     expect(t.toasts).toEqual(['Policy saved.']);
     expect(state(t).draft?.machine.max_cpu_percent).toBe('80');
+  });
+});
+
+describe('Apply Policy says when sessions start (HS2-D9KP86)', () => {
+  const withTimeline = (t: ReturnType<typeof setup>, read: () => Promise<unknown>) => {
+    const timeline = vi.fn(read);
+    (t.api as { orchestrationTimeline?: unknown }).orchestrationTimeline = timeline;
+    return timeline;
+  };
+
+  it('says Orchestration is placing sessions when the saved policy leaves the plan running', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    const timeline = withTimeline(t, () => Promise.resolve(demoTimeline('running')));
+    await t.settings.applyPolicy(DEMO_OWNER);
+    expect(timeline).toHaveBeenCalledWith(DEMO_OWNER);
+    expect(t.toasts).toEqual(['Policy saved. Orchestration is placing sessions.']);
+    // Placement turned off: saved, nothing starts, the timeline is not asked.
+    t.settings.changePolicy(DEMO_OWNER, 'automatic', false);
+    await t.settings.applyPolicy(DEMO_OWNER);
+    expect(timeline).toHaveBeenCalledTimes(1);
+    // Back on with no plan to run, then a read that fails: the plain words, since the save succeeded.
+    t.settings.changePolicy(DEMO_OWNER, 'automatic', true);
+    timeline.mockImplementationOnce(() => Promise.resolve(demoTimeline('no_plan')));
+    await t.settings.applyPolicy(DEMO_OWNER);
+    t.settings.changePolicy(DEMO_OWNER, 'machine.max_sessions', '3');
+    timeline.mockImplementationOnce(() => Promise.reject(new Error('offline')));
+    await t.settings.applyPolicy(DEMO_OWNER);
+    expect(t.toasts).toEqual([
+      'Policy saved. Orchestration is placing sessions.',
+      'Policy saved.',
+      'Policy saved.',
+      'Policy saved.',
+    ]);
   });
 });
 

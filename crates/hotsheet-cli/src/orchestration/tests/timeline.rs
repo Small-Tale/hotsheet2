@@ -141,10 +141,10 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
     let b = define(&m, &goal, &second, Some(&first));
     let proposed = read(&m);
     assert_eq!(proposed.phase, TimelinePhase::Proposed);
-    assert_eq!(
-        proposed.kick_off.start_blocked.as_deref(),
-        Some("policy_absent")
-    );
+    // HS2-D9KP86: no saved policy does not block Start; it saves the defaults.
+    assert_eq!(proposed.kick_off.start_blocked, None);
+    assert!(proposed.kick_off.can_start);
+    assert!(proposed.kick_off.default_policy);
     assert_eq!(
         proposed
             .waves
@@ -174,6 +174,7 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
     let ready = read(&m).kick_off;
     assert!(ready.can_start && !ready.can_pause);
     assert!(ready.policy_revision.is_some());
+    assert!(!ready.default_policy);
     set_policy(&m, false, Some("worker-1"));
     assert!(read(&m).kick_off.can_start);
 

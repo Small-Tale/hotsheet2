@@ -298,8 +298,9 @@ test('HS2-J89JC7 the timeline reads newest to oldest, opens on current work, and
     expect(await columnTitles(page)).toEqual(['Second · About +1 h Column', 'First · On Start Column']);
     await expect(view.locator('[data-orchestration-part="state"]').first()).toBeVisible();
     const start = page.getByRole('button', { name: 'Start Orchestration' });
-    await expect(start).toBeDisabled();
-    await expect(start).toHaveAttribute('title', /Orchestration settings first/);
+    // HS2-D9KP86: with no policy saved, Start saves the default one.
+    await expect(start).toBeEnabled();
+    await expect(start).toHaveAttribute('title', 'Save the default policy and place sessions automatically within it');
     await capture(page, 'plan-1440');
 
     // A dispatch reaches the open view through the long poll: Working Now and Next.

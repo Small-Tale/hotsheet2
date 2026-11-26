@@ -39,7 +39,7 @@ export const orchestrationDemoSettings = {
   defaultGoal: signal(false),
   /** HS2-R2N33M: placement runs because the policy leaves it Auto and a plan exists. */
   autoPlacement: signal(false),
-  /** HS2-1DC8X1: no policy is saved, so Start Orchestration says why and offers the settings. */
+  /** HS2-D9KP86: no policy is saved, so Start Orchestration saves the defaults and the banner leads to them. */
   policyAbsent: signal(false),
   /** HS2-FXY5QM: the condition of API-12's run: '' is a worker at work. */
   runCondition: signal(''),
@@ -249,13 +249,7 @@ export function OrchestrationToolbarDemo() {
               ...demoTimeline(value),
               automatic_by_default: value === 'running' && orchestrationDemoSettings.autoPlacement.value,
               ...((value === 'proposed' || value === 'paused') && orchestrationDemoSettings.policyAbsent.value
-                ? {
-                    kick_off: {
-                      ...demoTimeline(value).kick_off,
-                      can_start: false,
-                      start_blocked: 'policy_absent' as const,
-                    },
-                  }
+                ? { kick_off: { ...demoTimeline(value).kick_off, default_policy: true } }
                 : {}),
             }}
             propose={propose()}

@@ -75,7 +75,8 @@ const REASONS: Readonly<Record<string, string>> = {
   permission_required: 'it waits for a person’s permission',
   actor_required: 'the scheduler has not looked at it yet',
   // HS2-2Y535C: the explain answer's own codes for a step the pass did not rank.
-  policy_absent: 'no policy is saved yet; apply one in Settings › Orchestration',
+  // HS2-D9KP86: Start Orchestration saves the default policy when none is saved.
+  policy_absent: 'no policy is saved yet; Start Orchestration saves the default one',
   not_considered: 'the scheduler has not looked at it yet',
 };
 

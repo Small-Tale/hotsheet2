@@ -892,6 +892,16 @@ enum PolicyCmd {
         #[arg(long)]
         auto: bool,
     },
+    /// HS2-D9KP86: Start Orchestration headlessly. Reads the stored policy, turns
+    /// `placement.automatic` on and stores it at the revision read. With no policy
+    /// saved it saves the default policy (every member at its default) with placement
+    /// on, as the button does, and reports `saved_default`. Running it again changes
+    /// nothing. A person runs this; an AI actor is refused.
+    Start,
+    /// HS2-D9KP86: Pause headlessly: `placement.automatic` off at the revision read;
+    /// running work continues. With no policy saved it saves the defaults with
+    /// placement off. A person runs this; an AI actor is refused.
+    Pause,
 }
 #[derive(Args)]
 struct PermissionArgs {
@@ -1183,6 +1193,19 @@ fn with_role_sessions(mut policy: Value, edit: &Value) -> Value {
             object.insert("role_sessions".into(), Value::Array(list));
         }
     }
+    policy
+}
+
+/// HS2-D9KP86: the policy with `placement.automatic` set; no policy is the default one.
+fn with_automatic(mut policy: Value, automatic: Value) -> Value {
+    if !policy.is_object() {
+        policy = json!({});
+    }
+    let placement = &mut policy["placement"];
+    if !placement.is_object() {
+        *placement = json!({});
+    }
+    placement["automatic"] = automatic;
     policy
 }
 
@@ -1565,6 +1588,9 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                     // Turned into the edited policy below, at the revision read.
                     json!({"role_sessions_edit": {"target_id": target, "roles": roles, "auto": auto}}),
                 ),
+                // Turned into the stored (or default) policy below, at the revision read.
+                PolicyCmd::Start => ("PUT", prefix, json!({"automatic_edit": true})),
+                PolicyCmd::Pause => ("PUT", prefix, json!({"automatic_edit": false})),
             };
             (owner_id, request)
         }
@@ -1713,6 +1739,20 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 if let Some(warnings) = checked.get("warnings") {
                     answer["warnings"] = warnings.clone();
                 }
+                return Ok(answer);
+            }
+            // HS2-D9KP86: Start or Pause, edited into the stored policy, or into the
+            // default one when none is saved, as the Orchestration view's buttons do.
+            if let Some(automatic) = body
+                .as_object_mut()
+                .and_then(|object| object.remove("automatic_edit"))
+            {
+                let mut stored = runtime.request_now("GET", &path, &Value::Null)?;
+                let saved_default = stored["policy"].is_null();
+                body["policy"] = with_automatic(stored["policy"].take(), automatic);
+                body["expected_revision"] = stored["revision"].take();
+                let mut answer = runtime.request_now(method, &path, &body)?;
+                answer["saved_default"] = saved_default.into();
                 return Ok(answer);
             }
             // HS2-YCJDEB: `policy set` without a revision is read-then-set, so a

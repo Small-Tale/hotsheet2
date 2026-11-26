@@ -26593,8 +26593,12 @@ components:
             - no_projects
             - no_plan
             - project_software
-            - policy_absent
             - running
+        default_policy:
+          type: boolean
+          description:
+            HS2-D9KP86 - no policy is saved yet, so Start Orchestration first saves the default policy with placement
+            on. No saved policy never blocks Start.
         can_pause:
           type: boolean
         policy_revision:
