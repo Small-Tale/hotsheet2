@@ -25010,6 +25010,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SchedulerResourceContention'
+        home_outages:
+          description:
+            HS2-EX594V - each multi-site project whose home site is unavailable, so no dispatcher or integrator
+            starts for it anywhere. Left out when there is none.
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationHomeOutage'
         roles_unplaced:
           description:
             Each project home whose pending handoffs get no integrator in this pass, and why (HS2-4JQ41V). Left out
@@ -25182,6 +25189,8 @@ components:
             type: string
         assignment:
           $ref: '#/components/schemas/SchedulerAssignment'
+        home_outage:
+          $ref: '#/components/schemas/OrchestrationHomeOutage'
         integrator:
           description: For a running step, how its project's integrator stands in a fresh pass, on the project's home (HS2-4JQ41V).
           type: object
@@ -26608,6 +26617,49 @@ components:
           minimum: 1
         estimate:
           $ref: '#/components/schemas/OrchestrationEstimateBasis'
+        home_outages:
+          description:
+            HS2-EX594V - each multi-site project whose home site is unavailable now, from this machine's ledger.
+            Left out when there is none.
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationHomeOutage'
+    OrchestrationHomeOutage:
+      description:
+        HS2-EX594V - a multi-site project's home site that cannot coordinate its project (docs/26 section 26.30).
+        There is no failover; work on the other sites keeps the bounded dispatcher wait and then claims for its
+        own session.
+      type: object
+      required:
+        - home_target_id
+        - sites
+      properties:
+        home_target_id:
+          type: string
+        sites:
+          description: The project's other sites, where work still runs.
+          type: array
+          items:
+            type: string
+        since_ms:
+          description: When the outage was first seen.
+          type: integer
+          minimum: 0
+        reason:
+          enum:
+            - disabled
+            - unbound
+            - unreachable
+            - pool_unreadable
+        detail:
+          description: The failed read's code, such as `unreachable`.
+          type: string
+        announced:
+          description: An "unavailable" notification was sent for this outage.
+          type: boolean
+        returned_at_ms:
+          type: integer
+          minimum: 0
     OrchestrationEstimateBasis:
       description:
         What an estimated start rests on. `started` - the work started then; `measured` - the median lead time of

@@ -5229,3 +5229,172 @@ fn hs2_adasy5_stopped_and_lost_workers_that_never_joined_count_together() {
     }
     assert_eq!(f.host.launches().len(), 4);
 }
+
+/// HS2-EX594V: collects the home-outage notifications a runtime sends.
+#[derive(Default)]
+struct Notices(std::sync::Mutex<Vec<crate::orchestration::HomeNotification>>);
+
+impl crate::orchestration::HomeNotices for Notices {
+    fn notify(&self, notification: &crate::orchestration::HomeNotification) {
+        self.0.lock().unwrap().push(notification.clone());
+    }
+}
+
+impl Notices {
+    fn kinds(&self) -> Vec<hotsheet_ticketing::orchestration::HomeNoticeKind> {
+        self.0.lock().unwrap().iter().map(|n| n.kind).collect()
+    }
+}
+
+/// HS2-EX594V: target 2 is another site of target 1's project and the policy disables
+/// the home. No role session starts, the step still runs on the site, every surface
+/// (plan, tick, explain, timeline) names the outage, and a person is notified once
+/// after the delay and once when the home is back. A headless pass (no notifier)
+/// records the outage and sends nothing.
+#[test]
+fn hs2_ex594v_a_disabled_home_is_shown_and_announced_once_each_way() {
+    use hotsheet_ticketing::orchestration::{
+        HOME_OUTAGE_NOTIFY_AFTER_MS as AFTER, HomeNoticeKind, HomeOutageReason,
+    };
+    clocked!(clock, tx);
+    let mut f = Placed::new(&BOTH, &mut tx);
+    bind_and_allow(&f.m, 2, &[], &mut tx);
+    allow_on(
+        &f.m.runtime,
+        &f.m.owner.id,
+        &id(2),
+        &BOTH,
+        &["codex"],
+        &mut tx,
+    );
+    let revision = f.m.runtime.declarations(&f.owner()).unwrap().revision;
+    f.m.runtime
+        .request(
+            "PATCH",
+            &format!("/checkouts/{}/orchestration/targets/{}", f.owner(), id(2)),
+            &json!({"expected_revision": revision, "label": "Site Two", "site_of": id(1)}),
+            &mut tx,
+        )
+        .unwrap();
+    let headless = f.m.runtime.clone();
+    let notices = Arc::new(Notices::default());
+    f.m.runtime = f.m.runtime.clone().with_home_notices(notices.clone());
+    // The home is disabled; the project lists both roles, so only the outage stops them.
+    let mut body = policy();
+    let site = TargetPolicy {
+        target_id: id(2),
+        ..body.targets[0].clone()
+    };
+    body.targets[0].enabled = false;
+    body.targets.push(site);
+    body.placement.role_sessions = Vec::new();
+    f.set_policy(body.clone(), &mut tx);
+    let step = f.ready("Either site", &mut tx);
+
+    // The dry run names the outage and records nothing.
+    let plan =
+        f.m.runtime
+            .scheduler_plan(&f.owner(), Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(plan.home_outages.len(), 1, "{:?}", plan.home_outages);
+    assert_eq!(plan.home_outages[0].home_target_id, id(1));
+    assert_eq!(plan.home_outages[0].sites, vec![id(2)]);
+    assert_eq!(
+        plan.home_outages[0].reason,
+        Some(HomeOutageReason::Disabled)
+    );
+    assert!(f.m.runtime.home_outages(&f.owner()).unwrap().is_empty());
+
+    // The first applied pass places the step on the site, starts no role session,
+    // records the outage and notifies nobody yet; it passes again at the delay.
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(tick.outcomes[0].target_id, id(2));
+    assert!(
+        tick.view
+            .schedule
+            .placements
+            .iter()
+            .all(|placement| placement.role.is_none()),
+        "{:?}",
+        tick.view.schedule.placements
+    );
+    assert_eq!(tick.view.home_outages[0].since_ms, Some(START));
+    assert!(
+        tick.view
+            .schedule
+            .retry_at_ms
+            .is_some_and(|at| at <= START + AFTER)
+    );
+    assert!(notices.kinds().is_empty());
+    let wire = serde_json::to_value(&tick.view).unwrap();
+    assert_eq!(wire["home_outages"][0]["reason"], "disabled");
+
+    // Explain and the timeline say so as well.
+    let explained =
+        f.m.runtime
+            .scheduler_explain(
+                &f.owner(),
+                &serde_json::from_value(json!({"step_id": step})).unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(
+        explained
+            .home_outage
+            .as_ref()
+            .map(|o| o.home_target_id.clone()),
+        Some(id(1))
+    );
+    let timeline =
+        f.m.runtime
+            .orchestration_timeline(&f.owner(), None, 0, &mut tx)
+            .unwrap();
+    assert_eq!(timeline.home_outages.len(), 1);
+    assert_eq!(timeline.home_outages[0].since_ms, Some(START));
+
+    // A headless pass at the delay records it and sends nothing.
+    f.at(&clock, START + AFTER);
+    headless
+        .scheduler_tick(
+            &f.owner(),
+            &TickRequest::default(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(notices.kinds().is_empty());
+    // The server's pass sends it, once.
+    f.tick(&mut tx);
+    assert_eq!(notices.kinds(), [HomeNoticeKind::Unavailable]);
+    {
+        let sent = notices.0.lock().unwrap();
+        assert_eq!(sent[0].severity, "warning");
+        assert_eq!(sent[0].title, "Home site Target is unavailable");
+        assert!(sent[0].body.contains("Site Two"), "{}", sent[0].body);
+        assert!(sent[0].body.contains("disables"), "{}", sent[0].body);
+    }
+    f.at(&clock, START + 3 * AFTER);
+    f.tick(&mut tx);
+    assert_eq!(notices.kinds(), [HomeNoticeKind::Unavailable]);
+
+    // Enabled again: one "returned", and every surface is clear.
+    body.targets[0].enabled = true;
+    f.set_policy(body, &mut tx);
+    f.at(&clock, START + 4 * AFTER);
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        notices.kinds(),
+        [HomeNoticeKind::Unavailable, HomeNoticeKind::Returned]
+    );
+    assert!(tick.view.home_outages.is_empty());
+    assert!(f.m.runtime.home_outages(&f.owner()).unwrap().is_empty());
+    let timeline =
+        f.m.runtime
+            .orchestration_timeline(&f.owner(), None, 0, &mut tx)
+            .unwrap();
+    assert!(timeline.home_outages.is_empty());
+    f.tick(&mut tx);
+    assert_eq!(notices.kinds().len(), 2);
+}

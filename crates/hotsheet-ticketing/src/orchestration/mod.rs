@@ -9,6 +9,7 @@ mod capabilities;
 mod capacity;
 pub(crate) mod contract;
 mod gates;
+mod home_outage;
 mod hosted_audit;
 mod hosted_validations;
 mod joining;
@@ -81,6 +82,11 @@ pub use gates::{
     Linked, MAX_GATE_HISTORY, MAX_GATES, NewGate, REVIEW_APPROVED, REVIEW_CHANGES_REQUESTED,
     REVIEW_PROVIDER, REVIEW_REQUESTED, ReviewMark, WATCH_ENDED, WATCH_GONE, WATCH_LOST, summarize,
     valid_commit, valid_script,
+};
+pub use home_outage::{
+    HOME_OUTAGE_DIRECTORY, HOME_OUTAGE_NOTIFY_AFTER_MS, HomeNotice, HomeNoticeKind,
+    HomeObservation, HomeOutage, HomeOutageReason, HomeOutageStore, advance_outages, due_notices,
+    next_notice_at, observe_homes,
 };
 pub use hosted_audit::{
     HostedSessionAuditEntry, HostedSessionAuditJournal, HostedSessionAuditPage,
@@ -541,6 +547,8 @@ mod binding_tests;
 mod capacity_tests;
 #[cfg(test)]
 mod gate_tests;
+#[cfg(test)]
+mod home_outage_tests;
 #[cfg(test)]
 mod hosted_audit_tests;
 #[cfg(test)]

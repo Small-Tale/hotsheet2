@@ -176,6 +176,8 @@ struct Fixture {
     tickets: BTreeMap<TicketKey, TicketLabel>,
     policy: TimelinePolicy,
     now_ms: u64,
+    /// HS2-EX594V
+    home_outages: Vec<HomeOutage>,
 }
 
 impl Fixture {
@@ -228,6 +230,7 @@ impl Fixture {
             goals: &goals,
             tickets: &self.tickets,
             policy: &self.policy,
+            home_outages: &self.home_outages,
         })
     }
 }
@@ -1120,4 +1123,49 @@ fn hs2_38r8j2_never_started_until_placement_was_ever_on() {
         let json = serde_json::to_value(&view).unwrap();
         assert!(json.get("never_started").is_none());
     }
+}
+
+/// HS2-EX594V: the timeline shows each home that is unavailable now, and only those; a
+/// home whose "returned" notification is still to go out is not shown as down. Its
+/// version moves with them, so a waiting reader learns of the outage and its end.
+#[test]
+fn hs2_ex594v_the_timeline_shows_current_home_outages() {
+    let one = || vec![step(2, L::Confirmed, &[])];
+    let healthy = Fixture::new(one()).view();
+    assert!(healthy.home_outages.is_empty());
+    let down = HomeOutage {
+        home_target_id: "api".into(),
+        sites: vec!["web".into()],
+        since_ms: Some(NOW - 5 * 60 * 1000),
+        reason: Some(HomeOutageReason::Unreachable),
+        detail: Some("unreachable".into()),
+        announced: true,
+        returned_at_ms: None,
+    };
+    let returning = HomeOutage {
+        home_target_id: "docs".into(),
+        since_ms: None,
+        reason: None,
+        detail: None,
+        returned_at_ms: Some(NOW),
+        ..down.clone()
+    };
+    let mut fixture = Fixture::new(one());
+    fixture.home_outages = vec![down.clone(), returning];
+    let view = fixture.view();
+    assert_eq!(view.home_outages, vec![down]);
+    assert_ne!(view.version, healthy.version);
+    let json = serde_json::to_value(&view).unwrap();
+    assert_eq!(json["home_outages"][0]["reason"], "unreachable");
+    assert_eq!(json["home_outages"][0]["sites"][0], "web");
+    // Back again: the same version as before the outage.
+    let mut back = Fixture::new(one());
+    back.home_outages = Vec::new();
+    assert_eq!(back.view().version, healthy.version);
+    assert!(
+        serde_json::to_value(back.view())
+            .unwrap()
+            .get("home_outages")
+            .is_none()
+    );
 }

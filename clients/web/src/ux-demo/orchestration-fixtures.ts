@@ -3,6 +3,7 @@
  * project "Launch" plans work in "API" (remote, on "Build host"), "Web" and "Docs" (on this machine).
  * Every name, id and time is invented; nothing is read from a server or a real project.
  */
+import type { TimelineHomeOutage } from '../orchestration-home-outage';
 import type { CostTotals, ProgressSummaryView } from '../orchestration-progress';
 import type { RoleStandingView, SchedulerDecisionPage } from '../orchestration-scheduler';
 import type {
@@ -469,4 +470,19 @@ export function demoSummary(): ProgressSummaryView {
       docs: { cost: cost(0, false, 0, 1) },
     },
   };
+}
+
+/** HS2-EX594V: two projects whose home sites cannot coordinate them: one unreachable, one disabled. */
+export function demoHomeOutages(): TimelineHomeOutage[] {
+  return [
+    {
+      home_target_id: 'api',
+      sites: ['web'],
+      since_ms: DEMO_NOW - 12 * MINUTE,
+      reason: 'unreachable',
+      detail: 'unreachable',
+      announced: true,
+    },
+    { home_target_id: 'docs', sites: ['web', 'api'], since_ms: DEMO_NOW - 3 * MINUTE, reason: 'disabled' },
+  ];
 }

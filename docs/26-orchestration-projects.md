@@ -7008,12 +7008,56 @@ every site join that pool.
 
 **The home site** is the project's own target, the one the others name in `site_of`
 (`ProjectSites::home_of`). A one-site project is its own home, so nothing changes for
-it. There is **no fallback**. While the home's machine is offline, unbound, disabled in
-the policy or its pool unreadable, no role session starts for the project anywhere,
-because a second home would be a second pool and a second assignment authority for
-the same tickets. Work is still placed on the other sites. Their runs keep the bounded
-wait of §26.24 and then claim the ticket for their own session, as any run with no
-live dispatcher does. A failover home is HS2-EX594V. An entry naming a site is reported as having no effect (HS2-SYZB33, "Surfaces" above).
+it. There is **no failover** (the maintainer's decision on HS2-EX594V). While the
+home's machine is offline, its target unbound or disabled in the policy, or its pool
+unreadable, no role session starts for the project anywhere, because a second home
+would be a second pool and a second assignment authority for the same tickets. Work is
+still placed on the other sites. Their runs keep the bounded wait of §26.24 and then
+claim the ticket for their own session, as any run with no live dispatcher does. An
+entry naming a site is reported as having no effect (HS2-SYZB33, "Surfaces" above).
+
+**A home that is unavailable is shown and announced (HS2-EX594V).** Each scheduling
+pass observes every home of a project with several sites while that project has work
+or a session: `disabled` (the policy disables the home's target), `unbound` (its
+capacity read failed and this machine holds no binding for it), `unreachable` (any
+other failed read, with the code as `detail`, such as `target_unavailable` for a
+machine off the network; a pass that left the home alone after a refusal,
+`refusal_backoff`, keeps the reason seen before it), or
+`pool_unreadable` (the machine answered without its pool). A home the pass did not
+read, or read without an actor, is not observed, and what was known of it stays.
+
+- **Ledger.** An applied pass records each outage in this machine's private ledger,
+  `orchestration-home-outages/<owner>.json` under the machine home: the home, the
+  project's other sites, when the outage began (`since_ms`), the reason and detail,
+  and whether a person was told. A dry run computes the same view and writes nothing.
+  An entry whose target is no longer the home of a multi-site project is dropped
+  without a notification.
+- **Site runs.** A run on another site waits on the home's pool (§26.24). While this
+  machine's ledger records the home's outage and the pass cannot read that pool, the
+  run reads `no_live_dispatcher` instead of `pool_unknown`: nobody can assign it, so it
+  keeps the bounded `placement.dispatcher_wait_minutes` and then claims its ticket for
+  its own session. The ledger is updated before the pass decides assignments, so the
+  pass that first sees the outage already counts it.
+- **Notifications, debounced.** "Home site _X_ is unavailable" (severity `warning`) is
+  sent once the home has been unavailable **without a break for two minutes**
+  (`HOME_OUTAGE_NOTIFY_AFTER_MS`): long enough to ride out a restart or a short drop,
+  short enough that a project without a dispatcher is noticed. The pass schedules
+  itself again for that moment through the schedule's retry time. "Home site _X_ is
+  back" (severity `success`) is sent once, and only after an "unavailable" went out. A
+  home that flaps faster than the delay is never announced; one that goes down again
+  before "back" was sent continues the outage the person was told about. Each
+  notification says which project, the reason, what still runs on the other sites
+  and what to do, and carries a dedupe key per outage. The server sends them through
+  its notification inbox (`publish_notification`, the `notification` event of
+  `docs/32-notifier-plugins.md`), so they reach the app and every notifier channel a
+  rule routes. A process without a server (a headless `scheduler tick`) advances the
+  ledger and leaves the notifications to the server's loop, which sends each once.
+- **Surfaces.** `scheduler plan` and `tick` answer `home_outages`; `scheduler explain`
+  answers `home_outage` for an unfinished step of the project; the timeline
+  (`orchestration timeline`, `GET .../orchestration/timeline`) carries `home_outages`
+  and its version moves with them. The Orchestration view shows a warning banner above
+  the timeline per outage: the project, since when, why, what still runs and what to
+  do (`clients/web/src/orchestration-home-outage.ts`).
 
 **Placing role sessions per project.** The scheduler's input carries the active
 grouping (`ScheduleInput.sites`):

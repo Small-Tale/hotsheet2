@@ -147,6 +147,37 @@ impl AppState {
     }
 }
 
+/// HS2-EX594V: a multi-site project's home site became unavailable or came back. The
+/// orchestration runtime decides when (debounced, once per transition); this publishes
+/// it in the inbox like any other notification, so it reaches the app and every
+/// notifier channel a `notification` rule routes.
+pub(crate) struct ServerHomeNotices {
+    pub(crate) state: AppState,
+}
+
+impl hotsheet_cli::orchestration::HomeNotices for ServerHomeNotices {
+    fn notify(&self, notification: &hotsheet_cli::orchestration::HomeNotification) {
+        self.state
+            .publish_notification(home_notification(notification));
+    }
+}
+
+/// The inbox entry for a home-outage notification: its title on the first line, as
+/// the notifier router reads it, and the explanation after.
+pub(crate) fn home_notification(
+    notification: &hotsheet_cli::orchestration::HomeNotification,
+) -> NewNotification {
+    NewNotification {
+        message: format!("{}\n{}", notification.title, notification.body),
+        severity: notification.severity.into(),
+        checkout: Some(notification.owner_id.clone()),
+        store: None,
+        ticket: None,
+        recipient: None,
+        dedupe_key: Some(notification.dedupe_key.clone()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,5 +200,49 @@ mod tests {
         assert_eq!(h.list(Some("a"), None, None, None).len(), 1);
         h.acknowledge(&a.id).unwrap();
         assert!(h.list(Some("a"), None, None, None)[0].acknowledged);
+    }
+
+    /// HS2-EX594V: a home-outage notification is an inbox entry for the orchestration
+    /// project, titled on its first line, and the same outage is published once.
+    #[test]
+    fn hs2_ex594v_a_home_outage_is_one_inbox_entry_per_transition() {
+        use hotsheet_cli::orchestration::HomeNotification;
+        use hotsheet_ticketing::orchestration::HomeNoticeKind;
+        let notification = HomeNotification {
+            owner_id: "release-train-0123456789ab".into(),
+            home_target_id: "api".into(),
+            kind: HomeNoticeKind::Unavailable,
+            severity: "warning",
+            title: "Home site API is unavailable".into(),
+            body: "Its machine cannot be reached (unreachable).".into(),
+            dedupe_key: "home-outage:release-train-0123456789ab:api:1".into(),
+        };
+        let entry = home_notification(&notification);
+        assert_eq!(
+            entry.message.lines().next(),
+            Some("Home site API is unavailable")
+        );
+        assert_eq!(entry.severity, "warning");
+        assert_eq!(
+            entry.checkout.as_deref(),
+            Some("release-train-0123456789ab")
+        );
+        let hub = NotificationHub::default();
+        let first = hub.publish(entry.clone());
+        let again = hub.publish(entry);
+        assert_eq!(first.id, again.id);
+        let back = home_notification(&HomeNotification {
+            kind: HomeNoticeKind::Returned,
+            severity: "success",
+            title: "Home site API is back".into(),
+            dedupe_key: "home-returned:release-train-0123456789ab:api:2".into(),
+            ..notification
+        });
+        assert_ne!(hub.publish(back).id, first.id);
+        assert_eq!(
+            hub.list(Some("release-train-0123456789ab"), None, None, None)
+                .len(),
+            2
+        );
     }
 }

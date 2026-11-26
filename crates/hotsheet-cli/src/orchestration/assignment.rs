@@ -317,6 +317,8 @@ impl OrchestrationRuntime {
         // HS2-5P112Z: a run on a site that is not its project's home waits on the home's
         // pool, the one that assigns the whole project's work.
         let sites = self.active_project_sites(owner_id);
+        // HS2-EX594V: homes this machine found unable to coordinate their project.
+        let outages = self.home_outages(owner_id).unwrap_or_default();
         let mut found = Vec::new();
         for session in sessions.iter().filter(|session| {
             session.state == SessionState::Running
@@ -382,8 +384,21 @@ impl OrchestrationRuntime {
                 .iter()
                 .find(|entry| entry.target_id == session.target_id)
                 .and_then(PlacementMemory::refused_until_ms);
-            let dispatcher_live = pool.as_ref().and_then(|pool| pool.roles.dispatcher_live);
-            let integrator_live = pool.as_ref().and_then(|pool| pool.roles.integrator_live);
+            // HS2-EX594V: a site's run whose home is recorded unavailable, and whose
+            // pool this pass could not read, has nobody to assign it: no role session
+            // starts while the home is out (§26.30). It keeps the bounded wait and then
+            // claims its ticket for its own session, instead of waiting on the home.
+            let home_out = pool.is_none()
+                && home != session.target_id
+                && outages.iter().any(|outage| outage.home_target_id == home);
+            let dispatcher_live = pool
+                .as_ref()
+                .and_then(|pool| pool.roles.dispatcher_live)
+                .or(home_out.then_some(false));
+            let integrator_live = pool
+                .as_ref()
+                .and_then(|pool| pool.roles.integrator_live)
+                .or(home_out.then_some(false));
             let input = match &returned {
                 // Only the pool's assigning role gives out a correction.
                 Some(found) => {

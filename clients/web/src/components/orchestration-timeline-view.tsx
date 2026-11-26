@@ -12,6 +12,7 @@ import { ORCHESTRATION_ACTIONS, ORCHESTRATION_TARGETS } from '../interaction-att
 import type { PlanHealth, StepName } from '../orchestration-plan-health';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { type ClockFormat, clockTime, plannerWorkingLabel, timelineColumns } from '../orchestration-timeline-board';
+import { OrchestrationHomeOutage } from './orchestration-home-outage';
 import { OrchestrationPlanProblem } from './orchestration-plan-problem';
 import { TicketBoard, type TicketBoardLayout } from './ticket-board';
 
@@ -183,6 +184,8 @@ export function OrchestrationTimelineView({
       aria-label="Orchestration"
     >
       {failure}
+      {/* HS2-EX594V: a multi-site project whose home site cannot coordinate it. */}
+      {timeline ? <OrchestrationHomeOutage timeline={timeline} clock={clock} /> : undefined}
       <div class="orchestration-timeline-view__body">{content}</div>
     </section>
   );
