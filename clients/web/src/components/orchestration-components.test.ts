@@ -716,6 +716,8 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(open).toContain('Scheduler Decisions');
     expect(open).toContain('Deferred DOC-9: a resource it needs is held (vm/macos-vm)');
     expect(open.indexOf('Started API-12')).toBeLessThan(open.indexOf('Kept the session'));
+    // HS2-2YCHRC: a role session's start names its role and project.
+    expect(open).toContain('Started the integrator of API on Claude: a handoff waits to be integrated');
     expect(open).toContain('data-action="load-earlier-orchestration-decisions"');
     const all = String(
       OrchestrationDecisionsDialog({ state: { entries: [], more: false, loading: false, error: 'Offline.' } }),

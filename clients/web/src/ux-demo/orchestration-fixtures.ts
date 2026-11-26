@@ -348,6 +348,14 @@ export function demoDecisions(): SchedulerDecisionPage {
       decision(38, 21, 'tick', { tick_id: 'tick-3' }),
       decision(37, 40, 'keep', { tick_id: 'tick-3', step_id: 'step-4', reason: 'mid_turn' }),
       decision(36, 60, 'wind_down', { tick_id: 'tick-3', reason: 'no_ready_work' }),
+      // HS2-2YCHRC: a role session's start names its role and project, not a step.
+      decision(35, 60, 'start', {
+        tick_id: 'tick-3',
+        target_id: 'api',
+        tool: 'claude',
+        reason: 'integrator_started',
+        detail: 'handoff_pending',
+      }),
     ],
   };
 }

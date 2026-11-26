@@ -2376,6 +2376,96 @@ fn hs2_tk9adc_the_scheduler_starts_a_dispatcher_then_an_integrator_through_the_e
     );
 }
 
+/// HS2-2YCHRC: one pass starts both of a target's role sessions. Each start's decision
+/// record carries its own operation and the session it began, not the first role's.
+#[test]
+fn hs2_2ychrc_one_pass_starting_both_roles_logs_each_start_with_its_own_operation() {
+    use hotsheet_ticketing::orchestration::{RoleSessionKind, TargetRoleSessions};
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    s.ready("First", &mut tx);
+    // No dispatcher in the pool and a handoff waiting: both roles are needed at once.
+    target_pool(&s.m, |state| {
+        let handed = super::sessions::assignment("someone", crate::coordination::Phase::Handoff);
+        state.assignments.insert(handed.id.clone(), handed);
+    });
+    let mut body = policy(true);
+    body.targets[0].max_sessions = Some(3);
+    body.placement.role_sessions = vec![TargetRoleSessions {
+        target_id: id(1),
+        roles: vec![RoleSessionKind::Dispatcher, RoleSessionKind::Integrator],
+    }];
+    set_policy(&s.m, body, &mut tx);
+    let tick = s.tick(&mut tx);
+    let dispatcher = format!("sched-role-dispatcher-{}", id(1));
+    let integrator = format!("sched-role-integrator-{}", id(1));
+    let started: Vec<_> = tick
+        .outcomes
+        .iter()
+        .filter(|outcome| outcome.operation_id.starts_with("sched-role-"))
+        .map(|outcome| {
+            (
+                outcome.operation_id.clone(),
+                outcome.outcome.clone(),
+                outcome.session_id.clone().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(started.len(), 2, "{:?}", outcomes(&tick));
+    assert!(started.iter().all(|(_, outcome, _)| outcome == "started"));
+    assert_ne!(started[0].2, started[1].2);
+    let session_of = |operation: &str| {
+        started
+            .iter()
+            .find(|(id, _, _)| id == operation)
+            .map(|(_, _, session)| session.clone())
+    };
+    let logged: Vec<_> = s
+        .log()
+        .into_iter()
+        .filter(|record| {
+            record.kind == DecisionKind::Start
+                && matches!(
+                    record.reason.as_deref(),
+                    Some("role_needed" | "integrator_started")
+                )
+        })
+        .map(|record| {
+            (
+                record.reason.unwrap(),
+                record.operation_id.unwrap(),
+                record.session_id,
+                record.outcome,
+            )
+        })
+        .collect();
+    let mut expected = vec![
+        (
+            "role_needed".to_owned(),
+            dispatcher.clone(),
+            session_of(&dispatcher),
+            Some("started".to_owned()),
+        ),
+        (
+            "integrator_started".to_owned(),
+            integrator.clone(),
+            session_of(&integrator),
+            Some("started".to_owned()),
+        ),
+    ];
+    let mut logged_sorted = logged.clone();
+    logged_sorted.sort();
+    expected.sort();
+    assert_eq!(logged_sorted, expected, "{logged:?}");
+    // A repeated pass starts nothing and logs no further role start.
+    assert!(
+        s.tick(&mut tx)
+            .outcomes
+            .iter()
+            .all(|outcome| !outcome.operation_id.starts_with("sched-role-"))
+    );
+}
+
 /// HS2-ZY4Z4G: a plan step's requirements reach the scheduler. Work that needs
 /// another machine starts nowhere and `explain` names the missing requirement; once
 /// the machine reports what the step needs, the same work starts.

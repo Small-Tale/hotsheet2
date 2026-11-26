@@ -3311,7 +3311,7 @@ secret for permission routing, and `HOTSHEET_PROJECT` naming the checkout.
 Setup writes the instruction file and skills into the checkout as project files;
 the machine-local MCP and hook files are excluded from Git. The first setup in a
 checkout therefore leaves uncommitted files in the main checkout. They hold only an
-integrator there, never a worker (HS2-TRP2MJ). A terminal a person opens from the drawer in another checkout is still
+integrator the pool names in its role there, never a worker (HS2-TRP2MJ, HS2-KH41E3). A terminal a person opens from the drawer in another checkout is still
 set up against the serving store (HS2-MBDKWQ).
 
 **Label.** The host names the terminal tab `<orchestration project>: run <last eight
@@ -3464,7 +3464,9 @@ session owns, so one session's unfinished work no longer holds the others:
   worktree whose branch contains its slug (any case), or whose HEAD is its handoff
   commit. A worker never owns the main checkout unless an assignment names it, so a
   person's edits there and the tool setup files a launch writes there do not hold it.
-- An **integrator** owns the main checkout.
+- An **integrator** owns the main checkout once the pool names it in its role
+  (HS2-KH41E3). One whose role prompt failed or that never joined owns nothing, so a
+  person's edits there do not keep it from being wound down.
 - A **dispatcher** and a **planner** own nothing.
 
 Untracked files count inside an owned worktree. A worker whose pool cannot be read
@@ -5705,9 +5707,14 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   and no polling is involved.
 - **Trigger.** A ticket event for a ticket that no unfinished step names and no
   unfinished run works is read through the gate (`tickets_read`). If the ticket is open
-  (any status except completed, verified, archive, deleted or moved), it becomes
-  _pending_. The event for a ticket that is created or reopened is what starts a
-  re-plan. An event that names no ticket (a store reconciliation) starts nothing.
+  (any status except completed, verified, archive, deleted or moved) and neither
+  handed before nor in the _seen_ baseline (below), it becomes _pending_. The event
+  for a ticket that is created or reopened is what starts a re-plan. Editing a ticket
+  the baseline holds starts nothing, like a handed one (HS2-2AZQD2): it was open
+  when the planner last worked through the target, and a person can still press
+  Update Plan. Its event is still read, so closing it forgets it and reopening it
+  re-plans once. An event that names no ticket (a store reconciliation) starts
+  nothing.
 - **Caught up after unseen history (HS2-04WW8B).** A handshake (a server start or a
   new follower), an `overflow` or a reconnect cannot say which tickets are new. The
   follower then lists the target's open tickets of every source through the gate
@@ -5718,7 +5725,9 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   listings found and the tickets events showed (bounded to 8,192, smallest key
   forgotten first). A target's first listing after the re-plan starts to apply (its
   first follower step then, handshake or not) only seeds the baseline and starts
-  nothing: the default-goal planner already works through every open ticket. A
+  nothing: the default-goal planner already works through every open ticket. That
+  step reads its own events before it seeds, so a ticket an event of that step shows
+  is still judged as new or not. A
   complete listing forgets remembered tickets that closed meanwhile, so a pending
   ticket closed while the server was down starts nothing, and one reopened later
   counts again. A listing that fails changes nothing and is tried again at the next
@@ -6796,6 +6805,9 @@ its integrator when work waits to be integrated, without configuration.
   (`role_prompt_failed` or `never_joined`, detail `integrator`) and a new generation
   starts on a later pass. A role session the pool never named in its role answers for
   no pool assignment at its safe point, so it can be stopped while handoffs still wait.
+  It owns no work in the main checkout either: uncommitted changes there (a person's
+  edit, the AI tool's setup files, a changed policy file) count against an integrator
+  only once the pool names it (HS2-KH41E3).
   After `MAX_JOIN_REPLACEMENTS` (2) replacements failed in a row the last is wound
   down too, with detail `replacements_exhausted`, never kept in its slot, and the
   project reports `integrator_unavailable` (detail `replacements_exhausted`, with
@@ -6822,6 +6834,11 @@ detail, retry_at_ms}` with reason `integrator_not_started` and detail `target_ca
   coordination sessions", HS2-65AD6J): a card with a run has an **Integration**
   section, and the overview lists **Coordination Sessions**; the decision log's
   `role_unplaced` records read as "Did not start the integrator of Web: …".
+  A role session's start, keep and wind-down records name its role and project, not a
+  step: "Started the integrator of Web on Claude: a handoff waits to be integrated",
+  "Kept the dispatcher of Web" (HS2-2YCHRC). Each start record carries the operation
+  (`sched-role-<role>-<target>`) and session of its own role, also when one pass
+  starts both.
 
 The states and events are pinned in `integrator_session_tests.rs` (none, starting,
 live, idle, winding down and failed against a handoff arriving, the queue emptying, a

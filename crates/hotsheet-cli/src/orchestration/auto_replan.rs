@@ -16,7 +16,9 @@
 //!   defers the update to a later step; it starts once the planner is free.
 //! - **Once per ticket.** A ticket handed to a re-plan does not start another one while
 //!   it stays open, even when the planner chose to leave it out. Closing it forgets it,
-//!   so a reopened ticket counts again.
+//!   so a reopened ticket counts again. HS2-2AZQD2: a ticket in the *seen* baseline
+//!   (below) is known the same way, so editing one no step names starts nothing; its
+//!   event is still read, so closing it forgets it too.
 //! - **Caught up after unseen history (HS2-04WW8B).** A handshake, an overflow or a
 //!   reconnect cannot say which tickets are new, so it lists the target's open tickets
 //!   through the gate (`tickets_read`, bounded to [`MAX_CATCH_UP_PAGES`] pages per
@@ -284,19 +286,6 @@ impl OrchestrationRuntime {
             }
             candidates.push(key);
         }
-        // A target not seeded yet (the re-plan just started to apply) is listed once
-        // to seed its baseline, whatever the step saw.
-        if (seen == Seen::Unknown || !memory.seeded(target_id))
-            && let Some((connections, listed, complete)) =
-                self.replan_listing((owner_id, target_id), authorized, tx)
-        {
-            let listing = ReplanCatchUp {
-                target_id,
-                connections: &connections,
-                complete,
-            };
-            memory.catch_up(listing, &listed, is_named, latest_update().as_deref());
-        }
         if !candidates.is_empty() {
             let latest = latest_update();
             let mut failed = None;
@@ -321,6 +310,21 @@ impl OrchestrationRuntime {
             if let Ok(reference) = Self::target_ref(owner_id, target_id) {
                 let _ = self.record_outcome(&reference, authorized, failed.is_none(), failed, tx);
             }
+        }
+        // A target not seeded yet (the re-plan just started to apply) is listed once
+        // to seed its baseline, whatever the step saw. HS2-2AZQD2: listed after this
+        // step's events are read, so a ticket they show is judged before the seed
+        // marks it seen (a seen ticket is not new).
+        if (seen == Seen::Unknown || !memory.seeded(target_id))
+            && let Some((connections, listed, complete)) =
+                self.replan_listing((owner_id, target_id), authorized, tx)
+        {
+            let listing = ReplanCatchUp {
+                target_id,
+                connections: &connections,
+                complete,
+            };
+            memory.catch_up(listing, &listed, is_named, latest_update().as_deref());
         }
         if memory.pending() == 0 {
             return AutoReplan::Idle;

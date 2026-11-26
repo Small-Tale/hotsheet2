@@ -20,6 +20,20 @@ fn stop_operation(session_id: &str, tick_id: &str) -> String {
     }
 }
 
+/// The operation a start placement applies as. HS2-TK9ADC: a role session's start is
+/// stable per target and role; a worker's start per step. HS2-2YCHRC: the decision log
+/// matches a start's outcome to its placement by this id, since role starts carry no
+/// step and one pass can start both roles of a target.
+pub(super) fn start_operation_id(placement: &Placement) -> String {
+    match placement.role {
+        Some(role) => format!("sched-role-{}-{}", role.code(), placement.target_id),
+        None => format!(
+            "sched-start-{}",
+            placement.steps.first().map_or("none", String::as_str)
+        ),
+    }
+}
+
 impl OrchestrationRuntime {
     /// Whether the gate allows a session action now, without filing or using a
     /// permission request. When it does not, the action is passed through
@@ -137,11 +151,7 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> DecisionOutcome {
         let step_id = placement.steps.first().cloned();
-        // HS2-TK9ADC: a role session's start is stable per target and role.
-        let operation_id = match placement.role {
-            Some(role) => format!("sched-role-{}-{}", role.code(), placement.target_id),
-            None => format!("sched-start-{}", step_id.as_deref().unwrap_or("none")),
-        };
+        let operation_id = start_operation_id(placement);
         let mut outcome = DecisionOutcome {
             action: PlacementAction::Start,
             target_id: placement.target_id.clone(),

@@ -203,21 +203,47 @@ export function stepLabel(stepId: string | undefined, timeline: OrchestrationTim
   return item?.slug ?? item?.title ?? `step ${stepId.slice(-6)}`;
 }
 
+/**
+ * HS2-2YCHRC: the role of a role session's start, keep or wind-down decision, which names no step. An
+ * integrator's decisions have reasons of their own; a dispatcher's (`role_needed`) name the role as the detail.
+ */
+function decisionRole(decision: SchedulerDecision): string | undefined {
+  if (decision.reason?.startsWith('integrator_')) return 'integrator';
+  if (decision.reason === 'role_needed' && decision.detail && BY_HAND[decision.detail]) return decision.detail;
+  return undefined;
+}
+
+/** "the integrator of API: a handoff waits to be integrated", for a role session's decision. */
+function roleDecisionText(decision: SchedulerDecision, role: string, timeline: OrchestrationTimeline | undefined) {
+  const site = decision.target_id ? siteLabel(decision.target_id, timeline) : 'a project';
+  // A dispatcher's `role_needed` detail is its role, not a reason to word.
+  const why =
+    decision.reason === 'role_needed'
+      ? undefined
+      : roleReasonPhrase({ standing: decision.kind, reason: decision.reason, detail: decision.detail });
+  return { subject: `the ${role} of ${site}`, why: why ? `: ${why}` : '' };
+}
+
 /** One decision as a person reads it: "Started API-12 on Claude", "Deferred DOC-9: a resource it needs is held". */
 export function decisionText(decision: SchedulerDecision, timeline: OrchestrationTimeline | undefined): string {
   const step = stepLabel(decision.step_id, timeline),
-    dry = decision.mode === 'dry_run';
+    dry = decision.mode === 'dry_run',
+    role = decisionRole(decision);
+  const forRole = role ? roleDecisionText(decision, role, timeline) : undefined;
   switch (decision.kind) {
     case 'tick':
       return dry ? 'Planned a pass (dry run)' : 'Ran a scheduling pass';
     case 'start': {
-      if (decision.outcome === 'permission_required') return `${step} waits for permission`;
+      const subject = forRole?.subject ?? step;
+      if (decision.outcome === 'permission_required') return `${sentence(subject)} waits for permission`;
       const tool = toolLabel(decision.tool);
-      return `${dry ? 'Would start' : 'Started'} ${step}${tool ? ` on ${tool}` : ''}`;
+      return `${dry ? 'Would start' : 'Started'} ${subject}${tool ? ` on ${tool}` : ''}${forRole?.why ?? ''}`;
     }
     case 'keep':
+      if (forRole) return `Kept ${forRole.subject}${forRole.why}`;
       return `Kept the session of ${step}${decision.reason ? `: ${words(decision.reason)}` : ''}`;
     case 'wind_down':
+      if (forRole) return `${dry ? 'Would wind down' : 'Wound down'} ${forRole.subject}${forRole.why}`;
       return `${dry ? 'Would wind down' : 'Wound down'} a session${decision.reason ? `: ${words(decision.reason)}` : ''}`;
     case 'unplaced':
       return `Deferred ${step}${decision.reason ? `: ${schedulerReasonWithModel(decision.reason, decision.detail)}` : ''}`;

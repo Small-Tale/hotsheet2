@@ -90,6 +90,37 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
     expect(say({ kind: 'novel_kind', step_id: 'step-3' })).toBe('Novel kind API-12');
   });
 
+  it('words a role session’s start, keep and wind-down by its role and project, not as a step (HS2-2YCHRC)', () => {
+    const say = (rest: Partial<SchedulerDecision>) => decisionText(decision(rest), timeline);
+    const integrator = { target_id: 'api', reason: 'integrator_started', detail: 'handoff_pending' };
+    expect(say({ ...integrator, tool: 'claude' })).toBe(
+      'Started the integrator of API on Claude: a handoff waits to be integrated',
+    );
+    expect(say({ ...integrator, mode: 'dry_run' })).toBe(
+      'Would start the integrator of API: a handoff waits to be integrated',
+    );
+    expect(say({ ...integrator, outcome: 'permission_required' })).toBe('The integrator of API waits for permission');
+    expect(say({ target_id: 'web', reason: 'role_needed', detail: 'dispatcher', tool: 'claude' })).toBe(
+      'Started the dispatcher of Web on Claude',
+    );
+    expect(say({ kind: 'keep', target_id: 'web', reason: 'role_needed', detail: 'dispatcher' })).toBe(
+      'Kept the dispatcher of Web',
+    );
+    expect(say({ kind: 'keep', target_id: 'api', reason: 'integrator_kept', detail: 'ci_pending' })).toBe(
+      'Kept the integrator of API: an integrated commit waits on its CI gate',
+    );
+    expect(say({ kind: 'wind_down', target_id: 'api', reason: 'integrator_wound_down', detail: 'idle' })).toBe(
+      'Wound down the integrator of API: nothing has needed it for a while',
+    );
+    expect(say({ kind: 'wind_down', reason: 'integrator_wound_down', mode: 'dry_run' })).toBe(
+      'Would wind down the integrator of a project: nothing has needed it for a while',
+    );
+    // A `role_needed` decision naming no known role reads as before.
+    expect(say({ kind: 'keep', step_id: 'step-4', reason: 'role_needed' })).toBe(
+      'Kept the session of WEB-33: role needed',
+    );
+  });
+
   it('reads the last pass and the latest three decisions from the newest page', () => {
     const page = demoDecisions();
     expect(lastPassText(page, demoClock)).toBe('13:58 · started 1, deferred 1');

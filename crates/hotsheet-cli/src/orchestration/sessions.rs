@@ -993,14 +993,26 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 
 /// How many of the worktrees a session owns have uncommitted changes, untracked
 /// files included (HS2-TRP2MJ, `session_worktrees`). `None` when the checkout is not
-/// a git work tree, git could not say, or a worker's pool could not be read.
+/// a git work tree, git could not say, or a worker's or integrator's pool could not
+/// be read.
 fn dirty_worktrees(root: &Path, role: SessionRole, worker: &str) -> Option<u32> {
-    let listing = git(root, &["worktree", "list", "--porcelain"])?;
-    let worktrees = super::session_worktrees::parse_worktrees(&listing);
     let state = match role {
-        SessionRole::Worker => coordination_state(root).ok()?,
+        SessionRole::Worker | SessionRole::Integrator => coordination_state(root).ok()?,
         _ => None,
     };
+    // HS2-KH41E3: an integrator owns the main checkout only once the pool names it in
+    // its role (as for `pending_handoffs`). One whose role prompt failed or that never
+    // joined took up no work there, so a person's edit does not hold it.
+    if role == SessionRole::Integrator
+        && !state
+            .as_ref()
+            .and_then(|state| state.integrator.as_ref())
+            .is_some_and(|holder| holder.id == worker)
+    {
+        return Some(0);
+    }
+    let listing = git(root, &["worktree", "list", "--porcelain"])?;
+    let worktrees = super::session_worktrees::parse_worktrees(&listing);
     let assignments: Vec<&crate::coordination::Assignment> = state
         .as_ref()
         .map(|state| state.assignments.values().collect())
