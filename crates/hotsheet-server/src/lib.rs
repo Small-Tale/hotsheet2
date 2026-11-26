@@ -544,7 +544,8 @@ struct QuiescenceReport {
 #[derive(Clone)]
 struct InstanceMeta {
     url: String,
-    secret: String,
+    /// HS2-DGMK06: redacting, so a future `derive(Debug)` or log line cannot print it.
+    secret: hotsheet_sync::secret::SecretString,
     started_at: String,
     /// Registration identity shared by every hosted store's discovery file (HS2-GWFEAA).
     build_revision: Option<String>,

@@ -282,7 +282,11 @@ fn live_permission_hosts(state: &AppState) -> Result<Vec<PermissionHost>, ApiErr
     }
     hosts.sort();
     if let Some(own) = state.instance.lock_or_recover().as_ref() {
-        let identity = (std::process::id(), own.url.clone(), own.secret.clone());
+        let identity = (
+            std::process::id(),
+            own.url.clone(),
+            own.secret.expose().to_owned(),
+        );
         if !hosts.contains(&identity) {
             return Err(peer_discard_unavailable());
         }
@@ -298,11 +302,13 @@ fn invalidate_peer_legacy_permissions(
     source_id: &str,
 ) -> Result<(), ApiError> {
     let hosts = live_permission_hosts(state)?;
-    let own = state
-        .instance
-        .lock_or_recover()
-        .as_ref()
-        .map(|meta| (std::process::id(), meta.url.clone(), meta.secret.clone()));
+    let own = state.instance.lock_or_recover().as_ref().map(|meta| {
+        (
+            std::process::id(),
+            meta.url.clone(),
+            meta.secret.expose().to_owned(),
+        )
+    });
     let body = serde_json::json!({"source": source_id}).to_string();
     for (_, url, secret) in hosts.iter().filter(|host| Some(*host) != own.as_ref()) {
         let endpoint = format!(

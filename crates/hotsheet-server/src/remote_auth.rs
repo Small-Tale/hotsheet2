@@ -149,7 +149,9 @@ pub struct PendingDevice {
 #[derive(Clone, Debug)]
 pub struct IssuedSession {
     pub token: SecretString,
-    pub csrf: String,
+    /// The write and WebSocket proof paired with the session cookie: a credential too
+    /// (HS2-DGMK06).
+    pub csrf: SecretString,
     pub device: Device,
 }
 
@@ -789,7 +791,7 @@ impl RemoteAuth {
             });
             Ok(Ok(IssuedSession {
                 token: token.into(),
-                csrf,
+                csrf: csrf.into(),
                 device: Device::from(&device).at(now),
             }))
         })
@@ -993,7 +995,7 @@ impl RemoteAuth {
             touch(&mut entry.device, now);
             Ok(Ok(IssuedSession {
                 token: new_token.into(),
-                csrf: new_csrf,
+                csrf: new_csrf.into(),
                 device: Device::from(&entry.device).at(now),
             }))
         })
@@ -1151,7 +1153,7 @@ mod tests {
         let file = fs::read_to_string(&path)?;
         assert!(!file.contains(&pair.challenge));
         assert!(!file.contains(issued.token.expose()));
-        assert!(!file.contains(&issued.csrf));
+        assert!(!file.contains(issued.csrf.expose()));
         let reopened = RemoteAuth::open(&path, "synthetic-server")?;
         assert_eq!(reopened.server_id(), issued.device.server_id);
         assert!(
@@ -1187,6 +1189,30 @@ mod tests {
         let printed = format!("{issued:?} {issued:#?}");
         assert!(!printed.contains(issued.token.expose()), "{printed}");
         assert!(printed.contains("token: <redacted>"), "{printed}");
+        Ok(())
+    }
+
+    #[test]
+    fn hs2_dgmk06_issued_session_debug_redacts_the_csrf_proof() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let auth = RemoteAuth::open(dir.path().join("remote-auth.json"), "synthetic-server")?;
+        let origin = "http://localhost:4175";
+        let pair = auth.request("Synthetic tablet", origin, 100)?.unwrap();
+        auth.approve(&pair.id, Role::ReadOnly, Grants::default(), 101)?
+            .unwrap();
+        let issued = auth
+            .redeem(&pair.id, &pair.challenge, origin, 102)?
+            .unwrap();
+        let rotated = auth
+            .rotate(issued.token.expose(), issued.csrf.expose(), origin, 103)?
+            .unwrap();
+        for session in [&issued, &rotated] {
+            assert!(!session.csrf.is_empty());
+            let printed = format!("{session:?} {session:#?}");
+            assert!(!printed.contains(session.csrf.expose()), "{printed}");
+            assert!(printed.contains("csrf: <redacted>"), "{printed}");
+        }
+        assert_ne!(issued.csrf, rotated.csrf);
         Ok(())
     }
 
@@ -1392,7 +1418,7 @@ mod tests {
         auth.authorize(issued.token.expose(), None, None, false, 500)?
             .unwrap();
         let rotated = auth
-            .rotate(issued.token.expose(), &issued.csrf, origin, 501)?
+            .rotate(issued.token.expose(), issued.csrf.expose(), origin, 501)?
             .unwrap();
         assert!(!advanced(&auth));
         auth.change(
@@ -1461,7 +1487,7 @@ mod tests {
         assert!(
             auth.authorize(
                 issued.token.expose(),
-                Some(&issued.csrf),
+                Some(issued.csrf.expose()),
                 Some(ORIGIN),
                 true,
                 101
@@ -1484,7 +1510,7 @@ mod tests {
             AuthFailure::Invalid
         );
         assert_eq!(
-            auth.authorize_bearer(&issued.csrf, false, 102)?
+            auth.authorize_bearer(issued.csrf.expose(), false, 102)?
                 .unwrap_err(),
             AuthFailure::Invalid
         );
@@ -1598,7 +1624,7 @@ mod tests {
             reopened
                 .rotate(
                     issued.token.expose(),
-                    &issued.csrf,
+                    issued.csrf.expose(),
                     ORIGIN,
                     last + IDLE_TTL + 2
                 )?
@@ -1640,7 +1666,7 @@ mod tests {
         assert!(
             auth.authorize(
                 issued.token.expose(),
-                Some(&issued.csrf),
+                Some(issued.csrf.expose()),
                 Some(ORIGIN),
                 true,
                 100 * DAY
@@ -1662,7 +1688,7 @@ mod tests {
         assert_eq!(
             auth.request_renewal(
                 issued.token.expose(),
-                &issued.csrf,
+                issued.csrf.expose(),
                 "http://elsewhere:1",
                 idle
             )?
@@ -1670,13 +1696,18 @@ mod tests {
             AuthFailure::Invalid
         );
         let asked = auth
-            .request_renewal(issued.token.expose(), &issued.csrf, ORIGIN, idle)?
+            .request_renewal(issued.token.expose(), issued.csrf.expose(), ORIGIN, idle)?
             .unwrap();
         assert_eq!(asked.renewal_requested_at, Some(idle));
         // Asking again is idempotent and writes nothing.
         let before = writes(&auth);
         let again = auth
-            .request_renewal(issued.token.expose(), &issued.csrf, ORIGIN, idle + 5)?
+            .request_renewal(
+                issued.token.expose(),
+                issued.csrf.expose(),
+                ORIGIN,
+                idle + 5,
+            )?
             .unwrap();
         assert_eq!(again.renewal_requested_at, Some(idle));
         assert_eq!(writes(&auth), before);
@@ -1781,7 +1812,7 @@ mod tests {
             );
         }
         assert_eq!(
-            auth.request_renewal(issued.token.expose(), &issued.csrf, ORIGIN, 500)?
+            auth.request_renewal(issued.token.expose(), issued.csrf.expose(), ORIGIN, 500)?
                 .unwrap_err(),
             AuthFailure::Revoked
         );

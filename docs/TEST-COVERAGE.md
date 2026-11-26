@@ -1353,6 +1353,20 @@ byte-identical to the old plain string:
 - the extsync GitLab attachment marker's `secret` and `rendition_secret`
   (`gitlab/attachments.rs`), including the hidden-comment marker round trip.
 
+HS2-DGMK06 extends the policy scan's secret words. It now also flags `csrf`, `cookie`,
+`bearer`, `authorization`, `credential(s)`, `private_key`, `signing_key`, `passphrase` and
+`jwt`. The scanner fixture pins each new word. Two fields become `SecretString`:
+
+- `IssuedSession.csrf` (`remote_auth.rs # hs2_dgmk06_issued_session_debug_redacts_the_csrf_proof`,
+  which covers both redeemed and rotated sessions);
+- aitools' `HttpRequest.authorization` (`session_push/tests.rs`). The test checks the
+  header value the fake port receives and that `Debug` shows `Some(<redacted>)`.
+
+The server's own `InstanceMeta` secret is now a `SecretString` as well. That type has no
+`Debug`, and its value goes into the `InstanceInfo` record unchanged. `NOT_SECRET` now lists
+credential-store account references and three test fakes that record synthetic
+`Authorization` headers.
+
 HS2-HWC0FS adds Unix tests in
 `secrets/metadata_owner/unix/tests.rs`: unchanged-map set/delete publication versus
 true backfill no-ops, malformed-input preflight, symlink/special/hardlink and replaced

@@ -332,7 +332,7 @@ impl AppState {
             let mut m = self.instance.lock_or_recover();
             *m = Some(InstanceMeta {
                 url,
-                secret: self.secret.clone(),
+                secret: self.secret.as_str().into(),
                 started_at,
                 // Only the embedded revision: `status()` would hash the whole source tree of
                 // a local build between bind and the instance record, which held back
@@ -366,7 +366,7 @@ impl AppState {
         let info = lifecycle::InstanceInfo {
             pid: std::process::id(),
             url: meta.url,
-            secret: meta.secret.into(),
+            secret: meta.secret,
             store_path: store_path.display().to_string(),
             index_path,
             started_at: meta.started_at,

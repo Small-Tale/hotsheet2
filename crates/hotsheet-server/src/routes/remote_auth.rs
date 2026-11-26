@@ -398,7 +398,7 @@ fn issued_response(issued: IssuedSession, origin: &str) -> Response {
     set_session_cookies(
         &mut response,
         issued.token.expose(),
-        Some(&issued.csrf),
+        Some(issued.csrf.expose()),
         origin,
     );
     response

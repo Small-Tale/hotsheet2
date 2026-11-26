@@ -1,6 +1,6 @@
 //! HS2-A8T481 lint: a struct that derives `Debug` may not hold a secret-named string field
-//! (`token`, `secret`, `password`, `api_key`, or a `_`-suffixed form such as `access_token`)
-//! as a plain `String`. Such a field uses `hotsheet_sync::secret::SecretString`, whose
+//! (one of `SECRET_WORDS`, such as `token`, `secret`, `csrf` or `authorization`, or a
+//! `_`-suffixed form such as `access_token`) as a plain `String`. Such a field uses `hotsheet_sync::secret::SecretString`, whose
 //! `Debug` prints `<redacted>`. Otherwise the next `dbg!`, `{:?}` in an error, or failing
 //! `assert_eq!` prints the credential. A hand-written `Debug` that redacts is also allowed,
 //! since this lint only inspects derived `Debug`.
@@ -63,6 +63,48 @@ const NOT_SECRET: &[(&str, &str, &str, &str)] = &[
         "next_page_token",
         "Jira pagination cursor, not a credential",
     ),
+    (
+        "hotsheet-ticketing/src/connection_removal.rs",
+        "ConnectionRemoval",
+        "kept_credential",
+        "OS credential-store account name reported to the user, not the secret (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-ticketing/src/checkout_removal.rs",
+        "CheckoutRemoval",
+        "kept_credentials",
+        "OS credential-store account names reported to the user, not secrets (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-ticketing/src/claim_backends.rs",
+        "BackendConfiguration",
+        "credential",
+        "OS credential-store account name; the key itself stays in the store (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-notify/src/remote_change/registry.rs",
+        "Connection",
+        "credential",
+        "OS credential-store account name; the key itself stays in the store (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-server/tests/session_messages.rs",
+        "Seen",
+        "authorization",
+        "test fake recording a synthetic header it must assert on (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-server/tests/resource_remote_cli.rs",
+        "Seen",
+        "authorization",
+        "test fake recording a synthetic header it must assert on (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-cli/tests/job_ci_watch.rs",
+        "Seen",
+        "authorization",
+        "test fake recording a synthetic header it must assert on (HS2-DGMK06)",
+    ),
 ];
 
 // HS2-9ZMC7N retyped the nine secrets this lint found when it landed, so there is no
@@ -71,7 +113,25 @@ const NOT_SECRET: &[(&str, &str, &str, &str)] = &[
 
 const SELF: &str = "hotsheet-sync/tests/secret_debug_policy.rs";
 
-const SECRET_WORDS: &[&str] = &["token", "secret", "password", "api_key"];
+/// HS2-DGMK06 added the CSRF proof, cookies, bearer and `Authorization` header values, and
+/// key material. A `credential` field usually names an OS credential-store account rather
+/// than holding the secret, so each such reference is listed in `NOT_SECRET` with its reason.
+const SECRET_WORDS: &[&str] = &[
+    "token",
+    "secret",
+    "password",
+    "api_key",
+    "csrf",
+    "cookie",
+    "bearer",
+    "authorization",
+    "credential",
+    "credentials",
+    "private_key",
+    "signing_key",
+    "passphrase",
+    "jwt",
+];
 
 #[derive(Debug, PartialEq, Eq)]
 struct Finding {
@@ -266,6 +326,16 @@ pub struct Leaky {
     pub fencing_token: u64,
 }
 
+#[derive(Debug)]
+struct Session {
+    csrf: String,
+    session_cookie: Option<String>,
+    authorization: Option<String>,
+    client_private_key: String,
+    csrf_hash: String,
+    session_csrf: Option<SecretString>,
+}
+
 #[derive(
     Clone,
     Debug,
@@ -290,6 +360,10 @@ struct Tuple(String);
         ("Leaky", "token"),
         ("Leaky", "refresh_token"),
         ("Leaky", "api_key"),
+        ("Session", "csrf"),
+        ("Session", "session_cookie"),
+        ("Session", "authorization"),
+        ("Session", "client_private_key"),
         ("MultiLine", "secret"),
     ]
     .map(|(s, f)| (s.to_owned(), f.to_owned()));
