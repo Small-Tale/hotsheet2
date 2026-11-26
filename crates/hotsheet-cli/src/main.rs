@@ -277,6 +277,15 @@ enum Cmd {
         /// Remove the completion confidence from the note named by --edit-note.
         #[arg(long, requires = "edit_note", conflicts_with = "note_confidence")]
         clear_note_confidence: bool,
+        /// A commit holding this ticket's work, in the checkout tracking the provider's
+        /// project; repeatable. An AI completion verifies these are on the remote
+        /// (HS2-Z0VYZ5).
+        #[arg(long = "commit", value_name = "SHA")]
+        commits: Vec<String>,
+        /// The ticket has no code commits: an AI completion skips the remote-commit check
+        /// and records the opt-out as a provider note (HS2-Z0VYZ5).
+        #[arg(long, conflicts_with = "commits")]
+        no_commit: bool,
     },
     /// Close a provider-native ticket.
     ProviderClose {
@@ -284,6 +293,13 @@ enum Cmd {
         id: String,
         #[arg(long)]
         reason: String,
+        /// A commit holding this ticket's work; repeatable. An AI `completed` close
+        /// verifies these are on the remote (HS2-Z0VYZ5).
+        #[arg(long = "commit", value_name = "SHA")]
+        commits: Vec<String>,
+        /// The ticket has no code commits; record the opt-out (HS2-Z0VYZ5).
+        #[arg(long, conflicts_with = "commits")]
+        no_commit: bool,
     },
     /// Replace provider assignees and/or request reviews when supported.
     ProviderAssign {

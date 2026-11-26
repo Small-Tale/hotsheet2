@@ -727,9 +727,20 @@ Rules are role-specific, and their feedback is written for the reader:
   - **Opt-out:** `--no-commit` (MCP/HTTP `no_commit: true`) is for tickets with no code
     (docs in the store, investigations, decisions). The completion appends an activity
     note, "Completed without code commits", to the history.
+  - **Provider-backed tickets (HS2-Z0VYZ5):** the same rule covers GitHub, GitLab, Jira,
+    and hosted Git connections through CLI `provider-edit`/`provider-close`, the
+    provider-scoped routes (`PATCH /providers/{connection}/tickets/{id}`, `POST …/close`),
+    the checkout-scoped routes for a provider ticket, and MCP `hotsheet_update`/
+    `hotsheet_close` with `connection`. Each takes the same `--commit`/`--no-commit`
+    (MCP/HTTP `commits`/`no_commit`). The provider never holds code. The code checkout is
+    the route's checkout, else a registered checkout linking the connection as a ticket
+    source (for a hosted Git connection, also one linked to its store). The CLI prefers
+    the one containing its working directory. A GitHub or GitLab slug (`owner/repo#N`)
+    also matches commit subjects that lead with `#N`. The opt-out note is written through
+    the provider, for example as a GitHub comment. The checkout-scoped provider close now
+    applies the confidence rule too, which it previously skipped.
   - **Pinned by** `crates/hotsheet-ticketing/tests/completion_remote_policy.rs`: every
-    completion-rule site also checks remote commits. Provider-backed routes are exempt
-    until HS2-Z0VYZ5.
+    completion-rule site also checks remote commits, with no exemptions.
 
 The actor is also recorded (HS2-32QDZ3):
 

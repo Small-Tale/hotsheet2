@@ -19,7 +19,7 @@ use crate::routes::feedback_session::{self, Delivery};
 use crate::routes::groups;
 use crate::routes::project_tools::checkout_settings;
 use crate::routes::providers::{
-    connection_disabled, do_provider_create, do_provider_update, provider_for,
+    connection_disabled, do_provider_close, do_provider_create, do_provider_update, provider_for,
     provider_timing_headers, provider_transfer_error,
 };
 use crate::routes::store_scoped::ResolvedTicket;
@@ -28,7 +28,7 @@ use crate::routes::ticket_writes::{
 };
 use crate::routes::tickets::{NoteDoctorQuery, note_doctor_report};
 use crate::routes::tickets::{api_ticket, api_ticket_with_settings, contextualize_api_ticket};
-use crate::{AppState, multistore, now, opt_parse, provider_overlay};
+use crate::{AppState, multistore, now, provider_overlay};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -808,7 +808,13 @@ pub(crate) async fn update_checkout_ticket(
             .ok()
             .flatten()
             .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Human);
-        let (ticket, timing) = do_provider_update(&state, &source.connection_id, &native_id, req)?;
+        let (ticket, timing) = do_provider_update(
+            &state,
+            &source.connection_id,
+            Some(&checkout.id),
+            &native_id,
+            req,
+        )?;
         let feedback_delivery = if notify {
             feedback_session::after_provider_note(
                 &state,
@@ -1052,7 +1058,7 @@ pub(crate) async fn delete_checkout_ticket_note(
 pub(crate) async fn close_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
-    Json(req): Json<CloseReq>,
+    Json(mut req): Json<CloseReq>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
     let checkout = state
         .checkout_registry
@@ -1062,7 +1068,7 @@ pub(crate) async fn close_checkout_ticket(
     let settings = checkout.settings();
     let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
     if source.provider != "git" {
-        let duplicate_of = match req.duplicate_of {
+        let duplicate_of = match req.duplicate_of.take() {
             Some(DuplicateOfReq::Legacy(reference)) => Some(reference),
             Some(DuplicateOfReq::Qualified(reference)) => {
                 let target = resolve_project_ticket_ref(&state, reference)?;
@@ -1079,14 +1085,15 @@ pub(crate) async fn close_checkout_ticket(
             }
             None => None,
         };
-        let ticket = provider_for(&state, &source.connection_id)?
-            .close(
-                &native_id,
-                now(),
-                opt_parse(Some(&req.reason))?.expect("required close reason"),
-                duplicate_of,
-            )
-            .map_err(provider_transfer_error)?;
+        // The same completion rules as the provider-scoped close route (HS2-Z0VYZ5).
+        let ticket = do_provider_close(
+            &state,
+            &source.connection_id,
+            Some(&source_project),
+            &native_id,
+            &req,
+            duplicate_of,
+        )?;
         return Ok(Json(ResolvedTicket {
             store: source.connection_id,
             ticket: contextualize_api_ticket(ticket, &settings)?,

@@ -12,6 +12,7 @@ use hotsheet_ticketing::advisory_claim::{
 };
 use hotsheet_ticketing::advisory_claim_ledger::{AdvisoryClaimLedger, ClaimReplayState, now_epoch};
 use hotsheet_ticketing::checkouts::CheckoutRegistry;
+use hotsheet_ticketing::completion_remote::{self, CommitClaim};
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, OsKeychain, ProviderConfigRegistry,
     ProviderDescriptor, ProviderDraft, ProviderPatch, ProviderRegistry, TicketProvider,
@@ -106,6 +107,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             note_confidence,
             clear_note_confidence,
             edit_note,
+            commits,
+            no_commit,
         } => {
             let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
             let response_to = if clear_response_to {
@@ -149,6 +152,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     response_to,
                     note_confidence,
                     edit_note,
+                    commit_claim: CommitClaim { commits, no_commit },
                 },
             )
         }
@@ -156,7 +160,16 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             connection,
             id,
             reason,
-        } => cmd_provider_close(path, &connection, &id, &reason),
+            commits,
+            no_commit,
+        } => cmd_provider_close(
+            actor,
+            path,
+            &connection,
+            &id,
+            &reason,
+            &CommitClaim { commits, no_commit },
+        ),
         Cmd::ProviderAssign {
             connection,
             id,
@@ -956,7 +969,7 @@ pub(crate) fn cmd_provider_edit(
         bail!("provider connection '{connection}' does not support note editing");
     }
     let status = input.status.as_deref().map(parse_status_str).transpose()?;
-    if actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
+    let remote = if actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
         && status == Some(hotsheet_model::Status::Completed)
     {
         let current = provider.get(id)?;
@@ -964,13 +977,24 @@ pub(crate) fn cmd_provider_edit(
             Some(_) => matches!(input.note_confidence, Some(Some(_))),
             None => input.note.is_some() && input.note_confidence.flatten().is_some(),
         };
+        let completes = hotsheet_ticketing::actor::completes(current.status, status);
         hotsheet_ticketing::actor::check_completion(
             actor,
             &current.slug,
-            hotsheet_ticketing::actor::completes(current.status, status),
+            completes,
             scores_now || hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
         )?;
-    }
+        check_remote_commits(
+            actor,
+            completes,
+            &current.slug,
+            path,
+            connection,
+            &input.commit_claim,
+        )?
+    } else {
+        completion_remote::Outcome::NotApplicable
+    };
     let now = now_ts();
     let mut ticket = provider.update(
         id,
@@ -1026,26 +1050,105 @@ pub(crate) fn cmd_provider_edit(
             note,
         )?;
     }
+    if let Some(recorded) =
+        completion_remote::record_provider(provider.as_ref(), id, now_ts(), actor, &remote)?
+    {
+        ticket = recorded;
+    }
     // HS2-C1CFSH: an explicit regular note never opens a request; say so on stderr and in
     // the JSON result.
     if let Some(warning) = marker_warning {
         eprintln!("warning: {warning}");
         ticket.warnings.push(warning);
     }
+    ticket.warnings.extend(remote.warning().map(str::to_owned));
     println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())
 }
 
+/// Close a provider-native ticket. An AI `completed` close needs a scored completion cycle
+/// (HS2-RD4M29) and its commits on the remote (HS2-Z0VYZ5), as `close` does for a Git store.
 pub(crate) fn cmd_provider_close(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
     path: &Path,
     connection: &str,
     id: &str,
     reason: &str,
+    commit_claim: &CommitClaim,
 ) -> Result<()> {
     let reason = parse_close_reason(reason)?;
-    let ticket = configured_provider(path, connection)?.close(id, now_ts(), reason, None)?;
+    let provider = configured_provider(path, connection)?;
+    let remote = if actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai) {
+        let current = provider.get(id)?;
+        let completes = hotsheet_ticketing::actor::close_completes(current.status, reason);
+        hotsheet_ticketing::actor::check_completion(
+            actor,
+            &current.slug,
+            completes,
+            hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
+        )?;
+        check_remote_commits(
+            actor,
+            completes,
+            &current.slug,
+            path,
+            connection,
+            commit_claim,
+        )?
+    } else {
+        completion_remote::Outcome::NotApplicable
+    };
+    let mut ticket = provider.close(id, now_ts(), reason, None)?;
+    if let Some(recorded) =
+        completion_remote::record_provider(provider.as_ref(), id, now_ts(), actor, &remote)?
+    {
+        ticket = recorded;
+    }
+    ticket.warnings.extend(remote.warning().map(str::to_owned));
     println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())
+}
+
+/// HS2-Z0VYZ5: an AI completion of a provider ticket must have its commits on the remote.
+/// The code checkout is a registered checkout linking `connection` (or, for this store's
+/// Git connection, linked to the store), preferring the one containing the working
+/// directory; without one the check is skipped with a warning.
+fn check_remote_commits(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    completes: bool,
+    slug: &str,
+    store_path: &Path,
+    connection: &str,
+    claim: &CommitClaim,
+) -> Result<completion_remote::Outcome> {
+    if !completes || !actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai) {
+        return Ok(completion_remote::Outcome::NotApplicable);
+    }
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_ticketing::machine_home::hotsheet_home().join("checkouts.json"),
+    );
+    let store_root = FsStore::open(store_path)
+        .ok()
+        .filter(|store| git_connection_id(store) == connection)
+        .map(|store| store.root().to_path_buf());
+    let mut candidates = completion_remote::provider_checkout_candidates(
+        &registry,
+        connection,
+        store_root.as_deref(),
+        None,
+    );
+    if let Ok(cwd) = std::env::current_dir() {
+        let cwd = hotsheet_sync::paths::canonicalize(&cwd).unwrap_or(cwd);
+        candidates.sort_by_key(|root| {
+            !hotsheet_sync::paths::canonicalize(root).is_ok_and(|root| cwd.starts_with(root))
+        });
+    }
+    let repo = completion_remote::provider_code_checkout_from(&candidates, store_root.as_deref());
+    let outcome = completion_remote::check(actor, completes, slug, repo.as_deref(), claim, true)?;
+    if let Some(warning) = outcome.warning() {
+        eprintln!("warning: {warning}");
+    }
+    Ok(outcome)
 }
 
 pub(crate) fn cmd_provider_assign(
@@ -1950,6 +2053,8 @@ pub(crate) struct ProviderEditInput {
     response_to: Option<Option<String>>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
+    /// The completion's commits or no-commit opt-out (HS2-Z0VYZ5).
+    commit_claim: CommitClaim,
 }
 
 pub(crate) fn read_key_secret(

@@ -283,3 +283,174 @@ fn hs2_r8zh4k_slug_tokens_lead_the_subject() {
     assert!(!names_slug("Fix HS-R8ZH later", SLUG));
     assert!(!names_slug("HS-R8ZHX fix", SLUG));
 }
+
+/// Link an external provider connection to a registered checkout, as `provider connect`
+/// does, by writing the registry's source list.
+fn link_connection(registry: &Path, checkout_id: &str, connection: &str, provider: &str) {
+    let mut saved: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(registry).unwrap()).unwrap();
+    saved["checkouts"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|entry| entry["id"] == checkout_id)
+        .unwrap()["sources"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "connection_id": connection, "provider": provider, "locator": "acme/repo"
+        }));
+    std::fs::write(registry, serde_json::to_vec(&saved).unwrap()).unwrap();
+}
+
+#[test]
+fn hs2_z0vyz5_github_and_gitlab_slugs_match_their_short_issue_form() {
+    let github = "acme/repo#7";
+    assert!(names_slug("acme/repo#7 fix the bug", github));
+    assert!(names_slug("#7 fix the bug", github));
+    assert!(names_slug("#7: fix the bug", github));
+    assert!(names_slug("HS-1 #7 fix both", github));
+    assert!(!names_slug("#70 another issue", github));
+    assert!(!names_slug("Fix the bug (#7)", github));
+    assert!(!names_slug("other/repo#7 fix", github));
+    assert_eq!(
+        slug_aliases(github),
+        vec![github.to_owned(), "#7".to_owned()]
+    );
+    // Jira keys and Hot Sheet slugs have no short form.
+    assert_eq!(slug_aliases("PROJ-12"), vec!["PROJ-12".to_owned()]);
+    assert_eq!(slug_aliases("weird#"), vec!["weird#".to_owned()]);
+    assert_eq!(slug_aliases("#7"), vec!["#7".to_owned()]);
+}
+
+/// A GitHub ticket's commits are searched by both spellings against the real remote:
+/// local only is refused, pushed is verified, and the opt-out needs no commits.
+#[test]
+fn hs2_z0vyz5_provider_slug_commits_must_be_on_the_remote() {
+    let fixture = Fixture::new();
+    let github = "acme/repo#7";
+    let check_github =
+        |claim: &CommitClaim| check(Some(&ai()), true, github, Some(&fixture.clone), claim, true);
+    assert_eq!(check_github(&none()).unwrap_err().code, COMMITS_NOT_FOUND);
+    run(&fixture.clone, &["checkout", "--quiet", "-b", "issue-7"]);
+    let short = fixture.commit("a.txt", "#7 short form");
+    let long = fixture.commit("b.txt", "acme/repo#7 long form");
+    let error = check_github(&none()).unwrap_err();
+    assert_eq!(error.code, COMMIT_NOT_ON_REMOTE);
+    assert!(error.message.contains(&short[..12]), "{}", error.message);
+    assert!(error.message.contains(&long[..12]), "{}", error.message);
+    run(&fixture.clone, &["push", "--quiet", "origin", "HEAD:main"]);
+    match check_github(&none()).unwrap() {
+        Outcome::Verified { mut commits } => {
+            commits.sort();
+            let mut expected = vec![short, long];
+            expected.sort();
+            assert_eq!(commits, expected);
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(
+        check_github(&CommitClaim {
+            no_commit: true,
+            ..CommitClaim::default()
+        })
+        .unwrap(),
+        Outcome::OptedOut
+    );
+}
+
+#[test]
+fn hs2_z0vyz5_provider_code_checkout_is_the_checkout_linking_the_connection() {
+    let fixture = Fixture::new();
+    let registry_path = fixture.root.path().join("checkouts.json");
+    let registry = crate::checkouts::CheckoutRegistry::new(&registry_path);
+    let store = fixture.root.path().join("AA.hs2");
+    crate::FsStore::init_git(&store, &crate::StoreMetadata::new("AA")).unwrap();
+    let clone = hotsheet_sync::paths::canonicalize(&fixture.clone).unwrap();
+    // No checkout is registered: nothing is known.
+    assert_eq!(
+        provider_code_checkout(&registry, "github-main", None, None),
+        None
+    );
+    let other = fixture.root.path().join("other");
+    std::fs::create_dir(&other).unwrap();
+    run(&other, &["init", "--quiet"]);
+    let other = hotsheet_sync::paths::canonicalize(&other).unwrap();
+    let unrelated = registry
+        .register(&other, Some("other"), None, vec![])
+        .unwrap();
+    link_connection(&registry_path, &unrelated.id, "jira-main", "jira");
+    let linked = registry
+        .register(&fixture.clone, Some("code"), None, vec![store.clone()])
+        .unwrap();
+    assert_eq!(
+        provider_code_checkout(&registry, "github-main", None, None),
+        None,
+        "a checkout that links neither the connection nor its store does not count"
+    );
+    link_connection(&registry_path, &linked.id, "github-main", "github");
+    assert_eq!(
+        provider_code_checkout(&registry, "github-main", None, None),
+        Some(clone.clone())
+    );
+    assert_eq!(
+        provider_code_checkout(&registry, "jira-main", None, None),
+        Some(other.clone())
+    );
+    // The route's own checkout wins over the registry order.
+    assert_eq!(
+        provider_code_checkout(&registry, "github-main", None, Some(&other)),
+        Some(other)
+    );
+    // A hosted Git connection finds the checkout linked to its store, never the store.
+    let connection = crate::provider::git_connection_id(&crate::FsStore::open(&store).unwrap());
+    assert_eq!(
+        provider_code_checkout(&registry, &connection, Some(&store), None),
+        Some(clone.clone())
+    );
+    assert_eq!(
+        provider_code_checkout(&registry, &connection, Some(&store), Some(&store)),
+        Some(clone)
+    );
+}
+
+#[test]
+fn hs2_z0vyz5_record_provider_writes_the_opt_out_through_the_provider() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = crate::FsStore::init_git(dir.path(), &crate::StoreMetadata::new("AA")).unwrap();
+    let ticket = crate::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "AA",
+        hotsheet_model::Timestamp::new("2026-11-26T00:00:00Z"),
+        crate::NewTicket {
+            title: "Decision".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let provider = crate::GitProvider::new("git-test", store);
+    let now = hotsheet_model::Timestamp::new("2026-11-26T00:01:00Z");
+    let native = ticket.id.to_string();
+    for outcome in [
+        Outcome::NotApplicable,
+        Outcome::NoCheckout,
+        Outcome::Verified { commits: vec![] },
+    ] {
+        assert!(
+            record_provider(&provider, &native, now.clone(), Some(&ai()), &outcome)
+                .unwrap()
+                .is_none()
+        );
+    }
+    let recorded = record_provider(&provider, &native, now, Some(&ai()), &Outcome::OptedOut)
+        .unwrap()
+        .unwrap();
+    let note = recorded.notes.last().unwrap();
+    assert_eq!(
+        note.summary.as_deref(),
+        Some("Completed without code commits")
+    );
+    assert_eq!(note.kind, hotsheet_model::NoteKind::Activity);
+    assert!(note.text.contains("no-commit opt-out"));
+}

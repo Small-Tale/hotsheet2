@@ -985,12 +985,18 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
         "hotsheet_close" => {
             let id = arg_str(args, "id")?;
             let reason = arg_str(args, "reason")?;
-            let body = json!({
+            let mut body = json!({
                 "reason": reason,
                 "duplicate_of": args.get("duplicate_of").cloned().unwrap_or(Value::Null),
-                "commits": args.get("commits").cloned().unwrap_or(Value::Null),
-                "no_commit": args.get("no_commit").cloned().unwrap_or(Value::Null),
             });
+            // HS2-Z0VYZ5: forward the commit claim only when given. A null `commits` or
+            // `no_commit` is not a list or a boolean, so the server refused every close
+            // through the HTTP backend that omitted them.
+            for field in ["commits", "no_commit"] {
+                if let Some(value) = args.get(field).filter(|value| !value.is_null()) {
+                    body[field] = value.clone();
+                }
+            }
             let closed = backend
                 .send(
                     "POST",
@@ -5141,6 +5147,71 @@ mod tests {
             }
             server.join().unwrap();
         }
+    }
+
+    /// HS2-Z0VYZ5: `hotsheet_update` and `hotsheet_close` declare `commits`/`no_commit`,
+    /// and forward them to a provider connection's routes; an omitted claim sends no
+    /// field rather than a null the server cannot read as a list or a boolean.
+    #[test]
+    fn hs2_z0vyz5_provider_completions_forward_the_commit_claim() {
+        let tools = tools_list();
+        for name in ["hotsheet_update", "hotsheet_close"] {
+            let tool = tools["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|tool| tool["name"] == name)
+                .unwrap();
+            let properties = &tool["inputSchema"]["properties"];
+            assert_eq!(properties["commits"]["type"], "array", "{name}");
+            assert_eq!(properties["no_commit"]["type"], "boolean", "{name}");
+            assert!(properties.get("connection").is_some(), "{name}");
+        }
+        let backend = FakeBackend::default();
+        for (name, arguments) in [
+            (
+                "hotsheet_update",
+                json!({ "connection": "github-main", "id": "7", "status": "completed",
+                        "no_commit": true, "actor_role": "ai" }),
+            ),
+            (
+                "hotsheet_close",
+                json!({ "connection": "jira-main", "id": "APP-7", "reason": "completed",
+                        "commits": ["abc123"], "actor_role": "ai" }),
+            ),
+            (
+                "hotsheet_close",
+                json!({ "connection": "jira-main", "id": "APP-8", "reason": "completed" }),
+            ),
+        ] {
+            let reply = handle_message(
+                &req(
+                    "tools/call",
+                    json!({ "name": name, "arguments": arguments }),
+                ),
+                &backend,
+            )
+            .unwrap();
+            assert_eq!(reply["result"]["isError"], false, "{reply}");
+        }
+        let calls = backend.calls.borrow();
+        assert!(
+            calls[0].starts_with("PATCH /providers/github-main/tickets/7 ")
+                && calls[0].contains(r#""no_commit":true"#),
+            "{calls:?}"
+        );
+        assert!(
+            calls[1].starts_with("POST /providers/jira-main/tickets/APP-7/close ")
+                && calls[1].contains(r#""commits":["abc123"]"#)
+                && calls[1].contains(r#""role":"ai""#),
+            "{calls:?}"
+        );
+        assert!(
+            calls[2].starts_with("POST /providers/jira-main/tickets/APP-8/close ")
+                && !calls[2].contains("commits")
+                && !calls[2].contains("no_commit"),
+            "{calls:?}"
+        );
     }
 
     #[test]

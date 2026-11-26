@@ -12,6 +12,10 @@
 //! explicit `no_commit` opt-out covers tickets with no code; callers record it in history.
 //! When the fetch fails and a commit cannot be proven remote, the completion is refused
 //! with its own code rather than passing silently.
+//!
+//! Provider-backed completions (GitHub, GitLab, Jira, and a hosted Git connection) run the
+//! same check (HS2-Z0VYZ5): [`provider_code_checkout`] finds the checkout tracking the
+//! provider's project and [`record_provider`] records an opt-out through the provider.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -165,41 +169,162 @@ pub fn checkout_candidates(
     candidates
 }
 
-/// Whether `subject`'s leading slug tokens include `slug` (`HS2-A HS2-B fix …` names both).
+/// The code checkout for a ticket of provider connection `connection_id` (HS2-Z0VYZ5).
+/// A GitHub, GitLab or Jira ticket's code lives in the checkout that tracks the provider's
+/// project, not in the provider: `preferred` first (the request's own checkout), then every
+/// registered checkout linking the connection as a ticket source, then, for a Git
+/// connection with a known `store_root`, every checkout linked to that store. The store's
+/// own repository never counts. `None` means no checkout is known
+/// ([`Outcome::NoCheckout`]).
+#[must_use]
+pub fn provider_code_checkout(
+    registry: &crate::checkouts::CheckoutRegistry,
+    connection_id: &str,
+    store_root: Option<&Path>,
+    preferred: Option<&Path>,
+) -> Option<PathBuf> {
+    let candidates = provider_checkout_candidates(registry, connection_id, store_root, preferred);
+    provider_code_checkout_from(&candidates, store_root)
+}
+
+/// The ordered candidates [`provider_code_checkout`] searches, for a caller that reorders
+/// them (the CLI prefers the checkout containing its working directory).
+#[must_use]
+pub fn provider_checkout_candidates(
+    registry: &crate::checkouts::CheckoutRegistry,
+    connection_id: &str,
+    store_root: Option<&Path>,
+    preferred: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = preferred.map(Path::to_path_buf).into_iter().collect();
+    for checkout in registry.list().unwrap_or_default() {
+        let root = PathBuf::from(&checkout.root);
+        if checkout
+            .sources
+            .iter()
+            .any(|source| source.connection_id == connection_id)
+            && !candidates.contains(&root)
+        {
+            candidates.push(root);
+        }
+    }
+    if let Some(store_root) = store_root {
+        for root in checkout_candidates(registry, store_root, None) {
+            if !candidates.contains(&root) {
+                candidates.push(root);
+            }
+        }
+    }
+    candidates
+}
+
+/// The first candidate that is a Git checkout, other than `store_root`'s repository when
+/// the connection has a store.
+#[must_use]
+pub fn provider_code_checkout_from(
+    candidates: &[PathBuf],
+    store_root: Option<&Path>,
+) -> Option<PathBuf> {
+    match store_root {
+        Some(store_root) => code_checkout(candidates, store_root),
+        None => candidates.iter().find_map(|candidate| toplevel(candidate)),
+    }
+}
+
+/// [`record`] for a provider-backed ticket (HS2-Z0VYZ5): the opt-out's history note is
+/// appended through the provider's own note API, as an explicit activity note where the
+/// provider keeps note kinds and as its ordinary comment otherwise.
+pub fn record_provider(
+    provider: &dyn crate::TicketProvider,
+    native_id: &str,
+    now: hotsheet_model::Timestamp,
+    actor: Option<&MutationActor>,
+    outcome: &Outcome,
+) -> Result<Option<crate::ApiTicket>, crate::ProviderError> {
+    let Some(text) = outcome.history_note() else {
+        return Ok(None);
+    };
+    let append = |kind_explicit: bool| {
+        provider.add_note_with_metadata(
+            native_id,
+            crate::MutationContext {
+                now: now.clone(),
+                generated_id: hotsheet_model::Ulid::new(),
+            },
+            hotsheet_model::NoteKind::Activity,
+            crate::ops::NoteMetadataInput {
+                kind_explicit,
+                summary: Some("Completed without code commits".into()),
+                actor: actor.map(MutationActor::note_actor),
+                ..crate::ops::NoteMetadataInput::default()
+            },
+            text.to_owned(),
+        )
+    };
+    match append(true) {
+        Err(crate::ProviderError::Unsupported {
+            capability: "note_kind_intent",
+            ..
+        }) => append(false).map(Some),
+        other => other.map(Some),
+    }
+}
+
+/// The spellings a commit subject may lead with for `slug`: the slug itself, plus the short
+/// `#N` form of a GitHub or GitLab slug (`owner/repo#N`), the way the code checkout that
+/// tracks the provider's project names its issues (HS2-Z0VYZ5).
+fn slug_aliases(slug: &str) -> Vec<String> {
+    let mut aliases = vec![slug.to_owned()];
+    if let Some((project, number)) = slug.rsplit_once('#')
+        && !project.is_empty()
+        && !number.is_empty()
+        && number.chars().all(|c| c.is_ascii_digit())
+    {
+        aliases.push(format!("#{number}"));
+    }
+    aliases
+}
+
+/// Whether `subject`'s leading slug tokens include `slug` (`HS2-A HS2-B fix …` names both;
+/// `acme/repo#7 fix` and `#7 fix` name the GitHub slug `acme/repo#7`).
 fn names_slug(subject: &str, slug: &str) -> bool {
+    let aliases = slug_aliases(slug);
+    let is_alias = |token: &&str| {
+        aliases
+            .iter()
+            .any(|alias| token.eq_ignore_ascii_case(alias))
+    };
     subject
         .split(|c: char| c.is_whitespace() || c == ',' || c == ':')
         .filter(|token| !token.is_empty())
         .take_while(|token| {
-            token.contains('-')
-                && token
-                    .chars()
-                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-')
+            is_alias(token)
+                || (token.contains('-')
+                    && token
+                        .chars()
+                        .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-'))
         })
-        .any(|token| token.eq_ignore_ascii_case(slug))
+        .any(|token| is_alias(&token))
 }
 
 /// Commits (full SHAs) whose subject leads with `slug`, searched in `scope` (`--all` or
 /// `--remotes`).
 fn slug_commits(repo: &Path, slug: &str, scope: &str) -> Vec<String> {
-    let grep = format!("--grep={slug}");
-    git(
-        repo,
-        &[
-            "log",
-            scope,
-            "--fixed-strings",
-            "--regexp-ignore-case",
-            &grep,
-            "--format=%H%x09%s",
-        ],
-    )
-    .unwrap_or_default()
-    .lines()
-    .filter_map(|line| line.split_once('\t'))
-    .filter(|(_, subject)| names_slug(subject, slug))
-    .map(|(sha, _)| sha.to_owned())
-    .collect()
+    // Several `--grep`s match a subject containing any of them.
+    let greps: Vec<String> = slug_aliases(slug)
+        .iter()
+        .map(|alias| format!("--grep={alias}"))
+        .collect();
+    let mut args = vec!["log", scope, "--fixed-strings", "--regexp-ignore-case"];
+    args.extend(greps.iter().map(String::as_str));
+    args.push("--format=%H%x09%s");
+    git(repo, &args)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .filter(|(_, subject)| names_slug(subject, slug))
+        .map(|(sha, _)| sha.to_owned())
+        .collect()
 }
 
 fn on_remote(repo: &Path, sha: &str) -> bool {

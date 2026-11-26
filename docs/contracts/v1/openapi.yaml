@@ -5399,12 +5399,13 @@ paths:
           $ref: '#/components/responses/FullTicket'
     patch:
       operationId: updateProviderTicket
+      description: Update a provider ticket. An AI completion applies the confidence rule and the remote-commit rule, with the same commits and no_commit fields as a Git-store update (HS2-Z0VYZ5).
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/UpdateTicket'
       responses:
         '200':
           $ref: '#/components/responses/FullTicket'

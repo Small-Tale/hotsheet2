@@ -124,7 +124,7 @@ pub(crate) fn cleanup_with(
         "actor": {"role": "system", "id": command_cleanup::CLEANUP_ACTOR_ID},
     }))
     .ok()?;
-    match do_provider_update(state, connection_id, &current.native_id, request) {
+    match do_provider_update(state, connection_id, None, &current.native_id, request) {
         Ok((updated, _)) => {
             tracing::info!(
                 connection = connection_id,

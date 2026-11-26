@@ -266,16 +266,28 @@ fn hs2_27c161_external_provider_write_cleans_up_through_the_provider() {
     );
     let ticket = command_ticket(&external, &[TAG]);
     let request = serde_json::from_value(json!({"status": "completed"})).unwrap();
-    let (returned, _) =
-        do_provider_update(&state, "external-test", &ticket.id.to_string(), request).unwrap();
+    let (returned, _) = do_provider_update(
+        &state,
+        "external-test",
+        None,
+        &ticket.id.to_string(),
+        request,
+    )
+    .unwrap();
     assert_eq!(returned.status, Status::Archive);
     assert_eq!(read(&external, &ticket).status, Status::Archive);
     // A write that sets no status never triggers it.
     let other = command_ticket(&external, &[TAG]);
     set_status(&external, &other, Status::Completed);
     let request = serde_json::from_value(json!({"title": "Renamed"})).unwrap();
-    let (returned, _) =
-        do_provider_update(&state, "external-test", &other.id.to_string(), request).unwrap();
+    let (returned, _) = do_provider_update(
+        &state,
+        "external-test",
+        None,
+        &other.id.to_string(),
+        request,
+    )
+    .unwrap();
     assert_eq!(returned.status, Status::Completed);
 }
 

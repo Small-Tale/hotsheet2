@@ -183,7 +183,7 @@ pub(crate) async fn update_provider_ticket(
     Json(req): Json<UpdateReq>,
 ) -> Result<(HeaderMap, Json<ApiTicket>), ApiError> {
     let started = Instant::now();
-    let (ticket, timing) = do_provider_update(&state, &connection_id, &id, req)?;
+    let (ticket, timing) = do_provider_update(&state, &connection_id, None, &id, req)?;
     Ok((
         provider_timing_headers(timing, started.elapsed()),
         Json(ticket),
@@ -303,9 +303,12 @@ fn parse_ai_feedback(
     ))
 }
 
+/// `project_id` is the route's checkout, preferred as the code checkout of an AI
+/// completion's remote-commit check (HS2-Z0VYZ5); provider-scoped routes pass `None`.
 pub(crate) fn do_provider_update(
     state: &AppState,
     connection_id: &str,
+    project_id: Option<&str>,
     id: &str,
     req: UpdateReq,
 ) -> Result<(ApiTicket, ProviderMutationTiming), ApiError> {
@@ -423,7 +426,7 @@ pub(crate) fn do_provider_update(
     }
     let status = opt_parse(req.status.as_deref())?;
     let actor = parse_actor(req.actor.as_ref())?;
-    if actor
+    let remote = if actor
         .as_ref()
         .is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
         && status == Some(Status::Completed)
@@ -433,13 +436,25 @@ pub(crate) fn do_provider_update(
             Some(_) => matches!(confidence_change, Some(Some(_))),
             None => req.note.is_some() && note_confidence.is_some(),
         };
+        let completes = hotsheet_ticketing::actor::completes(current.status, status);
         hotsheet_ticketing::actor::check_completion(
             actor.as_ref(),
             &current.slug,
-            hotsheet_ticketing::actor::completes(current.status, status),
+            completes,
             scores_now || hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
         )?;
-    }
+        check_remote_commits(
+            state,
+            connection_id,
+            project_id,
+            actor.as_ref(),
+            completes,
+            &current.slug,
+            &req.commit_claim(),
+        )?
+    } else {
+        hotsheet_ticketing::completion_remote::Outcome::NotApplicable
+    };
     let group = if req.group_resolved {
         req.group.clone()
     } else {
@@ -552,6 +567,7 @@ pub(crate) fn do_provider_update(
         }
         _ => {}
     }
+    let ticket = with_remote_outcome(provider.as_ref(), id, actor.as_ref(), &remote, ticket)?;
     reindex_hosted_provider_write(state, connection_id, id);
     // A completed command ticket in an external provider is cleaned up now, and the caller
     // sees the archived or trashed result (HS2-27C161).
@@ -780,9 +796,9 @@ pub(crate) async fn delete_provider_ticket_note(
 pub(crate) async fn close_provider_ticket(
     State(state): State<AppState>,
     Path((connection_id, id)): Path<(String, String)>,
-    Json(req): Json<CloseReq>,
+    Json(mut req): Json<CloseReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
-    let duplicate_of = match req.duplicate_of {
+    let duplicate_of = match req.duplicate_of.take() {
         Some(DuplicateOfReq::Legacy(reference)) => Some(reference),
         Some(DuplicateOfReq::Qualified(reference)) => {
             let target = resolve_project_ticket_ref(&state, reference)?;
@@ -800,26 +816,124 @@ pub(crate) async fn close_provider_ticket(
         }
         None => None,
     };
-    let provider = provider_for(&state, &connection_id)?;
+    do_provider_close(&state, &connection_id, None, &id, &req, duplicate_of).map(Json)
+}
+
+/// Close a provider ticket after the AI completion rules (HS2-RD4M29, HS2-Z0VYZ5), for
+/// both the provider-scoped and the checkout-scoped close routes. `project_id` is the
+/// route's checkout, preferred as the code checkout; `duplicate_of` is already resolved.
+pub(crate) fn do_provider_close(
+    state: &AppState,
+    connection_id: &str,
+    project_id: Option<&str>,
+    id: &str,
+    req: &CloseReq,
+    duplicate_of: Option<String>,
+) -> Result<ApiTicket, ApiError> {
+    let provider = provider_for(state, connection_id)?;
     let reason: CloseReason = opt_parse(Some(&req.reason))?.expect("required close reason");
     let actor = parse_actor(req.actor.as_ref())?;
-    if actor
+    let remote = if actor
         .as_ref()
         .is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
     {
-        let current = provider.get(&id).map_err(provider_transfer_error)?;
+        let current = provider.get(id).map_err(provider_transfer_error)?;
+        let completes = hotsheet_ticketing::actor::close_completes(current.status, reason);
         hotsheet_ticketing::actor::check_completion(
             actor.as_ref(),
             &current.slug,
-            hotsheet_ticketing::actor::close_completes(current.status, reason),
+            completes,
             hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
         )?;
-    }
+        check_remote_commits(
+            state,
+            connection_id,
+            project_id,
+            actor.as_ref(),
+            completes,
+            &current.slug,
+            &hotsheet_ticketing::completion_remote::CommitClaim {
+                commits: req.commits.clone(),
+                no_commit: req.no_commit,
+            },
+        )?
+    } else {
+        hotsheet_ticketing::completion_remote::Outcome::NotApplicable
+    };
     let closed = provider
-        .close(&id, now(), reason, duplicate_of)
+        .close(id, now(), reason, duplicate_of)
         .map_err(provider_transfer_error)?;
-    reindex_hosted_provider_write(&state, &connection_id, &id);
-    Ok(Json(closed))
+    let closed = with_remote_outcome(provider.as_ref(), id, actor.as_ref(), &remote, closed)?;
+    reindex_hosted_provider_write(state, connection_id, id);
+    Ok(closed)
+}
+
+/// HS2-Z0VYZ5: an AI completion of a provider ticket must have its commits on the remote,
+/// exactly as a Git-store completion (HS2-R8ZH4K). The code checkout is the route's
+/// checkout, else a registered checkout linking this connection (or, for a hosted Git
+/// connection, its store); the provider itself never holds code.
+fn check_remote_commits(
+    state: &AppState,
+    connection_id: &str,
+    project_id: Option<&str>,
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    completes: bool,
+    slug: &str,
+    claim: &hotsheet_ticketing::completion_remote::CommitClaim,
+) -> Result<hotsheet_ticketing::completion_remote::Outcome, ApiError> {
+    use hotsheet_ticketing::completion_remote as remote;
+    if !completes || !actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai) {
+        return Ok(remote::Outcome::NotApplicable);
+    }
+    let preferred = project_id
+        .and_then(|id| state.checkout_registry.resolve(id).ok())
+        .map(|checkout| std::path::PathBuf::from(checkout.root));
+    let store_root = state
+        .host
+        .get(connection_id)
+        .map(|entry| entry.store.root().to_path_buf());
+    let repo = remote::provider_code_checkout(
+        &state.checkout_registry,
+        connection_id,
+        store_root.as_deref(),
+        preferred.as_deref(),
+    );
+    Ok(remote::check(
+        actor,
+        completes,
+        slug,
+        repo.as_deref(),
+        claim,
+        true,
+    )?)
+}
+
+/// Record a passing remote-commit check on the written ticket: the opt-out's history note
+/// through the provider, and the warning when no code checkout was known.
+fn with_remote_outcome(
+    provider: &dyn hotsheet_ticketing::TicketProvider,
+    id: &str,
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    remote: &hotsheet_ticketing::completion_remote::Outcome,
+    ticket: ApiTicket,
+) -> Result<ApiTicket, ApiError> {
+    let mut ticket = match hotsheet_ticketing::completion_remote::record_provider(
+        provider,
+        id,
+        now(),
+        actor,
+        remote,
+    )
+    .map_err(provider_transfer_error)?
+    {
+        Some(mut recorded) => {
+            recorded.warnings.splice(0..0, ticket.warnings);
+            recorded
+        }
+        None => ticket,
+    };
+    ticket.warnings.extend(remote.warning().map(str::to_owned));
+    Ok(ticket)
 }
 
 pub(crate) async fn assign_provider_ticket(

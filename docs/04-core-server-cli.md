@@ -1118,6 +1118,8 @@ hotsheet provider-assign github-main 42 --to octocat # replace assignees where s
 hotsheet provider-restore <connection> <ticket-id> # git-backed, GitHub Issues, GitLab, or Jira Trash
 hotsheet provider-report-not-working <git-connection> <ticket-id> --note-file report.md --evidence proof.png --expected-token <token>
 hotsheet provider-close github-main 42 --reason completed
+hotsheet --actor-role ai provider-close github-main 42 --reason completed --commit <sha>  # AI: commits must be on the remote (HS2-Z0VYZ5)
+hotsheet --actor-role ai provider-edit jira-main APP-7 --status completed --note-file done.md --note-confidence 85 --no-commit  # no code: records the opt-out
 hotsheet provider-disable github-main           # temporary: no reads/writes, tickets hidden
 hotsheet provider-enable github-main
 hotsheet provider-remove github-main [--json]  # permanent, every project; the account stays signed in
