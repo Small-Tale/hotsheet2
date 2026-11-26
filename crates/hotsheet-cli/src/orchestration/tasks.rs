@@ -179,6 +179,35 @@ impl RuntimeTasks {
         }
     }
 
+    /// HS2-K0RSCQ: run `work` (a request that cannot be interrupted, such as a long poll
+    /// over the remote transport) on a helper thread and wait for it or the stop,
+    /// whichever is first. `None` when the owner is stopping, or the helper could not
+    /// start. On a stop the helper is left behind unowned: it ends within its own
+    /// bounded wait and its answer is dropped, so it does nothing more, and the thread
+    /// that called this returns at once and is joined.
+    pub fn unless_stopped<T, F>(self: &Arc<Self>, name: &str, work: F) -> Option<T>
+    where
+        T: Send + 'static,
+        F: FnOnce() -> T + Send + 'static,
+    {
+        let (send, receive) = std::sync::mpsc::channel::<Option<T>>();
+        let stopped = send.clone();
+        // Runs at once when already stopping.
+        let _hook = self.on_stop(move || {
+            let _ = stopped.send(None);
+        });
+        if self.is_stopping() {
+            return None;
+        }
+        std::thread::Builder::new()
+            .name(name.to_owned())
+            .spawn(move || {
+                let _ = send.send(Some(work()));
+            })
+            .ok()?;
+        receive.recv().ok().flatten()
+    }
+
     /// Stop every thread and join them, waiting at most `grace` for them to end.
     pub fn shutdown(&self, grace: Duration) -> TasksShutdown {
         self.stop();
@@ -366,6 +395,57 @@ mod tests {
         assert_eq!(fired.load(Ordering::SeqCst), 11);
         drop((kept, late));
         assert!(tasks.hooks().is_empty());
+    }
+
+    #[test]
+    fn hs2_k0rscq_a_stop_ends_the_wait_for_an_uninterruptible_request() {
+        let tasks = Arc::new(RuntimeTasks::default());
+        // Answered before any stop: the answer.
+        assert_eq!(tasks.unless_stopped("hs2-k0rscq-quick", || 7), Some(7));
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let (done, finished) = std::sync::mpsc::channel::<()>();
+        let (begun, begin) = std::sync::mpsc::channel::<()>();
+        let (owner, waited) = (tasks.clone(), Arc::new(AtomicUsize::new(0)));
+        let counted = waited.clone();
+        // A follow thread whose request ignores the stop token.
+        tasks
+            .spawn("hs2-k0rscq-follow", move || {
+                let answer = owner.unless_stopped("hs2-k0rscq-request", move || {
+                    let _ = begun.send(());
+                    let _ = released.recv();
+                    let _ = done.send(());
+                    1
+                });
+                assert_eq!(answer, None);
+                counted.fetch_add(1, Ordering::SeqCst);
+            })
+            .unwrap();
+        // The request is in flight (a stop before it starts starts nothing).
+        begin.recv_timeout(PROMPT).unwrap();
+        let began = Instant::now();
+        let report = tasks.shutdown(PROMPT);
+        assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
+        assert_eq!(
+            report,
+            TasksShutdown {
+                joined: 1,
+                outstanding: 0
+            }
+        );
+        assert_eq!(waited.load(Ordering::SeqCst), 1);
+        assert!(tasks.hooks().is_empty());
+        // The abandoned request still ends on its own; its answer goes nowhere.
+        release.send(()).unwrap();
+        finished.recv_timeout(PROMPT).unwrap();
+        // Once stopping nothing is started at all.
+        let ran = Arc::new(AtomicUsize::new(0));
+        let counted = ran.clone();
+        assert_eq!(
+            tasks.unless_stopped("hs2-k0rscq-late", move || counted
+                .fetch_add(1, Ordering::SeqCst)),
+            None
+        );
+        assert_eq!(ran.load(Ordering::SeqCst), 0);
     }
 
     #[test]

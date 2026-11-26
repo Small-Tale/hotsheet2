@@ -238,15 +238,23 @@ impl OrchestrationRuntime {
                 return CapacityFollow::Ended("gate_refused".into());
             };
             let asked = Instant::now();
-            let reply = Self::destination(current)
-                .and_then(|destination| {
-                    self.hosted_call_at(destination, "/target-capacity", "GET", &query, None, tx)
-                })
-                .and_then(|reply| {
-                    serde_json::from_value::<CapacitySnapshot>(reply).map_err(|_| {
-                        OrchestrationError::Observation(TargetFailure::InvalidResponse)
-                    })
-                });
+            let reply = match Self::destination(current) {
+                Ok(destination) => {
+                    match self.hosted_long_poll(destination, "/target-capacity", &query, tx) {
+                        Some(reply) => reply,
+                        None => return CapacityFollow::Ended(STOPPING.into()),
+                    }
+                }
+                Err(error) => Err(error),
+            };
+            // HS2-K0RSCQ: an answer the stop cut short says nothing about the host.
+            if self.tasks.is_stopping() {
+                return CapacityFollow::Ended(STOPPING.into());
+            }
+            let reply = reply.and_then(|reply| {
+                serde_json::from_value::<CapacitySnapshot>(reply)
+                    .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+            });
             match reply {
                 Err(error) => return CapacityFollow::Ended(error.code().into()),
                 // An older host answers without a version and never waits.

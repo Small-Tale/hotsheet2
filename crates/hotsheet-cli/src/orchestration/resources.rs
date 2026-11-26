@@ -255,13 +255,18 @@ impl OrchestrationRuntime {
         let checkout = self.owner(checkout_id)?;
         ResourceRef::parse(&format!("{namespace}/{resource}"))
             .map_err(|_| OrchestrationError::Invalid("a namespace and resource are required"))?;
+        // HS2-K0RSCQ: a stopping owner ends the wait and answers held.
+        let cancel = WaitCancel::new();
+        let fire = cancel.clone();
+        let _hook = self.tasks.on_stop(move || fire.cancel());
         Ok(ResourceWait {
             // HS2-AP8KPT: in the backend the checkout's own bindings choose.
-            free: self.claims.wait_free(
+            free: self.claims.wait_free_cancellable(
                 namespace,
                 resource,
                 Duration::from_millis(wait_ms.min(MAX_RESOURCE_WAIT_MS)),
                 Some(Path::new(&checkout.root)),
+                &cancel,
             ),
         })
     }
@@ -357,22 +362,25 @@ impl OrchestrationRuntime {
                 return RemoteRelease::Ended("gate_refused".into());
             };
             let asked = Instant::now();
-            let reply = Self::destination(current)
-                .and_then(|destination| {
-                    self.hosted_call_at(
-                        destination,
-                        "/target-resource-wait",
-                        "GET",
-                        &query,
-                        None,
-                        tx,
-                    )
-                })
-                .and_then(|reply| {
-                    serde_json::from_value::<ResourceWait>(reply).map_err(|_| {
-                        OrchestrationError::Observation(TargetFailure::InvalidResponse)
-                    })
-                });
+            let reply = match Self::destination(current) {
+                Ok(destination) => {
+                    match self.hosted_long_poll(destination, "/target-resource-wait", &query, tx) {
+                        Some(reply) => reply,
+                        None => {
+                            return RemoteRelease::Ended(super::capacity_watch::STOPPING.into());
+                        }
+                    }
+                }
+                Err(error) => Err(error),
+            };
+            // HS2-K0RSCQ: an answer the stop cut short says nothing about the peer.
+            if self.tasks.is_stopping() {
+                return RemoteRelease::Ended(super::capacity_watch::STOPPING.into());
+            }
+            let reply = reply.and_then(|reply| {
+                serde_json::from_value::<ResourceWait>(reply)
+                    .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+            });
             match reply {
                 Ok(ResourceWait { free: true }) => {
                     if !self.tasks.is_stopping() {

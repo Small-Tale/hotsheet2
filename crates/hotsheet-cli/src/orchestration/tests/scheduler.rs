@@ -2702,3 +2702,63 @@ fn hs2_0vtqff_a_pattern_only_tool_starts_the_newest_reported_matching_model() {
         ("codex", Some("syn-codex-3"))
     );
 }
+
+/// HS2-K0RSCQ: a shutdown while a capacity follow's long poll is in flight on a target
+/// of this machine ends it at once: the hosted wait sees the stop token, the follow
+/// thread is joined well inside the server's 2 s grace and nothing is reported still
+/// running (measured before: the full grace, one outstanding, ~8 s to end). A stopping
+/// owner's served long poll answers at once too.
+#[test]
+fn hs2_k0rscq_a_shutdown_ends_a_capacity_follow_in_flight() {
+    tx!(tx);
+    let mut s = setup(true, &mut tx);
+    s.m.runtime =
+        s.m.runtime
+            .clone()
+            .with_capacity_resample(Duration::from_millis(20));
+    s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
+    let owner = s.owner();
+    s.probe
+        .set(|observation| observation.memory.free_mb = Some(2500));
+    let mut state = SchedulerFollowState::default();
+    assert_eq!(
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx)
+            .trigger,
+        Some("start")
+    );
+    assert_eq!(s.m.runtime.capacity_watches(&owner), [id(1)]);
+    // The follow's long poll is sampling the machine.
+    let asked = s.probe.asked();
+    assert!(until_state(Duration::from_secs(5), || s.probe.asked() > asked));
+
+    let grace = Duration::from_secs(2);
+    let began = std::time::Instant::now();
+    let report = s.m.runtime.shutdown(grace);
+    assert!(began.elapsed() < grace, "{:?}", began.elapsed());
+    assert_eq!(report.outstanding, 0, "{report:?}");
+    assert!(report.joined >= 1, "{report:?}");
+    assert_eq!(s.m.runtime.tasks().running(), 0);
+    assert!(s.m.runtime.capacity_watches(&owner).is_empty());
+    assert!(s.sessions.calls().is_empty());
+    // Served while stopping, a long poll on an unchanged version answers at once.
+    let checkout = s.m.target.id.clone();
+    let version =
+        s.m.runtime
+            .hosted_capacity(&checkout, &[])
+            .unwrap()
+            .version
+            .unwrap();
+    let began = std::time::Instant::now();
+    let answer =
+        s.m.runtime
+            .hosted_capacity_wait(&checkout, &[], Some(&version), 8_000)
+            .unwrap();
+    assert!(
+        began.elapsed() < Duration::from_secs(4),
+        "{:?}",
+        began.elapsed()
+    );
+    assert!(answer.version.is_some());
+}

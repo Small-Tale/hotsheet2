@@ -1807,3 +1807,37 @@ fn hs2_npazqw_a_pattern_requirement_starts_a_session_holding_one_exact_match() {
     // Either way the session holds the one exact resource, never the pattern.
     assert_eq!(started.resources, [need("vm/mac-b")]);
 }
+
+/// HS2-K0RSCQ: a shutdown while the watch of a resource on another machine has its
+/// long poll in flight on the peer: the request cannot be interrupted, so the watch
+/// stops waiting for it and is joined well inside the server's 2 s grace with nothing
+/// reported still running (measured before: the full grace, one outstanding, ~8 s to
+/// end). The abandoned request ends on its own and wakes no one.
+#[test]
+fn hs2_k0rscq_a_shutdown_ends_a_remote_release_watch_in_flight() {
+    tx!(tx);
+    let (r, held, _) = remote_waiting(Duration::from_secs(30 * 60), &mut tx);
+    let mut state = SchedulerFollowState::default();
+    assert_eq!(
+        r.runtime
+            .scheduler_follow_step(&r.owner.id, &mut state, 0, &mut tx)
+            .trigger,
+        Some("start")
+    );
+    assert!(until(Duration::from_secs(5), || wait_calls(&r) >= 1));
+    assert_eq!(r.runtime.claim_watches().len(), 1);
+
+    let grace = Duration::from_secs(2);
+    let began = std::time::Instant::now();
+    let report = r.runtime.shutdown(grace);
+    assert!(began.elapsed() < grace, "{:?}", began.elapsed());
+    assert_eq!(report.outstanding, 0, "{report:?}");
+    assert!(report.joined >= 1, "{report:?}");
+    assert!(r.runtime.claim_watches().is_empty());
+    // Released now, the peer answers the abandoned request free; nothing acts on it
+    // and no second request is made.
+    release(&r.peer.hosted.home, &held);
+    let asked = wait_calls(&r);
+    assert_eq!(asked, 1);
+    assert!(r.sessions.calls().is_empty());
+}

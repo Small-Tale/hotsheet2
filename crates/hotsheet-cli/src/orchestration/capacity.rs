@@ -311,7 +311,11 @@ impl OrchestrationRuntime {
             if after.is_none() || snapshot.version.as_deref() != after || remaining.is_zero() {
                 return Ok(snapshot);
             }
-            std::thread::sleep(remaining.min(self.capacity_resample));
+            // HS2-K0RSCQ: a stopping owner answers what it has rather than holding the
+            // long poll (and its thread) open past the shutdown grace.
+            if self.tasks.wait_stop(remaining.min(self.capacity_resample)) {
+                return Ok(snapshot);
+            }
         }
     }
 

@@ -4145,7 +4145,14 @@ and scheduler loops, its start-up followers, settings watches, and the timers, c
 and claim follows that each runtime it builds starts. At shutdown it stops them and
 joins them within `ORCHESTRATION_SHUTDOWN_GRACE` (2 s). A claim follow waiting on this
 machine's local claim backend is cancelled by the stop token and joined at once
-(HS2-2W2PTX). A request already in flight
+(HS2-2W2PTX). A capacity or remote-release follow whose long poll is in flight stops
+at once too (HS2-K0RSCQ): a hosted wait served by this runtime (`hosted_capacity_wait`,
+`hosted_resource_wait`) answers as soon as its owner stops, and a long poll over the
+remote transport, which cannot be interrupted, is left to end within its own bounded
+wait with its answer dropped while the follow thread is joined. Followers that wait on
+a file watch (`ChangeWaiter`) see the stop at their 1 s safety re-check; measured on a
+real server they joined within 1.01 s with none reported still running, so they keep it.
+A scheduling, target or gate loop's blocking step already in flight
 ends within its own bounded wait and does nothing more. Every loop uses one backoff
 (`Backoff`: 1 s doubling to 60 s, reset by progress). A step that returns in under
 250 ms without learning anything counts as idle and backs off. A loop step that

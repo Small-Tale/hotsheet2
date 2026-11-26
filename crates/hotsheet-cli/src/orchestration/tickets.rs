@@ -520,6 +520,54 @@ impl OrchestrationRuntime {
         self.hosted_call_at(destination, "/target-tickets", method, query, body, tx)
     }
 
+    /// HS2-K0RSCQ: [`Self::hosted_call_at`] for a long poll a follow thread makes, ended
+    /// by the owner's stop. In process the hosted wait sees the stop token itself; a
+    /// request over the remote transport cannot be interrupted, so it is raced against
+    /// the stop ([`super::RuntimeTasks::unless_stopped`]) and, on a stop, left to end
+    /// within its own bounded wait with its answer dropped. `None` once stopping.
+    pub(super) fn hosted_long_poll(
+        &self,
+        destination: &TargetDestination,
+        leaf: &'static str,
+        query: &str,
+        tx: &mut Transaction<'_>,
+    ) -> Option<Result<Value, OrchestrationError>> {
+        if self.tasks.is_stopping() {
+            return None;
+        }
+        match destination {
+            TargetDestination::Local { .. } => {
+                Some(self.hosted_call_at(destination, leaf, "GET", query, None, tx))
+            }
+            TargetDestination::Remote { .. } => {
+                let (runtime, destination, query) =
+                    (self.clone(), destination.clone(), query.to_owned());
+                let answer = self
+                    .tasks
+                    .unless_stopped("orchestration-long-poll", move || {
+                        let mut rng = super::request::Rng;
+                        runtime.hosted_call_at(
+                            &destination,
+                            leaf,
+                            "GET",
+                            &query,
+                            None,
+                            &mut Transaction {
+                                clock: &super::request::Clock,
+                                rng: &mut rng,
+                            },
+                        )
+                    });
+                // A helper that could not start is a failed request, not a stop.
+                answer.or_else(|| {
+                    (!self.tasks.is_stopping()).then_some(Err(OrchestrationError::Observation(
+                        TargetFailure::Unreachable,
+                    )))
+                })
+            }
+        }
+    }
+
     /// The same reach for any hosted route under the target checkout (HS2-EBHDSB).
     pub(super) fn hosted_call_at(
         &self,
