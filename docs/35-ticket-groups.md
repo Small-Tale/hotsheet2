@@ -114,6 +114,13 @@ once more when loaded tickets name an id it has no name for; it never polls.
   `ListHeader` `leadingEdge="summary-row"`, which compacts with the ticket rows at
   their own width; the app sets no inset token and has no container query for it
   (HS2-HKXSB1). A browser test measures the alignment from 1440px down to 384px.
+- **Long titles.** A title too long for one line wraps, and the header grows to hold
+  every line, so no line runs under the first ticket. The count, disclosure arrow,
+  and overflow button stay on the title's first line. Kerf's `ListHeader` owns this
+  geometry (KF-Z7M45B, shipped in 5.0.0-beta.136). The app adds no sizing or clipping
+  of its own and does not truncate the title (HS2-0J112R). A browser test measures it
+  in Columns from 1440px to 390px and in List from 1440px to 320px, in both color
+  schemes.
 - **Collapse.** Collapsing a group hides its tickets and keeps its header and count
   in place. The choice is a per-viewer preference for one project, view, and group,
   stored in the browser under `hotsheet.ticket-groups.collapsed` and keyed by group

@@ -1231,3 +1231,99 @@ test('HS2-GXKX1Q manages every group from Project Settings: new, rename, view, m
     }
   }, page);
 });
+
+/**
+ * HS2-0J112R: a group title's line boxes, its header, the header's overflow button, and the first
+ * ticket card below it, in viewport coordinates.
+ */
+async function groupHeaderGeometry(container: Locator) {
+  return container.evaluate((node) => {
+    const header = node.querySelector('[data-component="list-header"]')!,
+      toggle = header.querySelector('[data-action="toggle-ticket-group"]')!,
+      overflow = header.querySelector('[data-list-header-overflow]')!,
+      card = node.querySelector('[data-ticket-slug]'),
+      walker = document.createTreeWalker(toggle, NodeFilter.SHOW_TEXT);
+    let text = walker.nextNode();
+    while (text && !text.textContent?.trim()) text = walker.nextNode();
+    const range = document.createRange();
+    range.selectNodeContents(text!);
+    // One rect per line; inline fragments on the same line share a top.
+    const lines = [...range.getClientRects()]
+      .map((rect) => ({ top: rect.top, bottom: rect.bottom }))
+      .filter((rect, index, all) => all.findIndex((other) => Math.abs(other.top - rect.top) < 2) === index);
+    const box = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom };
+    };
+    return { lines, header: box(header), overflow: box(overflow), card: card ? box(card) : null };
+  });
+}
+
+test('HS2-0J112R keeps a long group title inside its header in Columns and List', async ({ page }) => {
+  test.setTimeout(240_000);
+  await withServer(async (server) => {
+    // The reported title shape: a long name with a colon and a comma-separated list (synthetic).
+    const LONG = 'Platforms: Windows, macOS, Linux, and every other supported desktop',
+      checkout = `/checkouts/${server.checkoutId}`;
+    for (const title of ['Package the desktop installer', 'Sign the desktop builds'])
+      await server.request<FullTicket>(`${checkout}/tickets`, 'POST', {
+        title,
+        category: 'task',
+        tags: [],
+        group: LONG,
+      });
+    await open(page, server);
+    const check = async (container: Locator, label: string) => {
+      await container.scrollIntoViewIfNeeded();
+      const geometry = await groupHeaderGeometry(container),
+        first = geometry.lines[0],
+        last = geometry.lines.at(-1)!;
+      expect(geometry.card, `${label} has a first ticket card`).not.toBeNull();
+      // The whole title is inside the header, and the header ends above the first card.
+      expect(last.bottom, `${label} title ends inside its header`).toBeLessThanOrEqual(geometry.header.bottom + 0.5);
+      expect(first.top, `${label} title starts inside its header`).toBeGreaterThanOrEqual(geometry.header.top - 0.5);
+      expect(geometry.header.bottom, `${label} header ends above the first card`).toBeLessThanOrEqual(
+        geometry.card!.top + 0.5,
+      );
+      // The overflow button stays on the title's first line.
+      const overflowCenter = (geometry.overflow.top + geometry.overflow.bottom) / 2;
+      expect(overflowCenter, `${label} overflow button is on the first line`).toBeGreaterThanOrEqual(first.top - 4);
+      expect(overflowCenter, `${label} overflow button is on the first line`).toBeLessThanOrEqual(first.bottom + 4);
+      return geometry.lines.length;
+    };
+
+    await showView(page, 'Columns View');
+    let wrapped = 0;
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      for (const width of [1440, 1100, 768, 390, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await settle(page);
+        const container = group(board(page), LONG, 'not-started');
+        await expect(container.locator('[data-ticket-slug]')).toHaveCount(2);
+        wrapped = Math.max(wrapped, await check(container, `column ${theme} ${width}px`));
+        await capture(page, `hs2-0j112r-columns-${theme}-${width}`);
+      }
+    }
+    // The case is meaningful only if the title wrapped onto several lines somewhere.
+    expect(wrapped).toBeGreaterThanOrEqual(2);
+
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await showView(page, 'List View');
+    wrapped = 0;
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      for (const width of [1440, 768, 390, 320, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await settle(page);
+        const container = group(list(page), LONG);
+        await expect(container.locator('[data-ticket-slug]')).toHaveCount(2);
+        wrapped = Math.max(wrapped, await check(container, `list ${theme} ${width}px`));
+        await capture(page, `hs2-0j112r-list-${theme}-${width}`);
+      }
+    }
+    expect(wrapped).toBeGreaterThanOrEqual(2);
+    await page.emulateMedia({ colorScheme: 'light' });
+  }, page);
+});
