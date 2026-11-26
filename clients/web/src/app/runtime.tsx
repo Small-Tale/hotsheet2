@@ -73,6 +73,7 @@ import {
   isRemoteClient,
   stampedBrowserAuthMode,
 } from '../client-origin';
+import { createLocalRunStarts, mergeRefreshedCommandRuns } from '../command-run-refresh';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
@@ -1743,6 +1744,8 @@ export async function startHotSheetWebClient() {
     ticketCollectionGeneration = 0,
     commandRefreshGeneration = 0,
     projectSessionRestoreRun = 0;
+  // Runs started here while a command refresh reads stay listed when it settles (HS2-YA6D31).
+  const localRunStarts = createLocalRunStarts();
   const ticketCollectionRefreshTask = createTrailingTask<TicketView>(250, (view) => {
     const query = sortedTicketQuery(ticketViewQuery(view));
     const boardPagesMissing =
@@ -4782,12 +4785,13 @@ export async function startHotSheetWebClient() {
     // HS2-X66412: warm project activation refreshes schedule metadata without a global loading cue.
     void commandSchedules.refresh(current, quiet);
     const active = () => generation === commandRefreshGeneration && project()?.id === current.id;
+    const startedDuringRead = localRunStarts.capture();
     try {
       const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
         previous = JSON.stringify(commandDefinitions.value, null, 2),
         // A save that starts or settles while these reads are in flight makes them stale (HS2-A6K8D5).
         writes = commandSettingsWriteVersion(current.id),
-        [commandResult, runs, groupResult] = await Promise.all([
+        [commandResult, serverRuns, groupResult] = await Promise.all([
           client.commandsWithRevision(),
           client.commandRuns(),
           /* An older server without kept command groups (HS2-EZ5KMC) must not block commands. */ client
@@ -4798,6 +4802,7 @@ export async function startHotSheetWebClient() {
             }),
         ]);
       if (!active()) return;
+      const runs = mergeRefreshedCommandRuns(serverRuns, commandRuns.value, startedDuringRead);
       commandRuns.value = runs;
       if (hasCommandSettingsConflict(current.id)) return;
       const { definitions, revision } = commandResult,
@@ -4830,6 +4835,8 @@ export async function startHotSheetWebClient() {
       const message = reason instanceof Error ? reason.message : String(reason);
       // Before the first read succeeds, the editor shows a failed-load state with Retry (HS2-BZKTDC).
       if (active() && !commandSettingsLoadFailed(current.id, message)) setCommandSettingsMessage(current.id, message);
+    } finally {
+      localRunStarts.release(startedDuringRead);
     }
   }
   async function refreshCustomViews(current = project(), quiet = false) {
@@ -5813,6 +5820,7 @@ export async function startHotSheetWebClient() {
       if (project()?.id === current.id) {
         tickets.value = prependCreatedTicketRow(tickets.value, created);
         publishOptimisticTicketRows(current.id);
+        localRunStarts.record(result.run.id);
         commandRuns.value = [result.run, ...commandRuns.value.filter((item) => item.id !== result.run.id)];
       }
       showToast(aiCommandRunMessage(result, aiToolLabel));
@@ -5860,8 +5868,10 @@ export async function startHotSheetWebClient() {
     }
     try {
       const run = await new Api(current.apiPath).runCommand(commandId);
-      if (project()?.id === current.id)
+      if (project()?.id === current.id) {
+        localRunStarts.record(run.id);
         commandRuns.value = [run, ...commandRuns.value.filter((item) => item.id !== run.id)];
+      }
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
     }
@@ -5870,8 +5880,10 @@ export async function startHotSheetWebClient() {
   async function recordCommandLaunch(current: Project, commandId: string, launch: CommandLaunch) {
     try {
       const run = await new Api(current.apiPath).recordCommandLaunch(commandId, launch);
-      if (project()?.id === current.id)
+      if (project()?.id === current.id) {
+        localRunStarts.record(run.id);
         commandRuns.value = [run, ...commandRuns.value.filter((item) => item.id !== run.id)];
+      }
     } catch (reason) {
       // An older server without launch records keeps the launch working. Any other failure is shown:
       // a silently dropped record left the history saying Never run (HS2-PWNPM2).

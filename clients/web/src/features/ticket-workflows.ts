@@ -1052,7 +1052,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         prepareSelectedDraft('title', state.titleDraftBase, value, undefined, predecessor),
     },
   );
-  const tagsAutosave = createDebouncedAutosave((value: string[]) => updateSelectedTracked({ tags: value }));
+  // A tag save the debounce timer started has no caller to see it fail; show it (HS2-YA6D31).
+  const tagsAutosave = createDebouncedAutosave(
+    (value: string[]) => updateSelectedTracked({ tags: value }),
+    undefined,
+    (reason) => {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    },
+  );
   function linkedReaderFrame(target: Element) {
     const id = target.closest<HTMLElement>('[data-reader-frame-id]')?.dataset.readerFrameId;
     return id && id !== 'workspace-reader' ? linkedReaderStack.value.find((frame) => frame.id === id) : undefined;
