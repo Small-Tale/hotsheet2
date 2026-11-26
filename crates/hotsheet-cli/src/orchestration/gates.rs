@@ -477,15 +477,18 @@ impl OrchestrationRuntime {
         self
     }
 
-    /// HS2-VVHVF0: let the GitHub Actions adapter start the machine's Job monitor for
-    /// the watches it creates. Without this the adapter only reports whether one runs.
+    /// HS2-VVHVF0: let the CI adapters start the machine's Job monitor for the watches
+    /// they create. Without this an adapter only reports whether one runs. HS2-JE4QQZ:
+    /// every CI provider's adapter, since the one monitor observes all their watches
+    /// (and, HS2-YA5S82, reads the pipeline repositories a hosted check wants).
     #[must_use]
     pub fn with_job_monitor(self, monitor: Arc<dyn JobMonitor>) -> Self {
-        let github = GithubActionsGates::new(&self.home).with_monitor(monitor.clone());
-        // HS2-TPAHYA: the same monitor observes GitLab CI watches.
-        let gitlab = GithubActionsGates::gitlab(&self.home).with_monitor(monitor);
-        self.with_gate_provider(Arc::new(github))
-            .with_gate_provider(Arc::new(gitlab))
+        let home = self.home.clone();
+        CiProvider::ALL.into_iter().fold(self, |runtime, ci| {
+            runtime.with_gate_provider(Arc::new(
+                GithubActionsGates::for_provider(&home, ci).with_monitor(monitor.clone()),
+            ))
+        })
     }
 
     /// HS2-VVHVF0: owning checkouts with a gate that still waits on a provider: what a

@@ -1765,3 +1765,162 @@ test('HS2-GPABYY a Done card whose review asks for changes reads as needing repa
     await server.stop(page);
   }
 });
+
+/**
+ * HS2-V7C7MM: HS2-GPABYY's deployment path through a real server. The project is a git checkout that tracks a
+ * synthetic deploy script, its commit's CI passes through the real Job monitor against the loopback GitHub
+ * Actions fake, and the ticket is completed: plainly Done. A production deployment asks a person, who denies it,
+ * so the card says Deploy failed (warning), its badge Done · Deploy failed and its Run section's Next what to do.
+ * A newer commit's CI fails while the failed deployment stands: CI is named first. A third commit's CI passes and
+ * Deploy failed returns; a new request a person allows runs the tracked script, passes, and the card reads
+ * plainly Done again. Synthetic data only.
+ */
+test('HS2-V7C7MM a Done card whose deployment failed reads as needing repair, CI first', async ({ page }) => {
+  test.setTimeout(240_000);
+  const provider = await fakeGithubActions();
+  const commits: string[] = [];
+  const server = await realTicketServer({
+    env: { ...provider.env(), HOTSHEET_JOB_MONITOR_AUTOSTART: 'on' },
+    seed: async ({ root, env: inherited }) => {
+      const env = withoutGitRepositoryEnv(inherited);
+      const git = async (...args: string[]) => (await execute('git', args, { cwd: root, env })).stdout.trim();
+      await git('init', '-q', '-b', 'main');
+      await mkdir(join(root, 'scripts'), { recursive: true });
+      await writeFile(join(root, 'scripts', 'deploy.sh'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      await git('add', 'scripts/deploy.sh');
+      for (const message of ['Synthetic release', 'Synthetic change', 'Synthetic fix']) {
+        await git('commit', '-q', '--allow-empty', '-m', message);
+        commits.push(await git('rev-parse', 'HEAD'));
+      }
+    },
+  });
+  const [released, change, fix] = commits;
+  const maintainer = { role: 'human', id: 'maintainer' };
+  try {
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const run = (await plan.dispatch()) as { run_id: string };
+    const ci = async (id: number, sha: string, conclusion: 'success' | 'failure') => {
+      provider.run(REPO, { id, sha, status: 'in_progress' });
+      await send(server, 'POST', `${base}/runs/${run.run_id}/gates`, {
+        commit: sha,
+        repository: REPO,
+        actor: scheduler,
+      });
+      provider.run(REPO, { id, sha, status: 'completed', conclusion });
+    };
+    const deploy = (operation: string) =>
+      send(server, 'POST', `${base}/runs/${run.run_id}/deployments`, {
+        environment: 'production',
+        script: 'scripts/deploy.sh',
+        production: true,
+        operation_id: operation,
+        actor: scheduler,
+      }) as Promise<{ gate: { gate_id: string; state: string; reason?: string }; request_id?: string }>;
+    const answer = (requestId: string, reply: 'deny' | 'allow_once') =>
+      send(server, 'POST', `${base}/permissions/${requestId}`, { answer: reply, actor: maintainer });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const line = card.locator('[data-orchestration-part="state"]');
+    const inspector = page.locator('[data-orchestration-inspector]');
+    const section = inspector.locator('[data-orchestration-section="Run"]');
+    const gates = inspector.locator('[data-orchestration-section="Gates"]');
+    const events = inspector.locator('[data-orchestration-section="Events"]');
+    const row = (within: typeof section, label: string) =>
+      within
+        .locator('dl > div')
+        .filter({ has: page.locator('dt', { hasText: label }) })
+        .locator('dd');
+    const nextRow = row(section, 'Next');
+    const deployNext =
+      'Its ticket is completed, but its deployment failed: fix the deployment and request it again as the Gates section says.';
+    const ciNext =
+      'Its ticket is completed, but its CI failed, so the work needs a fix: repair it as the Gates section says.';
+
+    // 1. The released commit's CI passes and the ticket is completed: plainly Done.
+    await ci(31, released, 'success');
+    await server.request(`/tickets/${plan.first.id}`, 'PATCH', { status: 'completed' });
+    await send(server, 'POST', `${base}/runs/${run.run_id}/sync`, { actor: scheduler });
+    await expect(view.locator('[aria-label="Done Column"]')).toContainText(plan.first.slug, { timeout: 30_000 });
+    await card.click();
+    await expect(row(gates, `CI · ${released.slice(0, 7)}`)).toHaveText('Passed', { timeout: 60_000 });
+    await expect(inspector).toContainText('Done');
+    await expect(line).toHaveCount(0);
+
+    // 2. A production deployment asks a person; while it waits the card is still plainly Done.
+    const waiting = await deploy('deploy-prod-1');
+    expect(waiting.gate.state).toBe('awaiting_approval');
+    expect(waiting.request_id).toBeTruthy();
+    await expect(events).toContainText('Deployment gate: awaiting approval', { timeout: 30_000 });
+    await expect(line).toHaveCount(0);
+    await expect(inspector).not.toContainText('Deploy failed');
+
+    // 3. The person denies it and the request is repeated: the deployment fails and the Done card needs repair.
+    await answer(waiting.request_id ?? '', 'deny');
+    const denied = await deploy('deploy-prod-1');
+    expect([denied.gate.state, denied.gate.reason]).toEqual(['failed', 'permission_denied']);
+    await expect(events).toContainText('Deployment gate: failed', { timeout: 30_000 });
+    await expect(line).toHaveText('Deploy failed', { timeout: 30_000 });
+    await expect(line).toHaveAttribute('data-tone', 'warning');
+    await expect(inspector).toContainText('Done · Deploy failed');
+    await expect(nextRow).toHaveText(deployNext);
+    await visualPass(page, 'hs2-v7c7mm', 'deploy-failed', {
+      show: section,
+      check: () => expect(line).toHaveText('Deploy failed'),
+      atPhone: () => card.click(),
+    });
+
+    // 4. A newer commit's CI fails while the failed deployment stands: CI is named first.
+    await ci(32, change, 'failure');
+    await expect(row(gates, `CI · ${change.slice(0, 7)}`)).toHaveText('Failed', { timeout: 60_000 });
+    await expect(line).toHaveText('CI failed', { timeout: 30_000 });
+    await expect(line).toHaveAttribute('data-tone', 'warning');
+    await expect(inspector).toContainText('Done · CI failed');
+    await expect(inspector).not.toContainText('Deploy failed');
+    await expect(nextRow).toHaveText(ciNext);
+    await visualPass(page, 'hs2-v7c7mm', 'ci-and-deploy-failed', {
+      show: section,
+      check: () => expect(line).toHaveText('CI failed'),
+      atPhone: () => card.click(),
+    });
+
+    // 5. The fix's CI passes: the CI warning goes and the failed deployment is named again.
+    await ci(33, fix, 'success');
+    await expect(row(gates, `CI · ${fix.slice(0, 7)}`)).toHaveText('Passed', { timeout: 60_000 });
+    await expect(row(gates, `CI · ${change.slice(0, 7)}`)).toHaveCount(0);
+    await expect(line).toHaveText('Deploy failed', { timeout: 30_000 });
+    await expect(inspector).toContainText('Done · Deploy failed');
+    await expect(nextRow).toHaveText(deployNext);
+
+    // 6. A new request in the same environment, which a person allows, runs the tracked script and passes:
+    // it replaces the failed deployment and the card reads plainly Done.
+    const again = await deploy('deploy-prod-2');
+    expect(again.gate.state).toBe('awaiting_approval');
+    await answer(again.request_id ?? '', 'allow_once');
+    await deploy('deploy-prod-2');
+    await expect
+      .poll(
+        async () => {
+          await send(server, 'POST', `${base}/runs/${run.run_id}/gate-sync`, { actor: scheduler, wait_ms: 5_000 });
+          const read = await send(server, 'GET', `${base}/gates/${again.gate.gate_id}`);
+          return read.state;
+        },
+        { timeout: 60_000, intervals: [0] },
+      )
+      .toBe('passed');
+    await expect(events).toContainText('Deployment gate: passed', { timeout: 30_000 });
+    await expect(line).toHaveCount(0, { timeout: 30_000 });
+    await expect(inspector).not.toContainText('Deploy failed');
+    await expect(inspector).not.toContainText('CI failed');
+    await expect(view.locator('[aria-label="Done Column"]')).toContainText(plan.first.slug);
+    expect(provider.requests.every((request) => request.startsWith('GET '))).toBe(true);
+  } finally {
+    await execute(server.cli, ['job', 'watch', 'stop'], { cwd: server.root, env: server.env }).catch(() => undefined);
+    await server.stop(page);
+    await provider.close();
+  }
+});

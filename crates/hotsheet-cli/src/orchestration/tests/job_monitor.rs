@@ -5,7 +5,7 @@
 use std::sync::atomic::AtomicU64;
 
 use hotsheet_jobs::{MonitorClaim, MonitorInfo, MonitorSlot};
-use hotsheet_ticketing::orchestration::{GateState, TargetAction};
+use hotsheet_ticketing::orchestration::{GateKind, GateState, TargetAction};
 use serde_json::json;
 
 use super::gates::{judge, sha, with_run};
@@ -246,4 +246,48 @@ fn hs2_vvhvf0_a_follower_and_a_sync_restart_a_missing_monitor_and_back_off_a_fai
     );
     assert_eq!(monitor.starts(), 9);
     assert_eq!(m.runtime.gate_owners(), std::slice::from_ref(&owner));
+}
+
+/// HS2-JE4QQZ: the monitor a runtime is given is started by every CI provider's
+/// adapter, not only GitHub Actions and GitLab: a Buildkite link starts it, and each
+/// adapter's own `ensure_watching` starts a monitor that is gone.
+#[test]
+fn hs2_je4qqz_every_ci_providers_adapter_starts_the_monitor() {
+    let mut rng = Rng(101);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
+    let before = m.runtime.gate_providers.len();
+    let monitor = Arc::new(Recording::default());
+    m.runtime = m.runtime.clone().with_job_monitor(monitor.clone());
+    // Replaced in place: one adapter per provider and kind, as before.
+    assert_eq!(m.runtime.gate_providers.len(), before);
+    let owner = m.owner.id.clone();
+    let linked = m
+        .runtime
+        .gate_link(
+            &owner,
+            &run,
+            serde_json::from_value(json!({"commit": sha('a'), "provider": "buildkite",
+                "repository": "example/widgets-ci"}))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        (linked.gate.state, linked.watching, monitor.starts()),
+        (GateState::Pending, Some(true), 1)
+    );
+    for (index, ci) in hotsheet_jobs::CiProvider::ALL.into_iter().enumerate() {
+        monitor.stop();
+        let adapter = m
+            .runtime
+            .gate_provider(ci.kind(), GateKind::Ci)
+            .unwrap_or_else(|| panic!("no {} adapter", ci.kind()));
+        assert_eq!(adapter.ensure_watching(), Some(true), "{}", ci.kind());
+        assert_eq!(monitor.starts(), index + 2, "{}", ci.kind());
+    }
 }

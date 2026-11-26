@@ -102,11 +102,11 @@ impl Provider {
         self.0.0.lock_or_recover().2
     }
     /// Answer every request with `status` (a provider outage), or as routed again.
-    fn fail_with(&self, status: Option<u16>) {
+    pub(super) fn fail_with(&self, status: Option<u16>) {
         self.0.0.lock_or_recover().3 = status;
     }
     /// Wait until the provider has answered more than `count` requests in all.
-    fn requested_beyond(&self, count: usize) -> bool {
+    pub(super) fn requested_beyond(&self, count: usize) -> bool {
         let (provider, signal) = &*self.0;
         let (provider, timeout) = signal
             .wait_timeout_while(

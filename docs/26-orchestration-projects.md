@@ -2362,7 +2362,9 @@ monitor ([33](33-jobs.md)) runs, so whoever links or follows a gate makes sure o
 
 - `gate link` through the CLI, the server or MCP starts the detached monitor when no
   monitor holds the machine's slot and the gate still waits. A settled gate starts
-  nothing. The answer's `watching` says whether a monitor runs afterwards.
+  nothing. The answer's `watching` says whether a monitor runs afterwards. This holds
+  for a gate of every CI provider, not only GitHub Actions and GitLab CI (HS2-JE4QQZ),
+  and for a hosted pipeline repository check that is not yet known (HS2-YA5S82).
 - `gate sync` does the same before it waits, and so does each step of the server's
   gate follower. That check is a lock probe made while the step is awake anyway: a
   running monitor is found without launching anything, and a stopped, crashed or idle
