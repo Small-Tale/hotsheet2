@@ -4628,7 +4628,11 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   tail is the tab's unclipped middle-truncation tail (HS2-8KZF59; the tail alone, without
   `run `, so it fits a phone-width caption, HS2-M4YJM4; unit:
   `terminal-drawer.test.ts`, `terminal-names.test.ts`), and the same of the Project grid
-  tile caption (HS2-3RBYJK; unit: `terminal-dashboard.test.ts # HS2-3RBYJK`). The delivered role
+  tile caption (HS2-3RBYJK; unit: `terminal-dashboard.test.ts # HS2-3RBYJK`). Both set Kerf's
+  suffix priority (HS2-4BY5TT, with the same two unit tests asserting the policy), and
+  `clients/web/tests/ux-demo.spec.ts # HS2-4BY5TT` proves the narrow-box policy in Chromium
+  and WebKit: orchestrator tiles whose caption leaves under 1em for the head keep the
+  `integrator`, run and `dispatcher` suffixes whole and inside the box. The delivered role
   prompt and joining are covered by HS2-2DPGDY below; sessions as a reconciliation source
   are covered under run recovery (HS2-75Q254).
 

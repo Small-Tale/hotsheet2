@@ -674,7 +674,61 @@ export function TerminalDashboardDemo() {
         />
       </CatalogExample>
       <TerminalDashboardStates />
+      <OrchestratorCaptionsDemo />
     </>
+  );
+}
+
+/**
+ * Orchestrator tiles too narrow for their whole caption: the role or run suffix stays whole and the
+ * head collapses to an ellipsis (HS2-4BY5TT, Kerf KF-0VGEKH suffix priority).
+ */
+function OrchestratorCaptionsDemo() {
+  const orchestrator = {
+      checkout_id: 'demo-checkout',
+      operation_id: 'demo-op',
+      project: 'Release train',
+      owner: 'orchestrator' as const,
+      paused: false,
+    },
+    session = (id: string, title: string) => ({
+      id,
+      projectId: 'demo-captions',
+      projectName: 'Demo project',
+      title,
+      kind: 'ai' as const,
+      tool: 'claude',
+      alive: true,
+      busy: false,
+      orchestrator,
+      scrollback: 'Waiting for the dispatcher',
+    });
+  return (
+    <CatalogExample
+      label="Orchestrator Captions, Narrow Tiles"
+      viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}
+    >
+      <div style="height: 200px" data-demo-orchestrator-captions="">
+        <TerminalDashboard
+          groups={[
+            {
+              projectId: 'demo-captions',
+              projectName: 'Demo project',
+              sessions: [
+                session('integrator', 'Release train: integrator'),
+                session('run', 'Release train: run Q69G5FB0'),
+                session('dispatcher', 'Release train: dispatcher'),
+              ],
+            },
+          ]}
+          width={480}
+          height={200}
+          fitAcross={3}
+          fitHigh={3}
+          layoutMode="drawer"
+        />
+      </div>
+    </CatalogExample>
   );
 }
 

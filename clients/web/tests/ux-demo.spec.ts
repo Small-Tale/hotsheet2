@@ -164,6 +164,42 @@ test('clears the halted terminal example from its menu at wide and phone widths 
   }
 });
 
+// HS2-4BY5TT: an orchestrator tile caption narrower than its run or role suffix plus a 1em head keeps
+// the suffix whole and collapses the head (Kerf KF-0VGEKH `truncatePriority="suffix"`). Kerf's default
+// head priority would ellipsize the run tail in the same box.
+test('keeps orchestrator caption suffixes whole in narrow tiles (HS2-4BY5TT)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=terminal-dashboard');
+    const example = page.locator('[data-demo-orchestrator-captions]');
+    await example.scrollIntoViewIfNeeded();
+    const captions = await example.evaluate((node) =>
+      [...node.querySelectorAll<HTMLElement>('.terminal-tile__identity .kui-text')].map((text) => {
+        const tail = text.querySelector<HTMLElement>('.kui-text__truncate-tail')!,
+          head = text.querySelector<HTMLElement>('.kui-text__truncate-head')!,
+          box = text.getBoundingClientRect(),
+          tailBox = tail.getBoundingClientRect(),
+          em = parseFloat(getComputedStyle(text).fontSize);
+        return {
+          priority: text.dataset.truncatePriority,
+          tail: tail.textContent,
+          tailClipped: tail.scrollWidth > tail.clientWidth + 1,
+          tailInside: tailBox.left >= box.left - 1 && tailBox.right <= box.right + 1,
+          // The whole caption does not fit, so the head is what gives way.
+          headCut: head.scrollWidth > head.clientWidth + 1,
+          // Room left for the head, in em: under 1em, the default policy would have cut the suffix.
+          headRoomEm: (box.width - tailBox.width) / em,
+        };
+      }),
+    );
+    expect(captions.map(({ tail }) => tail)).toEqual(['integrator', 'Q69G5FB0', 'dispatcher']);
+    for (const caption of captions) {
+      expect(caption).toMatchObject({ priority: 'suffix', tailClipped: false, tailInside: true, headCut: true });
+    }
+    expect(captions[1].headRoomEm).toBeLessThan(1);
+  }
+});
+
 test('centers the TerminalDashboard empty, loading, and message copy without clipping a short drawer (HS2-1Q6GER)', async ({
   page,
 }) => {

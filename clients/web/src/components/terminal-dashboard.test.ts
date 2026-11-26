@@ -230,6 +230,9 @@ describe('TerminalDashboard', () => {
     // Another terminal keeps the ordinary end ellipsis.
     expect(markup).toContain('Project One › Plain shell: one');
     expect(markup.match(/kui-text__truncate-middle/g)).toHaveLength(1);
+    // HS2-4BY5TT: a caption too narrow for both parts keeps the suffix whole and collapses the head
+    // to an ellipsis (Kerf KF-0VGEKH suffix priority); the plain terminal's caption has no policy.
+    expect(markup.match(/data-truncate-priority="suffix"/g)).toHaveLength(1);
     // No app rule reaches the strong inside Kerf Text.
     expect(css).not.toMatch(/\.terminal-tile__identity(:hover)? strong/);
   });

@@ -54,7 +54,11 @@ import {
 } from '../terminal-visibility';
 import { TerminalKeyBar, type TerminalKeyBarProps } from './terminal-key-bar';
 
-/** The grid tile's `project › terminal` caption, cut in the middle to keep a kept suffix (HS2-3RBYJK). */
+/**
+ * The grid tile's `project › terminal` caption, cut in the middle to keep a kept suffix (HS2-3RBYJK).
+ * The suffix tells two sessions of one project apart, so a box too narrow for both parts collapses
+ * the head to an ellipsis and keeps the suffix whole (HS2-4BY5TT, Kerf KF-0VGEKH).
+ */
 function TileCaption({ caption, keep }: { caption: string; keep: number | undefined }) {
   return keep === undefined ? (
     <Text variant="span" weight="strong" wrap="truncate" color={uiColor('neutral-on-normal')}>
@@ -67,6 +71,7 @@ function TileCaption({ caption, keep }: { caption: string; keep: number | undefi
       wrap="truncate"
       truncate="middle"
       truncateKeep={keep}
+      truncatePriority="suffix"
       color={uiColor('neutral-on-normal')}
     >
       {caption}
