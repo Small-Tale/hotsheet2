@@ -136,12 +136,15 @@ mutation response resolves standing auto-context from that checkout's project se
 one ticket store shared by several checkouts never supplies an implicit project identity.
 Detail reads retain the ticket fetched during source resolution, including external-provider
 payloads and historical connection aliases; they do not fetch it again after finding its
-owner. Synchronous resolution runs on the blocking pool. Duplicate backlinks use each Git
+owner. Synchronous resolution runs on the blocking pool. Duplicate backlinks use each hosted Git
 store's maintained reverse index for the exact qualified target plus historical bare-ULID
-references. A remembered but unhosted source is indexed and watched once on first use, with
-source-specific initialization coordination; no global registry lock spans its disk scan.
+references. The read never hosts a store (HS2-V7NK9T): a remembered but unhosted source is
+scanned once from its files on the blocking pool and released, so the GET starts no index,
+watcher, or sync loop, and hosting stays the result of explicit open and host actions. An
+already-hosted store stays hosted. No global registry lock spans a disk scan.
 Only indexed matches are read to validate current source content, so a retained healthy
-cache row does not expose a now-corrupt, removed, or retargeted backlink.
+cache row does not expose a now-corrupt, removed, or retargeted backlink; the unhosted scan
+omits corrupt files the same way.
 Writes update the reverse index immediately, while CLI/Git changes use the existing watcher
 and restart reconciliation. Missing checkout directories and absent store metadata are
 skipped, and inaccessible sources remain reported. External providers retain a live-query
