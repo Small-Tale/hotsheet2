@@ -850,6 +850,22 @@ cleanup, qualified project/selection guards, and current reconciliation bases.
 Synthetic detail revisions advance with their content. Existing draft merge and
 conflict tests remain the authority for text reconciliation.
 
+HS2-QW3PGE covers a refresh that would drop the selected ticket while one of its
+text edits is unsaved. In `clients/web/src/features/project-refresh.test.ts` a
+real focus-loss autosave checks the following:
+
+- Type, then prune, then blur: one write, to the original ticket while it is still listed.
+- With no pending edit, the prune happens straight away.
+- A ticket that stays listed is not written while the user types.
+- Prune, then the ticket reappears: no second write, and the selection is kept.
+- A save in flight plus a later edit, with repeated refreshes: both saves go to the same ticket before the prune.
+- A live change event from another worker defers the prune the same way.
+- A range anchor that was toggled off clears when its row leaves.
+
+The shipped parent in `clients/web/tests/ticket-edit-sequencing.spec.ts` edits
+Details, delivers a held poll change event whose refresh omits the ticket, and
+asserts exactly one PATCH that carries the edit and no leftover recovery draft.
+
 HS2-P9A21R covers the five-view phone toolbar and reachable sidebar toggle
 through the shipped shell in `clients/web/tests/shell-composition.spec.ts`.
 `mobile-layout.spec.ts` keeps overlay and resize navigation in the affected

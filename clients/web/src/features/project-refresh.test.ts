@@ -9,13 +9,19 @@ import {
   type TicketRow,
 } from '../api';
 import type { BoardColumnPage } from '../board-pagination';
+import { createFocusLossAutosave } from '../debounced-autosave';
 import type { Project } from '../interactions/types';
 import type { ProjectTicketSources } from '../new-ticket-source';
 import { PendingCreatedTickets } from '../pending-created-tickets';
 import type { ProjectTicketRefresh } from '../project-ticket-refresh';
 import { createRefreshBarrier } from '../refresh-barrier';
 import type { TicketView } from '../ticket-views';
-import { type CachedProjectProjection, createProjectRefresh, sameTicketQuery } from './project-refresh';
+import {
+  type CachedProjectProjection,
+  createProjectRefresh,
+  refreshPrunesSelectedTicket,
+  sameTicketQuery,
+} from './project-refresh';
 
 const { load, readDetail } = vi.hoisted(() => ({
   load: vi.fn<() => Promise<ProjectTicketRefresh>>(),
@@ -71,6 +77,7 @@ function owner() {
     projectProjectionById: signal<Record<string, CachedProjectProjection>>({}),
   };
   const reconcile = vi.fn();
+  const flushEdits = vi.fn<() => Promise<boolean> | undefined>(() => undefined);
   const refresh = createProjectRefresh({
     ...bindings,
     localTicketMutationBarrier: barrier,
@@ -91,12 +98,14 @@ function owner() {
     recordAuthoritativeTicketTrend: vi.fn(),
     scheduleClaimLeaseExpiry: vi.fn(),
     reconcileRefreshedSelected: reconcile,
+    flushSelectedTicketEdits: () => flushEdits(),
   });
   return {
     refresh,
     bindings,
     barrier,
     reconcile,
+    flushEdits,
     anchor: () => anchor,
     switchProject: () => {
       current = { id: 'p2', apiPath: '/api/p2' } as Project;
@@ -301,6 +310,162 @@ describe('selected project refresh owner (HS2-BSSWGV)', () => {
     await pending;
     expect(bindings.error.value).toBe('');
     expect(bindings.refreshError.value).toBe('');
+  });
+});
+
+describe('a refresh that prunes the selected ticket with an open edit (HS2-QW3PGE)', () => {
+  /** Mirrors updateSelectedTracked: the save resolves its ticket only when it runs. */
+  function editedOwner() {
+    const owned = owner();
+    const { bindings } = owned;
+    bindings.selectedTicketSlugs.value = ['A'];
+    bindings.selectedTicket.value = row('A') as FullTicket;
+    bindings.tickets.value = [row('A'), row('B')];
+    const writes: Array<{ slug: string; value: string; listed: boolean }> = [];
+    let hold: Promise<void> | undefined;
+    const autosave = createFocusLossAutosave(async (value: string) => {
+      const target = bindings.selectedTicket.value;
+      if (!target) return false;
+      writes.push({ slug: target.slug, value, listed: bindings.tickets.value.some((item) => item.id === target.id) });
+      await hold;
+      return true;
+    });
+    owned.flushEdits.mockImplementation(() => (autosave.pending() ? autosave.flush() : undefined));
+    return {
+      ...owned,
+      autosave,
+      writes,
+      holdSaves: (gate: Promise<void>) => {
+        hold = gate;
+      },
+    };
+  }
+  function gate() {
+    let open!: () => void;
+    const promise = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return { promise, open };
+  }
+
+  it('saves the edit against its own ticket before deselecting, then a later blur writes nothing', async () => {
+    const { refresh, bindings, autosave, writes, flushEdits } = editedOwner();
+    autosave.schedule('typed text');
+    load.mockResolvedValue({ tickets: [row('B')], ticketCounts: counts });
+    await refresh.refreshProject();
+    // The save ran while A was still selected and listed; the deferred refresh then pruned it.
+    expect(writes).toEqual([{ slug: 'A', value: 'typed text', listed: true }]);
+    await vi.waitFor(() => {
+      expect(bindings.selectedTicket.value).toBeNull();
+    });
+    expect(bindings.tickets.value.map((item) => item.slug)).toEqual(['B']);
+    expect(bindings.selectedTicketSlugs.value).toEqual([]);
+    expect(bindings.loading.value).toBe(false);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(flushEdits).toHaveBeenCalledTimes(2);
+    // Focus leaves the (now closed) editor: nothing is left to save, so no duplicate write.
+    await expect(autosave.flush()).resolves.toBe(true);
+    expect(writes).toHaveLength(1);
+  });
+
+  it('prunes straight away when the selected ticket has no unsaved edit', async () => {
+    const { refresh, bindings, flushEdits, writes } = editedOwner();
+    load.mockResolvedValue({ tickets: [row('B')], ticketCounts: counts });
+    await refresh.refreshProject();
+    expect(flushEdits).toHaveBeenCalledOnce();
+    expect(writes).toEqual([]);
+    expect(bindings.selectedTicket.value).toBeNull();
+    expect(load).toHaveBeenCalledOnce();
+  });
+
+  it('leaves an open edit alone while its ticket stays listed (no write while typing)', async () => {
+    const { refresh, bindings, autosave, flushEdits, writes } = editedOwner();
+    autosave.schedule('still typing');
+    readDetail.mockResolvedValue({ store: 'git', ticket: row('A') as FullTicket });
+    load.mockResolvedValue({ tickets: [row('A')], ticketCounts: counts });
+    await refresh.refreshProject();
+    expect(flushEdits).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+    expect(autosave.pending()).toBe(true);
+    expect(bindings.selectedTicket.value?.slug).toBe('A');
+  });
+
+  it('keeps the selection without a second write when the ticket comes back in the next refresh', async () => {
+    const { refresh, bindings, autosave, flushEdits, writes } = editedOwner();
+    autosave.schedule('typed text');
+    readDetail.mockResolvedValue({ store: 'git', ticket: row('A') as FullTicket });
+    load.mockResolvedValueOnce({ tickets: [row('B')], ticketCounts: counts });
+    load.mockResolvedValue({ tickets: [row('A'), row('B')], ticketCounts: counts });
+    await refresh.refreshProject();
+    await vi.waitFor(() => {
+      expect(load).toHaveBeenCalledTimes(2);
+    });
+    await vi.waitFor(() => {
+      expect(readDetail).toHaveBeenCalled();
+    });
+    expect(bindings.selectedTicket.value?.slug).toBe('A');
+    expect(bindings.selectedTicketSlugs.value).toEqual(['A']);
+    expect(writes).toEqual([{ slug: 'A', value: 'typed text', listed: true }]);
+    expect(flushEdits).toHaveBeenCalledOnce();
+    expect(autosave.pending()).toBe(false);
+  });
+
+  it('waits for a save already in flight, then saves the later edit to the same ticket before pruning', async () => {
+    const { refresh, bindings, autosave, writes, holdSaves } = editedOwner();
+    const first = gate();
+    holdSaves(first.promise);
+    autosave.schedule('first blur');
+    const blur = autosave.flush();
+    // The user refocuses and types again while the first save is still in flight.
+    autosave.schedule('second edit');
+    load.mockResolvedValue({ tickets: [row('B')], ticketCounts: counts });
+    await refresh.refreshProject();
+    // A repeated refresh during the same save neither prunes nor writes again.
+    await refresh.refreshProject();
+    expect(bindings.selectedTicket.value?.slug).toBe('A');
+    expect(writes.map((write) => write.value)).toEqual(['first blur']);
+    first.open();
+    await blur;
+    await vi.waitFor(() => {
+      expect(bindings.selectedTicket.value).toBeNull();
+    });
+    expect(writes).toEqual([
+      { slug: 'A', value: 'first blur', listed: true },
+      { slug: 'A', value: 'second edit', listed: true },
+    ]);
+  });
+
+  it('defers a prune caused by another worker changing the ticket (a live change event)', async () => {
+    const { refresh, bindings, autosave, writes } = editedOwner();
+    autosave.schedule('typed text');
+    // The view is unchanged; the store now reports A completed, so the open view omits it.
+    load.mockResolvedValue({ tickets: [row('B')], ticketCounts: counts });
+    bindings.selectedView.value = 'all';
+    await refresh.refreshProject({ showLoading: false, quiet: true });
+    expect(writes).toEqual([{ slug: 'A', value: 'typed text', listed: true }]);
+    await vi.waitFor(() => {
+      expect(bindings.selectedTicket.value).toBeNull();
+    });
+  });
+
+  it('clears a toggled-off range anchor when its row leaves', async () => {
+    const { refresh, bindings, anchor } = owner();
+    // GONE anchors a shift-click range but is no longer selected; selection length does not change.
+    bindings.selectedTicketSlugs.value = ['A'];
+    load.mockResolvedValue({ tickets: [row('A'), row('B')], ticketCounts: counts });
+    await refresh.refreshProject();
+    expect(bindings.selectedTicketSlugs.value).toEqual(['A']);
+    expect(anchor()).toBeUndefined();
+  });
+
+  it('decides a prune only for an authoritative, non-search page without the selected row', () => {
+    const selected = { id: 'A' };
+    expect(refreshPrunesSelectedTicket(selected, [{ id: 'B' }], false)).toBe(true);
+    expect(refreshPrunesSelectedTicket(selected, [{ id: 'A' }], false)).toBe(false);
+    expect(refreshPrunesSelectedTicket(selected, [{ id: 'B' }], true)).toBe(false);
+    expect(refreshPrunesSelectedTicket(selected, undefined, false)).toBe(false);
+    expect(refreshPrunesSelectedTicket(null, [{ id: 'B' }], false)).toBe(false);
+    expect(refreshPrunesSelectedTicket(selected, [], false)).toBe(true);
   });
 });
 
