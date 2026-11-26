@@ -143,6 +143,8 @@ export const appShellSettings = {
   projectUnavailable: signal(false),
   /** Which failure the unavailable project reports; the main panel explains it plainly (HS2-ZKAVZZ). */
   unavailableCause: signal<ProjectUnavailableCause>('folder-missing'),
+  /** Technical Details opens in the EmptyState's start-aligned secondary region (HS2-1ZKMS9). */
+  unavailableDetailsOpen: signal(false),
 };
 
 /** A representative raw error per cause, as the bridge reports it (HS2-ZKAVZZ). */
@@ -178,6 +180,7 @@ export function resetAppShellDemo(root?: ParentNode): void {
   appShellSettings.mobileViewValue.value = 'all';
   appShellSettings.projectUnavailable.value = false;
   appShellSettings.unavailableCause.value = 'folder-missing';
+  appShellSettings.unavailableDetailsOpen.value = false;
   shellLiveExpanded.value = false;
   if (root)
     syncSettingsControls(root, 'app-shell', {
@@ -189,6 +192,7 @@ export function resetAppShellDemo(root?: ParentNode): void {
         'overlay-open': appShellSettings.overlayOpen.value,
         'mobile-view-header': appShellSettings.mobileView.value,
         'project-unavailable': appShellSettings.projectUnavailable.value,
+        'unavailable-details-open': appShellSettings.unavailableDetailsOpen.value,
       },
     });
 }
@@ -225,6 +229,11 @@ export function AppShellSettings() {
         label="Unavailable Cause"
         value={appShellSettings.unavailableCause.value}
         choices={unavailableCauseChoices}
+      />
+      <Checkbox
+        name="unavailable-details-open"
+        checked={appShellSettings.unavailableDetailsOpen.value}
+        label="Unavailable project Technical Details open"
       />
       <Button type="button" action={'reset-settings'}>
         Reset
@@ -708,6 +717,7 @@ export function AppShellDemo() {
               root="/work/hot-sheet-2"
               name="Hot Sheet 2"
               error={unavailableCauseErrors[appShellSettings.unavailableCause.value]}
+              detailsOpen={appShellSettings.unavailableDetailsOpen.value}
             />
           }
           terminalDrawer={<UnavailableTerminalDrawer message={unavailable.drawer} />}
@@ -976,6 +986,8 @@ function wireAppShellDemo(root: HTMLElement): () => void {
         appShellSettings.projectUnavailable.value = control.checked;
       if (control.getAttribute('name') === 'unavailable-cause')
         appShellSettings.unavailableCause.value = control.value as ProjectUnavailableCause;
+      if (control.getAttribute('name') === 'unavailable-details-open')
+        appShellSettings.unavailableDetailsOpen.value = control.checked;
     }),
   );
   demoListeners.add(

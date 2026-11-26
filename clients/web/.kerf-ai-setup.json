@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "setupVersion": "5.0.0-beta.136",
+  "setupVersion": "5.0.0-beta.137",
   "packageManager": "npm",
   "packages": {
     ".": {
@@ -30,10 +30,10 @@
           "sha256": "01d54b2ca5c6d487dff7805f7ba7cb7ac3c69381e491c77b370741c3ac2bea7d"
         },
         "package.json#devDependencies.eslint-plugin-kerfjs": {
-          "sha256": "9676964a548e0e936fbe6dc1f584402098ef981abda60d6284a6c50e7620b8bb"
+          "sha256": "82e5913b1cf0c9aa57fefb7647e270d709b4a0ec395e392b41ded9aad6c0dc95"
         },
         "package.json#devDependencies.create-kerf-component": {
-          "sha256": "9676964a548e0e936fbe6dc1f584402098ef981abda60d6284a6c50e7620b8bb"
+          "sha256": "82e5913b1cf0c9aa57fefb7647e270d709b4a0ec395e392b41ded9aad6c0dc95"
         },
         "package.json#devDependencies.eslint-plugin-simple-import-sort": {
           "sha256": "fa6a7973ae2f660d323bbf0056dadcf9b0472352e2fc75213a5ee709f99a9348"

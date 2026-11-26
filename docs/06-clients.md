@@ -1714,7 +1714,8 @@ checkout name>`, where the host is the machine name the peer last reported on th
   Unavailable), and the project's ticket repository link names a repository that is gone (Ticket
   Repository Not Found); any other error reads Project Unavailable with Retry primary. The exact
   error, known stale-server process, and remembered root stay available behind a collapsed Technical
-  Details disclosure for diagnosis. The shell never drops a region for a
+  Details disclosure for diagnosis, set start-aligned below the centered actions so its chevron stays
+  beside its title when open (HS2-1ZKMS9, Kerf EmptyState `secondaryContent`). The shell never drops a region for a
   selected tab that is not ready (unavailable, a remote project loading or reconnecting, or a
   project still opening): the project sidebar, inspector, workspace toolbar, New Ticket action, and
   terminal drawer keep the user's visibility and sizes, the rails and drawer show an empty state,
@@ -2088,7 +2089,7 @@ checkout name>`, where the host is the machine name the peer last reported on th
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.136 (HS2-6H9P37). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.137 (HS2-N4G74W). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
   `npx kerfjs setup --ui --write --yes`, run from `clients/web`, installs the Kerf
   `kerf-app`, `kerf-ui`, and `kerf-ui-design-mock` skills under `clients/web/.claude/skills`

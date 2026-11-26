@@ -341,6 +341,10 @@ fn a_commits_run_is_followed_from_queued_to_green() {
     let refs = done.outcome.unwrap().refs;
     assert_eq!(refs["commit"], SHA);
     assert_eq!(refs["run_conclusion"], "success");
+    // HS2-CC7TCB: the run's created and updated times, for the main CI status report.
+    // 2026-11-01T10:09:00Z and 10:09:30Z.
+    assert_eq!(refs["run_created_ms"], "1793527740000");
+    assert_eq!(refs["run_updated_ms"], "1793527770000");
     assert_eq!(
         ci_outcome(&waiting),
         None,

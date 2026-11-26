@@ -10,6 +10,7 @@ mod ai_tool_discovery;
 mod api_error;
 pub mod auto_group;
 mod blocking_offload;
+pub mod ci_follow;
 pub mod ci_status;
 pub mod claim_conflict_push;
 pub mod client_drive;
@@ -483,6 +484,8 @@ pub struct AppState {
     live_states: live_state::LiveStates,
     /// The latest reported CI run per checkout (HS2-M8HHEA).
     ci_reports: ci_status::CiReports,
+    /// Followers of reported GitHub Actions runs still in flight (HS2-CC7TCB).
+    ci_follow: ci_follow::CiFollow,
     /// The last recorded overnight state per store (HS2-9AN4DN).
     live_history: Arc<live_history::LiveHistory>,
     tts: tts::TtsProviders,
@@ -732,6 +735,7 @@ impl AppState {
             notification_delivery: Default::default(),
             live_states: Default::default(),
             ci_reports: Default::default(),
+            ci_follow: Default::default(),
             live_history: Arc::default(),
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
@@ -1019,6 +1023,18 @@ impl AppState {
     /// The machine-local home this state reads and writes under.
     pub fn machine_home(&self) -> &std::path::Path {
         &self.machine_home
+    }
+
+    /// The followers of reported CI runs (HS2-CC7TCB).
+    pub fn ci_follow(&self) -> &ci_follow::CiFollow {
+        &self.ci_follow
+    }
+
+    /// Follow reported GitHub Actions runs with `follow`: an explicit Job monitor and
+    /// token check, for tests against a loopback provider (HS2-CC7TCB).
+    pub fn with_ci_follow(mut self, follow: ci_follow::CiFollow) -> Self {
+        self.ci_follow = follow;
+        self
     }
 
     /// This machine's provider configuration (HS2-7QPJ05): the one registry

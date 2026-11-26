@@ -6,7 +6,9 @@
 //! `hotsheet-cli ci report`. The server keeps the latest run per checkout id, persists it
 //! machine-locally in `<machine home>/ci-status.json`, and pushes it to glance surfaces as the
 //! `ci` member of every linked store's live state ([`crate::live_state`]). No inbound
-//! exposure is needed, and any CI that can run a command can report.
+//! exposure is needed, and any CI that can run a command can report. A reported GitHub
+//! Actions run still in flight is followed to its end by the Job monitor (HS2-CC7TCB,
+//! [`crate::ci_follow`]).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -304,7 +306,7 @@ fn save_runs(path: &Path, runs: &BTreeMap<String, CiRun>) {
 }
 
 impl CiReports {
-    fn with_runs<T>(
+    pub(crate) fn with_runs<T>(
         &self,
         machine_home: &Path,
         f: impl FnOnce(&mut BTreeMap<String, CiRun>) -> T,
@@ -363,10 +365,53 @@ pub struct CiReportResponse {
     pub ci: LiveCi,
     /// Hosted stores linked to this checkout, whose live state shows the run.
     pub stores: Vec<String>,
+    /// HS2-CC7TCB: whether a GitHub Actions watch follows the run to its end.
+    pub follow: crate::ci_follow::FollowState,
+}
+
+/// Record `run` for `checkout` and, when it applied, rebuild the live state of every
+/// hosted store linked to the checkout. The one path every report takes: the route and
+/// a followed run's verdict (HS2-CC7TCB). Returns whether it applied, the stored run,
+/// and the linked stores.
+pub(crate) fn apply_run(
+    state: &AppState,
+    checkout: &str,
+    run: CiRun,
+) -> (bool, CiRun, Vec<String>) {
+    let (applied, stored) = state.ci_reports.record(state.machine_home(), checkout, run);
+    let mut stores: Vec<String> = state
+        .host
+        .locations()
+        .into_iter()
+        .filter(|(_, root)| {
+            crate::notification_router::linked(state, root)
+                .iter()
+                .any(|linked| linked.id == checkout)
+        })
+        .map(|(id, _)| id)
+        .collect();
+    stores.sort();
+    if applied {
+        for store in &stores {
+            crate::live_state::touch(state, store);
+        }
+    }
+    (applied, stored, stores)
+}
+
+impl AppState {
+    /// Every stored run by checkout id (HS2-CC7TCB: a restarted server follows the ones
+    /// still in flight).
+    pub(crate) fn ci_reports_snapshot(&self) -> BTreeMap<String, CiRun> {
+        self.ci_reports
+            .with_runs(self.machine_home(), |runs| runs.clone())
+    }
 }
 
 /// `POST /checkouts/{reference}/ci-status` — record the latest CI run a local tool observed
 /// for a registered checkout and push it in the linked stores' live state (HS2-M8HHEA).
+/// An applied report of a GitHub Actions run still in flight is followed to its end
+/// (HS2-CC7TCB, [`crate::ci_follow`]).
 pub(crate) async fn report_ci_status(
     State(state): State<AppState>,
     RoutePath(reference): RoutePath<String>,
@@ -380,31 +425,29 @@ pub(crate) async fn report_ci_status(
     let run = report
         .into_run(now)
         .map_err(|message| ApiError::new(StatusCode::BAD_REQUEST, message))?;
-    let (applied, stored) = state
-        .ci_reports
-        .record(state.machine_home(), &checkout.id, run);
-    let mut stores: Vec<String> = state
-        .host
-        .locations()
-        .into_iter()
-        .filter(|(_, root)| {
-            crate::notification_router::linked(&state, root)
-                .iter()
-                .any(|linked| linked.id == checkout.id)
-        })
-        .map(|(id, _)| id)
-        .collect();
-    stores.sort();
-    if applied {
-        for store in &stores {
-            crate::live_state::touch(&state, store);
-        }
-    }
+    let checkout_id = checkout.id.clone();
+    let (applied, stored, stores, follow) = tokio::task::spawn_blocking(move || {
+        let (applied, stored, stores) = apply_run(&state, &checkout_id, run);
+        let follow = if applied {
+            crate::ci_follow::follow_reported(&state, &checkout_id, &stored)
+        } else {
+            crate::ci_follow::FollowState::None
+        };
+        (applied, stored, stores, follow)
+    })
+    .await
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the CI report did not finish",
+        )
+    })?;
     Ok(Json(CiReportResponse {
         ci: LiveCi::of(&checkout.id, &stored),
         checkout: checkout.id,
         applied,
         stores,
+        follow,
     }))
 }
 

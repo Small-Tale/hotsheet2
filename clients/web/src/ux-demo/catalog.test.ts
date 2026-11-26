@@ -721,11 +721,17 @@ describe('UX demo catalog', () => {
       expect(String(AppShellDemo())).toContain('data-project-unavailable-cause="server-unreachable"');
       appShellSettings.unavailableCause.value = 'unknown';
       expect(String(AppShellDemo())).toContain('The older server only supports schema 2.');
+      // Technical Details opens in the EmptyState's start-aligned secondary region (HS2-1ZKMS9).
+      expect(String(AppShellSettings())).toContain('name="unavailable-details-open"');
+      expect(String(AppShellDemo())).not.toMatch(/<details[^>]*data-project-unavailable-details[^>]*\bopen\b/);
+      appShellSettings.unavailableDetailsOpen.value = true;
+      expect(String(AppShellDemo())).toMatch(/<details[^>]*data-project-unavailable-details[^>]*\bopen\b/);
     } finally {
       resetAppShellDemo();
     }
     expect(appShellSettings.projectUnavailable.value).toBe(false);
     expect(appShellSettings.unavailableCause.value).toBe('folder-missing');
+    expect(appShellSettings.unavailableDetailsOpen.value).toBe(false);
   });
 
   it('projects the reader demo title-editing state into TicketReader (HS2-0VFPD5)', () => {

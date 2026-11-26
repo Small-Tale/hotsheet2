@@ -1131,6 +1131,19 @@ fn outcome(
             if !run.conclusion().is_empty() {
                 refs.insert("run_conclusion".to_owned(), clean(run.conclusion(), 64));
             }
+            // HS2-CC7TCB: when the run was created and last updated, so the run can be
+            // reported to the server's main CI status with the start `ci-gate` reports.
+            if let Some(created) = run.created_at.as_deref().and_then(parse_timestamp_ms) {
+                refs.insert("run_created_ms".to_owned(), created.to_string());
+            }
+            if let Some(updated) = run
+                .updated_at
+                .as_deref()
+                .filter(|_| run.completed())
+                .and_then(parse_timestamp_ms)
+            {
+                refs.insert("run_updated_ms".to_owned(), updated.to_string());
+            }
             if gate == "green" {
                 refs.insert("artifact_count".to_owned(), artifacts.len().to_string());
                 // HS2-TQG6AT: a named artifact is looked for by name; otherwise the

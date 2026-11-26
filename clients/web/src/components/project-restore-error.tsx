@@ -21,6 +21,8 @@ export interface ProjectRestoreFailure {
   error: string;
   recoveryPid?: number;
   busy?: boolean;
+  /** Opens Technical Details initially; the demo uses it to show the open state (HS2-1ZKMS9). */
+  detailsOpen?: boolean;
 }
 
 export function rememberedProjectName(root: string): string {
@@ -44,9 +46,18 @@ const CAUSE_ICONS = {
 /**
  * The workspace of a remembered project that could not be reopened. It explains the cause in plain
  * language and offers Retry and Close Tab, primary by cause; the raw error stays behind Technical
- * Details for diagnosis (HS2-ZKAVZZ). The shell around it keeps its regions (HS2-H0QGK7).
+ * Details for diagnosis (HS2-ZKAVZZ), in the EmptyState's start-aligned secondary region so the open
+ * disclosure keeps its chevron beside its title (HS2-1ZKMS9, Kerf KF-GZDZXH). The shell around it keeps
+ * its regions (HS2-H0QGK7).
  */
-export function ProjectRestoreError({ root, name, error, recoveryPid, busy = false }: ProjectRestoreFailure) {
+export function ProjectRestoreError({
+  root,
+  name,
+  error,
+  recoveryPid,
+  busy = false,
+  detailsOpen = false,
+}: ProjectRestoreFailure) {
   const failure = { root, name, error, ...(recoveryPid ? { recoveryPid } : {}) },
     explanation = explainProjectUnavailable(failure),
     icon = CAUSE_ICONS[explanation.cause];
@@ -64,40 +75,39 @@ export function ProjectRestoreError({ root, name, error, recoveryPid, busy = fal
         busy={busy}
         icon={<LucideIcon icon={icon.icon} name={icon.name} />}
         action={
-          <List gap="m">
-            <Row hAlign="center" gap="xs" wrap>
-              <Button
-                emphasis={explanation.primaryAction === 'retry' ? 'primary' : 'secondary'}
-                action={NAVIGATION_AND_TABS_ACTIONS.retryProjectRestore.value}
-                disabled={busy}
-                rootAttributes={{ 'data-project-root': root }}
-              >
-                {busy ? 'Retrying…' : 'Retry'}
-              </Button>
-              <Button
-                emphasis={explanation.primaryAction === 'close' ? 'primary' : 'secondary'}
-                action={TERMINALS_ACTIONS.closeProjectTab.value}
-                rootAttributes={{ 'data-project-id': projectRestoreTabId(root) }}
-              >
-                Close Tab
-              </Button>
-            </Row>
-            <Row hAlign="center">
-              <Disclosure
-                title="Technical Details"
-                size="compact"
-                rootAttributes={{ 'data-project-unavailable-details': '' }}
-              >
-                <List gap="xs">
-                  {projectUnavailableTechnicalDetails(failure).map((line) => (
-                    <Text size="compact" tone="quiet" font="monospace" wrap="anywhere">
-                      {line}
-                    </Text>
-                  ))}
-                </List>
-              </Disclosure>
-            </Row>
-          </List>
+          <Row hAlign="center" gap="xs" wrap>
+            <Button
+              emphasis={explanation.primaryAction === 'retry' ? 'primary' : 'secondary'}
+              action={NAVIGATION_AND_TABS_ACTIONS.retryProjectRestore.value}
+              disabled={busy}
+              rootAttributes={{ 'data-project-root': root }}
+            >
+              {busy ? 'Retrying…' : 'Retry'}
+            </Button>
+            <Button
+              emphasis={explanation.primaryAction === 'close' ? 'primary' : 'secondary'}
+              action={TERMINALS_ACTIONS.closeProjectTab.value}
+              rootAttributes={{ 'data-project-id': projectRestoreTabId(root) }}
+            >
+              Close Tab
+            </Button>
+          </Row>
+        }
+        secondaryContent={
+          <Disclosure
+            title="Technical Details"
+            size="compact"
+            open={detailsOpen}
+            rootAttributes={{ 'data-project-unavailable-details': '' }}
+          >
+            <List gap="xs">
+              {projectUnavailableTechnicalDetails(failure).map((line) => (
+                <Text size="compact" tone="quiet" font="monospace" wrap="anywhere">
+                  {line}
+                </Text>
+              ))}
+            </List>
+          </Disclosure>
         }
       />
     </List>

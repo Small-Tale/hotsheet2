@@ -44,6 +44,7 @@ const CI_CHOICES: SelectChoice[] = [
   { value: 'queued', label: 'Queued' },
   { value: 'failed', label: 'Failed' },
   { value: 'passed', label: 'Passed' },
+  { value: 'stale', label: 'Running, Reported Hours Ago' },
 ];
 
 const MODE_CHOICES: SelectChoice[] = [
@@ -54,7 +55,7 @@ const MODE_CHOICES: SelectChoice[] = [
 const DEFAULTS = { scenario: 'attention', host: 'disk-warning', ci: 'running', mode: 'compact' } as const;
 
 /** Every CI chip face, side by side in the states example. */
-const CI_CHIP_STATES: readonly DemoCiScenario[] = ['running', 'running-no-start', 'queued', 'failed'];
+const CI_CHIP_STATES: readonly DemoCiScenario[] = ['running', 'running-no-start', 'queued', 'failed', 'stale'];
 
 export const projectLiveSectionSettings = {
   scenario: signal<string>(DEFAULTS.scenario),
@@ -100,7 +101,7 @@ export function ProjectLiveSectionDemo() {
       </CatalogExample>
       <CatalogExample
         label="Main CI Chip"
-        note="The compact CI chip names itself (HS2-505PHC): its elapsed time while it runs, which the app re-renders each second while the section shows, then Running before a start is reported, Queued, and Failed. A passing run shows no chip."
+        note="The compact CI chip names itself (HS2-505PHC): its elapsed time while it runs, which the app re-renders each second while the section shows, then Running before a start is reported, Queued, and Failed. A run reported running over 2 h ago reads Unknown, with no clock (HS2-CC7TCB). A passing run shows no chip."
       >
         {CI_CHIP_STATES.map((state) => (
           <div class="demo-sidebar-width" data-demo-ci={state}>

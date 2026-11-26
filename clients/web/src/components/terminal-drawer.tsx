@@ -275,7 +275,8 @@ export function TerminalDrawer({
         if (session) {
           const name = session.title ?? session.id;
           // An orchestrator's sessions of one project differ only in their run suffix, so a capped tab
-          // keeps that suffix and ellipsizes the middle instead (HS2-8KZF59, Kerf KF-SDNA0Z).
+          // keeps that suffix and ellipsizes the middle instead (HS2-8KZF59, Kerf KF-SDNA0Z). A tab too
+          // narrow for both keeps the suffix whole and collapses the head (HS2-4BY5TT, Kerf KF-0VGEKH).
           const keep = session.orchestrator ? orchestratorTabNameKeep(name) : undefined;
           return (
             <TabBarItem
@@ -283,6 +284,7 @@ export function TerminalDrawer({
               name={name}
               nameTruncate={keep === undefined ? 'end' : 'middle'}
               nameTruncateKeep={keep}
+              nameTruncatePriority={keep === undefined ? undefined : 'suffix'}
               selected={selected === session.id}
               draggable
               className="terminal-tab"

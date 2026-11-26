@@ -9,7 +9,7 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { BatteryWarning, Cpu, HardDrive, type IconNode, MemoryStick, Thermometer, Timer, WifiOff } from 'lucide';
 
-import { CI_PRESENTATION, ciAge } from '../ci-presentation';
+import { CI_PRESENTATION, ciRow } from '../ci-presentation';
 import type { HostHealthSignalId } from '../host-health';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { LIVE_STATE_ICONS } from '../live-state-icons';
@@ -202,14 +202,7 @@ function expandedContent(summary: ProjectLiveSummary) {
           `+${formatGlanceDuration(summary.overrun.ms)}`,
         )}
       {summary.ci.status !== 'unavailable' &&
-        detailRow(
-          'ci',
-          CI_PRESENTATION[summary.ci.status],
-          `${summary.ci.branch} CI ${CI_PRESENTATION[summary.ci.status].word.toLowerCase()}${
-            summary.ci.shortSha ? ` · ${summary.ci.shortSha}` : ''
-          }`,
-          ciAge(summary.ci) ?? '',
-        )}
+        detailRow('ci', CI_PRESENTATION[summary.ci.status], ciRow(summary.ci).label, ciRow(summary.ci).trailing)}
     </List>
   );
 }

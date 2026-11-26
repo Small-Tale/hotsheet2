@@ -27308,6 +27308,63 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   ).toBeVisible();
 });
 
+// HS2-CC7TCB: a run reported running over 2 h ago, and never again, is not shown as running: the Right now CI
+// tile says the status is unknown and when the run was last seen, untinted. Captured wide and narrow, light and
+// dark.
+test('Stats Right now shows a stale running CI report as unknown (HS2-CC7TCB)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  const now = Date.now();
+  const states = glanceScenario(now).map((state, index) => ({
+    ...state,
+    checkouts: [...state.checkouts, project.id],
+    ...(index === 0
+      ? {
+          ci: {
+            status: 'in_progress',
+            checkout: project.id,
+            branch: 'main',
+            sha: '8f6c8d81f0a1',
+            run_url: 'https://ci.example.test/runs/2983',
+            workflow: 'CI',
+            started_at_ms: now - 165 * 60_000,
+            finished_at_ms: null,
+            reported_at_ms: now - 159 * 60_000,
+          },
+        }
+      : {}),
+  }));
+  await page.route('**/live-state', (route) => route.fulfill({ json: { epoch_ms: 1, stores: states } }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openMockedProject(page);
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
+  const rightNow = page
+    .getByRole('region', { name: 'Cross-Project Stats' })
+    .locator('[data-component="stats-right-now"]');
+  const ciTile = rightNow.locator('[data-tile="ci"]');
+  await expect(ciTile).toHaveAttribute('data-ci-status', 'unknown');
+  await expect(ciTile).toHaveAttribute('data-attention', 'false');
+  await expect(ciTile).toContainText('Unknown');
+  await expect(ciTile).toContainText(/main CI · 8f6c8d8 · last seen running 2h 39m ago/u);
+  await expect(ciTile.locator('[data-lucide="circle-help"]')).toBeVisible();
+  await page.mouse.move(1, 1);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['narrow', 600],
+      ['wide-again', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(ciTile).toBeVisible();
+      expect(await ciTile.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+      await ciTile.screenshot({ path: `target/visual-captures/hs2-cc7tcb-stats-ci-tile-${scheme}-${label}.png` });
+    }
+  }
+});
+
 test('Stats Right now shows live tiles and projects sorted by need, scoped and routed (HS2-ERTNJ7)', async ({
   page,
 }) => {

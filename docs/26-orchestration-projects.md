@@ -3408,7 +3408,10 @@ suffix only its run tail, which still fits a phone-width caption; HS2-M4YJM4)
 visible, so two sessions of one project stay distinguishable; the full label is the tab's
 accessible name and its title while truncated (HS2-8KZF59, Kerf `nameTruncate="middle"`). The
 Project grid tile's `project › label` caption does the same through Kerf `Text`
-`truncate="middle"` with the same kept suffix (HS2-3RBYJK). The
+`truncate="middle"` with the same kept suffix (HS2-3RBYJK). When the tab or caption is too
+narrow for the suffix plus a sliver of the head, the suffix still stays whole and the head
+collapses to an ellipsis or disappears (HS2-4BY5TT, Kerf `nameTruncatePriority` and
+`truncatePriority` set to `suffix`), so a longer role suffix stays readable too. The
 link from the orchestration workspace is HS2-HSMH2Q.
 
 **Roles.** A session joins the target's existing role model

@@ -286,6 +286,39 @@ test('HS2-ZKAVZZ explains a moved folder, a file path, and a broken ticket repos
     await details.getByText('Technical Details', { exact: true }).click();
     await expect(raw).toBeVisible();
     await expect(details.getByText(`Project folder: ${moved}`, { exact: true })).toBeVisible();
+    // HS2-1ZKMS9: Technical Details sits in the EmptyState's start-aligned secondary region (Kerf
+    // KF-GZDZXH), so the open disclosure keeps its chevron beside its title and its lines start on the
+    // title's column, while Retry and Close Tab stay centered, at every width.
+    const disclosureGeometry = () =>
+      details.evaluate((node) => {
+        const arrow = node.querySelector('.kui-disclosure-arrow')!.getBoundingClientRect(),
+          title = node.querySelector('.kui-disclosure__title')!.getBoundingClientRect(),
+          // The first glyph of the first detail line, past the Text's own inset.
+          glyphs = document.createRange();
+        glyphs.selectNodeContents(node.querySelector('.kui-disclosure__content .kui-text')!);
+        const line = glyphs.getClientRects()[0],
+          panel = node.closest('.kui-empty-state')!.getBoundingClientRect(),
+          actions = node
+            .closest('.kui-empty-state')!
+            .querySelector('.kui-empty-state__action')!
+            .getBoundingClientRect();
+        return {
+          inSecondary: Boolean(node.closest('.kui-empty-state__secondary')),
+          chevronGap: Math.round(title.left - arrow.right),
+          lineOffset: Math.round(Math.abs(line.left - title.left)),
+          actionsCentered: Math.abs((actions.left + actions.right) / 2 - (panel.left + panel.right) / 2) <= 2,
+        };
+      });
+    for (const width of [1280, 940, 390, 1280]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(raw).toBeVisible();
+      const geometry = await disclosureGeometry();
+      expect(geometry.inSecondary).toBe(true);
+      expect(geometry.chevronGap).toBeGreaterThanOrEqual(0);
+      expect(geometry.chevronGap).toBeLessThanOrEqual(12);
+      expect(geometry.lineOffset).toBeLessThanOrEqual(2);
+      expect(geometry.actionsCentered).toBe(true);
+    }
 
     if (captureDir) {
       await mkdir(captureDir, { recursive: true });

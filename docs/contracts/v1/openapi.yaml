@@ -17955,6 +17955,9 @@ paths:
         pushes the newest run among a store's linked checkouts as `ci` in that store's live state. A run that started
         before the stored one, or a non-terminal report of the same run after a terminal one, is stale and leaves the
         stored run unchanged. The headless form is `hotsheet-cli ci report`. The server never polls a CI provider.
+        An applied queued or in-progress report of a GitHub Actions run is handed to the machine's GitHub Actions
+        watch Job, which the Job monitor follows to its end, and the verdict is recorded like a report (HS2-CC7TCB,
+        `follow`).
       requestBody:
         required: true
         content:
@@ -32747,6 +32750,7 @@ components:
         - applied
         - ci
         - stores
+        - follow
       properties:
         checkout:
           description: The resolved checkout id.
@@ -32761,6 +32765,21 @@ components:
           type: array
           items:
             type: string
+        follow:
+          description: >-
+            Whether a GitHub Actions watch follows the run to its end (HS2-CC7TCB, docs/32-notifier-plugins.md
+            §32.8.5). `started`: an applied queued or in-progress report of a GitHub Actions run page with a full
+            commit, branch, and workflow handed the run to the watch Job, whose verdict is recorded as the finished
+            run. `following`: this server already follows that run. `none`: nothing to follow (a finished or stale
+            report, another CI's URL, a missing field, or a commit that already passed). `no_token`: no GitHub
+            token is available to the watch. `off`: this server starts no Job monitor.
+          type: string
+          enum:
+            - started
+            - following
+            - none
+            - no_token
+            - 'off'
       additionalProperties: false
     LiveCause:
       type: object

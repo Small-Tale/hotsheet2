@@ -94,6 +94,19 @@ describe('HS2-ERTNJ7 StatsRightNow', () => {
     expect(tile({ status: 'in_progress', branch: 'main', ageMs: 4 * 60_000 })).toContain('main CI · running 4m');
     expect(tile({ status: 'queued', branch: 'release', ageMs: 60_000 })).toContain('release CI · waiting 1m');
     expect(tile({ status: 'cancelled', branch: 'main' })).toContain('data-lucide="circle-slash"');
+    // HS2-CC7TCB: a stale running report says it is unknown and when it was last seen, untinted.
+    const unknown = tile({
+      status: 'unknown',
+      lastSeen: 'running',
+      branch: 'main',
+      shortSha: '8f6c8d8',
+      ageMs: (2 * 60 + 39) * 60_000,
+    });
+    expect(unknown).toContain('>Unknown<');
+    expect(unknown).toContain('data-ci-status="unknown"');
+    expect(unknown).toContain('data-lucide="circle-help"');
+    expect(unknown).toContain('main CI · 8f6c8d8 · last seen running 2h 39m ago');
+    expect(unknown).toContain('data-attention="false"');
   });
 
   it('shows an empty state, not zero tiles, without live stores', () => {

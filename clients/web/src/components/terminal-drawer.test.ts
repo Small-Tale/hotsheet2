@@ -103,8 +103,14 @@ describe('TerminalDrawer', () => {
     const run = { ...sessions[0], id: 'run', title: 'Release train: run Q69G5FB0', orchestrator };
     const renamed = { ...run, id: 'renamed', title: 'Build watcher', named: true };
     const markup = drawer([run, renamed, sessions[1]]);
-    expect(tab(markup, 'run')).toContain('<span class="kui-tab-bar-item__name-head">Release train: run </span>');
+    expect(tab(markup, 'run')).toContain(
+      '<span class="kui-tab-bar-item__name-head-content">Release train: run </span>',
+    );
     expect(tab(markup, 'run')).toContain('<span class="kui-tab-bar-item__name-tail">Q69G5FB0</span>');
+    // HS2-4BY5TT: a tab too narrow for both parts keeps the run tail whole and collapses the head
+    // (Kerf KF-0VGEKH suffix priority); only the orchestrator's tab asks for it.
+    expect(markup).toMatch(/data-terminal-id="run"[^>]*data-name-truncate-priority="suffix"/);
+    expect(markup.match(/data-name-truncate-priority=/g)).toHaveLength(1);
     // A rename with no `: ` suffix and an ordinary terminal keep Kerf's default end ellipsis.
     expect(tab(markup, 'renamed')).not.toContain('kui-tab-bar-item__name-tail');
     expect(tab(markup, 'two')).not.toContain('kui-tab-bar-item__name-tail');
