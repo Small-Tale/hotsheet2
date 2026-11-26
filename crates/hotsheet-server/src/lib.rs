@@ -23,6 +23,7 @@ pub mod dist_work_loop;
 mod dto;
 mod events;
 pub mod github_app_config;
+mod github_auth_sessions;
 mod github_webhooks;
 mod health_scan;
 mod host_health;
@@ -99,10 +100,9 @@ pub use host_health::capacity::{
     CapacitySource, MachineReading, ROOMY_CAPACITY_ENV, RoomyFixtureCapacity,
 };
 use routes::accounts::{
-    GitHubAuthSession, cancel_github_device_auth, identify_github_account,
-    list_account_github_repositories, list_accounts_route, list_github_auth_repositories,
-    list_stores, remove_unused_account_source, sign_out_account, start_github_device_auth,
-    wait_github_device_auth,
+    cancel_github_device_auth, identify_github_account, list_account_github_repositories,
+    list_accounts_route, list_github_auth_repositories, list_stores, remove_unused_account_source,
+    sign_out_account, start_github_device_auth, wait_github_device_auth,
 };
 use routes::activity::{
     checkout_activity, checkout_current_diff, ingest_activity, list_activity, list_store_activity,
@@ -331,7 +331,8 @@ pub struct AppState {
     repository_watchers: Arc<Mutex<std::collections::HashMap<String, RepositoryWatchHandle>>>,
     /// Server-owned GitHub device flows. Browser clients see only user codes and terminal
     /// states; OAuth device/access/refresh tokens never cross this boundary.
-    github_auth_sessions: Arc<Mutex<std::collections::HashMap<String, Arc<GitHubAuthSession>>>>,
+    /// Only in-flight flows count as active work; finished ones are pruned on access (HS2-NNWG8H).
+    github_auth_sessions: Arc<github_auth_sessions::GitHubAuthSessions>,
     /// Whether a `POST /stores`-registered store gets a **file-backed** index
     /// (`${HOTSHEET_HOME}/index/<id>.v<schema>.sqlite`, persists + restores) or an in-memory one.
     /// Off by default so tests stay hermetic (they never touch the machine home); the
@@ -677,7 +678,7 @@ impl AppState {
             project_hosted: Arc::default(),
             unhost_sweep: Arc::default(),
             repository_watchers: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            github_auth_sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            github_auth_sessions: Arc::default(),
             persist_indexes: false,
             instance: Arc::new(Mutex::new(None)),
             instance_guards: Arc::default(),
@@ -853,9 +854,8 @@ impl AppState {
                 count: permissions,
             });
         }
-        let github_auth = self
-            .github_auth_sessions
-            .with_lock(|sessions| sessions.len());
+        // HS2-NNWG8H: finished or expired device flows never block; this check prunes them.
+        let github_auth = self.github_auth_sessions.in_flight();
         if github_auth > 0 {
             blockers.push(QuiescenceBlocker {
                 kind: "github_auth",
@@ -927,6 +927,14 @@ impl AppState {
     #[must_use]
     pub fn with_remote_auth_clock(mut self, clock: remote_auth::Clock) -> Self {
         self.remote_auth = self.remote_auth.take().map(|auth| auth.with_clock(clock));
+        self
+    }
+
+    /// Drive GitHub device-flow expiry from `clock` instead of the wall clock (HS2-NNWG8H
+    /// transition tests). Call before any flow starts: it replaces the session registry.
+    #[must_use]
+    pub fn with_github_auth_clock(mut self, clock: remote_auth::Clock) -> Self {
+        self.github_auth_sessions = Arc::new(github_auth_sessions::GitHubAuthSessions::new(clock));
         self
     }
 
