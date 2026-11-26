@@ -36,7 +36,10 @@ pub mod provisional_claims;
 pub mod remote_servers;
 pub mod setup;
 #[path = "../../hotsheet-server/src/source_revision.rs"]
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    reason = "HS2-N9267G: shared source_revision module; the CLI uses a subset"
+)]
 mod source_revision;
 pub mod sync_ai;
 pub mod sync_kick;

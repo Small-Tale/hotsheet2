@@ -464,7 +464,7 @@ mod tests {
         let fake = Arc::new(Fake {
             responses: Mutex::new(VecDeque::from([
                 page(
-                    json!({"installations":[{"id":1,"app_slug":"hot-sheet","repository_selection":"selected","html_url":"https://github.test/settings/installations/1","account":{"login":"westphal"}}]}),
+                    json!({"installations":[{"id":1,"app_slug":"hot-sheet","repository_selection":"selected","html_url":"https://github.test/settings/installations/1","account":{"login":"synthetic-user"}}]}),
                     Some("https://github.test/api/v3/user/installations?page=2"),
                 ),
                 page(
@@ -472,15 +472,15 @@ mod tests {
                     None,
                 ),
                 page(
-                    json!({"repositories":[{"full_name":"westphal/Zeta"}]}),
+                    json!({"repositories":[{"full_name":"synthetic-user/Zeta"}]}),
                     Some("https://github.test/api/v3/user/installations/1/repositories?page=2"),
                 ),
                 page(
-                    json!({"repositories":[{"full_name":"westphal/alpha"}]}),
+                    json!({"repositories":[{"full_name":"synthetic-user/alpha"}]}),
                     None,
                 ),
                 page(
-                    json!({"repositories":[{"full_name":"Small-Tale/hotsheet2"},{"full_name":"westphal/alpha"}]}),
+                    json!({"repositories":[{"full_name":"Small-Tale/hotsheet2"},{"full_name":"synthetic-user/alpha"}]}),
                     None,
                 ),
             ])),
@@ -490,13 +490,17 @@ mod tests {
         let access = client.repository_access("token").unwrap();
         assert_eq!(
             access.repositories,
-            ["Small-Tale/hotsheet2", "westphal/alpha", "westphal/Zeta"]
+            [
+                "Small-Tale/hotsheet2",
+                "synthetic-user/alpha",
+                "synthetic-user/Zeta"
+            ]
         );
         assert_eq!(
             access.installations,
             [
                 AppInstallation {
-                    account: "westphal".into(),
+                    account: "synthetic-user".into(),
                     selection: "selected".into(),
                     settings_url: Some("https://github.test/settings/installations/1".into()),
                 },

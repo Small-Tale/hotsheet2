@@ -12248,7 +12248,7 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         .header("x-hotsheet-attachment-batch", "gesture-1")
         .header("x-hotsheet-metadata-encoding", "percent")
         .header("x-hotsheet-actor-role", "human")
-        .header("x-hotsheet-actor-name", "Brian%20Westphal")
+        .header("x-hotsheet-actor-name", "Sample%20Person")
         .header("x-hotsheet-attachment-purpose", "problem_evidence")
         .body(Body::from(video_bytes.clone()))
         .unwrap();
@@ -12260,7 +12260,7 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     assert_eq!(video_attached["attachments"][0]["actor"]["role"], "human");
     assert_eq!(
         video_attached["attachments"][0]["actor"]["display_name"],
-        "Brian Westphal"
+        "Sample Person"
     );
     assert_eq!(
         video_attached["attachments"][0]["purpose"],

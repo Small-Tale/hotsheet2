@@ -1310,10 +1310,10 @@ describe('Git ticket-store remote setup', () => {
   it('rejects option-like and multiline remote values before running Git', async () => {
     const runner = vi.fn();
     await expect(
-      connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2', '--upload-pack=bad', runner),
+      connectGitTicketStoreRemote('/Users/synthetic/Projects/sample.hs2', '--upload-pack=bad', runner),
     ).rejects.toThrow(/valid Git remote URL/);
     await expect(
-      connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2', 'good\nbad', runner),
+      connectGitTicketStoreRemote('/Users/synthetic/Projects/sample.hs2', 'good\nbad', runner),
     ).rejects.toThrow(/valid Git remote URL/);
     expect(runner).not.toHaveBeenCalled();
   });

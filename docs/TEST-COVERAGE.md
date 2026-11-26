@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-FXF07C: `scripts/instruction-policy.test.mjs` rejects tracked machine-local home and
+volume paths outside reasoned synthetic name lists, rejects stale list entries, and
+requires every Rust lint suppression to carry a reason with an HS2 slug, capped per file.
+Synthetic probes, assembled at run time, cover each path spelling and each accepted and
+rejected suppression form. The `hotsheet-server` watcher, `hotsheet-cli` advisory request
+and `hotsheet-plugins` guidance recommendation refactors keep their existing tests.
+
 HS2-S2T4VJ: `clients/web/src/features/terminal-drawer.test.ts` covers an aborted hung
 create, serialized second create, Retry/Close, a created terminal missing from the
 dashboard, and a later stream update. `clients/web/src/components/terminal-drawer.test.ts`

@@ -271,36 +271,48 @@ fn requested_review(
     reviewer: &str,
     generation: &str,
 ) -> Result<String> {
-    ticket
-        .notes
-        .iter()
-        .rev()
-        .find(|note| {
-            note.kind == NoteKind::Regular
-                && note.text.starts_with("## Advisory review request\n")
-                && !note.human_edited
-                && request_record(note).is_some_and(|record| {
-                    record.version == 1
-                        && record.assignment == assignment
-                        && record.ticket == assigned.ticket
-                        && record.base == assigned.base
-                        && assigned.handoff.as_ref() == Some(&record.handoff)
-                        && record.reviewer == reviewer
-                        && record.reviewer_session == generation
-                        && handoff_note(ticket, &record.handoff).ok().as_deref()
-                            == Some(record.handoff_note.as_str())
-                        && note.actor.as_ref().is_some_and(|actor| {
-                            actor.id.as_deref() == Some(record.integrator.as_str())
-                        })
-                })
-                && cancelled(ticket, &note.id.to_string()).is_none()
-                && note
-                    .actor
-                    .as_ref()
-                    .is_some_and(|actor| actor.role == AttachmentActorRole::Ai)
-        })
-        .map(|note| note.id.to_string())
+    requested_review_record(ticket, assigned, assignment, reviewer, generation)
+        .map(|(note, _)| note.id.to_string())
         .context("missing: exact integrator-addressed advisory request; delivery must be explicit")
+}
+
+/// The exact live request note and its parsed record, so callers never re-find or re-parse
+/// it (HS2-FXF07C).
+fn requested_review_record<'a>(
+    ticket: &'a hotsheet_model::Ticket,
+    assigned: &hotsheet_cli::coordination::Assignment,
+    assignment: &str,
+    reviewer: &str,
+    generation: &str,
+) -> Option<(&'a Note, RequestRecord)> {
+    ticket.notes.iter().rev().find_map(|note| {
+        if note.kind != NoteKind::Regular
+            || !note.text.starts_with("## Advisory review request\n")
+            || note.human_edited
+        {
+            return None;
+        }
+        let record = request_record(note)?;
+        let matches = record.version == 1
+            && record.assignment == assignment
+            && record.ticket == assigned.ticket
+            && record.base == assigned.base
+            && assigned.handoff.as_ref() == Some(&record.handoff)
+            && record.reviewer == reviewer
+            && record.reviewer_session == generation
+            && handoff_note(ticket, &record.handoff).ok().as_deref()
+                == Some(record.handoff_note.as_str())
+            && note
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.id.as_deref() == Some(record.integrator.as_str()))
+            && cancelled(ticket, &note.id.to_string()).is_none()
+            && note
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.role == AttachmentActorRole::Ai);
+        matches.then_some((note, record))
+    })
 }
 
 pub(super) fn request(
@@ -338,9 +350,9 @@ pub(super) fn request(
         let mut ticket = store.read_ticket(&native_id)?;
         let handoff = assigned.handoff.clone().context("missing: frozen handoff")?;
         let handoff_note_id = handoff_note(&ticket, &handoff)?;
-        if let Ok(existing) = requested_review(&ticket, &assigned, assignment, reviewer, reviewer_session) {
-            let note = ticket.notes.iter().find(|note| note.id.to_string() == existing).unwrap();
-            let record = request_record(note).unwrap();
+        if let Some((note, record)) =
+            requested_review_record(&ticket, &assigned, assignment, reviewer, reviewer_session)
+        {
             ensure!(record.return_route == *return_route,
                 "stale: same reviewer request has a different return route");
             return Ok(note.id);

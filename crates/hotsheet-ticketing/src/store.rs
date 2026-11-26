@@ -3099,7 +3099,10 @@ mod tests {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct LegacyMetadata {
-            #[allow(dead_code)]
+            #[expect(
+                dead_code,
+                reason = "HS2-SR4JD2: the field only proves the legacy shape parses"
+            )]
             schema_version: u32,
         }
         assert!(serde_json::from_str::<LegacyMetadata>(&raw).is_err());
