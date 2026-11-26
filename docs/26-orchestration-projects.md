@@ -1222,8 +1222,11 @@ longer has the backlog, and every run is caught up again. On failure the followe
 keeps its cursor, so reconnecting replays what was missed, marks the affected runs
 unreachable once, and retries with bounded backoff from one second up to a minute.
 It confirms its authority through the gate when it connects, after any failure and
-every ten minutes, acting as whoever dispatched the run. A target with no unfinished
-run is not contacted at all, and a run a person took over is still followed.
+every ten minutes, acting as whoever dispatched the run. A refusal is never kept: a
+target that cannot be reached when the follower first confirms it (its host offline as
+the server starts) is asked again after the backoff, so the follower catches up as soon
+as the host is back (HS2-K41M77). A target with no unfinished run is not contacted at
+all, and a run a person took over is still followed.
 
 A change written straight to a target store, such as by a headless `hotsheet-cli` in the
 session's checkout rather than through a server route, reaches the feed through that
@@ -2285,7 +2288,9 @@ the linking actor, which only observes and never asks, and confirms that every t
 minutes. A target that cannot be reached when the follower confirms it (its host is
 offline) is not kept as a refusal for those ten minutes: the follower leaves its gates
 as they stand and asks again at its next step, which a bounded wait already paces, so
-the verdict a host reached while offline is recorded once it is back (HS2-1P1HJT). A
+the verdict a host reached while offline is recorded once it is back (HS2-1P1HJT). The
+capacity follow and the remote resource-release follow keep no answer at all: a refusal
+ends them, and the next pass starts them again (HS2-K41M77). A
 headless caller uses `gate sync --wait-seconds`, which waits the same way. Nothing
 polls on a timer. Reads answer from this machine's records and contact nothing.
 

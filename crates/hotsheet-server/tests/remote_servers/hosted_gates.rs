@@ -412,3 +412,132 @@ async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
     assert_eq!(synced["changed"], json!([]), "{synced}");
     fleet.shut_down().await;
 }
+
+/// Waits, woken by the controller's machine home (where the audit journal lives)
+/// changing, until its audit holds `wanted` denials of `action` as `target_unavailable`.
+async fn denied_unavailable(fleet: &Fleet, action: &str, wanted: usize) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        let waiter = hotsheet_jobs::ChangeWaiter::starting(&[fleet.home.as_path()]).unwrap();
+        let reasons = audit_reasons(&fleet.home, &fleet.owner.id);
+        let denied = reasons
+            .iter()
+            .filter(|(code, outcome, reason)| {
+                code == action && *outcome == AuditOutcome::Denied && reason == "target_unavailable"
+            })
+            .count();
+        if denied >= wanted {
+            return;
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(
+            !remaining.is_zero(),
+            "no {action} denial as target_unavailable: {reasons:?}"
+        );
+        tokio::task::block_in_place(|| {
+            waiter.wait(remaining.min(std::time::Duration::from_secs(5)))
+        });
+    }
+}
+
+/// HS2-K41M77: every follower that remembers an authorization answer (the target
+/// follower, the gate follower) starts while the target's host is offline, so its very
+/// first check is a `target_unavailable` denial. That denial is not kept for the
+/// ten-minute re-authorization period: once the host is back, the run learns of the
+/// claim made there meanwhile and the gate reads the verdict the host's watch reached,
+/// well inside the bounded backoff. The capacity and remote-release follows end on a
+/// denial and are started again by the next pass, so they keep none. Waits on the audit
+/// journal and the run and gate event streams, never on a fixed delay.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_k41m77_followers_started_while_the_host_is_offline_ask_again_when_it_returns() {
+    let mut fleet = Fleet::new().await;
+    git(
+        &fleet.b_project,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/acme/widgets.git",
+        ],
+    );
+    let orchestration = fleet.orchestration_ticket("Follow the remote work");
+    let ticket = fleet.target_ticket(Side::Peer, "Remote work followed after an outage");
+    let run = fleet
+        .ok(
+            "POST",
+            "/runs",
+            json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration.slug},
+                "target_id":TARGET_B,"connection_id":fleet.connection(Side::Peer),
+                "native_id":ticket.slug,"operation_id":"first-check-offline-run",
+                "mode":"dispatcher"}),
+        )
+        .await;
+    let run_id = run["run_id"].as_str().unwrap().to_owned();
+    let commit = "f".repeat(40);
+    let linked = fleet
+        .ok(
+            "POST",
+            &format!("/runs/{run_id}/gates"),
+            json!({"commit":commit,"repository":"acme/widgets","actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(linked["gate"]["state"], "pending", "{linked}");
+    let gate_id = linked["gate"]["gate_id"].as_str().unwrap().to_owned();
+    let job_id = linked["gate"]["watch_ref"].as_str().unwrap().to_owned();
+    let before = fleet
+        .ok("GET", &format!("/runs/{run_id}/status"), Value::Null)
+        .await;
+    assert_ne!(before["state"], "dispatched", "{before}");
+    let denied = |action: &str| {
+        audit_reasons(&fleet.home, &fleet.owner.id)
+            .iter()
+            .filter(|(code, outcome, reason)| {
+                code == action && *outcome == AuditOutcome::Denied && reason == "target_unavailable"
+            })
+            .count()
+    };
+    let (tickets_denied, gates_denied) = (denied("tickets_read"), denied("gates_observe"));
+
+    // 1. The host is offline, and a new controller process starts: each follower's
+    // first check is made against an unreachable host.
+    fleet.peer_offline().await;
+    fleet.restart_controller().await;
+    denied_unavailable(&fleet, "tickets_read", tickets_denied + 1).await;
+    denied_unavailable(&fleet, "gates_observe", gates_denied + 1).await;
+
+    // 2. Meanwhile, on the host, a worker claims the ticket and the watch turns green.
+    fleet.claim(Side::Peer, &ticket, "synthetic-worker").await;
+    judge_green(&fleet.peer_home, &fleet.b_checkout.id, &job_id, &commit, 91);
+    let gate = fleet
+        .ok("GET", &format!("/gates/{gate_id}"), Value::Null)
+        .await;
+    assert_eq!(
+        gate["state"], "pending",
+        "nothing is read from an offline host"
+    );
+
+    // 3. The host is back. Both followers ask again rather than keep the denial: the
+    // run learns of the claim and the gate records the verdict, each once.
+    fleet.peer_online().await;
+    let claimed = fleet
+        .run_until(
+            &run_id,
+            "synced with the claim made while offline",
+            |status| status["worker_id"] == "synthetic-worker",
+        )
+        .await;
+    assert_eq!(claimed["reachability"], "reachable", "{claimed}");
+    let passed = fleet.gate_until(&gate_id, "passed").await;
+    assert_eq!(passed["evidence"]["reference"], "91", "{passed}");
+    let events = fleet.ok("GET", "/run-events?after=0", Value::Null).await;
+    let verdicts = events["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry.get("record").unwrap_or(entry))
+        .filter(|record| record["kind"] == "gate" && record["gate_id"] == gate_id.as_str())
+        .filter(|record| record["gate_state"] == "passed")
+        .count();
+    assert_eq!(verdicts, 1, "{events:#}");
+    fleet.shut_down().await;
+}
