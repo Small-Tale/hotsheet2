@@ -17983,6 +17983,8 @@ test('schedules an AI command through Settings and the real server (HS2-17663F)'
     const row = page.locator('[data-component="command-settings-editor"] [data-command-id="review"]');
     await expect(row).toBeVisible();
     await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    // Schedule… carries a Lucide calendar-clock icon like its Edit and Delete siblings (HS2-W3ZXHK).
+    await expect(row.locator('[data-action="open-command-schedule"] [data-lucide="calendar-clock"]')).toBeVisible();
     await row.locator('[data-action="open-command-schedule"]').click();
     const dialog = page.getByRole('dialog', { name: 'Schedule Command' });
     await expect(dialog).toBeVisible();

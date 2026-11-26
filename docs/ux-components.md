@@ -2048,7 +2048,8 @@ capability-aware sections when their underlying features and data contracts land
   dragging any row of the selection moves the whole selection together as one block,
   preserving relative order and adopting the drop target's group (HS2-VJYQHG). Each row
   exposes an overflow "…" menu — also opened by right-click — with Edit and Delete, and
-  AI commands add Schedule… or Manage Schedule… there (HS2-17663F). A scheduled row shows its
+  AI commands add Schedule… or Manage Schedule… there (HS2-17663F), drawn with the Lucide
+  `calendar-clock` icon beside Edit's `pencil` and Delete's `trash-2` (HS2-W3ZXHK). A scheduled row shows its
   cadence, pause state, and next run. The modal schedule form uses Kerf `DialogSurface`, `Form`,
   `RadioGroup`, `Select`, `TextField`, `Grid`, and `StateBanner`; it previews the next three local
   occurrences through the server's recurrence engine before saving. The form supports one-time,

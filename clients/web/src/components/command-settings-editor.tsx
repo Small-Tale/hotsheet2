@@ -20,7 +20,7 @@ import { TextField } from '@kerfjs/ui/text-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { Bot, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
+import { Bot, CalendarClock, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
 
 import type { AiToolDefaults, AiToolDescriptor, CommandDefinition } from '../api';
 import { commandGroupSections } from '../command-order';
@@ -145,6 +145,8 @@ function CommandRow({
                 {
                   label: schedule ? 'Manage Schedule…' : 'Schedule…',
                   action: COMMANDS_AND_AI_ACTIONS.openCommandSchedule.value,
+                  // A time on a calendar: the schedule runs at a local time on chosen dates (HS2-W3ZXHK).
+                  icon: <LucideIcon icon={CalendarClock} name="calendar-clock" />,
                 },
               ]
             : []),

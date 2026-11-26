@@ -343,4 +343,16 @@ describe('CommandSettingsEditor', () => {
     );
     expect(shell).not.toMatch(/<kui-select[^>]*name="action"/);
   });
+  it('gives the Schedule… menu item a calendar-clock Lucide icon beside Edit and Delete (HS2-W3ZXHK)', () => {
+    const markup = String(
+      CommandSettingsEditor({
+        commands: [{ id: 'r', title: 'Review', kind: 'ai', prompt: 'Review it' }],
+        scheduleDialog: {},
+      }),
+    );
+    const item = markup.match(/<[^>]*data-action="open-command-schedule"[^]*?Schedule…/)?.[0] ?? '';
+    expect(item).toContain('data-lucide="calendar-clock"');
+    expect(markup).toContain('data-lucide="pencil"');
+    expect(markup).toContain('data-lucide="trash-2"');
+  });
 });
