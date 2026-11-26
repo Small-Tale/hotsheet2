@@ -2144,6 +2144,103 @@ fn hs2_04ww8b_tickets_created_while_unseen_are_caught_up() {
     assert_eq!(auto_replans(&m).len(), 3);
 }
 
+/// HS2-2AZQD2: editing a target ticket that the seen baseline holds and no step names
+/// starts no automatic re-plan, like a ticket already handed: repeated edits, a fresh
+/// follower (as a restart gives) and edits in the same page as a new ticket, which
+/// alone starts one update. The edit is still read, so closing it forgets it and a
+/// reopened ticket starts one update.
+#[test]
+fn hs2_2azqd2_editing_a_seen_ticket_starts_no_replan() {
+    use super::sessions::{Probe, ScriptedHost, roomy};
+    let feed = Arc::new(Feed::default());
+    let mut m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let host = Arc::new(ScriptedHost::default());
+    let probe = Arc::new(Probe::default());
+    probe.set(|observation| *observation = roomy());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_probe(probe)
+        .with_session_host(host.clone());
+    let mut rng = Rng(9_600);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let owner = m.owner.id.clone();
+    let remembered = || {
+        hotsheet_ticketing::orchestration::ReplanMemoryStore::new(&m.home, &owner)
+            .unwrap()
+            .read()
+            .unwrap()
+    };
+    let step = |state: &mut WatchState, tx: &mut Transaction<'_>| {
+        m.runtime.watch_step(&owner, &id(1), state, 8_000, tx)
+    };
+    let cancel = |tx: &mut Transaction<'_>| {
+        m.runtime
+            .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), tx)
+            .unwrap();
+    };
+    let existing: Vec<Ticket> = (0..2)
+        .map(|n| target_ticket(&m, &format!("Existing {n}")))
+        .collect();
+    m.runtime
+        .plan_propose(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    placement(&m, true);
+    // The first step seeds the baseline with both open tickets.
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!(remembered().seen(), 2);
+
+    // Each is edited, one twice: nothing starts, nothing is handed or pending.
+    for ticket in [&existing[0], &existing[1], &existing[0]] {
+        feed.push(&m.target_connection(), ticket);
+        assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    }
+    assert_eq!((remembered().pending(), remembered().handed()), (0, 0));
+    // A fresh follower (a restart) catches up and its edits start nothing either.
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    feed.push(&m.target_connection(), &existing[1]);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert!(auto_replans(&m).is_empty());
+
+    // Edits in the same page as a new ticket: one update, for the new ticket alone.
+    let fresh = target_ticket(&m, "New beside the edits");
+    feed.push(&m.target_connection(), &existing[0]);
+    feed.push(&m.target_connection(), &fresh);
+    feed.push(&m.target_connection(), &existing[1]);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 1);
+    assert_eq!(remembered().handed(), 1);
+    cancel(&mut tx);
+    feed.push(&m.target_connection(), &existing[0]);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+
+    // Closed (its event is read), then reopened: one update again.
+    set_status(&m, &existing[0], Status::Completed);
+    feed.push(&m.target_connection(), &existing[0]);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!(remembered().seen(), 2);
+    set_status(&m, &existing[0], Status::NotStarted);
+    feed.push(&m.target_connection(), &existing[0]);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 2);
+    cancel(&mut tx);
+    // Its next edit starts nothing.
+    feed.push(&m.target_connection(), &existing[0]);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!(auto_replans(&m).len(), 2);
+}
+
 /// HS2-04WW8B: a catch-up reads a listing longer than one page to its end, so a
 /// ticket on the second page is neither missed at the seed nor counted as new later.
 #[test]

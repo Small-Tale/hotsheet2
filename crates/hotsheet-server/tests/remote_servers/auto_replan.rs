@@ -445,11 +445,12 @@ fn is_target_read_done(entry: &Value) -> bool {
 /// server is down is caught up when it starts again: its start-up follows the target,
 /// the follower's handshake lists the target's open tickets, and exactly one automatic
 /// Update Plan starts. The ticket that existed before the re-plan applied was only
-/// seeded, and another restart starts nothing more.
+/// seeded, so editing it starts nothing (HS2-2AZQD2), and another restart starts
+/// nothing more.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hs2_04ww8b_a_ticket_created_while_the_server_was_down_replans_once() {
     let mut world = TwoProjects::new().await;
-    world.target_ticket("Synthetic existing work");
+    let existing = world.target_ticket("Synthetic existing work");
     let (status, proposed) = world
         .call(
             "POST",
@@ -473,6 +474,16 @@ async fn hs2_04ww8b_a_ticket_created_while_the_server_was_down_replans_once() {
         .await;
     world.replannable().await;
     assert_eq!(count(&world.audit().await, is_auto), 0);
+
+    // HS2-2AZQD2: the seeded ticket, which no step names, is edited. The follower
+    // reads the change and starts nothing: the update below follows a later read.
+    let reads = count(&world.audit().await, is_target_read_done);
+    world.retitle(&existing, "Synthetic existing work, renamed");
+    world
+        .audit_until("the follower's read of the edit", |audit| {
+            count(audit, is_target_read_done) > reads
+        })
+        .await;
 
     // The server stops. A ticket is written into the target's store meanwhile, as a
     // headless CLI would; no server sees it happen.

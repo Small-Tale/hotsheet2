@@ -45,9 +45,70 @@ fn hs2_bqn0m5_handed_tickets_are_bounded() {
         memory.observe(key(&format!("{n:05}")), true, None);
     }
     assert_eq!(memory.handed(), MAX_REPLAN_HANDED);
-    // The oldest key went first: it counts as new again.
+    // The oldest key went first. HS2-2AZQD2: it is still seen, so it is not new.
     memory.asked();
+    assert!(!memory.observe(key("00000"), true, None));
+    assert_eq!(memory.pending(), 0);
+    // Closed and reopened, it counts as new again.
+    memory.observe(key("00000"), false, None);
     assert!(memory.observe(key("00000"), true, None));
+}
+
+/// HS2-2AZQD2: a ticket in the seen baseline (seeded by a catch-up, or seen through a
+/// named ticket's event) is known like a handed one: its edits are not new, however
+/// often and in whatever order they come; a new ticket beside them still is; closing
+/// one forgets it, so reopening counts once; empty, then refilled, the refill is new.
+#[test]
+fn hs2_2azqd2_a_seen_ticket_is_not_new() {
+    let conn = vec!["conn".to_owned()];
+    let none = |_: &ReplanKey| false;
+    let mut memory = ReplanMemory::default();
+    // Seeded with `a` and `b`; `n` a step named once (an event of a named ticket).
+    memory.catch_up(
+        listing("t1", &conn, true),
+        &[key("a"), key("b")],
+        none,
+        None,
+    );
+    memory.saw(key("n"));
+    assert_eq!((memory.seen(), memory.handed()), (3, 0));
+    // Edits, repeated and interleaved: nothing becomes pending, nothing is handed.
+    for edited in ["a", "b", "a", "n", "b"] {
+        assert!(!memory.observe(key(edited), true, Some("u1")), "{edited}");
+    }
+    assert_eq!(
+        (memory.pending(), memory.handed(), memory.seen()),
+        (0, 0, 3)
+    );
+    // A new ticket among the edits is the only one pending.
+    assert!(!memory.observe(key("a"), true, Some("u1")));
+    assert!(memory.observe(key("c"), true, Some("u1")));
+    assert!(!memory.observe(key("b"), true, Some("u1")));
+    assert_eq!((memory.pending(), memory.handed()), (1, 1));
+    memory.asked();
+    // `a` closes: forgotten, and reopening it counts once.
+    assert!(!memory.observe(key("a"), false, Some("u1")));
+    assert_eq!(memory.seen(), 3);
+    assert!(memory.observe(key("a"), true, Some("u1")));
+    assert!(!memory.observe(key("a"), true, Some("u1")));
+    memory.asked();
+    // A later catch-up of the same open tickets hands nothing.
+    let open = [key("a"), key("b"), key("c"), key("n")];
+    assert_eq!(
+        memory.catch_up(listing("t1", &conn, true), &open, none, None),
+        0
+    );
+    // Every ticket closed (an empty, complete listing), then refilled with `b`: new.
+    memory.catch_up(listing("t1", &conn, true), &[], none, None);
+    assert_eq!((memory.seen(), memory.handed()), (0, 0));
+    assert!(memory.observe(key("b"), true, None));
+    // The memory round-trips with what it knows: still not new after a restart.
+    let home = tempfile::tempdir().unwrap();
+    let store = ReplanMemoryStore::new(home.path(), OWNER).unwrap();
+    memory.asked();
+    store.write(&memory).unwrap();
+    let mut restored = store.read().unwrap();
+    assert!(!restored.observe(key("b"), true, None));
 }
 
 /// HS2-G6F5BP: the store keeps handed and pending tickets with the update each pending

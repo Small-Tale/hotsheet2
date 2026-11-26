@@ -68,8 +68,11 @@ pub struct CatchUp<'a> {
 }
 
 impl ReplanMemory {
-    /// A read of a ticket no step names. An open one not handed yet becomes pending
-    /// (true); a closed or missing one is forgotten, so reopening it counts again.
+    /// A read of a ticket no step names. An open one neither handed nor seen yet
+    /// becomes pending (true); a closed or missing one is forgotten, so reopening it
+    /// counts again. HS2-2AZQD2: a seen ticket (in the baseline a catch-up listed, or
+    /// shown by an earlier event) is not new, so editing it starts no re-plan, like a
+    /// handed one.
     pub fn observe(&mut self, key: ReplanKey, open: bool, latest: Option<&str>) -> bool {
         if !open {
             self.handed.remove(&key);
@@ -77,8 +80,9 @@ impl ReplanMemory {
             self.seen.remove(&key);
             return false;
         }
+        let known = self.seen.contains(&key) || self.handed.contains(&key);
         self.saw(key.clone());
-        if self.handed.contains(&key) {
+        if known {
             return false;
         }
         if self.handed.len() >= MAX_REPLAN_HANDED {

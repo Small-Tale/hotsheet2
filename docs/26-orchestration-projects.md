@@ -5602,9 +5602,14 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   and no polling is involved.
 - **Trigger.** A ticket event for a ticket that no unfinished step names and no
   unfinished run works is read through the gate (`tickets_read`). If the ticket is open
-  (any status except completed, verified, archive, deleted or moved), it becomes
-  _pending_. The event for a ticket that is created or reopened is what starts a
-  re-plan. An event that names no ticket (a store reconciliation) starts nothing.
+  (any status except completed, verified, archive, deleted or moved) and neither
+  handed before nor in the _seen_ baseline (below), it becomes _pending_. The event
+  for a ticket that is created or reopened is what starts a re-plan. Editing a ticket
+  the baseline holds starts nothing, like a handed one (HS2-2AZQD2): it was open
+  when the planner last worked through the target, and a person can still press
+  Update Plan. Its event is still read, so closing it forgets it and reopening it
+  re-plans once. An event that names no ticket (a store reconciliation) starts
+  nothing.
 - **Caught up after unseen history (HS2-04WW8B).** A handshake (a server start or a
   new follower), an `overflow` or a reconnect cannot say which tickets are new. The
   follower then lists the target's open tickets of every source through the gate
@@ -5615,7 +5620,9 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   listings found and the tickets events showed (bounded to 8,192, smallest key
   forgotten first). A target's first listing after the re-plan starts to apply (its
   first follower step then, handshake or not) only seeds the baseline and starts
-  nothing: the default-goal planner already works through every open ticket. A
+  nothing: the default-goal planner already works through every open ticket. That
+  step reads its own events before it seeds, so a ticket an event of that step shows
+  is still judged as new or not. A
   complete listing forgets remembered tickets that closed meanwhile, so a pending
   ticket closed while the server was down starts nothing, and one reopened later
   counts again. A listing that fails changes nothing and is tried again at the next
