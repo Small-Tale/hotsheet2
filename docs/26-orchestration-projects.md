@@ -7093,7 +7093,10 @@ plan` it already reads for Resources: each home's integrator placement (`role:
 integrator`) and every entry of `roles_unplaced`, one row per project and role ("Web
 Integrator: Not started: the project's session limit is reached", "Web Dispatcher:
 Unavailable: the dispatchers the scheduler started did not take up their role, so none
-starts for a while; looked at again by 15:40"). With none it says "No integrator runs
+starts for a while. Open the AI tool in a terminal of this project to check that it
+starts and is signed in, or assign ready work by hand until then; looked at again by
+15:40"). An unavailable role always ends with that next step; for the integrator it
+is "integrate handoffs by hand" (HS2-91AF8K). With none it says "No integrator runs
 now, and no coordination session waits to start." Settings → Orchestration's project
 detail shows no scheduler status, so the overview is the project surface. A code the
 view does not know reads as its words; no row shows a code. Unit tests pin each

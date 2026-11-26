@@ -23,7 +23,6 @@ import {
   type Ticket,
   visualPass,
 } from './orchestration-real-fixtures';
-import { proxyFetch } from './proxy-fetch';
 
 const execute = promisify(execFile);
 const REPO = 'acme/synthetic-widgets';
@@ -747,141 +746,215 @@ test('HS2-5GRXFN a held resource shows on the deferred card and in the overview 
 });
 
 /**
- * HS2-65AD6J: why integration is or is not running. The real server answers a running step's explanation with
- * its project's integrator (`none` here: nothing is handed off). HS2-6ES76F drives not_started, start and keep from
- * a real handoff below. The unavailable states stay put into the real responses, with only the server's own
- * documented `integrator` and `roles_unplaced` shapes (docs/26 §26.30): reaching them needs three role sessions in
- * a row that never join their pool, each given `placement.join_minutes` (at least one minute) of real time, which a
- * browser test cannot wait for (HS2-6ES76F, follow-up HS2-91AF8K).
+ * HS2-65AD6J, HS2-91AF8K: integration and the project's coordination sessions when the scheduler's role sessions do
+ * not take up their role, with nothing put into the server's answers. The synthetic AI tool refuses every role
+ * prompt through its session push (`refusesRolePrompt`), so each integrator and dispatcher the real scheduler starts
+ * has a failed role prompt, is wound down at once and replaced, and after its replacements are used up the project
+ * reports `integrator_unavailable` and `dispatcher_unavailable` (docs/26 §26.30, "Failure handling"). A handoff in
+ * the project's real pool wants the integrator; a ready step wants the dispatcher. HS2-6ES76F drives none,
+ * not_started, start and keep from a real handoff below.
  */
-test('HS2-65AD6J a running card says whether its integrator runs and the overview names role sessions not started', async ({
+test('HS2-65AD6J HS2-91AF8K role sessions that never take up their role leave the integrator and dispatcher unavailable', async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-  const server = await realTicketServer();
+  test.setTimeout(300_000);
+  const server = await realTicketServer({
+    // The scheduler's sessions launch in the project's resolved directory (HS2-KTHJN2).
+    canonicalRoot: true,
+    seed: async (fixture) => {
+      await gitCheckout(fixture);
+      await syntheticTool(fixture.env.HOTSHEET_HOME!, { refusesRolePrompt: true });
+    },
+  });
   try {
     await orchestrateSelf(server);
-    const plan = await planTwoSteps(server);
     const base = `/checkouts/${server.checkoutId}/orchestration`;
-    await send(server, 'PUT', `${base}/policy`, {
-      expected_revision: null,
-      policy: {
-        tools: [{ tool: 'synthetic-tool', max_sessions: 2 }],
-        targets: [{ target_id: TARGET, tools: [{ tool: 'synthetic-tool' }], max_sessions: 2 }],
-        placement: { automatic: false, actor: 'scheduler-1' },
-      },
-      actor: { role: 'human', id: 'maintainer' },
+    const person = { role: 'human', id: 'maintainer' };
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: SYNTHETIC_TOOL,
+      actor: person,
     });
-    await plan.dispatch();
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await openOrchestration(page, server);
-    const view = page.locator('[data-orchestration-view="true"]');
-
-    // What the server's pass would say once a handoff waits: put into the real responses.
-    const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
-    const injected: { integrator?: Record<string, unknown> } = {};
-    let explainedIntegrator: unknown;
-    const augment =
-      (change: (body: Record<string, unknown>) => Record<string, unknown>) =>
-      async (route: Parameters<Parameters<Page['route']>[1]>[0]) => {
-        const incoming = new URL(route.request().url());
-        const response = await proxyFetch(route, {
-          url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
-          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
-          timeout: 60_000,
-        });
-        const body = (await response.json()) as Record<string, unknown>;
-        await route.fulfill({ response, json: change(body) });
-      };
-    await page.route(
-      '**/orchestration/scheduler/explain',
-      augment((body) => {
-        explainedIntegrator = body.integrator;
-        return injected.integrator && body.integrator ? { ...body, integrator: injected.integrator } : body;
-      }),
-    );
-    await page.route(
-      '**/orchestration/scheduler/plan',
-      augment((body) => ({
-        ...body,
-        roles_unplaced: [
-          {
-            target_id: TARGET,
-            role: 'integrator',
-            reason: 'integrator_unavailable',
-            detail: 'replacements_exhausted',
-            retry_at_ms: Number(body.now_ms) + 3_600_000,
-          },
-          {
-            target_id: TARGET,
-            role: 'dispatcher',
-            reason: 'dispatcher_unavailable',
-            detail: 'replacements_exhausted',
-            retry_at_ms: Number(body.now_ms) + 3_600_000,
-          },
-        ],
-      })),
-    );
-    // A change to the plan reads the timeline, and with it the overview, again.
-    const another = await server.request<{ id: string; slug: string }>('/tickets', 'POST', {
-      title: 'Add the synthetic audit log',
-    });
+    const plan = await planTwoSteps(server);
+    // A step with nothing before it is ready, so the project wants a dispatcher.
+    const ready = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic audit log' });
     await send(server, 'POST', `${base}/readiness/define`, {
       ticket: { native_id: plan.goal.id },
       target_id: TARGET,
       connection_id: plan.first.connection_id,
-      native_id: another.id,
+      native_id: ready.id,
       prerequisites: [],
       actor: scheduler,
     });
+    await plan.dispatch();
+    // A worker hands a ticket off in the project's pool, so the project wants an integrator.
+    const handed = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic export' });
+    await handOffInPool(server, handed);
+    const policy = async (automatic: boolean) => {
+      const current = (await send(server, 'GET', `${base}/policy`)) as { revision?: string | null };
+      await send(server, 'PUT', `${base}/policy`, {
+        expected_revision: current.revision ?? null,
+        policy: {
+          machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+          tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 8 }],
+          targets: [{ target_id: TARGET, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 8 }],
+          placement: {
+            automatic,
+            actor: 'scheduler-1',
+            cooldown_minutes: 0,
+            role_sessions: [{ target_id: TARGET, roles: ['integrator', 'dispatcher'] }],
+          },
+        },
+        actor: person,
+      });
+    };
+    // The main checkout is clean, as in a project whose set-up for its AI tool and whose policy are committed: an
+    // integrator answers for uncommitted changes there even before it takes up its role, so it could not be wound down
+    // (HS2-KH41E3). The policy's change to automatic placement below is kept out of git's view for that reason.
+    await policy(false);
+    const env = withoutGitRepositoryEnv(server.env);
+    const git = (...args: string[]) => execute('git', args, { cwd: server.root, env });
+    await execute(server.cli, ['-C', server.store, 'setup', SYNTHETIC_TOOL, '--project', server.root], {
+      cwd: server.root,
+      env,
+    });
+    await git('add', '-A');
+    await git('commit', '-q', '-m', 'Set up the synthetic agent and its orchestration policy');
+    await git('update-index', '--assume-unchanged', '.hotsheet2/orchestration-policy.json');
+    type Decision = {
+      kind: string;
+      outcome?: string;
+      reason?: string;
+      detail?: string;
+      operation_id?: string;
+      session_id?: string;
+    };
+    // The whole decision log, newest first, paging back.
+    const decisions = async () => {
+      const entries: Decision[] = [];
+      let before: number | undefined;
+      for (;;) {
+        const page = (await send(server, 'POST', `${base}/scheduler/decisions`, {
+          newest: true,
+          limit: 200,
+          ...(before === undefined ? {} : { before }),
+        })) as { entries?: Decision[]; cursor?: number; more?: boolean };
+        entries.push(...(page.entries ?? []));
+        if (!page.more || page.cursor === undefined) return entries;
+        before = page.cursor;
+      }
+    };
+    type Unplaced = { target_id: string; role: string; reason: string; detail?: string; retry_at_ms?: number };
+    const unplaced = async () =>
+      (
+        (await send(server, 'POST', `${base}/scheduler/plan`, { actor: person })) as {
+          roles_unplaced?: Unplaced[];
+        }
+      ).roles_unplaced ?? [];
 
-    // The overview: each role session the pass does not start, and why.
+    // Automatic placement: the scheduler starts each role, learns its prompt failed, winds it down and starts the
+    // next, until the third of each in a row failed. It is turned off again once both are reported.
+    await policy(true);
+    type Session = { session_id: string; role: string; state: string; owner: string };
+    const roleSessions = async () =>
+      ((await send(server, 'GET', `${base}/sessions`)) as unknown as Session[]).filter(
+        (session) => session.role !== 'worker',
+      );
+    await expect
+      .poll(
+        async () => ({
+          reported: (await unplaced()).map((entry) => entry.reason).sort(),
+          running: (await roleSessions()).filter((session) => session.state !== 'stopped').length,
+        }),
+        { timeout: 60_000 },
+      )
+      .toEqual({ reported: ['dispatcher_unavailable', 'integrator_unavailable'], running: 0 });
+    await policy(false);
+    // Three sessions of each role, each stopped by a wind-down because its role prompt failed; the last had used up
+    // its replacements. (The decision log's start entries are not read: HS2-2YCHRC.)
+    const sessions = await roleSessions();
+    const log = await decisions();
+    for (const role of ['integrator', 'dispatcher']) {
+      const ofRole = sessions.filter((session) => session.role === role);
+      expect(
+        ofRole.map((session) => [session.owner, session.state]),
+        role,
+      ).toEqual(Array.from({ length: 3 }, () => ['orchestrator', 'stopped']));
+      // The decision of each session's wind-down; a pass that decides the same again is not logged again, so the one
+      // logged may be an earlier try that found the session not yet at its safe point.
+      const windDown = (session: Session) =>
+        log.find((entry) => entry.kind === 'wind_down' && entry.session_id === session.session_id);
+      expect(ofRole.map((session) => [windDown(session)?.reason, windDown(session)?.detail]).sort(), role).toEqual([
+        ['role_prompt_failed', role],
+        ['role_prompt_failed', role],
+        ['role_prompt_failed', 'replacements_exhausted'],
+      ]);
+    }
+    const reported = await unplaced();
+    for (const entry of reported) {
+      expect(entry).toMatchObject({ target_id: TARGET, detail: 'replacements_exhausted' });
+      expect(entry.retry_at_ms).toBeGreaterThan(Date.now());
+    }
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+
+    // The overview: each role session the scheduler does not start, why, and what a person can do meanwhile.
     const roles = page.locator('[data-orchestration-overview] [data-orchestration-section="Coordination Sessions"]');
-    await expect(roles).toContainText('Self Integrator', { timeout: 30_000 });
-    await expect(roles).toContainText('Unavailable: the integrators the scheduler started did not take up their role');
-    await expect(roles).toContainText('Self Dispatcher');
-    await expect(roles).toContainText('Unavailable: the dispatchers the scheduler started did not take up their role');
-    await expect(roles).toContainText('looked at again by');
+    const row = (section: typeof roles, label: string) =>
+      section.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    await expect(roles.locator('dt')).toHaveText(['Self Integrator', 'Self Dispatcher'], { timeout: 30_000 });
+    await expect(row(roles, 'Self Integrator').locator('dd')).toHaveText(
+      new RegExp(
+        '^Unavailable: the integrators the scheduler started did not take up their role, so none starts for a while\\. ' +
+          'Open the AI tool in a terminal of this project to check that it starts and is signed in, or integrate handoffs by hand ' +
+          'until then; looked at again by .+$',
+      ),
+    );
+    await expect(row(roles, 'Self Dispatcher').locator('dd')).toHaveText(
+      new RegExp(
+        '^Unavailable: the dispatchers the scheduler started did not take up their role, so none starts for a while\\. ' +
+          'Open the AI tool in a terminal of this project to check that it starts and is signed in, or assign ready work by hand ' +
+          'until then; looked at again by .+$',
+      ),
+    );
     await expect(roles).not.toContainText('_');
-    await visualPass(page, 'hs2-65ad6j', 'overview-roles', {
+    await visualPass(page, 'hs2-91af8k', 'overview-roles', {
       show: roles,
       check: () => expect(roles).toContainText('Self Dispatcher'),
       atPhone: () => openInspector(page),
     });
 
-    // The running card, as the real server answers it: no handoff waits, so no integrator runs.
+    // The running card, as the real server explains it: its project's integrator is unavailable.
     const running = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
     const waiting = view.locator(`[data-ticket-slug="${plan.second.slug}"]`);
     const integration = page.locator('[data-orchestration-inspector] [data-orchestration-section="Integration"]');
     await running.click();
-    await expect(integration).toContainText('Not running');
-    await expect(integration).toContainText('No handoff waits to be integrated');
-    expect(explainedIntegrator).toMatchObject({ target_id: TARGET, standing: 'none' });
+    // The card reads the scheduler's explanation of its step, a full pass, when it is selected.
+    await expect(row(integration, 'Integrator').locator('dd')).toHaveText('Unavailable', { timeout: 30_000 });
+    await expect(row(integration, 'Why').locator('dd')).toHaveText(
+      'The integrators the scheduler started did not take up their role, so none starts for a while. ' +
+        'Open the AI tool in a terminal of this project to check that it starts and is signed in, or integrate handoffs by hand ' +
+        'until then',
+    );
+    await expect(row(integration, 'Next').locator('dd')).toHaveText(/^Looked at again by .+/);
+    await expect(row(integration, 'Session')).toHaveCount(0);
+    await expect(integration).not.toContainText('_');
     const order = await page
       .locator('[data-orchestration-inspector] [data-orchestration-section]')
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-orchestration-section')));
     expect(order.indexOf('Integration')).toBe(order.indexOf('Run') + 1);
-    // A card without a run has no Integration section.
+    // A card without a run has no Integration section; selecting the running card again reads it again.
     await waiting.click();
     await expect(page.locator('[data-orchestration-inspector]')).toContainText('Prerequisites');
     await expect(integration).toHaveCount(0);
-
-    // An unavailable integrator, read again when the card is selected again.
-    injected.integrator = {
-      target_id: TARGET,
-      standing: 'not_started',
-      reason: 'integrator_unavailable',
-      detail: 'replacements_exhausted',
-      retry_at_ms: Date.now() + 3_600_000,
-    };
     await running.click();
-    await expect(integration).toContainText('Unavailable');
-    await expect(integration).toContainText('did not take up their role');
-    await expect(integration).toContainText('Looked at again by');
-    await expect(integration).not.toContainText('_');
-    await visualPass(page, 'hs2-65ad6j', 'integration-unavailable', {
+    await expect(row(integration, 'Integrator').locator('dd')).toHaveText('Unavailable', { timeout: 30_000 });
+    await visualPass(page, 'hs2-91af8k', 'integration-unavailable', {
       show: integration,
-      check: () => expect(integration).toContainText('Unavailable'),
+      check: () => expect(row(integration, 'Integrator').locator('dd')).toHaveText('Unavailable'),
       atPhone: () => running.click(),
     });
   } finally {

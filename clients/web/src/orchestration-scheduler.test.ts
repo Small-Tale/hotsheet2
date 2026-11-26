@@ -301,7 +301,9 @@ describe('why integration is or is not running (HS2-65AD6J)', () => {
     expect(notStarted(undefined)).toBe('this pass could not start one');
     expect(notStarted('brand_new_detail')).toBe('brand new detail');
     expect(why({ standing: 'not_started', reason: 'integrator_unavailable', detail: 'replacements_exhausted' })).toBe(
-      'the integrators the scheduler started did not take up their role, so none starts for a while',
+      'the integrators the scheduler started did not take up their role, so none starts for a while. ' +
+        'Open the AI tool in a terminal of this project to check that it starts and is signed in, or integrate ' +
+        'handoffs by hand until then',
     );
     expect(
       why({
@@ -310,7 +312,14 @@ describe('why integration is or is not running (HS2-65AD6J)', () => {
         reason: 'dispatcher_unavailable',
         detail: 'replacements_exhausted',
       }),
-    ).toBe('the dispatchers the scheduler started did not take up their role, so none starts for a while');
+    ).toBe(
+      'the dispatchers the scheduler started did not take up their role, so none starts for a while. ' +
+        'Open the AI tool in a terminal of this project to check that it starts and is signed in, or assign ready ' +
+        'work by hand until then',
+    );
+    // HS2-91AF8K: each unavailable role says what a person can do meanwhile.
+    for (const reason of ['integrator_unavailable', 'dispatcher_unavailable'])
+      expect(why({ standing: 'not_started', reason })).toMatch(/Open the AI tool .+ by hand until then$/);
     expect(why({ standing: 'not_started', reason: 'brand_new_reason' })).toBe('brand new reason');
     // No code ever reaches a person as a code.
     for (const detail of ['target_cap', 'cooldown', 'policy_opt_out', 'target_disabled', 'machine_refused'])
@@ -372,7 +381,9 @@ describe('why integration is or is not running (HS2-65AD6J)', () => {
       {
         label: 'Web Dispatcher',
         value:
-          'Unavailable: the dispatchers the scheduler started did not take up their role, so none starts for a while; looked at again by t3',
+          'Unavailable: the dispatchers the scheduler started did not take up their role, so none starts for a while. ' +
+          'Open the AI tool in a terminal of this project to check that it starts and is signed in, or assign ready ' +
+          'work by hand until then; looked at again by t3',
       },
       { label: 'site 123456 Integrator', value: 'Running' },
     ]);
@@ -487,7 +498,9 @@ describe('why integration is or is not running (HS2-65AD6J)', () => {
       'Did not start the integrator of API: the project’s session limit is reached',
     );
     expect(role({ target_id: 'web', reason: 'dispatcher_unavailable', detail: 'replacements_exhausted' })).toBe(
-      'Did not start the dispatcher of Web: the dispatchers the scheduler started did not take up their role, so none starts for a while',
+      'Did not start the dispatcher of Web: the dispatchers the scheduler started did not take up their role, so ' +
+        'none starts for a while. Open the AI tool in a terminal of this project to check that it starts and is ' +
+        'signed in, or assign ready work by hand until then',
     );
     expect(role({})).toBe('Did not start the integrator of a project');
     expect(
