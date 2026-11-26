@@ -238,23 +238,37 @@ fn decide_approval_with_pending(
     params: &Value,
     on_pending: impl FnOnce(u64),
 ) -> Value {
-    let Some((yes, no)) = approval_tokens(method) else {
+    if approval_decision(method, Decision::Deny).is_none() {
         return json!({}); // not an approval we recognize → empty result
-    };
+    }
     let decision = match policy {
         None => Decision::Deny,
         Some(p) => resolve_decision(p, method, params, on_pending),
     };
-    let tok = if decision == Decision::Allow { yes } else { no };
-    json!({ "decision": tok })
+    json!({ "decision": approval_decision(method, decision) })
 }
 
-/// The (approve, deny) reply tokens for each known approval method.
-fn approval_tokens(method: &str) -> Option<(&'static str, &'static str)> {
+/// The reason a legacy `denied` decision carries back to the model.
+const LEGACY_REJECTION: &str = "Hot Sheet declined this request.";
+
+/// The native reply `decision` for an allow or deny on each known approval method, taken
+/// from the Codex app-server schema (pinned by `hs2_nm6wxf_*` against
+/// `tests/fixtures/codex-0.172.0-approval-decisions.json`). The v2 `item/...` methods deny
+/// with `decline` (refused, the turn continues; `cancel` would also interrupt the turn).
+/// The legacy `ReviewDecision` denies with `{"denied":{"rejection":…}}`, also continuing;
+/// a bare `denied` string is not in its schema. Hot Sheet never answers an
+/// allow-for-session value: a remembered grant is a Hot Sheet rule, never delegated to
+/// Codex's own approval cache (HS2-NM6WXF).
+fn approval_decision(method: &str, decision: Decision) -> Option<Value> {
+    let allow = decision == Decision::Allow;
     match method {
-        "execCommandApproval" | "applyPatchApproval" => Some(("approved", "denied")),
+        "execCommandApproval" | "applyPatchApproval" => Some(if allow {
+            json!("approved")
+        } else {
+            json!({ "denied": { "rejection": LEGACY_REJECTION } })
+        }),
         "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
-            Some(("accept", "reject"))
+            Some(json!(if allow { "accept" } else { "decline" }))
         }
         _ => None,
     }
@@ -1682,11 +1696,20 @@ mod approval_tests {
     fn hs2_0g1fp6_no_policy_declines_every_approval_and_maps_reply_tokens() {
         // A bare headless run has nobody to ask: every approval method gets its decline
         // token and never its grant token (HS2-0G1FP6).
+        let legacy_no = json!({ "denied": { "rejection": LEGACY_REJECTION } });
         for (method, no, yes) in [
-            ("execCommandApproval", "denied", "approved"),
-            ("applyPatchApproval", "denied", "approved"),
-            ("item/commandExecution/requestApproval", "reject", "accept"),
-            ("item/fileChange/requestApproval", "reject", "accept"),
+            ("execCommandApproval", legacy_no.clone(), "approved"),
+            ("applyPatchApproval", legacy_no, "approved"),
+            (
+                "item/commandExecution/requestApproval",
+                json!("decline"),
+                "accept",
+            ),
+            (
+                "item/fileChange/requestApproval",
+                json!("decline"),
+                "accept",
+            ),
         ] {
             let reply = decide_approval(None, method, &json!({"command": ["rm", "-rf", "x"]}));
             assert_eq!(reply, json!({ "decision": no }), "{method}");
@@ -1739,10 +1762,107 @@ mod approval_tests {
         assert_eq!(
             replies,
             vec![
-                json!({"jsonrpc":"2.0","id":"a-1","result":{"decision":"reject"}}),
-                json!({"jsonrpc":"2.0","id":7,"result":{"decision":"denied"}}),
+                json!({"jsonrpc":"2.0","id":"a-1","result":{"decision":"decline"}}),
+                json!({"jsonrpc":"2.0","id":7,
+                    "result":{"decision":{"denied":{"rejection":LEGACY_REJECTION}}}}),
             ]
         );
+    }
+
+    /// The trimmed app-server schema fragment for each approval method's `decision`
+    /// (codex-cli 0.172.0, HS2-NM6WXF).
+    fn approval_decision_schema() -> Value {
+        serde_json::from_str(include_str!(
+            "../tests/fixtures/codex-0.172.0-approval-decisions.json"
+        ))
+        .unwrap()
+    }
+
+    /// Does `value` match one `oneOf` variant: a string enum member, or an object whose
+    /// single key names an object variant and carries its required string fields?
+    fn schema_accepts(variants: &[Value], value: &Value) -> bool {
+        variants.iter().any(|v| match value {
+            Value::String(s) => v["enum"]
+                .as_array()
+                .is_some_and(|e| e.iter().any(|m| m == s)),
+            Value::Object(o) if o.len() == 1 => {
+                let (key, body) = o.iter().next().unwrap();
+                let Some(spec) = v["properties"].get(key) else {
+                    return false;
+                };
+                v["required"].as_array().is_some_and(|r| r == &[json!(key)])
+                    && spec["required"].as_array().is_some_and(|req| {
+                        req.iter().all(|f| {
+                            f.as_str()
+                                .and_then(|f| body.get(f))
+                                .is_some_and(Value::is_string)
+                        })
+                    })
+            }
+            _ => false,
+        })
+    }
+
+    /// The variant a schema value matched, by its description, for semantic checks.
+    fn schema_description<'a>(variants: &'a [Value], value: &Value) -> &'a str {
+        variants
+            .iter()
+            .find(|v| schema_accepts(std::slice::from_ref(*v), value))
+            .and_then(|v| v["description"].as_str())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn hs2_nm6wxf_every_approval_reply_is_a_member_of_the_codex_schema() {
+        // Every approval method's allow and deny replies are members of the installed
+        // Codex app-server schema's decision `oneOf`. The deny keeps the turn going
+        // ("continue"), never the interrupting `cancel`/`abort`, and allow-for-session is
+        // never sent: Hot Sheet keeps remembered grants as its own rules (HS2-NM6WXF).
+        let schema = approval_decision_schema();
+        let methods = schema["methods"].as_object().unwrap();
+        assert_eq!(
+            methods.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec![
+                "applyPatchApproval",
+                "execCommandApproval",
+                "item/commandExecution/requestApproval",
+                "item/fileChange/requestApproval",
+            ],
+            "the fixture covers every approval method Hot Sheet answers"
+        );
+        for (method, session) in [
+            ("execCommandApproval", "approved_for_session"),
+            ("applyPatchApproval", "approved_for_session"),
+            ("item/commandExecution/requestApproval", "acceptForSession"),
+            ("item/fileChange/requestApproval", "acceptForSession"),
+        ] {
+            let variants = methods[method]["oneOf"].as_array().unwrap();
+            let allow = approval_decision(method, Decision::Allow).unwrap();
+            let deny = approval_decision(method, Decision::Deny).unwrap();
+            assert!(schema_accepts(variants, &allow), "{method} allow {allow}");
+            assert!(schema_accepts(variants, &deny), "{method} deny {deny}");
+            assert!(
+                schema_description(variants, &allow).contains("approved"),
+                "{method}: allow must be an approval"
+            );
+            let deny_meaning = schema_description(variants, &deny);
+            assert!(
+                deny_meaning.contains("denied") && deny_meaning.contains("continue"),
+                "{method}: deny must refuse and continue, got {deny_meaning:?}"
+            );
+            // The session value exists in the schema, and Hot Sheet never answers it.
+            assert!(
+                schema_accepts(variants, &json!(session)),
+                "{method} {session}"
+            );
+            assert_ne!(allow, json!(session), "{method}");
+            assert_ne!(deny, json!(session), "{method}");
+            // The superseded tokens are not schema members (the HS2-NM6WXF defect).
+            for stale in ["reject", "denied"] {
+                assert!(!schema_accepts(variants, &json!(stale)), "{method} {stale}");
+            }
+        }
+        assert_eq!(approval_decision("somethingElse", Decision::Deny), None);
     }
 
     #[test]
@@ -1789,14 +1909,14 @@ mod approval_tests {
             "execCommandApproval",
             &json!({"command": ["rm", "-rf", "/"]}),
         );
-        assert_eq!(no["decision"], "denied");
+        assert_eq!(no["decision"]["denied"]["rejection"], LEGACY_REJECTION);
         // Unmatched → the policy default (Deny here), and the pending request is cleared.
         let def = decide_approval(
             Some(&p),
             "execCommandApproval",
             &json!({"command": ["curl", "x"]}),
         );
-        assert_eq!(def["decision"], "denied");
+        assert_eq!(def["decision"]["denied"]["rejection"], LEGACY_REJECTION);
         assert!(
             p.bridge.pending().is_empty(),
             "no leaked pending requests after the timeout fallback"

@@ -1,6 +1,7 @@
 //! Checkout-scoped ticket CRUD and attachment routes.
 
 mod attachments;
+mod batch;
 pub(crate) use attachments::{
     act_on_checkout_ticket_attachment, act_on_checkout_ticket_attachment_by_name,
     add_checkout_ticket_attachment, checkout_git_ticket, delete_checkout_ticket_attachment,
@@ -10,8 +11,9 @@ pub(crate) use attachments::{
     update_checkout_ticket_attachment_annotations, update_checkout_ticket_attachment_markup,
     update_checkout_ticket_attachment_metadata, update_ticket_attachment_annotations,
 };
+pub(crate) use batch::batch_update_checkout_tickets;
 
-use crate::api_error::{ActorReq, ApiError};
+use crate::api_error::ApiError;
 use crate::dto::{CloseReq, CreateReq, DuplicateOfReq, UpdateReq};
 use crate::multistore::StoreEntry;
 use crate::routes::checkouts::{checkout_entries, checkout_lookup_error};
@@ -39,7 +41,7 @@ use hotsheet_ticketing::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path as FsPath;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Deserialize)]
 pub(crate) struct CheckoutStoreQuery {
@@ -931,149 +933,6 @@ pub(crate) struct CheckoutUpdateResult {
     feedback_delivery: Option<Delivery>,
 }
 
-#[derive(Deserialize)]
-struct CheckoutBatchUpdateReq {
-    id: String,
-    #[serde(flatten)]
-    update: UpdateReq,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct CheckoutBatchReq {
-    updates: Vec<CheckoutBatchUpdateReq>,
-    /// One actor for the whole bulk operation (HS2-XF81CJ); an update naming its own wins.
-    #[serde(default)]
-    actor: Option<ActorReq>,
-}
-
-/// Apply a multi-selection update through one checkout-scoped request. All optimistic
-/// concurrency tokens are validated before the first write, so a stale selection cannot
-/// partially apply while the client still sees one logical bulk operation.
-pub(crate) async fn batch_update_checkout_tickets(
-    State(state): State<AppState>,
-    Path(reference): Path<String>,
-    Json(req): Json<CheckoutBatchReq>,
-) -> Result<(HeaderMap, Json<Vec<ResolvedTicket>>), ApiError> {
-    let started = Instant::now();
-    if req.updates.is_empty() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "bulk update requires at least one ticket",
-        ));
-    }
-    let (_, settings) = checkout_settings(&state, &reference)?;
-    let mut resolved = Vec::with_capacity(req.updates.len());
-    for mut item in req.updates {
-        if item.update.actor.is_none() {
-            item.update.actor.clone_from(&req.actor);
-        }
-        let (entry, ticket) = checkout_git_ticket(&state, &reference, &item.id)?;
-        if item
-            .update
-            .expected_token
-            .as_deref()
-            .is_some_and(|token| token != ticket.updated_at.as_str())
-        {
-            return Err(ApiError::ticket_changed(format!(
-                "ticket {} changed since it was read",
-                item.id
-            )));
-        }
-        resolved.push((entry, ticket.id.to_string(), item));
-    }
-    // HS2-PDSHNN, HS2-9KZSD4: resolve each requested group once through the project's
-    // registry before the first write, so every ticket of the selection gets one id. An
-    // invalid name refuses the batch.
-    let mut resolved_groups = std::collections::BTreeMap::<String, Option<Option<String>>>::new();
-    for (_, _, item) in &mut resolved {
-        if let Some(Some(input)) = &item.update.group {
-            let value = match resolved_groups.get(input) {
-                Some(value) => value.clone(),
-                None => {
-                    let value = groups::resolve_for_checkout(
-                        &state,
-                        &reference,
-                        Some(Some(input.clone())),
-                    )?;
-                    resolved_groups.insert(input.clone(), value.clone());
-                    value
-                }
-            };
-            item.update.group = value;
-            item.update.group_resolved = true;
-        }
-    }
-    let admission_time = started.elapsed();
-    let mut updated = Vec::with_capacity(resolved.len());
-    let mut pending =
-        std::collections::BTreeMap::<std::path::PathBuf, (StoreEntry, Vec<Ticket>)>::new();
-    let mut failure = None;
-    for (entry, native_id, item) in resolved {
-        let mut deferred_entry = entry.clone();
-        deferred_entry.store = deferred_entry.store.with_deferred_autocommit();
-        let result = do_update_with_ticket(&state, &deferred_entry, &native_id, item.update, false)
-            .and_then(|(ticket, changed)| {
-                contextualize_api_ticket(ticket, &settings).map(|ticket| (ticket, changed))
-            });
-        match result {
-            Ok((ticket, changed)) => {
-                updated.push(ResolvedTicket {
-                    store: multistore::store_url_id(&entry.store),
-                    ticket,
-                });
-                pending
-                    .entry(entry.store.root().to_path_buf())
-                    .or_insert_with(|| (entry, Vec::new()))
-                    .1
-                    .push(changed);
-            }
-            Err(error) => {
-                failure = Some(error);
-                break;
-            }
-        }
-    }
-    let write_time = started.elapsed() - admission_time;
-    let mut git_time = Duration::ZERO;
-    let mut index_time = Duration::ZERO;
-    let mut event_time = Duration::ZERO;
-    let mut worklist_time = Duration::ZERO;
-    for (_, (entry, tickets)) in pending {
-        let paths = tickets
-            .iter()
-            .map(|ticket| entry.store.ticket_path(&ticket.id))
-            .collect::<Vec<_>>();
-        let git_started = Instant::now();
-        entry
-            .store
-            .queue_autocommit_paths("Update selected Hot Sheet tickets", &paths);
-        git_time += git_started.elapsed();
-        let [index, events, worklist] = state.changed_many_in(&entry, "updated", &tickets);
-        index_time += index;
-        event_time += events;
-        worklist_time += worklist;
-    }
-    if let Some(error) = failure {
-        return Err(error);
-    }
-    let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
-    let timing = format!(
-        "admission;dur={:.1}, write;dur={:.1}, git;dur={:.1}, index;dur={:.1}, events;dur={:.1}, worklist;dur={:.1}, total;dur={:.1}",
-        ms(admission_time),
-        ms(write_time),
-        ms(git_time),
-        ms(index_time),
-        ms(event_time),
-        ms(worklist_time),
-        ms(started.elapsed()),
-    );
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "server-timing",
-        axum::http::HeaderValue::from_str(&timing).expect("numeric server timing"),
-    );
-    Ok((headers, Json(updated)))
-}
 pub(crate) async fn delete_checkout_ticket_note(
     State(state): State<AppState>,
     Path((reference, id, note_id)): Path<(String, String, String)>,

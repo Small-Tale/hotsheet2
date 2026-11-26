@@ -2241,7 +2241,10 @@ fn hs2_0g1fp6_a_headless_codex_turn_without_a_bridge_declines_its_approval() {
     assert_eq!(reason, DoneReason::Completed);
     assert_eq!(thread["params"]["approvalPolicy"], "on-request");
     assert_eq!(reply["id"], "approval-1");
-    assert_eq!(reply["result"], serde_json::json!({ "decision": "reject" }));
+    assert_eq!(
+        reply["result"],
+        serde_json::json!({ "decision": "decline" })
+    );
 }
 
 /// HS2-0G1FP6: with a permission bridge attached the decision is the bridge's, unchanged:

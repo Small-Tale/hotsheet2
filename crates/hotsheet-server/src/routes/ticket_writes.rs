@@ -141,6 +141,7 @@ pub(crate) fn do_update_with_ticket(
             feedback,
             req.actor.as_ref(),
             req.expected_token.as_deref(),
+            publish,
         );
     }
     let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;

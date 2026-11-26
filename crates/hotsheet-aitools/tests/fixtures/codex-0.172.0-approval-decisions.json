@@ -1,0 +1,308 @@
+{
+  "$comment": "Trimmed from `codex app-server generate-json-schema` (codex-cli 0.172.0, generated 2026-11-26): each approval ServerRequest's response `decision` oneOf, with amendment object bodies reduced to property names and types. Pins Hot Sheet's allow, deny, and allow-for-session reply values (HS2-NM6WXF). Regenerate on a Codex upgrade that changes approval decisions.",
+  "codexVersion": "0.172.0",
+  "methods": {
+    "item/commandExecution/requestApproval": {
+      "responseSchema": "CommandExecutionRequestApprovalResponse",
+      "decisionDefinition": "CommandExecutionApprovalDecision",
+      "oneOf": [
+        {
+          "description": "User approved the command.",
+          "enum": [
+            "accept"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User approved the command and future prompts in the same session-scoped approval cache should run without prompting.",
+          "enum": [
+            "acceptForSession"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User approved the command, and wants to apply the proposed execpolicy amendment so future matching commands can run without prompting.",
+          "type": "object",
+          "required": [
+            "acceptWithExecpolicyAmendment"
+          ],
+          "properties": {
+            "acceptWithExecpolicyAmendment": {
+              "required": [
+                "execpolicy_amendment"
+              ],
+              "properties": {
+                "execpolicy_amendment": {
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "User chose a persistent network policy rule (allow/deny) for this host.",
+          "type": "object",
+          "required": [
+            "applyNetworkPolicyAmendment"
+          ],
+          "properties": {
+            "applyNetworkPolicyAmendment": {
+              "required": [
+                "network_policy_amendment"
+              ],
+              "properties": {
+                "network_policy_amendment": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "User denied the command. The agent will continue the turn.",
+          "enum": [
+            "decline"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User denied the command. The turn will also be immediately interrupted.",
+          "enum": [
+            "cancel"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "item/fileChange/requestApproval": {
+      "responseSchema": "FileChangeRequestApprovalResponse",
+      "decisionDefinition": "FileChangeApprovalDecision",
+      "oneOf": [
+        {
+          "description": "User approved the file changes.",
+          "enum": [
+            "accept"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User approved the file changes and future changes to the same files should run without prompting.",
+          "enum": [
+            "acceptForSession"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User denied the file changes. The agent will continue the turn.",
+          "enum": [
+            "decline"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User denied the file changes. The turn will also be immediately interrupted.",
+          "enum": [
+            "cancel"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "execCommandApproval": {
+      "responseSchema": "ExecCommandApprovalResponse",
+      "decisionDefinition": "ReviewDecision",
+      "oneOf": [
+        {
+          "description": "User has approved this command and the agent should execute it.",
+          "enum": [
+            "approved"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User has approved this command and wants to apply the proposed execpolicy amendment so future matching commands are permitted.",
+          "type": "object",
+          "required": [
+            "approved_execpolicy_amendment"
+          ],
+          "properties": {
+            "approved_execpolicy_amendment": {
+              "required": [
+                "proposed_execpolicy_amendment"
+              ],
+              "properties": {
+                "proposed_execpolicy_amendment": {
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "User has approved this request and wants future prompts in the same session-scoped approval cache to be automatically approved for the remainder of the session.",
+          "enum": [
+            "approved_for_session"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User has approved this MCP tool call and wants to amend its policy so matching future calls are automatically approved across sessions.",
+          "enum": [
+            "approved_mcp_policy_amendment"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User chose to persist a network policy rule (allow/deny) for future requests to the same host.",
+          "type": "object",
+          "required": [
+            "network_policy_amendment"
+          ],
+          "properties": {
+            "network_policy_amendment": {
+              "required": [
+                "network_policy_amendment"
+              ],
+              "properties": {
+                "network_policy_amendment": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "User has denied this command and the agent should not execute it, but it should continue the session and try something else.",
+          "type": "object",
+          "required": [
+            "denied"
+          ],
+          "properties": {
+            "denied": {
+              "required": [
+                "rejection"
+              ],
+              "properties": {
+                "rejection": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "Automatic approval review timed out before reaching a decision.",
+          "enum": [
+            "timed_out"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User has denied this command and the agent should not do anything until the user's next command.",
+          "enum": [
+            "abort"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "applyPatchApproval": {
+      "responseSchema": "ApplyPatchApprovalResponse",
+      "decisionDefinition": "ReviewDecision",
+      "oneOf": [
+        {
+          "description": "User has approved this command and the agent should execute it.",
+          "enum": [
+            "approved"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User has approved this command and wants to apply the proposed execpolicy amendment so future matching commands are permitted.",
+          "type": "object",
+          "required": [
+            "approved_execpolicy_amendment"
+          ],
+          "properties": {
+            "approved_execpolicy_amendment": {
+              "required": [
+                "proposed_execpolicy_amendment"
+              ],
+              "properties": {
+                "proposed_execpolicy_amendment": {
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "User has approved this request and wants future prompts in the same session-scoped approval cache to be automatically approved for the remainder of the session.",
+          "enum": [
+            "approved_for_session"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User has approved this MCP tool call and wants to amend its policy so matching future calls are automatically approved across sessions.",
+          "enum": [
+            "approved_mcp_policy_amendment"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User chose to persist a network policy rule (allow/deny) for future requests to the same host.",
+          "type": "object",
+          "required": [
+            "network_policy_amendment"
+          ],
+          "properties": {
+            "network_policy_amendment": {
+              "required": [
+                "network_policy_amendment"
+              ],
+              "properties": {
+                "network_policy_amendment": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "User has denied this command and the agent should not execute it, but it should continue the session and try something else.",
+          "type": "object",
+          "required": [
+            "denied"
+          ],
+          "properties": {
+            "denied": {
+              "required": [
+                "rejection"
+              ],
+              "properties": {
+                "rejection": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "Automatic approval review timed out before reaching a decision.",
+          "enum": [
+            "timed_out"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "User has denied this command and the agent should not do anything until the user's next command.",
+          "enum": [
+            "abort"
+          ],
+          "type": "string"
+        }
+      ]
+    }
+  }
+}

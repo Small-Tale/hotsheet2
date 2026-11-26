@@ -34,7 +34,7 @@ const GUARDED_STORE_SCHEMA_V3: &str = "hotsheet/v3-random-suffix-shards";
 const SHARD_ID_PREFIX_2: &str = "id-prefix-2";
 const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 const FINDER_METADATA_FILE: &str = ".DS_Store";
-const NOTE_MUTATION_LOCK_FILE: &str = ".hotsheet-note-mutation.lock";
+pub(crate) const NOTE_MUTATION_LOCK_FILE: &str = ".hotsheet-note-mutation.lock";
 /// The lasting sibling lock every provider-configuration writer takes beside the store's
 /// `providers.json` ([`crate::ProviderConfigRegistry`], HS2-457FGS), and beside the machine
 /// registry in the home (HS2-7QPJ05).
@@ -567,10 +567,24 @@ impl FsStore {
     /// Keep a ticket read–revise–write sequence together across processes.
     /// The file remains at the store root for git-backed and standalone stores alike;
     /// it is ignored by Git and never removed, so waiters cannot lock different inodes.
+    ///
+    /// The lock is re-entrant on the thread that holds it (HS2-A8TTD7): a nested
+    /// transaction on the same store joins the outer one instead of waiting on itself, so
+    /// a multi-ticket operation can hold the store across several single-ticket ops.
     pub fn with_ticket_transaction<T, E: From<StoreError>>(
         &self,
         operation: impl FnOnce() -> Result<T, E>,
     ) -> Result<T, E> {
+        let key = crate::store_transactions::lock_key(&self.root);
+        if crate::store_transactions::held_by_this_thread(&key) {
+            let scope = pending_commits::Scope::enter();
+            let result = operation();
+            // A nested level never owns jobs; the outermost transaction runs them.
+            for job in scope.finish() {
+                job.run();
+            }
+            return result;
+        }
         self.ensure_compaction_recovered().map_err(E::from)?;
         self.ensure_managed_gitignore().map_err(E::from)?;
         let path = self.root.join(NOTE_MUTATION_LOCK_FILE);
@@ -593,6 +607,7 @@ impl FsStore {
                 source,
             })
             .map_err(E::from)?;
+        let held = crate::store_transactions::Held::enter(key);
         self.ensure_compaction_recovered().map_err(E::from)?;
         // Commits produced inside the transaction run after the store-wide lock is
         // released (HS2-0DH8ZS): a git commit can take hundreds of milliseconds on a large
@@ -600,6 +615,7 @@ impl FsStore {
         // convoys every other writer process behind this one.
         let scope = pending_commits::Scope::enter();
         let result = operation();
+        drop(held);
         drop(lock);
         for job in scope.finish() {
             job.run();

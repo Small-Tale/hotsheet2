@@ -1600,11 +1600,15 @@ A driven Codex app-server connection answers its approval requests
 remembered rule answers at once, anything else waits for a person, then the safe deny.
 Every server caller attaches the bridge. A bare headless run has none: `hotsheet-cli
 trigger`, `hotsheet-cli work`, and the serverless `sync --run-repair` session. Such a run
-declines every approval with the method's own refusal (`denied` or `reject`) and never
-grants one, matching the ACP refusal (HS2-0G1FP6). Under the default `approvalPolicy`
-`never`, Codex raises no approvals, so nothing changes. A run started with an asking
-policy such as `--permission-mode on-request` continues after each refusal without the
-refused action. A caller that needs approvals granted attaches a permission bridge.
+declines every approval with the method's own refusal and never grants one, matching the
+ACP refusal (HS2-0G1FP6). Each reply uses the Codex app-server schema's decision values:
+allow is `accept` (`item/...`) or `approved` (legacy), and deny is `decline` or
+`{"denied":{"rejection":…}}`, both of which let the turn continue. Hot Sheet never answers
+Codex's allow-for-session value, because remembered grants are Hot Sheet rules. A test
+pins these values to a trimmed codex-cli 0.172.0 schema fixture (HS2-NM6WXF). Under the
+default `approvalPolicy` `never`, Codex raises no approvals, so nothing changes. A run
+started with an asking policy such as `--permission-mode on-request` continues after each
+refusal without the refused action. A caller that needs approvals granted attaches a permission bridge.
 
 The client applies a user's decision optimistically: the popup and its clickable actions
 disappear in the same render that begins the network request, preventing latency from

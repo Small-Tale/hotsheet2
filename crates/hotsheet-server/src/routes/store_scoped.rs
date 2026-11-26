@@ -291,7 +291,7 @@ pub(crate) async fn run_unhost_sweeper(state: AppState) {
 /// drive on the store, a terminal inside a checkout that uses it, or a live claim in it.
 /// Repository monitors of checkouts nobody has open stop too. While project stores remain
 /// hosted, another sweep is scheduled for when their leases could have lapsed.
-async fn sweep_unhosted(state: &AppState) {
+pub(crate) async fn sweep_unhosted(state: &AppState) {
     let live = state.presence.live();
     let terminal_dirs = live_terminal_dirs(state).await;
     let drive_sources: std::collections::HashSet<String> = state

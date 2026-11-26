@@ -14553,9 +14553,10 @@ async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_a
         serde_json::json!({"role":"human","id":"dana"})
     );
 
-    // A later item can fail after an earlier item has been written. The successful
-    // prefix must still reach the index and remain visible to subsequent requests.
-    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    // HS2-A8TTD7: the batch is all-or-nothing, so a ticket listed twice is refused
+    // before any write and neither edit lands (checkout_batch_atomic.rs covers the
+    // failing-item rollback).
+    let before_title = bulk[0]["title"].clone();
     let token = bulk[0]["updated_at"].as_str().unwrap();
     let partial = app
         .clone()
@@ -14572,7 +14573,7 @@ async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_a
         ))
         .await
         .unwrap();
-    assert_eq!(partial.status(), StatusCode::CONFLICT);
+    assert_eq!(partial.status(), StatusCode::BAD_REQUEST);
     let after_partial = body_json(
         app.clone()
             .oneshot(authed(
@@ -14584,7 +14585,7 @@ async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_a
             .unwrap(),
     )
     .await;
-    assert_eq!(after_partial["title"], "First batch edit");
+    assert_eq!(after_partial["title"], before_title);
 
     app.clone()
         .oneshot(authed(

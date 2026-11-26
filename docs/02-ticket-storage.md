@@ -231,7 +231,10 @@ milliseconds on a large store, seconds under index contention — never convoys 
 writer processes (HS2-0DH8ZS). A no-op update patch writes and commits nothing. This includes
 notes and AI ratings, general edits, claims, close actions, assignments, and
 attachment metadata and activity. Cross-store copy and move lock both stores in
-path order. The persistent `.hotsheet-note-mutation.lock` file retains its original
+path order. The lock is re-entrant on the thread that holds it, so a multi-ticket
+operation can hold every involved store (taken in the same canonical path order) while
+single-ticket operations run inside it; the checkout batch uses this to land all of its
+tickets or none (HS2-A8TTD7). The persistent `.hotsheet-note-mutation.lock` file retains its original
 name for compatibility and is Git-ignored; a crashed writer releases the OS lock,
 and the next writer reads the current ticket after acquiring it.
 
