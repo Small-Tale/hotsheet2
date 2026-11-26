@@ -431,6 +431,10 @@ test('HS2-A7YCB2 Link Again watches a CI gate the provider kept ending, and word
     await send(server, 'POST', `${base}/runs/${run.run_id}/reconcile`, { actor: scheduler });
     await expect(runSection).toContainText('Not verified', { timeout: 30_000 });
     await expect(runSection).toContainText('CI (the CI provider kept ending the watch');
+    // HS2-N9BFHW: the Events row words the reconciliation as the Checked row does, never its code.
+    const events = page.locator('[data-orchestration-inspector] [data-orchestration-section="Events"]');
+    await expect(events).toContainText('Checked · Held: something it depends on could not be verified');
+    await expect(events).not.toContainText('hold unverified');
     await visualPass(page, 'hs2-a7ycb2', 'watch-gone', {
       show: gates,
       check: () => expect(linkAgain).toBeVisible(),
@@ -452,7 +456,17 @@ test('HS2-A7YCB2 Link Again watches a CI gate the provider kept ending, and word
     // The watch reaches its verdict with nobody linking again.
     provider.run(REPO, { id: 11, sha: commit, status: 'completed', conclusion: 'success' });
     await expect(gates).toContainText('Passed', { timeout: 60_000 });
+    // HS2-N9BFHW: the verdict reconciles the run the CI gate held, so its Run section no longer reads CI as not
+    // verified, and the Events say it continues.
+    await expect(runSection).not.toContainText('Not verified', { timeout: 30_000 });
+    await expect(runSection).toContainText('The run’s worker holds its ticket');
+    await expect(events).toContainText('Checked · The run’s worker holds its ticket');
     await capture(page, 'hs2-a7ycb2', 'linked-again-passed-1440');
+    await visualPass(page, 'hs2-n9bfhw', 'gate-settled', {
+      show: events,
+      check: () => expect(runSection).not.toContainText('Not verified'),
+      atPhone: () => card.click(),
+    });
     expect(provider.requests.every((request) => request.startsWith('GET '))).toBe(true);
   } finally {
     await execute(server.cli, ['job', 'watch', 'stop'], { cwd: server.root, env: server.env }).catch(() => undefined);

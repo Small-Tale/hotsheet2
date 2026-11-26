@@ -205,3 +205,18 @@ describe('a released or returned run in words (HS2-ESVYQH)', () => {
     );
   });
 });
+
+describe('HS2-N9BFHW a reconciliation event reads in the Checked row’s words', () => {
+  it('words each disposition, never the code', () => {
+    expect(runEventText({ kind: 'reconciled', reason: 'hold_unverified', source: 'orchestrator' })).toBe(
+      'Checked · Held: something it depends on could not be verified',
+    );
+    expect(runEventText({ kind: 'reconciled', reason: 'continue' })).toBe(
+      'Checked · The run’s worker holds its ticket',
+    );
+    expect(runEventText({ kind: 'reconciled', reason: 'a_newer_outcome' })).toBe('Checked · A newer outcome');
+    expect(runEventText({ kind: 'reconciled' })).toBe('Reconciled');
+    for (const code of ['continue', 'wait_for_dispatcher', 'retry_dispatch', 'retry_cancel', 'needs_attention'])
+      expect(runEventText({ kind: 'reconciled', reason: code })).not.toContain('_');
+  });
+});

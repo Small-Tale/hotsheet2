@@ -1065,6 +1065,52 @@ impl OrchestrationRuntime {
         wait_ms: u64,
         tx: &mut Transaction<'_>,
     ) -> GateFollowStep {
+        let step = self.gate_follow_read(owner_id, state, wait_ms, tx);
+        for gate_id in &step.changed {
+            self.gate_settled_reconcile(owner_id, gate_id, tx);
+        }
+        step
+    }
+
+    /// HS2-N9BFHW: a gate that reached its verdict (passed or failed) while its run's
+    /// last reconciliation could not verify that gate's source (`ci_run` for CI,
+    /// `deployment` for a deployment) reconciles the run again, as whoever dispatched
+    /// it, so the run no longer reads as held for a source that has since answered. A
+    /// run reconciled since, or already finished, is left alone; best effort.
+    fn gate_settled_reconcile(&self, owner_id: &str, gate_id: &str, tx: &mut Transaction<'_>) {
+        use hotsheet_ticketing::orchestration::{ExternalSource, Verification};
+        let Ok(gate) = self.gate(owner_id, gate_id) else {
+            return;
+        };
+        if !matches!(gate.state, GateState::Passed | GateState::Failed) {
+            return;
+        }
+        let source = match gate.kind {
+            GateKind::Ci => ExternalSource::CiRun,
+            GateKind::Deployment => ExternalSource::Deployment,
+            _ => return,
+        };
+        let Ok(run) = self.run(owner_id, &gate.run_id) else {
+            return;
+        };
+        let unverified = run.reconciliation.as_ref().is_some_and(|found| {
+            found.findings.iter().any(|finding| {
+                finding.source == source && finding.verification == Verification::Unverifiable
+            })
+        });
+        if unverified && !run.state.is_terminal() {
+            let _ = self.run_reconcile(owner_id, &gate.run_id, None, tx);
+        }
+    }
+
+    /// One read of the owner's followed gates for [`Self::gate_follow_step`].
+    fn gate_follow_read(
+        &self,
+        owner_id: &str,
+        state: &mut GateFollowState,
+        wait_ms: u64,
+        tx: &mut Transaction<'_>,
+    ) -> GateFollowStep {
         let mut step = GateFollowStep::default();
         for round in 0..2 {
             let gates: Vec<Gate> = self

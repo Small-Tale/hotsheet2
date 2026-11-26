@@ -440,6 +440,8 @@ export function OrchestrationInspectorDemo() {
             },
             events: [
               { at_ms: timeline.now_ms - 60_000, kind: 'gate', state: 'pending', source: 'target' },
+              // HS2-N9BFHW: a reconciliation reads its disposition in words.
+              { at_ms: timeline.now_ms - 120_000, kind: 'reconciled', reason: 'continue', source: 'orchestrator' },
               { at_ms: timeline.now_ms - 300_000, kind: 'session', reason: 'started', source: 'orchestrator' },
               { at_ms: timeline.now_ms - 300_000, kind: 'state', state: 'dispatched', source: 'orchestrator' },
             ],

@@ -2614,7 +2614,12 @@ a missing watch outranks a live one. Reconciliation records nothing about the ga
 itself; the gate follower or the next `gate sync` brings the gate in line with the
 same reading. A live watch makes `may_start(ci_run)` false, and `gate link` never
 starts a second watch while one is live: the watch is found or reattached by its
-target, and only a finished one is watched again.
+target, and only a finished one is watched again. When the follower records a CI or
+deployment gate reaching its verdict (`passed` or `failed`) while the run's last
+reconciliation found that source (`ci_run` or `deployment`) `unverifiable`, it
+reconciles the run again, as whoever dispatched it, so the run no longer reads as held
+for a source that has since answered (HS2-N9BFHW). A run never reconciled, a finished
+run, and a gate that changes without a verdict are left alone.
 
 ### Deployments (HS2-BYEB60)
 
@@ -7177,7 +7182,9 @@ out), and **Differs** each `mismatched` one. A run whose state changed since kee
 outcome (HS2-68DWAM) and reads "Not checked since its last change". The inspector
 reads the run record (`GET /checkouts/{owner}/orchestration/runs/{run}`) with its
 gates, events and validations whenever the timeline's version changes; a new outcome
-is a `reconciled` run event, so it shows without polling. Words live in
+is a `reconciled` run event, so it shows without polling. The Events rows word that
+event with the same disposition words ("Checked · Held: something it depends on could
+not be verified"), never the code (HS2-N9BFHW). Words live in
 `clients/web/src/orchestration-run-checks.ts`.
 
 ### Validation and Run Validation (HS2-9XJEZC)

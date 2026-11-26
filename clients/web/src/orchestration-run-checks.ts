@@ -164,6 +164,8 @@ export function runReasonText(reason: string): string {
 
 /** One row of the Run section's events: its kind, the state it reached and why. */
 export function runEventText(event: { kind: string; state?: string; reason?: string; source?: string }): string {
+  // HS2-N9BFHW: a reconciliation's reason is its disposition, worded as the Run section's Checked row words it.
+  if (event.kind === 'reconciled' && event.reason) return `Checked · ${dispositionText(event.reason)}`;
   const kind = words(event.kind);
   const state = event.state === 'intervened' ? 'released by its worker' : event.state && words(event.state);
   return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}${state ? `: ${state}` : ''}${
