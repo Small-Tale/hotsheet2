@@ -292,15 +292,9 @@ fn judge_green(home: &std::path::Path, checkout: &str, job_id: &str, head: &str,
         .unwrap();
 }
 
-/// HS2-1P1HJT: a remote target's CI gate is watched on its host (HS2-WDQZ37), and the
-/// host drops off the network while the gate waits. The controller's gate follower keeps
-/// the gate `pending` (never a verdict, never lost work) and backs off instead of
-/// spinning on the unreachable host; the verdict the host's watch reached meanwhile is
-/// recorded once when the host is back. Waits on connection attempts (counted over a
-/// bounded window, HS2-Q9SPRV) and on the gate event stream, never on a fixed delay.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
-    let mut fleet = Fleet::new().await;
+/// A dispatcher run on the peer's target with one CI gate its host watches: the run,
+/// the commit, the gate and the host's watch Job.
+async fn hosted_gate(fleet: &Fleet, operation: &str) -> (Value, String, String, String) {
     git(
         &fleet.b_project,
         &[
@@ -318,7 +312,7 @@ async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
             "/runs",
             json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration.slug},
                 "target_id":TARGET_B,"connection_id":fleet.connection(Side::Peer),
-                "native_id":ticket.slug,"operation_id":"offline-gated-run","mode":"dispatcher"}),
+                "native_id":ticket.slug,"operation_id":operation,"mode":"dispatcher"}),
         )
         .await;
     let commit = "e".repeat(40);
@@ -338,6 +332,19 @@ async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
         .jobs;
     assert_eq!(jobs.len(), 1, "the watch runs on the host");
     assert_eq!(jobs[0].id, job_id);
+    (run, commit, gate_id, job_id)
+}
+
+/// HS2-1P1HJT: a remote target's CI gate is watched on its host (HS2-WDQZ37), and the
+/// host drops off the network while the gate waits. The controller's gate follower keeps
+/// the gate `pending` (never a verdict, never lost work) and backs off instead of
+/// spinning on the unreachable host; the verdict the host's watch reached meanwhile is
+/// recorded once when the host is back. Waits on connection attempts (counted over a
+/// bounded window, HS2-Q9SPRV) and on the gate event stream, never on a fixed delay.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
+    let mut fleet = Fleet::new().await;
+    let (run, commit, gate_id, job_id) = hosted_gate(&fleet, "offline-gated-run").await;
 
     // 1. The host drops off the network. Its address now refuses every connection at
     // once, and counts them: the controller keeps trying the host, but backs off.
@@ -431,6 +438,107 @@ async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
         )
         .await;
     assert_eq!(synced["changed"], json!([]), "{synced}");
+    fleet.shut_down().await;
+}
+
+/// HS2-C5TYA9: the gate follower's own back-off, measured on a real server. In
+/// `hs2_1p1hjt` the host's address refuses every connection, so TLS and the identity
+/// check before each peer call hide which controller loop connects, and the gate
+/// follower makes no connection in the measured window (HS2-Q9SPRV). Here the host's
+/// address is held by a stand-in with the host's own TLS identity: it answers
+/// `/remote-identity` as the host does and refuses only the checkout calls, at once,
+/// counting each read of `target-gates`. The gate follower then reaches the host,
+/// is refused without waiting, and spends the rest of its wait backing off (on this
+/// machine's adapter records): its reads come at most two together (HS2-CB5YEQ), the
+/// bursts about one wait (`MAX_HOSTED_GATE_WAIT_MS`) apart and never less than half
+/// of it, over three back-off periods, and the gate stays `pending`. Waits on the
+/// reads themselves, never on a fixed delay.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_c5tya9_the_gate_follower_backs_off_from_a_host_that_refuses_its_reads() {
+    use axum::response::IntoResponse;
+    use hotsheet_cli::orchestration::MAX_HOSTED_GATE_WAIT_MS;
+    use std::time::Duration;
+    let mut fleet = Fleet::new().await;
+    let (_, _, gate_id, job_id) = hosted_gate(&fleet, "refused-gated-run").await;
+
+    fleet.peer_offline().await;
+    let (read_tx, mut reads) = tokio::sync::mpsc::unbounded_channel::<tokio::time::Instant>();
+    let stand_in = app(fleet.peer_state.clone()).layer(axum::middleware::from_fn(
+        move |request: axum::extract::Request, next: axum::middleware::Next| {
+            let read_tx = read_tx.clone();
+            async move {
+                let path = request.uri().path().to_owned();
+                if !path.contains("/checkouts/") {
+                    return next.run(request).await;
+                }
+                if request.method() == axum::http::Method::GET && path.ends_with("/target-gates") {
+                    let _ = read_tx.send(tokio::time::Instant::now());
+                }
+                StatusCode::SERVICE_UNAVAILABLE.into_response()
+            }
+        },
+    ));
+    let listener = tokio::net::TcpListener::bind(fleet.peer_address)
+        .await
+        .unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let serving = tokio::spawn(hotsheet_server::tls::serve_tls_with_acl(
+        listener,
+        stand_in,
+        hotsheet_server::tls::build_server_config(&fleet.paths).unwrap(),
+        Some(fleet.paths.acl()),
+        async move {
+            let _ = stopped.await;
+        },
+    ));
+
+    // The follower's step reads the gate, waits out its wait on this machine's own
+    // adapter records, and reads once more before it ends; the next step reads at
+    // once. So reads come in bursts of at most two, a wait apart. Reads less than a
+    // second apart are one burst; four bursts span three back-off periods.
+    let wait = Duration::from_millis(MAX_HOSTED_GATE_WAIT_MS);
+    let mut bursts: Vec<Vec<tokio::time::Instant>> = Vec::new();
+    while bursts.len() < 4 {
+        let read = tokio::time::timeout(4 * wait, reads.recv())
+            .await
+            .expect("the gate follower stopped asking its host")
+            .expect("the stand-in serves");
+        match bursts.last_mut() {
+            Some(burst) if read - *burst.last().unwrap() < Duration::from_secs(1) => {
+                burst.push(read);
+            }
+            _ => bursts.push(vec![read]),
+        }
+    }
+    let sizes: Vec<usize> = bursts[..3].iter().map(Vec::len).collect();
+    let gaps: Vec<Duration> = bursts
+        .windows(2)
+        .map(|pair| pair[1][0] - pair[0][0])
+        .collect();
+    assert!(
+        sizes.iter().all(|size| *size <= 2),
+        "bursts of {sizes:?} reads: the follower asks a refusing host again and again"
+    );
+    for gap in &gaps {
+        assert!(
+            *gap >= wait / 2,
+            "gate read bursts {gaps:?} apart: the follower asks a refusing host again \
+             without backing off"
+        );
+        assert!(
+            *gap <= 3 * wait,
+            "gate read bursts {gaps:?} apart: the follower waits far past its back-off"
+        );
+    }
+    // A refusal is neither a verdict nor lost work.
+    let gate = fleet
+        .ok("GET", &format!("/gates/{gate_id}"), Value::Null)
+        .await;
+    assert_eq!(gate["state"], "pending", "{gate}");
+    assert_eq!(gate["watch_ref"], job_id.as_str(), "{gate}");
+
+    let _ = stop.send(());
+    serving.await.unwrap().unwrap();
     fleet.shut_down().await;
 }
 
