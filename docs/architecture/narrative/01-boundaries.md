@@ -1,4 +1,4 @@
-# Hot Sheet 2 at the baseline
+## Hot Sheet 2 at the baseline
 
 The workspace describes source revision
 `8a9d46d3972aa65ebafe0a25d8a60a0ca4f76774`. Start with **HS2-Context** for

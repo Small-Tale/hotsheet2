@@ -1,4 +1,8 @@
-# CLI and MCP shim
+## CLI and MCP shim
+
+![](embed:HS2-Cli-CommandTree)
+
+This is the starting diagram for this area. The **Start here** chapter lists the others.
 
 Status: written by HS2-TW2DKM. Audited source
 `8a9d46d3972aa65ebafe0a25d8a60a0ca4f76774`. Per-component fields (state,
@@ -6,7 +10,7 @@ types, concurrency, errors, configuration, invariants, tests) are in
 [coverage/cli.md](../coverage/cli.md); this chapter explains how the pieces fit
 and narrates the dynamic views.
 
-## Overview
+### Overview
 
 Three runtime containers live in this area:
 
@@ -29,7 +33,7 @@ Views: `HS2-Cli-CommandTree`, `HS2-Cli-TicketingDependencies`,
 `HS2-Cli-OperationsDependencies`, `HS2-Cli-McpComponents`,
 `HS2-Cli-MigratorComponents`, and the dynamic views listed below.
 
-## Components
+### Components
 
 | Component (model id)                                                         | Main modules                                                               | Runs in                |
 | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------- |
@@ -62,7 +66,7 @@ side. Note that the coordination contract types live in this crate
 (`crates/hotsheet-cli/src/coordination/contract.rs:10`), not in
 `hotsheet-ticketing`.
 
-### Command-tree map
+#### Command-tree map
 
 `Cmd` has 106 top-level variants (`crates/hotsheet-cli/src/main.rs:83-1016`)
 in 12 dispatch groups (`crates/hotsheet-cli/src/dispatch/mod.rs:58-71`).
@@ -85,7 +89,7 @@ Test: `crates/hotsheet-cli/src/main.rs:1738` (`every_subcommand_has_non_empty_he
 | Resources (`dispatch/resources.rs`, `resource_*.rs`, `remote_change.rs`)                | `resource …`, `remote-change …`                                                                                                                                                                                                                                   | Machine files; `resource renew                                                                                                                                                                                      | release --server` calls a server                                          | hotsheet-resource-claims, hotsheet-notify                                                                 | Claim records, OS keychain                                          |
 | Notify (`dispatch/notify.rs`)                                                           | `notify …`                                                                                                                                                                                                                                                        | Machine files only                                                                                                                                                                                                  | hotsheet-notify                                                           | Notifier sends                                                                                            |
 
-### Server discovery and bootstrap
+#### Server discovery and bootstrap
 
 A server writes `${HOTSHEET_HOME}/instances/<first 16 hex of sha(canonical
 anchor)>.json` with `pid`, `url`, `secret`, `store_path`
@@ -109,7 +113,7 @@ different version, and runs it as a foreground child
 `crates/hotsheet-mcp/src/main.rs:72-77`). Test:
 `crates/hotsheet-cli/src/external_launch.rs:476` (`hs2_vg3e8n_bootstrap_only_host_serves_a_project_store`).
 
-### Exit codes and errors
+#### Exit codes and errors
 
 `main` returns `anyhow::Result<()>` (`crates/hotsheet-cli/src/main.rs:1141`),
 so every failure prints `Error: <chain>` on stderr and exits 1. There are no
@@ -123,7 +127,7 @@ Commands that print JSON report domain refusals inside the JSON and still exit
 Test: `crates/hotsheet-cli/tests/broken_pipe.rs`; the generic exit-1 path is
 standard Rust behavior and untested here.
 
-### Headless parity
+#### Headless parity
 
 The project rule is that every graphical bootstrap or recovery path has a
 headless CLI path using the same workflow (`AGENTS.md`). Verified pairs at
@@ -138,7 +142,7 @@ session approval (`remote sessions`), and orchestration routes (in-process
 runtime over the server's routes). A complete GUI-to-CLI audit was not done
 here; see Unresolved U-CLI-3.
 
-### MCP versus CLI
+#### MCP versus CLI
 
 All 43 MCP tools go through the `Backend` trait with HTTP-shaped paths
 (`crates/hotsheet-mcp/src/lib.rs:24-37`); the CLI calls domain functions
@@ -180,7 +184,7 @@ paths kick host sync after serverless writes and use the same notification
 watch. Tests: `crates/hotsheet-mcp/src/lib.rs:5147`,
 `crates/hotsheet-mcp/tests/serverless_sync_kick.rs`.
 
-### MCP routing modes
+#### MCP routing modes
 
 Decided at `crates/hotsheet-mcp/src/main.rs:146-173`:
 
@@ -201,7 +205,7 @@ Presence runs only after `initialize`, every 15 s, and is released on EOF
 (`crates/hotsheet-mcp/src/presence.rs:22-23`, `:227-276`). Test:
 `crates/hotsheet-mcp/tests/registry_presence.rs`.
 
-## Durable state and file formats
+### Durable state and file formats
 
 | Record                                                                    | Writer                                                                                                    | Crash behavior                                                                                 |
 | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -218,7 +222,7 @@ The CLI also reads `${HOTSHEET_HOME}/checkouts.json`, `instances/*.json`,
 `remotes.json`, `providers.json`, the notification configuration and the
 process journal; their owners are the core and server areas.
 
-## Concurrency, tasks and locks
+### Concurrency, tasks and locks
 
 - CLI: one main thread plus the 8 MiB parser thread
   (`crates/hotsheet-cli/src/main.rs:1223-1236`). `claim-run` adds a renewal
@@ -237,7 +241,7 @@ step-runner`, the sync repair session and the machine host started by
 - MCP: one stdin loop thread and one presence thread; shutdown is EOF,
   which drops presence, which joins the thread (`crates/hotsheet-mcp/src/main.rs:202-203`).
 
-## Failure and recovery
+### Failure and recovery
 
 - No host: server-backed commands fail naming `hotsheet-cli serve`
   (`crates/hotsheet-cli/src/external_launch.rs:145-151`); writes still commit
@@ -254,7 +258,7 @@ step-runner`, the sync repair session and the machine host started by
 - Sync: `sync --recover-stale-locks` and `--restore-saved-writes`
   (`crates/hotsheet-cli/src/dispatch/store.rs:592`, `:617`).
 
-## Configuration and environment
+### Configuration and environment
 
 Every variable read in this area, default "unset" unless stated:
 
@@ -283,9 +287,9 @@ machine-home files above, the project's settings through
 `hotsheet_ticketing::Settings` (`crates/hotsheet-cli/src/main.rs:1647`), and
 the `.hotsheet2/store` link.
 
-## Dynamic views
+### Dynamic views
 
-### `HS2-Cli-McpServerlessWrite`
+#### `HS2-Cli-McpServerlessWrite`
 
 1. The tool writes one JSON-RPC line; the loop parses it
    (`crates/hotsheet-mcp/src/main.rs:175-201`).
@@ -300,7 +304,7 @@ the `.hotsheet2/store` link.
    gains a local-only notice (`:2528-2537`, `crates/hotsheet-cli/src/sync_kick.rs:38-58`).
    Test: `crates/hotsheet-mcp/tests/serverless_sync_kick.rs`.
 
-### `HS2-Cli-McpServerWrite`
+#### `HS2-Cli-McpServerWrite`
 
 1. The tool calls `hotsheet_update`.
 2. `--project` resolves the checkout and reads the launched or machine host
@@ -314,7 +318,7 @@ the `.hotsheet2/store` link.
 8. re-opens the project on the reattached host and retries once. Test:
    `crates/hotsheet-mcp/tests/launched_session.rs`.
 
-### `HS2-Cli-Bootstrap`
+#### `HS2-Cli-Bootstrap`
 
 1. `bootstrap` is dispatched to the Store group without store resolution
    (`crates/hotsheet-cli/src/dispatch/mod.rs:186-211`).
@@ -328,7 +332,7 @@ the `.hotsheet2/store` link.
 8. `--remote` adds origin; without it the exact commands are printed (`crates/hotsheet-cli/src/dispatch/store.rs:296-335`, `:415-423`).
    Tests: `crates/hotsheet-cli/tests/cli.rs:7023`, `crates/hotsheet-cli/tests/cli.rs:7180`.
 
-### `HS2-Cli-PermissionHook`
+#### `HS2-Cli-PermissionHook`
 
 1. The tool runs `hotsheet-cli permission-hook --agent <tool>` with hook
    JSON on stdin (`crates/hotsheet-cli/src/dispatch/setup.rs:708-715`).
@@ -341,7 +345,7 @@ the `.hotsheet2/store` link.
    auto (`:779-811`). Tests: `crates/hotsheet-cli/tests/cli.rs:2749`,
    `crates/hotsheet-cli/tests/cli.rs:2789`.
 
-### `HS2-Cli-Migrate`
+#### `HS2-Cli-Migrate`
 
 1. `hotsheet-migrate` parses its arguments (`crates/hotsheet-cli/src/bin/hotsheet-migrate.rs:15-48`).
 2. Earlier completion proof is invalidated (`crates/hotsheet-cli/src/lib.rs:351`).
@@ -355,7 +359,7 @@ the `.hotsheet2/store` link.
 10. `--backup-remote` saves origin, pushes and verifies (`crates/hotsheet-cli/src/import_completion.rs:151`).
     Tests: `crates/hotsheet-cli/tests/migrate.rs`, `crates/hotsheet-cli/tests/import_recovery.rs`.
 
-## Discrepancies
+### Discrepancies
 
 Each discrepancy names the follow-up ticket filed from HS2-TW2DKM. Item 7 is a model correction made in this baseline (HS2-RJB111).
 

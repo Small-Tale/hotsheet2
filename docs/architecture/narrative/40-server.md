@@ -1,10 +1,14 @@
-# Rust server, terminals, AI drive and notifications
+## Rust server, terminals, AI drive and notifications
+
+![](embed:HS2-Server-Admission)
+
+This is the starting diagram for this area. The **Start here** chapter lists the others.
 
 Status: written by HS2-P27EJM. Audited source
 `8a9d46d3972aa65ebafe0a25d8a60a0ca4f76774`. Follow the depth standard and evidence format in the architecture
 README. Module-by-module rows are in the [server coverage file](../coverage/server.md).
 
-## Overview
+### Overview
 
 `hotsheet-server` is one Axum/Tokio process per machine. It serves a primary
 store given by `-C`, plus every store it hosts for configured or opened
@@ -43,7 +47,7 @@ This chapter covers only the routes, tasks and authority around them.
 The `broker`, `launchRelay` and `saver` containers have their own component
 views: `HS2-Server-Broker`, `HS2-Server-LaunchRelay` and `HS2-Server-Saver`.
 
-## Startup and shutdown
+### Startup and shutdown
 
 `main` runs this sequence (`crates/hotsheet-server/src/main.rs:169-701`). Each
 step names its line.
@@ -156,7 +160,7 @@ and repository compaction are exempt. `shutdown_requested` lets the signal task
 treat a granted restart like SIGTERM (`crates/hotsheet-server/src/lib.rs:748`,
 `crates/hotsheet-server/src/main.rs:778-791`).
 
-## Admission and authority
+### Admission and authority
 
 Requests pass four layers, outermost first.
 
@@ -243,7 +247,7 @@ accepts only the machine secret (`crates/hotsheet-server/src/routes/remote_auth.
 Test: `crates/hotsheet-server/tests/remote_auth.rs`
 (`hs2_85w6be_dxm0yn_admin_and_local_grants_gate_device_management`).
 
-## Change stream: events, cursors, replay and overflow
+### Change stream: events, cursors, replay and overflow
 
 - **Emit.** `emit_change` pushes the event into the `EventLog` ring and gives it
   the next `seq` as its `cursor`. Only then does it broadcast the event
@@ -295,7 +299,7 @@ Test: `crates/hotsheet-server/tests/remote_auth.rs`
 
 The `HS2-Server-ChangeReplay` view shows the lagged-socket and overflow path.
 
-## Terminals
+### Terminals
 
 `serverTerminal` has two backends, and every route checks which is present.
 
@@ -384,7 +388,7 @@ Test: `crates/hotsheet-server/tests/terminal_launch_relay.rs`
 (`hs2_hyf56y_dead_namespace_server_gets_a_live_broker_through_the_relay`,
 `hs2_hyf56y_without_a_relay_the_server_spawns_directly_and_says_why`).
 
-## AI drive, tools, plugins and permissions
+### AI drive, tools, plugins and permissions
 
 - **Client drive.** `serverDrive` keeps chat connections in `ClientDriveManager`,
   persisted to `<home>/drive/<store>/sessions.json`
@@ -418,7 +422,7 @@ Test: `crates/hotsheet-server/tests/terminal_launch_relay.rs`
   Keychain prompt is open (`crates/hotsheet-server/src/lib.rs:1242-1290`). The
   flow is in the `HS2-Server-PermissionRoundTrip` view.
 
-## Notifications and standby
+### Notifications and standby
 
 - **Router.** `spawn_notification_router` subscribes to the bus, seeds ticket
   snapshots on a blocking task, then forwards every event in order to one
@@ -448,7 +452,7 @@ Test: `crates/hotsheet-server/tests/terminal_launch_relay.rs`
   Test: `crates/hotsheet-server/tests/standby_saver.rs`
   (`hs2_mzm988_the_running_router_keeps_the_snapshot_current_from_live_state_events`).
 
-## Route inventory
+### Route inventory
 
 There is one row for each module under `crates/hotsheet-server/src/routes`, and
 one for each non-route module the router mounts. The router line range for each
@@ -515,7 +519,7 @@ directions.
 The contract drift that remains is in security schemes, parameters and status
 codes; it is listed under [Discrepancies](#discrepancies).
 
-## Durable state and file formats
+### Durable state and file formats
 
 Every path below is under the machine home `${HOTSHEET_HOME:-~/.hotsheet2}`
 unless it says otherwise.
@@ -539,7 +543,7 @@ unless it says otherwise.
 | `~/Library/Containers/.../HotSheet/standby-snapshot.json` | `standby_saver` (`crates/hotsheet-ticketing/src/screensaver.rs:88-149`)                                    | Version 1 with a 3-minute validity. Written only where the directory exists.                                                |
 | store `metrics/local/*`                                   | live state, live history, live record                                                                      | Machine-local and gitignored. Best effort.                                                                                  |
 
-## Concurrency, tasks and locks
+### Concurrency, tasks and locks
 
 **Runtime.** `#[tokio::main]` uses the default multi-thread runtime
 (`crates/hotsheet-server/src/main.rs:169`).
@@ -611,7 +615,7 @@ auto-group turns, schedule passes and orchestration followers are not counted
 when a restart checks for quiescence
 (`crates/hotsheet-server/src/lib.rs:794-875`).
 
-## Failure and recovery
+### Failure and recovery
 
 - **Server crash.** The broker keeps its PTYs. Instance and lock files read as
   stale. The ring and bus are lost, and clients re-list on overflow. The
@@ -630,7 +634,7 @@ when a restart checks for quiescence
   about 1 s, or after the poll wait.
 - **Jira failure.** See the `HS2-Server-JiraWriteBehind` view below.
 
-## Configuration and environment
+### Configuration and environment
 
 The coverage file lists the flags and defaults under `serverLifecycle`. These
 environment variables are read in this area:
@@ -658,9 +662,9 @@ Compile-time values: `HOT_SHEET_BUILD_REVISION`,
 (`crates/hotsheet-server/src/source_revision.rs:45-46`,
 `crates/hotsheet-server/src/github_app_config.rs:4-5`).
 
-## Dynamic views
+### Dynamic views
 
-### `HS2-Server-ChangeReplay`: WebSocket lag, cursor replay and overflow
+#### `HS2-Server-ChangeReplay`: WebSocket lag, cursor replay and overflow
 
 1. A ticket write calls `changed_in`. It records the event in the 512-event
    ring, which assigns cursor n, then broadcasts it on the 256-slot bus
@@ -688,7 +692,7 @@ Tests: `crates/hotsheet-server/src/events.rs`
 (`websocket_push_and_long_poll_fallback_share_one_replay_cursor`). Step 3 is
 untested.
 
-### `HS2-Server-BrokerReattach`: server restart and the crashed-broker path
+#### `HS2-Server-BrokerReattach`: server restart and the crashed-broker path
 
 1. At startup `with_terminal_broker`, through `TerminalBroker::ensure`, pings
    the broker socket.
@@ -723,7 +727,7 @@ Tests: `crates/hotsheet-server/tests/broker_startup.rs`
 (`a_call_connection_restarts_an_idle_broker_with_a_missing_socket`). Killing the
 broker mid-session end to end is untested.
 
-### `HS2-Server-DevicePairing`
+#### `HS2-Server-DevicePairing`
 
 1. The remote-auth screen posts a label to `/__hotsheet/remote-auth/pair`
    (`clients/web/src/components/remote-auth-screen.tsx:214`), and the bridge
@@ -753,7 +757,7 @@ Tests: `crates/hotsheet-server/tests/remote_auth.rs`
 (`hs2_7dbjms_pair_approve_redeem_role_replay_revoke`,
 `hs2_bzhmev_pairing_request_events_reach_only_device_managers_over_poll`).
 
-### `HS2-Server-PermissionRoundTrip`
+#### `HS2-Server-PermissionRoundTrip`
 
 1. Before a tool call, the tool's hook runs `hotsheet-cli permission-hook`,
    which posts to `/permissions/ask`
@@ -794,7 +798,7 @@ requests never reach it (see Discrepancies). Tests:
 `crates/hotsheet-server/tests/terminal_ws.rs`
 (`fake_agent_permission_round_trip_in_a_terminal_persists_always_rule`).
 
-### `HS2-Server-JiraWriteBehind`
+#### `HS2-Server-JiraWriteBehind`
 
 1. `POST /providers/{c}/tickets/queued` validates that the edits touch only
    title, details, category, priority and tags. It admits the batch with its
@@ -829,7 +833,7 @@ Tests: `crates/hotsheet-server/tests/jira_outbox_http.rs`
 `attention_retry_and_discard_keep_the_remote_and_projection_honest`,
 `timeout_after_success_and_rate_limit_reconcile_without_duplicate_write`).
 
-## Discrepancies
+### Discrepancies
 
 Each discrepancy names the follow-up ticket filed from HS2-P27EJM. S-U2 is under security investigation in HS2-35J75Q.
 

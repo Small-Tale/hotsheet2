@@ -1,4 +1,8 @@
-# Node web host and Tauri desktop shell
+## Node web host and Tauri desktop shell
+
+![](embed:HS2-WebHost-BridgeComponents)
+
+This is the starting diagram for this area. The **Start here** chapter lists the others.
 
 Status: written by HS2-T6SD67 at audited source
 `8a9d46d3972aa65ebafe0a25d8a60a0ca4f76774`. Per-component fields are in
@@ -7,7 +11,7 @@ definitive Node/browser classification of every `clients/web/src` module.
 Views: `HS2-WebHost-BridgeComponents`, `HS2-WebHost-DesktopComponents`, and
 six dynamic views listed at the end.
 
-## Overview
+### Overview
 
 The "web server" is a Node process, not the Rust server. It serves the
 browser client and owns every `/__hotsheet` route; the browser never holds a
@@ -23,7 +27,7 @@ coverage file). The Node side is concentrated in a handful of files:
 `project-bridge.ts` (sessions, supervision and proxy, 2,617 lines),
 `terminal-ws-bridge.ts` (WebSockets) and the `remote-projects/` Node modules.
 
-### Three ways to run the host
+#### Three ways to run the host
 
 | Mode                                      | Started by                                                                             | Serves the client from                                                             | Node host entry                                                                                                                                                       | Differences                                                                                                                                                                                                                                                                                                                                |
 | ----------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -46,7 +50,7 @@ reaches this host, typically through Tailscale Serve; it changes
 authorization, not routing. Test: untested (no test starts a host on a
 non-loopback address).
 
-## Components
+### Components
 
 Bridge container (`bridge`): `hostProductionHost`, `hostViteDev`,
 `hostRoutes`, `hostBrowserAuth`, `hostSessions`, `hostSupervisor`,
@@ -58,7 +62,7 @@ coverage section but no component. The coverage file records each
 component's responsibility, state, entry points, concurrency, errors,
 configuration and invariants with citations and tests.
 
-### Every route the bridge serves
+#### Every route the bridge serves
 
 All routes are in `createDevApp` unless noted. "Auth" is the remote-mode
 grant from `remoteRouteKind` (`clients/web/src/dev-server.ts:68-82`); in local
@@ -102,7 +106,7 @@ plus gateway paths in remote mode (`clients/web/src/peer-gateway.ts:150-174`).
 Test: `clients/web/src/terminal-ws-bridge.test.ts`,
 `clients/web/src/peer-gateway.test.ts`.
 
-### Request authority
+#### Request authority
 
 - **Local mode, local project.** The bridge adds `x-hotsheet-secret` from the
   instance registration to every forwarded request
@@ -133,7 +137,7 @@ Test: `clients/web/src/terminal-ws-bridge.test.ts`,
   credentials (`clients/web/src/dev-server.ts:70-73`). Test:
   `clients/web/src/terminal-ws-bridge-remote-grant.test.ts`.
 
-## Durable state and file formats
+### Durable state and file formats
 
 | Record                         | Location                                                                          | Writer                                                                                                                                       | Crash behavior                                                                                            |
 | ------------------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -154,7 +158,7 @@ The bridge reads, but never writes, `<HOTSHEET_HOME>/instances/<id>.json` and
 All project sessions, pending pairings and health verifications are in
 memory and are lost when the Node process exits.
 
-## Concurrency, tasks and locks
+### Concurrency, tasks and locks
 
 - **One event loop.** There are no worker threads in the host. Shared state is
   kept on `process` (`__hotsheetProjectSessions`,
@@ -189,7 +193,7 @@ memory and are lost when the Node process exits.
   `stop_bridge` polls the child for 5 s on exit
   (`clients/web/src-tauri/src/lib.rs:200-214`).
 
-## Failure and recovery
+### Failure and recovery
 
 - **The Rust server dies.** The next proxied request fails at transport level;
   the bridge forgets the verified instance, re-supervises (launching a
@@ -234,7 +238,7 @@ memory and are lost when the Node process exits.
   `clients/web/src-tauri/src/lib.rs:100-118`). Test:
   `clients/web/src-tauri/src/close_lifecycle.rs` (unit tests).
 
-## Configuration and environment
+### Configuration and environment
 
 Defaults in parentheses. "Blank" means an empty or whitespace-only value counts
 as unset (`clients/web/src/machine-home.ts:14-17`).
@@ -265,9 +269,9 @@ discards Node's stdout and inherits stderr (`clients/web/src-tauri/src/lib.rs:16
 Server stderr goes to `logs/server.log`. Remote CLI stderr is discarded so
 peer details do not leak (`clients/web/src/remote-projects/host.ts:140-141`).
 
-## Dynamic views
+### Dynamic views
 
-### `HS2-WebHost-DesktopColdStart`
+#### `HS2-WebHost-DesktopColdStart`
 
 1. The shell spawns Node with the binary paths, storage directory and ready
    file (`clients/web/src-tauri/src/lib.rs:141-171`). On macOS it first runs
@@ -291,7 +295,7 @@ that exits before registering fails the open with its exit status and log path.
 Test: `clients/web/scripts/desktop-host-smoke.mjs` (steps 1 to 4 without
 Tauri), `clients/web/src/project-bridge.test.ts` (machine server supervision).
 
-### `HS2-WebHost-ProxiedCheckoutRequest`
+#### `HS2-WebHost-ProxiedCheckoutRequest`
 
 The route strips `/__hotsheet/project-api/<id>` and keeps the query
 (`clients/web/src/dev-server.ts:548-561`); the proxy looks up the session,
@@ -301,7 +305,7 @@ sets authority, rewrites settings paths under `/checkouts/<id>`, forwards with
 `clients/web/src/project-bridge.test.ts` (projectScopedServerPath); the retry
 is untested.
 
-### `HS2-WebHost-TerminalWebSocket`
+#### `HS2-WebHost-TerminalWebSocket`
 
 Upgrade matching, optional remote-mode checks, target resolution with
 re-supervision, replay parameter pass-through and frame piping are at
@@ -310,7 +314,7 @@ re-supervision, replay parameter pass-through and frame piping are at
 before resolving a reconnect target; refuses an unresolvable project socket
 at once).
 
-### `HS2-WebHost-RemoteProjectAccess`
+#### `HS2-WebHost-RemoteProjectAccess`
 
 Open discovers the checkout, reads the private connection, rejects a binding
 whose revision or server id changed mid-open, records a `remote:` session and
@@ -321,18 +325,18 @@ remote branch of the proxy (`clients/web/src/project-bridge.ts:2260-2347`).
 Test: `clients/web/src/remote-project-parity.test.ts`,
 `clients/web/src/project-bridge.remote-connections.test.ts`.
 
-### `HS2-WebHost-ServerCrashRecovery`
+#### `HS2-WebHost-ServerCrashRecovery`
 
 Narrated under "The Rust server dies" above.
 
-### `HS2-WebHost-BridgeExit`
+#### `HS2-WebHost-BridgeExit`
 
 On `RunEvent::Exit` the shell drops stdin, the host's stdin `end` handler runs
 `stop`, and the shell kills the child if it is still running after 5 s
 (`clients/web/src-tauri/src/lib.rs:200-214`, `clients/web/src/local-host.ts:496-520`).
 An unexpected bridge exit has no step: nothing observes it.
 
-## Discrepancies
+### Discrepancies
 
 Each discrepancy names the follow-up ticket filed from HS2-T6SD67. Untested retry paths and unbounded pre-open socket queues are tracked in HS2-FNBDTJ.
 

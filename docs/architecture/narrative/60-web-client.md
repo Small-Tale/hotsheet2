@@ -1,4 +1,8 @@
-# Browser web client
+## Browser web client
+
+![](embed:HS2-WebClient-Core)
+
+This is the starting diagram for this area. The **Start here** chapter lists the others.
 
 Status: written by HS2-AYKHVV. Audited source
 `8a9d46d3972aa65ebafe0a25d8a60a0ca4f76774`. Per-module rows, all seven
@@ -7,7 +11,7 @@ depth-standard fields, and the full module lists are in
 repository relative; unit tests are sibling `*.test.ts` files and Playwright
 specs live in `clients/web/tests/`.
 
-## Overview
+### Overview
 
 The browser web client is the `web` container: one TypeScript page built with
 Kerf (`kerfjs` and `@kerfjs/ui` 5.0.0-beta.135) and xterm.js 6. The same page
@@ -48,7 +52,7 @@ What surprises a first reader:
   (`clients/web/src/debounced-autosave.ts:89-155`). Test:
   `clients/web/src/debounced-autosave.test.ts`.
 
-## Components
+### Components
 
 The container has 16 components. Views `HS2-WebClient-Core`,
 `HS2-WebClient-LiveData`, `HS2-WebClient-Editing`, `HS2-WebClient-Features`
@@ -74,7 +78,7 @@ and `HS2-WebClient-FeatureServices` show them in groups; the baseline
 | `webHostOps`       | host health, stats, repository, migration, standby      | `clients/web/src/features/standby.tsx:101`               |
 | `webUxDemo`        | the `/ux-demo` catalog                                  | `clients/web/src/ux-demo-entry.ts:30`                    |
 
-### State ownership
+#### State ownership
 
 - **Owner.** Shared cross-feature state is local to the runtime closure, for
   example `projects`, `selectedProjectId`, `tickets`, `ticketRowsByProject`
@@ -99,7 +103,7 @@ and `HS2-WebClient-FeatureServices` show them in groups; the baseline
   `clients/web/src/features/project-teardown.test.ts`. There is no policy test
   that every signal has a reset (see Discrepancies).
 
-### Kerf public API dependencies
+#### Kerf public API dependencies
 
 - Core: `signal`, `computed`, `effect`, `batch`, `mount`, `delegate`, `each`
   from `kerfjs`; `createScope` from `kerfjs/scope`; `action` from
@@ -126,7 +130,7 @@ and `HS2-WebClient-FeatureServices` show them in groups; the baseline
   (`clients/web/src/kerf-ui-profile.test.ts:116`). Their upstream status is
   not verifiable from this repository (Unresolved U3).
 
-### The /ux-demo route
+#### The /ux-demo route
 
 `shouldBootUxDemo` requires both the `ux-demo` host feature and the path
 (`clients/web/src/host-features.ts:94-96`). `bootUxDemo` replaces `#app` with
@@ -138,7 +142,7 @@ import, to avoid a circular top-level await (comment at
 `clients/web/src/main.tsx:33-36`). Test: `clients/web/tests/ux-demo.spec.ts`,
 `clients/web/src/ux-demo-entry.dom.test.ts`.
 
-## Durable state and file formats
+### Durable state and file formats
 
 The client writes no files. Everything that survives a reload is browser
 storage, the server, or (in the desktop shell) the desktop storage endpoint.
@@ -171,7 +175,7 @@ dispatches the flush event, captures recovery, and acknowledges with
 `desktop_flush_complete` (`clients/web/src/desktop-close.ts:50-57`). Test:
 `clients/web/src/desktop-close.test.ts`, `clients/web/tests/desktop-native-close.spec.ts`.
 
-## Concurrency, tasks and locks
+### Concurrency, tasks and locks
 
 The page is single threaded. Background work:
 
@@ -216,7 +220,7 @@ The page is single threaded. Background work:
   polls (`clients/web/src/versioned-long-poll.ts:6-50`); each backs off to a
   30 s cap. Test: `clients/web/src/versioned-long-poll.test.ts`.
 
-## Failure and recovery
+### Failure and recovery
 
 - **Server or stream down.** Change streams back off 500 ms to 30 s
   (`clients/web/src/project-change-poll.ts:242-243`); the `online` event and
@@ -253,7 +257,7 @@ The page is single threaded. Background work:
   `clients/web/src/workspace-preferences.ts:164-166`,
   `clients/web/src/conversation-persistence.ts:104-108`). Test: untested.
 
-## Configuration and environment
+### Configuration and environment
 
 The browser reads no environment variables at run time. Inputs:
 
@@ -272,9 +276,9 @@ The browser reads no environment variables at run time. Inputs:
 - User settings stored in the browser: listed in the coverage file per
   component. Server-side settings arrive through `Api`.
 
-## Dynamic views
+### Dynamic views
 
-### HS2-WebClient-OpenProject
+#### HS2-WebClient-OpenProject
 
 1. The user picks a project; the `choose-project` delegate calls `openProject`
    (`clients/web/src/features/project-lifecycle.ts:333`).
@@ -297,7 +301,7 @@ The browser reads no environment variables at run time. Inputs:
    `clients/web/tests/change-stream-worker.spec.ts` ("applies a change made
    between the ticket load and its handshake (HS2-SQKJYG)").
 
-### HS2-WebClient-CoalescedEdit
+#### HS2-WebClient-CoalescedEdit
 
 1. Keystrokes update the controlled draft; `coalescedDraft` publishes it once
    per typing pause (`clients/web/src/draft-input-coalescing.ts:13-51`).
@@ -324,7 +328,7 @@ The browser reads no environment variables at run time. Inputs:
    (`clients/web/src/features/ticket-workflows.ts:917-937`). Test:
    `clients/web/src/ticket-draft-store.test.ts`; the wiring is untested.
 
-### HS2-WebClient-OtherTabChange
+#### HS2-WebClient-OtherTabChange
 
 1. Tab A writes as above. Tab B's stream receives the event: on its main
    thread by default, or through its own port of the SharedWorker.
@@ -343,7 +347,7 @@ The browser reads no environment variables at run time. Inputs:
    `clients/web/src/ticket-field-reconciliation.test.ts`,
    `clients/web/src/focused-draft-sync.test.ts`.
 
-### HS2-WebClient-ReplayOverflow
+#### HS2-WebClient-ReplayOverflow
 
 1. After a drop, the stream long-polls the replay from the last applied
    cursor (`clients/web/src/project-change-poll.ts:467-486`).
@@ -362,7 +366,7 @@ The browser reads no environment variables at run time. Inputs:
 5. Stream health returns to true and clears the reconnecting banner
    (`clients/web/src/features/project-change-streams.ts:465`).
 
-### HS2-WebClient-TerminalAttach
+#### HS2-WebClient-TerminalAttach
 
 1. The drawer lists sessions over REST (`clients/web/src/features/terminal-dashboard.ts:174-230`).
 2. The viewport opens `{apiPath}/terminals/<id>/attach` with
@@ -383,7 +387,7 @@ The browser reads no environment variables at run time. Inputs:
    (`clients/web/src/terminal-viewport.ts:166-176`). Test:
    `clients/web/tests/terminal-liveness.spec.ts`.
 
-## Discrepancies
+### Discrepancies
 
 Each discrepancy has a follow-up ticket filed from HS2-AYKHVV.
 

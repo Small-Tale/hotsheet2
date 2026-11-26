@@ -1,11 +1,15 @@
-# Core ticketing crates
+## Core ticketing crates
+
+![](embed:HS2-Core-TicketEngine)
+
+This is the starting diagram for this area. The **Start here** chapter lists the others.
 
 Status: written by HS2-AH9HAK. Audited source
 `8a9d46d3972aa65ebafe0a25d8a60a0ca4f76774`. Follow the depth standard and evidence format in the architecture
 README. Per-module rows, including every 500-line module, are in
 [coverage/core.md](../coverage/core.md).
 
-## Overview
+### Overview
 
 The core area is the set of linked Rust crates in the `coreLib` container plus the
 three data stores it owns: the Git ticket store (`tickets`), the derived SQLite index
@@ -29,7 +33,7 @@ direct CLI write and a server write follow one path.
 Views: `HS2-Core-TicketEngine`, `HS2-Core-Providers` and `HS2-Core-MachineAndProject`
 (component views), and four dynamic views described below.
 
-## Components
+### Components
 
 Each component's seven depth-standard fields are in its coverage row. This section
 gives what a reader needs before opening the code.
@@ -156,7 +160,7 @@ JSON. `coreActivityMetrics`, `coreRepoMaintenance` and `coreMedia` are leaf feat
 write into the store or the machine home. `coreUtil`, `coreTls` and `coreProcessJournal`
 are separate crates. Their rows in the coverage file record state, locks and tests.
 
-## Durable state and file formats
+### Durable state and file formats
 
 | Record                                          | Location                                                                                    | Writer                                                                    | Crash behavior                                                                                                            |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -218,7 +222,7 @@ the schema generation, so builds from different commits never share a file
 (`crates/hotsheet-index/src/lib.rs:53`). Test: `index_file_name_is_scoped_by_schema_version_so_builds_never_share_a_file`
 in `crates/hotsheet-index/src/tests.rs`.
 
-## Concurrency, tasks and locks
+### Concurrency, tasks and locks
 
 The core crates start two named background threads and otherwise run on the caller's
 thread:
@@ -274,7 +278,7 @@ hold an in-process transfer mutex; neither spans processes
 SQLite connections wait up to 30 s on a busy lock (`crates/hotsheet-index/src/lib.rs:32`)
 or 5 s for the outbox (`crates/hotsheet-ticketing/src/provider_outbox.rs:308`).
 
-## Failure and recovery
+### Failure and recovery
 
 - **Write path.** A ticket write must succeed; its Git commit is best effort and only
   warns (`crates/hotsheet-ticketing/src/store.rs:2183-2188`). Autocommit retries lock
@@ -318,7 +322,7 @@ or 5 s for the outbox (`crates/hotsheet-ticketing/src/provider_outbox.rs:308`).
   (`crates/hotsheet-ticketing/src/provider.rs:2709-2714`). Test:
   `move_reports_created_destination_and_retry_recovers_after_source_close_failure`.
 
-## Configuration and environment
+### Configuration and environment
 
 | Variable or key                                                                                                                                  | Default                                                  | Read at                                                                                                                                                                                             |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -340,9 +344,9 @@ Git an empty stdin (`crates/hotsheet-ticketing/src/git.rs:1-60`). Test:
 `crates/hotsheet-ticketing/tests/no_bare_git_spawn.rs`. Variables named
 `HOTSHEET_*_LIVE_*` and `HOTSHEET_*_TEST_*` are read only by tests.
 
-## Dynamic views
+### Dynamic views
 
-### HS2-Core-GitSyncConflict
+#### HS2-Core-GitSyncConflict
 
 1. The server sync loop (or `hotsheet-cli sync`) calls `sync_once`; a store without a
    remote, or a designated root, returns `NoRemote` (`crates/hotsheet-ticketing/src/sync.rs:187-203`).
@@ -378,7 +382,7 @@ Test: `hs2_qr1k8r_a_conflict_leaves_no_rebase_and_the_working_tree_untouched` in
 `crates/hotsheet-ticketing/src/sync/stall_tests.rs`, `crates/hotsheet-ticketing/src/sync/merge_driver_tests.rs`,
 `crates/hotsheet-ticketing/tests/merge_proptest.rs`, `crates/hotsheet-ticketing/src/sync_ai/tests.rs`.
 
-### HS2-Core-IndexRebuild
+#### HS2-Core-IndexRebuild
 
 1. `open_reconciled` takes the `-open.lock` sidecar, opens the file in WAL mode, and
    deletes and recreates it only for `SQLITE_CORRUPT` or `SQLITE_NOTADB`
@@ -405,7 +409,7 @@ Drift detection is therefore hash-based and Git-assisted, never time-based. Test
 in `crates/hotsheet-index/src/tests.rs`; `hs2_abv2j3_owner_change_and_legacy_cache_force_a_full_walk`
 in `crates/hotsheet-index/src/git_owner_tests.rs`.
 
-### HS2-Core-OutboxRetry
+#### HS2-Core-OutboxRetry
 
 1. `admit_batch` runs in one IMMEDIATE transaction: it counts queued rows against the
    capacity (1,000 in the server), rejects a changed payload under a known id, returns
@@ -431,7 +435,7 @@ Test: `dispatch_claims_one_per_ticket_and_survives_rate_limit_attention_and_rest
 `batch_is_atomic_and_backpressure_counts_only_new_pending_intents` in
 `crates/hotsheet-ticketing/src/provider_outbox.rs`; `crates/hotsheet-server/tests/jira_outbox_http.rs`.
 
-### HS2-Core-CrossProviderTransfer
+#### HS2-Core-CrossProviderTransfer
 
 1. A user-initiated `copy_between` or `move_between` needs a non-empty operation id and
    takes the registry's in-process transfer lock (`crates/hotsheet-ticketing/src/provider.rs:2452-2463`).
@@ -457,7 +461,7 @@ Same-store-kind copy and move between two Git stores use `ops::copy_ticket` (new
 `copied_from`) and `ops::move_ticket` (same ULID, a `moved` tombstone in the source,
 Git history keeps the old copy) (`crates/hotsheet-ticketing/src/ops.rs:2480-2600`).
 
-## Discrepancies
+### Discrepancies
 
 Each discrepancy names the follow-up ticket filed from HS2-AH9HAK.
 

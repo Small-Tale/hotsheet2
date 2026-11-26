@@ -13,6 +13,12 @@ environment variable, route or file format.
 
 ## Where to start
 
+The viewer opens on `HS2-00-Overview`, a ten-box conceptual map whose boxes
+double-click into the detailed views. The diagram list follows a guided tour
+(overview, system, each area, then flows), and the Documentation tab's
+**Start here** chapter walks the same layers with embedded diagrams
+(HS2-DHCY18). The table below indexes the detailed views by question.
+
 | Question                                                                  | Structurizr view                                                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Who interacts with Hot Sheet, and which systems does it depend on?        | `HS2-Context`                                                                                                                                                                                                                                                     |
@@ -70,6 +76,18 @@ copy to `java -jar /path/to/structurizr.war local /path/to/copy`. Open the
 localhost URL printed by the command. Scratch copies keep viewer-generated
 layout files out of the model history.
 [Structurizr command documentation](https://docs.structurizr.com/commands)
+
+Regenerate the client screenshots in `narrative/screenshots/` from synthetic
+data with the opt-in spec (HS2-DHCY18), after `npm run test:fixtures` when the
+fixture binaries are stale:
+
+```sh
+cd clients/web
+HS2_ARCHITECTURE_SCREENSHOTS=1 npx playwright test tests/architecture-screenshots.spec.ts --workers=1
+```
+
+Then update `views/screenshots.dsl` from `screenshots/manifest.json` when a
+capture is added or renamed.
 
 `node scripts/architecture-coverage.mjs inventory --area <key>` lists every
 required entry for an area and whether its coverage file maps it. `check`
@@ -132,14 +150,19 @@ docs/architecture/
   areas.json                     area roots for the coverage checker  shared
   model/context.dsl              people and external systems          shared
   model/system.dsl               hs2 system, machineData, includes    shared
+  model/overview.dsl             conceptual tour elements (custom)    shared
   model/<area>.dsl               the area's containers and components area
   model/<area>-relationships.dsl intra-area and area-to-external edges area
   model/relationships-cross.dsl  edges between two areas              append-only
   model/deployment.dsl           deployment environments              shared
+  views/tour.dsl                 HS2-00-Overview custom view          shared
   views/shared.dsl               context, container, deployment views shared
   views/<area>.dsl               the area's component and dynamic views area
   views/flows.dsl                cross-layer dynamic views            HS2-M81CCP
+  views/screenshots.dsl          image views of real client screens   shared
+  narrative/00-start-here.md     guided tour chapter                  shared
   narrative/NN-<area>.md         area chapter (Structurizr !docs)     area
+  narrative/screenshots/         real-client captures and manifest    shared
   coverage/<area>.md             per-module coverage rows             area
   unresolved.md                  unresolved-claims register           append-only
   decisions/                     architecture decision records        shared
@@ -176,6 +199,19 @@ the Node/browser module classification. Rules:
   layout edits do not create architecture events.
 - Split a view that is too dense to read in the viewer rather than shrinking
   its font.
+- Give every view a `title` of the form `<layer> <Area> · <name>` (for
+  example `6 Ticketing core · Flow: index rebuild`). The viewer lists views
+  in definition order (`structurizr.sort created`), so `workspace.dsl`
+  includes view files in tour order.
+- Keep the `HS2-00-Overview` custom elements true of the detailed model and
+  point each one's `url` at a `{workspace}/diagrams#<key>` view.
+- Put every colour, shape and line style inside the `light` or `dark` styles
+  block. The viewer merges same-tag styles in place, so a tag styled both
+  inside and outside a colour-scheme block shows dark colours in light mode.
+- Start narrative chapters at `##`: the documentation viewer drops `#`
+  headings, so `##` is the chapter and `###` its sections.
+- `scripts/architecture-workspace-policy.test.mjs` pins these rules
+  (HS2-DHCY18).
 
 The source-controlled workspace replaces the old overview diagram as the
 current map. The existing diagram and its HTML source remain available as an

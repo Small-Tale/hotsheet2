@@ -1,0 +1,104 @@
+[
+  {
+    "file": "01-workspace-ticket-list.png",
+    "title": "Workspace with an open project",
+    "caption": "The Acme Notes project open in the workspace: project tab, views sidebar, and the queue of tickets read from the project's checkout through the bridge and server.",
+    "shows": "Real app with a real ticket server and Git ticket store, seeded with ten synthetic tickets of mixed category, priority, and status.",
+    "elements": [
+      "web",
+      "webWorkspace",
+      "webTickets",
+      "webApi",
+      "bridge",
+      "hostProxy",
+      "server",
+      "serverTickets",
+      "tickets"
+    ],
+    "views": ["HS2-WebClient-OpenProject", "HS2-WorkspaceRuntime"]
+  },
+  {
+    "file": "02-ticket-editor-notes.png",
+    "title": "Ticket editor with notes",
+    "caption": "One ticket selected: the inspector edits its fields and details and lists its notes, including an attributed AI planning note.",
+    "shows": "Inspector scrolled to the Notes section of the featured ticket; a human note and an AI 'Preliminary thoughts' note written through the server API.",
+    "elements": ["web", "webTickets", "webDrafts", "server", "serverTickets", "tickets"],
+    "views": ["HS2-Flow-TicketEdit", "HS2-WebClient-CoalescedEdit"]
+  },
+  {
+    "file": "03-ai-session-terminal.png",
+    "title": "AI session terminal",
+    "caption": "The project terminal drawer attached to a running AI session's PTY over the terminal WebSocket, with replay and live output.",
+    "shows": "A real server-hosted PTY reported as a connected Codex session; the transcript is synthetic text printed by the fixture command, not a real AI tool.",
+    "elements": ["web", "webTerminal", "webAi", "server", "serverTerminal", "serverDrive", "broker", "aiTool"],
+    "views": ["HS2-Flow-AiSession", "HS2-WebClient-TerminalAttach"]
+  },
+  {
+    "file": "04-ai-question-prompt.png",
+    "title": "AI question prompt",
+    "caption": "A question the AI session asked arrives in the app as a prompt the user can answer here or in the terminal.",
+    "shows": "The 'AI waiting for your answer' prompt raised by the real server from a synthetic Codex rollout record.",
+    "elements": ["web", "webAi", "server", "serverDrive", "serverAiTools", "serverEvents", "aiTool"],
+    "views": ["HS2-Flow-AiPermission"]
+  },
+  {
+    "file": "05-orchestration-plan-run.png",
+    "title": "Orchestration plan and run",
+    "caption": "The Orchestration view: a goal's planned steps by column, the running step dispatched to a worker, and the inspector's Where It Runs, Plan, and Run sections.",
+    "shows": "A real orchestration project with a bound target, a two-step readiness plan, and one dispatched run, all created through the server's orchestration API.",
+    "elements": [
+      "web",
+      "webOrchestration",
+      "server",
+      "serverOrch",
+      "orchLib",
+      "orchPlanning",
+      "orchRuns",
+      "orchScheduler"
+    ],
+    "views": ["HS2-Flow-PlacementToGate", "HS2-Orch-Placement", "HS2-Orch-RunsAndGates"]
+  },
+  {
+    "file": "06-remote-device-pairing.png",
+    "title": "Remote device pairing request",
+    "caption": "A browser asks to pair with this host: a notice announces it, Settings carries the count, and Devices lists the waiting request to approve or reject.",
+    "shows": "Real app and ticket server; the host's device-management list and the anonymous pairing_requests change event are synthetic route answers in the server's shapes.",
+    "elements": ["web", "webRemote", "webNotifications", "bridge", "hostBrowserAuth", "server", "serverPairing"],
+    "views": ["HS2-Flow-RemoteDevice", "HS2-Server-DevicePairing"]
+  },
+  {
+    "file": "07-settings-ticket-sources.png",
+    "title": "Project ticket sources",
+    "caption": "Project settings list the ticket sources this checkout uses; GitHub, GitLab, and Jira sign-ins are shared app-wide under Accounts.",
+    "shows": "The real provider list from the server, with the store's temporary folder replaced by a portable display path.",
+    "elements": ["web", "server", "serverSources", "coreProviderContract", "coreGitProvider", "coreProviderConfig"],
+    "views": ["HS2-ProviderBoundaries", "HS2-Core-Providers"]
+  },
+  {
+    "file": "07b-settings-add-source.png",
+    "title": "Adding a ticket source",
+    "caption": "Adding a source offers a Hot Sheet Git ticket repository or a native GitHub Issues, GitLab Issues, or Jira Cloud connection, each keeping its own authoritative records.",
+    "shows": "The real 'Set up ticket support' dialog opened from Ticket sources.",
+    "elements": [
+      "web",
+      "server",
+      "serverSources",
+      "coreGitProvider",
+      "coreGithub",
+      "coreGitlab",
+      "coreJira",
+      "github",
+      "gitlab",
+      "jira"
+    ],
+    "views": ["HS2-ProviderBoundaries", "HS2-Core-Providers"]
+  },
+  {
+    "file": "08-standby-display.png",
+    "title": "Standby display",
+    "caption": "Standby shows every open project's live activity at a glance: token rate, tickets updated, and a stalled-work alert.",
+    "shows": "The in-app standby screen over the real app; the live-state snapshot for two synthetic stores is a route answer in the server's GET /live-state shape.",
+    "elements": ["web", "webHostOps", "server", "serverLive", "standby", "saver"],
+    "views": ["HS2-MigrationAndStandby", "HS2-Server-Saver"]
+  }
+]

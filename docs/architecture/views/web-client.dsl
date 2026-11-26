@@ -2,33 +2,40 @@
 // Owned by HS2-AYKHVV. New views use keys prefixed HS2-WebClient-.
 
 component web "HS2-WebComponents" "Workspace state, checkout API access, change streams, and terminal frontend." {
+    title "2 Web client · Web components (summary)"
     include webWorkspace webApi webChanges webTerminal bridge
-    autoLayout lr
+    autoLayout lr 220 140
 }
 
 // Component views, split so each stays readable (README "Model conventions").
 component web "HS2-WebClient-Core" "Entry, workspace, API, persistence and the editing core." {
+    title "2 Web client · Core"
     include developer webShell webWorkspace webApi webPersistence webTickets webDrafts webChanges webUxDemo bridge
-    autoLayout lr
+    autoLayout lr 220 140
 }
 component web "HS2-WebClient-LiveData" "How change events reach rendered state." {
+    title "2 Web client · Live data"
     include webChanges webTickets webAi webNotifications webTerminal webHostOps webCommands webRemote webApi webPersistence bridge
-    autoLayout lr
+    autoLayout lr 220 140
 }
 component web "HS2-WebClient-Editing" "Drafts, recovery copies, attachments and optimistic ticket writes." {
+    title "2 Web client · Editing"
     include developer webTickets webDrafts webPersistence webAttachments webApi webChanges webNotifications bridge
-    autoLayout lr
+    autoLayout lr 220 140
 }
 component web "HS2-WebClient-Features" "Feature components composed by the runtime." {
+    title "2 Web client · Features"
     include webShell webAi webOrchestration webCommands webNotifications webRemote webHostOps webAttachments webTerminal
-    autoLayout lr
+    autoLayout lr 220 140
 }
 component web "HS2-WebClient-FeatureServices" "Feature components and their outside dependencies." {
+    title "2 Web client · Feature services"
     include operator webAi webOrchestration webCommands webNotifications webRemote webHostOps webTerminal webApi bridge desktop
-    autoLayout lr
+    autoLayout lr 220 140
 }
 
 dynamic web "HS2-WebClient-OpenProject" "Opening a project: restore its session, load tickets, then follow its change cursor." {
+    title "2 Web client · Flow: open project"
     developer -> webShell "Chooses a project tab or opens a registered project"
     webShell -> webWorkspace "Asks the project lifecycle controller to activate the project"
     webWorkspace -> webPersistence "Restores the per-project session and touches the warm-project order"
@@ -39,10 +46,11 @@ dynamic web "HS2-WebClient-OpenProject" "Opening a project: restore its session,
     webWorkspace -> webChanges "Opens one change stream for the project"
     webChanges -> bridge "Handshakes with a zero-cursor poll, then opens the WebSocket"
     bridge -> webChanges "Delivers the starting cursor; a read stamped below it replays the gap once"
-    autoLayout lr
+    autoLayout lr 220 140
 }
 
 dynamic web "HS2-WebClient-CoalescedEdit" "Typing, a focus move, one merged save, a refused save, and reload recovery (HS2-RE1PS6)." {
+    title "2 Web client · Flow: coalesced edit"
     developer -> webTickets "Types into a ticket field"
     webTickets -> webDrafts "Updates the controlled draft; publishes once per typing pause"
     webDrafts -> webPersistence "After 150 ms writes a local recovery copy with the edit-start base; no server write"
@@ -54,20 +62,22 @@ dynamic web "HS2-WebClient-CoalescedEdit" "Typing, a focus move, one merged save
     webApi -> bridge "Forwards the checkout-scoped write"
     webTickets -> webNotifications "On refusal rolls back the optimistic row and reports it"
     webDrafts -> webPersistence "After reload, reads the stored copy and reconciles it against the fresh ticket"
-    autoLayout lr
+    autoLayout lr 220 140
 }
 
 dynamic web "HS2-WebClient-OtherTabChange" "A write in tab A reaches tab B through its own change stream." {
+    title "2 Web client · Flow: other tab change"
     webTickets -> webApi "Tab A sends a ticket write"
     webApi -> bridge "Tab A's write reaches the server through the bridge"
     bridge -> webChanges "Tab B's stream (main thread, or its port of the shared worker) receives the event"
     webChanges -> webTickets "Waits for tab B's barrier, skips own acknowledged writes, runs a coalesced refresh"
     webTickets -> webApi "Re-reads rows, counts and the selected ticket's detail"
     webTickets -> webDrafts "An active draft adopts a remote-only change, merges, or shows a field conflict"
-    autoLayout lr
+    autoLayout lr 220 140
 }
 
 dynamic web "HS2-WebClient-ReplayOverflow" "Reconnect after a dropped stream, when the replay overflowed or could not be served." {
+    title "2 Web client · Flow: replay overflow"
     webChanges -> bridge "After backoff, long-polls the replay from the last applied cursor"
     bridge -> webChanges "Answers with overflow set, or the replay fails and the cursor is reset for a fresh handshake"
     webChanges -> webAi "Resync re-reads permissions and drive connections"
@@ -77,10 +87,11 @@ dynamic web "HS2-WebClient-ReplayOverflow" "Reconnect after a dropped stream, wh
     webChanges -> webTickets "Forces a full ticket refresh: the projection is rebuilt from authoritative reads"
     webTickets -> webApi "Reads ticket pages, board columns and the selected detail"
     webChanges -> webRemote "Clears the reconnecting banner for a remote project"
-    autoLayout lr
+    autoLayout lr 220 140
 }
 
 dynamic web "HS2-WebClient-TerminalAttach" "Attaching a terminal with replay, resize arbitration, and recovery from a corrupt replay." {
+    title "2 Web client · Flow: terminal attach"
     developer -> webTerminal "Opens the terminal drawer tab"
     webTerminal -> webApi "Reads the terminal session list"
     webTerminal -> bridge "Opens the attach WebSocket with replay protocol 2, byte cap and resume position"
@@ -89,5 +100,5 @@ dynamic web "HS2-WebClient-TerminalAttach" "Attaching a terminal with replay, re
     bridge -> webTerminal "Broadcasts pty_size naming the driving and answering viewer"
     developer -> webTerminal "Types; input buffers up to 64 KiB while the socket reopens"
     webTerminal -> bridge "On a corrupt replay or stale socket, abandons it and reattaches with resume_from"
-    autoLayout lr
+    autoLayout lr 220 140
 }

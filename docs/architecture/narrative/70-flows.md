@@ -1,10 +1,10 @@
-# End-to-end flows, failure and recovery
+## End-to-end flows, failure and recovery
 
 Status: written by HS2-M81CCP. Audited source
 `8a9d46d3972aa65ebafe0a25d8a60a0ca4f76774`. Follows the depth standard and
 evidence format in the architecture README.
 
-## Overview
+### Overview
 
 Each area chapter stops at its own boundary. This chapter follows ten paths
 across the browser, the Node bridge, the Rust server, the linked libraries
@@ -40,7 +40,7 @@ The eight baseline flow views (`HS2-WebGitTicketWrite`,
 was corrected here: it claimed the server publishes an invalidation after a
 GitHub write, which it does not (Discrepancy 2).
 
-## Components
+### Components
 
 This chapter adds no components. It adds 16 cross-area relationships under
 `// HS2-M81CCP: end-to-end flows` in `model/relationships-cross.dsl`, because
@@ -73,7 +73,7 @@ The ones that record facts the area models lacked:
 The shared `ciServices` system now names all five additional CI services
 (`crates/hotsheet-jobs/src/lib.rs:50-71`).
 
-## Durable state and file formats
+### Durable state and file formats
 
 No new formats. The table lists what each flow leaves on disk when it is
 interrupted, which is what survives.
@@ -90,7 +90,7 @@ interrupted, which is what survives.
 | Remote project        | `remotes.json` bindings and keychain credentials                                     | open remote sockets on revoke                                                    |
 | Migration             | job checkpoint, per-ticket import checkpoints, receipt                               | nothing; a dead owner reads back as `interrupted`                                |
 
-## Concurrency, tasks and locks
+### Concurrency, tasks and locks
 
 The flows add no task or lock. The cross-layer orderings that matter:
 
@@ -110,7 +110,7 @@ The flows add no task or lock. The cross-layer orderings that matter:
   (`crates/hotsheet-ticketing/src/store.rs:570-607`), so the three surfaces
   serialize per store. Test: `crates/hotsheet-ticketing/src/store.rs` (tests module).
 
-## Failure and recovery
+### Failure and recovery
 
 Each flow section ends with its failure path. Summary:
 
@@ -128,7 +128,7 @@ Each flow section ends with its failure path. Summary:
 | Remote binding revoked        | 503 and sockets closed                                            | 8       |
 | Migration owner dies          | the job reads `interrupted`; retry resumes from checkpoints       | 10      |
 
-## Configuration and environment
+### Configuration and environment
 
 Variables that cross a process boundary in these flows:
 
@@ -145,9 +145,9 @@ Variables that cross a process boundary in these flows:
 it the hook and the MCP shim fall back to instance discovery. Test: untested
 (no server test asserts `HOTSHEET_SERVER`).
 
-## Dynamic views
+### Dynamic views
 
-### 1. Ticket edit
+#### 1. Ticket edit
 
 Views: `HS2-Flow-TicketEdit`, `HS2-Flow-TicketEditFailure`.
 
@@ -220,7 +220,7 @@ Views: `HS2-Flow-TicketEdit`, `HS2-Flow-TicketEditFailure`.
   server wrote before it died. The browser cannot tell which; the next
   re-read decides (FLOW-U4).
 
-### 2. Out-of-band edit
+#### 2. Out-of-band edit
 
 Views: `HS2-Flow-OutOfBandEdit`, `HS2-Flow-ReplayOverflow`.
 
@@ -271,7 +271,7 @@ S-U6; see Discrepancy 3. Test: untested.
 **What survives:** the files and Git history; the index is reconciled at the
 next start (view `HS2-Core-IndexRebuild`).
 
-### 3. Native provider write
+#### 3. Native provider write
 
 Views: `HS2-Flow-NativeProviderWrite`, `HS2-Flow-NativeProviderFailure`.
 
@@ -336,7 +336,7 @@ Views: `HS2-Flow-NativeProviderWrite`, `HS2-Flow-NativeProviderFailure`.
   `crates/hotsheet-ticketing/src/provider_outbox.rs`
   (`dispatch_claims_one_per_ticket_and_survives_rate_limit_attention_and_restart`).
 
-### 4. Claim lifecycle
+#### 4. Claim lifecycle
 
 Views: `HS2-Flow-ClaimLifecycle`, `HS2-Flow-ClaimContention`.
 
@@ -406,7 +406,7 @@ Views: `HS2-Flow-ClaimLifecycle`, `HS2-Flow-ClaimContention`.
 - **What survives:** the frontmatter lease and `claim_history` in Git; on a
   bound store, the remote marker until release or lapse.
 
-### 5. AI session
+#### 5. AI session
 
 Views: `HS2-Flow-AiSession`, `HS2-Flow-AiPermission`.
 
@@ -474,7 +474,7 @@ Views: `HS2-Flow-AiSession`, `HS2-Flow-AiPermission`.
   resumes their monitors (`HS2-Server-BrokerReattach`). Parked asks and chat
   drives do not survive.
 
-### 6. Scheduled command to placement and CI gate
+#### 6. Scheduled command to placement and CI gate
 
 Views: `HS2-Flow-ScheduledCommand`, `HS2-Flow-PlacementToGate`.
 
@@ -545,7 +545,7 @@ may add a step for it.
 - **What survives:** the ticket, the schedule cursor and its outcome; run,
   gate and session records under the machine home.
 
-### 7. Desktop cold start and shutdown
+#### 7. Desktop cold start and shutdown
 
 Views: `HS2-Flow-DesktopColdStart`, `HS2-Flow-DesktopShutdown`.
 
@@ -600,7 +600,7 @@ and desktop storage drafts. MCP presence leases end only when their tool
 exits. Lost: the bridge's in-memory sessions and pending pairings. A bridge
 that crashes is not restarted (`HS2-WebHost-BridgeExit`).
 
-### 8. Remote device and remote project
+#### 8. Remote device and remote project
 
 Views: `HS2-Flow-RemoteDevice`, `HS2-Flow-RemoteProject`. Two different
 pairings exist.
@@ -651,7 +651,7 @@ pairings exist.
 bindings in `remotes.json`. Pending pairings on the bridge side are memory
 only.
 
-### 9. Fresh install and headless parity
+#### 9. Fresh install and headless parity
 
 Views: `HS2-Flow-FreshInstallGui`, `HS2-Flow-FreshInstallHeadless`.
 
@@ -685,7 +685,7 @@ failure is explained in guidance prose, and the saved origin is kept for a
 retry (`clients/web/src/project-bridge.ts:1017-1051`). Test:
 `clients/web/src/project-bridge.test.ts`.
 
-### 10. Hot Sheet 1 migration
+#### 10. Hot Sheet 1 migration
 
 View: `HS2-Flow-Migration`.
 
@@ -734,7 +734,7 @@ so it can overlap a GUI job on the same store (Discrepancy 9).
 **What survives:** the job record, per-ticket checkpoints, the receipt and
 the completion proof.
 
-## Discrepancies
+### Discrepancies
 
 Each discrepancy names the follow-up ticket filed from HS2-M81CCP.
 

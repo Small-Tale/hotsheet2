@@ -1,11 +1,15 @@
-# Orchestration, coordination, resource claims and jobs
+## Orchestration, coordination, resource claims and jobs
+
+![](embed:HS2-Orch-Placement)
+
+This is the starting diagram for this area. The **Start here** chapter lists the others.
 
 Status: written by HS2-RJB111. Audited source
 `8a9d46d3972aa65ebafe0a25d8a60a0ca4f76774`. Follows the depth standard and
 evidence format in the architecture README. Per-module rows, with all seven
 depth fields, are in [coverage/orchestration.md](../coverage/orchestration.md).
 
-## Overview
+### Overview
 
 This area is library code in the `orchLib` container. It is linked into the
 server and the CLI and runs no process of its own. It covers four domains:
@@ -56,7 +60,7 @@ Views:
 | `HS2-Orch-WorkerPlanDispatch` | A worker plan dispatch (dynamic)                                                |
 | `HS2-Orch-SpeculationRed`     | Speculation invalidated by a red base gate (dynamic)                            |
 
-## Components
+### Components
 
 The model has 19 components. Their responsibilities are in the model
 descriptions and the coverage rows.
@@ -88,7 +92,7 @@ Three things are deliberately outside these components:
   `crates/hotsheet-jobs/tests/adversarial.rs` (`owned_liveness_follows_the_process_journal_launch_id`)
   covers the probe only.
 
-### Lock order
+#### Lock order
 
 Lock order inside a binding or manifest write:
 
@@ -107,7 +111,7 @@ never see a step without its reads
 Test: `crates/hotsheet-ticketing/src/orchestration/readiness_tests.rs`
 (`hs2_g052rv_a_concurrent_reader_never_sees_a_step_before_its_reads`).
 
-## Durable state and file formats
+### Durable state and file formats
 
 **Common write path.** Every orchestration file uses one storage helper
 (`crates/hotsheet-ticketing/src/orchestration/storage.rs:146-184`):
@@ -131,7 +135,7 @@ leave a stray temp file, which nothing sweeps.
 Test: `crates/hotsheet-ticketing/src/orchestration/tests.rs`
 (`hs2_4j6v46_newer_corrupt_and_untrusted_shared_data_are_not_overwritten`).
 
-### Orchestration records
+#### Orchestration records
 
 Every record here is written by the orchestration runtime. Locations are in
 the coverage rows.
@@ -153,7 +157,7 @@ the coverage rows.
 | `HOME/orchestration-line-observations/<checkout>.json`                                                                                               | machine (host) | Entries live 30 s to 15 min                                                 | Unreadable reads as empty                                                                                   |
 | Journals: `orchestration-audit/`, `orchestration-run-events/`, `hosted-session-audit/` (`*.jsonl`)                                                   | machine        | 1 MiB segment plus one predecessor; readers are told of the `gap`           | `fsync` per append; a torn last line is skipped                                                             |
 
-### Coordination and claim records
+#### Coordination and claim records
 
 | Record                                                                                                                                  | Writer                                 | Lifecycle and crash behavior                                                                                                                                                                                 |
 | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -169,7 +173,7 @@ the coverage rows.
 | `HOME/jobs/<checkout>/<ULID>/job.json`, `feed.jsonl`, `history.json`, `revision`                                                        | Job store                              | Retention is 15 min or 24 h, and at most 64 Jobs. Crash debris is swept by `prune_locked` (`crates/hotsheet-jobs/src/store.rs:905-932`)                                                                      |
 | `<git-common-dir>/hotsheet-coordination/state.json`, `speculation.json`, `batches.json`                                                 | coordination pool (CLI area)           | Temp file, `fsync`, persist (`crates/hotsheet-cli/src/coordination/mod.rs:166-232`)                                                                                                                          |
 
-### State machines
+#### State machines
 
 **Dispatch run.** Source: `crates/hotsheet-ticketing/src/orchestration/runs.rs:20-82`. Test:
 `crates/hotsheet-ticketing/src/orchestration/run_tests.rs`
@@ -256,9 +260,9 @@ there too.
 Test: `crates/hotsheet-ticketing/src/orchestration/permission_tests.rs`
 (`hs2_xhq1eh_transition_matrix_from_every_state`).
 
-## Lease semantics
+### Lease semantics
 
-### Ticket claims (frontmatter, core `crates/hotsheet-ticketing/src/ops.rs`)
+#### Ticket claims (frontmatter, core `crates/hotsheet-ticketing/src/ops.rs`)
 
 **How expiry works.**
 
@@ -327,7 +331,7 @@ Two ticket-claim paths do not steal, and their release is unconditional:
   issue mark it as conflicted
   (`crates/hotsheet-ticketing/src/advisory_claim.rs:77-165`).
 
-### Resource claims
+#### Resource claims
 
 | Backend                                                                             | Expiry clock        | Renewal                                                                                                                    | Takeover after expiry                                                            | Release of a lapsed claim                            |
 | ----------------------------------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -357,7 +361,7 @@ its first acquire attempt (`crates/hotsheet-resource-claims/src/local/mod.rs:310
 Test: `crates/hotsheet-cli/tests/resource_claims.rs`
 (`hs2_qgy1nn_a_wait_ended_by_a_stop_signal_removes_its_registration_and_dies_by_the_signal`).
 
-### Job leases
+#### Job leases
 
 **Lease.** A Job lease is 60 s, renewed at a third of its length
 (`crates/hotsheet-jobs/src/store.rs:54-65`, `crates/hotsheet-jobs/src/monitor.rs:268-270`).
@@ -387,7 +391,7 @@ Test: `crates/hotsheet-jobs/tests/adversarial.rs`
 
 Source: `crates/hotsheet-jobs/src/state.rs:10-24`.
 
-## Placement end to end
+### Placement end to end
 
 The path from owner to target is described below; the code is in the CLI
 orchestration runtime.
@@ -446,7 +450,7 @@ Tests:
 - `crates/hotsheet-server/tests/remote_servers/sessions.rs`
   (`hs2_crbr8x_the_host_journals_a_remote_orchestrators_start_stop_and_refusal`)
 
-## Speculation
+### Speculation
 
 Two separate rule sets use the word "provisional".
 
@@ -513,7 +517,7 @@ Tests:
 - `crates/hotsheet-cli/src/orchestration/tests/provisional.rs`
   (`hs2_jsf985_a_red_gate_puts_the_work_at_risk_and_its_fix_rebases_it`)
 
-## Coordination pool, worker plans and development strategies
+### Coordination pool, worker plans and development strategies
 
 The pool lives in `<git-common-dir>/hotsheet-coordination/`
 (`crates/hotsheet-cli/src/coordination/mod.rs:129-147`):
@@ -563,7 +567,7 @@ accepted (`crates/hotsheet-cli/src/coordination/development_strategy.rs:15-16`).
 Test: `crates/hotsheet-cli/src/coordination/development_strategy_tests.rs`
 (`hs2_bf79yx_ticket_then_session_then_project_precedence_keeps_gates`).
 
-## Concurrency, tasks and locks
+### Concurrency, tasks and locks
 
 | Lock, task or thread                                         | Owner                                                                 | Scope and shutdown                                                                                                                                                                               |
 | ------------------------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -579,7 +583,7 @@ Test: `crates/hotsheet-cli/src/coordination/development_strategy_tests.rs`
 | Distributed work loop                                        | server (`crates/hotsheet-server/src/dist_work_loop.rs:28`)            | Every 15 s: sweep, then work once                                                                                                                                                                |
 | Advisory ledger `Mutex`                                      | server (`crates/hotsheet-server/src/lib.rs:987-991`)                  | SQLite busy timeout 5 s                                                                                                                                                                          |
 
-## Failure and recovery
+### Failure and recovery
 
 **Server start.** `spawn_run_recovery`
 (`crates/hotsheet-server/src/routes/orchestration.rs:522-560`):
@@ -633,7 +637,7 @@ closed everywhere, with three exceptions:
 - `ProcessJournal::list` fails as a whole if any record is damaged
   (`crates/hotsheet-process-journal/src/lib.rs:869-886`).
 
-## Configuration and environment
+### Configuration and environment
 
 The crates in this area read no environment variables themselves. The
 variables below are read by their hosts.
@@ -661,9 +665,9 @@ Settings keys:
 The defaults are in the coverage rows for `orchPolicy`, `orchAdmission` and
 `orchSpeculation`.
 
-## Dynamic views
+### Dynamic views
 
-### `HS2-Orch-LeaseExpiry`
+#### `HS2-Orch-LeaseExpiry`
 
 1. Worker w1 claims the exact ticket. A `Claim` event and a lease end are
    written (`crates/hotsheet-ticketing/src/ops.rs:3163-3177`).
@@ -689,7 +693,7 @@ The defaults are in the coverage rows for `orchPolicy`, `orchAdmission` and
    `crates/hotsheet-ticketing/src/ops.rs`
    (`exact_claim_is_eligible_holder_idempotent_and_expiry_takeover_safe`).
 
-### `HS2-Orch-RefusedPlacement`
+#### `HS2-Orch-RefusedPlacement`
 
 The `server` container plays both roles: the owner, and the target reached
 over the paired peer API.
@@ -741,7 +745,7 @@ Tests:
 - `crates/hotsheet-cli/src/orchestration/tests/scheduler.rs`
   (`hs2_ecwg50_a_refused_start_backs_off_and_leaves_the_target_alone`)
 
-### `HS2-Orch-FailedCiGate`
+#### `HS2-Orch-FailedCiGate`
 
 1. The monitor serves the held watch Job
    (`crates/hotsheet-jobs/src/monitor.rs:366-436`).
@@ -774,7 +778,7 @@ Tests:
 - `crates/hotsheet-ticketing/src/orchestration/readiness_tests.rs`
   (`hs2_42tara_ticket_prerequisite_table_covers_every_gate_state`)
 
-### `HS2-Orch-WorkerPlanDispatch`
+#### `HS2-Orch-WorkerPlanDispatch`
 
 1. `PUT worker-plan` calls `replace_next_plan` under `state.lock`
    (`crates/hotsheet-cli/src/coordination/next_plan.rs:17-105`). It checks
@@ -811,11 +815,11 @@ Tests:
 Test: `crates/hotsheet-cli/src/coordination/next_plan_tests.rs`
 (`hs2_xcmavt_restart_replacement_and_dispatch_preserve_exact_plan`).
 
-### `HS2-Orch-SpeculationRed`
+#### `HS2-Orch-SpeculationRed`
 
 This view is narrated under [Speculation](#speculation).
 
-## Discrepancies
+### Discrepancies
 
 Each discrepancy names the follow-up ticket filed from HS2-RJB111.
 
