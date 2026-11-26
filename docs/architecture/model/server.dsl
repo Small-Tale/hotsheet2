@@ -87,7 +87,7 @@
         serverOrch = component "Orchestration runtime" "Reconciles work against reviewed plans, readiness, permissions, capacity, and machine resources. Dispatches or hosts target work and observes durable results." "Rust / checkout and peer APIs" {
             url "${SOURCE}/crates/hotsheet-server/src/routes/orchestration.rs"
         }
-        serverJobs = component "Job observation and validation" "Tracks supported CI, validation, and deployment job outcomes and reports them to orchestration." "hotsheet-jobs / process journal" {
+        serverJobs = component "Job observation and validation" "Hosts validation and deployment Jobs, reads the Job store, and ensures the machine Job monitor runs. CI providers are polled by the detached hotsheet-cli job monitor (cliJobs), not by the server." "hotsheet-jobs / process journal" {
             url "${SOURCE}/crates/hotsheet-jobs/src/lib.rs"
         }
         serverResources = component "Resource claim service" "Resolves configured backends and grants renewable leases for non-ticket resources." "hotsheet-resource-claims" {

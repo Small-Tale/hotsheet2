@@ -7,7 +7,12 @@ shared crates and source files to those owners. Per-area chapters and
 coverage files follow the README's depth standard (HS2-H0T69J);
 `scripts/architecture-coverage.mjs` lists the modules each area must map and
 resolves `path:line` citations, with area roots in
-`docs/architecture/areas.json`.
+`docs/architecture/areas.json`. Start with the
+[architecture overview](01-architecture.md), which links every area chapter
+(core, orchestration, CLI and MCP, server, web host, web client), the
+[end-to-end flows chapter](architecture/narrative/70-flows.md) with its
+`HS2-Flow-*` views, the coverage files and the
+[unresolved register](architecture/unresolved.md) (HS2-M81CCP).
 
 `scripts/check.sh` runs `scripts/local-gate.mjs`, reusing the HS2-FCCRCK
 `scripts/gate-plan.mjs` dependency plan and exact-input stage receipts. The

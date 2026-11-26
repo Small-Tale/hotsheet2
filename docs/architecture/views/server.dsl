@@ -11,7 +11,7 @@ component server "HS2-ExecutionComponents" "Command admission, sessions, permiss
     autoLayout lr
 }
 component server "HS2-HostSupport" "Job observation, resource backends, notifications, and machine-local state." {
-    include serverJobs serverNotify serverResources machineData github gitlab ciServices notifierServices sharedClaims gitRemote standby
+    include serverJobs serverNotify serverResources machineData github gitlab notifierServices sharedClaims gitRemote standby
     autoLayout lr
 }
 component server "HS2-OrchestrationComponents" "Plan inputs, readiness, authorization, run state, session placement, and job observations." {
