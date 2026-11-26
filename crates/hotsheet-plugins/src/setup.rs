@@ -1576,7 +1576,15 @@ fn remove_mcp_entry(
             } else {
                 "mcp"
             };
-            let Ok(mut root) = serde_json::from_str::<serde_json::Value>(&contents) else {
+            // OpenCode reads JSONC; a file with comments or trailing commas is edited in
+            // place so they survive (HS2-DWS3NS).
+            let jsonc = format == "opencode-json" && crate::jsonc::has_extensions(&contents);
+            let parsed = if format == "opencode-json" {
+                crate::jsonc::parse(&contents).ok()
+            } else {
+                serde_json::from_str::<serde_json::Value>(&contents).ok()
+            };
+            let Some(mut root) = parsed else {
                 return Ok(None);
             };
             let Some(object) = root.as_object_mut() else {
@@ -1598,13 +1606,27 @@ fn remove_mcp_entry(
                 return Ok(None);
             }
             servers.remove(name);
-            if servers.is_empty() {
+            let emptied = servers.is_empty();
+            if emptied {
                 object.remove(key);
             }
             let hotsheet_only = object
                 .keys()
                 .all(|key| format == "opencode-json" && key == "$schema");
-            if hotsheet_only {
+            if jsonc {
+                let Some(rest) = remove_jsonc_mcp_entry(&contents, key, name, emptied)
+                    .filter(|rest| crate::jsonc::parse(rest).ok().as_ref() == Some(&root))
+                else {
+                    // Never rewrite a file the splice cannot edit losslessly.
+                    return Ok(None);
+                };
+                // The user's comments keep the file even when no user key is left.
+                if hotsheet_only && !crate::jsonc::has_extensions(&rest) {
+                    None
+                } else {
+                    Some(rest)
+                }
+            } else if hotsheet_only {
                 None
             } else {
                 Some(serde_json::to_string_pretty(&root).unwrap() + "\n")
@@ -1641,6 +1663,17 @@ fn remove_mcp_entry(
             Ok(Some(Change::Edited))
         }
         None => remove_managed_file(fs, project, &spec.target, true),
+    }
+}
+
+/// Splice Hot Sheet's `<key>.<name>` member out of a JSONC config (HS2-DWS3NS), and the
+/// `<key>` container too when the removal `emptied` it. `None` when the text cannot be
+/// edited in place; the caller verifies the result.
+fn remove_jsonc_mcp_entry(contents: &str, key: &str, name: &str, emptied: bool) -> Option<String> {
+    if emptied {
+        crate::jsonc::remove_member(contents, &[key]).ok()?
+    } else {
+        crate::jsonc::remove_member(contents, &[key, name]).ok()?
     }
 }
 
@@ -6915,10 +6948,48 @@ args = ["--path", "{store}"]
         assert_eq!(replaced["environment"], entry["environment"]);
         assert_eq!(replaced["command"][0], entry["command"][0]);
 
-        // Disabling the tool never rewrites a JSONC config it cannot edit losslessly.
+        // Disabling the tool removes only Hot Sheet's entry, restoring the user's file
+        // exactly (HS2-DWS3NS), and re-enabling puts the same entry back.
         fixture.write("opencode.json", &first);
         fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), user);
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), user);
+        fixture.setup("oscar");
         assert_eq!(fixture.read("opencode.json").unwrap(), first);
+    }
+
+    /// HS2-DWS3NS: disabling OpenCode splices Hot Sheet's entry out of a commented
+    /// `opencode.json`. An emptied `mcp` goes with it; a file whose only remaining user
+    /// content is a comment is kept, and one Hot Sheet wrote alone is deleted.
+    #[test]
+    fn hs2_dws3ns_disabling_opencode_removes_only_its_jsonc_entry() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        let user = "{\n  /* keep */\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"theme\": \"dark\" // mine\n}\n";
+        fixture.write("opencode.json", user);
+        fixture.setup("oscar");
+        let enabled = fixture.read("opencode.json").unwrap();
+        assert!(enabled.contains("\"hotsheet\""), "{enabled}");
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), user);
+
+        // Only `$schema` and a comment remain: the comment is the user's, so the file stays.
+        let commented = "// mine\n{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"mcp\": {\n    \"hotsheet\": { \"type\": \"local\", \"command\": [\"hotsheet-mcp\"] },\n  },\n}\n";
+        fixture.write("opencode.json", commented);
+        fixture.refresh(&[]);
+        let left = fixture.read("opencode.json").unwrap();
+        assert_eq!(
+            left,
+            "// mine\n{\n  \"$schema\": \"https://opencode.ai/config.json\",\n}\n"
+        );
+
+        // A foreign command under the same name is not Hot Sheet's and stays.
+        let foreign =
+            "{\n  // theirs\n  \"mcp\": { \"hotsheet\": { \"command\": [\"other-mcp\"] } },\n}\n";
+        fixture.write("opencode.json", foreign);
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), foreign);
     }
 
     /// HS2-3MH5FH: a valid Codex `config.toml` is edited in place. Only Hot Sheet's

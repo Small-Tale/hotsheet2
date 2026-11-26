@@ -77,8 +77,12 @@ comments above its header and every other comment, key order and blank line; a
 current entry leaves the file byte-identical, and an edit whose result would not
 re-parse to exactly the intended config is refused rather than rewritten. Disabling
 Codex removes only that table (and an emptied `mcp_servers`); the file is deleted
-only when nothing of the user's, not even a comment, remains. Disabling OpenCode leaves its entry in a commented
-`opencode.json` in place rather than rewriting the file (lossless removal: HS2-DWS3NS).
+only when nothing of the user's, not even a comment, remains. Disabling OpenCode
+splices only Hot Sheet's `mcp` member (and an emptied `mcp`) out of a commented
+`opencode.json`, together with its separator and a comment trailing it on its line,
+so a file setup merged into is restored byte for byte (HS2-DWS3NS). The result must
+re-parse to exactly the intended value or the file is left untouched, and the file
+is deleted only when nothing but `$schema` remains and no user comment survives.
 
 **Unreadable instruction files are never rewritten (HS2-HXMGN8).** The same rule covers
 the Markdown writers: the instruction target, the canonical target (`AGENTS.md` for
