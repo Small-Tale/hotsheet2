@@ -17,6 +17,7 @@ use crate::message::EventKind;
 pub(crate) const COMPACT_AT: usize = 1000;
 pub(crate) const KEEP: usize = 500;
 const RESERVATION_KEY: &str = "held_summary_reservation";
+const COOLDOWN_CLAIM_KEY: &str = "cooldown_claim";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -33,10 +34,33 @@ struct Reservation {
     held_ids: Vec<String>,
 }
 
+/// A rule-routed delivery that took a dedupe key's cooldown before any transport work
+/// (HS2-3EZ1GR). The final record with the same `id` resolves it: a `Delivered` record
+/// keeps the cooldown, any other outcome releases it. An unresolved claim (a process died
+/// mid-send) stops suppressing after [`CooldownClaim`]'s pending bound. Older readers skip
+/// the line, as they skip every shape that is not a delivery record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClaimEntry {
+    cooldown_claim: CooldownClaim,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CooldownClaim {
+    pub(crate) version: u8,
+    /// The id of the delivery record that resolves this claim.
+    pub(crate) id: String,
+    pub(crate) channel: String,
+    pub(crate) dedupe: String,
+    pub(crate) at: String,
+}
+
 #[derive(Debug, Clone)]
 enum Entry {
     Record(DeliveryRecord),
     Reservation(Reservation),
+    Claim(CooldownClaim),
     // Old readers skipped unknown/malformed lines. Retain them through bounded compaction.
     Other(String),
 }
@@ -47,6 +71,10 @@ impl Entry {
             Self::Record(record) => serde_json::to_string(record).map_err(io::Error::other),
             Self::Reservation(reservation) => serde_json::to_string(&ReservationEntry {
                 held_summary_reservation: reservation.clone(),
+            })
+            .map_err(io::Error::other),
+            Self::Claim(claim) => serde_json::to_string(&ClaimEntry {
+                cooldown_claim: claim.clone(),
             })
             .map_err(io::Error::other),
             Self::Other(line) => Ok(line.clone()),
@@ -88,6 +116,19 @@ fn decode(line: &str) -> io::Result<Entry> {
             ));
         }
         return Ok(Entry::Reservation(reservation));
+    }
+    if value
+        .as_ref()
+        .is_ok_and(|value| value.get(COOLDOWN_CLAIM_KEY).is_some())
+    {
+        // A damaged claim only fails to suppress; it never blocks the journal.
+        return Ok(serde_json::from_str::<ClaimEntry>(line)
+            .ok()
+            .filter(|entry| entry.cooldown_claim.version == 1)
+            .map_or_else(
+                || Entry::Other(line.to_owned()),
+                |entry| Entry::Claim(entry.cooldown_claim),
+            ));
     }
     Ok(serde_json::from_str(line)
         .map(Entry::Record)
@@ -233,6 +274,50 @@ impl<'a> Journal<'a> {
             recovered.push(record);
         }
         Ok(recovered)
+    }
+
+    /// Whether `channel` already took the dedupe `hash` at `now`: a `Delivered` record inside
+    /// `window`, or an unresolved claim inside `pending` (HS2-3EZ1GR). Failed and suppressed
+    /// records never count, so a failed delivery leaves the next event free to send.
+    pub(crate) fn cooldown_taken(
+        &self,
+        channel: &str,
+        hash: &str,
+        now: time::OffsetDateTime,
+        window: time::Duration,
+        pending: time::Duration,
+    ) -> bool {
+        let within = |at: &str, limit: time::Duration| {
+            time::OffsetDateTime::parse(at, &time::format_description::well_known::Rfc3339)
+                .is_ok_and(|at| now - at < limit)
+        };
+        let resolved: HashSet<&str> = self
+            .entries
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Record(record) => Some(record.id.as_str()),
+                _ => None,
+            })
+            .collect();
+        self.entries.iter().any(|entry| match entry {
+            Entry::Record(record) => {
+                record.channel == channel
+                    && record.outcome == Outcome::Delivered
+                    && record.dedupe.as_deref() == Some(hash)
+                    && within(&record.at, window)
+            }
+            Entry::Claim(claim) => {
+                claim.channel == channel
+                    && claim.dedupe == hash
+                    && !resolved.contains(claim.id.as_str())
+                    && within(&claim.at, pending)
+            }
+            _ => false,
+        })
+    }
+
+    pub(crate) fn claim_cooldown(&mut self, claim: CooldownClaim) -> io::Result<()> {
+        self.append(Entry::Claim(claim))
     }
 
     pub(crate) fn reserve(

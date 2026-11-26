@@ -7832,6 +7832,90 @@ mod tests {
         assert!(released.claim_history[2].lease_expires_at.is_none());
     }
 
+    /// HS2-3EZ1GR: renewal transitions a lease must refuse. An unclaimed ticket is
+    /// `NotClaimed`; a lease ending at or before now has lapsed (the boundary included);
+    /// a new lease must end after the renewal time; and a renewal fenced to an attempt
+    /// that the same worker has since replaced is refused, while the live attempt renews.
+    /// No refusal writes the ticket.
+    #[test]
+    fn hs2_3ez1gr_renewal_refuses_unclaimed_lapsed_backdated_and_stale_attempts() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "t".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let now = ts("2026-08-19T00:10:00Z");
+        let lease = ts("2026-08-19T00:40:00Z");
+        let reason = |result: Result<Ticket, OpError>| match result {
+            Err(OpError::ClaimUnavailable { reason, .. }) => reason,
+            other => panic!("expected ClaimUnavailable, got {other:?}"),
+        };
+
+        assert!(matches!(
+            renew(&store, &id, now.clone(), lease.clone(), "w1"),
+            Err(OpError::NotClaimed(_))
+        ));
+        let first = claim(&store, &id, &now, lease.clone(), "w1", None).unwrap();
+        let history = first.claim_history.len();
+
+        // The new lease must end strictly after the renewal time.
+        for backdated in [now.clone(), ts("2026-08-19T00:05:00Z")] {
+            assert_eq!(
+                reason(renew(&store, &id, now.clone(), backdated, "w1")),
+                "new lease must end after the renewal time"
+            );
+        }
+        // A lease that ends at (or before) the renewal time has lapsed.
+        for late in [lease.clone(), ts("2026-08-19T00:41:00Z")] {
+            assert_eq!(
+                reason(renew(&store, &id, late, ts("2026-08-19T01:30:00Z"), "w1")),
+                "lease expired; inspect claim history and claim the exact ticket again"
+            );
+        }
+        assert_eq!(store.read_ticket(&id).unwrap().claim_history.len(), history);
+
+        // The same worker releases and reclaims: the first attempt is fenced out.
+        let old_attempt = first.claim_history.last().unwrap().id;
+        release(&store, &id, now.clone(), "w1", false).unwrap();
+        let second = claim(&store, &id, &now, lease.clone(), "w1", None).unwrap();
+        let live_attempt = second.claim_history.last().unwrap().id;
+        assert_ne!(old_attempt, live_attempt);
+        let later = ts("2026-08-19T00:20:00Z");
+        let extended = ts("2026-08-19T00:50:00Z");
+        assert_eq!(
+            reason(renew_live_attempt_with_clock(
+                &store,
+                &id,
+                "w1",
+                &old_attempt,
+                || (later.clone(), extended.clone())
+            )),
+            "claim attempt changed; inspect ownership before continuing"
+        );
+        assert_eq!(
+            store.read_ticket(&id).unwrap().claim_lease_expires_at,
+            Some(lease.clone())
+        );
+        let renewed = renew_live_attempt_with_clock(&store, &id, "w1", &live_attempt, || {
+            (later.clone(), extended.clone())
+        })
+        .unwrap();
+        assert_eq!(renewed.claim_lease_expires_at, Some(extended));
+        assert_eq!(
+            renewed.claim_history.last().unwrap().kind,
+            ClaimEventKind::Renew
+        );
+    }
+
     /// A claim's ETA (HS2-DQQ0AX) walks the claim lifecycle: set on claim, kept by a plain renew
     /// or holder retry, replaced on re-estimate, reported expired once passed, cleared on
     /// release and completion, and recorded per event in the append-only history.

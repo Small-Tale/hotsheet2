@@ -346,6 +346,27 @@ fn hs2_gdcmxe_processes_lists_machine_local_session_provenance() {
     assert_eq!(records[0]["exit_reason"], "completed");
     assert!(records[0].get("command").is_none());
     assert!(records[0].get("args").is_none());
+
+    // HS2-3EZ1GR: a damaged record is counted on stderr, not allowed to hide the others.
+    std::fs::write(
+        home.path()
+            .join("processes")
+            .join(format!("{}.json", ulid::Ulid::new())),
+        b"not-json",
+    )
+    .unwrap();
+    let output = Command::new(workspace_bin::path("hotsheet-cli"))
+        .env("HOTSHEET_HOME", home.path())
+        .arg("processes")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let records: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(records.as_array().unwrap().len(), 1);
+    assert_eq!(records[0]["launch_id"], record.launch_id);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("1 process record(s) could not be read")
+    );
 }
 
 // HS2-QXYWNH: launch tests start a detached server. Keep tool configuration in the

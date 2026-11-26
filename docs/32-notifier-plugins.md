@@ -276,9 +276,17 @@ tail is reported. A plugin that outlives its timeout is killed.
   All active dispatchers must use the updated implementation; an older running binary
   does not participate in these locks.
 - **Cooldown.** With a dedupe key and `cooldown_seconds > 0`, a repeat to the same
-  channel inside the window is recorded as `suppressed` and not sent. The check reads
-  memory and the delivery log, so it survives a server restart and separate CLI runs.
-  Only successful deliveries start a cooldown.
+  channel inside the window is recorded as `suppressed` and not sent. Only successful
+  deliveries start a cooldown: a failed delivery (exhausted retries, a refusal, a
+  missing credential) leaves the next event free to send (HS2-3EZ1GR). With a delivery
+  log, the log is the single source of truth, so the cooldown survives a server restart
+  and separate CLI runs. Before any transport work a delivery appends a private
+  `cooldown_claim` line under the journal lock; its final record (same id) resolves it.
+  While a claim is unresolved, another process dispatching the same key is suppressed,
+  so a server and a serverless CLI run racing one key send it once. A claim whose
+  process died stops suppressing after the longer of the window and two minutes.
+  Without a usable log, the process's memory applies the same rules. The cooldown reads
+  the dispatcher's injected clock.
 - **Retry.** Retryable failures (network, timeouts, HTTP 408/425/429/5xx, SMTP
   transient codes, plugin crashes) are retried after 2 s and 8 s. Permanent failures
   (bad settings, rejected credentials, other 4xx, a plugin's `retryable: false`) are

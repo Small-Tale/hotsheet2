@@ -17,7 +17,16 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Processes => {
             let journal =
                 hotsheet_process_journal::ProcessJournal::at(hotsheet_plugins::hotsheet_home());
-            println!("{}", serde_json::to_string_pretty(&journal.list()?)?);
+            // HS2-3EZ1GR: one damaged record does not hide every other launch; stdout
+            // keeps its record-array shape and stderr counts what could not be read.
+            let inventory = journal.inventory()?;
+            println!("{}", serde_json::to_string_pretty(&inventory.records)?);
+            if inventory.unreadable > 0 {
+                eprintln!(
+                    "{} process record(s) could not be read; the next launch's sweep removes them",
+                    inventory.unreadable
+                );
+            }
             Ok(())
         }
         Cmd::Commands { cmd } => cmd_commands(path, cmd),

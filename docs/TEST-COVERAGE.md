@@ -1104,6 +1104,20 @@ investigation compares an unresolved record's supervisor PID and session ID with
 the machine-server instance registration; an unended record alone does not prove
 that its child remains alive.
 
+HS2-3EZ1GR covers transition gaps from a behavioral audit. `hotsheet-process-journal`
+unit tests release a `Completed` and a `Killed` finish through a `Barrier` and assert
+both report the first reason; finish after prune, and finish racing prune, never
+recreate the record; `inventory` lists around a damaged record while `list` stays
+strict, and `hotsheet-cli/tests/cli.rs` asserts `processes` counts it on stderr.
+`hotsheet-notify` dispatch tests cover a failed delivery (exhausted retries, a
+refusal, a missing credential) that leaves the next in-cooldown event deliverable,
+with and without a delivery log; the injected clock ending the window; two
+dispatchers racing one key behind a gated transport (one send, the other
+suppressed by the journal claim or shared memory); and an orphaned claim expiring
+with a damaged claim line ignored. `hotsheet-ticketing` `ops.rs` covers renewal of an
+unclaimed ticket (`NotClaimed`), a lease ending at or before now, a backdated new
+lease, and a renewal fenced to an attempt the same worker replaced.
+
 HS2-G9TF60 extends that provenance to short-lived utility and detached external
 launches. `hotsheet-process-journal` tests exercise observed success and failure,
 kill, detached unresolved state, and ensure synthetic command text/output do not

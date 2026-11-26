@@ -13,6 +13,15 @@ const MAX_ENDED: usize = 1024;
 const MAX_UNRESOLVED: usize = 1024;
 const RETAIN_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 const STALE_TEMP_SECS: u64 = 60 * 60;
+/// Not a `.json` record and not a `.tmp` file, so neither listing nor the sweep touches it.
+const LOCK_FILE: &str = ".journal.lock";
+
+/// [`ProcessJournal::inventory`]: what could be read, and how much could not.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct Inventory {
+    pub records: Vec<ProcessRecord>,
+    pub unreadable: usize,
+}
 
 /// A fixed vocabulary prevents commands, arguments, and customer content entering records.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -837,10 +846,15 @@ impl ProcessJournal {
     }
 
     /// Only the launch's owner should finish it. A missing record is an error, so a stale
-    /// supervisor cannot silently overwrite a pruned or replaced launch.
+    /// supervisor cannot silently overwrite a pruned or replaced launch. The first reason
+    /// wins: finishes and prunes serialize through one process-shared lock, so a waiter's
+    /// `Completed` racing a kill path's `Killed` cannot overwrite each other, and a finish
+    /// racing a prune never recreates the pruned record (HS2-3EZ1GR).
     pub fn finish(&self, launch_id: &str, reason: ExitReason) -> io::Result<ProcessRecord> {
         ulid::Ulid::from_string(launch_id)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid launch ID"))?;
+        self.reject_non_directory()?;
+        let _lock = self.lock()?;
         let path = self.path(launch_id);
         let mut record = read_record(&path)?;
         if record.launch_id != launch_id {
@@ -866,28 +880,56 @@ impl ProcessJournal {
     /// is evidence for investigation, not proof that the child exited. Launches that start in
     /// the same millisecond list in launch-id order (HS2-ZKP7HW): deterministic, but a random
     /// same-millisecond ULID does not record which of them started first.
+    /// Any unreadable record fails the whole list, so corruption is never mistaken for an
+    /// empty or complete inventory; [`Self::inventory`] lists around it instead.
     pub fn list(&self) -> io::Result<Vec<ProcessRecord>> {
+        let inventory = self.scan(true)?;
+        Ok(inventory.records)
+    }
+
+    /// The readable records in start order, plus how many records could not be read
+    /// (damaged, oversized, or misnamed). One bad file does not hide every other launch
+    /// from an investigation; the count reports it (HS2-3EZ1GR). The next start's prune
+    /// removes unreadable records.
+    pub fn inventory(&self) -> io::Result<Inventory> {
+        self.scan(false)
+    }
+
+    fn scan(&self, strict: bool) -> io::Result<Inventory> {
         self.reject_non_directory()?;
         let entries = match fs::read_dir(&self.dir) {
             Ok(entries) => entries,
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Inventory::default()),
             Err(e) => return Err(e),
         };
-        let mut records = Vec::new();
+        let mut inventory = Inventory::default();
         for entry in entries {
             let entry = entry?;
             if entry.path().extension().is_some_and(|ext| ext == "json") {
-                records.push(read_record(&entry.path())?);
+                match read_record(&entry.path()) {
+                    Ok(record) => inventory.records.push(record),
+                    // A concurrent prune removed it after the directory read.
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                    Err(e) if strict => return Err(e),
+                    Err(_) => inventory.unreadable += 1,
+                }
             }
         }
-        records.sort_by_key(|r| (r.started_ms, r.launch_id.clone()));
-        Ok(records)
+        inventory
+            .records
+            .sort_by_key(|r| (r.started_ms, r.launch_id.clone()));
+        Ok(inventory)
     }
 
     /// Retain the most recent 1024 ended and 1024 unresolved launches for up to 30 days.
     /// Every start performs this sweep; no background timer or network request is needed.
     pub fn prune(&self) -> io::Result<()> {
         self.reject_non_directory()?;
+        let _lock = match self.lock() {
+            Ok(lock) => lock,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
         let entries = match fs::read_dir(&self.dir) {
             Ok(entries) => entries,
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -951,6 +993,18 @@ impl ProcessJournal {
 
     fn path(&self, id: &str) -> PathBuf {
         self.dir.join(format!("{id}.json"))
+    }
+
+    /// The process-shared lock that serializes [`Self::finish`] and [`Self::prune`]. It does
+    /// not create the journal directory: a missing directory is `NotFound`.
+    fn lock(&self) -> io::Result<hotsheet_ticketing::FileLock> {
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.dir.join(LOCK_FILE))?;
+        hotsheet_ticketing::FileLock::acquire(file)
     }
 
     fn prepare_dir(&self) -> io::Result<()> {
@@ -1601,6 +1655,134 @@ mod tests {
         assert_eq!(journal.list().unwrap(), vec![recovered]);
     }
 
+    /// HS2-3EZ1GR: a waiter's `Completed` and a kill path's `Killed` released together both
+    /// return the one reason that reached the record first; neither overwrites the other.
+    #[test]
+    fn hs2_3ez1gr_concurrent_finishes_keep_the_first_reason() {
+        let home = tempfile::tempdir().unwrap();
+        let journal = ProcessJournal::at(home.path());
+        for _ in 0..32 {
+            let record = journal.start(meta(42)).unwrap();
+            let barrier = std::sync::Barrier::new(2);
+            let (waiter, killer) = std::thread::scope(|scope| {
+                let finish = |reason| {
+                    let barrier = &barrier;
+                    let journal = &journal;
+                    let id = &record.launch_id;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        journal.finish(id, reason).unwrap()
+                    })
+                };
+                let waiter = finish(ExitReason::Completed);
+                let killer = finish(ExitReason::Killed);
+                (waiter.join().unwrap(), killer.join().unwrap())
+            });
+            assert_eq!(waiter, killer, "both finishes report the first reason");
+            assert_eq!(
+                read_record(&journal.path(&record.launch_id)).unwrap(),
+                waiter
+            );
+        }
+    }
+
+    /// HS2-3EZ1GR: a finish after a prune deleted the record is `NotFound` and never
+    /// recreates it, whether the prune came first or the two raced.
+    #[test]
+    fn hs2_3ez1gr_finish_after_or_racing_a_prune_never_recreates_the_record() {
+        let home = tempfile::tempdir().unwrap();
+        let journal = ProcessJournal::at(home.path());
+        journal.prepare_dir().unwrap();
+        let expired = |pid| {
+            let record = ProcessRecord {
+                launch_id: ulid::Ulid::new().to_string(),
+                pid,
+                supervisor_pid: 7,
+                supervisor: "test-host".into(),
+                purpose: Purpose::AiChannel,
+                project_id: None,
+                session_id: None,
+                binary_revision: None,
+                started_ms: now_ms() - RETAIN_MS - 1,
+                ended_ms: None,
+                exit_reason: None,
+            };
+            fs::write(
+                journal.path(&record.launch_id),
+                serde_json::to_vec(&record).unwrap(),
+            )
+            .unwrap();
+            record.launch_id
+        };
+        let pruned = expired(1);
+        journal.prune().unwrap();
+        assert_eq!(
+            journal
+                .finish(&pruned, ExitReason::Completed)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::NotFound
+        );
+        assert!(!journal.path(&pruned).exists());
+        for pid in 0..16 {
+            let id = expired(pid);
+            let barrier = std::sync::Barrier::new(2);
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    journal.prune().unwrap();
+                });
+                barrier.wait();
+                // Either order is legal: finished then pruned, or pruned then NotFound.
+                if let Err(error) = journal.finish(&id, ExitReason::Killed) {
+                    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+                }
+            });
+            assert!(
+                !journal.path(&id).exists(),
+                "a finish recreated a pruned record"
+            );
+        }
+        // Without a journal directory there is nothing to finish or prune.
+        let empty = ProcessJournal::at(home.path().join("absent"));
+        assert!(empty.prune().is_ok());
+        assert_eq!(
+            empty
+                .finish(&ulid::Ulid::new().to_string(), ExitReason::Completed)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::NotFound
+        );
+    }
+
+    /// HS2-3EZ1GR: `list` still refuses to present a damaged journal as complete, while
+    /// `inventory` lists every readable launch and counts the unreadable ones; the next
+    /// start's prune removes the damage and both agree again.
+    #[test]
+    fn hs2_3ez1gr_inventory_lists_around_an_unreadable_record() {
+        let home = tempfile::tempdir().unwrap();
+        let journal = ProcessJournal::at(home.path());
+        assert_eq!(journal.inventory().unwrap(), Inventory::default());
+        let kept = journal.start(meta(1)).unwrap();
+        let damaged = journal.start(meta(2)).unwrap();
+        fs::write(journal.path(&damaged.launch_id), b"not-json").unwrap();
+        assert!(journal.list().is_err());
+        let inventory = journal.inventory().unwrap();
+        assert_eq!(inventory.records, vec![kept.clone()]);
+        assert_eq!(inventory.unreadable, 1);
+        let next = journal.start(meta(3)).unwrap();
+        let mut expected = vec![kept, next];
+        expected.sort_by_key(|r| (r.started_ms, r.launch_id.clone()));
+        assert_eq!(journal.list().unwrap(), expected);
+        assert_eq!(
+            journal.inventory().unwrap(),
+            Inventory {
+                records: expected,
+                unreadable: 0
+            }
+        );
+    }
+
     /// HS2-F0S155: identifiers are record content, never path components. A path-shaped,
     /// traversal-shaped, or non-ASCII id is refused with no record written; bounded ids,
     /// including `..`, stay readable because a record's file name is only its launch ULID.
@@ -1657,6 +1839,8 @@ mod tests {
         let names: Vec<String> = fs::read_dir(home.path().join("processes"))
             .unwrap()
             .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            // The fixed finish/prune lock (HS2-3EZ1GR) names no launch.
+            .filter(|name| name != LOCK_FILE)
             .collect();
         assert_eq!(names.len(), 5);
         for name in &names {

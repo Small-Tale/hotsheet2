@@ -20,7 +20,7 @@ use crate::busy::{Activity, BusyDetector};
 use crate::env::scrub_env;
 use crate::input_queue::InputQueue;
 use crate::osc::{OscScanner, TermState};
-use crate::sizing::{Decision, SizeArbiter, SizeClaimOwner, SizePolicy, ViewportClaim};
+use crate::sizing::{Decision, SizeArbiter, SizeClaimOwner, ViewportClaim};
 
 /// How much recent PTY output to retain for a re-attaching viewer when no limit is
 /// configured (HS2-Y5DYC0 sizes new terminals from `crate::limits`).
@@ -954,14 +954,6 @@ impl Terminal {
         match s.decide(now_ms) {
             Some(decision) => Decided::Resize(decision),
             None => s.notice().map_or(Decided::Nothing, Decided::Notice),
-        }
-    }
-
-    /// Set the per-terminal sizing policy (focus-follows | smallest | largest | pinned).
-    pub fn set_size_policy(&self, policy: SizePolicy) {
-        {
-            let mut s = self.sizer.lock_or_recover();
-            s.set_policy(policy);
         }
     }
 

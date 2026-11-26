@@ -10,6 +10,9 @@ rust-version.workspace = true
 
 [dependencies]
 hotsheet-sync.workspace = true
+# HS2-3EZ1GR: finish and prune serialize through a process-shared FileLock; macOS
+# detached launches also resolve their program through git::program_path (HS2-Y4VDBK).
+hotsheet-ticketing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ulid.workspace = true
@@ -21,10 +24,6 @@ libc.workspace = true
 # HS2-8CGT4R: a detached launch marks the launcher's standard handles not inheritable.
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
-
-# HS2-Y4VDBK: detached launches resolve their program as execvp would (git::program_path).
-[target.'cfg(target_os = "macos")'.dependencies]
-hotsheet-ticketing.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

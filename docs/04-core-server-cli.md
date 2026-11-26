@@ -914,7 +914,12 @@ supervisor PID and label, a fixed purpose, project and session identifiers when
 known, the supervising build revision when available, and observed start/end times
 and exit reason. It stores no command, arguments, environment, output, or customer
 content. The journal retains the newest 1,024 ended and 1,024 unresolved records
-for at most 30 days, sweeping on each new launch. After a supervisor crash, a
+for at most 30 days, sweeping on each new launch. Finishing a launch and the sweep
+serialize through one process-shared lock file in the journal directory, so the first
+observed exit reason wins (a waiter's `completed` racing a kill path's `killed`), and
+finishing a launch the sweep already removed fails without recreating it. The command
+lists every readable record; a damaged record is counted on stderr rather than hiding
+the others, and the next launch's sweep removes it (HS2-3EZ1GR). After a supervisor crash, a
 record with no observed exit remains unresolved; it does not assert that the child
 is still alive. The existing server instance registration supplies the server's
 launcher and build identity when correlating a child with its host. HS2-G9TF60

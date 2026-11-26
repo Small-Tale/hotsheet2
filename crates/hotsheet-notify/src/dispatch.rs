@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use hotsheet_sync::LockExt;
 use serde::{Deserialize, Serialize};
@@ -83,9 +83,32 @@ impl Default for RetryPolicy {
 pub type Sleeper = Arc<dyn Fn(Duration) + Send + Sync>;
 pub type Clock = Arc<dyn Fn() -> time::OffsetDateTime + Send + Sync>;
 
-/// `(channel, dedupe key)` → last delivery, shared by every dispatcher a long-lived host
-/// builds so rule cooldowns survive across dispatches.
-pub type Cooldowns = Arc<Mutex<HashMap<(String, String), Instant>>>;
+/// `(channel, dedupe hash)` → the delivery holding its cooldown, shared by every dispatcher
+/// a long-lived host builds. Only a dispatcher without a usable delivery log consults it;
+/// with a log, the journal is the single source of truth (HS2-3EZ1GR).
+pub type Cooldowns = Arc<Mutex<HashMap<(String, String), CooldownSlot>>>;
+
+/// One in-memory cooldown: pending while its delivery runs, then kept only when delivered.
+#[derive(Debug, Clone, Copy)]
+pub struct CooldownSlot {
+    at: time::OffsetDateTime,
+    delivered: bool,
+}
+
+/// How long an unresolved cooldown claim (a delivery still running, or one whose process
+/// died) keeps suppressing when the rule's own window is shorter. It covers the retry
+/// schedule and transport timeouts (HS2-3EZ1GR).
+const PENDING_CLAIM: time::Duration = time::Duration::minutes(2);
+
+/// What a rule-routed delivery holds while it runs.
+enum Claim {
+    /// No dedupe key or no cooldown.
+    Free,
+    /// A journal claim, resolved by the delivery record that shares its id.
+    Journal,
+    /// An in-memory slot to keep on success and release on failure.
+    Memory((String, String)),
+}
 
 pub struct Dispatcher {
     registry: Arc<Registry>,
@@ -156,24 +179,28 @@ impl Dispatcher {
         }
         records.extend(targets.into_iter().filter_map(|(channel, rule, cooldown)| {
             let channel = config.channel(channel).filter(|c| c.enabled)?;
+            let mut record = self.record(
+                message,
+                &channel.id,
+                &channel.notifier,
+                Some(rule),
+                Outcome::Failed,
+            );
             let held = self.held(channel, message.severity);
-            let reason = held.clone().or_else(|| {
-                self.suppressed(&channel.id, message, cooldown)
-                    .then(|| "a repeat inside the rule's cooldown".to_string())
-            });
-            if let Some(reason) = reason {
-                let mut record = self.record(
-                    message,
-                    &channel.id,
-                    &channel.notifier,
-                    Some(rule),
-                    Outcome::Suppressed,
-                );
-                record.error = Some(reason);
+            let claim = match &held {
+                Some(_) => None,
+                None => self.claim_cooldown(&record, cooldown),
+            };
+            let Some(claim) = claim else {
+                record.outcome = Outcome::Suppressed;
                 record.held = held.is_some();
+                record.error =
+                    Some(held.unwrap_or_else(|| "a repeat inside the rule's cooldown".into()));
                 return Some(self.finish(record));
-            }
-            Some(self.deliver(config, &channel.id, Some(rule), message))
+            };
+            let record = self.finish(self.attempt_delivery(config, &channel.id, message, record));
+            self.settle(claim, &record);
+            Some(record)
         }));
         records
     }
@@ -296,51 +323,75 @@ impl Dispatcher {
         (count >= limit as usize).then(|| format!("rate limit of {limit} per hour reached"))
     }
 
-    /// Whether `channel` already took this dedupe key inside the cooldown: from this
-    /// process's memory, else from the delivery log (a restarted server or another CLI run).
-    fn suppressed(&self, channel: &str, message: &Message, cooldown: u64) -> bool {
-        let Some(key) = message.dedupe_key.as_ref().filter(|_| cooldown > 0) else {
-            return false;
+    /// Take the cooldown of `record`'s dedupe key on its channel, or `None` when another
+    /// delivery already holds it: a delivered one inside the window, or one still running
+    /// (HS2-3EZ1GR). With a delivery log the claim is written to the journal under its
+    /// process-shared lock before any transport work, so a restarted server, a serverless
+    /// CLI run, and this process agree, and two of them racing one key send it once. A
+    /// failed delivery releases the claim, so the next real event is delivered. Both
+    /// sources read the injected clock.
+    fn claim_cooldown(&self, record: &DeliveryRecord, cooldown: u64) -> Option<Claim> {
+        let Some(hash) = record.dedupe.clone().filter(|_| cooldown > 0) else {
+            return Some(Claim::Free);
         };
+        let window = time::Duration::seconds(i64::try_from(cooldown).unwrap_or(i64::MAX));
+        let pending = window.max(PENDING_CLAIM);
+        let now = (self.clock)();
+        if let Some(path) = &self.log_path {
+            let claimed = Journal::open(path).and_then(|mut journal| {
+                if journal.cooldown_taken(&record.channel, &hash, now, window, pending) {
+                    return Ok(false);
+                }
+                journal.claim_cooldown(delivery_log::CooldownClaim {
+                    version: 1,
+                    id: record.id.clone(),
+                    channel: record.channel.clone(),
+                    dedupe: hash.clone(),
+                    at: record.at.clone(),
+                })?;
+                Ok(true)
+            });
+            match claimed {
+                Ok(true) => return Some(Claim::Journal),
+                Ok(false) => return None,
+                Err(error) => eprintln!(
+                    "hotsheet-notify: cooldown falls back to this process's memory: {error}"
+                ),
+            }
+        }
         let mut recent = self.recent.lock_or_recover();
-        let now = Instant::now();
-        let window = Duration::from_secs(cooldown);
-        recent.retain(|_, at| now.duration_since(*at) < Duration::from_secs(24 * 3600));
-        let slot = (channel.to_string(), key.clone());
+        recent.retain(|_, slot| now - slot.at < time::Duration::hours(24));
+        let key = (record.channel.clone(), hash);
         if recent
-            .get(&slot)
-            .is_some_and(|at| now.duration_since(*at) < window)
+            .get(&key)
+            .is_some_and(|slot| now - slot.at < if slot.delivered { window } else { pending })
         {
-            return true;
+            return None;
         }
-        if self.logged_within(channel, &dedupe_hash(key), window) {
-            return true;
-        }
-        recent.insert(slot, now);
-        false
+        recent.insert(
+            key.clone(),
+            CooldownSlot {
+                at: now,
+                delivered: false,
+            },
+        );
+        Some(Claim::Memory(key))
     }
 
-    fn logged_within(&self, channel: &str, hash: &str, window: Duration) -> bool {
-        let Some(path) = &self.log_path else {
-            return false;
+    /// Resolve an in-memory claim once its delivery finished. A journal claim needs nothing
+    /// here: the delivery record [`Dispatcher::finish`] appended shares its id.
+    fn settle(&self, claim: Claim, record: &DeliveryRecord) {
+        let Claim::Memory(key) = claim else {
+            return;
         };
-        let Ok(records) = delivery_log::read_records(path) else {
-            return false;
-        };
-        let now = (self.clock)();
-        records
-            .into_iter()
-            .rev()
-            .filter(|r| {
-                r.channel == channel
-                    && r.outcome == Outcome::Delivered
-                    && r.dedupe.as_deref() == Some(hash)
-            })
-            .filter_map(|r| {
-                time::OffsetDateTime::parse(&r.at, &time::format_description::well_known::Rfc3339)
-                    .ok()
-            })
-            .any(|at| (now - at).whole_seconds() < window.as_secs() as i64)
+        let mut recent = self.recent.lock_or_recover();
+        if record.outcome == Outcome::Delivered {
+            if let Some(slot) = recent.get_mut(&key) {
+                slot.delivered = true;
+            }
+        } else {
+            recent.remove(&key);
+        }
     }
 
     fn deliver(
@@ -993,12 +1044,13 @@ mod tests {
 
     #[test]
     fn hs2_cfmsp2_cooldown_repeats_disabled_channels_and_failures_are_not_resummarized() {
-        let h = harness(vec![status(400)]);
+        let h = harness(vec![ok(), status(400)]);
         let clock = Arc::new(Mutex::new(utc(12, 0)));
         let d = at(&h, clock.clone(), true);
         let mut c = one_channel(600);
-        // A cooldown repeat is suppressed but not held, so it is never summarized.
-        d.dispatch(&c, &blocked());
+        // A cooldown repeat is suppressed but not held, so it is never summarized. Only a
+        // delivered message starts the cooldown (HS2-3EZ1GR).
+        assert_eq!(d.dispatch(&c, &blocked())[0].outcome, Outcome::Delivered);
         let repeat = d.dispatch(&c, &blocked()).remove(0);
         assert!(repeat.outcome == Outcome::Suppressed && !repeat.held);
         assert!(d.flush_held(&c).is_empty());
@@ -1029,6 +1081,176 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("held-notification summaries")
+        );
+    }
+
+    /// HS2-3EZ1GR: whatever the failure (exhausted retries, a permanent refusal, a missing
+    /// credential), the next event inside the cooldown is delivered, by this process from
+    /// its log or its memory alike; a delivered one suppresses the next until the injected
+    /// clock passes the window.
+    #[test]
+    fn hs2_3ez1gr_a_failed_delivery_never_starts_a_cooldown() {
+        let outcome = |records: Vec<DeliveryRecord>| records.last().unwrap().outcome;
+        for log in [true, false] {
+            for failure in ["exhausted", "refused", "secret"] {
+                let replies = match failure {
+                    "exhausted" => vec![status(503), status(503), status(503), ok()],
+                    "refused" => vec![status(401), ok()],
+                    _ => vec![ok()],
+                };
+                let h = harness(replies);
+                let clock = Arc::new(Mutex::new(utc(12, 0)));
+                let d =
+                    at(&h, clock.clone(), log).with_retry(RetryPolicy::default(), Arc::new(|_| {}));
+                let mut c = one_channel(600);
+                if failure == "secret" {
+                    c.channels[0]
+                        .settings
+                        .insert("token".into(), json!({"secret":"absent"}));
+                }
+                assert_eq!(outcome(d.dispatch(&c, &blocked())), Outcome::Failed);
+                if failure == "secret" {
+                    c = one_channel(600);
+                }
+                // Inside the window, the next event is delivered...
+                *clock.lock_or_recover() = utc(12, 1);
+                assert_eq!(
+                    outcome(d.dispatch(&c, &blocked())),
+                    Outcome::Delivered,
+                    "{failure} (log: {log})"
+                );
+                // ...and that delivery starts the cooldown.
+                *clock.lock_or_recover() = utc(12, 5);
+                let repeat = d.dispatch(&c, &blocked()).pop().unwrap();
+                assert_eq!((repeat.outcome, repeat.attempts), (Outcome::Suppressed, 0));
+                if log {
+                    // A restarted process agrees with this one.
+                    assert_eq!(
+                        outcome(at(&h, clock.clone(), true).dispatch(&c, &blocked())),
+                        Outcome::Suppressed
+                    );
+                }
+                // The injected clock alone ends the window (one clock, HS2-3EZ1GR).
+                *clock.lock_or_recover() = utc(12, 11);
+                assert_eq!(outcome(d.dispatch(&c, &blocked())), Outcome::Delivered);
+                assert_eq!(outcome(d.dispatch(&c, &blocked())), Outcome::Suppressed);
+            }
+        }
+    }
+
+    /// A transport that holds its first request until the test releases it.
+    struct Gate {
+        entered: std::sync::mpsc::Sender<()>,
+        release: Mutex<std::sync::mpsc::Receiver<()>>,
+        requests: Mutex<usize>,
+    }
+
+    impl crate::http::HttpTransport for Gate {
+        fn send(&self, _: &crate::http::HttpRequest) -> Result<HttpResponse, String> {
+            let first = {
+                let mut requests = self.requests.lock_or_recover();
+                *requests += 1;
+                *requests == 1
+            };
+            if first {
+                self.entered.send(()).unwrap();
+                self.release.lock_or_recover().recv().unwrap();
+            }
+            ok()
+        }
+    }
+
+    /// HS2-3EZ1GR: while one process is still delivering a key (a server retrying), another
+    /// process sharing the home (a serverless CLI run) sees its journal claim and suppresses
+    /// the repeat instead of sending it too. With no log, one process's dispatchers share
+    /// the same guarantee through the in-memory cooldowns.
+    #[test]
+    fn hs2_3ez1gr_two_dispatchers_racing_one_key_send_it_once() {
+        for log in [true, false] {
+            let (entered_tx, entered) = std::sync::mpsc::channel();
+            let (release, release_rx) = std::sync::mpsc::channel();
+            let gate = Arc::new(Gate {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+                requests: Mutex::new(0),
+            });
+            let home = tempfile::tempdir().unwrap();
+            let cooldowns = Cooldowns::default();
+            let dispatcher = || {
+                Dispatcher::new(
+                    Arc::new(Registry::with_builtins(
+                        vec![Arc::new(Ntfy::with_transport(gate.clone()))],
+                        None,
+                        Arc::new(LiveRunner),
+                    )),
+                    Arc::new(BTreeMap::from([(
+                        "ntfy-token".to_string(),
+                        "tk".to_string(),
+                    )])),
+                    log.then(|| home.path()),
+                )
+                .with_cooldowns(cooldowns.clone())
+            };
+            let c = one_channel(600);
+            let first = dispatcher();
+            let second = dispatcher();
+            std::thread::scope(|scope| {
+                let sending = scope.spawn(|| first.dispatch(&c, &blocked()));
+                entered.recv().unwrap();
+                let repeat = second.dispatch(&c, &blocked()).pop().unwrap();
+                assert_eq!(
+                    (repeat.outcome, repeat.error.as_deref()),
+                    (
+                        Outcome::Suppressed,
+                        Some("a repeat inside the rule's cooldown")
+                    ),
+                    "log: {log}"
+                );
+                release.send(()).unwrap();
+                assert_eq!(sending.join().unwrap()[0].outcome, Outcome::Delivered);
+            });
+            assert_eq!(*gate.requests.lock_or_recover(), 1);
+            assert_eq!(
+                second.dispatch(&c, &blocked())[0].outcome,
+                Outcome::Suppressed
+            );
+        }
+    }
+
+    /// HS2-3EZ1GR: a claim whose process died mid-send suppresses only for the pending
+    /// bound (or the rule's longer window), then frees the key; a damaged claim line is
+    /// skipped without blocking the journal.
+    #[test]
+    fn hs2_3ez1gr_an_orphaned_claim_expires_and_a_damaged_one_is_ignored() {
+        let h = harness(vec![ok()]);
+        let clock = Arc::new(Mutex::new(utc(12, 0)));
+        let d = at(&h, clock.clone(), true);
+        let c = one_channel(30);
+        let path = h.home.path().join(LOG_FILE);
+        Journal::open(&path)
+            .unwrap()
+            .claim_cooldown(delivery_log::CooldownClaim {
+                version: 1,
+                id: "orphan".into(),
+                channel: "phone".into(),
+                dedupe: dedupe_hash("blocked:HS2-1"),
+                at: "2026-10-29T12:00:00Z".into(),
+            })
+            .unwrap();
+        let mut log = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        std::io::Write::write_all(&mut log, b"{\"cooldown_claim\":{\"version\":1}}\n").unwrap();
+        *clock.lock_or_recover() = utc(12, 1);
+        assert_eq!(d.dispatch(&c, &blocked())[0].outcome, Outcome::Suppressed);
+        *clock.lock_or_recover() = utc(12, 2);
+        assert_eq!(d.dispatch(&c, &blocked())[0].outcome, Outcome::Delivered);
+        // Public readers skip claim lines; only delivery records are listed.
+        assert!(
+            recent_deliveries(h.home.path(), 10)
+                .iter()
+                .all(|r| r.channel == "phone")
         );
     }
 
