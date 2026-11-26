@@ -64,6 +64,10 @@ impl GateState {
 pub struct GateReading {
     pub state: GateState,
     pub job_id: Option<String>,
+    /// HS2-507DGZ: the Job finished without a verdict (the provider ended the watch, for
+    /// example a 404 for a repository the credentials cannot read). Nothing watches it
+    /// any more; a lost Job is not ended, because the monitor reattaches it.
+    pub ended: bool,
     /// Pass to [`JobStore::wait_for_change`] to wait for the next change of any kind.
     pub revision: u64,
 }
@@ -240,9 +244,14 @@ pub fn gate_state(
     // Read the revision first: a change after it is then seen by the next wait.
     let revision = store.revision(checkout_id)?;
     let job = find_ci_watch(store, checkout_id, target)?;
+    let state = job.as_ref().map_or(GateState::Unknown, gate_of);
+    let ended = job.as_ref().is_some_and(|job| {
+        state == GateState::Unknown && job.status.is_finished() && job.status != Status::Lost
+    });
     Ok(GateReading {
-        state: job.as_ref().map_or(GateState::Unknown, gate_of),
+        state,
         job_id: job.map(|job| job.id),
+        ended,
         revision,
     })
 }

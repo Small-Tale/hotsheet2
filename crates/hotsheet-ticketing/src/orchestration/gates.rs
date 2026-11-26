@@ -174,6 +174,18 @@ impl GateEvidence {
     }
 }
 
+/// HS2-VVHVF0: a CI gate's watch Job is there and its observer was lost; the monitor
+/// reattaches it.
+pub const WATCH_LOST: &str = "watch_lost";
+/// HS2-507DGZ: the provider ended the CI gate's watch without a verdict (for example a
+/// 404 for a repository the credentials cannot read). The gate follower links it again
+/// with a bounded back-off.
+pub const WATCH_ENDED: &str = "watch_ended";
+/// HS2-507DGZ: the gate follower's automatic re-links of an ended watch were spent.
+/// The gate waits on nothing: check the provider's credentials and repository, then
+/// link the gate again.
+pub const WATCH_GONE: &str = "watch_gone";
+
 /// One answer from a provider adapter about one gate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GateReading {
@@ -297,9 +309,19 @@ impl Gate {
     /// it deployed exactly that commit.
     /// HS2-VVHVF0: the gate still waits on its provider: watched with no verdict, or
     /// its watch was lost and may be reattached. Such a gate needs an observer.
+    /// HS2-507DGZ: a watch the provider ended without a verdict (`watch_ended`) waits
+    /// too, because the gate follower links it again; once those attempts are spent the
+    /// gate reads `watch_gone`, which waits on nothing and needs a person or an agent.
     pub fn awaits_provider(&self) -> bool {
         self.state == GateState::Pending
-            || (self.state == GateState::Unknown && self.reason.as_deref() == Some("watch_lost"))
+            || (self.state == GateState::Unknown
+                && matches!(self.reason.as_deref(), Some(WATCH_LOST | WATCH_ENDED)))
+    }
+
+    /// HS2-507DGZ: the provider ended the gate's watch without a verdict, and the gate
+    /// follower may still link it again.
+    pub fn watch_ended(&self) -> bool {
+        self.state == GateState::Unknown && self.reason.as_deref() == Some(WATCH_ENDED)
     }
 
     pub fn covered_by(&self, evidence: &GateEvidence) -> bool {
@@ -371,6 +393,16 @@ impl Gate {
         } else {
             // Only a verdict carries evidence.
             evidence = None;
+        }
+        // HS2-507DGZ: a gate whose automatic re-links were spent stays `watch_gone`
+        // while its adapter still reads the same ended watch; a new watch clears it.
+        if self.state == GateState::Unknown
+            && state == GateState::Unknown
+            && self.reason.as_deref() == Some(WATCH_GONE)
+            && reason.as_deref() == Some(WATCH_ENDED)
+            && (watch_ref.is_none() || watch_ref == self.watch_ref)
+        {
+            return GateOutcome::Unchanged;
         }
         if let (Some(current), Some(new)) = (&self.evidence, &evidence) {
             if new.rank() < current.rank() {

@@ -722,6 +722,7 @@ fn hs2_7qhwhj_a_remote_target_is_followed_through_the_reviewed_transport() {
         hosted: machine_with(99, false, unsupported, Some(feed.clone())),
         calls: Mutex::new(Vec::new()),
         status_override: Mutex::new(None),
+        offline: Default::default(),
     });
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

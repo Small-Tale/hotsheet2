@@ -62,8 +62,9 @@ pub use capacity::{
 };
 pub use capacity_watch::{CapacityFollow, MAX_CAPACITY_WATCHES};
 pub use gates::{
-    GateFollowState, GateFollowStep, GateProvider, GateView, GithubActionsGates, LinkGate,
-    MAX_GATE_WAIT_MS, MarkReview, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
+    GATE_RELINK_ATTEMPTS, GateFollowState, GateFollowStep, GateProvider, GateView,
+    GithubActionsGates, LinkGate, MAX_GATE_WAIT_MS, MarkReview, RequestDeployment, RunGates,
+    SyncGates, TARGET_SCRIPT_PROVIDER,
 };
 pub use hosted_audit::{HostedAuditView, HostedJournalFailures};
 pub use hosted_deployments::{
@@ -211,6 +212,9 @@ pub struct OrchestrationRuntime {
     prompt: Arc<dyn PermissionPrompt>,
     /// HS2-P5GTSW: how often a capacity wait samples again (tests shorten it).
     capacity_resample: std::time::Duration,
+    /// HS2-507DGZ: the first delay before a gate follower links an ended CI watch again,
+    /// doubling per attempt (tests shorten it).
+    gate_relink_retry_ms: u64,
     /// HS2-J7N3PQ: how a deadline timer waits until its instant (tests skip the wait).
     timer_sleep: Arc<dyn Fn(std::time::Duration) + Send + Sync>,
     /// HS2-M7EV18: hosted validation steps run in detached runner processes.
@@ -267,6 +271,7 @@ impl OrchestrationRuntime {
             claims: Arc::new(MachineClaims::new(&home)),
             prompt: Arc::new(NoPrompt),
             capacity_resample: std::time::Duration::from_millis(capacity::CAPACITY_RESAMPLE_MS),
+            gate_relink_retry_ms: gates::OBSERVER_RETRY_MS,
             timer_sleep: Arc::new(std::thread::sleep),
             detached_validation: false,
             requester: None,

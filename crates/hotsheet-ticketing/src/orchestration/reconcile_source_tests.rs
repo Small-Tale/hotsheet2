@@ -71,6 +71,8 @@ fn hs2_7qnk7y_every_recorded_ci_state_against_every_adapter_answer() {
     let lost = || reading(Unknown, Some("watch_lost"), Some("job-1"));
     let gone = || reading(Unknown, Some("not_watched"), None);
     let odd = || reading(Unknown, Some("evidence_missing"), Some("job-1"));
+    // HS2-507DGZ: the provider ended the watch without a verdict.
+    let ended = || reading(Unknown, Some(WATCH_ENDED), Some("job-1"));
     let unavailable = || Err::<GateReading, String>("gate_provider_unavailable".into());
     let unsupported = || Err::<GateReading, String>("gate_provider_unsupported".into());
     type Row = (
@@ -160,6 +162,58 @@ fn hs2_7qnk7y_every_recorded_ci_state_against_every_adapter_answer() {
             Ok(gone()),
             Mismatched,
             Some("recorded_work_missing"),
+            true,
+        ),
+        // HS2-507DGZ: an ended watch is still waited on (the follower links it again),
+        // and reads as not verified meanwhile.
+        (
+            Pending,
+            None,
+            Ok(ended()),
+            Unverifiable,
+            Some("watch_ended"),
+            false,
+        ),
+        (
+            Unknown,
+            Some("watch_ended"),
+            Ok(ended()),
+            Unverifiable,
+            Some("watch_ended"),
+            false,
+        ),
+        (
+            Unknown,
+            Some("watch_ended"),
+            Ok(pending()),
+            Verified,
+            None,
+            false,
+        ),
+        // Its re-links spent: nothing watches the commit, and it needs attention.
+        (
+            Unknown,
+            Some("watch_gone"),
+            Ok(ended()),
+            Unverifiable,
+            Some("watch_gone"),
+            false,
+        ),
+        // Linked again by hand: the live watch is adopted; a verdict settles it.
+        (
+            Unknown,
+            Some("watch_gone"),
+            Ok(rewatched()),
+            Verified,
+            Some("watch_adopted"),
+            false,
+        ),
+        (
+            Unknown,
+            Some("watch_gone"),
+            Ok(green()),
+            Verified,
+            None,
             true,
         ),
         // Never watched: nothing in flight, unless the adapter shows a watch, which is

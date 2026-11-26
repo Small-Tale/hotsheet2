@@ -1093,6 +1093,7 @@ fn remote(tx: &mut Transaction<'_>) -> Remote {
         hosted,
         calls: Mutex::new(Vec::new()),
         status_override: Mutex::new(None),
+        offline: Default::default(),
     });
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

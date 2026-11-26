@@ -251,3 +251,164 @@ async fn hs2_g3vak4_a_remote_targets_deploy_script_runs_on_the_peer() {
         "the worktree is removed"
     );
 }
+
+/// Finish a watch Job on `home` the way that machine's Job monitor would: a green run
+/// `run` built `head`.
+fn judge_green(home: &std::path::Path, checkout: &str, job_id: &str, head: &str, run: u64) {
+    use hotsheet_jobs::{Acquire, ActiveStatus, FinalStatus, Outcome};
+    let store = JobStore::at(home);
+    let (_, token) = store
+        .acquire(
+            checkout,
+            job_id,
+            Acquire {
+                owner: "monitor:synthetic".into(),
+                status: ActiveStatus::Running,
+                launch_id: None,
+                external: None,
+            },
+        )
+        .unwrap();
+    let refs = [
+        ("gate", "green".to_owned()),
+        ("run_id", run.to_string()),
+        ("run_attempt", "1".to_owned()),
+        ("run_head_sha", head.to_owned()),
+    ]
+    .into_iter()
+    .map(|(key, value)| (key.to_owned(), value))
+    .collect();
+    store
+        .finish(
+            checkout,
+            job_id,
+            &token,
+            FinalStatus::Succeeded,
+            Outcome {
+                summary: None,
+                refs,
+            },
+        )
+        .unwrap();
+}
+
+/// HS2-1P1HJT: a remote target's CI gate is watched on its host (HS2-WDQZ37), and the
+/// host drops off the network while the gate waits. The controller's gate follower keeps
+/// the gate `pending` (never a verdict, never lost work) and backs off instead of
+/// spinning on the unreachable host; the verdict the host's watch reached meanwhile is
+/// recorded once when the host is back. Waits on connection attempts and on the gate
+/// event stream, never on a fixed delay.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
+    let mut fleet = Fleet::new().await;
+    git(
+        &fleet.b_project,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/acme/widgets.git",
+        ],
+    );
+    let orchestration = fleet.orchestration_ticket("Gate the remote work");
+    let ticket = fleet.target_ticket(Side::Peer, "Remote work");
+    let run = fleet
+        .ok(
+            "POST",
+            "/runs",
+            json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration.slug},
+                "target_id":TARGET_B,"connection_id":fleet.connection(Side::Peer),
+                "native_id":ticket.slug,"operation_id":"offline-gated-run","mode":"dispatcher"}),
+        )
+        .await;
+    let commit = "e".repeat(40);
+    let linked = fleet
+        .ok(
+            "POST",
+            &format!("/runs/{}/gates", run["run_id"].as_str().unwrap()),
+            json!({"commit":commit,"repository":"acme/widgets","actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(linked["gate"]["state"], "pending", "{linked}");
+    let gate_id = linked["gate"]["gate_id"].as_str().unwrap().to_owned();
+    let job_id = linked["gate"]["watch_ref"].as_str().unwrap().to_owned();
+    let jobs = JobStore::at(&fleet.peer_home)
+        .list(&fleet.b_checkout.id)
+        .unwrap()
+        .jobs;
+    assert_eq!(jobs.len(), 1, "the watch runs on the host");
+    assert_eq!(jobs[0].id, job_id);
+
+    // 1. The host drops off the network. Its address now refuses every connection at
+    // once, and counts them: the controller keeps trying the host, but backs off.
+    fleet.peer_offline().await;
+    let refusing = tokio::net::TcpListener::bind(fleet.peer_address)
+        .await
+        .unwrap();
+    let started = std::time::Instant::now();
+    for _ in 0..3 {
+        let (connection, _) =
+            tokio::time::timeout(std::time::Duration::from_secs(60), refusing.accept())
+                .await
+                .expect("the controller stopped trying the host")
+                .unwrap();
+        drop(connection);
+    }
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed >= std::time::Duration::from_millis(500),
+        "three connection attempts in {elapsed:?}: the controller spins on an unreachable host"
+    );
+    // The gate still waits: an unreachable host is neither a verdict nor lost work.
+    let gate = fleet
+        .ok("GET", &format!("/gates/{gate_id}"), Value::Null)
+        .await;
+    assert_eq!(gate["state"], "pending", "{gate}");
+    assert_eq!(gate["watch_ref"], job_id.as_str(), "{gate}");
+    assert!(gate["evidence"].is_null(), "{gate}");
+
+    // 2. Meanwhile the host's own watch reaches a green verdict.
+    judge_green(&fleet.peer_home, &fleet.b_checkout.id, &job_id, &commit, 77);
+    let still = fleet
+        .ok("GET", &format!("/gates/{gate_id}"), Value::Null)
+        .await;
+    assert_eq!(
+        still["state"], "pending",
+        "nothing is read from an offline host"
+    );
+
+    // 3. The host is back: the follower reads the verdict it reached and records it
+    // once.
+    drop(refusing);
+    fleet.peer_online().await;
+    let passed = fleet.gate_until(&gate_id, "passed").await;
+    assert_eq!(passed["evidence"]["reference"], "77", "{passed}");
+    assert_eq!(passed["evidence"]["commit"], commit.as_str(), "{passed}");
+    let events = fleet.ok("GET", "/run-events?after=0", Value::Null).await;
+    let verdicts = events["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry.get("record").unwrap_or(entry))
+        .filter(|record| record["kind"] == "gate" && record["gate_id"] == gate_id.as_str())
+        .filter(|record| record["gate_state"] == "passed")
+        .count();
+    assert_eq!(verdicts, 1, "{events:#}");
+    let history: Vec<&str> = passed["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["to"].as_str().unwrap())
+        .collect();
+    assert_eq!(history, ["unknown", "pending", "passed"], "{passed}");
+    // A later sync reads the same verdict again and records nothing new.
+    let synced = fleet
+        .ok(
+            "POST",
+            &format!("/runs/{}/gate-sync", run["run_id"].as_str().unwrap()),
+            json!({"actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(synced["changed"], json!([]), "{synced}");
+    fleet.shut_down().await;
+}

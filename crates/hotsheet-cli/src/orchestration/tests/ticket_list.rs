@@ -324,6 +324,7 @@ fn hs2_d85g19_a_remote_target_is_listed_over_the_reviewed_transport() {
         hosted: machine(99, false, unsupported),
         calls: Mutex::new(Vec::new()),
         status_override: Mutex::new(None),
+        offline: Default::default(),
     });
     seed(
         &peer.hosted.target_store,

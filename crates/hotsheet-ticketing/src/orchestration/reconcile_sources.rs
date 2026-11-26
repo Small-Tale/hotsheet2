@@ -13,7 +13,7 @@
 use super::reconcile::{ExternalWork, Observed};
 use super::{
     Gate, GateKind, GateReading, GateState, OrchestratedSession, SessionState, ValidationResult,
-    ValidationState,
+    ValidationState, WATCH_ENDED, WATCH_GONE,
 };
 
 /// A verified source's note: no CI gate is linked to the run.
@@ -67,6 +67,16 @@ fn ci_gate(gate: &Gate, reading: &Result<GateReading, String>) -> SourceWork {
         },
         // A verdict ended the watch in the open; the record follows it on the next sync.
         GateState::Passed | GateState::Failed | GateState::Superseded => SourceWork::Settled(None),
+        // HS2-507DGZ: the follower's automatic re-links of an ended watch were spent.
+        // Nothing watches the commit and nothing will: a person or an agent checks the
+        // provider's credentials and repository and links the gate again.
+        GateState::Unknown
+            if gate.state == GateState::Unknown
+                && gate.reason.as_deref() == Some(WATCH_GONE)
+                && matches!(reading.reason.as_deref(), Some(WATCH_ENDED | WATCH_GONE)) =>
+        {
+            SourceWork::Unverifiable(WATCH_GONE.into())
+        }
         GateState::Unknown | GateState::AwaitingApproval => match reading.reason.as_deref() {
             // Somebody stopped watching on purpose: nothing is in flight.
             Some("watch_cancelled") => SourceWork::Settled(None),

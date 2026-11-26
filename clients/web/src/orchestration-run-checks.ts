@@ -40,6 +40,17 @@ const SOURCES: Readonly<Record<string, string>> = {
 
 const words = (code: string) => code.replaceAll('_', ' ');
 
+/**
+ * HS2-507DGZ: why a CI gate's watch is not running, in plain language (docs/26 §26.13), with the next step
+ * where a person or an agent must act.
+ */
+export const CI_WATCH_REASONS: Readonly<Record<string, string>> = {
+  watch_lost: 'the watch was interrupted; it resumes when the job monitor runs again',
+  watch_ended: 'the CI provider ended the watch; it is linked again automatically',
+  watch_gone:
+    'the CI provider kept ending the watch; check the provider’s credentials and repository, then link the gate again',
+};
+
 export function dispositionText(disposition: string): string {
   const known = DISPOSITIONS[disposition];
   if (known) return known;
@@ -48,7 +59,7 @@ export function dispositionText(disposition: string): string {
 }
 
 const finding = (item: RunFinding) =>
-  `${SOURCES[item.source] ?? words(item.source)}${item.reason ? ` (${words(item.reason)})` : ''}`;
+  `${SOURCES[item.source] ?? words(item.source)}${item.reason ? ` (${CI_WATCH_REASONS[item.reason] ?? words(item.reason)})` : ''}`;
 
 /**
  * The Run section's reconciliation rows: Checked, then Not verified and Differs when a source is so.
