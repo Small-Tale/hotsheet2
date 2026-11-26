@@ -3580,7 +3580,11 @@ Closing the tab is a person's stop (HS2-HVKS7M): the drawer sends it through the
 
 `sync` reads a session from its host. A session the host started and no longer has
 becomes `lost` with `host_lost`; one the host has no record of at all becomes `lost`
-with `host_forgot`. A session still `requested` that the host never saw is left as it
+with `host_forgot`. A terminal that ends while its stop is under way is that stop's,
+never a crash (HS2-X3Z0HA): the host marks the stop with its reason before it stops the
+terminal, so a sync or the scheduler's loop that finds the terminal gone first records
+the same `wound_down` or `person_stopped` end; a stop the host refuses clears the mark,
+so a later crash is `host_lost` again. A session still `requested` that the host never saw is left as it
 is, so its start can be repeated or it can be stopped, which ends it as
 `never_started`. While the terminal host cannot be asked nothing is concluded: the
 session keeps its state and its safe point lists `session_unknown`. A lost session

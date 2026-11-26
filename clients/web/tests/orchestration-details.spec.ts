@@ -867,7 +867,22 @@ test('HS2-65AD6J HS2-91AF8K role sessions that never take up their role leave th
     // Three sessions of each role, each stopped by a wind-down because its role prompt failed; the last had used up
     // its replacements.
     const sessions = await roleSessions();
-    const log = await decisions();
+    // HS2-X3Z0HA: a pass logs its decisions after it applied them, so the log can trail the last wind-downs the
+    // sessions already show. Wait until it has one for every stopped role session.
+    let log: Decision[] = [];
+    await expect
+      .poll(
+        async () => {
+          log = await decisions();
+          return sessions
+            .filter(
+              (session) => !log.some((entry) => entry.kind === 'wind_down' && entry.session_id === session.session_id),
+            )
+            .map((session) => session.session_id);
+        },
+        { timeout: 30_000 },
+      )
+      .toEqual([]);
     for (const role of ['integrator', 'dispatcher']) {
       const ofRole = sessions.filter((session) => session.role === role);
       expect(

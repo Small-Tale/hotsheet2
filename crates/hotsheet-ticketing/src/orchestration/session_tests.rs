@@ -1936,3 +1936,98 @@ fn hs2_fds95d_a_planner_records_each_later_proposal_once_within_its_bound() {
         .unwrap();
     assert!(worker.proposals.is_empty());
 }
+
+/// HS2-X3Z0HA: the end a host records for a terminal found gone, over every order of a
+/// stop under way, its refusal, the stopper's own end and a repeat. A stop under way
+/// names the end; without one the terminal was lost; the first end stands.
+#[test]
+fn hs2_x3z0ha_a_terminal_gone_during_its_stop_ends_with_the_stops_reason() {
+    #[derive(Clone, Copy, Debug)]
+    enum Step {
+        Begin(&'static str),
+        Abandon,
+        End(&'static str),
+        Gone,
+    }
+    use Step::{Abandon, Begin, End, Gone};
+    let cases: &[(&[Step], Option<&str>)] = &[
+        (&[Gone], Some("host_lost")),
+        (&[Begin("wound_down"), Gone], Some("wound_down")),
+        (&[Begin("person_stopped"), Gone], Some("person_stopped")),
+        // The reader raced the stop: both record the same end, once.
+        (
+            &[Begin("wound_down"), Gone, End("wound_down")],
+            Some("wound_down"),
+        ),
+        (
+            &[Begin("wound_down"), End("wound_down"), Gone],
+            Some("wound_down"),
+        ),
+        // Refused: a later exit is the host's loss again.
+        (&[Begin("wound_down"), Abandon, Gone], Some("host_lost")),
+        // Refused, then asked again.
+        (
+            &[Begin("wound_down"), Abandon, Begin("person_stopped"), Gone],
+            Some("person_stopped"),
+        ),
+        // Lost before any stop: a late stop does not rewrite it.
+        (
+            &[Gone, Begin("wound_down"), End("wound_down")],
+            Some("host_lost"),
+        ),
+        (&[Gone, Gone], Some("host_lost")),
+        (&[Begin("wound_down"), Abandon], None),
+        (&[Abandon, Gone], Some("host_lost")),
+    ];
+    for (steps, expected) in cases {
+        let home = tempfile::tempdir().unwrap();
+        let registry = HostedSessionRegistry::new(home.path());
+        let clock = Clock(std::cell::Cell::new(10));
+        let mut rng = Rng(100);
+        let mut tx = Transaction {
+            clock: &clock,
+            rng: &mut rng,
+        };
+        registry
+            .reserve(HOSTED, &hosted("op-1", "codex"), &mut tx)
+            .unwrap();
+        registry.mark_started(HOSTED, "op-1").unwrap().unwrap();
+        let mut first_end = None;
+        for (at, step) in steps.iter().enumerate() {
+            let now = 100 + at as u64;
+            let after = match step {
+                Begin(reason) => registry.begin_stop(HOSTED, "op-1", reason),
+                Abandon => registry.abandon_stop(HOSTED, "op-1"),
+                End(reason) => registry.end(HOSTED, "op-1", reason, now),
+                Gone => registry.end_gone(HOSTED, "op-1", now),
+            }
+            .unwrap()
+            .unwrap();
+            if first_end.is_none() {
+                first_end = after.ended_at_ms;
+            }
+            assert_eq!(after.ended_at_ms, first_end, "{steps:?} at {step:?}");
+        }
+        let record = registry.get(HOSTED, "op-1").unwrap().unwrap();
+        assert_eq!(record.end_reason.as_deref(), *expected, "{steps:?}");
+        // The record round-trips through the file and a reader of an older shape.
+        let mut value = serde_json::to_value(&record).unwrap();
+        assert_eq!(
+            value.get("stopping").is_some(),
+            record.stopping.is_some(),
+            "{steps:?}"
+        );
+        value.as_object_mut().unwrap().remove("stopping");
+        let older: HostedSession = serde_json::from_value(value).unwrap();
+        assert_eq!(older.stopping, None);
+    }
+    // An unknown operation changes nothing, and a stop reason is a bounded code.
+    let home = tempfile::tempdir().unwrap();
+    let registry = HostedSessionRegistry::new(home.path());
+    assert_eq!(
+        registry.begin_stop(HOSTED, "op-x", "wound_down").unwrap(),
+        None
+    );
+    assert_eq!(registry.end_gone(HOSTED, "op-x", 1).unwrap(), None);
+    assert!(registry.begin_stop(HOSTED, "op-x", "not a code").is_err());
+}

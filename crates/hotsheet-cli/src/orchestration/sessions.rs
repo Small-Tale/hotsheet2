@@ -1309,14 +1309,11 @@ impl OrchestrationRuntime {
         if !gone {
             return Ok(session);
         }
+        // HS2-X3Z0HA: a terminal gone while its stop is under way was wound down or
+        // stopped, not lost; the registry decides which under its lock.
         let ended = self
             .hosted_sessions_registry()
-            .end(
-                &session.checkout_id,
-                &session.operation_id,
-                "host_lost",
-                now_ms,
-            )?
+            .end_gone(&session.checkout_id, &session.operation_id, now_ms)?
             .unwrap_or(session);
         // HS2-CRBR8X: the host's journal records the end once, whoever noticed it.
         self.journal_hosted_end(&ended);
@@ -1838,25 +1835,27 @@ impl OrchestrationRuntime {
         if let Err(error) = decide_stop(session.owner, stop, &safe_point) {
             return Ok(refused(error.code(), Some(safe_point), Some(view)));
         }
-        match self.sessions.stop(&checkout, &session.session_id) {
-            Ok(()) => {}
-            Err(_) => {
-                return Ok(refused(
-                    SessionError::HostUnavailable.code(),
-                    Some(safe_point),
-                    Some(view),
-                ));
-            }
+        let reason = if human {
+            "person_stopped"
+        } else {
+            "wound_down"
+        };
+        // HS2-X3Z0HA: recorded before the terminal stops, so a reader that finds it gone
+        // before this stop records its end does not call it lost.
+        registry.begin_stop(&checkout.id, &request.operation_id, reason)?;
+        if self.sessions.stop(&checkout, &session.session_id).is_err() {
+            registry.abandon_stop(&checkout.id, &request.operation_id)?;
+            return Ok(refused(
+                SessionError::HostUnavailable.code(),
+                Some(safe_point),
+                Some(view),
+            ));
         }
         let ended = registry
             .end(
                 &checkout.id,
                 &request.operation_id,
-                if human {
-                    "person_stopped"
-                } else {
-                    "wound_down"
-                },
+                reason,
                 tx.clock.now_ms(),
             )?
             .unwrap_or(session);
@@ -3016,7 +3015,7 @@ impl OrchestrationRuntime {
             )?)
             .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?;
             let stopped = |reason: &str, tx: &mut Transaction<'_>| {
-                self.session_apply(
+                let applied = self.session_apply(
                     owner_id,
                     session_id,
                     SessionUpdate {
@@ -3032,7 +3031,20 @@ impl OrchestrationRuntime {
                     },
                     false,
                     tx,
-                )
+                );
+                match applied {
+                    // HS2-X3Z0HA: a concurrent observer (the scheduler's loop, a sync)
+                    // learned this stop from the host first and recorded it.
+                    Err(OrchestrationError::Session(SessionError::NotActive)) => {
+                        let current = self.session(owner_id, session_id)?;
+                        if current.state == SessionState::Stopped {
+                            Ok(current)
+                        } else {
+                            Err(OrchestrationError::Session(SessionError::NotActive))
+                        }
+                    }
+                    other => other,
+                }
             };
             if !reply.stopped {
                 return match reply.reason.as_deref().and_then(SessionError::from_code) {

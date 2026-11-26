@@ -1052,6 +1052,11 @@ pub struct HostedSession {
     /// turn, oldest first, at most `MAX_PLANNER_PROPOSALS`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub proposals: Vec<String>,
+    /// HS2-X3Z0HA: a stop is under way, with the reason it will record. Set before
+    /// the terminal is stopped, so a reader that finds the terminal gone meanwhile
+    /// ends the session with this reason rather than as lost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopping: Option<String>,
 }
 
 /// HS2-R7QH35: why a running session is told about one exact ticket.
@@ -1448,6 +1453,7 @@ impl HostedSessionRegistry {
             resources: resources.to_vec(),
             account: new.account.clone(),
             proposals: Vec::new(),
+            stopping: None,
         };
         validate_hosted(&session)?;
         file.sessions.push(session.clone());
@@ -1525,6 +1531,58 @@ impl HostedSessionRegistry {
             if session.ended_at_ms.is_none() {
                 session.ended_at_ms = Some(now_ms);
                 session.end_reason = Some(reason.into());
+            }
+        })
+    }
+
+    /// HS2-X3Z0HA: a stop with `reason` is about to stop the terminal. Changes nothing
+    /// once the session ended.
+    pub fn begin_stop(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+        reason: &str,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        valid_identifier(reason)?;
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_none() {
+                session.stopping = Some(reason.into());
+            }
+        })
+    }
+
+    /// HS2-X3Z0HA: the host refused the stop, so the terminal still runs and a later
+    /// exit is not this stop's.
+    pub fn abandon_stop(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_none() {
+                session.stopping = None;
+            }
+        })
+    }
+
+    /// HS2-X3Z0HA: the terminal is gone. A session with a stop under way ended by that
+    /// stop; any other was lost by its host (`host_lost`). Decided under the lock, so
+    /// a reader that raced the stop records the stop's reason. The first reason stands.
+    pub fn end_gone(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+        now_ms: u64,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_none() {
+                session.ended_at_ms = Some(now_ms);
+                session.end_reason = Some(
+                    session
+                        .stopping
+                        .clone()
+                        .unwrap_or_else(|| "host_lost".into()),
+                );
             }
         })
     }
@@ -1737,6 +1795,9 @@ fn validate_hosted(session: &HostedSession) -> Result<(), OrchestrationError> {
     }
     .validate()?;
     if let Some(reason) = &session.end_reason {
+        valid_identifier(reason)?;
+    }
+    if let Some(reason) = &session.stopping {
         valid_identifier(reason)?;
     }
     if let Some(request) = &session.request {
