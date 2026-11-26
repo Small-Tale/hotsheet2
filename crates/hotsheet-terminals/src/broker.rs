@@ -2401,3 +2401,8 @@ mod tests {
         assert_eq!(input, serde_json::json!({"frame": "input", "data": [120]}));
     }
 }
+
+/// Kill, input, clear and size-claim transitions after Kill and while exiting (HS2-582G8R).
+#[cfg(all(test, unix))]
+#[path = "broker_transition_tests.rs"]
+mod transition_tests;

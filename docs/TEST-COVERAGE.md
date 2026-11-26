@@ -3126,6 +3126,11 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-terminals/src/broker_socket.rs # socket_probe_retries_only_transient_would_block` covers recovery, retry exhaustion, and immediate non-transient failure.
 - End to end: `crates/hotsheet-terminals/src/broker_socket.rs # binding_is_exclusive_then_reclaims_stale_socket_after_release` exercises owned stale-socket recovery and cleanup.
 
+### Broker kill and exiting-terminal transitions (HS2-582G8R)
+
+- Behavior: After `kill`, a second `kill`, `input`, `clear_replay` and `attach` all answer not found, in any order, and the id reopens as a fresh PTY. A terminal whose child exited stays tracked until killed: `input` is refused with an error and never echoed, `clear_replay` succeeds and sends attached viewers a replacement replay, a size claim is applied and reported, and the first `kill` forgets it.
+- Unit: `crates/hotsheet-terminals/src/broker_transition_tests.rs` drives each transition over a real broker socket, waiting on broker state and stream frames. `hs2_582g8r_attached_stream_ends_once_on_kill` is quarantined under HS2-QWT94V: an attached stream does not end today when its terminal is killed.
+
 ### Bounded live ticket refreshes (HS2-B5SJMJ)
 
 - Behavior: Each project's change-stream ticket invalidations batch for 180 ms of quiet or at most 900 ms of continuous events. An event during an in-flight read schedules one trailing read. Closing the project cancels a queued read, and activation still performs an authoritative refresh.
