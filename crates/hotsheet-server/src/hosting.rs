@@ -332,7 +332,7 @@ impl AppState {
             let mut m = self.instance.lock_or_recover();
             *m = Some(InstanceMeta {
                 url,
-                secret: self.secret.as_str().into(),
+                secret: self.secret.clone(),
                 started_at,
                 // Only the embedded revision: `status()` would hash the whole source tree of
                 // a local build between bind and the instance record, which held back

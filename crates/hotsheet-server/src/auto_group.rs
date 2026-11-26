@@ -366,7 +366,7 @@ fn ask_tool(
     )];
     if let Some(url) = state.terminal_server_url.lock_or_recover().clone() {
         envs.push(format!("HOTSHEET_SERVER={url}"));
-        envs.push(format!("HOTSHEET_SECRET={}", state.secret));
+        envs.push(format!("HOTSHEET_SECRET={}", state.secret.expose()));
     }
     let trigger = hotsheet_aitools::prepare_trigger_with_home(
         request.store_root,

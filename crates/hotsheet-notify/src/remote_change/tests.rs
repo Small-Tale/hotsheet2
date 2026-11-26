@@ -505,10 +505,12 @@ impl ChangeAdapter for FakeAdapter {
     ) -> Result<(), AdapterError> {
         self.runs.fetch_add(1, Ordering::SeqCst);
         self.channels.lock().unwrap().push(channels.to_vec());
-        self.credentials
-            .lock()
-            .unwrap()
-            .push(context.credential.clone());
+        self.credentials.lock().unwrap().push(
+            context
+                .credential
+                .as_ref()
+                .map(|key| key.expose().to_owned()),
+        );
         let session = self.sessions.lock().unwrap().pop_front();
         let Some(session) = session else {
             emit(Event::Connected { resumed: true });

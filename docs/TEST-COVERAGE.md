@@ -1381,6 +1381,24 @@ secret-named plain-string field anywhere under `crates/`. Its only exemption lis
 fields that are not secrets, and every entry must still match a real field. There is no
 baseline: HS2-9ZMC7N retyped the nine secrets the scan found when it landed.
 
+HS2-N1JXBZ widens that scan to every struct, whatever it derives: no derive, a hand-written
+redacting `Debug`, `Serialize` wire and storage records, and clap flags. `SecretString` is
+serde-transparent and clap parses it through `From<String>`, so no deliberate wire type needs
+an exemption. The exemption list adds concurrency tokens, credential-store reference flags and
+test fakes. The retyped secrets are the server `AppState.secret` and `--secret`, the MCP
+`HttpBackend.secret` and `--secret`, `RemoteCredentials.bearer_secret` and `session_csrf`, the
+Ably `ConnectionContext.credential`, the Upstash and GitHub job tokens, and the Claude inbox
+token. The tests are:
+
+- `secret_debug_policy.rs # hs2_n1jxbz_*`: the workspace scan, and a scanner fixture that
+  covers each of those struct shapes;
+- `crates/hotsheet-ticketing/src/remote_servers/tests.rs # hs2_n1jxbz_remote_credentials_json_is_byte_identical`:
+  the stored credential JSON stays byte-identical, including the defaulted empty bearer;
+- `crates/hotsheet-server/src/main.rs` and `crates/hotsheet-mcp/src/main.rs # hs2_n1jxbz_secret_flag_parses_into_a_redacting_string`:
+  the `--secret` flag keeps its value;
+- `crates/hotsheet-server/tests/session_messages.rs`: still proves the Claude inbox token
+  reaches the socket end to end.
+
 HS2-CQNE4E covers credentials in HTTP header collections:
 
 - The policy file's `hs2_cqne4e_*` tests reject a derived `Debug` over a `*header*` field

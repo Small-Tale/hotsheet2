@@ -48,7 +48,7 @@ pub(crate) async fn attach_terminal(
             .secret
             .as_ref()
             .map(hotsheet_sync::secret::SecretString::expose)
-            == Some(state.secret.as_str())
+            == Some(state.secret.expose())
             && state.local_bearer_allowed(peer.map(|info| info.0.0)));
     if !local && crate::routes::remote_auth::session(&state, &headers, true, true).is_err() {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();

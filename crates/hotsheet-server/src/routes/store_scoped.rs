@@ -171,7 +171,7 @@ pub(crate) async fn ws_sync(
         .find(|(key, _)| key == "secret")
         .map(|(_, value)| value);
     let local = certificate.is_some()
-        || (secret.map(String::as_str) == Some(state.secret.as_str())
+        || (secret.map(String::as_str) == Some(state.secret.expose())
             && state.local_bearer_allowed(peer.map(|info| info.0.0)));
     if !local && crate::routes::remote_auth::session(&state, &headers, false, true).is_err() {
         return (StatusCode::UNAUTHORIZED, "invalid remote session").into_response();
@@ -480,8 +480,8 @@ pub(crate) async fn poll_events(
         .get("x-hotsheet-secret")
         .and_then(|value| value.to_str().ok());
     let local = certificate.is_some()
-        || ((params.secret.as_ref().map(SecretString::expose) == Some(state.secret.as_str())
-            || header_secret == Some(state.secret.as_str()))
+        || ((params.secret.as_ref().map(SecretString::expose) == Some(state.secret.expose())
+            || header_secret == Some(state.secret.expose()))
             && state.local_bearer_allowed(peer.map(|info| info.0.0)));
     if !local && crate::routes::remote_auth::session(&state, &headers, false, false).is_err() {
         return (StatusCode::UNAUTHORIZED, "invalid remote session").into_response();

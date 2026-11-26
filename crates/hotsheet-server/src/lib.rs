@@ -281,7 +281,7 @@ pub struct AppState {
     /// Identity of the primary store at startup. An unscoped route must never silently
     /// switch to a different store placed at the same path (HS2-34XE8B).
     primary_instance_id: Result<String, String>,
-    secret: String,
+    secret: hotsheet_sync::secret::SecretString,
     remote_listener: bool,
     /// HS2-JFEMAR: bounds the failed attempts a peer may make on the unauthenticated
     /// renewal-token route.
@@ -661,7 +661,7 @@ impl AppState {
             remote_runtime: None,
             orchestration_runtime: None,
             primary_instance_id,
-            secret,
+            secret: secret.into(),
             remote_listener: false,
             token_failures: Arc::default(),
             remote_auth: None,

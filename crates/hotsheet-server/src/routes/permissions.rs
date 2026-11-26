@@ -1195,7 +1195,7 @@ pub(crate) async fn create_drive_connection(
     ];
     if let Some(url) = state.terminal_server_url.with_lock(|value| value.clone()) {
         env.push(format!("HOTSHEET_SERVER={url}"));
-        env.push(format!("HOTSHEET_SECRET={}", state.secret));
+        env.push(format!("HOTSHEET_SECRET={}", state.secret.expose()));
     }
     let info = state
         .client_drives

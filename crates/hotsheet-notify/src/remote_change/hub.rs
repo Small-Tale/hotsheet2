@@ -381,7 +381,7 @@ impl Shared {
             let context = ConnectionContext {
                 connection: connection.id.clone(),
                 settings: connection.settings.clone(),
-                credential,
+                credential: credential.map(hotsheet_sync::secret::SecretString::from),
             };
             let mut announced = false;
             let mut emit = |event: Event| match event {

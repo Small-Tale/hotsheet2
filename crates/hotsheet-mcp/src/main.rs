@@ -31,7 +31,7 @@ struct Cli {
     server: Option<String>,
     /// The server's shared secret (proxy mode only).
     #[arg(long)]
-    secret: Option<String>,
+    secret: Option<hotsheet_sync::secret::SecretString>,
 }
 
 fn main() -> Result<()> {
@@ -98,7 +98,10 @@ fn main() -> Result<()> {
         project_server
             .as_ref()
             .map(|(_, secret)| secret.as_str())
-            .or(cli.secret.as_deref()),
+            .or(cli
+                .secret
+                .as_ref()
+                .map(hotsheet_sync::secret::SecretString::expose)),
         // HS2-MRR6Z0: under a shared host (the Codex app-server daemon) the terminal environment
         // belongs to whichever session started that host, so it names no terminal here.
         presence::identity_env(
@@ -153,7 +156,7 @@ fn main() -> Result<()> {
             let secret = cli
                 .secret
                 .ok_or_else(|| anyhow::anyhow!("--server requires --secret"))?;
-            Box::new(HttpBackend::new(server, secret))
+            Box::new(HttpBackend::new(server, secret.into_inner()))
         }
         (None, None, Some((server, secret))) => {
             let home = hotsheet_plugins::hotsheet_home();
@@ -457,6 +460,22 @@ fn resolve_store_path(path: PathBuf, cwd: &Path, env_store: Option<PathBuf>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// HS2-N1JXBZ: `--secret` parses straight into `SecretString` with its value unchanged.
+    #[test]
+    fn hs2_n1jxbz_secret_flag_parses_into_a_redacting_string() {
+        let cli = Cli::try_parse_from([
+            "hotsheet-mcp",
+            "--server",
+            "http://127.0.0.1:4174",
+            "--secret",
+            "synthetic-mcp-secret",
+        ])
+        .unwrap();
+        let secret = cli.secret.unwrap();
+        assert_eq!(secret.expose(), "synthetic-mcp-secret");
+        assert_eq!(format!("{secret:?}"), "<redacted>");
+    }
 
     /// HS2-JFE7JJ: the launched route is the terminal's own server and secret, trimmed;
     /// blank values name none, and a shim under a shared host ignores the inherited pair.

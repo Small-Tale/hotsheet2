@@ -52,7 +52,7 @@ pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 #[derive(Clone)]
 pub struct ClaudeInboxPush {
     socket: String,
-    token: Option<String>,
+    token: Option<hotsheet_sync::secret::SecretString>,
     session_id: Option<String>,
     timeout: Duration,
 }
@@ -85,7 +85,7 @@ impl ClaudeInboxPush {
         }
         Some(Self {
             socket,
-            token: field(TOKEN_FIELD).map(str::to_owned),
+            token: field(TOKEN_FIELD).map(hotsheet_sync::secret::SecretString::from),
             session_id: reported.session_id.clone().filter(|id| !id.is_empty()),
             timeout: DEFAULT_TIMEOUT,
         })
@@ -114,7 +114,13 @@ impl SessionPush for ClaudeInboxPush {
                 "Claude sessions accept prompts, not UI commands".into(),
             ));
         };
-        let frame = message_frame(self.token.as_deref(), self.session_id.as_deref(), text)?;
+        let frame = message_frame(
+            self.token
+                .as_ref()
+                .map(hotsheet_sync::secret::SecretString::expose),
+            self.session_id.as_deref(),
+            text,
+        )?;
         post(&self.socket, &frame, self.timeout)?;
         Ok(PushReceipt {
             mechanism: MECHANISM,

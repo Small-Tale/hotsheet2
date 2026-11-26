@@ -4623,7 +4623,7 @@ pub use core_backend::CoreBackend;
 /// Proxies to a running server over HTTP with the shared secret.
 pub struct HttpBackend {
     base: String,
-    secret: String,
+    secret: hotsheet_sync::secret::SecretString,
     agent: ureq::Agent,
 }
 
@@ -4631,7 +4631,7 @@ impl HttpBackend {
     pub fn new(base: impl Into<String>, secret: impl Into<String>) -> Self {
         Self {
             base: base.into().trim_end_matches('/').to_string(),
-            secret: secret.into(),
+            secret: hotsheet_sync::secret::SecretString::new(secret),
             // HS2-0BTSX8: ureq's standard auth filtering does not cover our custom bearer.
             agent: ureq::AgentBuilder::new().redirects(0).build(),
         }
@@ -4647,7 +4647,7 @@ impl Backend for HttpBackend {
         let agent = self.remote_registry_agent(path);
         let mut req = agent
             .get(&format!("{}{path}", self.base))
-            .set("X-Hotsheet-Secret", &self.secret);
+            .set("X-Hotsheet-Secret", self.secret.expose());
         for (k, v) in query {
             req = req.query(k, v);
         }
@@ -4659,7 +4659,7 @@ impl Backend for HttpBackend {
         let agent = self.remote_registry_agent(path);
         let req = agent
             .request(method, &format!("{}{path}", self.base))
-            .set("X-Hotsheet-Secret", &self.secret)
+            .set("X-Hotsheet-Secret", self.secret.expose())
             .set("Content-Type", "application/json");
         let payload = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
         self.exec(path, req.send_string(&payload))

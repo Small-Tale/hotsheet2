@@ -55,7 +55,7 @@ struct Cli {
     local_bind: String,
     /// Shared secret required on `X-Hotsheet-Secret` (generated + printed if omitted).
     #[arg(long)]
-    secret: Option<String>,
+    secret: Option<hotsheet_sync::secret::SecretString>,
     /// Index database file (default: ${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.v<schema>.sqlite).
     #[arg(long)]
     index: Option<PathBuf>,
@@ -356,7 +356,10 @@ async fn main() -> Result<()> {
     };
     let local_addr = local_listener_addr(mode, &cli.local_bind)?;
 
-    let secret = cli.secret.unwrap_or_else(|| Ulid::new().to_string());
+    let secret = cli.secret.map_or_else(
+        || Ulid::new().to_string(),
+        hotsheet_sync::secret::SecretString::into_inner,
+    );
 
     // File-backed index, restored from disk + reconciled with the current files.
     let index_path = match cli.index {
@@ -1092,6 +1095,25 @@ mod tests {
         assert!(
             Cli::try_parse_from(["hotsheet-server", "--remote-transport", "http", "--stop"])
                 .is_err()
+        );
+    }
+
+    /// HS2-N1JXBZ: `--secret` parses straight into `SecretString` (clap uses its
+    /// `From<String>`), so the flag keeps its spelling and value.
+    #[test]
+    fn hs2_n1jxbz_secret_flag_parses_into_a_redacting_string() {
+        let cli =
+            Cli::try_parse_from(["hotsheet-server", "--secret", "synthetic-flag-secret"]).unwrap();
+        let secret = cli.secret.unwrap();
+        assert_eq!(secret.expose(), "synthetic-flag-secret");
+        assert_eq!(format!("{secret:?}"), "<redacted>");
+        let cli = Cli::try_parse_from(["hotsheet-server", "--secret=a=b c"]).unwrap();
+        assert_eq!(cli.secret.unwrap().into_inner(), "a=b c");
+        assert!(
+            Cli::try_parse_from(["hotsheet-server"])
+                .unwrap()
+                .secret
+                .is_none()
         );
     }
 

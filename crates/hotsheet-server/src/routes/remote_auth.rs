@@ -260,7 +260,7 @@ fn owner(
     headers: &HeaderMap,
     peer: Option<&Extension<ConnectInfo<std::net::SocketAddr>>>,
 ) -> Result<(), ApiError> {
-    if value(headers, "x-hotsheet-secret") == Some(state.secret.as_str())
+    if value(headers, "x-hotsheet-secret") == Some(state.secret.expose())
         && state.local_bearer_allowed(peer.map(|info| info.0.0))
     {
         Ok(())

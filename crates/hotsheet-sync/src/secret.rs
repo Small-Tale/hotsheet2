@@ -5,8 +5,8 @@
 //! `<redacted>` under `Debug`, has no `Display` and no `Deref`, and hands out the value only
 //! through [`SecretString::expose`], so every read is explicit at the call site. Serde is
 //! `transparent`: a field retyped from `String` keeps its stored and wire format exactly.
-//! `tests/secret_debug_policy.rs` rejects a derived `Debug` over any other secret-named
-//! string field.
+//! `tests/secret_debug_policy.rs` rejects any other secret-named string field in any struct,
+//! whatever it derives (HS2-N1JXBZ). Clap parses a flag straight into it through `From<String>`.
 //!
 //! HTTP header collections carry credentials too (`Authorization`, `Cookie`, signature and
 //! API-key headers). [`RedactedHeaders`] is the `Debug` adapter a hand-written `Debug` uses

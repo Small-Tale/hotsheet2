@@ -504,9 +504,9 @@ impl PairedPeer {
                 .to_owned()
         };
         let credentials = RemoteCredentials {
-            bearer_secret: format!("session:{}", cookie("hs2_remote_session")),
+            bearer_secret: format!("session:{}", cookie("hs2_remote_session")).into(),
             session_origin: Some(PAIRED_ORIGIN.into()),
-            session_csrf: Some(cookie("hs2_remote_csrf")),
+            session_csrf: Some(cookie("hs2_remote_csrf").into()),
             ca_pem: None,
             client_certificate_pem: None,
             client_key_pem: None,
