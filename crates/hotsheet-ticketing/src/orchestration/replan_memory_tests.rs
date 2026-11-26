@@ -312,6 +312,57 @@ fn hs2_04ww8b_catch_up_transitions() {
     );
 }
 
+/// HS2-A0853J: Propose Plan seeds a target with what its planner reads. The follower's
+/// first catch-up then hands a ticket created since (it is not taken as seen); what the
+/// planner read is never handed, an edit of it starts nothing, and a later read clears
+/// what waited and keeps what was handed.
+#[test]
+fn hs2_a0853j_the_planner_read_seeds_the_baseline() {
+    let conn = vec!["conn".to_owned()];
+    let none = |_: &ReplanKey| false;
+    let mut memory = ReplanMemory::default();
+    // Propose Plan: the planner reads `a` and `b`.
+    memory.planner_read(listing("t1", &conn, true), &[key("a"), key("b")]);
+    assert!(memory.seeded("t1"));
+    assert_eq!(
+        (memory.pending(), memory.handed(), memory.seen()),
+        (0, 0, 2)
+    );
+    // `c` is created before the follower's first catch-up: handed, once.
+    let listed = [key("a"), key("b"), key("c")];
+    assert_eq!(
+        memory.catch_up(listing("t1", &conn, true), &listed, none, None),
+        1
+    );
+    assert_eq!(
+        memory.catch_up(listing("t1", &conn, true), &listed, none, None),
+        0
+    );
+    // Its event arrives afterwards: known, nothing more.
+    assert!(!memory.observe(key("c"), true, None));
+    // An edit of what the planner read starts nothing (HS2-2AZQD2).
+    assert!(!memory.observe(key("a"), true, None));
+    assert_eq!((memory.pending(), memory.handed()), (1, 1));
+    // A new Propose Plan reads everything open: nothing waits, `c` stays handed, and
+    // a complete read forgets `b`, which closed.
+    memory.planner_read(listing("t1", &conn, true), &[key("a"), key("c")]);
+    assert_eq!(
+        (memory.pending(), memory.handed(), memory.seen()),
+        (0, 1, 2)
+    );
+    // `b` reopened: new again. An incomplete read forgets nothing.
+    memory.planner_read(listing("t1", &conn, false), &[key("a")]);
+    assert_eq!(memory.seen(), 2);
+    assert!(memory.observe(key("b"), true, None));
+    // Without a planner read, the first catch-up of another target only seeds it.
+    let other = vec!["other".to_owned()];
+    let theirs = [("other".to_owned(), "x".to_owned())];
+    assert_eq!(
+        memory.catch_up(listing("t2", &other, true), &theirs, none, None),
+        0
+    );
+}
+
 /// HS2-04WW8B: the baseline and the seeded targets are bounded; the smallest key goes
 /// first.
 #[test]

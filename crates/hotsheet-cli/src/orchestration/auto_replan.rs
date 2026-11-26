@@ -34,11 +34,18 @@
 //!   the first step (the handshake's catch-up settles and asks for what was pending,
 //!   together with what it finds new). A memory file that cannot be read falls back to the follower's own
 //!   in-process copy; one that does not decode is replaced.
+//! - **Seeded from the planner's read (HS2-A0853J).** Propose Plan for the default goal,
+//!   while the re-plan applies, lists every project target before its planner starts
+//!   and seeds the baseline with that snapshot once the planner started or was given
+//!   the proposal. A ticket created between that read and the follower's first step is
+//!   then handed at that step rather than taken as seen. Without a snapshot (the
+//!   re-plan did not apply yet, or a listing failed) the first catch-up seeds as
+//!   before.
 
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     DeclarationState, PlanningState, ReplanCatchUp, ReplanKey, ReplanMemory, ReplanMemoryStore,
-    RunTarget, TargetOpError, current_planner, planning_state,
+    RunTarget, TargetAction, TargetOpError, current_planner, planning_state,
 };
 use serde_json::Value;
 
@@ -237,6 +244,83 @@ impl OrchestrationRuntime {
             let _ = self.record_outcome(&reference, authorized, outcome.is_ok(), outcome.err(), tx);
         }
         outcome.ok().map(|()| (connections, listed, complete))
+    }
+
+    /// HS2-A0853J: what a planner about to be proposed the default goal reads, per
+    /// project target: the target's open tickets, listed through the gate as the
+    /// scheduler's actor. Empty while placement is off or a target cannot be listed
+    /// (that target's first catch-up then seeds it, as before). Called before the
+    /// planner starts, so nothing it reads is left out.
+    pub(super) fn replan_snapshot(
+        &self,
+        owner_id: &str,
+        tx: &mut Transaction<'_>,
+    ) -> Vec<(String, Vec<String>, Vec<Key>, bool)> {
+        let Some(actor) = self.scheduler_actor(owner_id).ok().flatten() else {
+            return Vec::new();
+        };
+        let Ok(declared) = self.declarations(owner_id) else {
+            return Vec::new();
+        };
+        let mut snapshot = Vec::new();
+        for target in declared
+            .targets
+            .into_iter()
+            .filter(|target| target.state == DeclarationState::Active && target.site_of.is_none())
+        {
+            let Ok(reference) = Self::target_ref(owner_id, &target.target_id) else {
+                continue;
+            };
+            let Ok(authorized) = self.authorize(
+                &reference,
+                Some(&actor),
+                ActionRequest::new(TargetAction::TicketsRead),
+                tx,
+            ) else {
+                continue;
+            };
+            if let Some((connections, listed, complete)) =
+                self.replan_listing((owner_id, &target.target_id), &authorized, tx)
+            {
+                snapshot.push((target.target_id, connections, listed, complete));
+            }
+        }
+        snapshot
+    }
+
+    /// HS2-A0853J: the planner was started or given the proposal: seed each listed
+    /// target's baseline with what it reads, under the memory's lock. Best effort: a
+    /// memory that cannot be locked or read is left for the first catch-up to seed.
+    pub(super) fn replan_planner_read(
+        &self,
+        owner_id: &str,
+        snapshot: &[(String, Vec<String>, Vec<Key>, bool)],
+    ) {
+        if snapshot.is_empty() {
+            return;
+        }
+        let Ok(store) = ReplanMemoryStore::new(&self.home, owner_id) else {
+            return;
+        };
+        let Ok(_lock) = store.lock() else {
+            return;
+        };
+        let mut memory = match store.read() {
+            Ok(memory) => memory,
+            Err(OrchestrationError::Corrupt) => ReplanMemory::default(),
+            Err(_) => return,
+        };
+        for (target_id, connections, listed, complete) in snapshot {
+            memory.planner_read(
+                ReplanCatchUp {
+                    target_id,
+                    connections,
+                    complete: *complete,
+                },
+                listed,
+            );
+        }
+        let _ = store.write(&memory);
     }
 
     /// HS2-BQN0M5: one follower step's part in re-planning. `events` are the page's

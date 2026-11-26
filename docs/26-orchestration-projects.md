@@ -1281,7 +1281,11 @@ the feed keeps one file watcher on that store's `tickets` directory, from a foll
 first request until no follower has asked for ten minutes. Each changed ticket file is
 recorded in the change log as a `target_store_changed` event that carries only the
 ticket id and is read only by the feed, so cursors and replay work as they do for hosted
-stores (HS2-G5FYP6).
+stores (HS2-G5FYP6). A new shard directory under `tickets` can report its own event
+before its watch is armed (Linux inotify), so a ticket renamed into it just afterwards
+reports nothing. Each burst of new-directory events therefore reads the store once more
+a second later: local files only, and each write recorded once (HS2-268461, as
+HS2-ZER3MA does for hosted stores).
 
 When a hosted store is recreated, its watcher may reconcile several files in one
 pass and publish a store-scoped `changed` event with an empty ticket id. The target
@@ -5862,7 +5866,15 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   first follower step then, handshake or not) only seeds the baseline and starts
   nothing: the default-goal planner already works through every open ticket. That
   step reads its own events before it seeds, so a ticket an event of that step shows
-  is still judged as new or not. A
+  is still judged as new or not. Propose Plan seeds the baseline earlier
+  (HS2-A0853J), with what its planner reads. For the default goal, while the re-plan
+  applies, the press lists every project target through the gate as the scheduler's
+  actor before the planner starts. Once the planner started or was given the
+  proposal, the press seeds each listed target with that snapshot, and the snapshot's
+  tickets no longer wait for an update. A press answered by a planner as it is seeds
+  nothing. A ticket created after the planner's read and before the follower's first
+  step is then pending at that step, not taken as seen. Without a snapshot (the re-plan
+  did not apply yet, or a listing failed) the first listing seeds as above. A
   complete listing forgets remembered tickets that closed meanwhile, so a pending
   ticket closed while the server was down starts nothing, and one reopened later
   counts again. A listing that fails changes nothing and is tried again at the next

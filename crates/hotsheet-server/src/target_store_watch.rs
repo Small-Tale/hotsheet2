@@ -35,6 +35,14 @@ pub(crate) const TARGET_STORE_CHANGE_KIND: &str = "target_store_changed";
 /// A watch nobody's feed asked for in this long is dropped at the next request.
 const IDLE: Duration = Duration::from_secs(10 * 60);
 
+/// HS2-268461: how long after a new directory's event the store is read once more.
+/// notify's inotify backend delivers a new shard directory's create event before it arms
+/// that directory's watch, so a ticket file renamed into it in between reports no event;
+/// listing the directory at its event can come too early. One more read after this
+/// delay finds it (local files only, each write recorded once). As for hosted stores
+/// (HS2-ZER3MA), each burst of directory events schedules one read: never a poll.
+const SHARD_RECHECK_DELAY: Duration = Duration::from_secs(1);
+
 /// One linked Git store a feed request names: its connection id and root.
 pub(crate) struct UnhostedStore {
     pub connection_id: String,
@@ -182,12 +190,17 @@ fn watch_scoped_tickets(
         }
     });
     let on_event = emit.clone();
+    // HS2-268461: a new directory asks for one later read of the store.
+    let (shard_created, shard_rechecks) = std::sync::mpsc::channel::<()>();
     let handler = move |delivery: Delivery| {
         let Ok(mut event) = delivery else { return };
         if matches!(event.kind, EventKind::Access(_))
             || scope.admit_paths(&mut event.paths).is_none()
         {
             return;
+        }
+        if event.paths.iter().any(|path| path.is_dir()) {
+            let _ = shard_created.send(());
         }
         on_event(changed_tickets(event.paths));
     };
@@ -211,6 +224,13 @@ fn watch_scoped_tickets(
         status,
         start,
     );
+    let shard_read = read.clone();
+    let spawned = std::thread::Builder::new()
+        .name("target-store-shard-recheck".into())
+        .spawn(move || shard_recheck(&shard_rechecks, &shard_read));
+    if let Err(error) = spawned {
+        tracing::warn!(%error, "no shard re-check for a linked store");
+    }
     let pending = Arc::new(());
     let owner = Arc::downgrade(&pending);
     let spawned = std::thread::Builder::new()
@@ -228,6 +248,25 @@ fn watch_scoped_tickets(
         tracing::warn!(%error, "no pending re-check for a linked store; it waits for its watch");
     }
     Some((watcher, pending))
+}
+
+/// HS2-268461: for each burst of new-directory events, read the store once
+/// [`SHARD_RECHECK_DELAY`] after the first of them. Ends when the watch's handler is
+/// dropped (the watch stopped).
+fn shard_recheck(created: &std::sync::mpsc::Receiver<()>, read: &dyn Fn()) {
+    use std::sync::mpsc::RecvTimeoutError;
+    while created.recv().is_ok() {
+        let due = Instant::now() + SHARD_RECHECK_DELAY;
+        // Directory events until then join this read.
+        loop {
+            match created.recv_timeout(due.saturating_duration_since(Instant::now())) {
+                Ok(()) => {}
+                Err(RecvTimeoutError::Timeout) => break,
+                Err(RecvTimeoutError::Disconnected) => return,
+            }
+        }
+        read();
+    }
 }
 
 /// The ticket files of one store recorded since its watch was asked for, by their
@@ -431,6 +470,84 @@ mod tests {
         assert_eq!(recorded(&other), 0);
         // Only now may the stand-in start end (as refused, which reads once more).
         drop(hold);
+    }
+
+    /// HS2-268461: a new shard directory's event can arrive before its watch is armed
+    /// (notify's inotify backend), so a ticket renamed into it right after the event
+    /// reports nothing. The watch reads the store once more after the event, and the
+    /// ticket is recorded once. Driven through a stand-in stream that delivers only the
+    /// directory event.
+    #[test]
+    fn hs2_268461_a_ticket_in_a_new_shard_directory_is_recorded() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("linked");
+        std::fs::create_dir_all(root.join("tickets")).unwrap();
+        let quiet = dir.path().join("quiet");
+        std::fs::create_dir_all(&quiet).unwrap();
+        let log = Arc::new(Mutex::new(EventLog::default()));
+        let (events, _keep) = broadcast::channel(64);
+        let mut changes = events.subscribe();
+        type Handler = Box<dyn FnMut(Delivery) + Send>;
+        let captured: Arc<Mutex<Option<Handler>>> = Arc::default();
+        let start: StartStream = {
+            let captured = captured.clone();
+            // Live over an unrelated directory; the test delivers the store's events.
+            Box::new(move |_, handler| {
+                *captured.lock_or_recover() = Some(handler);
+                PathWatcher::start(&[(quiet.as_path(), RecursiveMode::NonRecursive)], |_| {})
+            })
+        };
+        let store = UnhostedStore {
+            connection_id: "linked-connection".into(),
+            root: root.clone(),
+        };
+        let (watcher, pending) = watch_tickets_with(&store, &log, &events, start).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !watcher.is_live() {
+            assert!(
+                Instant::now() < deadline,
+                "the stand-in stream never went live"
+            );
+            std::thread::yield_now();
+        }
+        // The new shard directory's event is delivered while it is still empty...
+        let shard = root.join("tickets").join("XD");
+        std::fs::create_dir_all(&shard).unwrap();
+        let mut deliver = captured.lock_or_recover().take().unwrap();
+        // (An unclassified event, as a coalescing backend may report one.)
+        deliver(Ok(hotsheet_jobs::watch::Event::new(EventKind::Any)
+            .add_path(hotsheet_sync::paths::canonicalize(&shard).unwrap())));
+        // ...and the ticket lands in it afterwards, with no event of its own.
+        let id = Ulid::new().to_string();
+        std::fs::write(shard.join(format!("{id}.md")), "---\n---\n").unwrap();
+        let (seen, recorded) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            while let Ok(change) = changes.blocking_recv() {
+                if change.kind == TARGET_STORE_CHANGE_KIND && seen.send(change.id).is_err() {
+                    return;
+                }
+            }
+        });
+        let found = loop {
+            match recorded.recv_timeout(SHARD_RECHECK_DELAY * 10) {
+                Ok(found) if found == id => break true,
+                Ok(_) => {}
+                Err(_) => break false,
+            }
+        };
+        assert!(
+            found,
+            "the ticket in the new shard directory was never recorded"
+        );
+        let count = log
+            .lock_or_recover()
+            .since(0)
+            .0
+            .iter()
+            .filter(|event| event.kind == TARGET_STORE_CHANGE_KIND && event.id == id)
+            .count();
+        assert_eq!(count, 1);
+        drop((deliver, watcher, pending));
     }
 
     /// HS2-VN96J5: in the store-root scope Windows uses, the watch holds the store root,

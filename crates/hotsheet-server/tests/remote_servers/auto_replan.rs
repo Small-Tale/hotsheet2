@@ -453,11 +453,52 @@ async fn hs2_tzccbj_the_server_follows_a_target_only_for_the_default_goal() {
         .await;
     assert_eq!(status, StatusCode::OK, "{proposed}");
     assert_eq!(proposed["goals"][0]["default_goal"], true, "{proposed}");
+    // HS2-A0853J: the press itself read the target once, as the planner's snapshot, so
+    // the follower's own authorization is a second one (in either order: the follower
+    // may start before the press answers).
     world
         .audit_until("the target followed for the default goal", |audit| {
-            count(audit, is_follower_authorized) > 0
+            count(audit, is_follower_authorized) >= 2
         })
         .await;
+}
+
+/// HS2-A0853J: on a real server, a ticket written into the target right after Propose
+/// Plan (after the planner's read, while the follower is still starting and taking its
+/// first catch-up) starts one automatic Update Plan. Nothing waits for the follower:
+/// the press seeded the baseline with what the planner read, so the ticket is new
+/// whenever the follower's first step lists it. A ticket the planner read starts none.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_a0853j_a_ticket_written_while_the_follower_seeds_replans() {
+    let world = TwoProjects::new().await;
+    world.target_ticket("Synthetic work the planner reads");
+    let (status, proposed) = world
+        .call(
+            "POST",
+            "/planning/propose",
+            json!({"tool":REPORT_TOOL,"operation_id":"press-1",
+                "actor":{"role":"human","id":"maintainer"}}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{proposed}");
+    assert_eq!(proposed["goals"][0]["default_goal"], true, "{proposed}");
+    world.target_ticket("Synthetic work written while the follower seeds");
+    let audit = world
+        .audit_until("an automatic update", |audit| count(audit, is_auto) == 1)
+        .await;
+    let auto = audit.iter().find(|entry| is_auto(entry)).unwrap();
+    assert_eq!(auto["outcome"], "succeeded", "{auto}");
+    assert_eq!(auto["reason"], "plan_update_started", "{auto}");
+    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    assert_eq!(shown["update"]["state"], "drafting", "{shown}");
+    // Exactly one: the ticket the planner read was not handed.
+    let memory = ReplanMemoryStore::new(&world.home, &world.owner.id)
+        .unwrap()
+        .read()
+        .unwrap();
+    assert_eq!(memory.handed(), 1);
+    assert_eq!(count(&world.audit().await, is_auto), 1);
+    world.host.begin_stopping();
 }
 
 /// HS2-04WW8B: the follower's catch-up listing of the target's open tickets (and any
