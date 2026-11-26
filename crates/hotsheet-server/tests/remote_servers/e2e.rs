@@ -284,6 +284,9 @@ pub(super) struct Fleet {
     pub(super) rules: HashMap<&'static str, Vec<String>>,
     /// The policy revision last stored.
     pub(super) revision: Value,
+    /// HS2-F7ZG0F: the controller's first delay before it links an ended CI watch
+    /// again; `None` keeps the server's default.
+    relink_retry: Option<Duration>,
 }
 
 impl Fleet {
@@ -387,6 +390,7 @@ impl Fleet {
             &memory,
             &provider_url,
             Roomy(controller_tools, controller_os),
+            None,
         );
         let a_checkout = registry
             .register(&a_project, None, None, vec![a_store.clone()])
@@ -429,6 +433,7 @@ impl Fleet {
             peer_address,
             rules: HashMap::new(),
             revision: Value::Null,
+            relink_retry: None,
         };
         fleet.declare().await;
         fleet.policy(json!({})).await;
@@ -446,6 +451,7 @@ impl Fleet {
         memory: &Arc<Memory>,
         provider_url: &str,
         capacity: Roomy,
+        relink_retry: Option<Duration>,
     ) -> AppState {
         // The runtime a server composes with `OrchestrationRuntime::live`, over the
         // in-memory credentials of the synthetic remote registration.
@@ -469,6 +475,10 @@ impl Fleet {
                     .env("HOTSHEET_GITHUB_API_URL", provider_url)
                     .env("GH_TOKEN", TOKEN),
             ));
+        let runtime = match relink_retry {
+            Some(first) => runtime.with_gate_relink_retry(first),
+            None => runtime,
+        };
         state(a_store, home)
             .with_capacity_source(Box::new(capacity))
             .with_capacity_cache(Duration::ZERO)
@@ -979,10 +989,19 @@ impl Fleet {
             &self.memory,
             &self.provider_url,
             Roomy(tools, os),
+            self.relink_retry,
         );
         next.spawn_run_recovery();
         self.router = app(next.clone());
         self.controller = next;
+    }
+
+    /// HS2-F7ZG0F: a controller whose gate follower links an ended CI watch again
+    /// after `first`, doubling per attempt, instead of the server's default. Started
+    /// over the same home, as [`Self::restart_controller`] does.
+    pub(super) async fn relink_after(&mut self, first: Duration) {
+        self.relink_retry = Some(first);
+        self.restart_controller().await;
     }
 
     /// The controller's API on a plain loopback listener, for the stdio MCP tool's

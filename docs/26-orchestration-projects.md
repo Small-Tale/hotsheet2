@@ -1230,8 +1230,11 @@ longer has the backlog, and every run is caught up again. On failure the followe
 keeps its cursor, so reconnecting replays what was missed, marks the affected runs
 unreachable once, and retries with bounded backoff from one second up to a minute.
 It confirms its authority through the gate when it connects, after any failure and
-every ten minutes, acting as whoever dispatched the run. A target with no unfinished
-run is not contacted at all, and a run a person took over is still followed.
+every ten minutes, acting as whoever dispatched the run. A refusal is never kept: a
+target that cannot be reached when the follower first confirms it (its host offline as
+the server starts) is asked again after the backoff, so the follower catches up as soon
+as the host is back (HS2-K41M77). A target with no unfinished run is not contacted at
+all, and a run a person took over is still followed.
 
 A change written straight to a target store, such as by a headless `hotsheet-cli` in the
 session's checkout rather than through a server route, reaches the feed through that
@@ -2293,7 +2296,9 @@ the linking actor, which only observes and never asks, and confirms that every t
 minutes. A target that cannot be reached when the follower confirms it (its host is
 offline) is not kept as a refusal for those ten minutes: the follower leaves its gates
 as they stand and asks again at its next step, which a bounded wait already paces, so
-the verdict a host reached while offline is recorded once it is back (HS2-1P1HJT). A
+the verdict a host reached while offline is recorded once it is back (HS2-1P1HJT). The
+capacity follow and the remote resource-release follow keep no answer at all: a refusal
+ends them, and the next pass starts them again (HS2-K41M77). A
 headless caller uses `gate sync --wait-seconds`, which waits the same way. Nothing
 polls on a timer. Reads answer from this machine's records and contact nothing.
 
@@ -5547,9 +5552,14 @@ dispatcher (§26.30) while it lasts.
   `returned_at_ms`, the decision log's `assignment` record has detail
   `review_returned`, and `scheduler explain` answers `no_live_dispatcher` with the
   claim time.
-- **A worker on another site** of a project (§26.30, HS2-5P112Z) is not covered: the
-  home's pool route reports no returns, so its correction waits for the home's
-  dispatcher (HS2-SK9B3T).
+- **A worker on another site** of a project (§26.30, HS2-5P112Z) is returned by the
+  home's pool, so its run reads the home's `target-pool` answer, which reports the
+  same `returned` and `assigner_live` (HS2-SK9B3T). The home names each ticket by its
+  own connection id; the run's ticket is matched under the home's id for it
+  (HS2-3JGPDR), so the peer's own id for the shared store never hides a return. The
+  claim is then the same: on the run's own site, for the session's worker, which is
+  told `returned`. A run on such a site whose session was lost reads the home's
+  answer as well before its step is placed again.
 
 ## 26.25 Proposing the plan from goal tickets (HS2-HCW7MD)
 
@@ -6925,7 +6935,9 @@ hosted routes, so it relays. The home's machine hosts
 `/checkouts/{checkout}/target-pool`:
 
 - `GET` reads the pool's role flags and one member's unfinished assignment, as a
-  capacity read (`gates_observe`).
+  capacity read (`gates_observe`). Both `GET` and `POST` also answer the pool's
+  `returned` handoffs and `assigner_live`, as the hosted session listing does for
+  §26.24 (HS2-SK9B3T); an older home answers neither.
 - `POST` registers or renews a member (worker id, the session id as its generation, a
   lease of 10 to 3600 seconds, the site it runs on), with the human-relay return route.
   It then records what the shared ticket says the member did. Where the pool already

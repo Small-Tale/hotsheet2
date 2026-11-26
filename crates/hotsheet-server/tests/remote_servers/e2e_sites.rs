@@ -1199,3 +1199,275 @@ async fn hs2_xa9dza_a_push_on_a_site_reaches_the_followed_feed() {
     changed(cursor, "the push").await;
     fleet.shut_down().await;
 }
+
+/// HS2-SK9B3T: rewrite the home's pool as its people's own commands would leave it.
+fn edit_home_pool(fleet: &Fleet, change: impl FnOnce(&mut State)) {
+    let mut state = home_pool(fleet).state().unwrap();
+    change(&mut state);
+    state.revision += 1;
+    std::fs::write(
+        fleet
+            .a_project
+            .join(".git")
+            .join("hotsheet-coordination")
+            .join("state.json"),
+        serde_json::to_vec(&state).unwrap(),
+    )
+    .unwrap();
+}
+
+/// HS2-SK9B3T: the request the peer recorded on a hosted worker session: its kind and
+/// the return note it names.
+async fn request_on_peer(fleet: &Fleet, placed: &Placed) -> (String, String) {
+    let operation = fleet.session(&placed.session_id).await["operation_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let hosted = hotsheet_ticketing::orchestration::HostedSessionRegistry::new(&fleet.peer_home)
+        .get(&fleet.b_checkout.id, &operation)
+        .unwrap()
+        .expect("the peer hosts the worker");
+    let request = hosted.request.expect("a request was recorded");
+    (
+        request.kind.code().to_owned(),
+        request.commit.unwrap_or_default(),
+    )
+}
+
+/// HS2-SK9B3T (docs/26 §26.24): a worker on the peer, a site that is not its project's
+/// home, hands off work the home's dispatcher assigned it. The dispatcher then leaves,
+/// and the home's integrator (which does not assign under dispatcher authority) returns
+/// the handoff for corrections. The home's `target-pool` answer reports that return by
+/// the home's own connection id, the peer's ticket names the same ticket under its own,
+/// and the controller's loop claims the ticket for the same peer session again and tells
+/// it which return to correct. Before the return, while the handoff awaits review,
+/// nothing is claimed. Waits on event streams and file changes, never on time.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_sk9b3t_a_site_workers_returned_handoff_is_claimed_again_for_its_session() {
+    const FIRST: &str = "3333333333333333333333333333333333333333";
+    let mut fleet = Fleet::sites().await;
+    // Each site names the shared store by its own connection id.
+    assert_ne!(
+        fleet.connection(Side::Controller),
+        fleet.connection(Side::Peer)
+    );
+    // The home's pool runs under dispatcher authority, with a live dispatcher and a live
+    // integrator (both people's: the loop starts no role session here).
+    let pool = home_pool(&fleet);
+    let now = now_s();
+    pool.register(
+        Role::Integrator,
+        "integrator-1",
+        "integrate-1",
+        now,
+        3600,
+        ReturnRoute::HumanRelay,
+    )
+    .unwrap();
+    pool.set_authority(
+        "integrator-1",
+        "integrate-1",
+        now,
+        Authority::Dispatcher,
+        true,
+    )
+    .unwrap();
+    pool.register(
+        Role::Dispatcher,
+        "dispatcher-1",
+        "dispatch-1",
+        now,
+        3600,
+        ReturnRoute::HumanRelay,
+    )
+    .unwrap();
+    let orchestration = fleet.orchestration_ticket("Coordinate the synthetic project");
+    let windows = fleet.target_ticket(Side::Controller, "Windows-only change to correct");
+    converge(&fleet);
+    // Only the peer meets the step; a correction nobody assigns is claimed at once.
+    fleet
+        .policy(json!({
+            "targets":[
+                {"target_id":TARGET_A,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1},
+                {"target_id":TARGET_B,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1}],
+            "placement":{"automatic":true,"actor":ACTOR,"cooldown_minutes":0,
+                "dispatcher_wait_minutes":0,
+                "role_sessions":[{"target_id":TARGET_A,"roles":[]}]}
+        }))
+        .await;
+    let defined = fleet
+        .ok(
+            "POST",
+            "/readiness/define",
+            json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration.slug},
+                "target_id":TARGET_A,"connection_id":fleet.connection(Side::Controller),
+                "native_id":windows.slug,"prerequisites":[],
+                "requirements":{"os":["windows"]}}),
+        )
+        .await;
+    let step = defined["step"]["step_id"].as_str().unwrap().to_owned();
+    let w = placed_step(&fleet, &step, TARGET_B, "os:windows").await;
+    let w_run = w.run_id.clone().unwrap();
+
+    // The worker takes up its role on its own machine, as the worker skill does, and the
+    // relay joins it to the home's pool. It claims the ticket the dispatcher gave it.
+    received_prompt(&fleet.reports, &w.terminal, "`hotsheet-worker`");
+    fleet.join_pool(Side::Peer, &w.worker);
+    let synced = fleet
+        .ok(
+            "POST",
+            &format!("/sessions/{}/sync", w.session_id),
+            json!({"actor":Fleet::ai()}),
+        )
+        .await;
+    assert!(synced["joined_at_ms"].as_u64().is_some(), "{synced}");
+    pool_until(&fleet, "joined by the peer's worker", |state| {
+        state
+            .workers
+            .get(&w.worker)
+            .is_some_and(|member| member.generation == w.session_id)
+    });
+    assert_eq!(claim(&fleet, Side::Peer, &windows, &w.worker).await, 200);
+    fleet
+        .run_until(&w_run, "dispatched", |status| {
+            status["state"] == "dispatched"
+        })
+        .await;
+
+    // The home records its handoff (as the relay does from a pushed branch); the
+    // dispatcher leaves; the worker releases its claim and its machine publishes that.
+    let handed: Assignment = serde_json::from_value(json!({
+        "id":"site-original","worker":w.worker,"generation":w.session_id,
+        "ticket":{"connection_id":fleet.connection(Side::Controller),
+            "native_id":windows.id.to_string()},
+        "slug":windows.slug,"base":"0".repeat(40),"phase":"handoff","commit":FIRST,
+        "handoff":{"kind":"code","commit":FIRST},
+        "return_route":{"kind":"human_relay"}
+    }))
+    .unwrap();
+    edit_home_pool(&fleet, |state| {
+        state.assignments.insert(handed.id.clone(), handed.clone());
+        state.dispatcher.as_mut().unwrap().expires_at = now_s() - 1;
+    });
+    release(&fleet, Side::Peer, &windows, &w.worker).await;
+    sync_published(&fleet.b_store);
+    fleet
+        .run_until(&w_run, "released", |status| status["state"] == "intervened")
+        .await;
+    assert_eq!(fleet.readiness(&step).await["level"], "in_progress");
+
+    // Awaiting review is not a return: a pass claims nothing.
+    let tick = fleet
+        .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+        .await;
+    assert_eq!(tick["mode"], "applied", "{tick}");
+    assert!(
+        !fleet
+            .decisions()
+            .await
+            .iter()
+            .any(|entry| { entry["kind"] == "assignment" && entry["detail"] == "review_returned" }),
+        "a handoff awaiting review was claimed"
+    );
+    assert_eq!(
+        fleet
+            .ok("GET", &format!("/runs/{w_run}/status"), Value::Null)
+            .await["state"],
+        "intervened"
+    );
+
+    // 2. The home's integrator returns it: a `## Review return` note on the ticket in
+    // the home's clone, and the return in the home's pool. Both machines' sync loops
+    // publish the note, and its arrival on the peer's change feed wakes the loop.
+    converge(&fleet);
+    let note = hotsheet_model::Ulid::new();
+    hotsheet_ticketing::ops::add_note(
+        &FsStore::open(&fleet.a_store).unwrap(),
+        &windows.id,
+        note,
+        hotsheet_model::Timestamp::from_datetime(time::OffsetDateTime::now_utc()),
+        hotsheet_model::NoteKind::Regular,
+        format!("## Review return\nsite-original {FIRST}\nCorrect the synthetic behaviour."),
+    )
+    .unwrap();
+    pool.review_return(
+        "integrator-1",
+        "integrate-1",
+        time::OffsetDateTime::now_utc(),
+        "site-original",
+        &note.to_string(),
+    )
+    .unwrap();
+    // The home's pool route reports the return by the home's connection id, and that
+    // nobody will assign it.
+    let (status, reply) = api(
+        fleet.router.clone(),
+        "GET",
+        &format!("/checkouts/{}/target-pool", fleet.a_checkout.id),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["assigner_live"], false, "{reply}");
+    let returned = reply["returned"].as_array().unwrap();
+    assert_eq!(returned.len(), 1, "{reply}");
+    assert_eq!(
+        returned[0]["connection_id"],
+        fleet.connection(Side::Controller).as_str()
+    );
+    assert_eq!(returned[0]["native_id"], windows.id.to_string().as_str());
+    assert_eq!(returned[0]["review_note"], note.to_string().as_str());
+    converge(&fleet);
+
+    let claimed = fleet
+        .decided(
+            "the site worker's correction claimed",
+            |entry| {
+                entry["kind"] == "assignment"
+                    && entry["detail"] == "review_returned"
+                    && entry["outcome"] == "claimed"
+            },
+            2 * MINUTE,
+        )
+        .await;
+    assert_eq!(claimed["run_id"], w_run.as_str(), "{claimed}");
+    assert_eq!(claimed["session_id"], w.session_id.as_str(), "{claimed}");
+    let run = fleet
+        .run_until(&w_run, "claimed again", |status| {
+            status["state"] == "dispatched"
+        })
+        .await;
+    assert_eq!(run["worker_id"], w.worker.as_str(), "{run}");
+    assert_eq!(
+        request_on_peer(&fleet, &w).await,
+        ("returned".to_owned(), note.to_string())
+    );
+    // The claim is the peer worker's, taken on the peer and published to the home.
+    sync_published(&fleet.b_store);
+    sync_published(&fleet.a_store);
+    for store in [&fleet.b_store, &fleet.a_store] {
+        let read = ticket_in(store, &windows);
+        assert_eq!(
+            read.claimed_by.as_deref(),
+            Some(w.worker.as_str()),
+            "{read:?}"
+        );
+    }
+    assert_eq!(fleet.readiness(&step).await["level"], "in_progress");
+    // One run, one worker session, nothing started twice; the return is claimed once.
+    assert_eq!(fleet.runs().await.len(), 1);
+    assert_eq!(fleet.sessions().await.len(), 1);
+    let claims = fleet
+        .decisions()
+        .await
+        .into_iter()
+        .filter(|entry| {
+            entry["kind"] == "assignment"
+                && entry["detail"] == "review_returned"
+                && entry["outcome"] == "claimed"
+        })
+        .count();
+    assert_eq!(claims, 1);
+    fleet.shut_down().await;
+}

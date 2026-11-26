@@ -14,6 +14,10 @@
 //! the assignment's scope, and only then records the mailbox handoff, so its
 //! integrator finds the commit locally. The scope reservation stays the pool's own
 //! `assign` non-overlap check.
+//!
+//! HS2-SK9B3T: both answers also carry the pool's handoffs returned for corrections and
+//! whether its assigning role is live, so the orchestrator places a site worker's
+//! correction as it does a home worker's (docs/26 §26.24).
 use std::path::Path;
 
 use hotsheet_model::{ClaimEventKind, NoteKind, Ticket, Timestamp};
@@ -23,6 +27,7 @@ use hotsheet_ticketing::{FsStore, git_connection_id, ops};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::review_returns::{ReturnedHandoff, assigner_live, returned_handoffs};
 use super::sessions::{HostedRoles, coordination_state};
 use super::tickets::identifier;
 use super::*;
@@ -71,6 +76,34 @@ pub struct HostedPoolReply {
     pub roles: HostedRoles,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignment: Option<HostedPoolAssignment>,
+    /// HS2-SK9B3T: the pool's handoffs returned for corrections with no correction in
+    /// flight (as the hosted session listing reports them, HS2-ESVYQH), named by the
+    /// home's own connection ids. Absent from an older home.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub returned: Vec<ReturnedHandoff>,
+    /// HS2-SK9B3T: the role that assigns in the pool (its dispatcher, or a legacy
+    /// pool's integrator) holds a live lease. Absent from an older home.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assigner_live: Option<bool>,
+}
+
+impl HostedPoolReply {
+    /// The pool's answer to one member from its state at `now_s`.
+    fn of(
+        state: &State,
+        now_s: i64,
+        joined: bool,
+        assignment: Option<HostedPoolAssignment>,
+    ) -> Self {
+        Self {
+            pool: true,
+            joined,
+            roles: roles(state, now_s),
+            assignment,
+            returned: returned_handoffs(state),
+            assigner_live: Some(assigner_live(state, now_s)),
+        }
+    }
 }
 
 /// The member's unfinished assignment in the home pool.
@@ -405,6 +438,8 @@ impl OrchestrationRuntime {
                     dispatcher_live: Some(false),
                 },
                 assignment: None,
+                returned: Vec::new(),
+                assigner_live: Some(false),
             });
         };
         let (joined, assignment) = match (worker_id, generation) {
@@ -417,12 +452,7 @@ impl OrchestrationRuntime {
             ),
             _ => (false, None),
         };
-        Ok(HostedPoolReply {
-            pool: true,
-            joined,
-            roles: roles(&state, now_s),
-            assignment,
-        })
+        Ok(HostedPoolReply::of(&state, now_s, joined, assignment))
     }
 
     /// `POST /checkouts/{checkout}/target-pool`: register or renew a member from
@@ -490,12 +520,7 @@ impl OrchestrationRuntime {
         let state = coordinator.state().map_err(|_| failed())?;
         let Some(assigned) = member_assignment(&state, &member.worker_id, &member.generation)
         else {
-            return Ok(HostedPoolReply {
-                pool: true,
-                joined: true,
-                roles: roles(&state, now_s),
-                assignment: None,
-            });
+            return Ok(HostedPoolReply::of(&state, now_s, true, None));
         };
         let mut reply = view(assigned);
         if assigned.ticket.connection_id != git_connection_id(&store) {
@@ -518,12 +543,7 @@ impl OrchestrationRuntime {
             reply.phase = now.phase;
             reply.commit = now.commit.clone();
         }
-        Ok(HostedPoolReply {
-            pool: true,
-            joined: true,
-            roles: roles(&state, now_s),
-            assignment: Some(reply),
-        })
+        Ok(HostedPoolReply::of(&state, now_s, true, Some(reply)))
     }
 
     fn site_pool_evidence(

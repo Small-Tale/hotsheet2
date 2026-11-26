@@ -24567,6 +24567,35 @@ components:
                 `handoff_out_of_scope`, `ticket_unreadable` or `source_unsupported`.
               type: string
           additionalProperties: false
+        returned:
+          description:
+            The pool's handoffs returned for corrections that no correction assignment has taken up (HS2-SK9B3T, as the
+            hosted session listing reports them for HS2-ESVYQH), named by this home's own connection ids. Absent when
+            there are none, and from an older home.
+          type: array
+          items:
+            type: object
+            required:
+              - connection_id
+              - native_id
+              - returned_at_ms
+              - review_note
+            properties:
+              connection_id:
+                type: string
+              native_id:
+                type: string
+              returned_at_ms:
+                type: integer
+                minimum: 0
+              review_note:
+                type: string
+            additionalProperties: false
+        assigner_live:
+          description:
+            The role that assigns in the pool (its dispatcher under dispatcher authority, else its integrator) holds a
+            live lease (HS2-SK9B3T). Absent from an older home.
+          type: boolean
       additionalProperties: false
     SchedulerOperation:
       description: Body of a scheduler operation (HS2-ECWG50). `plan` takes nothing; `explain` takes `step_id`, or
