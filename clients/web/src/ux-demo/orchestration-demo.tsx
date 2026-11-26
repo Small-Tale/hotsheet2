@@ -162,6 +162,8 @@ const CI_GATES = [
   { value: 'not_watched', label: 'Not Watched' },
   { value: 'watch_ended', label: 'Watch Ended' },
   { value: 'watch_gone', label: 'Watch Gone' },
+  // HS2-2751D6: the gate failed, and the Gates section says what to do.
+  { value: 'failed', label: 'Failed' },
 ];
 
 /** HS2-A7YCB2: API-12's CI gate in the chosen state, as the view parses it. */
@@ -169,6 +171,8 @@ function demoCiGate() {
   const reason = orchestrationDemoSettings.ciGate.value,
     commit = '3f9c2a1d00';
   if (!reason) return { kind: 'ci', state: 'pending', provider: 'github-actions', commit, gate_id: 'gate-ci' };
+  if (reason === 'failed')
+    return { kind: 'ci', state: 'failed', provider: 'github-actions', commit, gate_id: 'gate-ci' };
   return {
     kind: 'ci',
     state: `unknown: ${CI_WATCH_REASONS[reason]}`,

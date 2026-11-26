@@ -1,10 +1,16 @@
-import { mkdir } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
 
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
-import { capture } from './orchestration-real-fixtures';
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { fakeGithubActions } from './fake-github-actions';
+import { capture, handOffInPool, SYNTHETIC_TOOL, syntheticTool } from './orchestration-real-fixtures';
 import { proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
+
+const execute = promisify(execFile);
 
 /**
  * HS2-1DDXNS: the orchestration workflow as a new person meets it, in one flow through the shipped
@@ -18,11 +24,21 @@ type Server = Awaited<ReturnType<typeof realTicketServer>>;
 const scheduler = { role: 'ai', id: 'scheduler-1' };
 const WORKER = 'golden-worker';
 
-async function openTwoProjects(page: Page) {
-  const server = await realTicketServer();
+async function openTwoProjects(
+  page: Page,
+  options: Parameters<typeof realTicketServer>[0] & { gitWeb?: boolean } = {},
+) {
+  const { gitWeb, ...fixture } = options;
+  const server = await realTicketServer(fixture);
   const projects = [{ id: server.checkoutId, root: server.root, name: 'Launch' }];
-  const root = join(dirname(server.root), 'web');
-  await mkdir(root, { recursive: true });
+  await mkdir(join(dirname(server.root), 'web'), { recursive: true });
+  // HS2-2751D6: Web as a git checkout has its own coordination pool, read at its resolved path.
+  const root = await realpath(join(dirname(server.root), 'web'));
+  if (gitWeb) {
+    const env = withoutGitRepositoryEnv(server.env);
+    await execute('git', ['init', '-q', '-b', 'main'], { cwd: root, env });
+    await execute('git', ['commit', '-q', '--allow-empty', '-m', 'Synthetic base'], { cwd: root, env });
+  }
   const web = await server.request<{ id: string }>('/checkouts', 'POST', { root, stores: [server.store] });
   projects.push({ id: web.id, root, name: 'Web' });
   await page.addInitScript(
@@ -56,11 +72,14 @@ async function openTwoProjects(page: Page) {
     }
   });
   await routeProjectChangeSocket(page, server, server.checkoutId);
-  return server;
+  return Object.assign(server, { webId: web.id, webRoot: root });
 }
 
-/** What the planning AI session does with the default goal: a goal and three steps, each after the one before. */
-async function proposePlan(server: Server, base: string, target: string) {
+/**
+ * What the planning AI session does with the default goal: a goal and three steps, each after the one before.
+ * HS2-2751D6: `gates` is what each step needs of the one before (`ci`: its CI gate passed).
+ */
+async function proposePlan(server: Server, base: string, target: string, gates: 'none' | 'ci' = 'none') {
   const goal = await server.request<{ id: string; slug: string }>('/tickets', 'POST', {
     title: 'Ship the synthetic sign-on',
   });
@@ -85,7 +104,7 @@ async function proposePlan(server: Server, base: string, target: string) {
                 target_id: target,
                 connection_id: connection,
                 native_id: steps[index - 1].id,
-                gates: 'none',
+                gates,
               },
             ],
       actor: scheduler,
@@ -121,8 +140,14 @@ const visibleShare = (page: Page, label: string) =>
     return Math.max(0, Math.min(box.right, view.right) - Math.max(box.left, view.left)) / box.width;
   });
 
-/** Wide, medium, narrow, wide again, then dark at wide and narrow (Visual QA). */
-async function widths(page: Page, name: string, ticket = 'hs2-1ddxns') {
+/**
+ * Wide, medium, narrow, wide again, then dark at wide and narrow (Visual QA). HS2-2751D6: `show` is an inspector
+ * section to scroll into view where the inspector shows beside the board (not at phone width, where it is a sheet).
+ */
+async function widths(page: Page, name: string, ticket = 'hs2-1ddxns', show?: Locator) {
+  const reveal = async (width: number) => {
+    if (show && width > 390) await show.scrollIntoViewIfNeeded();
+  };
   for (const [width, height] of [
     [1440, 900],
     [1100, 820],
@@ -130,6 +155,7 @@ async function widths(page: Page, name: string, ticket = 'hs2-1ddxns') {
     [1440, 900],
   ] as const) {
     await page.setViewportSize({ width, height });
+    await reveal(width);
     await settle(page, ticket, `${name}-${width}`);
   }
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -333,5 +359,176 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     stopped = true;
   } finally {
     if (!stopped) await server.stop();
+  }
+});
+
+/** HS2-2751D6: a second orchestrated project, Web, bound to Launch as a local target. */
+const WEB_TARGET = '01ARZ3NDEKTSV4RRFFQ69G5FJ9';
+const REPO = 'synthetic-org/web';
+
+async function orchestrateWeb(server: Awaited<ReturnType<typeof openTwoProjects>>, base: string) {
+  const person = { role: 'human', id: 'maintainer' };
+  const added = await server.request<{ revision: string }>(`${base}/targets`, 'POST', {
+    target_id: WEB_TARGET,
+    label: 'Web',
+    expected_revision: null,
+  });
+  const candidate = await server.request<{ destination: unknown }>(`${base}/inspect`, 'POST', {
+    destination: { kind: 'local', checkout_id: server.webId },
+  });
+  await server.request(`${base}/targets/${WEB_TARGET}/binding`, 'PUT', {
+    target: { owner_checkout_id: server.checkoutId, target_id: WEB_TARGET },
+    expected_manifest_revision: added.revision,
+    expected_binding_revision: 0,
+    previous_destination: null,
+    destination: candidate.destination,
+  });
+  for (const rule of [{ action: 'work_start' }, { action: 'session_start', tool: SYNTHETIC_TOOL }])
+    await server.request(`${base}/permission-rules`, 'POST', { target_id: WEB_TARGET, ...rule, actor: person });
+  await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+  // Web's Coordination Sessions include the integrator; placement stays off, so the scheduler's passes are dry
+  // runs and no AI session starts. The machine limits never refuse on a busy test host.
+  const current = await server.request<{ revision?: string | null }>(`${base}/policy`);
+  await server.request(`${base}/policy`, 'PUT', {
+    expected_revision: current.revision ?? null,
+    policy: {
+      machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+      tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 2 }],
+      targets: [{ target_id: WEB_TARGET, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 2 }],
+      placement: {
+        automatic: false,
+        actor: 'scheduler-1',
+        cooldown_minutes: 0,
+        role_sessions: [{ target_id: WEB_TARGET, roles: ['integrator'] }],
+      },
+    },
+    actor: person,
+  });
+}
+
+/**
+ * HS2-2751D6: the golden path past a finished run, through the shipped shell against a real server. A worker
+ * hands its work off in Web's real coordination pool (HS2-6ES76F), so its card says no worker holds it and the
+ * Integration section says a handoff waits and the integrator would start; the integrator pushes it and the
+ * commit's CI gate goes red through the real gate follower and Job monitor against a loopback GitHub Actions
+ * fake (HS2-8KV14Y), so the step that needs it says CI failed and the run's Gates say what to do; the fix's gate
+ * passes and the ticket is completed, so the work is Done and the next step Ready. Only the planner's proposal,
+ * the worker's and the integrator's actions and the CI provider are played by the test. Synthetic data only.
+ */
+test('HS2-2751D6 a handoff waits on the integrator, its CI goes red and the fix goes green', async ({ page }) => {
+  test.setTimeout(300_000);
+  const provider = await fakeGithubActions();
+  const server = await openTwoProjects(page, {
+    env: { ...provider.env(), HOTSHEET_JOB_MONITOR_AUTOSTART: 'on' },
+    seed: (fixture) => syntheticTool(fixture.env.HOTSHEET_HOME!),
+    gitWeb: true,
+  });
+  const base = `/checkouts/${server.checkoutId}/orchestration`;
+  const maintainer = { role: 'human', id: 'maintainer' };
+  try {
+    await orchestrateWeb(server, base);
+    const plan = await proposePlan(server, base, WEB_TARGET, 'ci');
+    const [first, second] = plan.steps;
+    const run = await server.request<{ run_id: string }>(`${base}/runs`, 'POST', {
+      ticket: { native_id: plan.goal.id },
+      target_id: WEB_TARGET,
+      connection_id: first.connection_id,
+      native_id: first.id,
+      operation_id: 'op-golden-ci',
+      worker_id: 'synthetic-worker',
+      actor: scheduler,
+    });
+    const sync = () => server.request(`${base}/runs/${run.run_id}/sync`, 'POST', { actor: maintainer });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('tab', { name: /Launch/ }).click();
+    await page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Orchestration View' }).click();
+    const view = page.locator('[data-orchestration-view="true"]');
+    const inspector = page.locator('[data-orchestration-inspector]');
+    const firstCard = view.locator(`[data-ticket-slug="${first.slug}"]`);
+    const firstLine = firstCard.locator('[data-orchestration-part="state"]');
+    const secondLine = view.locator(`[data-ticket-slug="${second.slug}"] [data-orchestration-part="state"]`);
+    const runSection = inspector.locator('[data-orchestration-section="Run"]');
+    const gates = inspector.locator('[data-orchestration-section="Gates"]');
+    const integration = inspector.locator('[data-orchestration-section="Integration"]');
+    const row = (section: typeof gates, label: string) =>
+      section
+        .locator('dl > div')
+        .filter({ has: page.locator('dt', { hasText: label }) })
+        .locator('dd');
+    await expect(view.locator('[aria-label="Working Now Column"]')).toContainText(first.slug, { timeout: 30_000 });
+    await firstCard.click();
+    await expect(runSection).toContainText('Dispatched to a worker');
+    await expect(gates).toContainText('No gate is linked to this run yet.');
+
+    // 1. The worker hands its work off in Web's pool and lets the ticket go. Its card says nobody holds it and
+    // that a handoff may be in review; the Integration section says a handoff waits and the integrator would
+    // start on the next pass, since placement is off.
+    // The pool assigns only a worker with no live claim, so the dispatch's claim is given back to be taken again
+    // under the pool's assignment.
+    await server.request(`/tickets/${first.id}/release`, 'POST', { worker: 'synthetic-worker' });
+    const handoff = await handOffInPool(server, first, server.webRoot);
+    await sync();
+    await expect(firstLine).toHaveText('No worker holds it', { timeout: 30_000 });
+    await expect(runSection).toContainText('Its handoff may be in review or back for corrections');
+    await expect(row(integration, 'Integrator')).toHaveText('Would start on the next pass (dry run)', {
+      timeout: 30_000,
+    });
+    await expect(row(integration, 'Why')).toHaveText('A handoff waits to be integrated');
+    await expect(integration).not.toContainText('_');
+    await widths(page, 'handoff-waits', 'hs2-2751d6', integration);
+
+    // 2. The integrator pushes it and links its commit's CI gate, which runs: the next step waits on it.
+    await handoff.integrate();
+    provider.run(REPO, { id: 21, sha: handoff.commit, status: 'in_progress' });
+    await server.request(`${base}/runs/${run.run_id}/gates`, 'POST', {
+      commit: handoff.commit,
+      repository: REPO,
+      actor: scheduler,
+    });
+    await expect(row(gates, `CI · ${handoff.commit.slice(0, 7)}`)).toHaveText('Pending', { timeout: 30_000 });
+    // No integrator is live once it pushed, so a pass would still start one for the project's pool.
+    await expect(row(integration, 'Integrator')).toHaveText('Would start on the next pass (dry run)');
+    await expect(secondLine).toHaveText(`Waits on ${first.slug}`);
+    await expect(row(gates, 'What to do')).toHaveCount(0);
+
+    // 3. CI fails. The next step says its prerequisite's CI failed, and the run's Gates say what to do.
+    provider.run(REPO, { id: 21, sha: handoff.commit, status: 'completed', conclusion: 'failure' });
+    await expect(row(gates, `CI · ${handoff.commit.slice(0, 7)}`)).toHaveText('Failed', { timeout: 60_000 });
+    await expect(row(gates, 'What to do')).toHaveText(
+      'Fix the work and push the fix; link the new commit’s CI gate, which replaces this one. Work that needs this ticket’s CI waits until it passes.',
+    );
+    await expect(secondLine).toHaveText(`Waits on ${first.slug} · CI failed`, { timeout: 30_000 });
+    await expect(secondLine).toHaveAttribute('data-tone', 'warning');
+    await widths(page, 'ci-red', 'hs2-2751d6', gates);
+
+    // 4. The fix is pushed and its gate linked: it replaces the failed one, passes, and the ticket is completed.
+    const env = withoutGitRepositoryEnv(server.env);
+    await execute('git', ['commit', '-q', '--allow-empty', '-m', 'Synthetic fix'], { cwd: server.webRoot, env });
+    const fix = (await execute('git', ['rev-parse', 'HEAD'], { cwd: server.webRoot, env })).stdout.trim();
+    provider.run(REPO, { id: 22, sha: fix, status: 'in_progress' });
+    await server.request(`${base}/runs/${run.run_id}/gates`, 'POST', {
+      commit: fix,
+      repository: REPO,
+      actor: scheduler,
+    });
+    await expect(row(gates, `CI · ${fix.slice(0, 7)}`)).toHaveText('Pending', { timeout: 30_000 });
+    await expect(row(gates, `CI · ${handoff.commit.slice(0, 7)}`)).toHaveCount(0);
+    await expect(secondLine).toHaveText(`Waits on ${first.slug}`, { timeout: 30_000 });
+    provider.run(REPO, { id: 22, sha: fix, status: 'completed', conclusion: 'success' });
+    await expect(row(gates, `CI · ${fix.slice(0, 7)}`)).toHaveText('Passed', { timeout: 60_000 });
+    await expect(row(gates, 'What to do')).toHaveCount(0);
+    await server.request(`/tickets/${first.id}`, 'PATCH', { status: 'completed' });
+    await sync();
+    await expect(view.locator('[aria-label="Done Column"]')).toContainText(first.slug, { timeout: 30_000 });
+    await expect(secondLine).toHaveText('Ready', { timeout: 30_000 });
+    await widths(page, 'ci-green-done', 'hs2-2751d6', gates);
+    // The test only read the provider.
+    expect(provider.requests.every((request) => request.startsWith('GET '))).toBe(true);
+  } finally {
+    await execute(server.cli, ['job', 'watch', 'stop'], { cwd: server.root, env: server.env }).catch(() => undefined);
+    await server.stop(page);
+    await provider.close();
   }
 });

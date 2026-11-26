@@ -63,6 +63,9 @@ export function stateWords(item: TimelineItem, proposed: boolean): { label: stri
     case 'waits_for_prerequisite': {
       const wait = firstWait(item);
       if (proposed) return { label: wait ? `After ${wait}` : 'After its prerequisites', tone: 'neutral' };
+      // HS2-2751D6: a prerequisite whose CI failed is repaired before this can start.
+      if (wait && item.waits_on?.[0]?.reason === 'gate_failed')
+        return { label: `Waits on ${wait} · CI failed`, tone: 'warning' };
       return { label: wait ? `Waits on ${wait}` : 'Waits on a prerequisite', tone: 'neutral' };
     }
     case 'waits_for_permission':

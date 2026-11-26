@@ -498,9 +498,14 @@ test('HS2-A7YCB2 the inspector demo shows each CI gate state, with Link Again on
     await expect(gates).toContainText(words);
     await expect(gates.getByRole('button', { name: 'Link Again' })).toBeEnabled();
   }
+  // HS2-2751D6: a failed gate says what to do and offers no Link Again.
+  await choose('failed');
+  await expect(gates).toContainText('Fix the work and push the fix');
+  await expect(gates.getByRole('button', { name: 'Link Again' })).toHaveCount(0);
   // Reset returns the pending gate.
   await page.locator('[data-settings="orchestration"] [data-action="reset-settings"]').dispatchEvent('click');
   await expect(gates.getByRole('button', { name: 'Link Again' })).toHaveCount(0);
+  await expect(gates).not.toContainText('Fix the work');
 });
 
 test('HS2-77SRHC a ready card says why it is not running and the overview lists the scheduler’s decisions', async ({

@@ -320,15 +320,16 @@ export async function gitCheckout({ root, env }: RealTicketFixtureContext) {
  * leaves (so no integrator is live), the worker claims it, commits, writes its Integration handoff note,
  * releases and records the handoff. The pool then shows one handoff pending and no integrator.
  * `integrate()` plays the integrator taking it up and pushing it, so its commit waits on its CI gate.
- * The project must be a git checkout (`gitCheckout`); the ticket is synthetic.
+ * The project must be a git checkout (`gitCheckout`); the ticket is synthetic. HS2-2751D6: `root` names another
+ * project of the same store (its own pool), such as an orchestrated target that is not the server's own project.
  */
-export async function handOffInPool(server: Server, ticket: Ticket) {
+export async function handOffInPool(server: Server, ticket: Ticket, root = server.root) {
   const env = withoutGitRepositoryEnv({ ...server.env, HOTSHEET_ACTOR_ROLE: 'system' });
   delete env.HOTSHEET_ACTOR_ID;
   delete env.HOTSHEET_WORKER_ID;
-  const cli = (...args: string[]) => execute(server.cli, ['-C', server.store, ...args], { cwd: server.root, env });
-  const pool = (...args: string[]) => cli('coordination', '--project', server.root, ...args);
-  const git = async (...args: string[]) => (await execute('git', args, { cwd: server.root, env })).stdout.trim();
+  const cli = (...args: string[]) => execute(server.cli, ['-C', server.store, ...args], { cwd: root, env });
+  const pool = (...args: string[]) => cli('coordination', '--project', root, ...args);
+  const git = async (...args: string[]) => (await execute('git', args, { cwd: root, env })).stdout.trim();
   const assignment = 'synthetic-handoff';
   const worker = ['--id', 'synthetic-worker', '--session', 'synthetic-worker-1', '--assignment', assignment];
   const base = await git('rev-parse', 'HEAD');

@@ -6118,7 +6118,8 @@ A read on the server also starts the target followers of §26.9.
 - **Cards** are the shared `TicketRow` with its new **orchestration line**: the state in
   words with a tone (Ready, Waits on API-12, Waits for permission, Waits for your
   decision on LCH-1, Provisional on WEB-33; running and done say it through the status
-  badge), where it runs (machine · tool) and the goal ticket. List and Columns take the
+  badge; "Waits on API-12 · CI failed", warning, when the prerequisite's CI gate failed,
+  readiness reason `gate_failed`, HS2-2751D6), where it runs (machine · tool) and the goal ticket. List and Columns take the
   same prop, and a target project's own List and Columns show it on its planned
   tickets (§26.29, HS2-S3FKJ7). Work started ahead of a pending gate words its ledger
   record exactly as a worker's card does (HS2-H5H9QP, the same `provisionalLine` as
@@ -6146,7 +6147,11 @@ A read on the server also starts the target followers of §26.9.
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
   §26.14, each a person's act with a confirmation where undo cannot help), then the
-  run's gates, validation steps and latest events. The maintainer's default decision
+  run's gates, validation steps and latest events. A failed CI gate adds a **What to
+  do** row to Gates: fix the work and push the fix, link the new commit's CI gate (which
+  supersedes the failed one, so it leaves the list), and work that needs this ticket's CI
+  waits until it passes; a failed deployment asks for the deployment again (HS2-2751D6).
+  The maintainer's default decision
   (HS2-PR984R): once the scheduler has placed or would place the step on another site of
   its project (`scheduler explain`'s `site`), Where It Runs names that chosen site and its
   machine, with a **Step's site** row naming the site the step itself names, so it agrees

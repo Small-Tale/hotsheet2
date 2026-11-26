@@ -481,3 +481,27 @@ describe('HS2-9FS7YX a running card whose step the scheduler holds back reads he
     ).toBe('Held until 16:01');
   });
 });
+
+describe('HS2-2751D6 a card whose prerequisite’s CI failed says so', () => {
+  const waiting = item('step-9');
+  const wait = waiting.waits_on![0];
+  const withReason = (reason: string) => ({ ...waiting, waits_on: [{ ...wait, reason }] });
+
+  it('reads CI failed with a warning while running, and plain after a prerequisite otherwise', () => {
+    expect(stateWords(withReason('gate_failed'), false)).toEqual({
+      label: `Waits on ${wait.slug} · CI failed`,
+      tone: 'warning',
+    });
+    expect(stateWords(withReason('gate_pending'), false)).toEqual({ label: `Waits on ${wait.slug}`, tone: 'neutral' });
+    expect(stateWords(withReason('prerequisite_not_finished'), false)?.label).toBe(`Waits on ${wait.slug}`);
+    // A proposed plan names the order, not a verdict.
+    expect(stateWords(withReason('gate_failed'), true)?.label).toBe(`After ${wait.slug}`);
+    // Without a slug or a wait it falls back as before.
+    expect(stateWords({ ...waiting, waits_on: [] }, false)?.label).toBe('Waits on a prerequisite');
+    // The repair lands: the same card reads plainly again.
+    const timeline = demoTimeline('running');
+    const card = (reason: string) => timelineCard(withReason(reason), timeline, undefined, demoClock).orchestration;
+    expect(card('gate_failed')?.state).toBe(`Waits on ${wait.slug} · CI failed`);
+    expect(card('gate_pending')?.stateTone).toBe('neutral');
+  });
+});

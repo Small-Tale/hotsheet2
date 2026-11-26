@@ -94,6 +94,18 @@ export function relinkRequest(gate: Record<string, unknown>): GateLinkRequest | 
   return request;
 }
 
+/**
+ * HS2-2751D6: what a person does about a run whose CI or deployment gate failed, for the Gates section. A gate
+ * superseded by a newer commit is not listed, so the fix's gate takes the failed one's place.
+ */
+export function gateNextStep(gates: ReadonlyArray<{ kind: string; state: string }>): string | undefined {
+  if (gates.some((gate) => gate.kind === 'ci' && gate.state === 'failed'))
+    return 'Fix the work and push the fix; link the new commit’s CI gate, which replaces this one. Work that needs this ticket’s CI waits until it passes.';
+  if (gates.some((gate) => gate.kind === 'deployment' && gate.state === 'failed'))
+    return 'Fix the deployment and request it again. Work that needs this deployment waits until it passes.';
+  return undefined;
+}
+
 export function dispositionText(disposition: string): string {
   const known = DISPOSITIONS[disposition];
   if (known) return known;

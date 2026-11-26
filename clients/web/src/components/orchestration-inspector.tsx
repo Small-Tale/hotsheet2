@@ -25,6 +25,7 @@ import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { BuiltAheadView } from '../orchestration-built-ahead';
 import {
   type GateLinkRequest,
+  gateNextStep,
   reconciliationRows,
   runEventText,
   type RunReconciliation,
@@ -439,6 +440,8 @@ function Evidence({
 }) {
   if (details.loading && !details.gates && !details.events)
     return <Note text="Reading gates, validation and events…" />;
+  // HS2-2751D6: a failed gate says what a person does next.
+  const next = gateNextStep(details.gates ?? []);
   return (
     <>
       {details.error && <Note text={details.error} />}
@@ -451,6 +454,7 @@ function Evidence({
                 value={sentence(gate.state)}
               />
             ))}
+            {next ? <ValueTableRow label="What to do" value={next} /> : undefined}
           </ValueTable>
         ) : (
           <Note text="No gate is linked to this run yet." />
