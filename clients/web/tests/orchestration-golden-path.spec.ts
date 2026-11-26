@@ -93,7 +93,26 @@ async function proposePlan(server: Server, base: string, target: string) {
   return { goal, steps };
 }
 
-const settle = (page: Page, ticket: string, name: string) => capture(page, ticket, name);
+/**
+ * HS2-QCKVVY: the board is placed at its right end in the frame after a width change, so a capture waits two
+ * animation frames; a screenshot taken at once can show the frame before (seen in WebKit).
+ */
+async function settle(page: Page, ticket: string, name: string) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))),
+  );
+  await capture(page, ticket, name);
+}
+
+/** How much of a column shows inside the board's horizontal scroller, from 0 to 1. */
+const visibleShare = (page: Page, label: string) =>
+  page.locator(`[data-orchestration-view="true"] [aria-label="${label}"]`).evaluate((column) => {
+    let track = column.parentElement;
+    while (track && !/auto|scroll/.test(getComputedStyle(track).overflowX)) track = track.parentElement;
+    const box = column.getBoundingClientRect(),
+      view = track!.getBoundingClientRect();
+    return Math.max(0, Math.min(box.right, view.right) - Math.max(box.left, view.left)) / box.width;
+  });
 
 /** Wide, medium, narrow, wide again, then dark at wide and narrow (Visual QA). */
 async function widths(page: Page, name: string, ticket = 'hs2-1ddxns') {
@@ -196,6 +215,12 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     const why = inspector.locator('[data-orchestration-section="Why It Is Not Running"]');
     await expect(why).toContainText('Waits: no policy is saved yet; Start Orchestration saves the default one');
     await expect(why).not.toContainText('policy absent');
+    // HS2-QCKVVY: after a width change the board returns to its right end, the selected First in view,
+    // in WebKit as in Chromium (it lands within two frames of the resize).
+    for (const width of [1100, 1440, 1100]) {
+      await page.setViewportSize({ width, height: 820 });
+      await expect.poll(() => visibleShare(page, 'First · On Start Column')).toBeGreaterThan(0.95);
+    }
     await widths(page, 'proposed');
 
     // 5. A worker takes the first step: it works now; orchestration still places nothing and can start.
