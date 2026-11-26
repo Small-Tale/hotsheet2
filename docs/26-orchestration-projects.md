@@ -2916,7 +2916,8 @@ records `cancelled`. Each claim change wakes the follower, whose sync could read
 target in between and record the orchestrator's own change as a person's intervention
 (`dispatched -> intervened -> dispatched`). So every operation that reads a run, acts
 on its target and records the result (sync, dispatch, renew, cancel, handoff, pause,
-resume, correct) holds that run's operation lock throughout
+resume, correct, and the scheduler's claim for a session, HS2-G9A9DF) holds that run's
+operation lock throughout
 (`RunRegistry::operation_lock`: one of 64 striped lock files under
 `orchestration-run-operations/` in the machine home, shared by every process and
 reentrant on one thread). A sync that waited reads the run again under the lock, so it
