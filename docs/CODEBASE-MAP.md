@@ -702,7 +702,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/advisory_claim_v2.rs #   timestamped v2 operation IDs, 24-hour horizon and 60-second skew validation (HS2-0QEPRW)
       src/advisory_claim_ledger.rs #   bounded machine-local SQLite provisional Jira claim admission and replay states (HS2-BPKM76)
       src/provider_trash.rs  #   GH-5 external-provider Trash: ProviderPurgeOutcome (Purged/Retained), purge_provider_trash shared by Empty Trash and the sync-loop retention sweep (TicketProvider::restore / purge_trashed default to Unsupported)
-      src/provider_outbox.rs #   durable Jira write-behind admission, dispatch state, provisional projection, 30-day payload compaction, and v2 retry-floor pruning (HS2-056R8P/HS2-X5AJ7M/HS2-QA1VEF)
+      src/provider_outbox.rs #   durable Jira write-behind admission, dispatch state and per-row dispatch leases, provisional projection, 30-day payload compaction, and v2 retry-floor pruning (HS2-056R8P/HS2-X5AJ7M/HS2-QA1VEF/HS2-NJQVQF)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8/26M48F): ActivityEvent/Kind/Importance + deterministic per-session volume admission/coalescing + bounded rolling store/timeline + mappers; server persists then broadcasts the same admitted payloads on WS/poll
       src/roster.rs          #   Roster/Person: committed people.json (git email → name/github); display_name; docs/10 §10.2 (HS2-20)

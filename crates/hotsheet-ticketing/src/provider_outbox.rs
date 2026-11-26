@@ -259,10 +259,22 @@ pub fn project_pending_ticket(
 }
 
 /// A persistent queue with a bound on unconfirmed intent, safe to reopen after a crash.
+///
+/// Every instance is a potential dispatcher with its own random id. A claimed row holds a
+/// wall-clock lease under that id, so any number of processes may open, admit, and
+/// dispatch from one outbox: a `sending` row returns to the queue only when its lease
+/// expired or its holder dropped the outbox, never because another process opened it
+/// (HS2-NJQVQF).
 pub struct ProviderOutbox {
     db: Connection,
     max_pending: usize,
+    dispatcher_id: String,
 }
+
+/// How long a claimed row stays with its dispatcher without renewal. A Jira dispatch is a
+/// readback plus one write, each bounded by a 30-second request timeout, and the
+/// dispatcher renews right before writing (HS2-NJQVQF).
+pub const DISPATCH_LEASE_SECONDS: i64 = 10 * 60;
 
 /// Full settled payloads remain available for diagnostics and exact retry responses for 30 days.
 /// Compact rows retain exact retry evidence until a durable admission floor fences them.
@@ -294,6 +306,19 @@ fn unix_now() -> i64 {
 
 fn payload_digest(payload: &str) -> String {
     format!("{:x}", Sha256::digest(payload.as_bytes()))
+}
+
+/// Return expired `sending` rows to the queue for readback-first redelivery. A row without
+/// a lease was claimed before leases existed (HS2-NJQVQF) and is treated as expired, which
+/// keeps the earlier restart recovery for existing outbox files.
+fn requeue_expired_leases(db: &Connection, now: i64) -> Result<usize, OutboxError> {
+    Ok(db.execute(
+        "UPDATE provider_outbox SET dispatch_state = 'queued', dispatcher_id = NULL,
+         lease_expires_at = NULL
+         WHERE state = 'queued' AND dispatch_state = 'sending'
+           AND (lease_expires_at IS NULL OR lease_expires_at <= ?1)",
+        [now],
+    )?)
 }
 
 impl ProviderOutbox {
@@ -328,6 +353,8 @@ impl ProviderOutbox {
                 payload_digest TEXT,
                 compacted INTEGER NOT NULL DEFAULT 0,
                 id_version INTEGER NOT NULL DEFAULT 1,
+                dispatcher_id TEXT,
+                lease_expires_at INTEGER,
                 UNIQUE (connection_id, native_id, sequence)
             );
             CREATE INDEX IF NOT EXISTS provider_outbox_pending
@@ -369,6 +396,8 @@ impl ProviderOutbox {
             ("payload_digest", "TEXT"),
             ("compacted", "INTEGER NOT NULL DEFAULT 0"),
             ("id_version", "INTEGER NOT NULL DEFAULT 1"),
+            ("dispatcher_id", "TEXT"),
+            ("lease_expires_at", "INTEGER"),
         ] {
             let present: bool = db.query_row(
                 "SELECT EXISTS(SELECT 1 FROM pragma_table_info('provider_outbox') WHERE name = ?1)",
@@ -383,10 +412,10 @@ impl ProviderOutbox {
         }
         db.execute_batch(
             "UPDATE provider_outbox SET dispatch_state = 'confirmed'
-             WHERE state = 'confirmed' AND dispatch_state = 'queued';
-             UPDATE provider_outbox SET dispatch_state = 'queued'
-             WHERE state = 'queued' AND dispatch_state = 'sending';",
+             WHERE state = 'confirmed' AND dispatch_state = 'queued';",
         )?;
+        // HS2-NJQVQF: a live dispatcher in another process keeps its in-flight rows.
+        requeue_expired_leases(&db, unix_now())?;
         db.execute(
             "UPDATE provider_outbox SET settled_at = ?1
              WHERE state = 'confirmed' AND settled_at IS NULL",
@@ -396,7 +425,12 @@ impl ProviderOutbox {
             "CREATE INDEX IF NOT EXISTS provider_outbox_compaction
              ON provider_outbox (state, compacted, settled_at);",
         )?;
-        let mut outbox = Self { db, max_pending };
+        let dispatcher_id = format!("{}-{}", std::process::id(), ulid::Ulid::new());
+        let mut outbox = Self {
+            db,
+            max_pending,
+            dispatcher_id,
+        };
         outbox.compact_terminal_before(unix_now() - SETTLED_PAYLOAD_RETENTION)?;
         outbox.prune_terminal_rows()?;
         Ok(outbox)
@@ -533,6 +567,28 @@ impl ProviderOutbox {
         get_in(&self.db, operation_id)
     }
 
+    /// This instance's dispatcher identity, recorded on every row it claims.
+    pub fn dispatcher_id(&self) -> &str {
+        &self.dispatcher_id
+    }
+
+    /// Extend this dispatcher's lease on an in-flight row. Call it right before a provider
+    /// write: `false` means the lease lapsed and another dispatcher took the row over, so
+    /// the caller must not write (HS2-NJQVQF).
+    pub fn renew_lease(&mut self, operation_id: &str) -> Result<bool, OutboxError> {
+        let changed = self.db.execute(
+            "UPDATE provider_outbox SET lease_expires_at = ?3
+             WHERE operation_id = ?1 AND state = 'queued' AND dispatch_state = 'sending'
+               AND dispatcher_id = ?2",
+            params![
+                operation_id,
+                self.dispatcher_id,
+                unix_now().saturating_add(DISPATCH_LEASE_SECONDS)
+            ],
+        )?;
+        Ok(changed > 0)
+    }
+
     /// Replace old terminal snapshots with a permanent compact retry fence. Pending rows are
     /// never touched; `sequence` and the operation id remain, including through restarts.
     pub fn compact_terminal_before(&mut self, cutoff: i64) -> Result<usize, OutboxError> {
@@ -656,9 +712,11 @@ impl ProviderOutbox {
     pub fn confirm(&mut self, operation_id: &str) -> Result<bool, OutboxError> {
         let changed = self.db.execute(
             "UPDATE provider_outbox SET state = 'confirmed', dispatch_state = 'confirmed',
-             next_attempt_at = 0, last_error = NULL, settled_at = ?2
-             WHERE operation_id = ?1 AND state = 'queued' AND dispatch_state = 'sending'",
-            params![operation_id, unix_now()],
+             next_attempt_at = 0, last_error = NULL, settled_at = ?2, dispatcher_id = NULL,
+             lease_expires_at = NULL
+             WHERE operation_id = ?1 AND state = 'queued' AND dispatch_state = 'sending'
+               AND dispatcher_id = ?3",
+            params![operation_id, unix_now(), self.dispatcher_id],
         )?;
         Ok(changed > 0)
     }
@@ -675,7 +733,8 @@ impl ProviderOutbox {
     }
 
     /// Claim only the first pending intent for each ticket. A transaction excludes a second
-    /// dispatcher and keeps later local intent behind an attention state.
+    /// dispatcher and keeps later local intent behind an attention state. Rows whose lease
+    /// expired return to the queue first, so a crashed dispatcher's work is retried.
     pub fn claim_ready(
         &mut self,
         now: i64,
@@ -684,6 +743,8 @@ impl ProviderOutbox {
         let tx = self
             .db
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let wall_now = unix_now();
+        requeue_expired_leases(&tx, wall_now)?;
         let ids = list_in(
             &tx,
             "SELECT operation_id FROM provider_outbox AS candidate
@@ -702,9 +763,14 @@ impl ProviderOutbox {
         let mut claimed = Vec::with_capacity(ids.len());
         for operation in ids {
             tx.execute(
-                "UPDATE provider_outbox SET dispatch_state = 'sending', attempts = attempts + 1
+                "UPDATE provider_outbox SET dispatch_state = 'sending', attempts = attempts + 1,
+                 dispatcher_id = ?2, lease_expires_at = ?3
                  WHERE operation_id = ?1",
-                [&operation.operation_id],
+                params![
+                    operation.operation_id,
+                    self.dispatcher_id,
+                    wall_now.saturating_add(DISPATCH_LEASE_SECONDS)
+                ],
             )?;
             claimed.push(get_in(&tx, &operation.operation_id)?.expect("claimed row exists"));
         }
@@ -726,9 +792,10 @@ impl ProviderOutbox {
         };
         let changed = self.db.execute(
             "UPDATE provider_outbox SET dispatch_state = ?2, next_attempt_at = ?3,
-             last_error = ?4 WHERE operation_id = ?1 AND state = 'queued'
-             AND dispatch_state = 'sending'",
-            params![operation_id, state, until, error],
+             last_error = ?4, dispatcher_id = NULL, lease_expires_at = NULL
+             WHERE operation_id = ?1 AND state = 'queued'
+             AND dispatch_state = 'sending' AND dispatcher_id = ?5",
+            params![operation_id, state, until, error, self.dispatcher_id],
         )?;
         if changed == 0 {
             return Err(OutboxError::InvalidTransition(operation_id.into()));
@@ -744,12 +811,14 @@ impl ProviderOutbox {
     ) -> Result<(), OutboxError> {
         let changed = self.db.execute(
             "UPDATE provider_outbox SET dispatch_state = 'needs_attention', last_error = ?2,
-             conflict_json = ?3 WHERE operation_id = ?1 AND state = 'queued'
-             AND dispatch_state = 'sending'",
+             conflict_json = ?3, dispatcher_id = NULL, lease_expires_at = NULL
+             WHERE operation_id = ?1 AND state = 'queued'
+             AND dispatch_state = 'sending' AND dispatcher_id = ?4",
             params![
                 operation_id,
                 error,
-                conflict.map(serde_json::to_string).transpose()?
+                conflict.map(serde_json::to_string).transpose()?,
+                self.dispatcher_id
             ],
         )?;
         if changed == 0 {
@@ -802,13 +871,35 @@ impl ProviderOutbox {
     ) -> Result<(), OutboxError> {
         let changed = self.db.execute(
             "UPDATE provider_outbox SET conflict_json = ?2 WHERE operation_id = ?1
-             AND state = 'queued' AND dispatch_state = 'sending'",
-            params![operation_id, serde_json::to_string(conflict)?],
+             AND state = 'queued' AND dispatch_state = 'sending' AND dispatcher_id = ?3",
+            params![
+                operation_id,
+                serde_json::to_string(conflict)?,
+                self.dispatcher_id
+            ],
         )?;
         if changed == 0 {
             return Err(OutboxError::InvalidTransition(operation_id.into()));
         }
         Ok(())
+    }
+}
+
+/// Stopping a dispatcher hands back what it still holds. The server shares one outbox
+/// behind an `Arc`, and each in-flight dispatch holds a clone, so this runs only after its
+/// sends finished or were abandoned. A crash skips it; lease expiry covers that case.
+impl Drop for ProviderOutbox {
+    fn drop(&mut self) {
+        let released = self.db.execute(
+            "UPDATE provider_outbox SET dispatch_state = 'queued', dispatcher_id = NULL,
+             lease_expires_at = NULL
+             WHERE state = 'queued' AND dispatch_state = 'sending' AND dispatcher_id = ?1",
+            [&self.dispatcher_id],
+        );
+        if let Err(error) = released {
+            // The leases still expire, so the rows are retried after the lease window.
+            eprintln!("warning: provider outbox could not release its dispatch leases: {error}");
+        }
     }
 }
 
@@ -1307,6 +1398,277 @@ mod tests {
         assert_eq!(
             outbox.claim_ready(0, 1).unwrap()[0].dispatch_state,
             DispatchState::Sending
+        );
+    }
+
+    // ---- HS2-NJQVQF: dispatch leases across processes ----
+
+    /// The lease columns as another process would read them.
+    fn lease(path: &Path, id: &str) -> (String, Option<String>, Option<i64>) {
+        Connection::open(path)
+            .unwrap()
+            .query_row(
+                "SELECT dispatch_state, dispatcher_id, lease_expires_at
+                 FROM provider_outbox WHERE operation_id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap()
+    }
+
+    /// Age every lease past its window without waiting on the wall clock.
+    fn expire_leases(path: &Path) {
+        Connection::open(path)
+            .unwrap()
+            .execute(
+                "UPDATE provider_outbox SET lease_expires_at = ?1
+                 WHERE lease_expires_at IS NOT NULL",
+                [unix_now() - 1],
+            )
+            .unwrap();
+    }
+
+    fn queued_outbox(path: &Path, ids: &[(&str, &str)]) -> ProviderOutbox {
+        let mut outbox = ProviderOutbox::open(path, 20).unwrap();
+        let admissions: Vec<_> = ids
+            .iter()
+            .map(|(id, ticket)| admission(id, ticket, id))
+            .collect();
+        outbox.admit_batch(&admissions).unwrap();
+        outbox
+    }
+
+    #[test]
+    fn open_during_a_live_send_keeps_the_row_with_its_dispatcher_hs2_njqvqf() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.sqlite");
+        let mut first = queued_outbox(&path, &[("one", "42")]);
+        assert_eq!(first.claim_ready(0, 4).unwrap().len(), 1);
+        let (state, holder, expires) = lease(&path, "one");
+        assert_eq!(state, "sending");
+        assert_eq!(holder.as_deref(), Some(first.dispatcher_id()));
+        assert!(expires.unwrap() > unix_now() + DISPATCH_LEASE_SECONDS - 60);
+
+        // A second process opens (server restart overlap) and repeats the open.
+        let mut second = ProviderOutbox::open(&path, 10).unwrap();
+        let mut third = ProviderOutbox::open(&path, 10).unwrap();
+        assert_ne!(second.dispatcher_id(), first.dispatcher_id());
+        assert_eq!(lease(&path, "one").0, "sending");
+        assert!(second.claim_ready(0, 4).unwrap().is_empty());
+        assert!(third.claim_ready(0, 4).unwrap().is_empty());
+        // Only the holder settles or renews; the others cannot touch its attempt.
+        assert!(!second.renew_lease("one").unwrap());
+        assert!(!second.confirm("one").unwrap());
+        assert!(matches!(
+            second.defer("one", 0, "x", false),
+            Err(OutboxError::InvalidTransition(_))
+        ));
+        assert!(matches!(
+            second.needs_attention("one", "x", None),
+            Err(OutboxError::InvalidTransition(_))
+        ));
+        assert!(matches!(
+            second.record_conflict("one", &json!({})),
+            Err(OutboxError::InvalidTransition(_))
+        ));
+        assert!(first.renew_lease("one").unwrap());
+        assert!(first.confirm("one").unwrap());
+        let settled = second.get("one").unwrap().unwrap();
+        assert_eq!(settled.dispatch_state, DispatchState::Confirmed);
+        assert_eq!(settled.attempts, 1, "sent exactly once");
+        assert_eq!(lease(&path, "one").1, None);
+    }
+
+    #[test]
+    fn crash_mid_send_recovers_once_after_the_lease_expires_hs2_njqvqf() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.sqlite");
+        let mut crashed = queued_outbox(&path, &[("one", "42"), ("later", "42")]);
+        assert_eq!(crashed.claim_ready(0, 4).unwrap()[0].operation_id, "one");
+        // A crash runs no destructor, so nothing hands the row back.
+        std::mem::forget(crashed);
+
+        let mut survivor = ProviderOutbox::open(&path, 10).unwrap();
+        assert_eq!(lease(&path, "one").0, "sending", "lease still live");
+        assert!(survivor.claim_ready(0, 4).unwrap().is_empty());
+
+        expire_leases(&path);
+        // Reopening after expiry requeues once; repeating the open changes nothing.
+        drop(ProviderOutbox::open(&path, 10).unwrap());
+        drop(ProviderOutbox::open(&path, 10).unwrap());
+        let recovered = survivor.get("one").unwrap().unwrap();
+        assert_eq!(recovered.dispatch_state, DispatchState::Queued);
+        assert_eq!(recovered.attempts, 1);
+        assert_eq!(lease(&path, "one").1, None);
+
+        let reclaimed = survivor.claim_ready(0, 4).unwrap();
+        assert_eq!(reclaimed.len(), 1, "later stays behind the recovered row");
+        assert_eq!(reclaimed[0].operation_id, "one");
+        assert_eq!(reclaimed[0].attempts, 2);
+        assert!(survivor.confirm("one").unwrap());
+        assert_eq!(survivor.claim_ready(0, 4).unwrap()[0].operation_id, "later");
+    }
+
+    #[test]
+    fn claim_ready_takes_over_an_expired_lease_and_fences_the_stale_holder_hs2_njqvqf() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.sqlite");
+        let mut stale = queued_outbox(&path, &[("one", "42")]);
+        let mut fresh = ProviderOutbox::open(&path, 10).unwrap();
+        assert_eq!(stale.claim_ready(0, 4).unwrap().len(), 1);
+        assert!(fresh.claim_ready(0, 4).unwrap().is_empty());
+
+        // The holder stalls past its lease; the next dispatch pass takes the row over
+        // without anyone reopening the outbox.
+        expire_leases(&path);
+        let taken = fresh.claim_ready(0, 4).unwrap();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken[0].attempts, 2);
+        assert_eq!(
+            lease(&path, "one").1.as_deref(),
+            Some(fresh.dispatcher_id())
+        );
+
+        // The stale holder wakes up: it may not write (renew fails) or settle.
+        assert!(!stale.renew_lease("one").unwrap());
+        assert!(!stale.confirm("one").unwrap());
+        assert!(matches!(
+            stale.defer("one", 0, "late", true),
+            Err(OutboxError::InvalidTransition(_))
+        ));
+        assert!(matches!(
+            stale.needs_attention("one", "late", None),
+            Err(OutboxError::InvalidTransition(_))
+        ));
+        // Dropping the stale holder does not hand back the new owner's row.
+        drop(stale);
+        assert_eq!(lease(&path, "one").0, "sending");
+        assert!(fresh.renew_lease("one").unwrap());
+        fresh.defer("one", 5, "Jira 503", false).unwrap();
+        let deferred = fresh.get("one").unwrap().unwrap();
+        assert_eq!(deferred.dispatch_state, DispatchState::Queued);
+        assert_eq!(deferred.next_attempt_at, 5);
+        assert_eq!(lease(&path, "one").1, None);
+    }
+
+    #[test]
+    fn graceful_drop_releases_only_its_own_rows_hs2_njqvqf() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.sqlite");
+        let mut stopping = queued_outbox(&path, &[("mine", "42"), ("theirs", "43")]);
+        let mut other = ProviderOutbox::open(&path, 10).unwrap();
+        assert_eq!(stopping.claim_ready(0, 1).unwrap()[0].operation_id, "mine");
+        assert_eq!(other.claim_ready(0, 1).unwrap()[0].operation_id, "theirs");
+        drop(stopping);
+        assert_eq!(lease(&path, "mine"), ("queued".into(), None, None));
+        assert_eq!(lease(&path, "theirs").0, "sending");
+        // The released row is ready at once; a confirmed row is never released.
+        let mut next = ProviderOutbox::open(&path, 10).unwrap();
+        assert_eq!(next.claim_ready(0, 4).unwrap()[0].operation_id, "mine");
+        assert!(next.confirm("mine").unwrap());
+        drop(next);
+        assert_eq!(lease(&path, "mine").0, "confirmed");
+        assert!(other.confirm("theirs").unwrap());
+    }
+
+    #[test]
+    fn racing_dispatchers_never_claim_the_same_row_hs2_njqvqf() {
+        use std::sync::{Arc, Barrier};
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.sqlite");
+        let tickets: Vec<String> = (0..12).map(|n| n.to_string()).collect();
+        let ids: Vec<(String, String)> = tickets
+            .iter()
+            .map(|ticket| (format!("op-{ticket}"), ticket.clone()))
+            .collect();
+        let pairs: Vec<(&str, &str)> = ids.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        drop(queued_outbox(&path, &pairs));
+        let barrier = Arc::new(Barrier::new(3));
+        let handles: Vec<_> = (0..3)
+            .map(|_| {
+                let path = path.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    let mut outbox = ProviderOutbox::open(&path, 20).unwrap();
+                    barrier.wait();
+                    let mut mine = Vec::new();
+                    loop {
+                        let claimed = outbox.claim_ready(0, 2).unwrap();
+                        if claimed.is_empty() {
+                            break;
+                        }
+                        for operation in claimed {
+                            assert!(outbox.renew_lease(&operation.operation_id).unwrap());
+                            assert!(outbox.confirm(&operation.operation_id).unwrap());
+                            mine.push(operation.operation_id);
+                        }
+                    }
+                    mine
+                })
+            })
+            .collect();
+        let mut all: Vec<String> = handles
+            .into_iter()
+            .flat_map(|handle| handle.join().unwrap())
+            .collect();
+        all.sort();
+        let mut expected: Vec<String> = ids.into_iter().map(|(id, _)| id).collect();
+        expected.sort();
+        assert_eq!(all, expected, "every row sent exactly once");
+        let outbox = ProviderOutbox::open(&path, 20).unwrap();
+        assert_eq!(outbox.pending_count().unwrap(), 0);
+        for id in &expected {
+            assert_eq!(outbox.get(id).unwrap().unwrap().attempts, 1);
+        }
+    }
+
+    #[test]
+    fn a_pre_lease_outbox_migrates_and_requeues_its_unleased_sending_rows_hs2_njqvqf() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pre-lease.sqlite");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(
+            "CREATE TABLE provider_outbox (
+                operation_id TEXT PRIMARY KEY, connection_id TEXT NOT NULL,
+                native_id TEXT NOT NULL, sequence INTEGER NOT NULL, base_token TEXT,
+                base_ticket_json TEXT NOT NULL, patch_json TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                state TEXT NOT NULL CHECK (state IN ('queued', 'confirmed')),
+                dispatch_state TEXT NOT NULL DEFAULT 'queued',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT, conflict_json TEXT, settled_at INTEGER,
+                payload_digest TEXT, compacted INTEGER NOT NULL DEFAULT 0,
+                id_version INTEGER NOT NULL DEFAULT 1,
+                UNIQUE (connection_id, native_id, sequence)
+            );",
+        )
+        .unwrap();
+        let item = admission("old-send", "42", "Old");
+        db.execute(
+            "INSERT INTO provider_outbox (operation_id, connection_id, native_id, sequence,
+             base_token, base_ticket_json, patch_json, payload_json, state, dispatch_state,
+             attempts) VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, 'queued', 'sending', 1)",
+            params![
+                item.operation_id,
+                item.connection_id,
+                item.native_id,
+                item.base_token,
+                serde_json::to_string(&item.base_ticket).unwrap(),
+                serde_json::to_string(&item.patch).unwrap(),
+                item.payload_json().unwrap(),
+            ],
+        )
+        .unwrap();
+        drop(db);
+        let mut outbox = ProviderOutbox::open(&path, 4).unwrap();
+        assert_eq!(lease(&path, "old-send"), ("queued".into(), None, None));
+        let claimed = outbox.claim_ready(0, 4).unwrap();
+        assert_eq!(claimed[0].attempts, 2);
+        assert_eq!(
+            lease(&path, "old-send").1.as_deref(),
+            Some(outbox.dispatcher_id())
         );
     }
 
