@@ -216,9 +216,12 @@ Refusals have their own codes:
 | `site_run_conflict`        | 409    | This machine has two active runs on one ticket of the project the change would form                                   |
 
 **One ticket store.** Every site of a project reaches the same ticket store. A bind
-or review of a site whose destination's `checkout_authority` differs from that of any
-other bound site of the project on this machine is refused before any probe, and so
-is a grouping change that would join targets bound to different stores. The
+or review of a site whose destination's `checkout_authority` or observed Git ticket
+store differs from that of any other bound site of the project on this machine is
+refused with `site_store_mismatch`. A bind compares the stores the probe observed, so
+the check runs after the probe and before anything is bound; a refused bind writes no
+destination (HS2-S5RPAR). Adding a site checks the candidate before it is declared
+(above). So is a grouping change that would join targets bound to different stores. The
 declared repository identity is descriptive, but two sites of one project may not
 declare different ones.
 
@@ -687,7 +690,12 @@ in that target. Rules are not a cryptographic boundary between processes of the 
 user; the authenticated target server, which still enforces its own device role,
 remains that boundary. Forgetting a rule (Settings → Permissions, or `permission
 forget`) makes the next action ask again. The ledger keeps at most 512 requests,
-1,024 rules and 256 decision records, dropping the oldest settled entries first.
+1,024 rules and 256 decision records. A full request list drops its oldest used or
+lapsed requests first, so pending and usable ones stay. Denied requests and requests an
+Always Allow answered are not dropped yet, so a list full of them refuses new asks with
+`capacity` (HS2-8GE9HM). Rules are never dropped automatically: at 1,024 Always Allow is
+refused with `capacity` until a person forgets one (HS2-5675T5). The oldest decision
+record is dropped first.
 
 ### Judgment calls are decisions on the goal ticket
 
@@ -880,14 +888,14 @@ its default, a newer version is an explicit unsupported-version error and is nev
 overwritten, and a stored policy that no longer validates is treated as corrupt
 rather than evaluated. All quantities are integers: megabytes, percent and cents.
 
-| Section       | Fields and defaults                                                                                                                                                                                                                    |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                                                                                    |
-| `tools[]`     | `tool`, `max_sessions` Auto (0 off, else 1 to 64), `weight` Auto (0 off, else 1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`. See Auto below.                     |
-| `targets[]`   | `target_id`, `enabled` true, `tools[]` Auto (empty) with optional `models` (names or `*` patterns, HS2-1X1TXC), `max_sessions` Auto (0 starts none, else 1 to 64), and optional `machine` and `speculation` overrides. See Auto below. |
-| `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                                                                                        |
-| `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`, `redo_reopened` false (HS2-NCMATS, §26.22).                     |
-| `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5, and `resources[]` (§26.20). Left out of the file while it holds only defaults.                                                               |
+| Section       | Fields and defaults                                                                                                                                                                                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                                                                                                                                                 |
+| `tools[]`     | `tool`, `max_sessions` Auto (0 off, else 1 to 64), `weight` Auto (0 off, else 1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`. See Auto below.                                                                                  |
+| `targets[]`   | `target_id`, `enabled` true, `tools[]` Auto (empty) with optional `models` (names or `*` patterns, HS2-1X1TXC), `max_sessions` Auto (0 starts none, else 1 to 64), and optional `machine` and `speculation` overrides. See Auto below.                                                              |
+| `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                                                                                                                                                     |
+| `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`, `redo_reopened` false (HS2-NCMATS, §26.22).                                                                                  |
+| `placement`   | HS2-ECWG50, §26.17: `automatic` Auto (unset: on once a plan exists, HS2-R2N33M), `actor`, `aging_minutes` 60, `cooldown_minutes` 5, `dispatcher_wait_minutes` 2, `join_minutes` 10 (§26.24), `role_sessions[]` Auto, and `resources[]` (§26.20). Left out of the file while it holds only defaults. |
 
 **Retired fields.** `targets[].actions` and `approval.required_for` are read and
 ignored. `validate` reports each as `target_actions_ignored` or `approval_ignored`
@@ -1008,13 +1016,15 @@ person is asked, so a request is never filed for an action the limits refuse.
   alone, so a project that never enables throughput is unaffected. A session start is
   denied `policy_absent`: nothing automatic runs without a policy. An unreadable or
   corrupt policy denies every acting action.
-- **Denials** are `policy_denied` with a `detail`: `policy_target_not_permitted`,
-  `policy_target_disabled`, `policy_tool_not_permitted`, `policy_model_not_permitted`,
-  `policy_load_unknown`, `policy_target_cap`, `policy_machine_cap`,
+- **Denials** are `policy_denied` with a `detail`: `policy_target_disabled`,
+  `policy_tool_not_permitted`, `policy_model_not_permitted`, `policy_load_unknown`, `policy_target_cap`, `policy_machine_cap`,
   `policy_tool_cap`, `policy_account_not_permitted`, `policy_account_cap`,
   `policy_speculation_not_allowed`, and `policy_project_software` for every acting
   action of a project whose type is Software (§26.27, HS2-J3ZF27). The audit entry
-  records the detail.
+  records the detail. `policy_target_not_permitted` is no longer produced: since Auto
+  (HS2-N3HWP9) a declared target the policy omits is permitted, and an undeclared one
+  is `target_not_found` before the policy is read. The code stays so older audit
+  entries and clients still read it (HS2-F1AS2G).
 - **Caps.** A session start states the current load (sessions on the target, on its
   machine, on the tool and on the account). A start without it is denied, and each
   cap denies exactly at its bound. Stopping or winding down needs no headroom.
@@ -1207,8 +1217,9 @@ same sequence cursor, rotation and gap reporting as the audit journal. Event kin
 are `state`, `lease`, `observed`, `target_unreachable`, `target_reachable`,
 `cancel_requested`, `validation` (§26.12), `gate` (§26.13), the recovery kinds of
 §26.14 (`reconciled`, `paused`, `resumed`, `handoff`, `corrected`), `readiness`
-(§26.15, about a plan step rather than a run) and `session` (§26.16). Each event says
-whether the orchestrator did it or it was learned
+(§26.15, about a plan step rather than a run), `provisional` (§26.22, also about a
+step: its provisional state, with the gate that changed it) and `session` (§26.16).
+Each event says whether the orchestrator did it or it was learned
 from the target, and carries identifiers, states and codes only.
 
 - **Ordering.** Events are recorded in arrival order and keep the time the fact was
@@ -2240,14 +2251,14 @@ short or symbolic name is refused.
 
 ### States
 
-| State               | Meaning                                                | May become                                                          |
-| ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
-| `unknown`           | Nothing trustworthy is known; the reason code says why | any other state                                                     |
-| `awaiting_approval` | A deployment waits for a person                        | `pending`, `unknown`, `failed`, `superseded`                        |
-| `pending`           | Watched or started, no verdict yet                     | `passed`, `failed`, `unknown`, `superseded`                         |
-| `failed`            | The newest covering run or execution failed            | `pending` (watched again), `passed` (a later attempt), `superseded` |
-| `passed`            | A covering run or execution succeeded                  | `superseded`                                                        |
-| `superseded`        | The link no longer stands for the run                  | nothing                                                             |
+| State               | Meaning                                                | May become                                                                             |
+| ------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `unknown`           | Nothing trustworthy is known; the reason code says why | any other state                                                                        |
+| `awaiting_approval` | A deployment or a requested review waits for a person  | `pending`, `unknown`, `failed`, `superseded`, `passed` (a review approved, HS2-GD3NNK) |
+| `pending`           | Watched or started, no verdict yet                     | `passed`, `failed`, `unknown`, `superseded`                                            |
+| `failed`            | The newest covering run or execution failed            | `pending` (watched again), `passed` (a later attempt), `superseded`                    |
+| `passed`            | A covering run or execution succeeded                  | `superseded`                                                                           |
+| `superseded`        | The link no longer stands for the run                  | nothing                                                                                |
 
 Reason codes for `unknown` include `not_watched`, `watch_lost`, `watch_ended`,
 `watch_gone`, `watch_cancelled`, `gate_provider_unavailable`, `evidence_missing`, `evidence_not_covering`,
@@ -2917,7 +2928,10 @@ plan assigns. A step holds at most 16 **prerequisites**, each named once:
 | Kind         | Fields                                                                | Holds when                                                                          |
 | ------------ | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `ticket`     | `target_id`, `connection_id`, `native_id`, `gates`, optional `commit` | That qualified target ticket is confirmed finished and the required gates are green |
-| `validation` | `step_id`, optional orchestration `ticket` (the step's own otherwise) | The latest evidence of that validation step (§26.12) is `passed`                    |
+| `validation` | `step_id`, `ticket` (optional when defining: the step's own)          | The latest evidence of that validation step (§26.12) is `passed`                    |
+
+A `validation` prerequisite's orchestration `ticket` may be left out of a define
+request; the plan stores it resolved, so a stored step always names it.
 
 `gates` is `ci` when omitted (every standing CI gate passed), `deployment` (CI and
 the requested deployment passed) or `none` (the ticket being finished is enough).
@@ -3292,8 +3306,9 @@ person took over still runs, so it still counts until it stops.
 5. The host's answer makes the session `running`. A refusal makes it `failed` with the
    host's reason code in its history (an admission reason such as `below_ram_floor`,
    `session_cap_reached`, or a session code) and the caller gets
-   `session_admission_refused`, `session_role_active`, `session_start_failed` or
-   `session_host_unavailable`. A failure that may be transient leaves the session
+   `session_admission_refused`, `session_role_active`, `session_start_failed`,
+   `session_host_unavailable`, or `session_withdrawn` when a stop already withdrew the
+   operation (HS2-WHR4GS, below). A failure that may be transient leaves the session
    `requested`, and the same request repeats it. HS2-8Z9VHH: the host's reply keeps
    the admission `refusal` (above) as `admission`, so a `session_admission_refused`
    error body carries `admission` with the reason, limit and observed value, and the
@@ -5904,7 +5919,9 @@ re-plans in the background; nothing pauses.
   | unchanged                          | anything                        | the live step       |
   | changed, added or removed          | unchanged                       | the draft's         |
   | changed                            | changed the same way            | that step           |
-  | changed or removed                 | changed differently or removed  | refused: a conflict |
+  | removed                            | removed                         | no step             |
+  | changed                            | changed differently or removed  | refused: a conflict |
+  | removed                            | changed                         | refused: a conflict |
 
   A change a person made to the live plan meanwhile is kept, and the merged plan must
   still be a valid plan (one step per target ticket). It is written in one replacement
@@ -6013,7 +6030,7 @@ requests (§26.7), the bindings and the policy. It contacts no target, passes no
 | `never_started` | HS2-38R8J2: placement was never turned on for the owner (HS2-ZF5H5M: on any machine sharing its policy file); absent while running and once it was on |
 | `waves`         | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on                                            |
 | `version`       | Changes exactly when what the timeline shows changes; time alone does not change it                                                                   |
-| `wave_minutes`  | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes                                                |
+| `wave_minutes`  | The wave length estimates use: the median lead time of completed runs (cancelled or failed runs do not count), or 60 minutes until one completes      |
 
 **Waves.** Finished steps are **Done**. Once orchestration was kicked off, a step with an
 unfinished run is **Working Now**; every other step's wave is its depth over the
@@ -6653,7 +6670,10 @@ tickets. A read-only device is refused by the existing write fence. Bounds: 256 
 **Storage.** One private file per checkout under
 `HOTSHEET_HOME/orchestration-line-observations/` (`LineObservations`). The target-lines
 read merges the live entries, and its long poll also watches that directory, so a push
-ends a waiting read at once; an expiry is seen at the one-second safety re-check.
+ends a waiting read at once; an expiry is seen at the one-second safety re-check. A read
+skips expired entries; the next push for the checkout drops them from the file, so it
+stays within its bounds. A checkout no owner pushes to any more keeps its expired
+entries until then (HS2-2WMQER).
 
 **When the owner pushes.** The server's follower (`AppState::spawn_target_line_push`)
 recomputes each remote destination's lines on a run event, a scheduler wake or the
