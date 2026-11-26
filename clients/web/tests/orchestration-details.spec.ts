@@ -435,6 +435,8 @@ test('HS2-A7YCB2 Link Again watches a CI gate the provider kept ending, and word
     const events = page.locator('[data-orchestration-inspector] [data-orchestration-section="Events"]');
     await expect(events).toContainText('Checked · Held: something it depends on could not be verified');
     await expect(events).not.toContainText('hold unverified');
+    // HS2-7NJN7S: a Gate event says which gate and the state it entered.
+    await expect(events).toContainText('CI gate: unknown (the CI provider kept ending its watch)');
     await visualPass(page, 'hs2-a7ycb2', 'watch-gone', {
       show: gates,
       check: () => expect(linkAgain).toBeVisible(),
@@ -461,7 +463,14 @@ test('HS2-A7YCB2 Link Again watches a CI gate the provider kept ending, and word
     await expect(runSection).not.toContainText('Not verified', { timeout: 30_000 });
     await expect(runSection).toContainText('The run’s worker holds its ticket');
     await expect(events).toContainText('Checked · The run’s worker holds its ticket');
+    await expect(events).toContainText('CI gate: passed');
+    await expect(events).not.toContainText(/Gate( ·|$)/);
     await capture(page, 'hs2-a7ycb2', 'linked-again-passed-1440');
+    await visualPass(page, 'hs2-7njn7s', 'gate-events', {
+      show: events,
+      check: () => expect(events).toContainText('CI gate: passed'),
+      atPhone: () => card.click(),
+    });
     await visualPass(page, 'hs2-n9bfhw', 'gate-settled', {
       show: events,
       check: () => expect(runSection).not.toContainText('Not verified'),

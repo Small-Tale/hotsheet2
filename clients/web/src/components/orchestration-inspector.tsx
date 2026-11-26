@@ -28,6 +28,7 @@ import {
   gateNextStep,
   reconciliationRows,
   runEventText,
+  type RunEventView,
   type RunReconciliation,
 } from '../orchestration-run-checks';
 import {
@@ -87,7 +88,7 @@ export interface OrchestrationInspectorDetails {
   validations?: readonly ValidationStepView[];
   /** HS2-9XJEZC: Run Validation requests that wait on a person's answer. */
   pendingValidations?: readonly PendingValidation[];
-  events?: ReadonlyArray<{ at_ms: number; kind: string; state?: string; reason?: string; source?: string }>;
+  events?: ReadonlyArray<RunEventView>;
   /** HS2-XM692S: the run record was read; its last reconciliation, absent when none is stored. */
   runRead?: boolean;
   reconciliation?: RunReconciliation;

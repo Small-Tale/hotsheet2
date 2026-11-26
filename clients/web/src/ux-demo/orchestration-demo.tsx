@@ -443,7 +443,14 @@ export function OrchestrationInspectorDemo() {
               findings: [{ source: 'ci_run', verification: 'unverifiable', reason: 'provider_unreachable' }],
             },
             events: [
-              { at_ms: timeline.now_ms - 60_000, kind: 'gate', state: 'pending', source: 'target' },
+              // HS2-7NJN7S: a gate event says which gate and the state it entered.
+              {
+                at_ms: timeline.now_ms - 60_000,
+                kind: 'gate',
+                gate_state: 'pending',
+                gate_kind: 'ci',
+                source: 'target',
+              },
               // HS2-N9BFHW: a reconciliation reads its disposition in words.
               { at_ms: timeline.now_ms - 120_000, kind: 'reconciled', reason: 'continue', source: 'orchestrator' },
               { at_ms: timeline.now_ms - 300_000, kind: 'session', reason: 'started', source: 'orchestrator' },

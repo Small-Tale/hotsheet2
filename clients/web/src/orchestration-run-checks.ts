@@ -174,13 +174,43 @@ export function runReasonText(reason: string): string {
   return RUN_REASONS[reason] ?? words(reason);
 }
 
+/** One run event as the inspector reads it (`GET .../events`). */
+export interface RunEventView {
+  at_ms: number;
+  kind: string;
+  state?: string;
+  reason?: string;
+  source?: string;
+  /** HS2-7NJN7S: a `gate` event's state, and its gate's kind when the run's gate list names it. */
+  gate_state?: string;
+  gate_kind?: string;
+}
+
+/** HS2-GD3NNK: a review gate's state in the review's own words; other gates keep theirs. */
+export const REVIEW_GATE_STATES: Readonly<Record<string, string>> = {
+  awaiting_approval: 'requested',
+  passed: 'approved',
+  failed: 'changes_requested',
+};
+
+/** HS2-7NJN7S: a gate's name as the Gates section labels it. */
+export const gateKindLabel = (kind: string): string =>
+  kind === 'ci' ? 'CI' : `${words(kind).charAt(0).toUpperCase()}${words(kind).slice(1)}`;
+
 /** One row of the Run section's events: its kind, the state it reached and why. */
-export function runEventText(event: { kind: string; state?: string; reason?: string; source?: string }): string {
+export function runEventText(event: Omit<RunEventView, 'at_ms'>): string {
   // HS2-N9BFHW: a reconciliation's reason is its disposition, worded as the Run section's Checked row words it.
   if (event.kind === 'reconciled' && event.reason) return `Checked · ${dispositionText(event.reason)}`;
+  const learned = event.source === 'target' ? ' · learned from the project' : '';
+  const why = event.reason ? ` (${runReasonText(event.reason)})` : '';
+  // HS2-7NJN7S: a gate event says which gate and the state it entered, as the Gates section does.
+  if (event.kind === 'gate' && event.gate_state) {
+    const state =
+      event.gate_kind === 'review' ? (REVIEW_GATE_STATES[event.gate_state] ?? event.gate_state) : event.gate_state;
+    const gate = event.gate_kind ? `${gateKindLabel(event.gate_kind)} gate` : 'Gate';
+    return `${gate}: ${words(state)}${why}${learned}`;
+  }
   const kind = words(event.kind);
   const state = event.state === 'intervened' ? 'released by its worker' : event.state && words(event.state);
-  return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}${state ? `: ${state}` : ''}${
-    event.reason ? ` (${runReasonText(event.reason)})` : ''
-  }${event.source === 'target' ? ' · learned from the project' : ''}`;
+  return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}${state ? `: ${state}` : ''}${why}${learned}`;
 }

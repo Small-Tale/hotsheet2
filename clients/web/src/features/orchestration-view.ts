@@ -20,7 +20,12 @@ import { parseProgressSummary, type ProgressSummaryView } from '../orchestration
 import { describeRefusal } from '../orchestration-refusals';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseContention, type ResourceContentionView } from '../orchestration-resources';
-import { CI_WATCH_REASONS, parseRunReconciliation, relinkRequest } from '../orchestration-run-checks';
+import {
+  CI_WATCH_REASONS,
+  parseRunReconciliation,
+  relinkRequest,
+  REVIEW_GATE_STATES,
+} from '../orchestration-run-checks';
 import {
   heldExplanation,
   parseDecisionPage,
@@ -294,13 +299,8 @@ const message = (reason: unknown) => (reason instanceof Error ? reason.message :
 
 /** The selected run's records as the inspector shows them; an unread record leaves its part absent. */
 /** HS2-GD3NNK: a review gate's state in the review's own words; other gates keep theirs. */
-const REVIEW_STATES: Record<string, string> = {
-  awaiting_approval: 'requested',
-  passed: 'approved',
-  failed: 'changes_requested',
-};
 function gateState(kind: string | undefined, state: string, reason?: string): string {
-  if (kind === 'review') return REVIEW_STATES[state] ?? state;
+  if (kind === 'review') return REVIEW_GATE_STATES[state] ?? state;
   // HS2-507DGZ: an unknown CI gate says why its watch is not running, and what to do.
   const why = state === 'unknown' && reason !== undefined ? CI_WATCH_REASONS[reason] : undefined;
   return why ? `unknown: ${why}` : state;
@@ -317,6 +317,8 @@ export function parseOrchestrationDetails(
   const text = (value: unknown) => (typeof value === 'string' ? value : undefined);
   const gateList = Array.isArray(gates?.gates) ? (gates.gates as Array<Record<string, unknown>>) : [];
   const eventList = Array.isArray(events?.entries) ? (events.entries as Array<Record<string, unknown>>) : [];
+  // HS2-7NJN7S: a gate event names its gate, not its kind; superseded gates still name theirs.
+  const gateKinds = new Map<unknown, string | undefined>(gateList.map((gate) => [gate.gate_id, text(gate.kind)]));
   return {
     loading: false,
     runRead: run !== undefined,
@@ -345,6 +347,8 @@ export function parseOrchestrationDetails(
         state: text(record.state),
         reason: text(record.reason),
         source: text(record.source),
+        gate_state: text(record.gate_state),
+        gate_kind: text(record.gate_id) ? gateKinds.get(record.gate_id) : undefined,
       }))
       .slice(-8)
       .reverse(),

@@ -7236,8 +7236,11 @@ reads the run record (`GET /checkouts/{owner}/orchestration/runs/{run}`) with it
 gates, events and validations whenever the timeline's version changes; a new outcome
 is a `reconciled` run event, so it shows without polling. The Events rows word that
 event with the same disposition words ("Checked · Held: something it depends on could
-not be verified"), never the code (HS2-N9BFHW). Words live in
-`clients/web/src/orchestration-run-checks.ts`.
+not be verified"), never the code (HS2-N9BFHW). A `gate` event row says which gate and
+the state it entered, as the Gates section does ("CI gate: passed · learned from the
+project", a review gate in review words), from the event's `gate_state` and the kind of
+the gate its `gate_id` names; a gate the run no longer lists reads "Gate: …"
+(HS2-7NJN7S). Words live in `clients/web/src/orchestration-run-checks.ts`.
 
 ### Validation and Run Validation (HS2-9XJEZC)
 

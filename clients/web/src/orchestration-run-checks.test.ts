@@ -201,6 +201,31 @@ describe('a released or returned run in words (HS2-ESVYQH)', () => {
       'State: dispatched (claimed for its session, with no dispatcher to assign it)',
     );
     expect(runEventText({ kind: 'session' })).toBe('Session');
+    // HS2-7NJN7S: a Gate event says which gate and the state it entered, as the Gates section does.
+    expect(runEventText({ kind: 'gate', gate_kind: 'ci', gate_state: 'passed', source: 'target' })).toBe(
+      'CI gate: passed · learned from the project',
+    );
+    expect(runEventText({ kind: 'gate', gate_kind: 'ci', gate_state: 'unknown', reason: 'watch_gone' })).toBe(
+      'CI gate: unknown (the CI provider kept ending its watch)',
+    );
+    expect(runEventText({ kind: 'gate', gate_kind: 'ci', gate_state: 'awaiting_approval' })).toBe(
+      'CI gate: awaiting approval',
+    );
+    for (const [state, words] of [
+      ['awaiting_approval', 'requested'],
+      ['passed', 'approved'],
+      ['failed', 'changes requested'],
+      ['pending', 'pending'],
+    ])
+      expect(runEventText({ kind: 'gate', gate_kind: 'review', gate_state: state })).toBe(`Review gate: ${words}`);
+    expect(runEventText({ kind: 'gate', gate_kind: 'deployment', gate_state: 'failed' })).toBe(
+      'Deployment gate: failed',
+    );
+    // A gate the run's gate list no longer names reads as a gate; an event with no state keeps its reason.
+    expect(runEventText({ kind: 'gate', gate_state: 'superseded', source: 'target' })).toBe(
+      'Gate: superseded · learned from the project',
+    );
+    expect(runEventText({ kind: 'gate', gate_kind: 'ci', reason: 'not_watched' })).toBe('Gate (not watched yet)');
     expect(runEventText({ kind: 'session_request', reason: 'session_request_delivered' })).toBe(
       'Session request (session request delivered)',
     );

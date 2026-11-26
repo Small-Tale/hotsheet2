@@ -411,6 +411,46 @@ describe('the selected run’s details (HS2-XM692S)', () => {
       ['watched', undefined],
     ]);
   });
+
+  it('gives each Gate event its gate state and its gate’s kind, superseded gates included (HS2-7NJN7S)', () => {
+    const event = (at_ms: number, gate_id: string | undefined, gate_state?: string) => ({
+      record: {
+        at_ms,
+        kind: 'gate',
+        source: 'target',
+        ...(gate_id ? { gate_id } : {}),
+        ...(gate_state ? { gate_state } : {}),
+      },
+    });
+    const read = parseOrchestrationDetails(
+      {
+        gates: [
+          { gate_id: 'old', kind: 'ci', state: 'superseded', superseded_by: 'new' },
+          { gate_id: 'new', kind: 'ci', state: 'passed' },
+          { gate_id: 'review', kind: 'review', state: 'awaiting_approval' },
+        ],
+      },
+      {
+        entries: [
+          event(1, 'old', 'pending'),
+          event(2, 'new', 'passed'),
+          event(3, 'review', 'awaiting_approval'),
+          event(4, 'unlisted', 'failed'),
+          event(5, undefined),
+        ],
+      },
+      undefined,
+      'api',
+    );
+    expect(read.events?.map((row) => [row.at_ms, row.gate_kind, row.gate_state])).toEqual([
+      [5, undefined, undefined],
+      [4, undefined, 'failed'],
+      [3, 'review', 'awaiting_approval'],
+      [2, 'ci', 'passed'],
+      [1, 'ci', 'pending'],
+    ]);
+    expect(read.gates?.map((row) => row.gate_id)).toEqual(['new', 'review']);
+  });
 });
 
 describe('Link Again through the view (HS2-A7YCB2)', () => {
