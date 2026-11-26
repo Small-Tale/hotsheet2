@@ -13015,6 +13015,25 @@ paths:
           in: query
           schema:
             type: boolean
+  /plugins/status:
+    get:
+      operationId: get_plugin_status
+      description:
+        HS2-YJCPD5. Plugin directories in the server's search path that discovery skipped, each with its load error
+        (for example an id or write target refused by HS2-80JHZD). Read fresh on every request.
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PluginStatus'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /ai-settings:
     get:
       operationId: get_ai_settings
@@ -34912,6 +34931,30 @@ components:
         description:
           type: string
         warning:
+          type: string
+      additionalProperties: false
+    PluginStatus:
+      type: object
+      required:
+        - skipped
+      properties:
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkippedPlugin'
+      additionalProperties: false
+    SkippedPlugin:
+      description: HS2-YJCPD5. A plugin directory that failed to load and was left out of discovery.
+      type: object
+      required:
+        - path
+        - reason
+      properties:
+        path:
+          description: The plugin directory holding the refused manifest.toml, as lossy UTF-8.
+          type: string
+        reason:
+          description: The load error, as a human-readable sentence.
           type: string
       additionalProperties: false
     AiToolDescriptor:

@@ -1637,6 +1637,53 @@ fn hs2_80jhzd_a_plugin_with_an_escaping_target_does_not_load() {
 }
 
 #[test]
+fn hs2_yjcpd5_discovery_reports_each_skipped_plugin_with_its_reason() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_manifest_plugin(&tmp.path().join("bad-id"), "Upper_Case", "AGENTS.md");
+    write_manifest_plugin(&tmp.path().join("escaping"), "escaping", "../../x");
+    write_manifest_plugin(&tmp.path().join("fine"), "fine", "AGENTS.md");
+    // A directory with no manifest is not a plugin, so it is not "skipped" either.
+    std::fs::create_dir_all(tmp.path().join("not-a-plugin")).unwrap();
+
+    let found = load_dir_reporting(tmp.path());
+    let ids: Vec<&str> = found.plugins.iter().map(Plugin::id).collect();
+    assert_eq!(ids, ["fine"]);
+    assert_eq!(found.skipped.len(), 2, "{:?}", found.skipped);
+    assert_eq!(found.skipped[0].path, tmp.path().join("bad-id"));
+    assert!(
+        found.skipped[0]
+            .reason
+            .contains("invalid plugin id \"Upper_Case\""),
+        "{}",
+        found.skipped[0].reason
+    );
+    assert_eq!(found.skipped[1].path, tmp.path().join("escaping"));
+    assert!(
+        found.skipped[1].reason.contains("escape the project")
+            && found.skipped[1].reason.contains("../../x"),
+        "{}",
+        found.skipped[1].reason
+    );
+
+    // Existing callers keep their shape: load_dir and all_plugins drop the failures.
+    assert_eq!(load_dir(tmp.path()).len(), 1);
+    let dirs = vec![
+        tmp.path().to_path_buf(),
+        PathBuf::from("/no/such/hotsheet-plugin-dir"),
+    ];
+    assert_eq!(all_plugins(&dirs).len(), builtin_plugins().len() + 1);
+    assert_eq!(skipped_plugins(&dirs), found.skipped);
+    assert!(skipped_plugins(&[]).is_empty());
+
+    let wire = serde_json::to_value(&found.skipped[0]).unwrap();
+    assert_eq!(
+        wire["path"],
+        serde_json::json!(tmp.path().join("bad-id").to_string_lossy())
+    );
+    assert!(wire["reason"].as_str().unwrap().contains("Upper_Case"));
+}
+
+#[test]
 fn hs2_80jhzd_a_plugin_with_an_unsafe_id_does_not_load() {
     let tmp = tempfile::tempdir().unwrap();
     for id in [

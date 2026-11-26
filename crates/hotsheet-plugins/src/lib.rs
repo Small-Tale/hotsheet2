@@ -1082,23 +1082,70 @@ pub fn all_plugins(search_dirs: &[PathBuf]) -> Vec<Plugin> {
     plugins
 }
 
+/// A plugin directory that discovery skipped because it failed to load (HS2-YJCPD5):
+/// an id or write target refused by HS2-80JHZD's validation, a malformed manifest, a
+/// missing template file, or an unreadable directory. Surfaced by `hotsheet plugin list`
+/// (stderr) and `GET /plugins/status` so a third-party plugin never vanishes silently.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SkippedPlugin {
+    /// The plugin directory that holds the refused `manifest.toml` (lossy UTF-8 on the
+    /// wire, so a non-UTF-8 directory name never fails the response).
+    #[serde(serialize_with = "serialize_path_lossy")]
+    pub path: PathBuf,
+    /// The load error, as a human-readable sentence.
+    pub reason: String,
+}
+
+fn serialize_path_lossy<S: serde::Serializer>(path: &Path, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(&path.to_string_lossy())
+}
+
+/// One search directory's discovery result: the plugins that loaded, plus every plugin
+/// directory that was skipped and why (HS2-YJCPD5).
+#[derive(Debug, Default)]
+pub struct PluginDiscovery {
+    pub plugins: Vec<Plugin>,
+    pub skipped: Vec<SkippedPlugin>,
+}
+
 /// Load every plugin (a subdir containing `manifest.toml`) directly under `dir`.
-/// Missing dir → empty; a bad plugin dir is skipped.
+/// Missing dir → empty; a bad plugin dir is skipped (see [`load_dir_reporting`] for
+/// the skipped entries).
 pub fn load_dir(dir: &Path) -> Vec<Plugin> {
+    load_dir_reporting(dir).plugins
+}
+
+/// [`load_dir`], also reporting each plugin directory that failed to load (HS2-YJCPD5).
+/// Both lists are sorted (plugins by id, skipped entries by path) for stable output.
+pub fn load_dir_reporting(dir: &Path) -> PluginDiscovery {
     let Ok(entries) = fs::read_dir(dir) else {
-        return Vec::new();
+        return PluginDiscovery::default();
     };
-    let mut out = Vec::new();
+    let mut out = PluginDiscovery::default();
     for entry in entries.flatten() {
         let path = entry.path();
         if path.join("manifest.toml").is_file() {
-            if let Ok(p) = Plugin::from_fs_dir(&path) {
-                out.push(p);
+            match Plugin::from_fs_dir(&path) {
+                Ok(p) => out.plugins.push(p),
+                Err(error) => out.skipped.push(SkippedPlugin {
+                    path,
+                    reason: error.to_string(),
+                }),
             }
         }
     }
-    out.sort_by(|a, b| a.id().cmp(b.id()));
+    out.plugins.sort_by(|a, b| a.id().cmp(b.id()));
+    out.skipped.sort_by(|a, b| a.path.cmp(&b.path));
     out
+}
+
+/// Every plugin directory under `search_dirs` that discovery skipped, in search-dir
+/// order (HS2-YJCPD5). Built-ins never fail to load, so they never appear here.
+pub fn skipped_plugins(search_dirs: &[PathBuf]) -> Vec<SkippedPlugin> {
+    search_dirs
+        .iter()
+        .flat_map(|dir| load_dir_reporting(dir).skipped)
+        .collect()
 }
 
 /// Find a plugin by id across built-ins + the given search dirs.

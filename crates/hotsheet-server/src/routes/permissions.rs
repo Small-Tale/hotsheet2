@@ -889,6 +889,25 @@ pub(crate) async fn list_ai_tools(
     Json(discovered_ai_tools_off_runtime(&state, query.refresh).await)
 }
 
+/// `GET /plugins/status` (HS2-YJCPD5): plugin directories in the server's search path
+/// that discovery skipped, each with its load error (for example an id or write target
+/// refused by HS2-80JHZD), so a third-party plugin never drops out silently.
+#[derive(Serialize)]
+pub(crate) struct PluginStatus {
+    skipped: Vec<hotsheet_plugins::SkippedPlugin>,
+}
+
+pub(crate) async fn get_plugin_status(
+    State(state): State<AppState>,
+) -> Result<Json<PluginStatus>, ApiError> {
+    let plugin_dirs = state.plugin_dirs.clone();
+    let skipped =
+        tokio::task::spawn_blocking(move || hotsheet_plugins::skipped_plugins(&plugin_dirs))
+            .await
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(Json(PluginStatus { skipped }))
+}
+
 /// The settings key holding the default Drive tool, model, and effort.
 const AI_DEFAULTS_SETTING: &str = "ai.defaults";
 

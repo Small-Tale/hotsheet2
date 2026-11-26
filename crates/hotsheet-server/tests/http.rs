@@ -1011,6 +1011,87 @@ permission_modes = [{modes}]
     assert_eq!(explicit["permission_mode"], "ask");
 }
 
+/// HS2-YJCPD5: `GET /plugins/status` names each plugin dir discovery skipped (here an id
+/// refused by HS2-80JHZD) with its load error, and requires authentication.
+#[tokio::test]
+async fn hs2_yjcpd5_plugin_status_reports_skipped_plugin_dirs() {
+    let plugins = tempfile::tempdir().unwrap();
+    let bad = plugins.path().join("dotted");
+    std::fs::create_dir(&bad).unwrap();
+    std::fs::write(bad.join("instructions.md"), "Fixture.\n").unwrap();
+    std::fs::write(
+        bad.join("manifest.toml"),
+        r#"
+id = "dot.ted"
+display_name = "Dotted"
+product_name = "Dotted"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+    )
+    .unwrap();
+
+    let (_dir, state) = state();
+    let router = app(state
+        .with_machine_home(_dir.path().join("machine-home"))
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    let unauthenticated = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/plugins/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+
+    let status = router
+        .clone()
+        .oneshot(authed("GET", "/plugins/status", None))
+        .await
+        .unwrap();
+    assert_eq!(status.status(), StatusCode::OK);
+    let status = body_json(status).await;
+    let skipped = status["skipped"].as_array().unwrap();
+    assert_eq!(skipped.len(), 1, "{status}");
+    assert_eq!(skipped[0]["path"], bad.to_string_lossy().as_ref());
+    assert!(
+        skipped[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("invalid plugin id \"dot.ted\""),
+        "{status}"
+    );
+
+    // Fixing the plugin clears the entry on the next request (no cache).
+    std::fs::write(
+        bad.join("manifest.toml"),
+        std::fs::read_to_string(bad.join("manifest.toml"))
+            .unwrap()
+            .replace("\"dot.ted\"", "\"dotted\""),
+    )
+    .unwrap();
+    let status = body_json(
+        router
+            .oneshot(authed("GET", "/plugins/status", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, serde_json::json!({ "skipped": [] }));
+}
+
 #[tokio::test]
 async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated() {
     let plugins = tempfile::tempdir().unwrap();

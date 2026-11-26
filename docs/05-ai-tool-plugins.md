@@ -3813,6 +3813,15 @@ target that is absolute or climbs out with `..`. A plugin that breaks either rul
 to load: `plugin install` reports the error, and discovery skips it. `plugin remove <id>`
 checks the same id rule before touching the filesystem and exits non-zero on a bad id.
 
+**Skipped plugins are reported (HS2-YJCPD5).** Discovery never drops a plugin silently.
+Any directory with a `manifest.toml` that fails to load (a refused id or write target, a
+malformed manifest, a missing template file) is reported with its directory and load
+error. `hotsheet plugin list` keeps its stdout table and prints one
+`warning: skipped plugin <dir>: <reason>` line per skipped directory on stderr. The
+authenticated `GET /plugins/status` route returns `{ "skipped": [{ "path", "reason" }] }`
+for the server's search path, read fresh on every request. The web client does not show
+this list yet (HS2-WGAAF0).
+
 **Trust gate (mandatory, not optional).** A manifest is inert data, but what it
 _writes_ is a supply-chain surface: a plugin's instruction template steers an agent,
 and its launch command _executes_. So:
