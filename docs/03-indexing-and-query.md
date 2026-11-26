@@ -228,6 +228,11 @@ On change:
 1. **Debounce** rapid bursts (an editor save, a git checkout touching many files). A batch
    is applied after a 150 ms pause in events, or at most 1 s after its first event, so a
    stream that never pauses cannot hold a write back indefinitely (HS2-TFBFRP).
+   A new shard directory (`tickets/<XY>/`) is listed when its event is applied, and once
+   more 1 s later: Linux inotify reports a new directory before it watches it, so a ticket
+   file created in between reports no event. The second listing is a one-shot per
+   directory event, not a repeating poll, and applies only files whose bytes differ from
+   the index (HS2-ZER3MA).
 2. **Detect what actually changed.** For each candidate file, compare its current
    content hash (or git blob OID when committed) against `content_hash` in the
    index. Unchanged → skip (this is what makes a `git pull` that rewrites mtimes

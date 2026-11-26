@@ -1081,11 +1081,33 @@ pub(crate) fn watch_loop(
 
     let freshness = target.entry.freshness.clone();
     let mut retry_delay = INDEX_REPAIR_RETRY_MIN;
+    let mut shard_rechecks = ShardRechecks::default();
     loop {
         // Retry queued index repairs on a bounded backoff so a store with no further
         // writes (and a missed watcher echo) still converges (HS2-5BAEX9). This is a
-        // local timer over in-memory state; it issues no network requests.
-        let first = match rx.recv_timeout(retry_delay) {
+        // local timer over in-memory state; it issues no network requests. A pending
+        // one-shot shard re-read (HS2-ZER3MA) may end the wait earlier.
+        let repair_at = Instant::now() + retry_delay;
+        let received = loop {
+            let deadline = shard_rechecks
+                .next_due()
+                .map_or(repair_at, |due| due.min(repair_at));
+            match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+                Ok(first) => break Ok(first),
+                Err(RecvTimeoutError::Timeout) => {
+                    if apply_due_shard_rechecks(&target, &mut shard_rechecks, Instant::now()) {
+                        regenerate_target_worklists(&target);
+                    }
+                    if Instant::now() >= repair_at {
+                        break Err(RecvTimeoutError::Timeout);
+                    }
+                }
+                Err(RecvTimeoutError::Disconnected) => {
+                    break Err(RecvTimeoutError::Disconnected);
+                }
+            }
+        };
+        let first = match received {
             Ok(first) => first,
             Err(RecvTimeoutError::Timeout) => {
                 if target.index_repairs.has_pending(&target.store_id) {
@@ -1121,6 +1143,7 @@ pub(crate) fn watch_loop(
             events,
             goes_live,
             reconcile,
+            shard_dirs,
         } = batch;
         paths.sort();
         paths.dedup();
@@ -1171,11 +1194,85 @@ pub(crate) fn watch_loop(
             freshness.set_live(true);
         }
         freshness.events_applied(events);
+        let applied = Instant::now();
+        for dir in shard_dirs {
+            shard_rechecks.schedule(dir, applied);
+        }
+        // A stream that never pauses must not starve a due re-read either.
+        index_changed |= apply_due_shard_rechecks(&target, &mut shard_rechecks, applied);
         if !index_changed {
             continue;
         }
         regenerate_target_worklists(&target);
     }
+}
+
+/// How long after applying a batch that named a new shard directory the watch loop lists
+/// that directory once more (HS2-ZER3MA).
+const SHARD_RECHECK_DELAY: Duration = Duration::from_secs(1);
+
+/// One-shot re-reads of shard directories (`tickets/<XY>`) that applied batches named
+/// (HS2-ZER3MA). notify's inotify backend delivers a new directory's create event before
+/// it arms the directory's watch, so a ticket file created in between reports no event.
+/// Listing the directory when its event is applied covers a file that landed earlier; one
+/// more listing after [`SHARD_RECHECK_DELAY`] covers a file that landed after that listing
+/// but before the watch armed. Each directory event schedules at most one re-read, and a
+/// directory already pending is not rescheduled: this is never a repeating poll.
+#[derive(Default)]
+struct ShardRechecks {
+    pending: Vec<(std::path::PathBuf, Instant)>,
+}
+
+impl ShardRechecks {
+    fn schedule(&mut self, dir: std::path::PathBuf, applied: Instant) {
+        if self.pending.iter().all(|(pending, _)| *pending != dir) {
+            self.pending.push((dir, applied + SHARD_RECHECK_DELAY));
+        }
+    }
+
+    fn next_due(&self) -> Option<Instant> {
+        self.pending.iter().map(|(_, due)| *due).min()
+    }
+
+    /// Removes and returns every directory whose re-read is due at `now`.
+    fn take_due(&mut self, now: Instant) -> Vec<std::path::PathBuf> {
+        let mut due = Vec::new();
+        self.pending.retain(|(dir, at)| {
+            if *at <= now {
+                due.push(dir.clone());
+                false
+            } else {
+                true
+            }
+        });
+        due
+    }
+}
+
+/// Re-reads each due shard directory and applies its ticket files whose bytes differ from
+/// the index; returns whether the index changed. Already indexed files are skipped, so a
+/// re-read after the normal event path applied a file announces nothing again.
+fn apply_due_shard_rechecks(
+    target: &WatchTarget,
+    rechecks: &mut ShardRechecks,
+    now: Instant,
+) -> bool {
+    let mut changed = false;
+    for dir in rechecks.take_due(now) {
+        for path in stale_shard_files(target, &dir) {
+            changed |= handle_path_change(target, &path);
+        }
+    }
+    changed
+}
+
+/// Whether a raw event path is a shard directory directly under the store's `tickets/`
+/// directory (HS2-ZER3MA).
+fn is_shard_dir(path: &FsPath) -> bool {
+    path.parent()
+        .and_then(|parent| parent.file_name())
+        .is_some_and(|name| name == "tickets")
+        && path.is_dir()
 }
 
 /// How long the watch loop waits for more events after the last one before applying a batch.
@@ -1200,6 +1297,9 @@ struct WatchBatch {
     events: usize,
     goes_live: bool,
     reconcile: bool,
+    /// Shard directories the batch's events named, each re-read once after it is applied
+    /// (HS2-ZER3MA).
+    shard_dirs: Vec<std::path::PathBuf>,
 }
 
 impl WatchBatch {
@@ -1231,6 +1331,15 @@ impl WatchBatch {
             self.reconcile = true;
             self.goes_live = true;
             return;
+        }
+        if let Ok(event) = &res
+            && event.info().is_none()
+        {
+            for dir in event.paths.iter().filter(|path| is_shard_dir(path)) {
+                if !self.shard_dirs.contains(dir) {
+                    self.shard_dirs.push(dir.clone());
+                }
+            }
         }
         self.paths.extend(watch_event_paths(target, res));
     }
@@ -1297,6 +1406,29 @@ fn stale_ticket_files_with_reader(
             }
         }
     }
+    stale_among(target, files, read)
+}
+
+/// The ticket files directly inside one shard directory whose content hash differs from
+/// the index (HS2-ZER3MA). Unlike [`stale_ticket_files`] it does not descend.
+fn stale_shard_files(target: &WatchTarget, shard: &FsPath) -> Vec<std::path::PathBuf> {
+    let Ok(entries) = std::fs::read_dir(shard) else {
+        return Vec::new();
+    };
+    let files = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|e| e.to_str()) == Some("md"))
+        .collect();
+    stale_among(target, files, |path| std::fs::read(path))
+}
+
+/// The subset of `files` whose content hash differs from the store's index.
+fn stale_among(
+    target: &WatchTarget,
+    files: Vec<std::path::PathBuf>,
+    read: impl Fn(&FsPath) -> std::io::Result<Vec<u8>>,
+) -> Vec<std::path::PathBuf> {
     // Read and hash every file before taking the index mutex (HS2-P867K1). Holding it across
     // the whole walk blocked every list, detail, and note save for the full read of the store
     // (about 600 ms for 2,000 tickets on a debug build), on each startup and every lost-event
@@ -2110,6 +2242,151 @@ mod freshness_tests {
         assert!(!target.index_repairs.repair(&entry, &target.store_id));
         assert!(entry.freshness.in_sync());
         assert_eq!(entry.resolve(&ticket.slug).unwrap().unwrap().id, ticket.id);
+    }
+
+    /// HS2-ZER3MA: each directory event schedules one re-read; a pending directory is not
+    /// rescheduled, a taken re-read is gone, and a later event schedules a fresh one.
+    #[test]
+    fn hs2_zer3ma_a_shard_recheck_is_one_shot_per_directory_event() {
+        use super::{SHARD_RECHECK_DELAY, ShardRechecks};
+        let start = Instant::now();
+        let at = |ms: u64| start + Duration::from_millis(ms);
+        let shard = std::path::PathBuf::from("tickets/01");
+        let other = std::path::PathBuf::from("tickets/02");
+        let mut rechecks = ShardRechecks::default();
+        assert_eq!(rechecks.next_due(), None, "nothing pending at first");
+        assert!(rechecks.take_due(at(10_000)).is_empty());
+
+        rechecks.schedule(shard.clone(), start);
+        // A repeated event for a pending directory neither duplicates nor postpones it.
+        rechecks.schedule(shard.clone(), at(500));
+        rechecks.schedule(other.clone(), at(300));
+        assert_eq!(rechecks.next_due(), Some(start + SHARD_RECHECK_DELAY));
+        assert!(
+            rechecks.take_due(at(999)).is_empty(),
+            "not due before the delay"
+        );
+        assert_eq!(rechecks.take_due(at(1_000)), vec![shard.clone()]);
+        assert_eq!(
+            rechecks.next_due(),
+            Some(at(300) + SHARD_RECHECK_DELAY),
+            "the interleaved directory keeps its own due time"
+        );
+        assert_eq!(rechecks.take_due(at(5_000)), vec![other]);
+        assert_eq!(rechecks.next_due(), None, "a taken re-read never repeats");
+
+        // Empty, then refilled by a later event for the same directory.
+        rechecks.schedule(shard.clone(), at(6_000));
+        assert_eq!(rechecks.take_due(at(7_000)), vec![shard]);
+        assert!(rechecks.take_due(at(60_000)).is_empty());
+    }
+
+    /// HS2-ZER3MA: a due re-read indexes a ticket file that arrived with no event, and a
+    /// re-read of a file already indexed announces nothing (idempotent).
+    #[test]
+    fn hs2_zer3ma_a_due_shard_recheck_indexes_only_unindexed_files() {
+        use super::{SHARD_RECHECK_DELAY, ShardRechecks, apply_due_shard_rechecks};
+        let (_dir, store) = store();
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        target.entry.freshness.set_live(true);
+        let mut changes = target.events.subscribe();
+        let ticket = create(&store, "landed without an event");
+        let shard = store
+            .ticket_path(&ticket.id)
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        assert!(target.entry.resolve(&ticket.slug).unwrap().is_none());
+
+        let mut rechecks = ShardRechecks::default();
+        let applied = Instant::now();
+        rechecks.schedule(shard.clone(), applied);
+        assert!(!apply_due_shard_rechecks(&target, &mut rechecks, applied));
+        assert!(target.entry.resolve(&ticket.slug).unwrap().is_none());
+        assert!(apply_due_shard_rechecks(
+            &target,
+            &mut rechecks,
+            applied + SHARD_RECHECK_DELAY
+        ));
+        assert_eq!(
+            target.entry.resolve(&ticket.slug).unwrap().unwrap().id,
+            ticket.id
+        );
+        let announced = changes.try_recv().unwrap();
+        assert_eq!(
+            (announced.kind.as_str(), announced.slug.as_str()),
+            ("changed", ticket.slug.as_str())
+        );
+
+        // Already indexed: a second directory event's re-read is a no-op.
+        rechecks.schedule(shard, applied);
+        assert!(!apply_due_shard_rechecks(
+            &target,
+            &mut rechecks,
+            applied + SHARD_RECHECK_DELAY
+        ));
+        assert!(changes.try_recv().is_err(), "nothing announced again");
+        // A missing directory (removed since its event) is skipped quietly.
+        rechecks.schedule(_dir.path().join("tickets/ZZ"), applied);
+        assert!(!apply_due_shard_rechecks(
+            &target,
+            &mut rechecks,
+            applied + SHARD_RECHECK_DELAY
+        ));
+    }
+
+    /// HS2-ZER3MA: the real watch loop applies a new shard directory's event while the
+    /// directory is still empty; the ticket file then lands with no event (the inotify
+    /// window before the new directory's watch arms) and must still be indexed.
+    #[test]
+    fn hs2_zer3ma_a_file_landing_after_its_shard_event_is_indexed() {
+        let (dir, store) = store();
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let freshness = entry.freshness.clone();
+        let mut changes = target.events.subscribe();
+        let (raw, rx) = std::sync::mpsc::channel();
+        let tx = QueuedSender {
+            tx: raw,
+            freshness: freshness.clone(),
+        };
+        let looping = std::thread::spawn(move || watch_loop(rx, target));
+        tx.send(Ok(resync_event(&dir.path().join("tickets"), LIVE_RESYNC)));
+        wait_for("the live resync", || freshness.in_sync());
+
+        for round in 0..2 {
+            // Capture a real ticket's bytes, then empty its shard directory.
+            let ticket = create(&store, &format!("late file {round}"));
+            let path = store.ticket_path(&ticket.id);
+            let shard = path.parent().unwrap().to_path_buf();
+            let bytes = std::fs::read(&path).unwrap();
+            std::fs::remove_file(&path).unwrap();
+
+            let folder = notify::EventKind::Create(notify::event::CreateKind::Folder);
+            tx.send(Ok(notify::Event::new(folder).add_path(shard)));
+            wait_for("the directory event", || freshness.in_sync());
+            assert!(
+                entry.resolve(&ticket.slug).unwrap().is_none(),
+                "round {round}: the directory was empty when its event applied"
+            );
+
+            std::fs::write(&path, bytes).unwrap();
+            wait_for("the one-shot shard re-read", || {
+                entry.resolve(&ticket.slug).unwrap().is_some()
+            });
+            let announced = loop {
+                let change = changes.try_recv().unwrap();
+                if change.slug == ticket.slug {
+                    break change;
+                }
+            };
+            assert_eq!(announced.kind, "changed");
+        }
+
+        drop(tx);
+        looping.join().unwrap();
     }
 
     /// The deterministic polling backend goes live on its own, and a genuine miss then
