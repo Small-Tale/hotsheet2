@@ -285,10 +285,12 @@ export async function runLintWeb({
           report(`Kerf UI doctor failed with ${lines.length} diagnostic${lines.length === 1 ? '' : 's'}:`);
           for (const line of lines) report(`  ${line}`);
         } else {
+          // HS2-52W4TK: the same report path reads the same on every platform.
+          const shown = relative(root, reportPath).split(sep).join('/');
           report(
             doctorReport
-              ? `Kerf UI doctor failed without a failing diagnostic in ${relative(root, reportPath)}.`
-              : `Kerf UI doctor failed before writing ${relative(root, reportPath)}.`,
+              ? `Kerf UI doctor failed without a failing diagnostic in ${shown}.`
+              : `Kerf UI doctor failed before writing ${shown}.`,
           );
         }
       }
