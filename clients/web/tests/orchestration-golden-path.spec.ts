@@ -7,7 +7,15 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { fakeGithubActions } from './fake-github-actions';
-import { capture, handOffInPool, SYNTHETIC_TOOL, syntheticTool } from './orchestration-real-fixtures';
+import {
+  capture,
+  handOffInPool,
+  nextFrames,
+  resizeTo,
+  SYNTHETIC_TOOL,
+  syntheticTool,
+  visibleShare,
+} from './orchestration-real-fixtures';
 import { proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
 
 const execute = promisify(execFile);
@@ -129,28 +137,9 @@ async function proposePlan(server: Server, base: string, target: string, gates: 
  * animation frames; a screenshot taken at once can show the frame before (seen in WebKit).
  */
 async function settle(page: Page, ticket: string, name: string) {
-  await page.evaluate(
-    () =>
-      new Promise((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            resolve(undefined);
-          });
-        });
-      }),
-  );
+  await nextFrames(page);
   await capture(page, ticket, name);
 }
-
-/** How much of a column shows inside the board's horizontal scroller, from 0 to 1. */
-const visibleShare = (page: Page, label: string) =>
-  page.locator(`[data-orchestration-view="true"] [aria-label="${label}"]`).evaluate((column) => {
-    let track = column.parentElement;
-    while (track && !/auto|scroll/.test(getComputedStyle(track).overflowX)) track = track.parentElement;
-    const box = column.getBoundingClientRect(),
-      view = track!.getBoundingClientRect();
-    return Math.max(0, Math.min(box.right, view.right) - Math.max(box.left, view.left)) / box.width;
-  });
 
 /**
  * Wide, medium, narrow, wide again, then dark at wide and narrow (Visual QA). HS2-2751D6: `show` is an inspector
@@ -166,16 +155,16 @@ async function widths(page: Page, name: string, ticket = 'hs2-1ddxns', show?: Lo
     [390, 844],
     [1440, 900],
   ] as const) {
-    await page.setViewportSize({ width, height });
+    await resizeTo(page, { width, height });
     await reveal(width);
     await settle(page, ticket, `${name}-${width}`);
   }
   await page.emulateMedia({ colorScheme: 'dark' });
   await settle(page, ticket, `${name}-1440-dark`);
-  await page.setViewportSize({ width: 390, height: 844 });
+  await resizeTo(page, { width: 390, height: 844 });
   await settle(page, ticket, `${name}-390-dark`);
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await resizeTo(page, { width: 1440, height: 900 });
 }
 
 test('HS2-1DDXNS a new orchestration project goes from Software to a started plan through the shipped shell', async ({
@@ -190,7 +179,7 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     const settingsNav = page.getByRole('navigation', { name: 'Project Settings' });
     const view = page.locator('[data-orchestration-view="true"]');
     const toolbar = page.locator('[data-orchestration-toolbar]');
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await page.goto('/');
     await page.getByRole('tab', { name: /Launch/ }).click();
 
@@ -261,9 +250,10 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     await expect(why).toContainText('Waits: no policy is saved yet; Start Orchestration saves the default one');
     await expect(why).not.toContainText('policy absent');
     // HS2-QCKVVY: after a width change the board returns to its right end, the selected First in view,
-    // in WebKit as in Chromium (it lands within two frames of the resize).
+    // in WebKit as in Chromium (it lands within two frames of the resize). HS2-15C8TA: each width is
+    // rendered before the next one, as a person's window resize is.
     for (const width of [1100, 1440, 1100]) {
-      await page.setViewportSize({ width, height: 820 });
+      await resizeTo(page, { width, height: 820 });
       await expect.poll(() => visibleShare(page, 'First · On Start Column')).toBeGreaterThan(0.95);
     }
     await widths(page, 'proposed');
@@ -465,7 +455,7 @@ test('HS2-2751D6 a handoff waits on the integrator, its CI goes red and the fix 
     });
     const sync = () => server.request(`${base}/runs/${run.run_id}/sync`, 'POST', { actor: maintainer });
 
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await page.goto('/');
     await page.getByRole('tab', { name: /Launch/ }).click();
     await page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Orchestration View' }).click();

@@ -131,6 +131,47 @@ export async function openOrchestration(page: Page, server: Server, name = 'Laun
   await expect(page.locator('[data-orchestration-view="true"]')).toBeVisible();
 }
 
+/**
+ * Wait until the page has rendered two more frames. The timeline board reacts to a width change in the frame after
+ * it is laid out: its ResizeObserver sees the new width and its placement runs in the next animation frame
+ * (HS2-QCKVVY).
+ */
+export async function nextFrames(page: Page) {
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve(undefined);
+          });
+        });
+      }),
+  );
+}
+
+/**
+ * HS2-15C8TA: change the viewport and let the page render it before the test reads or changes it again. Without a
+ * frame between two width changes the board's ResizeObserver never sees the middle width, while a layout read in
+ * between (a visibility check) already moved the scroller there; the board then never places itself again.
+ */
+export async function resizeTo(page: Page, size: { width: number; height: number }) {
+  await page.setViewportSize(size);
+  await nextFrames(page);
+}
+
+/** How much of a column shows inside the board's horizontal scroller, from 0 to 1. */
+export const visibleShare = (page: Page, label: string) =>
+  page.locator(`[data-orchestration-view="true"] [aria-label="${label}"]`).evaluate((column) => {
+    let track = column.parentElement;
+    while (track && !/auto|scroll/.test(getComputedStyle(track).overflowX)) track = track.parentElement;
+    // HS2-3KHE7R: while the board re-renders after a width change there is briefly no scroller;
+    // answer "not in view yet" so the caller's poll waits instead of throwing.
+    if (!track) return 0;
+    const box = column.getBoundingClientRect(),
+      view = track.getBoundingClientRect();
+    return Math.max(0, Math.min(box.right, view.right) - Math.max(box.left, view.left)) / box.width;
+  });
+
 /** Capture once every finite animation (rails and sheets slide) has finished. */
 export async function capture(page: Page, ticket: string, name: string) {
   await page.waitForFunction(() =>

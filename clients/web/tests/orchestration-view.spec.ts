@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
 
 import { openMockedProject, projectTab } from './open-mocked-project';
-import { syntheticTool } from './orchestration-real-fixtures';
+import { resizeTo, syntheticTool, visibleShare } from './orchestration-real-fixtures';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 /**
@@ -141,19 +141,6 @@ const columnTitles = (page: Page) =>
     .locator('[data-orchestration-view="true"] [data-component="ticket-board-column"]')
     .evaluateAll((columns) => columns.map((column) => column.getAttribute('aria-label') ?? ''));
 
-/** How much of a column shows inside the board's horizontal scroller, from 0 to 1. */
-const visibleShare = (page: Page, label: string) =>
-  page.locator(`[data-orchestration-view="true"] [aria-label="${label}"]`).evaluate((column) => {
-    let track = column.parentElement;
-    while (track && !/auto|scroll/.test(getComputedStyle(track).overflowX)) track = track.parentElement;
-    // HS2-3KHE7R: while the board re-renders after a width change there is briefly no scroller;
-    // answer "not in view yet" so the caller's poll waits instead of throwing.
-    if (!track) return 0;
-    const box = column.getBoundingClientRect(),
-      view = track.getBoundingClientRect();
-    return Math.max(0, Math.min(box.right, view.right) - Math.max(box.left, view.left)) / box.width;
-  });
-
 const capture = async (page: Page, name: string, ticket = 'hs2-j89jc7') => {
   // Rails and sheets slide; capture once every finite animation has finished.
   await page.waitForFunction(() =>
@@ -167,7 +154,7 @@ const capture = async (page: Page, name: string, ticket = 'hs2-j89jc7') => {
 test('HS2-J89JC7 a project that is not an orchestration project has no Orchestration view', async ({ page }) => {
   const server = await realTicketServer();
   try {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await openProject(page, server, 'Plain Project');
     await expect(page.locator('[data-segment-value="workers"]').first()).toBeVisible();
     await expect(page.locator('[data-segment-value="orchestration"]')).toHaveCount(0);
@@ -219,7 +206,7 @@ test('HS2-BRRSYM switching back to an orchestration project shows its Orchestrat
         }
       });
     }
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await page.goto('/');
     await openMockedProject(page);
     const selected = (mode: string) => page.locator(`[data-segment-value="${mode}"][aria-pressed="true"]`).first();
@@ -258,7 +245,7 @@ test('HS2-J89JC7 an orchestration project with no projects added shows the first
       targets: [],
     });
     await asOrchestrationProject(server);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await openProject(page, server, 'Launch');
     const tab = page.locator('[data-segment-value="orchestration"]').first();
     await expect(tab).toBeVisible();
@@ -290,7 +277,7 @@ test('HS2-J89JC7 the timeline reads newest to oldest, opens on current work, and
     await declareSelf(server);
     await asOrchestrationProject(server);
     const plan = await planAndDispatch(server);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await openProject(page, server, 'Launch');
     await page.locator('[data-segment-value="orchestration"]').first().click();
 
@@ -352,17 +339,17 @@ test('HS2-J89JC7 the timeline reads newest to oldest, opens on current work, and
     await expect(inspector.locator('[data-orchestration-section="Prerequisites"]')).toContainText(plan.first.slug);
 
     // Medium, then a phone: paged, opening on Working Now; then wide again.
-    await page.setViewportSize({ width: 1100, height: 820 });
+    await resizeTo(page, { width: 1100, height: 820 });
     await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.95);
     await capture(page, 'running-1100');
-    await page.setViewportSize({ width: 390, height: 844 });
+    await resizeTo(page, { width: 390, height: 844 });
     await expect(view).toHaveAttribute('data-layout', 'paged');
     await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.85);
     await capture(page, 'running-390');
     await view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click();
     await expect(inspector.locator('[data-orchestration-section="Run"]')).toBeVisible();
     await capture(page, 'running-inspector-390');
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await expect(view).toHaveAttribute('data-layout', 'grid');
     await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.95);
     await expect
@@ -455,7 +442,7 @@ test('HS2-DBQSWB Show Request opens that exact orchestrator request in Pending a
     expect(other.status).toBe(403);
     const requestId = await waitOnPermission(server, plan);
     for (const width of [1440, 1100, 390]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await resizeTo(page, { width, height: width === 390 ? 844 : 900 });
       if (width === 1440) await openProject(page, server, 'Launch');
       // The popup asks first, as for any request; Ignore leaves both in Pending.
       const popup = page.locator('[data-component="permission-request-popup"]');
@@ -505,7 +492,7 @@ test('HS2-DBQSWB Show Request opens that exact orchestrator request in Pending a
       await capture(page, `pending-${width}`, 'hs2-dbqswb');
     }
     // Narrow back to wide: the focused card stays the same one, in view.
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await expect(page.locator('[data-component="permission-request-card"][data-targeted="true"]')).toBeInViewport();
     await capture(page, 'pending-1440-after-narrow', 'hs2-dbqswb');
   } finally {
@@ -537,7 +524,7 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
       [plan.second.slug]: 'Add the synthetic login page',
       [third.slug]: 'Add the synthetic audit log',
     };
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await openProject(page, server, 'Launch');
     await page.locator('[data-segment-value="orchestration"]').first().click();
     const view = page.locator('[data-orchestration-view="true"]');
@@ -557,7 +544,7 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
     };
 
     for (const width of [1440, 1100]) {
-      await page.setViewportSize({ width, height: 900 });
+      await resizeTo(page, { width, height: 900 });
       await card(top).click();
       await expectAt(top);
       await page.keyboard.press('ArrowDown');
@@ -593,7 +580,7 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
     }
 
     // A phone pages one column at a time: Left and Right bring the card's column into view.
-    await page.setViewportSize({ width: 390, height: 844 });
+    await resizeTo(page, { width: 390, height: 844 });
     await expect(view).toHaveAttribute('data-layout', 'paged');
     await card(top).focus({ timeout: 10_000 });
     await page.keyboard.press('ArrowLeft');
@@ -605,7 +592,7 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
     await expect.poll(() => visibleShare(page, 'First · On Start Column')).toBeGreaterThan(0.85);
 
     // Wide again: the focused card stays focused and in view.
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await expect(view).toHaveAttribute('data-layout', 'grid');
     await card(top).focus({ timeout: 10_000 });
     await page.keyboard.press('ArrowLeft');
@@ -640,7 +627,7 @@ test('HS2-S3FKJ7 a target project’s List and Columns show the orchestration li
     await asOrchestrationProject(server);
     const plan = await planAndDispatch(server);
     const unplanned = await server.request<{ slug: string }>('/tickets', 'POST', { title: 'Unplanned synthetic work' });
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await openProject(page, server, 'Launch');
     await page.locator('[data-segment-value="list"]').first().click();
     const row = (slug: string) => page.locator(`[data-ticket-slug="${slug}"]`).first();
@@ -675,7 +662,7 @@ test('HS2-S3FKJ7 a target project’s List and Columns show the orchestration li
     await expect(line(plan.first.slug).locator('[data-orchestration-part="placement"]')).toHaveText('This machine');
 
     for (const width of [1100, 390]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await resizeTo(page, { width, height: width === 390 ? 844 : 900 });
       await expect(line(plan.second.slug)).toBeVisible();
       await capture(page, `list-${width}`, 'hs2-s3fkj7');
     }
@@ -686,7 +673,7 @@ test('HS2-S3FKJ7 a target project’s List and Columns show the orchestration li
     );
     await capture(page, 'columns-390', 'hs2-s3fkj7');
     for (const width of [1100, 1440]) {
-      await page.setViewportSize({ width, height: 900 });
+      await resizeTo(page, { width, height: 900 });
       await expect(line(plan.second.slug)).toBeVisible();
       await capture(page, `columns-${width}`, 'hs2-s3fkj7');
     }
@@ -709,7 +696,7 @@ test('HS2-HDHT5E remote target tickets show their titles, read once through the 
     await declareSelf(server);
     await asOrchestrationProject(server);
     const plan = await planAndDispatch(server);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     // The real timeline, with both target tickets placed on a paired server: the read on this machine has
     // only their slugs, never their titles (HS2-J89JC7).
     const remote = new Set([plan.first.id, plan.second.id]);
@@ -770,11 +757,11 @@ test('HS2-HDHT5E remote target tickets show their titles, read once through the 
     await expect(first).toContainText('Add the synthetic token endpoint');
     expect(reads.sort()).toEqual([plan.first.id, plan.second.id].sort());
     for (const width of [1100, 390]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await resizeTo(page, { width, height: width === 390 ? 844 : 900 });
       await expect(view).toHaveAttribute('data-layout', width === 390 ? 'paged' : 'grid');
       await capture(page, `remote-${width}`, 'hs2-hdht5e');
     }
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await expect(first).toContainText('Add the synthetic token endpoint');
     await capture(page, 'remote-1440-after-narrow', 'hs2-hdht5e');
     // Nothing the read found was written to this machine's records.
@@ -799,7 +786,7 @@ test('HS2-6GE7WM a card shows the site its run was placed on and gathers under t
     };
     const sites = real.waves.flatMap((wave) => wave.items.map((item) => item.site_id));
     expect(sites).toEqual([TARGET, TARGET]);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     // The scheduler placed the first step's run on another site of the project, on a paired Mac, as the
     // two-site server test (`e2e_sites.rs`) shows the real timeline reporting it.
     const otherSite = '01ARZ3NDEKTSV4RRFFQ69G5FJ9';
@@ -848,12 +835,12 @@ test('HS2-6GE7WM a card shows the site its run was placed on and gathers under t
     await expect(page.locator('[data-orchestration-inspector]')).toContainText('Self on the second Mac (remote)');
     await capture(page, 'sites-inspector-1440', 'hs2-6ge7wm');
     for (const width of [1100, 390]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await resizeTo(page, { width, height: width === 390 ? 844 : 900 });
       await expect(view).toHaveAttribute('data-layout', width === 390 ? 'paged' : 'grid');
       await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.85);
       await capture(page, `sites-${width}`, 'hs2-6ge7wm');
     }
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.95);
     await expect(first.locator('[data-orchestration-part="placement"]')).toHaveText('Second Mac');
     await capture(page, 'sites-1440-after-narrow', 'hs2-6ge7wm');
@@ -923,8 +910,8 @@ test('HS2-AMCSKS an orchestration project shows its Orchestration entries on the
       expect(await page.evaluate(() => (window as unknown as { __late: string[] }).__late)).toEqual([]);
       if (width === 1440) {
         // Wide, narrow and wide again: nothing is inserted on a resize either.
-        await page.setViewportSize({ width: 390, height: 844 });
-        await page.setViewportSize({ width: 1440, height: 900 });
+        await resizeTo(page, { width: 390, height: 844 });
+        await resizeTo(page, { width: 1440, height: 900 });
         await capture(page, 'settings-1440-after-narrow', 'hs2-amcsks');
         expect(await page.evaluate(() => (window as unknown as { __late: string[] }).__late)).toEqual([]);
       }
@@ -950,7 +937,7 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
       args: ['-c', 'echo SYNTHETIC-PLANNER; sleep 600'],
       cwd: server.root,
     });
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     // `plan show` as the server answers it while the planner's terminal runs and its tool has not reported
     // its session start yet (it stopped on a trust question). Every other request reaches the real server.
     let toolReady = false;
@@ -998,13 +985,13 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
     await expect(toolbar.getByRole('button', { name: 'Propose Plan' })).toHaveCount(0);
     await expect(propose).toHaveAttribute('title', 'The planning session is waiting for an answer in its terminal tab');
     await capture(page, 'waiting-1440', 'hs2-5ryxnn');
-    await page.setViewportSize({ width: 1100, height: 820 });
+    await resizeTo(page, { width: 1100, height: 820 });
     await expect(toolbar).toContainText('Planner waiting in its terminal');
     await capture(page, 'waiting-1100', 'hs2-5ryxnn');
-    await page.setViewportSize({ width: 390, height: 844 });
+    await resizeTo(page, { width: 390, height: 844 });
     await expect(toolbar).toContainText('Planner waiting in its terminal');
     await capture(page, 'waiting-390', 'hs2-5ryxnn');
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await capture(page, 'waiting-1440-after-narrow', 'hs2-5ryxnn');
 
     // HS2-FA8G9J: Show Planner, beside the busy button and as the empty state's action, opens the drawer on
@@ -1019,7 +1006,7 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
       [390, 844],
       [1440, 900],
     ] as const) {
-      await page.setViewportSize({ width, height });
+      await resizeTo(page, { width, height });
       await capture(page, `show-planner-${width}`, 'hs2-fa8g9j');
     }
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -1053,7 +1040,7 @@ test('HS2-190RDX Update Plan re-plans while the plan runs, shows the update and 
     await declareSelf(server);
     await asOrchestrationProject(server);
     await planAndDispatch(server);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await openProject(page, server, 'Launch');
     // No live AI session: Update Plan and Cancel answer as the server does, and `plan show` reports the
     // drafting update once it was pressed. Every other request reaches the real server.
@@ -1093,10 +1080,10 @@ test('HS2-190RDX Update Plan re-plans while the plan runs, shows the update and 
     const cancel = toolbar.getByRole('button', { name: 'Cancel Plan Update' });
     await expect(cancel).toBeEnabled();
     await capture(page, 'updating-1440', 'hs2-190rdx');
-    await page.setViewportSize({ width: 390, height: 844 });
+    await resizeTo(page, { width: 390, height: 844 });
     await expect(cancel).toBeVisible();
     await capture(page, 'updating-390', 'hs2-190rdx');
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await cancel.click();
     await expect(toolbar).not.toContainText('Updating Plan');
     await expect(toolbar.getByRole('button', { name: 'Update Plan' })).toBeVisible();
@@ -1113,7 +1100,7 @@ test('HS2-N5BDE4 a planner that asked a question says so and opens the goal tick
     await declareSelf(server);
     await asOrchestrationProject(server);
     const plan = await planAndDispatch(server);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     // `plan show` as the server answers it while the goal holds the planner's unanswered question.
     // HS2-Z19C1Y: installed before the page loads, as HS2-GYJHA3 did: an orchestration project opens
     // straight in its Orchestration view and reads planning at once, so a mock installed after opening
@@ -1158,10 +1145,10 @@ test('HS2-N5BDE4 a planner that asked a question says so and opens the goal tick
       `Open ${plan.goal.slug}, where the planning session asked you a question`,
     );
     await capture(page, 'asked-1440', 'hs2-n5bde4');
-    await page.setViewportSize({ width: 390, height: 844 });
+    await resizeTo(page, { width: 390, height: 844 });
     await expect(answer).toBeVisible();
     await capture(page, 'asked-390', 'hs2-n5bde4');
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await answer.click();
     await expect(page.getByText('Ship the synthetic sign-on').first()).toBeVisible();
     await capture(page, 'asked-opened-1440', 'hs2-n5bde4');
@@ -1199,7 +1186,7 @@ test('HS2-2Z4M6M a refused Propose Plan says why on the first press, from the re
     await declareSelf(server, false);
     await asOrchestrationProject(server);
     await server.request('/tickets', 'POST', { title: 'Ship the synthetic sign-on' });
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     let proposals = 0;
     await openProject(page, server, 'Launch', async () => {
       await page.route(/\/orchestration\/planning\/propose$/, async (route) => {
@@ -1221,7 +1208,7 @@ test('HS2-2Z4M6M a refused Propose Plan says why on the first press, from the re
     // Nothing started: the button is back for another press.
     await expect(propose).toBeEnabled();
     await capture(page, 'refused-1440', 'hs2-2z4m6m');
-    await page.setViewportSize({ width: 390, height: 844 });
+    await resizeTo(page, { width: 390, height: 844 });
     await propose.click();
     await expect(toast).toBeVisible();
     await capture(page, 'refused-390', 'hs2-2z4m6m');
@@ -1237,7 +1224,7 @@ test('HS2-8Z9VHH a refused planner session start for Update Plan says why on the
     await declareSelf(server);
     await asOrchestrationProject(server);
     await planAndDispatch(server);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await openProject(page, server, 'Launch');
     await page.locator('[data-segment-value="orchestration"]').first().click();
     const update = page.locator('[data-orchestration-toolbar="proposed"]').getByRole('button', { name: 'Update Plan' });
@@ -1262,7 +1249,7 @@ test('HS2-EX594V the view warns while a multi-site project’s home site is unav
     await declareSelf(server);
     await asOrchestrationProject(server);
     const plan = await planAndDispatch(server);
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     // The scheduler's ledger, as the real timeline carries it on a server whose project has a second site
     // (crates/hotsheet-server/tests/remote_servers/e2e_sites.rs proves the server side): Self is the home
     // and is unreachable, so no dispatcher or integrator starts and work still runs on the other site.
@@ -1329,7 +1316,7 @@ test('HS2-EX594V the view warns while a multi-site project’s home site is unav
     expect(bannerBox && boardBox && bannerBox.y + bannerBox.height <= boardBox.y + 1).toBe(true);
     await capture(page, 'home-outage-1440', 'hs2-ex594v');
     for (const width of [1100, 390]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await resizeTo(page, { width, height: width === 390 ? 844 : 900 });
       await expect(view).toHaveAttribute('data-layout', width === 390 ? 'paged' : 'grid');
       await expect(banner).toBeVisible();
       await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.85);
@@ -1337,7 +1324,7 @@ test('HS2-EX594V the view warns while a multi-site project’s home site is unav
       expect(box && box.x >= 0 && box.x + box.width <= width + 0.5).toBe(true);
       await capture(page, `home-outage-${width}`, 'hs2-ex594v');
     }
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await resizeTo(page, { width: 1440, height: 900 });
     await expect(view).toHaveAttribute('data-layout', 'grid');
     await expect(banner).toBeVisible();
     await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.95);
