@@ -489,14 +489,14 @@ fn next_action(health: &SyncHealth) -> Option<String> {
 pub(crate) fn record_attempt_start(store_path: &Path) {
     let mut record = read_record(store_path).unwrap_or_default();
     record.attempt_started_at = Some(now_string());
-    let _ = write_record(store_path, &record);
+    write_record(store_path, &record);
 }
 
 /// Record a finished cycle's outcome.
 pub(crate) fn record_outcome(store_path: &Path, report: SyncReport, detail: CycleDetail) {
     let mut record = read_record(store_path).unwrap_or_default();
     apply_outcome(&mut record, report, detail, &now_string());
-    let _ = write_record(store_path, &record);
+    write_record(store_path, &record);
 }
 
 fn apply_outcome(record: &mut SyncRecord, report: SyncReport, detail: CycleDetail, now: &str) {
@@ -534,7 +534,7 @@ pub(crate) fn record_stale_lock_recovery(
         at: now_string(),
         moved,
     });
-    let _ = write_record(store_path, &record);
+    write_record(store_path, &record);
 }
 
 /// Remember that a cycle registered the missing merge driver (HS2-9TV6A2).
@@ -547,7 +547,7 @@ pub(crate) fn record_merge_driver(
     }
     let mut record = read_record(store_path).unwrap_or_default();
     record.merge_driver_repaired_at = Some(now_string());
-    let _ = write_record(store_path, &record);
+    write_record(store_path, &record);
 }
 
 /// Count one more automatic continue of the unfinished rebase that started at
@@ -563,7 +563,7 @@ pub(crate) fn note_continue_attempt(store_path: &Path, orig_head: &str) -> u32 {
     let count = (before + 1).min(crate::sync_replay::MAX_CONTINUE_ATTEMPTS + 1);
     if count != before {
         record.continue_attempts = Some((orig_head.to_string(), count));
-        let _ = write_record(store_path, &record);
+        write_record(store_path, &record);
     }
     count
 }
@@ -573,7 +573,7 @@ pub(crate) fn clear_continue_attempts(store_path: &Path) {
     if let Some(mut record) = read_record(store_path)
         && record.continue_attempts.take().is_some()
     {
-        let _ = write_record(store_path, &record);
+        write_record(store_path, &record);
     }
 }
 
@@ -592,7 +592,19 @@ pub fn read_record(store_path: &Path) -> Option<SyncRecord> {
     serde_json::from_slice(&std::fs::read(path).ok()?).ok()
 }
 
-fn write_record(store_path: &Path, record: &SyncRecord) -> std::io::Result<()> {
+/// Save the record, best effort: a sync cycle never fails because its health record could
+/// not be written, but the failure is reported, since sync status would then show a stale
+/// outcome (HS2-68JAY3).
+fn write_record(store_path: &Path, record: &SyncRecord) {
+    if let Err(error) = try_write_record(store_path, record) {
+        eprintln!(
+            "warning: could not save the sync health record for {}: {error}",
+            store_path.display()
+        );
+    }
+}
+
+fn try_write_record(store_path: &Path, record: &SyncRecord) -> std::io::Result<()> {
     let dir = git_dir(store_path)
         .ok_or_else(|| std::io::Error::other("store is not a Git repository"))?;
     let mut temp = tempfile::NamedTempFile::new_in(&dir)?;

@@ -822,3 +822,170 @@ fn hs2_322zsz_a_store_bound_to_an_external_backend_refuses_to_claim_without_it()
     }
     assert_eq!(f.a.read_ticket(&f.tickets[0]).unwrap().claimed_by, None);
 }
+
+// ---- HS2-68JAY3: the claim records follow the store's Git directory as it changes ----
+
+fn lost_conflict(ticket: Ulid, worker: &str) -> ClaimConflict {
+    ClaimConflict {
+        ticket,
+        slug: "CL-1".into(),
+        worker: worker.into(),
+        holder: "other-machine".into(),
+        detected_at: now(),
+    }
+}
+
+fn standing(store: &FsStore, ticket: Ulid) -> Option<ClaimStanding> {
+    ClaimStandings::read(store).of(&ticket.to_string(), None, false)
+}
+
+fn canonical(path: &Path) -> PathBuf {
+    hotsheet_sync::paths::canonicalize(path).unwrap()
+}
+
+/// A store first read while it is not a Git repository reads as having no records, as
+/// often as it is asked; once it gains a `.git` the same process records and reads them
+/// at once, with no restart.
+#[test]
+fn hs2_68jay3_a_store_that_gains_a_git_directory_gets_its_claim_records_without_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path().join("store"), &StoreMetadata::new("CL")).unwrap();
+    let ticket = Ulid::new();
+    for _ in 0..3 {
+        assert!(ClaimStandings::read(&store).is_empty());
+        assert!(pending_conflicts(&store).is_empty());
+        assert!(provisional_claims(&store).is_empty());
+    }
+    // Without a Git directory there is nowhere to record, and nothing is written.
+    record_conflict(&store, lost_conflict(ticket, "worker-a"));
+    assert!(pending_conflicts(&store).is_empty());
+    assert!(record_provisional(&store, ticket, &Ulid::new(), "worker-a").is_err());
+
+    git(store.root(), &["init", "--quiet", "-b", "main"]);
+    let git_dir = canonical(&store.root().join(".git"));
+    assert_eq!(
+        git_path(&store, CONFLICTS_FILE).map(|path| canonical(path.parent().unwrap())),
+        Some(git_dir.clone())
+    );
+    record_conflict(&store, lost_conflict(ticket, "worker-a"));
+    assert_eq!(pending_conflicts(&store).len(), 1);
+    assert!(matches!(
+        standing(&store, ticket),
+        Some(ClaimStanding::Lost { ref worker, .. }) if worker == "worker-a"
+    ));
+    let other = Ulid::new();
+    record_provisional(&store, other, &Ulid::new(), "worker-b").unwrap();
+    assert_eq!(provisional_claims(&store)[&other].worker, "worker-b");
+    assert!(git_dir.join(PROVISIONAL_FILE).is_file());
+}
+
+/// Every transition of the store's Git directory is seen by the next lookup, whichever
+/// of reads and writes comes first: removed, re-created, and acknowledged in between.
+#[test]
+fn hs2_68jay3_claim_records_follow_removed_and_recreated_git_directories() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path().join("store"), &StoreMetadata::new("CL")).unwrap();
+    let (first, second) = (Ulid::new(), Ulid::new());
+    git(store.root(), &["init", "--quiet", "-b", "main"]);
+    // A write before any read, then the read.
+    record_conflict(&store, lost_conflict(first, "worker-a"));
+    assert!(standing(&store, first).is_some());
+
+    // The repository goes away: nothing stale is reported, and writes go nowhere.
+    std::fs::remove_dir_all(store.root().join(".git")).unwrap();
+    assert!(ClaimStandings::read(&store).is_empty());
+    assert!(pending_conflicts(&store).is_empty());
+    record_conflict(&store, lost_conflict(second, "worker-b"));
+    assert!(take_conflicts(&store).is_empty());
+
+    // A new repository starts empty, then records again; a read comes before the write.
+    git(store.root(), &["init", "--quiet", "-b", "main"]);
+    assert!(ClaimStandings::read(&store).is_empty());
+    record_conflict(&store, lost_conflict(second, "worker-b"));
+    assert!(standing(&store, first).is_none());
+    assert!(standing(&store, second).is_some());
+
+    // Acknowledge (twice: the second is a no-op), refill and take.
+    acknowledge_conflicts(&store, &[second]);
+    assert!(pending_conflicts(&store).is_empty());
+    acknowledge_conflicts(&store, &[second]);
+    record_conflict(&store, lost_conflict(first, "worker-a"));
+    assert_eq!(take_conflicts(&store).len(), 1);
+    assert!(take_conflicts(&store).is_empty());
+    assert!(ClaimStandings::read(&store).is_empty());
+}
+
+/// In a linked worktree the records live where `git rev-parse --git-path` puts them: the
+/// worktree's own Git directory, not the shared one.
+#[test]
+fn hs2_68jay3_a_linked_worktree_keeps_its_records_in_its_own_git_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let main = dir.path().join("main");
+    std::fs::create_dir_all(&main).unwrap();
+    git(&main, &["init", "--quiet", "-b", "main"]);
+    git(
+        &main,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            "seed",
+        ],
+    );
+    let linked = dir.path().join("linked");
+    git(
+        &main,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "side",
+            linked.to_str().unwrap(),
+        ],
+    );
+    let store = FsStore::init(&linked, &StoreMetadata::new("CL")).unwrap();
+    for name in [PROVISIONAL_FILE, CONFLICTS_FILE] {
+        let expected = PathBuf::from(git(&linked, &["rev-parse", "--git-path", name]).trim());
+        let expected = if expected.is_absolute() {
+            expected
+        } else {
+            linked.join(expected)
+        };
+        let found = git_path(&store, name).unwrap();
+        assert_eq!(found.file_name(), expected.file_name());
+        assert_eq!(
+            canonical(found.parent().unwrap()),
+            canonical(expected.parent().unwrap())
+        );
+        assert_ne!(
+            canonical(found.parent().unwrap()),
+            canonical(&main.join(".git"))
+        );
+    }
+    let ticket = Ulid::new();
+    record_conflict(&store, lost_conflict(ticket, "worker-a"));
+    assert!(standing(&store, ticket).is_some());
+}
+
+/// A record that cannot be saved or removed is reported and never panics; removing one
+/// already gone is silent.
+#[test]
+fn hs2_68jay3_record_writes_that_fail_are_reported_not_fatal() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("no-such-dir").join(CONFLICTS_FILE);
+    save_record(&missing, &Vec::<ClaimConflict>::new());
+    assert!(!missing.exists());
+    remove_record(&missing);
+    let present = dir.path().join(CONFLICTS_FILE);
+    save_record(&present, &vec![lost_conflict(Ulid::new(), "worker-a")]);
+    assert_eq!(read_json::<Vec<ClaimConflict>>(&present).len(), 1);
+    remove_record(&present);
+    assert!(!present.exists());
+    remove_record(&present);
+}

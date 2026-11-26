@@ -1004,12 +1004,15 @@ fn write_overlay(root: &Path, overlay: &Overlay) {
     let Some(parent) = path.parent() else {
         return;
     };
-    if fs::create_dir_all(parent).is_err() {
-        return;
-    }
-    if let Ok(mut text) = serde_json::to_string_pretty(overlay) {
+    // Best effort, and the next pass recomputes the overlay; until then group names show
+    // without upstream changes, so a failure is reported (HS2-68JAY3).
+    let written = fs::create_dir_all(parent).and_then(|()| {
+        let mut text = serde_json::to_string_pretty(overlay).map_err(std::io::Error::from)?;
         text.push('\n');
-        let _ = crate::store::write_file_atomically(&path, text.as_bytes());
+        crate::store::write_file_atomically(&path, text.as_bytes())
+    });
+    if let Err(error) = written {
+        eprintln!("warning: could not write {}: {error}", path.display());
     }
 }
 

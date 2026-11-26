@@ -447,20 +447,37 @@ pub struct ClaimConflict {
     pub detected_at: Timestamp,
 }
 
+/// HS2-68JAY3: where a machine-local claim record lives: `name` inside the store's Git
+/// directory, from the HS2-CBZV9W discovery cache that [`FsStore::git_owner`] shares. A
+/// list reads these records on every request, so a lookup costs a few `stat` calls rather
+/// than a `git` process, and a store that becomes a Git repository while the server runs
+/// gets its records at the next lookup, never a remembered "no repository". For these
+/// file names `<git dir>/<name>` is what `git rev-parse --git-path <name>` prints.
 fn git_path(store: &FsStore, name: &str) -> Option<PathBuf> {
-    let output = crate::git::command_in(store.root())
-        .args(["rev-parse", "--git-path", name])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+    crate::store_git::store_git_dir(store.root()).map(|dir| dir.join(name))
+}
+
+/// Save a record, and say so when it could not be saved (HS2-68JAY3): the claim it
+/// describes stands, but this host cannot then report it as provisional or lost.
+fn save_record<T: Serialize>(path: &Path, value: &T) {
+    if let Err(error) = write_json(path, value) {
+        eprintln!(
+            "warning: could not save claim record {}: {error}",
+            path.display()
+        );
     }
-    let path = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
-    Some(if path.is_absolute() {
-        path
-    } else {
-        store.root().join(path)
-    })
+}
+
+/// Remove a record; one already gone is not a failure (HS2-68JAY3).
+fn remove_record(path: &Path) {
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => eprintln!(
+            "warning: could not remove claim record {}: {error}",
+            path.display()
+        ),
+    }
 }
 
 fn read_json<T: for<'de> Deserialize<'de> + Default>(path: &Path) -> T {
@@ -501,7 +518,7 @@ fn clear_provisional(store: &FsStore, ticket: Ulid) {
     };
     let mut claims: BTreeMap<Ulid, ProvisionalClaim> = read_json(&path);
     if claims.remove(&ticket).is_some() {
-        let _ = write_json(&path, &claims);
+        save_record(&path, &claims);
     }
 }
 
@@ -521,7 +538,7 @@ fn record_conflict(store: &FsStore, conflict: ClaimConflict) {
     conflicts.push(conflict);
     let excess = conflicts.len().saturating_sub(MAX_CONFLICTS);
     conflicts.drain(..excess);
-    let _ = write_json(&path, &conflicts);
+    save_record(&path, &conflicts);
 }
 
 /// The claim conflicts recorded and not yet acknowledged, oldest first, without forgetting them
@@ -571,7 +588,7 @@ impl ClaimStandings {
 
     /// [`Self::read`] as of `now`.
     pub fn read_at(store: &FsStore, now: Timestamp) -> Self {
-        let read = |name: &'static str| store_git_path(store, name);
+        let read = |name: &str| git_path(store, name);
         let provisional: BTreeMap<Ulid, ProvisionalClaim> = read(PROVISIONAL_FILE)
             .map(|path| read_json(&path))
             .unwrap_or_default();
@@ -638,27 +655,6 @@ fn lease_live(expires: Option<&str>, now: &Timestamp) -> bool {
     })
 }
 
-/// [`git_path`] memoized per store root and file name: a list reads these records on every
-/// request, and asking Git for its directory each time would cost a process per read. A
-/// store's Git directory does not move while the server runs; a store that is not a Git
-/// repository has no claim backend (HS2-ZR8B4N).
-fn store_git_path(store: &FsStore, name: &'static str) -> Option<PathBuf> {
-    use std::collections::HashMap;
-    use std::sync::{Mutex, OnceLock};
-    type Cache = Mutex<HashMap<(PathBuf, &'static str), Option<PathBuf>>>;
-    static CACHE: OnceLock<Cache> = OnceLock::new();
-    let key = (store.root().to_path_buf(), name);
-    let cache = CACHE.get_or_init(Default::default);
-    if let Some(found) = cache.lock().ok().and_then(|map| map.get(&key).cloned()) {
-        return found;
-    }
-    let found = git_path(store, name);
-    if let Ok(mut map) = cache.lock() {
-        map.insert(key, found.clone());
-    }
-    found
-}
-
 /// Forget the conflicts recorded for `tickets`, after their losing sessions were told.
 pub fn acknowledge_conflicts(store: &FsStore, tickets: &[Ulid]) {
     let Some(path) = git_path(store, CONFLICTS_FILE) else {
@@ -671,9 +667,9 @@ pub fn acknowledge_conflicts(store: &FsStore, tickets: &[Ulid]) {
         return;
     }
     if conflicts.is_empty() {
-        let _ = std::fs::remove_file(&path);
+        remove_record(&path);
     } else {
-        let _ = write_json(&path, &conflicts);
+        save_record(&path, &conflicts);
     }
 }
 
@@ -684,7 +680,7 @@ pub fn take_conflicts(store: &FsStore) -> Vec<ClaimConflict> {
     };
     let conflicts: Vec<ClaimConflict> = read_json(&path);
     if !conflicts.is_empty() {
-        let _ = std::fs::remove_file(&path);
+        remove_record(&path);
     }
     conflicts
 }

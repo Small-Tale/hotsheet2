@@ -911,7 +911,15 @@ pub fn abort_stalled_integration(
     if let Some(saved) = &saved
         && let Err(error) = crate::sync_saved_writes::set_aside(saved)
     {
-        let _ = crate::sync_saved_writes::restore(saved);
+        // The set-aside error is the one to return; a failed write-back is reported with
+        // the backup ref that still holds every saved write (HS2-68JAY3).
+        if let Err(restore) = crate::sync_saved_writes::restore(saved) {
+            eprintln!(
+                "warning: could not write back saved ticket writes after a failed set-aside \
+                 ({restore}); they remain in {}",
+                saved.backup_ref
+            );
+        }
         return Err(error);
     }
     let args: &[&str] = match kind {

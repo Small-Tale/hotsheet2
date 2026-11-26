@@ -528,6 +528,13 @@ the holder and the time), which `claim_gate::take_conflicts` returns once. The l
 session's next renew is refused naming the holder. Pushing a conflict to the session as
 a notification is HS2-1639Q0.
 
+**Record location.** Both records live in the Git directory Git uses for the store (a
+linked worktree's own directory), found through the store-owner discovery cache
+(HS2-CBZV9W), so a list reads them without starting `git`. A store that gains, loses or
+re-creates its `.git` while the server runs reads and writes its records at the next
+lookup; a store outside any repository has none. A record that cannot be saved is
+reported as a warning and the claim stands (HS2-68JAY3).
+
 **Namespace resources.** A namespace bound to a `git_ref` configuration is served by
 `GitRefBackend`: exclusive with fencing; renew and release by token alone from any
 machine sharing the remote; `provisional` grants come from a local fallback under

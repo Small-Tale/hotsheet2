@@ -284,6 +284,19 @@ pub(crate) enum OwnerProbe {
 /// Owner probes per canonical store directory (HS2-CBZV9W).
 static OWNER_PROBES: LazyLock<DiscoveryCache<OwnerProbe>> = LazyLock::new(DiscoveryCache::new);
 
+/// HS2-68JAY3: the absolute Git directory Git uses for the store at `root` (the
+/// worktree-private directory of a linked worktree, or the enclosing repository's for a
+/// nested store), answered from [`OWNER_PROBES`]. A store outside any repository is
+/// reused only while every `.git` on its path is unchanged, so a store that gains a
+/// `.git` while the server runs is seen by the next lookup; a failed probe is never
+/// reused. `None` when Git finds no working tree here.
+pub(crate) fn store_git_dir(root: &Path) -> Option<PathBuf> {
+    match OWNER_PROBES.get_or_probe(root, Watch::LocationAndHead, probe_owner) {
+        OwnerProbe::Located { git_dir, .. } => Some(hotsheet_sync::paths::from_git(&git_dir)),
+        OwnerProbe::Classified(_) => None,
+    }
+}
+
 /// One scrubbed `rev-parse` call: the working tree, Git directory, prefix and `HEAD`.
 /// `NoRepository` is reusable while the path's `.git` entries stay as they are; a probe
 /// that could not describe a working tree is never reused.

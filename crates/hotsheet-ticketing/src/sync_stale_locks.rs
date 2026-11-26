@@ -572,8 +572,14 @@ fn write_recovery_file(stash: &Path, records: &[RecoveryRecord], now: SystemTime
         ),
         "moved": records,
     });
-    if let Ok(text) = serde_json::to_vec_pretty(&body) {
-        let _ = std::fs::write(stash.join("recovery.json"), text);
+    // The locks have already moved; the sync health record still names them, so a
+    // missing proof file is reported, not fatal (HS2-68JAY3).
+    let path = stash.join("recovery.json");
+    let written = serde_json::to_vec_pretty(&body)
+        .map_err(std::io::Error::from)
+        .and_then(|text| std::fs::write(&path, text));
+    if let Err(error) = written {
+        eprintln!("warning: could not write {}: {error}", path.display());
     }
 }
 
