@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { TimelineItem } from './orchestration-timeline';
 import {
   cardTime,
-  ciRepair,
+  doneRepair,
   dryRunPlan,
   findTimelineItem,
   machineLabel,
@@ -515,21 +515,21 @@ describe('HS2-89578K a Done card whose CI gate failed reads as needing repair', 
 
   it('says CI failed with a warning and a next step, and reads plainly done otherwise', () => {
     expect(done.state).toBe('done');
-    expect(ciRepair(withCi('failed'))).toMatchObject({ label: 'CI failed', tone: 'warning' });
-    expect(ciRepair(withCi('failed'))?.next).toContain('repair it as the Gates section says');
+    expect(doneRepair(withCi('failed'))).toMatchObject({ label: 'CI failed', tone: 'warning' });
+    expect(doneRepair(withCi('failed'))?.next).toContain('repair it as the Gates section says');
     expect(card('failed')).toMatchObject({ state: 'CI failed', stateTone: 'warning' });
     expect(stateBadge(withCi('failed'))).toEqual({ label: 'Done · CI failed', tone: 'warning' });
     expect(orchestrationLine(withCi('failed'), false).state).toBe('CI failed');
     // Every other verdict, and no gate, keeps Done as it was.
     for (const ci of [undefined, 'passed', 'pending', 'unknown', 'superseded']) {
-      expect(ciRepair(withCi(ci)), String(ci)).toBeUndefined();
+      expect(doneRepair(withCi(ci)), String(ci)).toBeUndefined();
       expect(card(ci)?.state, String(ci)).toBeUndefined();
       expect(stateBadge(withCi(ci)), String(ci)).toEqual({ label: 'Done', tone: 'neutral' });
     }
     // A finished run with no run record, and unfinished work with a failed gate, are not Done repairs.
-    expect(ciRepair({ ...done, run: undefined })).toBeUndefined();
+    expect(doneRepair({ ...done, run: undefined })).toBeUndefined();
     const running = item('step-3');
-    expect(ciRepair({ ...running, run: { ...running.run!, ci_gate: 'failed' } })).toBeUndefined();
+    expect(doneRepair({ ...running, run: { ...running.run!, ci_gate: 'failed' } })).toBeUndefined();
   });
 
   it('follows the verdict through red, repair and green, and red again', () => {
@@ -549,5 +549,61 @@ describe('HS2-89578K a Done card whose CI gate failed reads as needing repair', 
       owner_label: 'Launch',
     } as Parameters<typeof targetLineOrchestration>[0]);
     expect(line).toMatchObject({ state: 'CI failed', stateTone: 'warning' });
+  });
+});
+
+describe('HS2-GPABYY a Done card whose deployment failed or whose review asks for changes reads as needing repair', () => {
+  const done = item('step-1');
+  type Gates = { ci_gate?: string; deployment_gate?: string; review_gate?: string };
+  const withGates = (gates: Gates) => ({ ...done, run: { ...done.run!, ...gates } });
+  const timeline = demoTimeline('running');
+  const card = (gates: Gates) => timelineCard(withGates(gates), timeline, undefined, demoClock).orchestration;
+
+  it('says Deploy failed or Changes requested with a warning and a next step', () => {
+    const deploy = withGates({ deployment_gate: 'failed' });
+    expect(doneRepair(deploy)).toMatchObject({ label: 'Deploy failed', tone: 'warning' });
+    expect(doneRepair(deploy)?.next).toContain('fix the deployment and request it again');
+    expect(card({ deployment_gate: 'failed' })).toMatchObject({ state: 'Deploy failed', stateTone: 'warning' });
+    expect(stateBadge(deploy)).toEqual({ label: 'Done · Deploy failed', tone: 'warning' });
+    const review = withGates({ review_gate: 'failed' });
+    expect(doneRepair(review)).toMatchObject({ label: 'Changes requested', tone: 'warning' });
+    expect(doneRepair(review)?.next).toContain('request the review again');
+    expect(card({ review_gate: 'failed' })).toMatchObject({ state: 'Changes requested', stateTone: 'warning' });
+    expect(stateBadge(review)).toEqual({ label: 'Done · Changes requested', tone: 'warning' });
+    expect(orchestrationLine(review, false).state).toBe('Changes requested');
+  });
+
+  it('reads plainly Done for every other verdict, and never for unfinished work', () => {
+    for (const verdict of [undefined, 'passed', 'pending', 'unknown', 'awaiting_approval', 'superseded']) {
+      for (const gates of [{ deployment_gate: verdict }, { review_gate: verdict }]) {
+        expect(doneRepair(withGates(gates)), JSON.stringify(gates)).toBeUndefined();
+        expect(card(gates)?.state, JSON.stringify(gates)).toBeUndefined();
+        expect(stateBadge(withGates(gates))).toEqual({ label: 'Done', tone: 'neutral' });
+      }
+    }
+    const running = item('step-3');
+    for (const gates of [{ deployment_gate: 'failed' }, { review_gate: 'failed' }])
+      expect(doneRepair({ ...running, run: { ...running.run!, ...gates } })).toBeUndefined();
+  });
+
+  it('names CI first, then the deployment, then the review, and follows each repair', () => {
+    const all = { ci_gate: 'failed', deployment_gate: 'failed', review_gate: 'failed' };
+    expect(card(all)?.state).toBe('CI failed');
+    expect(card({ ...all, ci_gate: 'passed' })?.state).toBe('Deploy failed');
+    expect(card({ ...all, ci_gate: 'passed', deployment_gate: 'pending' })?.state).toBe('Changes requested');
+    expect(card({ ci_gate: 'passed', deployment_gate: 'passed', review_gate: 'passed' })?.state).toBeUndefined();
+    // A review sent back, requested again, approved, then sent back again.
+    expect(
+      ['failed', 'awaiting_approval', 'passed', 'failed'].map((review_gate) => card({ review_gate })?.state),
+    ).toEqual(['Changes requested', undefined, undefined, 'Changes requested']);
+  });
+
+  it('is the same line in the target project’s own List', () => {
+    const line = targetLineOrchestration({
+      item: withGates({ deployment_gate: 'failed' }),
+      proposed: false,
+      owner_label: 'Launch',
+    } as Parameters<typeof targetLineOrchestration>[0]);
+    expect(line).toMatchObject({ state: 'Deploy failed', stateTone: 'warning' });
   });
 });

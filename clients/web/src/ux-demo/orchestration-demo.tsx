@@ -52,7 +52,10 @@ export const orchestrationDemoSettings = {
   docWait: signal('resource_held'),
   /** HS2-A7YCB2: API-12's CI gate: '' is pending; an unknown reason offers Link Again. */
   ciGate: signal(''),
-  /** HS2-89578K: the done API-11's CI verdict: '' is none linked; `failed` reads as needing repair. */
+  /**
+   * HS2-89578K: the done API-11's CI verdict: '' is none linked; `failed` reads as needing repair. HS2-GPABYY:
+   * `deploy_failed` and `changes_requested` fail its deployment or its review instead.
+   */
   doneCi: signal(''),
   collapsed: signal<string[]>([]),
 };
@@ -131,7 +134,7 @@ function withDoneCi(timeline: OrchestrationTimeline): OrchestrationTimeline {
     waves: timeline.waves.map((wave) => ({
       ...wave,
       items: wave.items.map((item) =>
-        item.step_id === 'step-1' && item.run ? { ...item, run: { ...item.run, ci_gate: ci } } : item,
+        item.step_id === 'step-1' && item.run ? { ...item, run: { ...item.run, ...DONE_GATES[ci] } } : item,
       ),
     })),
   };
@@ -204,7 +207,17 @@ const DONE_CI = [
   { value: '', label: 'None Linked' },
   { value: 'passed', label: 'Passed' },
   { value: 'failed', label: 'Failed' },
+  { value: 'deploy_failed', label: 'Passed, Deploy Failed' },
+  { value: 'changes_requested', label: 'Passed, Changes Requested' },
 ];
+
+/** HS2-GPABYY: the run's gate verdicts each Done API-11 choice sets. */
+const DONE_GATES: Readonly<Record<string, { ci_gate: string; deployment_gate?: string; review_gate?: string }>> = {
+  passed: { ci_gate: 'passed' },
+  failed: { ci_gate: 'failed' },
+  deploy_failed: { ci_gate: 'passed', deployment_gate: 'failed' },
+  changes_requested: { ci_gate: 'passed', review_gate: 'failed' },
+};
 
 const SELECTIONS = [
   { value: 'step-3', label: 'API-12 Running' },
@@ -525,7 +538,7 @@ export function OrchestrationDemoSettings() {
       <Select name="doc-wait" label="DOC-9 Waits For" value={settings.docWait.value} choices={DOC_WAITS} />
       <Select name="ci-gate" label="API-12’s CI Gate" value={settings.ciGate.value} choices={CI_GATES} />
       <Select name="run-condition" label="API-12’s Run" value={settings.runCondition.value} choices={RUN_CONDITIONS} />
-      <Select name="done-ci" label="Done API-11’s CI" value={settings.doneCi.value} choices={DONE_CI} />
+      <Select name="done-ci" label="Done API-11’s Gates" value={settings.doneCi.value} choices={DONE_CI} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />

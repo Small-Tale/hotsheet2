@@ -386,6 +386,23 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     );
     expect(green).not.toContain('CI failed');
     expect(green).not.toContain('repair it');
+    // HS2-GPABYY: so does done work whose deployment failed or whose review asks for changes.
+    const inspect = (gates: { deployment_gate?: string; review_gate?: string }) =>
+      String(
+        OrchestrationInspector({
+          item: { ...done, run: { ...done.run!, ...gates } },
+          timeline: demoTimeline('running'),
+        }),
+      );
+    const deploy = inspect({ deployment_gate: 'failed' });
+    expect(deploy).toContain('Done · Deploy failed');
+    expect(deploy).toContain('fix the deployment and request it again');
+    const review = inspect({ review_gate: 'failed' });
+    expect(review).toContain('Done · Changes requested');
+    expect(review).toContain('request the review again');
+    const settled = inspect({ deployment_gate: 'passed', review_gate: 'passed' });
+    expect(settled).not.toContain('Deploy failed');
+    expect(settled).not.toContain('Changes requested');
   });
 
   it('offers Link Again on each unknown CI gate a link watches again, and nowhere else (HS2-A7YCB2)', () => {

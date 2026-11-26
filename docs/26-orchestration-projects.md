@@ -6199,6 +6199,16 @@ A read on the server also starts the target followers of §26.9.
   says (HS2-89578K). The timeline item's `run.ci_gate` carries the run's CI verdict
   (its standing CI gates rolled up as `gates` does; absent when no CI gate stands), so
   a repair that is pending or passes reads plainly Done again.
+  Finished work whose deployment failed reads "Deploy failed", and finished work whose
+  review asks for changes (a review gate marked changes requested, typically after the
+  ticket was completed) reads "Changes requested", both warning tone, with the badge
+  **Done · Deploy failed** or **Done · Changes requested** and a **Next** row saying to
+  fix the deployment and request it again, or to make the changes and request the
+  review again (HS2-GPABYY). The run carries `deployment_gate` and `review_gate`
+  beside `ci_gate`, each rolled up from the run's standing gates of that kind and
+  absent when none stands. A card names CI first, then the deployment, then the
+  review; a review requested again or approved, and a deployment that passes, read
+  plainly Done again.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
