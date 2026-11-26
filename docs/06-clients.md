@@ -2650,8 +2650,16 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   posts a tentative claim ranked by when it began waiting, confirms it after a short settle
   window only if fewer than four confirmed or better-ranked claims are ahead of it (so the
   oldest waiter wins), and releases it when the poll ends. A newly opened context queries
-  existing holds; leases expire 35 s after a hold starts, so a closed tab cannot keep a
-  slot. A context that has to wait announces it, and holders yield after the one-second
+  existing holds; leases expire 35 s after a hold starts, so a context that vanishes cannot
+  keep a slot. A page that hides (closes, navigates away, or enters the back/forward cache)
+  releases its leases on `pagehide`, as Web Locks do, so the other tabs reclaim them at once;
+  the listener is registered when the lease channel first opens, never at import. A page
+  restored from that cache forgets the claims it knew of, since it may have missed releases
+  while frozen, and queries again (HS2-S3RHFP). Contexts that use Web Locks and contexts that
+  use leases do not count each other's slots: both are per origin, and Web Locks availability
+  follows the origin's secure-context status and storage policy, so the contexts of one origin
+  agree. A sandboxed or opaque-origin context that is refused locks also has its own
+  `BroadcastChannel` scope, so it could not join the origin's leases anyway. A context that has to wait announces it, and holders yield after the one-second
   minimum turn. Waiting sends no requests: it wakes on a release, an expiry, or an abort.
   Without `BroadcastChannel` either, a context cannot see the others and holds one slot.
   **Multiplexed WebSocket (HS2-QJR1K6).** Projects sharing a bridge use one browser

@@ -15,7 +15,10 @@
  *   otherwise withdraws it, so the oldest waiter wins a race;
  * - `release` frees a slot; a context that opens the channel sends `query`, and holders
  *   re-announce their holds;
- * - leases and tentative claims expire, so a closed tab cannot keep a slot;
+ * - leases and tentative claims expire, so a context that vanishes cannot keep a slot;
+ * - HS2-S3RHFP: a page that hides (closes, navigates away, or enters the back/forward
+ *   cache) releases its leases at once, as Web Locks do, so peers need not wait for expiry;
+ *   one restored from that cache forgets what it knew of others and queries again;
  * - a context that has to wait posts `waiting`, so holders yield after their minimum turn.
  * Waiting never touches the network: it wakes on a release, an expiry, or an abort.
  * Without any `BroadcastChannel` a context cannot see the others, so it holds one slot.
@@ -44,6 +47,12 @@ export interface SlotLeaseBus {
   listen(listener: (message: SlotLeaseMessage) => void): () => void;
 }
 
+/** Page lifecycle events of this context; workers and tests have none. */
+export interface PageLifecycle {
+  /** `listener` runs when the page hides or shows again; returns an unsubscribe. */
+  listen(listener: (event: { type: 'pagehide' | 'pageshow'; persisted: boolean }) => void): () => void;
+}
+
 export interface SlotLeasesOptions {
   /** `null` means this context cannot see any other, so it holds one slot. */
   bus: SlotLeaseBus | null;
@@ -52,6 +61,8 @@ export interface SlotLeasesOptions {
   now?: () => number;
   /** This context's id; random by default. */
   contextId?: string;
+  /** `null` ignores page lifecycle events; the default listens on the global page. */
+  lifecycle?: PageLifecycle | null;
 }
 
 interface Claim {
@@ -130,11 +141,39 @@ export function broadcastLeaseBus(): SlotLeaseBus | null {
   };
 }
 
+/**
+ * The global page's `pagehide`/`pageshow` events, or `null` where the context has none. Nothing
+ * is registered until `listen` runs, which `SlotLeases` does only when its bus first opens.
+ */
+export function windowPageLifecycle(): PageLifecycle | null {
+  const target = globalThis as Partial<Pick<Window, 'addEventListener' | 'removeEventListener'>>;
+  if (typeof target.addEventListener !== 'function' || typeof target.removeEventListener !== 'function') return null;
+  const add = target.addEventListener.bind(globalThis);
+  const remove = target.removeEventListener.bind(globalThis);
+  return {
+    listen: (listener) => {
+      const handle = (event: Event) => {
+        listener({
+          type: event.type === 'pageshow' ? 'pageshow' : 'pagehide',
+          persisted: (event as Partial<PageTransitionEvent>).persisted ?? false,
+        });
+      };
+      add('pagehide', handle);
+      add('pageshow', handle);
+      return () => {
+        remove('pagehide', handle);
+        remove('pageshow', handle);
+      };
+    },
+  };
+}
+
 const randomId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 export class SlotLeases {
   readonly capacity: number;
   private readonly bus: SlotLeaseBus | null;
+  private readonly lifecycle: PageLifecycle | null;
   private readonly now: () => number;
   private readonly self: string;
   private readonly claims = new Map<string, Claim>();
@@ -150,6 +189,7 @@ export class SlotLeases {
     this.capacity = options.bus ? Math.max(1, options.capacity) : 1;
     this.now = options.now ?? Date.now;
     this.self = options.contextId ?? randomId();
+    this.lifecycle = options.lifecycle === undefined ? windowPageLifecycle() : options.lifecycle;
   }
 
   /** Run `listener` whenever a poll, here or in another context, starts waiting for a slot. */
@@ -182,6 +222,27 @@ export class SlotLeases {
       this.receive(message);
     });
     this.bus.post({ type: 'query', from: this.self });
+    // Registered here, on first use, never at import or construction (HS2-S3RHFP).
+    this.lifecycle?.listen((event) => {
+      if (event.type === 'pagehide') this.hide();
+      else if (event.persisted) this.restore();
+    });
+  }
+
+  /** The page is going away or into the back/forward cache: free every slot it holds. */
+  private hide() {
+    for (const [id, claim] of [...this.claims]) if (claim.from === this.self) this.release(id);
+  }
+
+  /**
+   * Restored from the back/forward cache: releases may have been missed while frozen, so forget
+   * other contexts' claims and ask holders to announce again. A settling claim absorbs replies.
+   */
+  private restore() {
+    for (const [id, claim] of [...this.claims]) if (claim.from !== this.self) this.claims.delete(id);
+    this.remoteWaiting.clear();
+    this.bus?.post({ type: 'query', from: this.self });
+    this.wake();
   }
 
   private receive(message: SlotLeaseMessage) {
@@ -264,6 +325,8 @@ export class SlotLeases {
             }
             this.prune();
           }
+          // A claim the page dropped while hiding (HS2-S3RHFP) is not held: try again.
+          if (!this.claims.has(id)) continue;
           if (this.ahead(rank, id) < this.capacity) {
             this.confirm(id);
             return id;

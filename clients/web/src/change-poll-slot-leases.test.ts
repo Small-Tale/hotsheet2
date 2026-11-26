@@ -6,9 +6,11 @@ import {
   LEASE_GRACE_MS,
   LEASE_HOLD_MAX_MS,
   LEASE_SETTLE_MS,
+  type PageLifecycle,
   type SlotLeaseBus,
   type SlotLeaseMessage,
   SlotLeases,
+  windowPageLifecycle,
 } from './change-poll-slot-leases';
 
 afterEach(() => {
@@ -284,5 +286,175 @@ describe('direct-poll slot leases without Web Locks (HS2-QS2P6B)', () => {
     expect(received).toEqual([{ type: 'release', from: 'x', id: 'x:1' }]);
     vi.stubGlobal('BroadcastChannel', undefined);
     expect(broadcastLeaseBus()).toBeNull();
+  });
+});
+
+/** A page whose lifecycle events the test fires by hand. */
+function fakeLifecycle() {
+  const listeners = new Set<Parameters<PageLifecycle['listen']>[0]>();
+  let registrations = 0;
+  const lifecycle: PageLifecycle = {
+    listen: (listener) => {
+      registrations += 1;
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  const fire = (type: 'pagehide' | 'pageshow', persisted: boolean) => {
+    for (const listener of [...listeners]) listener({ type, persisted });
+  };
+  return { lifecycle, fire, registrations: () => registrations };
+}
+
+describe('direct-poll slot leases across page hide and show (HS2-S3RHFP)', () => {
+  it('a page that hides mid-hold frees its slot at once, not after the lease expires', async () => {
+    vi.useFakeTimers();
+    const hub = fakeLeaseHub();
+    const page = fakeLifecycle();
+    const closing = new SlotLeases({ bus: hub.bus(), capacity: 1, contextId: 'c', lifecycle: page.lifecycle });
+    const survivor = new SlotLeases({ bus: hub.bus(), capacity: 1, contextId: 's', lifecycle: null });
+    // The closing tab's poll never settles: its page is torn down mid-request.
+    void closing.run(new AbortController().signal, () => new Promise<never>(() => undefined));
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+    expect(closing.held()).toBe(1);
+    const poll = vi.fn(() => Promise.resolve());
+    const run = survivor.run(new AbortController().signal, poll);
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+    expect(poll).not.toHaveBeenCalled();
+    page.fire('pagehide', false);
+    expect(closing.held()).toBe(0);
+    expect(hub.sent.at(-1)).toEqual({ type: 'release', from: 'c', id: 'c:1' });
+    // One settle window, far short of the 35 s lease.
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+    await run;
+    expect(poll).toHaveBeenCalledTimes(1);
+  });
+
+  it('an aborted poll releases its slot to a waiting peer at once', async () => {
+    vi.useFakeTimers();
+    const hub = fakeLeaseHub();
+    const holder = new SlotLeases({ bus: hub.bus(), capacity: 1, contextId: 'h', lifecycle: null });
+    const waiter = new SlotLeases({ bus: hub.bus(), capacity: 1, contextId: 'w', lifecycle: null });
+    const canceled = new AbortController();
+    const held = holder.run(
+      canceled.signal,
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          canceled.signal.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    );
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+    const poll = vi.fn(() => Promise.resolve());
+    const run = waiter.run(new AbortController().signal, poll);
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+    expect(poll).not.toHaveBeenCalled();
+    canceled.abort();
+    await expect(held).rejects.toHaveProperty('name', 'AbortError');
+    expect(hub.sent.filter((message) => message.type === 'release' && message.from === 'h')).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+    await run;
+    expect(poll).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers no page listener until leases are first used, and only with a bus', async () => {
+    vi.useFakeTimers();
+    const added: string[] = [];
+    const removed: string[] = [];
+    vi.stubGlobal('addEventListener', (type: string) => added.push(type));
+    vi.stubGlobal('removeEventListener', (type: string) => removed.push(type));
+    const hub = fakeLeaseHub();
+    const leases = new SlotLeases({ bus: hub.bus(), capacity: 1, contextId: 'l' });
+    const lonely = new SlotLeases({ bus: null, capacity: 1 });
+    expect(added).toEqual([]);
+    await lonely.run(new AbortController().signal, () => Promise.resolve());
+    expect(added).toEqual([]);
+    const run = leases.run(new AbortController().signal, () => Promise.resolve());
+    expect(added).toEqual(['pagehide', 'pageshow']);
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS);
+    await run;
+    const again = leases.run(new AbortController().signal, () => Promise.resolve());
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS);
+    await again;
+    // Registered once per context, not per poll.
+    expect(added).toEqual(['pagehide', 'pageshow']);
+    const stop = windowPageLifecycle()?.listen(() => undefined);
+    stop?.();
+    expect(removed).toEqual(['pagehide', 'pageshow']);
+  });
+
+  it('maps window page transition events and is absent without a global event target', () => {
+    const target = new EventTarget();
+    vi.stubGlobal('addEventListener', target.addEventListener.bind(target));
+    vi.stubGlobal('removeEventListener', target.removeEventListener.bind(target));
+    const seen: Array<{ type: string; persisted: boolean }> = [];
+    const stop = windowPageLifecycle()?.listen((event) => seen.push(event));
+    target.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+    target.dispatchEvent(new Event('pageshow'));
+    stop?.();
+    target.dispatchEvent(new Event('pagehide'));
+    expect(seen).toEqual([
+      { type: 'pagehide', persisted: true },
+      { type: 'pageshow', persisted: false },
+    ]);
+    vi.stubGlobal('addEventListener', undefined);
+    expect(windowPageLifecycle()).toBeNull();
+  });
+
+  it('repeated hide and back/forward restore release once each time and relearn peers', async () => {
+    vi.useFakeTimers();
+    const hub = fakeLeaseHub();
+    const page = fakeLifecycle();
+    const leases = new SlotLeases({ bus: hub.bus(), capacity: 1, contextId: 'p', lifecycle: page.lifecycle });
+    const stale = hub.bus();
+    const polls = heldPolls();
+    for (let round = 1; round <= 3; round += 1) {
+      const run = leases.run(new AbortController().signal, polls.poll);
+      await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+      expect(leases.held()).toBe(1);
+      page.fire('pagehide', true);
+      expect(leases.held()).toBe(0);
+      // The interrupted poll ends after the hide; its release is not posted twice.
+      polls.finishOne();
+      await run;
+      const releases = hub.sent.filter((message) => message.type === 'release' && message.from === 'p');
+      expect(releases).toHaveLength(round);
+      // While frozen, a peer's hold arrived and its release was missed.
+      stale.post({ type: 'hold', from: 'gone', id: `gone:${round.toString()}`, rank: 0, until: Date.now() + 35_000 });
+      await flush();
+      const queries = hub.sent.filter((message) => message.type === 'query' && message.from === 'p').length;
+      page.fire('pageshow', false);
+      expect(hub.sent.filter((message) => message.type === 'query' && message.from === 'p')).toHaveLength(queries);
+      page.fire('pageshow', true);
+      expect(hub.sent.filter((message) => message.type === 'query' && message.from === 'p')).toHaveLength(queries + 1);
+    }
+    // The stale holds were forgotten on restore, so the next poll starts without waiting.
+    const poll = vi.fn(() => Promise.resolve());
+    const run = leases.run(new AbortController().signal, poll);
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+    await run;
+    expect(poll).toHaveBeenCalledTimes(1);
+    expect(page.registrations()).toBe(1);
+  });
+
+  it('a claim dropped by a hide during its settle window is retried, never granted unheld', async () => {
+    vi.useFakeTimers();
+    const hub = fakeLeaseHub();
+    const page = fakeLifecycle();
+    const leases = new SlotLeases({ bus: hub.bus(), capacity: 1, contextId: 'd', lifecycle: page.lifecycle });
+    const contended = vi.fn(() => {
+      expect(leases.held()).toBe(1);
+      return Promise.resolve();
+    });
+    const run = leases.run(new AbortController().signal, contended);
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS / 2);
+    page.fire('pagehide', true);
+    expect(hub.sent.at(-1)).toEqual({ type: 'release', from: 'd', id: 'd:1' });
+    page.fire('pageshow', true);
+    await vi.advanceTimersByTimeAsync(LEASE_SETTLE_MS * 2);
+    await run;
+    expect(contended).toHaveBeenCalledTimes(1);
+    expect(hub.sent.filter((message) => message.type === 'hold').map((message) => message.id)).toEqual(['d:2']);
   });
 });

@@ -1,4 +1,4 @@
-import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
+import { expect, type Page, type Request, test, type WebSocketRoute } from '@playwright/test';
 
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
@@ -703,4 +703,53 @@ test('independent tabs share direct-poll slots and recover them after a tab clos
     .poll(() => [...seen].filter((path) => path.startsWith('replacement:')).length, { timeout: 20_000 })
     .toBe(projects.length);
   expect(peak).toBeLessThanOrEqual(4);
+});
+
+// HS2-S3RHFP: without Web Locks, a tab that closes mid-hold posts its lease releases on
+// pagehide, so the remaining tab takes the freed slots at once instead of after the 35 s lease.
+test('without Web Locks a tab that closes mid-hold frees its direct-poll slots at once', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await context.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'locks', { configurable: true, get: () => undefined });
+  });
+  const second = await context.newPage();
+  // Open cursor polls per tab, as the page sees them: a poll the page aborts stops counting.
+  const open = new Map<string, Set<Request>>([
+    ['first', new Set()],
+    ['second', new Set()],
+  ]);
+  const count = (label: string) => open.get(label)?.size ?? 0;
+  const prepare = async (tab: Page, label: string) => {
+    const polls = open.get(label) ?? new Set<Request>();
+    tab.on('requestfailed', (request) => polls.delete(request));
+    await installBridge(tab);
+    await tab.route(`**${MUX}`, (route) => route.fulfill({ status: 404, body: 'Not Found' }));
+    await tab.route('**/ws/poll*', async (route) => {
+      const request = route.request(),
+        url = new URL(request.url());
+      if (!url.searchParams.has('since'))
+        return route.fulfill({ json: { cursor: 1, events: [], overflow: false } }).catch(() => undefined);
+      polls.add(request);
+      // Hold a cursor poll for its timeout, as the real server does.
+      const timeout = Number(url.searchParams.get('timeout_ms') ?? 0);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(timeout, 30_000)));
+      polls.delete(request);
+      return route.fulfill({ json: { cursor: 1, events: [], overflow: false } }).catch(() => undefined);
+    });
+  };
+  await prepare(page, 'first');
+  await prepare(second, 'second');
+  await openAllProjects(page);
+  expect(await page.evaluate(() => Boolean(navigator.locks))).toBe(false);
+  await second.goto('/');
+  await expect(second.getByRole('tab', { name: projects.at(-1)?.name })).toBeVisible();
+  // Both tabs want eight polls; wait until they fill the four shared slots between them, with
+  // the second tab holding at least one.
+  await expect.poll(() => (count('second') > 0 ? count('first') + count('second') : 0), { timeout: 45_000 }).toBe(4);
+  // Closing the tab fires pagehide; its held polls never finish from the client side.
+  await second.close();
+  const left = Date.now();
+  await expect.poll(() => count('first'), { timeout: 10_000 }).toBe(4);
+  // Far sooner than the 35 s lease a vanished tab would otherwise keep.
+  expect(Date.now() - left).toBeLessThan(10_000);
 });

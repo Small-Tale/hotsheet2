@@ -1543,6 +1543,17 @@ and every project gets turns; cursor replay after preemption; and bounded transp
 backoff through an outage, then a reconnect resync and a return to long polls. The browser test
 above removes `navigator.locks` with an init script.
 
+HS2-S3RHFP releases leases on `pagehide`. `change-poll-slot-leases.test.ts # direct-poll
+slot leases across page hide and show (HS2-S3RHFP)` covers a page hiding mid-hold so a
+waiting peer starts within one settle window instead of after the 35 s lease, an aborted
+poll releasing to a waiting peer at once, no page listener until leases are first used
+(and none without a bus), the window event mapping, repeated hide and back/forward
+restore (one release per hold, stale peer holds forgotten, a fresh query), and a claim
+dropped during its settle window being retried rather than granted unheld.
+`tests/change-poll-mux.spec.ts # without Web Locks a tab that closes mid-hold frees its
+direct-poll slots at once` fills the four slots from two tabs, closes one, and expects
+the other tab to hold four polls within 10 s; it fails without the release.
+
 HS2-KB5PMF keeps mocked `/ws/poll` events cursor replayable for simultaneous
 readers. The dialog Stop browser test opens two independent polls alongside the
 app poll and verifies both readers see the done event. It advances the installed
