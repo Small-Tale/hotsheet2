@@ -128,6 +128,38 @@ test('HS2-XM692S the Run section shows the last reconciliation beside the run co
   }
 });
 
+test('HS2-ESVYQH a released run’s Next says it may be in review or back for corrections, at every width', async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    await plan.dispatch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const section = page.locator('[data-orchestration-inspector] [data-orchestration-section="Run"]');
+    await card.click();
+    // The person hands the run off through the shipped control: its worker no longer holds the ticket.
+    await section.locator('[data-control="handoff"]').click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Hand Off', exact: true }).click();
+    const next = 'Its handoff may be in review or back for corrections';
+    await expect(section).toContainText(next, { timeout: 30_000 });
+    await expect(section).toContainText('No worker holds it');
+    await expect(section).toContainText('it is not done until its ticket is completed');
+    await visualPass(page, 'hs2-esvyqh', 'released-run-next', {
+      show: section,
+      check: () => expect(section).toContainText(next),
+      atPhone: () => card.click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-9XJEZC Run Validation asks through the permission prompt and shows each step’s evidence', async ({
   page,
 }) => {
