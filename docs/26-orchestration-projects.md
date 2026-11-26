@@ -691,9 +691,11 @@ user; the authenticated target server, which still enforces its own device role,
 remains that boundary. Forgetting a rule (Settings → Permissions, or `permission
 forget`) makes the next action ask again. The ledger keeps at most 512 requests,
 1,024 rules and 256 decision records. A full request list drops its oldest used or
-lapsed requests first, so pending and usable ones stay. Denied requests and requests an
-Always Allow answered are not dropped yet, so a list full of them refuses new asks with
-`capacity` (HS2-8GE9HM). Rules are never dropped automatically: at 1,024 Always Allow is
+lapsed requests first, then (HS2-8GE9HM) its oldest Denies and requests an Always Allow
+answered, once a day has passed since the answer: a Deny stays final for its operation
+at least that long, and a rule answers its key on its own. Waiting requests and an
+unused Allow Once are never dropped, so a list full of them refuses new asks with
+`capacity`. Rules are never dropped automatically: at 1,024 Always Allow is
 refused with `capacity` until a person forgets one (HS2-5675T5). The oldest decision
 record is dropped first.
 
