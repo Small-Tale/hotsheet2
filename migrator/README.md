@@ -44,6 +44,12 @@ PG18**, a future Hot Sheet) can't be opened; those fall back to
 pinned, hash-verified matching engine on demand (cached). Bundling the absolute-latest
 0.5.x would be _wrong_ — it can't read today's 0.3.x/0.4.x data.
 
+The bundled engine throws the same `PGlite failed to initialize properly` for a
+damaged datadir as for one of another Postgres major, so the fetch runs only when that
+failure meets a `PG_VERSION` major other than the bundled 17 (`BUNDLED_PG_MAJOR`). A
+damaged, same-major, or unstamped datadir fails with a "looks damaged" message and
+downloads nothing (HS2-D0V2NB).
+
 - **Old datadirs.** v0.17.x (0.3.x) clusters open directly with the bundled 0.4.x
   engine — no fetch.
 - **Working database.** PGLite 0.4.0 moved the default working DB from `template1` to
@@ -64,7 +70,9 @@ clusters (the old one written by a devDependency 0.3.x engine).
 npm test   # vitest
 ```
 
-Covers: the export shape, field/notes/tag/timestamp mapping, `blocked_by` edge
+Covers: the export shape, field/notes/tag/timestamp mapping, HS1 row and timestamp
+shape rejection, engine-fallback selection (`test/engine-fallback.test.mjs`, with
+`pglite-migrate` mocked), `blocked_by` edge
 resolution, soft-delete, column tolerance, **real on-disk old (0.3.x) and current
 (0.4.x) clusters** read by the bundled engine, and a **cross-language conformance** test that
 feeds the exporter's JSON to the real Rust `hotsheet import` (skips if the CLI isn't

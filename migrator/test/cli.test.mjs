@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -146,6 +146,24 @@ describe('exporter command line (HS2-6JNDRY)', () => {
     });
     expect(result.stderr).toContain('hotsheet-export: no HS1 database directory');
   });
+
+  it('exits 1 for a damaged bundled-major datadir without fetching an engine (HS2-D0V2NB)', () => {
+    const damaged = join(root, 'damaged', '.hotsheet');
+    cpSync(hs, damaged, { recursive: true });
+    writeFileSync(join(damaged, 'db', 'global', 'pg_control'), Buffer.alloc(8192, 7));
+    const out = join(root, 'damaged.json');
+    const result = run(['--progress-json', damaged, '--out', out]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/hotsheet-export: could not open the HS1 database \(PG_VERSION 17\)/);
+    expect(result.stderr).toContain('No engine was downloaded');
+    const events = result.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(events.map((event) => event.phase)).not.toContain('export_tickets');
+    expect(events.at(-1)).toMatchObject({ phase: 'failed', error: expect.stringContaining('looks damaged') });
+    expect(existsSync(out)).toBe(false);
+  }, 60000);
 
   it('accepts a dash-leading datadir after --', () => {
     const result = run(['--', '--not-a-flag']);
