@@ -624,7 +624,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     // HS2-4K43DK adds Locked, with Orchestrator Answers.
     ['permission-rules-settings', 6],
     ['project-sidebar', 1],
-    ['command-settings-editor', 3], // HS2-BZKTDC adds the loading and failed-load examples
+    ['command-settings-editor', 4], // HS2-BZKTDC adds the loading and failed-load examples; HS2-MA31ZN adds the scheduled AI command
     ['ai-tool-settings', 2], // HS2-RWA8V6 adds the ordered-backup specimen.
     ['permission-request', 1],
     ['notification-center', 1],
@@ -9455,8 +9455,8 @@ test('keeps element ids unique across the command settings editor examples', asy
   // The ready, loading, and failed-load examples each mount an editor dialog; they once shared
   // `command-editor-dialog` (HS2-CP5F46).
   await page.goto('/ux-demo?component=command-settings-editor');
-  await expect(page.locator('[data-component="command-settings-editor"]')).toHaveCount(3);
-  await expect(page.locator('[data-command-editor-dialog]')).toHaveCount(3);
+  await expect(page.locator('[data-component="command-settings-editor"]')).toHaveCount(4);
+  await expect(page.locator('[data-command-editor-dialog]')).toHaveCount(4);
   const duplicates = await page.evaluate(() => {
     const counts = new Map<string, number>();
     for (const element of document.querySelectorAll('[id]')) counts.set(element.id, (counts.get(element.id) ?? 0) + 1);
