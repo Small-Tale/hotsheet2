@@ -6,13 +6,17 @@
 //!
 //! - HS2-1CC1TQ: an outage whose project goes idle is still followed, so it clears and
 //!   its end is announced once the home is back, with no pass anyone asked for.
+//! - HS2-5DF941: the home cut off from the site keeps running; its dispatcher and the
+//!   site's run both try to claim one ticket, and exactly one claim holds.
 //!
 //! Synthetic tickets and identifiers only. Nothing is waited for by time: every wait is
 //! woken by an event stream or a file change, with a deadline.
 use super::e2e::{ACTIONS, ACTOR, Fleet, Side, TARGET_A, TARGET_B, TOOL_A};
-use super::e2e_sites::{Placed, converge, home_notifications, placed_from};
+use super::e2e_sites::{Placed, claim, converge, home_notifications, placed_from, ticket_in};
+use super::orchestration::api;
 use super::session_work::received_prompt;
 use super::*;
+use hotsheet_model::ClaimEventKind;
 use std::time::Duration;
 
 const MINUTE: Duration = Duration::from_secs(60);
@@ -81,6 +85,29 @@ async fn session_until(fleet: &Fleet, session_id: &str, state: &str) -> Value {
             "session never {state}: {session:#}"
         );
         cursor = fleet.next_event(None, cursor).await;
+    }
+}
+
+/// The controller's home-outage notifications once there are `count`, woken by the
+/// server's change events (a notification is published just after the ledger that
+/// the timeline reads is written).
+async fn notifications_until(
+    fleet: &Fleet,
+    events: &mut tokio::sync::broadcast::Receiver<hotsheet_server::ChangeEvent>,
+    count: usize,
+) -> Vec<(String, String)> {
+    let deadline = tokio::time::Instant::now() + MINUTE;
+    loop {
+        let told = home_notifications(fleet).await;
+        if told.len() >= count {
+            return told;
+        }
+        assert!(
+            tokio::time::timeout_at(deadline, events.recv())
+                .await
+                .is_ok(),
+            "never {count} notifications: {told:?}"
+        );
     }
 }
 
@@ -160,12 +187,13 @@ async fn hs2_1cc1tq_an_idle_projects_outage_clears_by_itself_when_the_home_is_ba
     assert_eq!(home_notifications(&fleet).await.len(), 1);
 
     // Back. No tick is asked for: the loop's own re-read finds it.
+    let mut events = fleet.controller.subscribe();
     fleet.peer_online().await;
     timeline_until(&fleet, "cleared", |timeline| {
         timeline.get("home_outages").is_none()
     })
     .await;
-    let told = home_notifications(&fleet).await;
+    let told = notifications_until(&fleet, &mut events, 2).await;
     assert_eq!(
         told,
         vec![
@@ -187,5 +215,194 @@ async fn hs2_1cc1tq_an_idle_projects_outage_clears_by_itself_when_the_home_is_ba
     assert!(tick.get("home_outages").is_none(), "{tick:#}");
     assert_eq!(tick["inputs"]["targets"], 0, "{tick:#}");
     assert_eq!(home_notifications(&fleet).await.len(), 2);
+    fleet.shut_down().await;
+}
+
+/// Who claims the project's ticket first while the home is cut off from the site.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum First {
+    /// The home's dispatcher assigns it to one of the home's own workers.
+    Home,
+    /// The site's run claims it for its own session after the bounded wait.
+    Site,
+}
+
+/// The worker id the home's dispatcher assigns the ticket to on its own side.
+const HOME_WORKER: &str = "home-worker-synthetic";
+
+/// HS2-5DF941: the home's dispatcher wins. While the home is cut off from the site it
+/// still runs and assigns the ticket to one of its own workers; the site's run then
+/// ends its bounded wait and tries to claim the same ticket for its own session.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_5df941_a_partitioned_homes_claim_wins_over_its_sites_run() {
+    partitioned_claim(First::Home).await;
+}
+
+/// HS2-5DF941: the site's run wins. It claims after the bounded wait; the home's
+/// dispatcher, still running on the other side of the partition, then assigns the same
+/// ticket to one of its own workers, whose claim is refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_5df941_a_sites_claim_wins_over_its_partitioned_home() {
+    partitioned_claim(First::Site).await;
+}
+
+/// HS2-5DF941: a network partition between the home's server and the site's, both
+/// running, both trying to claim one ticket of the project. The shared store's claim
+/// (the `git_ref` backend both clones push to) lets exactly one hold it; the loser is
+/// told why in plain words and starts no second session; the outage is announced once
+/// each way.
+async fn partitioned_claim(first: First) {
+    let mut fleet =
+        Fleet::sites_peer_home_rechecked(Duration::ZERO, Duration::from_millis(200)).await;
+    let orchestration = fleet.orchestration_ticket("Coordinate the synthetic project");
+    let change = fleet.target_ticket(Side::Controller, "Change both sides want");
+    converge(&fleet);
+    // The partition: the controller (the orchestrator and site A) can no longer reach
+    // the home's server, which keeps running and serving its own side.
+    fleet.peer_offline().await;
+    place_at_once(&mut fleet).await;
+    let (step, worker) = placed_on_site(&fleet, &orchestration, &change).await;
+    let run_id = worker.run_id.clone().unwrap();
+
+    let holder = match first {
+        First::Home => {
+            // The home's dispatcher assigns the ticket on its side; its worker claims.
+            assert_eq!(claim(&fleet, Side::Peer, &change, HOME_WORKER).await, 200);
+            // The site's worker joins: its run's bounded wait is over, so the loop
+            // tries to claim for its session. The shared claim refuses it, and the
+            // decision log says why with a code the app words in plain language
+            // ("The ticket changed in that project meanwhile.").
+            join(&fleet, &worker).await;
+            let refused = fleet
+                .decided(
+                    "the site's claim answered",
+                    |entry| {
+                        entry["kind"] == "assignment"
+                            && entry["run_id"] == run_id.as_str()
+                            && entry["outcome"].is_string()
+                    },
+                    2 * MINUTE,
+                )
+                .await;
+            assert_eq!(refused["outcome"], "refused", "{refused:#}");
+            assert_eq!(refused["outcome_detail"], "target_conflict", "{refused:#}");
+            HOME_WORKER.to_owned()
+        }
+        First::Site => {
+            join(&fleet, &worker).await;
+            let claimed = fleet
+                .decided(
+                    "the site's run claimed for its own session",
+                    |entry| {
+                        entry["kind"] == "assignment"
+                            && entry["outcome"] == "claimed"
+                            && entry["run_id"] == run_id.as_str()
+                    },
+                    2 * MINUTE,
+                )
+                .await;
+            assert_eq!(claimed["session_id"], worker.session_id.as_str());
+            // The home's dispatcher, cut off, assigns the same ticket on its side: its
+            // worker's claim is refused, naming who holds it.
+            let (status, body) = api(
+                fleet.side_router(Side::Peer),
+                "POST",
+                &format!("/tickets/{}/claim", change.id),
+                json!({"worker": HOME_WORKER, "lease_minutes": 30}),
+                true,
+            )
+            .await;
+            assert_eq!(status, StatusCode::CONFLICT, "{body}");
+            let said = body["error"].as_str().unwrap();
+            assert!(
+                said.contains(&format!("is claimed by '{}'", worker.worker)),
+                "{said}"
+            );
+            worker.worker.clone()
+        }
+    };
+    // The one run of the step names the winner and how it got the ticket, in words the
+    // app shows ("assigned by the project's dispatcher", "claimed for its session").
+    let run = fleet
+        .ok("GET", &format!("/runs/{run_id}"), Value::Null)
+        .await;
+    assert_eq!(run["state"], "dispatched", "{run:#}");
+    assert_eq!(run["worker_id"], holder.as_str(), "{run:#}");
+    let how = match first {
+        First::Home => "assigned_by_dispatcher",
+        First::Site => "claimed_for_session",
+    };
+    let dispatched: Vec<&Value> = run["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["to"] == "dispatched")
+        .collect();
+    assert_eq!(dispatched.len(), 1, "{run:#}");
+    assert_eq!(dispatched[0]["reason"], how, "{run:#}");
+
+    // Exactly one claim, held by the winner, in both clones once they sync.
+    converge(&fleet);
+    for store in [&fleet.a_store, &fleet.b_store] {
+        let read = ticket_in(store, &change);
+        assert_eq!(
+            read.claimed_by.as_deref(),
+            Some(holder.as_str()),
+            "{read:?}"
+        );
+        let claims = read
+            .claim_history
+            .iter()
+            .filter(|event| event.kind == ClaimEventKind::Claim)
+            .count();
+        assert_eq!(claims, 1, "{read:?}");
+    }
+
+    // More passes start no second session for the step, and no role session.
+    for _ in 0..2 {
+        fleet
+            .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+            .await;
+    }
+    let log = fleet.decisions().await;
+    let starts: Vec<_> = log
+        .iter()
+        .filter(|entry| entry["kind"] == "start" && entry["outcome"] == "started")
+        .collect();
+    assert_eq!(starts.len(), 1, "{starts:#?}");
+    assert_eq!(starts[0]["step_id"], step.as_str(), "{starts:#?}");
+    let sessions = fleet.sessions().await;
+    assert_eq!(sessions.len(), 1, "{sessions:#?}");
+    assert_eq!(fleet.runs().await.len(), 1);
+
+    // Heal: the outage ends, announced once each way.
+    let mut events = fleet.controller.subscribe();
+    fleet.peer_online().await;
+    timeline_until(&fleet, "cleared", |timeline| {
+        timeline.get("home_outages").is_none()
+    })
+    .await;
+    let told = notifications_until(&fleet, &mut events, 2).await;
+    assert_eq!(
+        told,
+        vec![
+            (
+                "warning".to_owned(),
+                format!("Home site Target {TARGET_B} is unavailable")
+            ),
+            (
+                "success".to_owned(),
+                format!("Home site Target {TARGET_B} is back")
+            ),
+        ]
+    );
+    // After the heal the shared store still names one holder.
+    converge(&fleet);
+    let read = ticket_in(&fleet.a_store, &change);
+    assert_eq!(
+        read.claimed_by.as_deref(),
+        Some(holder.as_str()),
+        "{read:?}"
+    );
     fleet.shut_down().await;
 }

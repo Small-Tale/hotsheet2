@@ -7094,6 +7094,15 @@ read, or read without an actor, is not observed, and what was known of it stays.
   keeps the bounded `placement.dispatcher_wait_minutes` and then claims its ticket for
   its own session. The ledger is updated before the pass decides assignments, so the
   pass that first sees the outage already counts it.
+- **No double claim in a partition (HS2-5DF941).** A home cut off from a site may keep
+  running, and its dispatcher may assign the same ticket on its side while the site's
+  run claims it. Both machines' store clones claim through the shared `git_ref` claim
+  backend (HS2-WJF0D8), so exactly one claim holds. When the home's worker claimed
+  first, the site's claim is refused (`target_conflict`, "The ticket changed in that
+  project meanwhile."), the run syncs with its target and reads `dispatched` to the
+  home's worker (`assigned_by_dispatcher`), and no second session starts. When the
+  site claimed first, the home's worker is refused (409, naming the holder) and the
+  run keeps `claimed_for_session`. Proven on two servers in both orders.
 - **Notifications, debounced.** "Home site _X_ is unavailable" (severity `warning`) is
   sent once the home has been unavailable **without a break for two minutes**
   (`HOME_OUTAGE_NOTIFY_AFTER_MS`): long enough to ride out a restart or a short drop,
