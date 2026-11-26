@@ -1,0 +1,387 @@
+//! HS2-EX594V: a multi-site project's home out of reach is observed, remembered and
+//! announced once per transition, debounced. Synthetic targets and times only.
+
+use super::scheduler_tests::{MIN, T0, World, session, target, work};
+use super::*;
+
+const AFTER: u64 = HOME_OUTAGE_NOTIFY_AFTER_MS;
+
+/// Project 1 with its site 2, work on the project, the home's pool known.
+fn project() -> World {
+    let mut world = World::new(&[(1, 3), (2, 3)]);
+    world.sites = ProjectSites::default().with_site(&target(2), &target(1));
+    home_pool(&mut world, Some(PoolState::default()));
+    world.work.push(work(1, 1));
+    world
+}
+
+fn home_pool(world: &mut World, pool: Option<PoolState>) {
+    let home = world
+        .targets
+        .iter_mut()
+        .find(|state| state.target_id == target(1))
+        .unwrap();
+    if let Some(capacity) = home.capacity.as_mut() {
+        capacity.pool = pool;
+    }
+}
+
+/// The home's capacity read failed with `code`.
+fn home_unread(world: &mut World, code: &str) {
+    let home = world
+        .targets
+        .iter_mut()
+        .find(|state| state.target_id == target(1))
+        .unwrap();
+    home.capacity = None;
+    home.unavailable = Some(code.into());
+}
+
+fn observe(world: &World) -> Vec<HomeObservation> {
+    observe_bound(world, true)
+}
+
+fn observe_bound(world: &World, bound: bool) -> Vec<HomeObservation> {
+    observe_homes(
+        &ScheduleInput {
+            now_ms: T0,
+            owner_id: "owner",
+            policy: &world.policy,
+            work: &world.work,
+            targets: &world.targets,
+            sessions: &world.sessions,
+            tool_entries: &[],
+            held: &[],
+            unreadable: &[],
+            memory: &[],
+            capacity_streams: &[],
+            sites: &world.sites,
+        },
+        &|_| bound,
+    )
+}
+
+fn outage(world: &World) -> Option<(HomeOutageReason, Option<String>)> {
+    let observed = observe(world);
+    assert_eq!(observed.len(), 1, "{observed:?}");
+    assert_eq!(observed[0].home_target_id, target(1));
+    observed[0].outage.clone()
+}
+
+/// One pass at `now_ms`: the ledger after it and the notices it sent.
+fn pass(
+    world: &World,
+    ledger: &[HomeOutage],
+    now_ms: u64,
+) -> (Vec<HomeOutage>, Vec<HomeNoticeKind>) {
+    let mut after = advance_outages(ledger, &observe(world), &world.sites, now_ms);
+    let notices = due_notices(&mut after, now_ms, AFTER);
+    (
+        after,
+        notices.into_iter().map(|notice| notice.kind).collect(),
+    )
+}
+
+#[test]
+fn hs2_ex594v_each_reason_the_home_cannot_coordinate_is_observed() {
+    let mut world = project();
+    assert_eq!(outage(&world), None);
+    // The machine answered without its pool.
+    home_pool(&mut world, None);
+    assert_eq!(
+        outage(&world),
+        Some((HomeOutageReason::PoolUnreadable, None))
+    );
+    // Any failed read of a bound home is unreachable, with its code: an offline
+    // machine answers `target_unavailable` too.
+    for code in ["unreachable", "trust_failed", "target_unavailable"] {
+        let mut world = project();
+        home_unread(&mut world, code);
+        assert_eq!(
+            outage(&world),
+            Some((HomeOutageReason::Unreachable, Some(code.into()))),
+            "{code}"
+        );
+        // The same failure of a home this machine holds no binding for is unbound.
+        let observed = observe_bound(&world, false);
+        assert_eq!(
+            observed[0].outage,
+            Some((HomeOutageReason::Unbound, Some(code.into()))),
+            "{code}"
+        );
+    }
+    // Disabled in the policy: the pass does not read it at all.
+    let mut world = project();
+    world.targets.retain(|state| state.target_id != target(1));
+    world.policy.targets[0].enabled = false;
+    assert_eq!(outage(&world), Some((HomeOutageReason::Disabled, None)));
+}
+
+#[test]
+fn hs2_ex594v_a_home_the_pass_learned_nothing_of_is_not_observed() {
+    // A pass without an actor reads no target: that says nothing of the home.
+    let mut world = project();
+    home_unread(&mut world, "actor_required");
+    assert!(observe(&world).is_empty());
+    // A home the pass did not read is not observed.
+    let mut world = project();
+    world.targets.retain(|state| state.target_id != target(1));
+    assert!(observe(&world).is_empty());
+    // A disabled home of a project with no work and no session does not matter now.
+    let mut world = project();
+    world.work.clear();
+    world.targets.retain(|state| state.target_id != target(1));
+    world.policy.targets[0].enabled = false;
+    assert!(observe(&world).is_empty());
+    // A session on a site keeps the project busy.
+    world
+        .sessions
+        .push(session("site-worker", 2, SessionActivity::Busy));
+    assert_eq!(outage(&world), Some((HomeOutageReason::Disabled, None)));
+    // Work named on the site counts for the project too.
+    world.sessions.clear();
+    world.work.push(work(2, 2));
+    assert_eq!(outage(&world), Some((HomeOutageReason::Disabled, None)));
+}
+
+#[test]
+fn hs2_ex594v_a_one_site_project_has_no_home_outage() {
+    let mut world = World::new(&[(1, 3)]);
+    world.work.push(work(1, 1));
+    home_unread(&mut world, "unreachable");
+    assert!(observe(&world).is_empty());
+    assert!(ProjectSites::default().homes_with_sites().is_empty());
+    let sites = ProjectSites::default()
+        .with_site(&target(2), &target(1))
+        .with_site(&target(3), &target(1))
+        .with_site(&target(5), &target(4));
+    assert_eq!(sites.homes_with_sites(), vec![target(1), target(4)]);
+}
+
+#[test]
+fn hs2_ex594v_unavailable_is_announced_once_after_the_delay_and_returned_once() {
+    let healthy = project();
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+
+    // Seen down: remembered from now, nothing sent before the delay.
+    let (ledger, sent) = pass(&down, &[], T0);
+    assert!(sent.is_empty());
+    assert_eq!(ledger.len(), 1);
+    assert_eq!(ledger[0].since_ms, Some(T0));
+    assert_eq!(ledger[0].sites, vec![target(2)]);
+    assert_eq!(ledger[0].reason, Some(HomeOutageReason::Unreachable));
+    assert_eq!(next_notice_at(&ledger, AFTER), Some(T0 + AFTER));
+    let (ledger, sent) = pass(&down, &ledger, T0 + AFTER - 1);
+    assert!(sent.is_empty());
+    assert_eq!(ledger[0].since_ms, Some(T0), "the start is kept");
+    // At the delay: one "unavailable".
+    let (ledger, sent) = pass(&down, &ledger, T0 + AFTER);
+    assert_eq!(sent, vec![HomeNoticeKind::Unavailable]);
+    assert!(ledger[0].announced);
+    assert_eq!(next_notice_at(&ledger, AFTER), None);
+    // Repeated passes while it stays down send nothing more.
+    let (ledger, sent) = pass(&down, &ledger, T0 + 10 * MIN);
+    assert!(sent.is_empty());
+    let (ledger, sent) = pass(&down, &ledger, T0 + 20 * MIN);
+    assert!(sent.is_empty());
+    // Back: one "returned", and the ledger is empty.
+    let (ledger, sent) = pass(&healthy, &ledger, T0 + 21 * MIN);
+    assert_eq!(sent, vec![HomeNoticeKind::Returned]);
+    assert!(ledger.is_empty());
+    // Staying up sends nothing.
+    let (ledger, sent) = pass(&healthy, &ledger, T0 + 22 * MIN);
+    assert!(sent.is_empty() && ledger.is_empty());
+    // Down again: a new outage with its own start, announced after its own delay.
+    let (ledger, sent) = pass(&down, &ledger, T0 + 30 * MIN);
+    assert!(sent.is_empty());
+    assert_eq!(ledger[0].since_ms, Some(T0 + 30 * MIN));
+    let (_, sent) = pass(&down, &ledger, T0 + 30 * MIN + AFTER);
+    assert_eq!(sent, vec![HomeNoticeKind::Unavailable]);
+}
+
+#[test]
+fn hs2_ex594v_a_flapping_home_is_never_announced_within_the_delay() {
+    let healthy = project();
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    let mut ledger = Vec::new();
+    let mut sent = Vec::new();
+    // Down and up every half delay: each outage is shorter than the delay.
+    for round in 0..10 {
+        let at = T0 + round * AFTER;
+        let (next, notices) = pass(&down, &ledger, at);
+        sent.extend(notices);
+        let (next, notices) = pass(&healthy, &next, at + AFTER / 2);
+        sent.extend(notices);
+        ledger = next;
+        assert!(
+            ledger.is_empty(),
+            "an unannounced outage leaves nothing behind"
+        );
+    }
+    assert!(sent.is_empty(), "{sent:?}");
+}
+
+#[test]
+fn hs2_ex594v_down_again_before_returned_went_out_continues_the_told_outage() {
+    let healthy = project();
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    let (ledger, _) = pass(&down, &[], T0);
+    let (ledger, sent) = pass(&down, &ledger, T0 + AFTER);
+    assert_eq!(sent, vec![HomeNoticeKind::Unavailable]);
+    // Seen back by a pass that could not notify (a headless tick): "returned" waits.
+    let ledger = advance_outages(&ledger, &observe(&healthy), &healthy.sites, T0 + 5 * MIN);
+    assert_eq!(ledger.len(), 1);
+    assert!(!ledger[0].current());
+    assert_eq!(ledger[0].returned_at_ms, Some(T0 + 5 * MIN));
+    // A later pass that can notify sends it, dated when the home came back.
+    let mut later = ledger.clone();
+    let notices = due_notices(&mut later, T0 + 6 * MIN, AFTER);
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].kind, HomeNoticeKind::Returned);
+    assert_eq!(notices[0].at_ms, T0 + 5 * MIN);
+    assert!(later.is_empty());
+    // Down again before it went out: still the outage the person was told of.
+    let (ledger, sent) = pass(&down, &ledger, T0 + 6 * MIN);
+    assert!(sent.is_empty(), "{sent:?}");
+    assert!(ledger[0].announced && ledger[0].current());
+    assert_eq!(ledger[0].returned_at_ms, None);
+    // So its end is announced once.
+    let (ledger, sent) = pass(&healthy, &ledger, T0 + 7 * MIN);
+    assert_eq!(sent, vec![HomeNoticeKind::Returned]);
+    assert!(ledger.is_empty());
+}
+
+#[test]
+fn hs2_ex594v_a_refusal_backoff_keeps_the_reason_seen_before_it() {
+    let mut down = project();
+    home_unread(&mut down, "trust_failed");
+    let (ledger, _) = pass(&down, &[], T0);
+    let mut waiting = project();
+    home_unread(&mut waiting, "refusal_backoff");
+    let (ledger, _) = pass(&waiting, &ledger, T0 + MIN);
+    assert_eq!(ledger[0].reason, Some(HomeOutageReason::Unreachable));
+    assert_eq!(ledger[0].detail.as_deref(), Some("trust_failed"));
+    assert_eq!(ledger[0].since_ms, Some(T0));
+    // A backoff with nothing seen before stands as unreachable.
+    let (fresh, _) = pass(&waiting, &[], T0);
+    assert_eq!(fresh[0].reason, Some(HomeOutageReason::Unreachable));
+    assert_eq!(fresh[0].detail.as_deref(), Some("refusal_backoff"));
+    // A new reason replaces the old one; the start stays.
+    let mut disabled = project();
+    disabled.policy.targets[0].enabled = false;
+    let (ledger, _) = pass(&disabled, &ledger, T0 + 2 * MIN);
+    assert_eq!(ledger[0].reason, Some(HomeOutageReason::Disabled));
+    assert_eq!(ledger[0].detail, None);
+    assert_eq!(ledger[0].since_ms, Some(T0));
+}
+
+#[test]
+fn hs2_ex594v_an_unobserved_home_keeps_its_entry_and_a_regrouped_one_is_dropped() {
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    let (ledger, _) = pass(&down, &[], T0);
+    // A pass that did not read the home leaves the outage as it was.
+    let mut idle = project();
+    idle.work.clear();
+    idle.targets.retain(|state| state.target_id != target(1));
+    let kept = advance_outages(&ledger, &observe(&idle), &idle.sites, T0 + MIN);
+    assert_eq!(kept, ledger);
+    // The delay counts from the start, so a pass after it announces even unread.
+    let (_, sent) = pass(&idle, &ledger, T0 + AFTER);
+    assert_eq!(sent, vec![HomeNoticeKind::Unavailable]);
+    // Once the site is separated into its own project the entry is dropped silently.
+    let mut split = project();
+    split.sites = ProjectSites::default();
+    let (after, sent) = pass(&split, &ledger, T0 + AFTER);
+    assert!(after.is_empty() && sent.is_empty());
+}
+
+#[test]
+fn hs2_ex594v_the_store_writes_only_changes_and_reads_its_ledger_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = HomeOutageStore::new(dir.path());
+    assert!(store.outages("owner").unwrap().is_empty());
+    let file = store.directory().join("owner.json");
+    assert!(!file.exists(), "a read creates nothing");
+    let world = project();
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    // Healthy: nothing to remember, nothing written.
+    let (ledger, sent) = store
+        .advance("owner", &observe(&world), &world.sites, T0, Some(AFTER))
+        .unwrap();
+    assert!(ledger.is_empty() && sent.is_empty());
+    assert!(!file.exists());
+    // Down, without a notifier: remembered, nothing sent, nothing marked sent.
+    let (ledger, sent) = store
+        .advance("owner", &observe(&down), &down.sites, T0, None)
+        .unwrap();
+    assert_eq!(ledger.len(), 1);
+    assert!(sent.is_empty());
+    assert_eq!(store.outages("owner").unwrap(), ledger);
+    let (_, sent) = store
+        .advance("owner", &observe(&down), &down.sites, T0 + AFTER, None)
+        .unwrap();
+    assert!(sent.is_empty());
+    assert!(!store.outages("owner").unwrap()[0].announced);
+    // With one: sent once, then never again.
+    let (_, sent) = store
+        .advance(
+            "owner",
+            &observe(&down),
+            &down.sites,
+            T0 + AFTER,
+            Some(AFTER),
+        )
+        .unwrap();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].kind, HomeNoticeKind::Unavailable);
+    assert_eq!(sent[0].at_ms, T0);
+    let (_, sent) = store
+        .advance(
+            "owner",
+            &observe(&down),
+            &down.sites,
+            T0 + 2 * AFTER,
+            Some(AFTER),
+        )
+        .unwrap();
+    assert!(sent.is_empty());
+    // Other owners are apart.
+    assert!(store.outages("other").unwrap().is_empty());
+    let (ledger, sent) = store
+        .advance(
+            "owner",
+            &observe(&world),
+            &world.sites,
+            T0 + 3 * AFTER,
+            Some(AFTER),
+        )
+        .unwrap();
+    assert!(ledger.is_empty());
+    assert_eq!(sent[0].kind, HomeNoticeKind::Returned);
+    assert!(store.outages("owner").unwrap().is_empty());
+    assert!(store.outages("../escape").is_err());
+}
+
+#[test]
+fn hs2_ex594v_a_damaged_ledger_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = HomeOutageStore::new(dir.path());
+    std::fs::create_dir_all(store.directory()).unwrap();
+    let path = store.directory().join("owner.json");
+    std::fs::write(
+        &path,
+        b"{\"schema_version\":1,\"outages\":[{\"home_target_id\":\"../x\",\"sites\":[]}]}",
+    )
+    .unwrap();
+    assert!(matches!(
+        store.outages("owner"),
+        Err(OrchestrationError::Corrupt)
+    ));
+    std::fs::write(&path, b"not json").unwrap();
+    assert!(store.outages("owner").is_err());
+}

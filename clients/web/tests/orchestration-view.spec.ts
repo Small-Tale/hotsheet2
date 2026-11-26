@@ -1252,3 +1252,109 @@ test('HS2-8Z9VHH a refused planner session start for Update Plan says why on the
     await server.stop(page);
   }
 });
+
+test('HS2-EX594V the view warns while a multi-site project’s home site is unavailable, and clears', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await declareSelf(server);
+    await asOrchestrationProject(server);
+    const plan = await planAndDispatch(server);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // The scheduler's ledger, as the real timeline carries it on a server whose project has a second site
+    // (crates/hotsheet-server/tests/remote_servers/e2e_sites.rs proves the server side): Self is the home
+    // and is unreachable, so no dispatcher or integrator starts and work still runs on the other site.
+    const otherSite = '01ARZ3NDEKTSV4RRFFQ69G5FJ9';
+    let outage = false;
+    await openProject(page, server, 'Launch', async () => {
+      await page.route(/\/orchestration\/timeline(\?|$)/, async (route) => {
+        const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
+          incoming = new URL(route.request().url());
+        try {
+          const response = await proxyFetch(route, {
+            url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          const body = (await response.json()) as Record<string, unknown> & {
+            now_ms: number;
+            targets: Array<Record<string, unknown>>;
+          };
+          body.targets.push({
+            target_id: otherSite,
+            label: 'Self on the second Mac',
+            location: 'remote',
+            machine_label: 'Second Mac',
+          });
+          if (outage)
+            body.home_outages = [
+              {
+                home_target_id: TARGET,
+                sites: [otherSite],
+                since_ms: body.now_ms - 7 * 60_000,
+                reason: 'unreachable',
+                detail: 'unreachable',
+                announced: true,
+              },
+            ];
+          await route.fulfill({ response, json: body });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
+    });
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const view = page.locator('[data-orchestration-view="true"]');
+    await expect(view.locator(`[data-ticket-slug="${plan.first.slug}"]`)).toBeVisible({ timeout: 30_000 });
+    const banners = view.locator('[data-orchestration-home-outages]');
+    await expect(banners).toHaveCount(0);
+
+    // The home becomes unavailable: the next real change of the timeline carries the outage.
+    outage = true;
+    const run = (await plan.dispatch()) as { run_id: string };
+    const banner = view.locator('[data-home-outage="01ARZ3NDEKTSV4RRFFQ69G5FJ8"]');
+    await expect(banner).toBeVisible({ timeout: 30_000 });
+    await expect(banner).toHaveAttribute('data-tone', 'warning');
+    await expect(banner).toContainText('Home Site of Self Is Unavailable');
+    await expect(banner).toContainText('Its machine cannot be reached.');
+    await expect(banner).toContainText('there is no failover');
+    await expect(banner).toContainText('Work on Self on the second Mac still runs');
+    await expect(banner).toContainText('claims its ticket for its own session');
+    await expect(banners).toHaveAttribute('data-orchestration-home-outages', '1');
+    // It sits above the board, which keeps showing the plan.
+    const bannerBox = await banner.boundingBox(),
+      boardBox = await view.locator('.orchestration-timeline-view__body').boundingBox();
+    expect(bannerBox && boardBox && bannerBox.y + bannerBox.height <= boardBox.y + 1).toBe(true);
+    await capture(page, 'home-outage-1440', 'hs2-ex594v');
+    for (const width of [1100, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await expect(view).toHaveAttribute('data-layout', width === 390 ? 'paged' : 'grid');
+      await expect(banner).toBeVisible();
+      await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.85);
+      const box = await banner.boundingBox();
+      expect(box && box.x >= 0 && box.x + box.width <= width + 0.5).toBe(true);
+      await capture(page, `home-outage-${width}`, 'hs2-ex594v');
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(view).toHaveAttribute('data-layout', 'grid');
+    await expect(banner).toBeVisible();
+    await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.95);
+    await capture(page, 'home-outage-1440-after-narrow', 'hs2-ex594v');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture(page, 'home-outage-1440-dark', 'hs2-ex594v');
+    await page.emulateMedia({ colorScheme: 'light' });
+
+    // The home is back: the next real change of the timeline no longer carries it, and the banner leaves.
+    outage = false;
+    await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/runs/${run.run_id}/renew`, {
+      actor: scheduler,
+      lease_minutes: 45,
+    });
+    await expect(banners).toHaveCount(0, { timeout: 30_000 });
+    await expect(view.locator(`[data-ticket-slug="${plan.first.slug}"]`)).toBeVisible();
+  } finally {
+    await server.stop(page);
+  }
+});

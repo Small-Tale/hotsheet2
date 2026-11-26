@@ -21,6 +21,7 @@ import {
   demoClock,
   demoContention,
   demoDecisions,
+  demoHomeOutages,
   demoIntegrator,
   demoRoles,
   demoSummary,
@@ -312,6 +313,28 @@ export function OrchestrationTimelineViewDemo() {
             discard_resolves: true,
           }}
           stepName={() => 'API-12'}
+        />
+      </CatalogExample>
+      {/* HS2-EX594V: a multi-site project's home site is unavailable; there is no failover. */}
+      <CatalogExample
+        label="Home Site Unavailable"
+        viewport={{ width: 'full', height: 'app', frame: 'solid', overflow: 'hidden' }}
+      >
+        <OrchestrationTimelineView
+          timeline={{ ...timeline, home_outages: demoHomeOutages() }}
+          propose={propose()}
+          clock={demoClock}
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Home Site Unavailable, Phone"
+        viewport={{ width: 'compact', height: 'app', frame: 'solid', overflow: 'hidden' }}
+      >
+        <OrchestrationTimelineView
+          timeline={{ ...timeline, home_outages: demoHomeOutages().slice(0, 1) }}
+          layout="paged"
+          propose={propose()}
+          clock={demoClock}
         />
       </CatalogExample>
       <CatalogExample label="Loading" viewport={{ width: 'full', height: 'app', frame: 'solid', overflow: 'hidden' }}>

@@ -202,6 +202,19 @@ impl ProjectSites {
         self.project_of.is_empty()
     }
 
+    /// HS2-EX594V: every home of a project with more than one site, sorted.
+    pub fn homes_with_sites(&self) -> Vec<String> {
+        let mut homes: Vec<String> = self
+            .project_of
+            .iter()
+            .filter(|(site, project)| site != project)
+            .map(|(_, project)| project.clone())
+            .collect();
+        homes.sort();
+        homes.dedup();
+        homes
+    }
+
     /// The project key of a target: the project target's id, or its own.
     pub fn project_of<'a>(&'a self, target_id: &'a str) -> &'a str {
         self.project_of

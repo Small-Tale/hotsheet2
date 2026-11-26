@@ -3,6 +3,7 @@
  * answers it (docs/26 and the OpenAPI `OrchestrationTimeline` schema). Members the Rust DTO skips when
  * unset are optional here and never `null`.
  */
+import { HOME_OUTAGE_REASONS, type TimelineHomeOutage } from './orchestration-home-outage';
 import { ServerResponseShapeError } from './server-response-parsers';
 
 export type TimelinePhase = 'no_projects' | 'no_plan' | 'proposed' | 'running' | 'paused';
@@ -163,6 +164,8 @@ export interface OrchestrationTimeline {
   counts: Record<string, number>;
   wave_minutes: number;
   estimate: EstimateBasis;
+  /** HS2-EX594V: each multi-site project whose home site is unavailable now; absent when none is. */
+  home_outages?: TimelineHomeOutage[];
 }
 
 /** HS2-S3FKJ7: one target ticket's line, read from the target project's side. */
@@ -307,6 +310,17 @@ export function parseOrchestrationTimeline(value: unknown): OrchestrationTimelin
   });
   record(view.counts);
   count(view.wave_minutes);
+  optional(view.home_outages, (outages) =>
+    list(outages, (outage) => {
+      const entry = record(outage);
+      text(entry.home_target_id);
+      list(entry.sites, text);
+      optional(entry.since_ms, count);
+      optional(entry.reason, (reason) => one(reason, HOME_OUTAGE_REASONS));
+      optional(entry.detail, text);
+      return entry;
+    }),
+  );
   return view as unknown as OrchestrationTimeline;
 }
 

@@ -17,7 +17,10 @@ use sha2::{Digest, Sha256};
 
 use super::gates::GateState;
 use super::readiness::{Prerequisite, ReadinessLevel, StepReadiness, TicketKey, ticket_key};
-use super::{OrchestratedSession, ProjectSites, Run, RunState, RunTarget, RunTicket, SessionState};
+use super::{
+    HomeOutage, OrchestratedSession, ProjectSites, Run, RunState, RunTarget, RunTicket,
+    SessionState,
+};
 
 /// The wave length assumed until a run of this owner has finished (minutes).
 pub const DEFAULT_WAVE_MINUTES: u64 = 60;
@@ -279,6 +282,9 @@ pub struct TimelineInput<'a> {
     pub goals: &'a BTreeMap<(String, String), TicketLabel>,
     pub tickets: &'a BTreeMap<TicketKey, TicketLabel>,
     pub policy: &'a TimelinePolicy,
+    /// HS2-EX594V: the homes of multi-site projects this machine's scheduler last
+    /// found unable to coordinate their project, from its ledger.
+    pub home_outages: &'a [HomeOutage],
 }
 
 /// A prerequisite ticket an item waits on.
@@ -425,6 +431,10 @@ pub struct Timeline {
     pub counts: BTreeMap<String, usize>,
     pub wave_minutes: u64,
     pub estimate: EstimateBasis,
+    /// HS2-EX594V: each multi-site project whose home site is unavailable now, so no
+    /// dispatcher or integrator starts for it anywhere. Absent when none is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub home_outages: Vec<HomeOutage>,
 }
 
 fn finished_at(run: &Run) -> Option<u64> {
@@ -947,6 +957,12 @@ pub fn timeline(input: &TimelineInput<'_>) -> Timeline {
         counts,
         wave_minutes: minutes,
         estimate: basis,
+        home_outages: input
+            .home_outages
+            .iter()
+            .filter(|outage| outage.current())
+            .cloned()
+            .collect(),
     };
     timeline.version = version(&timeline);
     timeline

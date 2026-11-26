@@ -103,6 +103,10 @@ pub struct ScheduleView {
     /// it. Absent when none waits.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub assignments: Vec<super::assignment::Assignment>,
+    /// HS2-EX594V: each multi-site project whose home site is unavailable, so no
+    /// dispatcher or integrator starts for it anywhere. Absent when none is.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub home_outages: Vec<hotsheet_ticketing::orchestration::HomeOutage>,
 }
 
 /// What applying one placement did.
@@ -194,6 +198,10 @@ pub struct Explanation {
     /// pass, so a person sees why integration is or is not running.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub integrator: Option<IntegratorStanding>,
+    /// HS2-EX594V: the step's project has several sites and its home is unavailable,
+    /// so no dispatcher or integrator starts for it anywhere.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_outage: Option<hotsheet_ticketing::orchestration::HomeOutage>,
     /// `dry_run` when a placement shown here would not be applied by a tick.
     pub mode: DecisionMode,
 }
@@ -986,7 +994,39 @@ impl OrchestrationRuntime {
             },
             schedule: Schedule::default(),
             assignments: Vec::new(),
+            home_outages: Vec::new(),
         }
+    }
+
+    /// HS2-EX594V: the pass's home outages; see [`Self::home_outage_pass`].
+    fn scheduler_home_outages(
+        &self,
+        owner_id: &str,
+        gathered: &Gathered,
+        now_ms: u64,
+        applied: bool,
+    ) -> (
+        Vec<hotsheet_ticketing::orchestration::HomeOutage>,
+        Option<u64>,
+    ) {
+        self.home_outage_pass(
+            owner_id,
+            &ScheduleInput {
+                now_ms,
+                owner_id,
+                policy: &gathered.policy,
+                work: &gathered.work,
+                targets: &gathered.targets,
+                sessions: &gathered.sessions,
+                tool_entries: &gathered.entries,
+                held: &gathered.held,
+                unreadable: &gathered.unreadable,
+                memory: &gathered.memory,
+                capacity_streams: &[],
+                sites: &gathered.sites,
+            },
+            applied,
+        )
     }
 
     /// The schedule a tick would compute now. A dry run: it changes and logs
@@ -1010,7 +1050,9 @@ impl OrchestrationRuntime {
         let assignments =
             self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
         Self::assignment_retry(&mut schedule, &assignments);
+        let (home_outages, _) = self.scheduler_home_outages(owner_id, &gathered, now_ms, false);
         Ok(ScheduleView {
+            home_outages,
             now_ms,
             enabled: true,
             mode: if self.placement_on(owner_id, &gathered.policy.placement)
@@ -1082,11 +1124,14 @@ impl OrchestrationRuntime {
             provisional_dependents: Vec::new(),
             assignment: None,
             integrator: None,
+            home_outage: None,
             mode: DecisionMode::DryRun,
         };
         let Some(step) = step else {
             return Ok(answer);
         };
+        // HS2-EX594V: the outages a fresh pass saw, when this answer reads one.
+        let mut outages: Option<Vec<hotsheet_ticketing::orchestration::HomeOutage>> = None;
         // HS2-JSF985: which work is provisional on which gate.
         answer.speculation = step.speculation.clone();
         answer.provisional = step.provisional.clone();
@@ -1145,6 +1190,7 @@ impl OrchestrationRuntime {
                 }
                 // HS2-4JQ41V: who integrates the work once it is handed off.
                 let view = self.scheduler_plan(owner_id, actor, tx)?;
+                outages = Some(view.home_outages.clone());
                 // HS2-ADASY5: a run whose session is gone is placed again; when this pass
                 // does not (its sessions never joined until the replacements ran out, or
                 // what it needs is held) the step says why, and when it is looked at again.
@@ -1186,6 +1232,7 @@ impl OrchestrationRuntime {
             }
             ReadinessLevel::Confirmed | ReadinessLevel::Provisional => {
                 let view = self.scheduler_plan(owner_id, actor, tx)?;
+                outages = Some(view.home_outages.clone());
                 answer.mode = view.mode;
                 // HS2-JSF985: the pass may just have read a target's own setting.
                 if let Ok(fresh) = self.readiness(owner_id, &step.readiness.step.step_id, tx) {
@@ -1264,6 +1311,21 @@ impl OrchestrationRuntime {
                     }
                 }
             }
+        }
+        // HS2-EX594V: a step of an unfinished project whose home is down says so.
+        if level != ReadinessLevel::Finished {
+            let outages = match outages {
+                Some(outages) => outages,
+                None => self.home_outages(owner_id).unwrap_or_default(),
+            };
+            let home = hotsheet_ticketing::orchestration::ProjectSites::active(
+                &self.declarations(owner_id)?.targets,
+            )
+            .home_of(&step.readiness.step.target.target_id)
+            .to_owned();
+            answer.home_outage = outages
+                .into_iter()
+                .find(|outage| outage.home_target_id == home);
         }
         Ok(answer)
     }
@@ -1356,6 +1418,11 @@ impl OrchestrationRuntime {
             (false, _) => DecisionMode::DryRun,
         };
         let (mut schedule, inputs) = self.scheduler_compute(owner_id, &gathered, now_ms);
+        // HS2-EX594V: an applied pass records each home outage and announces it once it
+        // lasted the notify delay; the loop passes again when that falls due. Before the
+        // assignments, so a site's run reads the outage this pass found.
+        let (home_outages, notice_at) =
+            self.scheduler_home_outages(owner_id, &gathered, now_ms, mode == DecisionMode::Applied);
         // HS2-NPTKS8: sessions that did not join their role are wound down and placed
         // again, before anything is applied.
         self.scheduler_joining(owner_id, &gathered.policy, &mut schedule, now_ms);
@@ -1447,6 +1514,9 @@ impl OrchestrationRuntime {
         for at in relays.iter().filter_map(|relay| relay.retry_at_ms) {
             schedule.retry_at_ms = Some(schedule.retry_at_ms.map_or(at, |known| known.min(at)));
         }
+        if let Some(at) = notice_at {
+            schedule.retry_at_ms = Some(schedule.retry_at_ms.map_or(at, |known| known.min(at)));
+        }
 
         let logged = self.scheduler_log(
             owner_id,
@@ -1472,6 +1542,7 @@ impl OrchestrationRuntime {
                 inputs,
                 schedule,
                 assignments,
+                home_outages,
             },
             outcomes,
             logged,

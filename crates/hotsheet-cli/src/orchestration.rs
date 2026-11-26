@@ -9,6 +9,7 @@ mod capacity;
 mod capacity_watch;
 mod decisions;
 mod gates;
+mod home_outages;
 mod hosted_audit;
 mod hosted_deployments;
 mod hosted_gates;
@@ -66,6 +67,7 @@ pub use gates::{
     GithubActionsGates, LinkGate, MAX_GATE_WAIT_MS, MarkReview, RequestDeployment, RunGates,
     SyncGates, TARGET_SCRIPT_PROVIDER,
 };
+pub use home_outages::{HomeNotices, HomeNotification, notification as home_notification};
 pub use hosted_audit::{HostedAuditView, HostedJournalFailures};
 pub use hosted_deployments::{
     DEPLOYMENT_WORKTREES_DIRECTORY, HostedDeploymentStart, MAX_DEPLOYMENT_SECONDS,
@@ -223,6 +225,10 @@ pub struct OrchestrationRuntime {
     /// paired browser), for the hosting machine's session journal. `None` is this
     /// machine itself.
     requester: Option<String>,
+    /// HS2-EX594V: where home-outage notifications go; `None` sends none.
+    home_notices: Option<Arc<dyn HomeNotices>>,
+    /// HS2-EX594V: how long a home must be unavailable before it is announced.
+    home_notify_after_ms: u64,
 }
 
 impl OrchestrationRuntime {
@@ -275,6 +281,8 @@ impl OrchestrationRuntime {
             timer_sleep: Arc::new(std::thread::sleep),
             detached_validation: false,
             requester: None,
+            home_notices: None,
+            home_notify_after_ms: home_outages::DEFAULT_NOTIFY_AFTER_MS,
             home,
             checkouts,
             providers,

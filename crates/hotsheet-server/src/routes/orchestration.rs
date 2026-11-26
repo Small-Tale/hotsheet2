@@ -44,13 +44,18 @@ pub(super) fn runtime(
     let prompt = Arc::new(crate::routes::orchestration_permissions::BridgePrompt {
         state: state.clone(),
     });
+    // HS2-EX594V: home-outage notifications go to this server's inbox.
+    let notices = Arc::new(crate::notifications::ServerHomeNotices {
+        state: state.clone(),
+    });
     if let Some(runtime) = &state.orchestration_runtime {
         // HS2-95SWQ4: an injected runtime keeps the executor it was given.
         return Ok(Arc::new(
             OrchestrationRuntime::clone(runtime)
                 .with_capacity_probe(probe)
                 .with_session_host(sessions)
-                .with_permission_prompt(prompt),
+                .with_permission_prompt(prompt)
+                .with_home_notices(notices),
         ));
     }
     OrchestrationRuntime::live(
@@ -63,7 +68,8 @@ pub(super) fn runtime(
             .with_target_events(target_events(state))
             .with_capacity_probe(probe)
             .with_session_host(sessions)
-            .with_permission_prompt(prompt);
+            .with_permission_prompt(prompt)
+            .with_home_notices(notices);
         match test_gate_relink_retry() {
             Some(first) => runtime.with_gate_relink_retry(first),
             None => runtime,

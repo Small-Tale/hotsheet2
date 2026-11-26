@@ -359,7 +359,12 @@ impl OrchestrationRuntime {
                 (summary.ci_reason.as_deref() != Some("no_gate")).then_some((run_id, summary.ci))
             })
             .collect();
+        // HS2-EX594V: an unreadable ledger shows no outage rather than failing the view.
+        let home_outages = hotsheet_ticketing::orchestration::HomeOutageStore::new(&self.home)
+            .outages(owner_id)
+            .unwrap_or_default();
         let input = TimelineInput {
+            home_outages: &home_outages,
             run_ci: &run_ci,
             sites: &sites,
             owner_checkout_id: owner_id,
@@ -423,11 +428,15 @@ impl OrchestrationRuntime {
         if after != Some(first.version.as_str()) {
             return Ok(first);
         }
+        // HS2-EX594V: a home outage begun or ended changes what the view shows.
+        let outages =
+            hotsheet_ticketing::orchestration::HomeOutageStore::new(&self.home).directory();
         let mut dirs = vec![
             runs.directory(),
             decisions.directory(),
             wake.as_path(),
             permissions.as_path(),
+            outages.as_path(),
         ];
         dirs.extend(stores.iter().map(PathBuf::as_path));
         // HS2-ANQXQ4: the stores to watch are known only after the first read, so the
