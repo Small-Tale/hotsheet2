@@ -21,7 +21,7 @@
  */
 import type { PollResponse } from './api';
 import { CHANGE_MUX_MAX_POLLS, CHANGE_MUX_VERSION, type ChangeMuxPoll } from './change-mux-bridge';
-import { DirectPollSlots } from './change-poll-slots';
+import { DirectPollSlots, type SlotGrant } from './change-poll-slots';
 
 export type ChangePollFn = (since?: number, signal?: AbortSignal, timeoutMs?: number) => Promise<PollResponse>;
 
@@ -37,6 +37,8 @@ export interface ChangePollMultiplexerOptions {
   directOnly?: boolean;
   /** Disable cross-context coordination only for isolated multiplexer tests. */
   crossContextSlots?: boolean;
+  /** Cross-context slots to use instead of the default ones (tests). */
+  directSlots?: Pick<DirectPollSlots, 'run' | 'onContention'>;
   parse(value: unknown): PollResponse;
   fetch?: typeof fetch;
   now?: () => number;
@@ -59,6 +61,21 @@ interface Pending {
   detach(): void;
 }
 
+/** One direct request for a pending project (HS2-EZN3NY). */
+interface DirectAttempt {
+  entry: Pending;
+  /** Aborts this request only; the project's poll stays pending when it is preempted. */
+  controller: AbortController;
+  /** Set when the request is issued (after its slot is granted). */
+  started?: number;
+  timeout?: number;
+  /** A full-window poll that contention may preempt after its minimum turn. */
+  held: boolean;
+  preempted: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+  release(): void;
+}
+
 interface InFlight {
   controller: AbortController;
   members: Map<string, Pending>;
@@ -67,7 +84,11 @@ interface InFlight {
 const DEFAULT_TIMEOUT_MS = 25_000;
 /** Leave two HTTP/1.1 origin connections available for ordinary API work in direct fallback. */
 export const DIRECT_POLL_MAX_IN_FLIGHT = 4;
-/** Rotate queued projects rather than holding their place for the full long-poll deadline. */
+/**
+ * Under contention (more projects than slots, or another context waiting for a slot), direct
+ * polls rotate on this cap, and a held full-window poll yields once it has had this long.
+ * Without contention a direct poll holds the caller's whole window (HS2-EZN3NY).
+ */
 export const DIRECT_POLL_TIMEOUT_MS = 1_000;
 
 const abortError = (): Error => {
@@ -103,8 +124,9 @@ export class ChangePollMultiplexer {
   private modeValue: ChangePollMuxMode = 'mux';
   private readonly pending = new Map<string, Pending>();
   private inflight: InFlight | undefined;
-  private readonly directActive = new Set<Pending>();
-  private readonly directSlots: DirectPollSlots | undefined;
+  private readonly directActive = new Map<Pending, DirectAttempt>();
+  private readonly directSlots: Pick<DirectPollSlots, 'run' | 'onContention'> | undefined;
+  private contentionSubscribed = false;
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly fetcher: typeof fetch;
   private readonly now: () => number;
@@ -117,7 +139,7 @@ export class ChangePollMultiplexer {
     this.fetcher = options.fetch ?? ((input, init) => fetch(input, init));
     this.now = options.now ?? Date.now;
     this.coalesceMs = options.coalesceMs ?? 5;
-    this.directSlots = options.crossContextSlots === false ? undefined : new DirectPollSlots();
+    this.directSlots = options.directSlots ?? (options.crossContextSlots === false ? undefined : new DirectPollSlots());
   }
 
   get mode(): ChangePollMuxMode {
@@ -335,8 +357,8 @@ export class ChangePollMultiplexer {
   }
 
   /**
-   * HS2-AZ11V9: a direct poll is capped at `DIRECT_POLL_TIMEOUT_MS` only so queued projects take
-   * turns. An empty page from that capped poll is not the end of the caller's long poll: the
+   * HS2-AZ11V9: under contention a direct poll is capped at `DIRECT_POLL_TIMEOUT_MS` so queued
+   * projects take turns (HS2-EZN3NY: only then). An empty page from that capped poll is not the end of the caller's long poll: the
    * transport treats an early empty page as the server having held its whole window and then
    * sleeps out the rest of its retry window, up to 30 s, without polling, so an event in that
    * gap (a terminal halt) arrived late. Keep polling until the caller's deadline instead.
@@ -357,47 +379,115 @@ export class ChangePollMultiplexer {
     );
   }
 
+  /** Projects waiting for a direct slot in this context. */
+  private queuedDirect(): number {
+    let queued = 0;
+    for (const entry of this.pending.values()) if (!this.directActive.has(entry)) queued += 1;
+    return queued;
+  }
+
   private drainDirect() {
     if (this.modeValue !== 'direct') return;
+    if (this.directSlots && !this.contentionSubscribed) {
+      this.contentionSubscribed = true;
+      this.directSlots.onContention(() => {
+        this.preemptHeld();
+      });
+    }
     for (const entry of this.pending.values()) {
       if (this.directActive.size >= DIRECT_POLL_MAX_IN_FLIGHT) break;
       if (this.directActive.has(entry)) continue;
-      this.directActive.add(entry);
+      this.startDirect(entry);
+    }
+    if (this.queuedDirect() > 0) this.preemptHeld();
+  }
+
+  /**
+   * HS2-EZN3NY: a held full-window poll yields its slot once it has had a minimum turn. The
+   * project stays pending and is reissued with the same cursor, so the server replays anything
+   * that arrived meanwhile; preemption never rejects, so the transport does not back off.
+   */
+  private preemptHeld() {
+    const now = this.now();
+    for (const attempt of this.directActive.values()) {
+      if (!attempt.held || attempt.preempted || attempt.timer !== undefined || attempt.started === undefined) continue;
+      const preempt = () => {
+        attempt.timer = undefined;
+        attempt.preempted = true;
+        attempt.controller.abort();
+      };
+      const remaining = attempt.started + DIRECT_POLL_TIMEOUT_MS - now;
+      if (remaining <= 0) preempt();
+      else attempt.timer = setTimeout(preempt, remaining);
+    }
+  }
+
+  /** Put a still-pending project behind the others waiting for a slot. */
+  private rotate(entry: Pending) {
+    this.pending.delete(entry.key);
+    this.pending.set(entry.key, entry);
+  }
+
+  private startDirect(entry: Pending) {
+    const controller = new AbortController();
+    const parent = entry.directController.signal;
+    const onParentAbort = () => {
+      controller.abort();
+    };
+    parent.addEventListener('abort', onParentAbort, { once: true });
+    const attempt: DirectAttempt = {
+      entry,
+      controller,
+      held: false,
+      preempted: false,
+      release: () => {
+        parent.removeEventListener('abort', onParentAbort);
+        if (attempt.timer !== undefined) clearTimeout(attempt.timer);
+        attempt.timer = undefined;
+        if (this.directActive.get(entry) === attempt) this.directActive.delete(entry);
+      },
+    };
+    this.directActive.set(entry, attempt);
+    // The timeout is chosen once the slot is granted: hold the caller's whole window unless
+    // another project, here or in another context, is waiting for a slot.
+    const issue = (grant: SlotGrant) => {
       const started = this.now(),
-        timeout = Math.min(DIRECT_POLL_TIMEOUT_MS, Math.max(0, Math.ceil(entry.deadline - started)));
-      void Promise.resolve()
-        .then(() =>
-          this.directSlots
-            ? this.directSlots.run(entry.directController.signal, (slotTimeout) =>
-                entry.direct(entry.since, entry.directController.signal, Math.min(timeout, slotTimeout)),
-              )
-            : entry.direct(entry.since, entry.directController.signal, timeout),
-        )
-        .then(
-          (page) => {
-            this.directActive.delete(entry);
-            if (this.pending.get(entry.key) === entry) {
-              if (this.continueDirectPoll(entry, page, started, timeout)) {
-                // Rotate: the project goes behind the others waiting for a slot.
-                this.pending.delete(entry.key);
-                this.pending.set(entry.key, entry);
-              } else
-                this.settle(entry, () => {
-                  entry.resolve(page);
-                });
-            }
-            this.drainDirect();
-          },
-          (reason: unknown) => {
-            this.directActive.delete(entry);
-            if (this.pending.get(entry.key) === entry)
+        remaining = Math.max(0, Math.ceil(entry.deadline - started)),
+        contended = grant.contended || this.pending.size > DIRECT_POLL_MAX_IN_FLIGHT;
+      let timeout = contended ? Math.min(DIRECT_POLL_TIMEOUT_MS, remaining) : remaining;
+      if (grant.maxTimeoutMs !== undefined) timeout = Math.min(timeout, grant.maxTimeoutMs);
+      attempt.started = started;
+      attempt.timeout = timeout;
+      attempt.held = timeout > DIRECT_POLL_TIMEOUT_MS;
+      return entry.direct(entry.since, controller.signal, timeout);
+    };
+    void Promise.resolve()
+      .then(() => (this.directSlots ? this.directSlots.run(controller.signal, issue) : issue({ contended: false })))
+      .then(
+        (page) => {
+          attempt.release();
+          if (this.pending.get(entry.key) === entry) {
+            if (this.continueDirectPoll(entry, page, attempt.started ?? this.now(), attempt.timeout ?? 0))
+              this.rotate(entry);
+            else
+              this.settle(entry, () => {
+                entry.resolve(page);
+              });
+          }
+          this.drainDirect();
+        },
+        (reason: unknown) => {
+          attempt.release();
+          if (this.pending.get(entry.key) === entry) {
+            if (attempt.preempted) this.rotate(entry);
+            else
               this.settle(entry, () => {
                 entry.reject(reason);
               });
-            this.drainDirect();
-          },
-        );
-    }
+          }
+          this.drainDirect();
+        },
+      );
   }
 }
 

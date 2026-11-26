@@ -2610,8 +2610,14 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   waiting projects switches that multiplexer permanently to direct per-project polls. An
   older server behind a new bridge surfaces as that project's own error, as before. Direct
   fallback in the page, dedicated worker, and shared worker admits at most four browser
-  polls at once per origin and caps each one at one second; queued projects rotate in
-  arrival order, while abort and supersede remove obsolete work. A capped poll that held
+  polls at once per origin. While no other poll waits for a slot, each project holds one
+  genuine long poll for the caller's whole window, so an idle project sends one request
+  per window. Under contention (more waiting projects than slots, or another tab or worker
+  queued for a slot) each poll is capped at one second and queued projects rotate in
+  arrival order; a held full-window poll yields its slot after a one-second minimum turn
+  and is reissued with the same cursor, so the server replays anything it missed. A tab or
+  worker that must wait announces it on a `BroadcastChannel` so holders elsewhere yield
+  (HS2-EZN3NY). Abort and supersede remove obsolete work. A capped poll that held
   its second and came back empty is not the end of the caller's long poll: the project
   re-queues behind the others and keeps polling until its own deadline. Before, the
   transport took that empty page for a full window and slept out the rest of its retry

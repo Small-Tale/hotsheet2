@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { PollResponse } from './api';
 import { CHANGE_MUX_MAX_POLLS } from './change-mux-bridge';
@@ -10,6 +10,7 @@ import {
   DIRECT_POLL_MAX_IN_FLIGHT,
   DIRECT_POLL_TIMEOUT_MS,
 } from './change-poll-mux';
+import type { SlotGrant } from './change-poll-slots';
 import { type ProjectChangeSink, runProjectChangePollTransport } from './project-change-poll';
 import { parsePollResponse } from './server-response-parsers';
 
@@ -82,7 +83,15 @@ function mux(fetcher: typeof fetch, extra: Partial<ConstructorParameters<typeof 
   });
 }
 
+/** Slots that always report another context waiting, so direct polls rotate on the cap. */
+const contendedSlots = {
+  run: <T>(_signal: AbortSignal, poll: (grant: SlotGrant) => Promise<T>) => poll({ contended: true }),
+  onContention: () => () => undefined,
+};
+
 const neverDirect: ChangePollFn = () => Promise.reject(new Error('direct poll used'));
+
+const neverFetch = (() => Promise.reject(new Error('bridge used'))) as unknown as typeof fetch;
 
 describe('ChangePollMultiplexer', () => {
   it('shares one request for two tabs on the same project and routes answers by client', async () => {
@@ -438,7 +447,8 @@ describe('ChangePollMultiplexer', () => {
   it('keeps a direct long poll open until its deadline across empty capped polls, then delivers an event', async () => {
     const bridge = fakeBridge();
     let clock = 0;
-    const m = mux(bridge.fetcher, { now: () => clock });
+    // Another context waits for a slot, so this poll rotates on the cap.
+    const m = mux(bridge.fetcher, { now: () => clock, directSlots: contendedSlots });
     const calls: Array<{ since?: number; timeout?: number; resolve(page: PollResponse): void }> = [];
     const direct: ChangePollFn = (since, _signal, timeout) =>
       new Promise((resolve) => calls.push({ since, timeout, resolve }));
@@ -509,6 +519,222 @@ describe('ChangePollMultiplexer', () => {
     await tick(20);
     expect(bridge.calls).toHaveLength(1);
     expect(bridge.calls[0].body.polls).toHaveLength(7);
+  });
+});
+
+/**
+ * HS2-EZN3NY: a fake `/ws/poll` that holds each request for its timeout (or until an event is
+ * published) and answers with the events after `since`, on fake timers.
+ */
+function heldServer() {
+  const calls: Array<{ project: string; since?: number; timeout: number; at: number }> = [];
+  const waiters = new Set<() => void>();
+  let cursor = 0;
+  const log: Array<{ seq: number; project: string }> = [];
+  const pageFor = (project: string, since: number): PollResponse => ({
+    cursor,
+    overflow: false,
+    events: log
+      .filter((event) => event.project === project && event.seq > since)
+      .map((event) => ({ kind: 'ticket_updated', store: 's', id: `t${event.seq}`, slug: `T-${event.seq}` })),
+  });
+  const directFor =
+    (project: string): ChangePollFn =>
+    (since, signal, timeout = 25_000) => {
+      calls.push({ project, ...(since === undefined ? {} : { since }), timeout, at: Date.now() });
+      return new Promise<PollResponse>((resolve, reject) => {
+        const from = since ?? cursor;
+        const answer = () => {
+          clearTimeout(timer);
+          waiters.delete(check);
+          resolve(pageFor(project, from));
+        };
+        const check = () => {
+          if (pageFor(project, from).events.length) answer();
+        };
+        const timer = setTimeout(answer, timeout);
+        waiters.add(check);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            waiters.delete(check);
+            const error = new Error('aborted');
+            error.name = 'AbortError';
+            reject(error);
+          },
+          { once: true },
+        );
+        check();
+      });
+    };
+  const publish = (project: string) => {
+    cursor += 1;
+    log.push({ seq: cursor, project });
+    for (const check of [...waiters]) check();
+  };
+  return { calls, directFor, publish };
+}
+
+/** Each project re-polls with its cursor as soon as its last poll answers, like the transport. */
+function idleClients(m: ChangePollMultiplexer, server: ReturnType<typeof heldServer>, projects: string[]) {
+  const stopped = { value: false };
+  const received = new Map<string, number[]>();
+  for (const project of projects) {
+    received.set(project, []);
+    void (async () => {
+      let since = 0;
+      while (!stopped.value) {
+        try {
+          const answer = await m.poll(project, server.directFor(project), since, undefined, 25_000);
+          for (const event of answer.events) received.get(project)?.push(Number(event.id.slice(1)));
+          since = answer.cursor;
+        } catch {
+          return;
+        }
+      }
+    })();
+  }
+  return {
+    stop: () => {
+      stopped.value = true;
+    },
+    received,
+  };
+}
+
+describe('direct fallback request rate (HS2-EZN3NY)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const directMux = (extra: Partial<ConstructorParameters<typeof ChangePollMultiplexer>[0]> = {}) =>
+    mux(neverFetch, { directOnly: true, now: () => Date.now(), ...extra });
+
+  it.each([
+    [1, 3],
+    [4, 12],
+  ])('%i idle project(s) hold one request each per 25 s window over a minute', async (count, expected) => {
+    vi.useFakeTimers();
+    const server = heldServer();
+    const clients = idleClients(
+      directMux(),
+      server,
+      Array.from({ length: count }, (_, index) => `p${index}`),
+    );
+    await vi.advanceTimersByTimeAsync(59_999);
+    clients.stop();
+    // Windows start at 0, 25 and 50 s: one held request per project per window.
+    expect(server.calls).toHaveLength(expected);
+    expect(server.calls.every((call) => call.timeout === 25_000)).toBe(true);
+  });
+
+  it('more projects than slots rotate on the cap, bounded and fair', async () => {
+    vi.useFakeTimers();
+    const server = heldServer();
+    const projects = ['p0', 'p1', 'p2', 'p3', 'p4'];
+    const clients = idleClients(directMux(), server, projects);
+    await vi.advanceTimersByTimeAsync(59_999);
+    clients.stop();
+    // Real contention keeps the bounded rotation: at most four requests a second in all,
+    expect(server.calls.length).toBeLessThanOrEqual(DIRECT_POLL_MAX_IN_FLIGHT * 60 + projects.length);
+    // and every project keeps getting turns.
+    for (const project of projects)
+      expect(server.calls.filter((call) => call.project === project).length).toBeGreaterThanOrEqual(30);
+  });
+
+  it('a project that joins while every slot is held gets a turn within the minimum hold', async () => {
+    vi.useFakeTimers();
+    const server = heldServer();
+    const m = directMux();
+    const t0 = Date.now();
+    const held = idleClients(m, server, ['a', 'b', 'c', 'd']);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(server.calls.map((call) => call.timeout)).toEqual(Array(4).fill(25_000));
+    const joined = idleClients(m, server, ['late']);
+    await vi.advanceTimersByTimeAsync(DIRECT_POLL_TIMEOUT_MS - 200 + 10);
+    const late = server.calls.filter((call) => call.project === 'late');
+    expect(late.length).toBeGreaterThanOrEqual(1);
+    expect(late[0].at - t0).toBeLessThanOrEqual(DIRECT_POLL_TIMEOUT_MS + 10);
+    // Preempted polls were reissued with their unchanged cursor, not rejected (five projects
+    // share four slots, so one of them is still queued).
+    await vi.advanceTimersByTimeAsync(DIRECT_POLL_TIMEOUT_MS);
+    for (const project of ['a', 'b', 'c', 'd']) {
+      const calls = server.calls.filter((call) => call.project === project);
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      expect(calls.every((call) => call.since === 0)).toBe(true);
+    }
+    // An event for a preempted project still reaches it through the cursor replay.
+    server.publish('a');
+    await vi.advanceTimersByTimeAsync(3 * DIRECT_POLL_TIMEOUT_MS);
+    expect(held.received.get('a')).toEqual([1]);
+    held.stop();
+    joined.stop();
+  });
+
+  it('returns to full-window holds once the extra project leaves', async () => {
+    vi.useFakeTimers();
+    const server = heldServer();
+    const m = directMux();
+    const stay = idleClients(m, server, ['a', 'b', 'c', 'd']);
+    const leaving = new AbortController();
+    void m.poll('e', server.directFor('e'), 0, leaving.signal, 25_000).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(5_000);
+    leaving.abort();
+    await vi.advanceTimersByTimeAsync(2 * DIRECT_POLL_TIMEOUT_MS);
+    const before = server.calls.length;
+    await vi.advanceTimersByTimeAsync(20_000);
+    // Four projects, four slots: at most one more request each in the next 20 s.
+    expect(server.calls.length - before).toBeLessThanOrEqual(4);
+    expect(server.calls.at(-1)?.timeout).toBeGreaterThan(DIRECT_POLL_TIMEOUT_MS);
+    stay.stop();
+  });
+
+  it('delivers an event that arrives mid-hold at once (HS2-AZ11V9)', async () => {
+    vi.useFakeTimers();
+    const server = heldServer();
+    const clients = idleClients(directMux(), server, ['a']);
+    await vi.advanceTimersByTimeAsync(7_000);
+    server.publish('a');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(clients.received.get('a')).toEqual([1]);
+    expect(server.calls).toHaveLength(2);
+    expect(server.calls[1]).toMatchObject({ since: 1, timeout: 25_000 });
+    clients.stop();
+  });
+
+  it('a failed direct poll rejects so the transport backs off, and is not retried here', async () => {
+    const m = directMux();
+    const direct = vi.fn<ChangePollFn>(() => Promise.reject(new Error('offline')));
+    await expect(m.poll('a', direct, 3, undefined, 25_000)).rejects.toThrow('offline');
+    await tick(10);
+    expect(direct).toHaveBeenCalledTimes(1);
+    expect(m.waiting()).toEqual([]);
+  });
+
+  it('preempts a held poll when another context announces it is waiting for a slot', async () => {
+    vi.useFakeTimers();
+    const server = heldServer();
+    let announce: () => void = () => undefined;
+    let contended = false;
+    const slots = {
+      run: <T>(_signal: AbortSignal, poll: (grant: SlotGrant) => Promise<T>) => poll({ contended }),
+      onContention: (listener: () => void) => {
+        announce = listener;
+        return () => undefined;
+      },
+    };
+    const clients = idleClients(directMux({ directSlots: slots }), server, ['a']);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(server.calls).toEqual([expect.objectContaining({ timeout: 25_000 })]);
+    contended = true;
+    announce();
+    await vi.advanceTimersByTimeAsync(DIRECT_POLL_TIMEOUT_MS - 300 - 1);
+    expect(server.calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.calls).toHaveLength(2);
+    expect(server.calls[1]).toMatchObject({ since: 0, timeout: DIRECT_POLL_TIMEOUT_MS });
+    clients.stop();
   });
 });
 

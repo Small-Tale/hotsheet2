@@ -1411,6 +1411,17 @@ covers two contexts, refill, fallback pacing, and abort; `change-poll-mux.spec.t
 opens eight projects in two tabs, checks the shared limit and ordinary API
 responsiveness, then closes and reopens a tab to verify recovery and fairness.
 
+HS2-EZN3NY makes uncontended direct change polls genuine long polls.
+`change-poll-mux.test.ts # direct fallback request rate (HS2-EZN3NY)` simulates a held
+`/ws/poll` on fake timers: one request per project per 25 s window over a minute with one
+and four projects, bounded fair rotation with five, a joining project's turn within the
+one-second minimum hold, cursor replay after preemption, return to full-window holds, a
+mid-hold event delivered at once, failure rejection for transport backoff, and preemption
+on a cross-context announcement. `change-poll-slots.test.ts` covers free-slot-first grants,
+contention reporting and announcement, aborting a queued wait, and the lazy
+`BroadcastChannel`. `tests/change-poll-mux.spec.ts # idle projects on an older bridge hold
+one direct long poll each instead of polling every second` counts idle browser requests.
+
 HS2-KB5PMF keeps mocked `/ws/poll` events cursor replayable for simultaneous
 readers. The dialog Stop browser test opens two independent polls alongside the
 app poll and verifies both readers see the done event. It advances the installed

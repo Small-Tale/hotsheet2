@@ -301,7 +301,8 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
     await vi.waitFor(() => {
       expect(sockets).toHaveLength(1);
     });
-    expect(polls[0]).toBe('http://host/p/a/ws/poll?timeout_ms=1000&client=tab-1');
+    // HS2-EZN3NY: an uncontended direct handshake holds the caller's window, not a 1 s cap.
+    expect(polls[0]).toMatch(/^http:\/\/host\/p\/a\/ws\/poll\?timeout_ms=2[45]\d{3}&client=tab-1$/u);
     sockets[0].open();
     await vi.waitFor(() => {
       expect(polls).toHaveLength(2);

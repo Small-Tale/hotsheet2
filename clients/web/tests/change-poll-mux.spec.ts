@@ -561,6 +561,97 @@ for (const advertisesMux of [true, false]) {
   });
 }
 
+// HS2-EZN3NY: with free slots, an idle project's direct poll is a genuine long poll. It used to be
+// capped at one second, so every idle open project sent about one request a second.
+test('idle projects on an older bridge hold one direct long poll each instead of polling every second', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const polls: Array<{ path: string; at: number; timeout: number; since: boolean }> = [];
+  let chosen = 0;
+  await page.routeWebSocket(/.*/, (socket) => {
+    void socket.close();
+  });
+  await page.route(appRequests, async (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = decodeURIComponent(url.pathname);
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {
+      const root = (request.postDataJSON() as { root: string }).root;
+      const selected = projects.find((project) => project.root === root) ?? projects[0];
+      return route.fulfill({ status: 201, json: { ...selected, changeMuxPath: undefined } });
+    }
+    if (path === '/__hotsheet/folders/choose') {
+      chosen += 1;
+      return route.fulfill({ json: { path: projects[chosen].root } });
+    }
+    if (path.endsWith('/ws/poll')) {
+      const timeout = Number(url.searchParams.get('timeout_ms') ?? 0),
+        since = url.searchParams.has('since');
+      polls.push({ path, at: Date.now(), timeout, since });
+      // The real server answers a handshake at once and holds a cursor poll for its timeout.
+      if (since) await new Promise((resolve) => setTimeout(resolve, Math.min(timeout, 30_000)));
+      return route.fulfill({ json: { cursor: 1, events: [], overflow: false } }).catch(() => undefined);
+    }
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git',
+            provider: 'git',
+            display_name: 'Hot Sheet Git',
+            locator: '/work/alpha.hs2',
+            default: true,
+            capabilities,
+          },
+        ],
+      });
+    if (path.endsWith('/tickets') && request.method() === 'GET') {
+      const projectId = path.match(/project-api\/([^/]+)/)?.[1];
+      const name = projects.find((project) => project.id === projectId)?.name ?? 'Alpha';
+      return route.fulfill({ json: ticketPage([row(`${name.toUpperCase()}1`, `${name} first`)]) });
+    }
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: {
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          staged: 0,
+          unstaged: 0,
+          untracked: 0,
+          conflicted: 0,
+          clean: true,
+        },
+      });
+    if (path.endsWith('/terminal-settings')) return route.fulfill({ json: { inherit_global_shell_history: false } });
+    if (path.startsWith('/__hotsheet/project-api/')) return route.fulfill({ json: [] });
+    if (!path.startsWith('/__hotsheet/')) return route.continue();
+    return route.fulfill({ status: 404, json: { error: `Unhandled ${path}` } });
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await expect(page.getByRole('tab', { name: projects[1].name })).toHaveAttribute('aria-selected', 'true');
+  // The WebSocket-first transport replays through windows that double from 1 s while its
+  // socket keeps failing (bounded backoff). Measure once both projects hold a window of 8 s.
+  const longWindow = () =>
+    new Set(polls.filter((poll) => poll.since && poll.timeout >= 7_000).map((poll) => poll.path)).size;
+  await expect.poll(longWindow, { timeout: 30_000 }).toBe(2);
+  const start = Date.now(),
+    before = polls.length;
+  // Wait on the clock, not on requests: this measures how many requests idle projects make.
+  await page.waitForTimeout(5_000);
+  const during = polls.slice(before);
+  // Each project holds one long poll and starts at most one more; the old 1 s cap made ten.
+  expect(during.length, JSON.stringify(during.map((poll) => ({ ...poll, at: poll.at - start })))).toBeLessThanOrEqual(
+    2,
+  );
+  expect(during.every((poll) => poll.timeout > 1_000)).toBe(true);
+});
+
 test('independent tabs share direct-poll slots and recover them after a tab closes', async ({ page, context }) => {
   test.setTimeout(120_000);
   const second = await context.newPage();

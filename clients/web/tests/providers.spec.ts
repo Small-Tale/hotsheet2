@@ -35310,8 +35310,8 @@ test('switches already-open projects from cache within one frame and rejects sta
             url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
           // Name each early request so a regression says which route jumped the paint (HS2-8YHY6V).
           // The change stream's long poll is not a refresh: with no change multiplexer here, each open
-          // project's direct poll rotates about once a second whatever the user does, so a rotation
-          // can start inside the switch frame by chance (HS2-PR03G5).
+          // project's direct poll can end and be reissued whatever the user does, so one can start
+          // inside the switch frame by chance (HS2-PR03G5, HS2-EZN3NY).
           if (
             url.includes('/__hotsheet/project-api/') &&
             !new URL(url, location.href).pathname.endsWith('/ws/poll') &&
