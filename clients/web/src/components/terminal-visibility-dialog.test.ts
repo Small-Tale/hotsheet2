@@ -117,8 +117,8 @@ describe('TerminalVisibilityDialog', () => {
           contextMenu: { id: 'focus', x: 20, y: 30 },
         }),
       );
-    expect(markup).not.toContain('>Project</h2>');
-    expect(markup).toContain('>Other</h2>');
+    expect(markup).not.toContain('<span>Project</span>');
+    expect(markup).toContain('<span>Other</span>');
     expect(markup).toContain('aria-label="Visibility Group Actions"');
     expect(markup).toMatch(/popup-menu-context-x:20px;[^"]*popup-menu-context-y:30px/);
     expect(markup).toContain('data-context-menu="terminal-visibility-group"');
@@ -208,12 +208,18 @@ describe('TerminalVisibilityDialog', () => {
     expect(visible).toContain('data-action="toggle-terminal-visibility-project"');
     expect(visible).toContain('data-project-id="project"');
     expect(visible).toContain('aria-label="Hide All Project AI Shells"');
-    expect(visible).toMatch(/aria-label="Hide All Project AI Shells"[^>]*>[^]*?data-lucide="eye"/);
+    // HS2-DZH5GH: the project name is the button, inside the heading; no separate trailing eye button.
+    const projectButton =
+      /<h2[^>]*>\s*<button[^>]*data-action="toggle-terminal-visibility-project"[^>]*>\s*<span>Project<\/span>/;
+    expect(visible).toMatch(projectButton);
+    expect(visible.match(/data-action="toggle-terminal-visibility-project"/g)).toHaveLength(1);
+    const heading = visible.match(/<header class="kui-list-header"[^]*?<\/header>/)?.[0] ?? '';
+    expect(heading.match(/<button/g)).toHaveLength(1);
+    expect(heading).not.toContain('data-lucide');
     const mixed = render(setTerminalVisibleInGroup(initialTerminalVisibilityState(), 'default', 'project:two', false));
     expect(mixed).toContain('aria-label="Show All Project AI Shells"');
-    expect(mixed).toMatch(/aria-label="Show All Project AI Shells"[^>]*>[^]*?data-lucide="eye-off"/);
-    // The heading still names the project for the outline.
-    expect(mixed).toContain('>Project</');
+    expect(mixed).toMatch(projectButton);
+    expect(mixed).not.toContain('aria-expanded');
     // The footer bulk actions stay.
     expect(mixed).toContain('hide-all-terminals-in-group');
     expect(mixed).toContain('show-all-terminals-in-group');

@@ -226,17 +226,16 @@ export function TerminalVisibilityDialog({
               );
               return (
                 <section data-key={group.projectId}>
-                  {/* The heading acts on the project's listed items (HS2-HC67SP): any hidden shows all,
-                    otherwise it hides all. Kerf ListHeader's action mode keeps it one named stop. */}
+                  {/* The project name itself acts on the project's listed items (HS2-HC67SP, HS2-DZH5GH):
+                    any hidden shows all, otherwise it hides all. Kerf ListHeader's title-action mode keeps
+                    it one named stop inside the heading. */}
                   <ListHeader
                     label={group.projectName}
-                    action={TERMINALS_ACTIONS.toggleTerminalVisibilityProject.value}
-                    actionLabel={`${show ? 'Show' : 'Hide'} All ${group.projectName} ${terminalVisibilityItemsNoun(
+                    titleAction={TERMINALS_ACTIONS.toggleTerminalVisibilityProject.value}
+                    titleActionLabel={`${show ? 'Show' : 'Hide'} All ${group.projectName} ${terminalVisibilityItemsNoun(
                       group.items.map((item) => item.kind),
                     )}`}
-                    // Like each row, the icon reports state (any hidden: eye-off) and the label the action.
-                    actionIcon={<LucideIcon icon={show ? EyeOff : Eye} name={show ? 'eye-off' : 'eye'} />}
-                    triggerAttributes={{ 'data-project-id': group.projectId }}
+                    titleTriggerAttributes={{ 'data-project-id': group.projectId }}
                   />
                   <List className="terminal-visibility-dialog__rows">
                     {group.items.map((item) => {
