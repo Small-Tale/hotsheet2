@@ -530,3 +530,276 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
         ));
     }
 }
+
+/// HS2-TZJYKH: Start and Pause are one runtime edit of the stored policy at its
+/// revision. The first Start saves the default policy with it; a repeat keeps the
+/// revision; a stale revision is the policy's `conflict`; an AI actor is refused; and
+/// every other member a person set survives.
+#[test]
+fn hs2_tzjykh_start_and_pause_edit_the_stored_policy_at_its_revision() {
+    let f = fixture();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    declaration(&f, &mut tx);
+    let path = format!("/checkouts/{}/orchestration/policy/automatic", f.owner.id);
+    let person = json!({"role":"human","id":"maintainer"});
+    let put = |body: Value, tx: &mut Transaction<'_>| f.runtime.request("PUT", &path, &body, tx);
+
+    // An AI actor may not start it, and nothing is written.
+    let refused = put(
+        json!({"automatic":true,"actor":{"role":"ai","id":"worker-1"}}),
+        &mut tx,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(refused, OrchestrationError::Forbidden(_)),
+        "{refused}"
+    );
+    assert_eq!(f.runtime.policy(&f.owner.id).unwrap().revision, None);
+    // A revision when none is saved is stale.
+    assert!(matches!(
+        put(
+            json!({"automatic":true,"expected_revision":id(99),"actor":person}),
+            &mut tx
+        ),
+        Err(OrchestrationError::Conflict)
+    ));
+    // An unknown member is refused rather than ignored.
+    assert!(matches!(
+        put(
+            json!({"automatic":true,"automatic_edit":true,"actor":person}),
+            &mut tx
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
+
+    // No policy: the defaults, with placement on, in one write.
+    let started = put(json!({"automatic":true,"actor":person}), &mut tx).unwrap();
+    assert_eq!(started["saved_default"], true, "{started}");
+    assert_eq!(started["enabled"], true);
+    let mut expected = PolicyBody::default();
+    expected.placement.automatic = Some(true);
+    assert_eq!(
+        started["policy"],
+        serde_json::to_value(&expected).unwrap(),
+        "every other member stays at its default"
+    );
+    let first = started["revision"].clone();
+    assert_eq!(
+        f.runtime.policy(&f.owner.id).unwrap().policy,
+        Some(expected)
+    );
+    // HS2-38R8J2: placement was turned on, so a later pause reads Paused.
+    assert!(
+        f.runtime
+            .placement_started_at(&f.owner.id)
+            .unwrap()
+            .is_some()
+    );
+
+    // Again: the same revision, and a saved policy is not the default one.
+    let again = put(json!({"automatic":true,"actor":person}), &mut tx).unwrap();
+    assert_eq!(
+        (again["revision"].clone(), again["saved_default"].clone()),
+        (first.clone(), json!(false))
+    );
+
+    // A person's own limits survive Pause and Start.
+    let mut edited = policy(false);
+    edited.placement.automatic = Some(true);
+    edited.placement.aging_minutes = 30;
+    let limits = set(&f, edited.clone(), &mut tx);
+    // Pause at a stale revision conflicts and changes nothing.
+    assert!(matches!(
+        put(
+            json!({"automatic":false,"expected_revision":first,"actor":person}),
+            &mut tx
+        ),
+        Err(OrchestrationError::Conflict)
+    ));
+    assert_eq!(f.runtime.policy(&f.owner.id).unwrap().revision, limits);
+    // Pause at the current revision.
+    let paused = put(
+        json!({"automatic":false,"expected_revision":limits,"actor":person}),
+        &mut tx,
+    )
+    .unwrap();
+    assert_ne!(paused["revision"], json!(limits));
+    edited.placement.automatic = Some(false);
+    assert_eq!(
+        f.runtime.policy(&f.owner.id).unwrap().policy,
+        Some(edited.clone())
+    );
+    // Pause again, then Start: placement only, at each revision read.
+    let repeat = put(json!({"automatic":false,"actor":person}), &mut tx).unwrap();
+    assert_eq!(repeat["revision"], paused["revision"]);
+    let resumed = put(json!({"automatic":true,"actor":person}), &mut tx).unwrap();
+    edited.placement.automatic = Some(true);
+    assert_eq!(f.runtime.policy(&f.owner.id).unwrap().policy, Some(edited));
+    assert_eq!(resumed["saved_default"], false);
+    let (action, outcome, _) = last_audit(&f);
+    assert_eq!(
+        (action.as_str(), outcome),
+        ("policy_set", AuditOutcome::Changed)
+    );
+}
+
+/// HS2-TZJYKH: one target's role sessions, edited by the runtime: added last,
+/// replaced in place, none kept as a choice, Auto removing the entry, and a repeat
+/// keeping the revision. Other targets' entries and every other member stay.
+#[test]
+fn hs2_tzjykh_role_sessions_edit_one_target_at_the_stored_revision() {
+    let f = fixture();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    f.runtime
+        .replace(
+            &f.owner.id,
+            ReplaceTargets {
+                expected_revision: None,
+                targets: [(1, None), (2, None), (3, Some(id(1)))]
+                    .into_iter()
+                    .map(|(n, site_of)| TargetDeclaration {
+                        target_id: id(n),
+                        state: DeclarationState::Active,
+                        label: format!("Synthetic {n}"),
+                        expected_repository_identity: None,
+                        site_of,
+                    })
+                    .collect(),
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let path = format!(
+        "/checkouts/{}/orchestration/policy/role-sessions",
+        f.owner.id
+    );
+    let person = json!({"role":"human","id":"maintainer"});
+    let put = |body: Value, tx: &mut Transaction<'_>| {
+        let mut body = body;
+        body["actor"] = person.clone();
+        f.runtime.request("PUT", &path, &body, tx)
+    };
+    let stored = |f: &Fixture| {
+        serde_json::to_value(f.runtime.policy(&f.owner.id).unwrap().policy).unwrap()["placement"]
+            ["role_sessions"]
+            .clone()
+    };
+
+    // Auto together with roles is refused; an AI actor is refused; nothing is written.
+    assert!(matches!(
+        put(
+            json!({"target_id":id(1),"roles":["dispatcher"],"auto":true}),
+            &mut tx
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    assert!(matches!(
+        f.runtime.request(
+            "PUT",
+            &path,
+            &json!({"target_id":id(1),"roles":[],"actor":{"role":"ai","id":"worker-1"}}),
+            &mut tx
+        ),
+        Err(OrchestrationError::Forbidden(_))
+    ));
+    assert_eq!(f.runtime.policy(&f.owner.id).unwrap().revision, None);
+    // Auto on a target with no entry and no policy saves the default policy unchanged.
+    let auto = put(json!({"target_id":id(1),"auto":true}), &mut tx).unwrap();
+    assert_eq!(
+        auto["policy"],
+        serde_json::to_value(PolicyBody::default()).unwrap()
+    );
+    assert!(auto.get("warnings").is_none());
+    // Entries need the policy to list their targets.
+    let listed = PolicyBody {
+        targets: (1..=3)
+            .map(|n| TargetPolicy {
+                target_id: id(n),
+                enabled: true,
+                actions: None,
+                tools: Vec::new(),
+                max_sessions: None,
+                machine: None,
+                speculation: None,
+            })
+            .collect(),
+        ..PolicyBody::default()
+    };
+    set(&f, listed.clone(), &mut tx);
+
+    // Added last, in the order given.
+    let one = put(
+        json!({"target_id":id(1),"roles":["integrator","dispatcher"]}),
+        &mut tx,
+    )
+    .unwrap();
+    put(json!({"target_id":id(2),"roles":["dispatcher"]}), &mut tx).unwrap();
+    assert_eq!(
+        stored(&f),
+        json!([{"target_id":id(1),"roles":["integrator","dispatcher"]},
+            {"target_id":id(2),"roles":["dispatcher"]}])
+    );
+    // Replaced in place with none: the choice of none is kept.
+    let none = put(json!({"target_id":id(1),"roles":[]}), &mut tx).unwrap();
+    assert_ne!(none["revision"], one["revision"]);
+    assert_eq!(
+        stored(&f),
+        json!([{"target_id":id(1),"roles":[]},{"target_id":id(2),"roles":["dispatcher"]}])
+    );
+    // A repeat keeps the revision.
+    let repeat = put(json!({"target_id":id(1),"roles":[]}), &mut tx).unwrap();
+    assert_eq!(repeat["revision"], none["revision"]);
+    // A stale revision conflicts and changes nothing.
+    assert!(matches!(
+        put(
+            json!({"target_id":id(1),"roles":["dispatcher"],"expected_revision":one["revision"]}),
+            &mut tx
+        ),
+        Err(OrchestrationError::Conflict)
+    ));
+    assert_eq!(
+        f.runtime
+            .policy(&f.owner.id)
+            .unwrap()
+            .revision
+            .map(Value::from),
+        Some(none["revision"].clone())
+    );
+    // At the current revision it applies.
+    put(
+        json!({"target_id":id(1),"roles":["dispatcher"],"expected_revision":none["revision"]}),
+        &mut tx,
+    )
+    .unwrap();
+    // HS2-SYZB33: an entry on a site that is not its project's home is said.
+    let site = put(json!({"target_id":id(3),"roles":["integrator"]}), &mut tx).unwrap();
+    assert_eq!(
+        site["warnings"][0]["code"], "role_sessions_not_home",
+        "{site}"
+    );
+    assert_eq!(site["warnings"][0]["subject"], id(3));
+    // Auto removes the entries again, the last leaving no list at all.
+    for n in [3, 1] {
+        assert!(
+            put(json!({"target_id":id(n),"auto":true}), &mut tx)
+                .unwrap()
+                .get("warnings")
+                .is_none()
+        );
+    }
+    assert_eq!(
+        stored(&f),
+        json!([{"target_id":id(2),"roles":["dispatcher"]}])
+    );
+    put(json!({"target_id":id(2),"auto":true}), &mut tx).unwrap();
+    assert_eq!(stored(&f), Value::Null);
+    assert_eq!(f.runtime.policy(&f.owner.id).unwrap().policy, Some(listed));
+}

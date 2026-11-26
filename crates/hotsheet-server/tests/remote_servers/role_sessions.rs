@@ -172,6 +172,50 @@ async fn hs2_tk9adc_role_sessions_set_headlessly_and_the_pool_reported_with_capa
         body["placement"]["resources"]
     );
 
+    // HS2-TZJYKH: the runtime route the CLI calls, over HTTP.
+    let route = format!("{base}/policy/role-sessions");
+    let person = json!({"role":"human","id":"maintainer"});
+    let put = |body: Value| api(router.clone(), "PUT", &route, body, true);
+    let (status, refused) = put(json!({"target_id":TARGET,"roles":["dispatcher"],
+        "actor":{"role":"ai","id":"worker-1"}}))
+    .await;
+    assert_eq!(
+        (status, refused["code"].clone()),
+        (StatusCode::FORBIDDEN, json!("forbidden"))
+    );
+    let (status, stale) = put(json!({"target_id":TARGET,"roles":["dispatcher"],
+        "expected_revision":set["revision"],"actor":person}))
+    .await;
+    assert_eq!(
+        (status, stale["code"].clone()),
+        (StatusCode::CONFLICT, json!("conflict"))
+    );
+    let (status, _) =
+        put(json!({"target_id":TARGET,"roles":["dispatcher"],"auto":true,"actor":person})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = put(json!({"role_sessions_edit":{"target_id":TARGET},"actor":person})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, http) = put(json!({"target_id":TARGET,"roles":["integrator"],
+        "expected_revision":off["revision"],"actor":person}))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{http}");
+    assert_eq!(
+        http["policy"]["placement"]["role_sessions"],
+        json!([{"target_id":TARGET,"roles":["integrator"]}])
+    );
+    assert!(http.get("warnings").is_none(), "{http}");
+    let (_, again) = put(json!({"target_id":TARGET,"roles":["integrator"],"actor":person})).await;
+    assert_eq!(again["revision"], http["revision"]);
+    let (_, auto) = put(json!({"target_id":TARGET,"auto":true,"actor":person})).await;
+    assert!(
+        auto["policy"]["placement"].get("role_sessions").is_none(),
+        "{auto}"
+    );
+    assert_eq!(
+        auto["policy"]["placement"]["resources"],
+        body["placement"]["resources"]
+    );
+
     // The host reports the checkout's pool with its capacity: empty without a pool,
     // then a live dispatcher and two handoffs not yet done, and the version changes.
     let capacity = format!("/checkouts/{}/target-capacity", owner.id);

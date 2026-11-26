@@ -89,6 +89,7 @@ import {
   parseNotificationRule,
   parseNotifierList,
   parseOrchestrationAdmission,
+  parseOrchestrationAutomaticSet,
   parseOrchestrationBinding,
   parseOrchestrationCapacity,
   parseOrchestrationInspection,
@@ -1341,6 +1342,10 @@ export interface OrchestrationPolicyView {
   enabled: boolean;
   revision: string | null;
   policy: OrchestrationPolicyBody | null;
+}
+/** HS2-TZJYKH: the policy after Start or Pause; `saved_default` when no policy was saved before. */
+export interface OrchestrationAutomaticSet extends OrchestrationPolicyView {
+  saved_default: boolean;
 }
 /** One target ticket an orchestration ticket refers to (HS2-AZ15GA). */
 export interface OrchestrationLink {
@@ -3486,6 +3491,16 @@ export class Api {
       method: 'PUT',
       body: JSON.stringify({ expected_revision: expectedRevision, policy, actor: { role: 'human' } }),
     });
+  /**
+   * HS2-TZJYKH: Start (`true`) or Pause (`false`) as one runtime edit of the stored policy at its revision; with
+   * none saved the server saves the default policy with it (HS2-D9KP86).
+   */
+  setOrchestrationAutomatic = (owner: string, automatic: boolean) =>
+    this.parsed(
+      parseOrchestrationAutomaticSet,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/policy/automatic`,
+      { method: 'PUT', body: JSON.stringify({ automatic, actor: { role: 'human' } }) },
+    );
   trashSettings = (checkoutId: string) =>
     this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`);
   trashPurgePreview = (checkoutId: string, days: number) =>

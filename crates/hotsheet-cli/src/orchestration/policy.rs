@@ -9,7 +9,8 @@ use hotsheet_ticketing::orchestration::{
     AccessRequest, AuditOutcome, AuditRecord, DeclarationState, IgnoredField, PermissionAction,
     PermissionKey, PlacementStartedStore, PolicyBody, PolicyDenial, PolicyProblem, PolicyQuestion,
     PolicyStore, PolicyVerdict, PolicyView, PolicyWarning, ProjectSites, RetiredAuthority,
-    SchedulerStore, SessionLoad, SessionRequest, SetPolicy, TargetAction, retired_authority,
+    RoleSessionKind, SchedulerStore, SessionLoad, SessionRequest, SetPolicy, TargetAction,
+    TargetRoleSessions, retired_authority,
 };
 use serde::{Deserialize, Serialize};
 
@@ -96,6 +97,52 @@ pub struct MadeHome {
     pub manifest: ManifestView,
     pub previous_home: String,
     pub policy_revision: Option<String>,
+}
+
+/// HS2-TZJYKH: `PUT …/policy/automatic`, Start (`true`) or Pause (`false`) as one
+/// edit of the stored policy (HS2-D9KP86).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetAutomatic {
+    pub automatic: bool,
+    /// The stored revision the caller saw; omitted, the edit applies at the current one.
+    #[serde(default)]
+    pub expected_revision: Option<String>,
+}
+
+/// HS2-TZJYKH: the policy after Start or Pause, and whether no policy was saved
+/// before, so the default one was saved with this edit.
+#[derive(Debug, Serialize)]
+pub struct AutomaticSet {
+    #[serde(flatten)]
+    pub view: PolicyView,
+    pub saved_default: bool,
+}
+
+/// HS2-TZJYKH: `PUT …/policy/role-sessions`, one target's `placement.role_sessions`
+/// entry (HS2-TK9ADC). No roles is the choice of none; `auto` removes the entry, so
+/// the target is Auto again (HS2-R2N33M).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetRoleSessions {
+    pub target_id: String,
+    #[serde(default)]
+    pub roles: Vec<RoleSessionKind>,
+    #[serde(default)]
+    pub auto: bool,
+    /// The stored revision the caller saw; omitted, the edit applies at the current one.
+    #[serde(default)]
+    pub expected_revision: Option<String>,
+}
+
+/// HS2-TZJYKH: the policy after a role-sessions edit, with the entries that have no
+/// effect (HS2-SYZB33), such as role sessions on a site that is not its project's home.
+#[derive(Debug, Serialize)]
+pub struct RoleSessionsSet {
+    #[serde(flatten)]
+    pub view: PolicyView,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<PolicyWarning>,
 }
 
 /// The policy's limits for one action.
@@ -185,6 +232,110 @@ impl OrchestrationRuntime {
             )?;
         }
         Ok(view)
+    }
+
+    /// HS2-TZJYKH: one edit of the stored policy, or of the default one when none is
+    /// saved, written through [`Self::set_policy`] at the caller's revision or else at
+    /// the revision read here; a change in between is the same `conflict`. Answers the
+    /// written view and whether no policy was saved before.
+    fn edit_policy(
+        &self,
+        owner_id: &str,
+        expected_revision: Option<String>,
+        edit: impl FnOnce(&mut PolicyBody),
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(PolicyView, bool), OrchestrationError> {
+        access::person(actor)?;
+        let stored = self.policy(owner_id)?;
+        let saved_default = stored.policy.is_none();
+        let expected_revision = expected_revision.or(stored.revision);
+        let mut policy = stored.policy.unwrap_or_default();
+        edit(&mut policy);
+        let view = self.set_policy(
+            owner_id,
+            SetPolicy {
+                expected_revision,
+                policy,
+            },
+            actor,
+            tx,
+        )?;
+        Ok((view, saved_default))
+    }
+
+    /// HS2-D9KP86: Start or Pause, `placement.automatic` on or off in the stored policy.
+    /// With none saved, the default policy is saved with it in the same write, which the
+    /// answer reports as `saved_default`. A repeat changes nothing.
+    pub fn set_automatic(
+        &self,
+        owner_id: &str,
+        request: SetAutomatic,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<AutomaticSet, OrchestrationError> {
+        let (view, saved_default) = self.edit_policy(
+            owner_id,
+            request.expected_revision,
+            |policy| policy.placement.automatic = Some(request.automatic),
+            actor,
+            tx,
+        )?;
+        Ok(AutomaticSet {
+            view,
+            saved_default,
+        })
+    }
+
+    /// HS2-TK9ADC: replace one target's role-sessions entry in place, add it last, or
+    /// with `auto` remove it. Every other member is unchanged.
+    pub fn set_role_sessions(
+        &self,
+        owner_id: &str,
+        request: SetRoleSessions,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<RoleSessionsSet, OrchestrationError> {
+        if request.auto && !request.roles.is_empty() {
+            return Err(OrchestrationError::Invalid(
+                "role sessions are either auto or a list of roles",
+            ));
+        }
+        let SetRoleSessions {
+            target_id,
+            roles,
+            auto,
+            expected_revision,
+        } = request;
+        let (view, _) = self.edit_policy(
+            owner_id,
+            expected_revision,
+            |policy| {
+                let list = &mut policy.placement.role_sessions;
+                let at = list.iter().position(|entry| entry.target_id == target_id);
+                let entry = (!auto).then(|| TargetRoleSessions {
+                    target_id: target_id.clone(),
+                    roles,
+                });
+                match (at, entry) {
+                    (Some(at), Some(entry)) => list[at] = entry,
+                    (Some(at), None) => {
+                        list.remove(at);
+                    }
+                    (None, Some(entry)) => list.push(entry),
+                    (None, None) => {}
+                }
+            },
+            actor,
+            tx,
+        )?;
+        let sites = ProjectSites::active(&self.declarations(owner_id)?.targets);
+        let warnings = view
+            .policy
+            .as_ref()
+            .map(|policy| policy.warnings(&sites))
+            .unwrap_or_default();
+        Ok(RoleSessionsSet { view, warnings })
     }
 
     /// HS2-NAA3HV: make a site the home of its project at one manifest revision, and

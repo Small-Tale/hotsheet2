@@ -1071,13 +1071,18 @@ each reads the stored policy, sets `placement.automatic` on or off and stores it
 revision read, so every other member stays as it is. With no policy saved they save the
 default policy (every member at its default, as Settings › Orchestration › Policy shows
 it) with that placement and answer `saved_default: true`. Repeating either changes
-nothing; an AI actor is refused.
+nothing; an AI actor is refused. HS2-TZJYKH: the edit is the runtime's
+`PUT …/policy/automatic`, which the Orchestration view's Start and Pause call too; a
+caller may pin `expected_revision`, and a stale one is the policy's `conflict` (409).
+`policy role-sessions` is likewise the runtime's `PUT …/policy/role-sessions`.
 
-| Route                                              | Methods and purpose                                                      |
-| -------------------------------------------------- | ------------------------------------------------------------------------ |
-| `/checkouts/{owner}/orchestration/policy`          | GET stored policy; PUT replace at the expected revision                  |
-| `/checkouts/{owner}/orchestration/policy/validate` | POST every problem, ignored field and retired file                       |
-| `/checkouts/{owner}/orchestration/policy/dry-run`  | POST per-target outcome; machine-local because it reads remembered rules |
+| Route                                                   | Methods and purpose                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `/checkouts/{owner}/orchestration/policy`               | GET stored policy; PUT replace at the expected revision                  |
+| `/checkouts/{owner}/orchestration/policy/automatic`     | PUT Start or Pause: `placement.automatic` at the revision (HS2-TZJYKH)   |
+| `/checkouts/{owner}/orchestration/policy/role-sessions` | PUT one target's role sessions at the revision (HS2-TZJYKH)              |
+| `/checkouts/{owner}/orchestration/policy/validate`      | POST every problem, ignored field and retired file                       |
+| `/checkouts/{owner}/orchestration/policy/dry-run`       | POST per-target outcome; machine-local because it reads remembered rules |
 
 The policy itself is ordinary authenticated project data, like the target
 declarations. MCP `hotsheet_targets` adds the read-only actions `policy_show`,
@@ -7034,8 +7039,8 @@ and the start for a handoff and the wind-down in the two-server `e2e_roles.rs`.
 [--role dispatcher] [--role integrator] [--auto]` reads the stored policy, replaces that
   target's entry (no `--role` stores the choice of none; `--auto` removes the entry, so
   the target is Auto again, HS2-R2N33M) and sets it at the revision read, through the
-  same policy route the form uses. A person runs it; an AI actor is refused. A repeat
-  changes nothing.
+  runtime's `PUT …/policy/role-sessions` (HS2-TZJYKH), which writes the same policy file
+  the form does. A person runs it; an AI actor is refused. A repeat changes nothing.
 - **On another site of a project (HS2-SYZB33).** Role sessions start only on the
   project's home site, so an entry on another site has no effect. It is still stored,
   so policies set before the grouping keep reading and setting, but every surface says

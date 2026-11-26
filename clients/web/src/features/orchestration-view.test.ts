@@ -663,19 +663,25 @@ describe('switching between orchestration and software projects (HS2-BRRSYM)', (
   });
 });
 
-describe('Start Orchestration with and without a saved policy (HS2-D9KP86)', () => {
+describe('Start Orchestration with and without a saved policy (HS2-D9KP86, HS2-TZJYKH)', () => {
   const project = { id: 'orch', name: 'orch', root: '/synthetic/orch', apiPath: '/api/orch' } as Project;
-  function setup(stored: { revision: string | null; policy: Record<string, unknown> | null }) {
+  /** A server that edits its stored policy as the runtime's automatic route does. */
+  function setup(stored: Record<string, unknown> | null, refuse?: string) {
     const toasts: string[] = [],
-      saved: Array<{ revision: string | null; policy: Record<string, unknown> }> = [];
-    let current = stored;
+      calls: Array<{ owner: string; automatic: boolean }> = [];
+    let policy = stored;
     const known: Record<string, unknown> = {
-      orchestrationPolicy: () => Promise.resolve({ enabled: current.policy !== null, ...current }),
-      setOrchestrationPolicy: (_owner: string, revision: string | null, policy: Record<string, unknown>) => {
-        saved.push({ revision, policy });
-        current = { revision: `rev-${String(saved.length)}`, policy };
-        return Promise.resolve({ enabled: true, ...current });
+      setOrchestrationAutomatic: (owner: string, automatic: boolean) => {
+        calls.push({ owner, automatic });
+        if (refuse) return Promise.reject(new Error(refuse));
+        const saved_default = policy === null,
+          before = policy ?? {};
+        policy = { ...before, placement: { ...(before.placement as object | undefined), automatic } };
+        return Promise.resolve({ enabled: true, revision: `rev-${String(calls.length)}`, policy, saved_default });
       },
+      // The view never reads and writes the whole policy for Start or Pause any more.
+      orchestrationPolicy: () => Promise.reject(new Error('read the policy')),
+      setOrchestrationPolicy: () => Promise.reject(new Error('wrote the whole policy')),
     };
     // Every other read stays pending, as a server that has not answered yet.
     const client = new Proxy(known, {
@@ -698,33 +704,49 @@ describe('Start Orchestration with and without a saved policy (HS2-D9KP86)', () 
       createClient: () => client,
       orchestrationProject: () => false,
     });
-    return { controller, toasts, saved };
+    return { controller, toasts, calls, policy: () => policy };
   }
 
-  it('saves the default policy with placement on in one press when none is saved', async () => {
-    const t = setup({ revision: null, policy: null });
+  it('says the default policy was saved when the server saved it with the first Start', async () => {
+    const t = setup(null);
     await t.controller.start();
-    expect(t.saved).toEqual([{ revision: null, policy: { placement: { automatic: true } } }]);
+    expect(t.calls).toEqual([{ owner: 'orch', automatic: true }]);
     expect(t.toasts).toEqual(['Saved the default policy and started orchestration.']);
-    // Paused and started again: the saved policy is edited at its revision, nothing else changes.
+    // Paused and started again: the saved policy is edited, nothing else changes.
     await t.controller.pause();
     await t.controller.start();
-    expect(t.saved.slice(1)).toEqual([
-      { revision: 'rev-1', policy: { placement: { automatic: false } } },
-      { revision: 'rev-2', policy: { placement: { automatic: true } } },
+    expect(t.calls.slice(1)).toEqual([
+      { owner: 'orch', automatic: false },
+      { owner: 'orch', automatic: true },
     ]);
     expect(t.toasts.slice(1)).toEqual(['Orchestration paused. Running work continues.', 'Orchestration started.']);
+    expect(t.policy()).toEqual({ placement: { automatic: true } });
     t.controller.dispose();
   });
 
-  it('keeps every member of a saved policy and only turns placement on', async () => {
-    const policy = { machine: { max_sessions: 4 }, placement: { automatic: false, aging_minutes: 30 } };
-    const t = setup({ revision: 'stored', policy });
+  it('starts a saved policy with the plain toast, and repeats are separate calls', async () => {
+    const t = setup({ machine: { max_sessions: 4 }, placement: { automatic: false, aging_minutes: 30 } });
     await t.controller.start();
-    expect(t.saved).toEqual([
-      { revision: 'stored', policy: { ...policy, placement: { automatic: true, aging_minutes: 30 } } },
+    await t.controller.start();
+    expect(t.calls).toEqual([
+      { owner: 'orch', automatic: true },
+      { owner: 'orch', automatic: true },
     ]);
-    expect(t.toasts).toEqual(['Orchestration started.']);
+    expect(t.toasts).toEqual(['Orchestration started.', 'Orchestration started.']);
+    expect(t.policy()).toEqual({ machine: { max_sessions: 4 }, placement: { automatic: true, aging_minutes: 30 } });
+    t.controller.dispose();
+  });
+
+  it('says a refused Start or Pause failed and writes nothing else', async () => {
+    const t = setup(null, 'conflict');
+    await t.controller.start();
+    await t.controller.pause();
+    expect(t.calls).toEqual([
+      { owner: 'orch', automatic: true },
+      { owner: 'orch', automatic: false },
+    ]);
+    expect(t.toasts.map((toast) => toast.split(':')[0])).toEqual(['Start failed', 'Pause failed']);
+    expect(t.policy()).toBeNull();
     t.controller.dispose();
   });
 });
