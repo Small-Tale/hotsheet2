@@ -2515,7 +2515,11 @@ repository, workflow, branch, again}` starts or finds the watch Job in the hosti
   machine's adapter, as before. A peer that cannot be reached or refuses leaves the
   gate as it stands: a sync returns it unchanged, and the follower spends the rest
   of its wait on this machine's records instead of asking again at once. A host that
-  answers a wait at once with nothing new is treated the same way.
+  answers a wait at once with nothing new is treated the same way. Such a host is read
+  once per back-off: the follower's step ends after the back-off (or after a long poll
+  that found nothing new) and the next step reads it, never a read at the end of one
+  step and another at the start of the next, including the first refusal of a host
+  that became reachable during a wait (HS2-CB5YEQ).
 - Deployment gates of the `target-script` provider are always run and read on the
   target's machine, local or remote (HS2-G3VAK4, below).
 

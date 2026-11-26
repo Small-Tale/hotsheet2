@@ -449,10 +449,11 @@ async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
 /// `/remote-identity` as the host does and refuses only the checkout calls, at once,
 /// counting each read of `target-gates`. The gate follower then reaches the host,
 /// is refused without waiting, and spends the rest of its wait backing off (on this
-/// machine's adapter records): its reads come at most two together (HS2-CB5YEQ), the
-/// bursts about one wait (`MAX_HOSTED_GATE_WAIT_MS`) apart and never less than half
-/// of it, over three back-off periods, and the gate stays `pending`. Waits on the
-/// reads themselves, never on a fixed delay.
+/// machine's adapter records): it reads the host once per back-off period (HS2-CB5YEQ:
+/// no second read after the wait, from the first refusal on), the reads about one wait
+/// (`MAX_HOSTED_GATE_WAIT_MS`) apart and never less than half of it, over three
+/// back-off periods, and the gate stays `pending`. Waits on the reads themselves,
+/// never on a fixed delay.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hs2_c5tya9_the_gate_follower_backs_off_from_a_host_that_refuses_its_reads() {
     use axum::response::IntoResponse;
@@ -492,10 +493,10 @@ async fn hs2_c5tya9_the_gate_follower_backs_off_from_a_host_that_refuses_its_rea
         },
     ));
 
-    // The follower's step reads the gate, waits out its wait on this machine's own
-    // adapter records, and reads once more before it ends; the next step reads at
-    // once. So reads come in bursts of at most two, a wait apart. Reads less than a
-    // second apart are one burst; four bursts span three back-off periods.
+    // The follower's step reads the gate and, refused, waits out its back-off on this
+    // machine's own adapter records and ends; the next step reads again. HS2-CB5YEQ: so
+    // each burst is a single read, a wait apart. Reads less than a second apart are one
+    // burst; four bursts span three back-off periods.
     let wait = Duration::from_millis(MAX_HOSTED_GATE_WAIT_MS);
     let mut bursts: Vec<Vec<tokio::time::Instant>> = Vec::new();
     while bursts.len() < 4 {
@@ -510,14 +511,14 @@ async fn hs2_c5tya9_the_gate_follower_backs_off_from_a_host_that_refuses_its_rea
             _ => bursts.push(vec![read]),
         }
     }
-    let sizes: Vec<usize> = bursts[..3].iter().map(Vec::len).collect();
+    let sizes: Vec<usize> = bursts.iter().map(Vec::len).collect();
     let gaps: Vec<Duration> = bursts
         .windows(2)
         .map(|pair| pair[1][0] - pair[0][0])
         .collect();
     assert!(
-        sizes.iter().all(|size| *size <= 2),
-        "bursts of {sizes:?} reads: the follower asks a refusing host again and again"
+        sizes.iter().all(|size| *size == 1),
+        "bursts of {sizes:?} reads: the follower asks a refusing host more than once per back-off"
     );
     for gap in &gaps {
         assert!(
