@@ -47,3 +47,13 @@ mcpLinksCore = mcp -> coreLib "Links the ticket engine for serverless mode" "Rus
 serverLinksOrch = server -> orchLib "Links orchestration, coordination, resource claims and jobs" "Rust crate dependency"
 cliLinksOrch = cli -> orchLib "Links orchestration and coordination for headless commands" "Rust crate dependency"
 orchLinksCore = orchLib -> coreLib "Builds on ticket store, claims and settings" "Rust crate dependency"
+
+// HS2-AYKHVV: browser web client
+webBridgeDeliversChanges = bridge -> webChanges "Delivers change events, replay pages and overflow flags" "WebSocket / HTTP long poll"
+webBridgeDeliversTerminal = bridge -> webTerminal "Delivers PTY bytes, replay frames, size and liveness control frames" "WebSocket"
+webBridgeAnswersApi = bridge -> webApi "Answers checkout-scoped requests with a change-cursor stamp" "HTTP(S)"
+webPersistenceUsesBridge = webPersistence -> bridge "Mirrors hotsheet.* keys and desktop draft files" "Loopback HTTP"
+webRemoteUsesBridge = webRemote -> bridge "Signs in, reads grants, long-polls the device list" "HTTP(S) long poll"
+webHostOpsUsesDesktop = webHostOps -> desktop "Reports flush completion on native close and sets the window theme" "Tauri invoke"
+webNotificationsUsesDesktop = webNotifications -> desktop "Sends system notifications through the Tauri notification plugin" "Tauri plugin"
+desktopRequestsWebFlush = desktop -> webHostOps "Dispatches the desktop flush event before a native close" "DOM event"
