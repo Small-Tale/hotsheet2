@@ -776,3 +776,40 @@ fn gitlab_live_trash_delete_restore_and_permission_checked_purge() {
         }
     }
 }
+
+#[test]
+fn hs2_dag8p8_moving_out_of_gitlab_closes_the_source_with_exactly_one_destination() {
+    // Parity with the Jira move fix: GitLab can close, so a move closes its source, and
+    // repeating the operation id neither duplicates the destination nor reopens it.
+    let fake = FakeGitLab::new(DeleteAccess::Owner);
+    fake.seed(5, "opened", &[]);
+    let dir = tempfile::tempdir().unwrap();
+    let store = hotsheet_ticketing::FsStore::init(
+        dir.path(),
+        &hotsheet_ticketing::StoreMetadata::new("DST"),
+    )
+    .unwrap();
+    let registry = hotsheet_ticketing::ProviderRegistry::default();
+    registry.register(Arc::new(provider(&fake))).unwrap();
+    registry
+        .register(Arc::new(hotsheet_ticketing::GitProvider::new(
+            "local",
+            store.clone(),
+        )))
+        .unwrap();
+    let source = hotsheet_ticketing::TicketRef {
+        connection_id: "gitlab-main".into(),
+        native_id: "5".into(),
+    };
+    let mut destinations = Vec::new();
+    for _ in 0..2 {
+        let moved =
+            hotsheet_ticketing::move_between(&registry, source.clone(), "local", "move-5", now())
+                .unwrap();
+        assert!(moved.moved);
+        destinations.push(moved.destination.qualified());
+        assert_eq!(store.list_tickets().unwrap().len(), 1);
+        assert_eq!(fake.field(5, "state"), "closed");
+    }
+    assert_eq!(destinations[0], destinations[1]);
+}

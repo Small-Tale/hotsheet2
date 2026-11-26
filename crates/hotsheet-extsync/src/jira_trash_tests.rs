@@ -38,6 +38,8 @@ struct FakeJira {
     access: Mutex<DeleteAccess>,
     clock: Mutex<u64>,
     requests: Mutex<Vec<(String, String, Option<Value>)>>,
+    /// How many upcoming `PUT issue/{key}` requests fail with a 503 before applying.
+    failing_puts: Mutex<usize>,
 }
 
 const MISSING: &str = "Issue does not exist or you do not have permission to see it.";
@@ -49,6 +51,7 @@ impl FakeJira {
             access: Mutex::new(access),
             clock: Mutex::new(0),
             requests: Mutex::default(),
+            failing_puts: Mutex::new(0),
         })
     }
 
@@ -164,6 +167,16 @@ impl FakeJira {
     }
 
     fn put(&self, key: &str, body: &Value) -> HttpResponse {
+        {
+            let mut failing = self.failing_puts.lock().unwrap();
+            if *failing > 0 {
+                *failing -= 1;
+                return Self::reply(
+                    503,
+                    json!({"errorMessages": ["Service temporarily unavailable"], "errors": {}}),
+                );
+            }
+        }
         let now = self.tick();
         let mut issues = self.issues.lock().unwrap();
         let Some(issue) = issues.get_mut(key) else {
@@ -783,4 +796,127 @@ fn jira_live_trash_delete_restore_and_permission_checked_purge() {
             assert_eq!(jira.get(&key).unwrap().status, Status::Deleted);
         }
     }
+}
+
+/// A git-backed destination connection and a registry holding it beside the Jira source.
+fn move_registry(
+    fake: &Arc<FakeJira>,
+) -> (
+    tempfile::TempDir,
+    hotsheet_ticketing::FsStore,
+    hotsheet_ticketing::ProviderRegistry,
+) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = hotsheet_ticketing::FsStore::init(
+        dir.path(),
+        &hotsheet_ticketing::StoreMetadata::new("DST"),
+    )
+    .unwrap();
+    let registry = hotsheet_ticketing::ProviderRegistry::default();
+    registry.register(Arc::new(provider(fake))).unwrap();
+    registry
+        .register(Arc::new(hotsheet_ticketing::GitProvider::new(
+            "local",
+            store.clone(),
+        )))
+        .unwrap();
+    (dir, store, registry)
+}
+
+fn jira_source(key: &str) -> hotsheet_ticketing::TicketRef {
+    hotsheet_ticketing::TicketRef {
+        connection_id: "jira-eng".into(),
+        native_id: key.into(),
+    }
+}
+
+fn jira_source_status(registry: &hotsheet_ticketing::ProviderRegistry) -> Status {
+    registry
+        .get("jira-eng")
+        .unwrap()
+        .get("ENG-7")
+        .unwrap()
+        .status
+}
+
+#[test]
+fn hs2_dag8p8_moving_out_of_jira_trashes_the_source_with_exactly_one_destination() {
+    // Jira cannot close (`close: false`), so every move used to create the destination
+    // and then fail on close, leaving a duplicate on each attempt.
+    let fake = FakeJira::new(DeleteAccess::Allowed);
+    fake.seed("ENG-7", "indeterminate", &["backend"]);
+    let (_dir, store, registry) = move_registry(&fake);
+    for _ in 0..2 {
+        let moved = hotsheet_ticketing::move_between(
+            &registry,
+            jira_source("ENG-7"),
+            "local",
+            "move-eng-7",
+            now(),
+        )
+        .unwrap();
+        assert!(moved.moved);
+        assert_eq!(moved.source.qualified(), "jira-eng:ENG-7");
+        assert_eq!(store.list_tickets().unwrap().len(), 1);
+        let copied = registry
+            .get("local")
+            .unwrap()
+            .get(&moved.destination.native_id)
+            .unwrap();
+        assert_eq!(copied.transferred_from.as_deref(), Some("jira-eng:ENG-7"));
+        assert_eq!(copied.tags, ["backend"]);
+        // Trashed by its label alone: the workflow status is untouched and no
+        // transition is ever requested.
+        assert_eq!(fake.labels("ENG-7"), ["backend", TRASH_LABEL]);
+        assert_eq!(fake.category("ENG-7"), "indeterminate");
+        assert_eq!(jira_source_status(&registry), Status::Deleted);
+    }
+    assert!(
+        !fake
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, url, _)| url.contains("/transitions")),
+        "a move must not transition the Jira issue"
+    );
+}
+
+#[test]
+fn hs2_dag8p8_a_failed_jira_trash_reports_the_destination_and_a_retry_finishes_the_move() {
+    let fake = FakeJira::new(DeleteAccess::Allowed);
+    fake.seed("ENG-7", "new", &[]);
+    let (_dir, store, registry) = move_registry(&fake);
+    *fake.failing_puts.lock().unwrap() = 1;
+    let error = hotsheet_ticketing::move_between(
+        &registry,
+        jira_source("ENG-7"),
+        "local",
+        "move-eng-7",
+        now(),
+    )
+    .unwrap_err();
+    let hotsheet_ticketing::TransferError::SourceCloseFailed { destination, .. } = &error else {
+        panic!("expected a reported partial move, got {error}")
+    };
+    assert!(destination.starts_with("local:"), "{destination}");
+    assert!(error.to_string().contains("same operation id"), "{error}");
+    // Recoverable: one destination, and the source is still live and untrashed.
+    assert_eq!(store.list_tickets().unwrap().len(), 1);
+    assert!(fake.labels("ENG-7").is_empty());
+    assert_eq!(jira_source_status(&registry), Status::NotStarted);
+
+    let recovered = hotsheet_ticketing::move_between(
+        &registry,
+        jira_source("ENG-7"),
+        "local",
+        "move-eng-7",
+        now(),
+    )
+    .unwrap();
+    assert!(recovered.moved);
+    assert_eq!(&recovered.destination.qualified(), destination);
+    assert_eq!(store.list_tickets().unwrap().len(), 1);
+    assert_eq!(fake.labels("ENG-7"), [TRASH_LABEL]);
+    assert_eq!(jira_source_status(&registry), Status::Deleted);
 }

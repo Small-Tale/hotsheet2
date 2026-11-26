@@ -658,3 +658,41 @@ fn gh_5_empty_trash_without_permission_reports_every_retained_ticket() {
     assert_eq!(report.purged.len(), 2);
     assert!(!fake.exists(1) && !fake.exists(2));
 }
+
+#[test]
+fn hs2_dag8p8_moving_out_of_github_closes_the_source_with_exactly_one_destination() {
+    // Parity with the Jira move fix: GitHub can close, so a move closes its source as
+    // not planned, and repeating the operation id neither duplicates nor reopens.
+    let fake = FakeGitHub::new(DeleteAccess::Admin);
+    fake.seed(3, "open", None, &[]);
+    let dir = tempfile::tempdir().unwrap();
+    let store = hotsheet_ticketing::FsStore::init(
+        dir.path(),
+        &hotsheet_ticketing::StoreMetadata::new("DST"),
+    )
+    .unwrap();
+    let registry = hotsheet_ticketing::ProviderRegistry::default();
+    registry.register(Arc::new(provider(&fake))).unwrap();
+    registry
+        .register(Arc::new(hotsheet_ticketing::GitProvider::new(
+            "local",
+            store.clone(),
+        )))
+        .unwrap();
+    let source = hotsheet_ticketing::TicketRef {
+        connection_id: "github-main".into(),
+        native_id: "3".into(),
+    };
+    let mut destinations = Vec::new();
+    for _ in 0..2 {
+        let moved =
+            hotsheet_ticketing::move_between(&registry, source.clone(), "local", "move-3", now())
+                .unwrap();
+        assert!(moved.moved);
+        destinations.push(moved.destination.qualified());
+        assert_eq!(store.list_tickets().unwrap().len(), 1);
+        assert_eq!(fake.field(3, "state"), "closed");
+        assert_eq!(fake.field(3, "state_reason"), "not_planned");
+    }
+    assert_eq!(destinations[0], destinations[1]);
+}

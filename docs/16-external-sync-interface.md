@@ -515,8 +515,15 @@ content, notes, assignment, and review requests; reject dependencies that lack a
 explicit mapping and fields unsupported by the destination; and store
 `transfer_operation_id` plus the qualified `transferred_from` reference. Deterministic
 destination and note ids make retries converge, while an operation lock prevents
-same-process collaborators from racing file updates. Move reports the already-created
-destination if closing the source fails, so retry can recover without duplication.
+same-process collaborators from racing file updates. Move retires its source the
+provider-correct way, chosen before anything is copied (HS2-DAG8P8): a provider that can
+close (git, GitHub, GitLab) closes the source as Obsolete; one that cannot (Jira) moves it
+to Trash with a Deleted status update, which for Jira is the label-only Trash of
+HS2-73Z1R8 and never a workflow transition; a provider that can do neither is refused
+before any destination exists, with a message to copy instead. The operation lock spans
+the copy and the source step. Move reports the already-created destination if retiring
+the source fails and tells the caller to retry with the same operation id, which reuses
+that destination and repeats only the idempotent close or Trash step.
 Every copied or moved destination starts as Not Started and outside Up Next; workflow
 state belongs to the destination project and is never inherited from the source.
 The provider-neutral routes are `POST /provider-transfers/copy|move`; CLI and MCP expose

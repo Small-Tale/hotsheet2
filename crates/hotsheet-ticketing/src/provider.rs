@@ -2486,11 +2486,62 @@ pub enum TransferError {
         connection_id: String,
         field: &'static str,
     },
-    #[error("destination ticket {destination} was created, but source close failed: {message}")]
+    /// The source can be neither closed nor moved to Trash, so a move could only leave a
+    /// duplicate. Refused before the destination exists (HS2-DAG8P8).
+    #[error(
+        "provider '{connection_id}' can neither close nor trash its tickets, so they cannot be moved; copy instead"
+    )]
+    SourceRemovalUnsupported { connection_id: String },
+    /// The destination exists but retiring the source (close or Trash) failed. Retrying the
+    /// move with the same operation id reuses the destination and repeats only that step.
+    #[error(
+        "destination ticket {destination} was created, but retiring the source failed: {message}; retry the move with the same operation id to finish it"
+    )]
     SourceCloseFailed {
         destination: String,
         message: String,
     },
+}
+
+/// How a move retires its source once the destination exists (HS2-DAG8P8): close it where
+/// the provider can close, otherwise move it to the provider's Trash (Jira's label-only
+/// Trash, HS2-73Z1R8). Both steps are idempotent, so a retry repeats them safely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SourceRemoval {
+    Close,
+    Trash,
+}
+
+impl SourceRemoval {
+    fn for_provider(provider: &dyn TicketProvider) -> Option<Self> {
+        let capabilities = provider.descriptor().capabilities;
+        if capabilities.close {
+            Some(Self::Close)
+        } else if capabilities.update {
+            Some(Self::Trash)
+        } else {
+            None
+        }
+    }
+
+    fn apply(
+        self,
+        provider: &dyn TicketProvider,
+        native_id: &str,
+        now: Timestamp,
+    ) -> Result<ApiTicket, ProviderError> {
+        match self {
+            Self::Close => provider.close(native_id, now, CloseReason::Obsolete, None),
+            Self::Trash => provider.update(
+                native_id,
+                now,
+                ProviderPatch {
+                    status: Some(Status::Deleted),
+                    ..ProviderPatch::default()
+                },
+            ),
+        }
+    }
 }
 
 fn transfer_ulid(operation_id: &str, suffix: &str) -> Ulid {
@@ -2514,6 +2565,17 @@ pub fn copy_between(
     }
     let transfer_lock = registry.transfer_lock(operation_id)?;
     let _guard = transfer_lock.lock_or_recover();
+    copy_locked(registry, source, destination_connection, operation_id, now)
+}
+
+/// The copy itself; the caller holds the operation's transfer lock.
+fn copy_locked(
+    registry: &ProviderRegistry,
+    source: TicketRef,
+    destination_connection: &str,
+    operation_id: &str,
+    now: Timestamp,
+) -> Result<TransferOutcome, TransferError> {
     let source_provider = registry.get(&source.connection_id)?;
     let destination = registry.get(destination_connection)?;
     let ticket = source_provider.get(&source.native_id)?;
@@ -2750,16 +2812,31 @@ pub fn move_between(
     operation_id: &str,
     now: Timestamp,
 ) -> Result<TransferOutcome, TransferError> {
-    let mut outcome = copy_between(
+    if operation_id.trim().is_empty() {
+        return Err(TransferError::EmptyOperationId);
+    }
+    // HS2-DAG8P8: decide how the source is retired before anything is copied. Closing
+    // unconditionally failed for every Jira source (Jira cannot close) only after the
+    // destination existed, so each attempt left a duplicate destination behind.
+    let source_provider = registry.get(&source.connection_id)?;
+    let removal = SourceRemoval::for_provider(source_provider.as_ref()).ok_or_else(|| {
+        TransferError::SourceRemovalUnsupported {
+            connection_id: source.connection_id.clone(),
+        }
+    })?;
+    // One lock spans the copy and the source step, so a concurrent retry of the same
+    // operation waits for the first attempt instead of interleaving with it.
+    let transfer_lock = registry.transfer_lock(operation_id)?;
+    let _guard = transfer_lock.lock_or_recover();
+    let mut outcome = copy_locked(
         registry,
         source.clone(),
         destination_connection,
         operation_id,
         now.clone(),
     )?;
-    registry
-        .get(&source.connection_id)?
-        .close(&source.native_id, now, CloseReason::Obsolete, None)
+    removal
+        .apply(source_provider.as_ref(), &source.native_id, now)
         .map_err(|error| TransferError::SourceCloseFailed {
             destination: outcome.destination.qualified(),
             message: error.to_string(),
@@ -4119,6 +4196,116 @@ mod tests {
             source.get(&source_id.to_string()).unwrap().close_reason,
             Some(CloseReason::Obsolete)
         );
+    }
+
+    /// A source registry for HS2-DAG8P8 whose source reports `capabilities`.
+    fn dag8p8_move_fixture(
+        capabilities: ProviderCapabilities,
+    ) -> (
+        Vec<tempfile::TempDir>,
+        ProviderRegistry,
+        FsStore,
+        TicketRef,
+        Arc<dyn TicketProvider>,
+    ) {
+        let (source_dir, source) = git_provider();
+        let source = source.with_test_capabilities(capabilities);
+        let destination_dir = tempfile::tempdir().unwrap();
+        let destination_store =
+            FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+        let source_id = Ulid::new();
+        source
+            .create(
+                ctx(source_id, "2026-11-26T00:00:00Z"),
+                draft("leaves its provider", vec![]),
+            )
+            .unwrap();
+        let registry = ProviderRegistry::default();
+        let source: Arc<dyn TicketProvider> = Arc::new(source);
+        registry.register(source.clone()).unwrap();
+        registry
+            .register(Arc::new(GitProvider::new(
+                "destination",
+                destination_store.clone(),
+            )))
+            .unwrap();
+        let source_ref = TicketRef {
+            connection_id: "local".into(),
+            native_id: source_id.to_string(),
+        };
+        (
+            vec![source_dir, destination_dir],
+            registry,
+            destination_store,
+            source_ref,
+            source,
+        )
+    }
+
+    #[test]
+    fn hs2_dag8p8_a_source_that_cannot_close_is_trashed_once_and_retries_are_idempotent() {
+        // Jira reports `close: false`; the move must retire the source through its Trash
+        // instead of creating the destination and then failing to close.
+        let mut capabilities = ProviderCapabilities::git();
+        capabilities.close = false;
+        let (_dirs, registry, destination_store, source_ref, source) =
+            dag8p8_move_fixture(capabilities);
+        for attempt in ["2026-11-26T00:01:00Z", "2026-11-26T00:02:00Z"] {
+            let moved = move_between(
+                &registry,
+                source_ref.clone(),
+                "destination",
+                "dag8p8-op",
+                Timestamp::new(attempt),
+            )
+            .unwrap();
+            assert!(moved.moved);
+            assert_eq!(destination_store.list_tickets().unwrap().len(), 1);
+            let retired = source.get(&source_ref.native_id).unwrap();
+            assert_eq!(retired.status, Status::Deleted);
+            assert_eq!(retired.close_reason, None);
+        }
+    }
+
+    #[test]
+    fn hs2_dag8p8_a_source_that_can_neither_close_nor_trash_is_refused_before_copying() {
+        let mut capabilities = ProviderCapabilities::git();
+        capabilities.close = false;
+        capabilities.update = false;
+        let (_dirs, registry, destination_store, source_ref, source) =
+            dag8p8_move_fixture(capabilities);
+        let error = move_between(
+            &registry,
+            source_ref.clone(),
+            "destination",
+            "dag8p8-refused",
+            Timestamp::new("2026-11-26T00:01:00Z"),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                &error,
+                TransferError::SourceRemovalUnsupported { connection_id } if connection_id == "local"
+            ),
+            "{error}"
+        );
+        assert!(destination_store.list_tickets().unwrap().is_empty());
+        assert_eq!(
+            source.get(&source_ref.native_id).unwrap().status,
+            Status::NotStarted
+        );
+        // An empty operation id is still refused first, and nothing is written.
+        assert!(matches!(
+            move_between(
+                &registry,
+                source_ref,
+                "destination",
+                " ",
+                Timestamp::new("2026-11-26T00:02:00Z"),
+            ),
+            Err(TransferError::EmptyOperationId)
+        ));
+        assert!(destination_store.list_tickets().unwrap().is_empty());
     }
 
     #[test]
