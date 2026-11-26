@@ -4233,6 +4233,53 @@ fn hs2_hxmgn8_headless_setup_refuses_an_unreadable_agents_md_and_creates_a_missi
     );
 }
 
+/// HS2-ETJ4TB: headless setup and refresh refuse to overwrite an installed skill that is
+/// not UTF-8 and leave it byte-identical. Codex is set up first, so refresh includes it
+/// without a `codex` binary on PATH.
+#[test]
+fn hs2_etj4tb_headless_setup_refuses_an_unreadable_skill() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(&store);
+        cmd.env("HOTSHEET_HOME", &home)
+            .args(args)
+            .arg("--project")
+            .arg(&project);
+        cmd
+    };
+    run(&["setup", "codex"]).assert().success();
+    let skill = project.join(".agents/skills/hotsheet/SKILL.md");
+    let not_utf8: &[u8] = b"# Synthetic skill\n\xff\xfe\n";
+    std::fs::write(&skill, not_utf8).unwrap();
+    let agents = std::fs::read(project.join("AGENTS.md")).unwrap();
+    for args in [&["setup", "codex"][..], &["setup", "--refresh"][..]] {
+        let output = run(args).assert().failure().get_output().stderr.clone();
+        let stderr = String::from_utf8_lossy(&output);
+        assert!(
+            stderr.contains("cannot update .agents/skills/hotsheet/SKILL.md"),
+            "{args:?}: {stderr}"
+        );
+        assert!(stderr.contains("not UTF-8 text"), "{args:?}: {stderr}");
+        assert_eq!(std::fs::read(&skill).unwrap(), not_utf8, "{args:?}");
+        assert_eq!(
+            std::fs::read(project.join("AGENTS.md")).unwrap(),
+            agents,
+            "{args:?}"
+        );
+    }
+}
+
 #[test]
 fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let root = tempfile::tempdir().unwrap();

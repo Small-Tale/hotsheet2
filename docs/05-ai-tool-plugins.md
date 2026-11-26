@@ -95,6 +95,14 @@ Such a file can be shared by several tools, so the project-open refresh reports 
 one warning and does not hold a single tool. Removing a disabled tool's section skips an
 unreadable file without writing it.
 
+**Unreadable skill files are never overwritten (HS2-ETJ4TB).** Skill files are Hot
+Sheet's artifacts, but a project may customize one (an equal-version skill with different
+bytes, or a newer one, is preserved), so an unreadable skill cannot be shown to be safe to
+replace. The worklist skill and every manifest `additional` skill follow the rule above:
+a missing skill is written, and one that exists but is not UTF-8 or cannot be opened
+stops setup, refresh, and diagnosis before the first write with the same error naming
+the file. Disabling the tool leaves such a skill in place instead of deleting it.
+
 **Project open reports each refused config (HS2-52X9PN).** The server's project-open
 refresh treats a refusal like this per tool rather than for the whole run. It holds the
 tool whose config was refused and refreshes every other tool. A held tool is not a

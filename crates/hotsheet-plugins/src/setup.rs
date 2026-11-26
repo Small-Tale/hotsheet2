@@ -1444,7 +1444,10 @@ fn remove_disabled_tool_artifacts(
             }
         }
         if let Some((rel, _)) = plugin.skill() {
-            if crate::is_safe_rel_path(rel) && !claimed.contains(rel) {
+            if crate::is_safe_rel_path(rel)
+                && !claimed.contains(rel)
+                && !unreadable_file(fs, &project.join(rel))
+            {
                 report.record(rel, remove_managed_file(fs, project, rel, false)?);
             }
         }
@@ -1452,6 +1455,7 @@ fn remove_disabled_tool_artifacts(
     for (rel, bundled) in plugin.additional_skills() {
         if crate::is_safe_rel_path(rel)
             && !claimed.contains(rel)
+            && !unreadable_file(fs, &project.join(rel))
             && !marked_skill_requires_preservation(fs, project, rel, bundled)
         {
             report.record(rel, remove_managed_file(fs, project, rel, false)?);
@@ -3440,8 +3444,17 @@ fn read_existing_text(
     }
 }
 
+/// Whether `path` exists but cannot be read as text. Disabling a tool leaves such a skill
+/// file in place rather than deleting what it cannot inspect (HS2-ETJ4TB).
+fn unreadable_file(fs: &PlanFs, path: &Path) -> bool {
+    fs.read_to_string(path)
+        .is_err_and(|error| error.kind() != std::io::ErrorKind::NotFound)
+}
+
 /// Every existing instruction file `plugin` (or this refresh) may edit, and the checkout's
-/// local git exclude, must be readable before the first write (HS2-HXMGN8).
+/// local git exclude, must be readable before the first write (HS2-HXMGN8). So must every
+/// skill file it may replace (HS2-ETJ4TB): a customized or newer skill is preserved, and an
+/// unreadable one cannot be shown to be neither, so it is never overwritten.
 fn check_existing_text(
     fs: &PlanFs,
     project: &Path,
@@ -3449,9 +3462,15 @@ fn check_existing_text(
     refresh_targets: &[String],
 ) -> Result<(), SetupError> {
     let instructions = &plugin.manifest.instructions;
-    let targets = std::iter::once(&instructions.target)
-        .chain(instructions.canonical.as_ref().map(|c| &c.target))
-        .chain(refresh_targets)
+    let skills = plugin
+        .skill()
+        .into_iter()
+        .chain(plugin.additional_skills())
+        .map(|(target, _)| target);
+    let targets = std::iter::once(instructions.target.as_str())
+        .chain(instructions.canonical.as_ref().map(|c| c.target.as_str()))
+        .chain(refresh_targets.iter().map(String::as_str))
+        .chain(skills)
         .filter(|rel| crate::is_safe_rel_path(rel))
         .map(|rel| project.join(rel));
     for path in targets.chain(project_exclude_file(project)) {
@@ -6799,6 +6818,100 @@ args = ["--path", "{store}"]
         assert!(error.contains("cannot update AGENTS.md"), "{error}");
         assert!(error.contains("could not be read"), "{error}");
         assert_eq!(std::fs::read_to_string(&agents).unwrap(), "User text.\n");
+    }
+
+    /// HS2-ETJ4TB: an installed skill that cannot be read is never overwritten. Setup,
+    /// refresh and diagnosis refuse before the first write and name the file, and disabling
+    /// the tool leaves it in place; the checkout stays byte-identical.
+    #[test]
+    fn hs2_etj4tb_unreadable_skill_files_are_never_overwritten() {
+        let not_utf8: &[u8] = b"# My skill\n\xff\xfe user text\n";
+        let cases = [
+            ("claude", ".claude/skills/hotsheet/SKILL.md"),
+            ("claude", ".claude/skills/hotsheet-worker/SKILL.md"),
+            ("codex", ".agents/skills/hotsheet/SKILL.md"),
+            ("codex", ".agents/skills/note-repair/SKILL.md"),
+        ];
+        for (tool, rel) in cases {
+            let store = tempfile::tempdir().unwrap();
+            let project = tempfile::tempdir().unwrap();
+            let root = project.path();
+            std::fs::create_dir_all(root.join(".git/info")).unwrap();
+            run_setup_in(store.path(), root, Some(tool), false, None, &[]).unwrap();
+            std::fs::write(root.join(rel), not_utf8).unwrap();
+            let before = snapshot_files(root);
+
+            let error = run_setup_in(store.path(), root, Some(tool), false, None, &[])
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(&format!("cannot update {rel}")), "{error}");
+            assert!(error.contains("not UTF-8 text"), "{error}");
+            assert!(
+                error.contains("Hot Sheet left the file unchanged"),
+                "{error}"
+            );
+            assert_eq!(snapshot_files(root), before, "{tool} {rel}");
+
+            let enabled = HashSet::from([tool.to_string()]);
+            for refused in [
+                refresh_setup_in(store.path(), root, Some(&enabled), &[]).map(|_| ()),
+                plan_refresh_setup_in(store.path(), root, Some(&enabled), &[]).map(|_| ()),
+            ] {
+                let error = refused.unwrap_err();
+                assert!(
+                    matches!(&error, SetupError::UnreadableFile { path, .. } if path == rel),
+                    "{tool} {rel}: {error}"
+                );
+            }
+            assert_eq!(snapshot_files(root), before, "{tool} {rel}");
+
+            // Disabling the tool removes its readable files but keeps the unreadable skill.
+            refresh_setup_in(store.path(), root, Some(&HashSet::new()), &[]).unwrap();
+            assert_eq!(std::fs::read(root.join(rel)).unwrap(), not_utf8, "{rel}");
+            let worklist = if tool == "claude" {
+                ".claude/skills/hotsheet/SKILL.md"
+            } else {
+                ".agents/skills/hotsheet/SKILL.md"
+            };
+            if worklist != rel {
+                assert!(!root.join(worklist).exists(), "{tool} {rel}");
+            }
+        }
+    }
+
+    /// HS2-ETJ4TB: a skill that cannot be opened refuses the same way, and a missing one
+    /// is still written.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_etj4tb_permission_denied_skill_refuses_and_missing_skills_are_written() {
+        use std::os::unix::fs::PermissionsExt;
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path();
+        run_setup_in(store.path(), root, Some("claude"), false, None, &[]).unwrap();
+        let skill = root.join(".claude/skills/hotsheet/SKILL.md");
+        std::fs::remove_file(&skill).unwrap();
+        run_setup_in(store.path(), root, Some("claude"), false, None, &[]).unwrap();
+        let bundled = std::fs::read_to_string(&skill).unwrap();
+
+        std::fs::write(&skill, "My skill.\n").unwrap();
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&skill).is_ok() {
+            // Running as a superuser: permissions cannot make the file unreadable.
+            std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o644)).unwrap();
+            return;
+        }
+        let error = run_setup_in(store.path(), root, Some("claude"), false, None, &[])
+            .unwrap_err()
+            .to_string();
+        std::fs::set_permissions(&skill, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(
+            error.contains("cannot update .claude/skills/hotsheet/SKILL.md"),
+            "{error}"
+        );
+        assert!(error.contains("could not be read"), "{error}");
+        assert_eq!(std::fs::read_to_string(&skill).unwrap(), "My skill.\n");
+        assert_ne!(bundled, "My skill.\n");
     }
 
     /// HS2-52X9PN: the project-open refresh holds a tool whose config setup refused. The
