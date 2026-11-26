@@ -20,6 +20,11 @@ Options may come before or after the path; `--out` defaults to
 progress on stdout. Unknown flags, a missing `--out` value, or a missing path exit 2
 with a usage error; export failures exit 1 with a message (HS2-6JNDRY).
 
+`node src/introspect.mjs <path-to-.hotsheet/db>` prints each table's row count and
+columns. It copies the datadir and opens it with the exporter's own database probe, so
+an old cluster lists its `template1` tables, and it removes the copy on every path
+(HS2-Q77A53).
+
 ## Supported Hot Sheet versions
 
 Targets the **5 most recent production releases + the current beta**. These use two

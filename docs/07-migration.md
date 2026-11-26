@@ -422,6 +422,9 @@ producer boundaries are database bytes after each successful file copy, exported
 imported ticket items, staged attachment bytes, and verified/copied attachment items
 within each ticket. Empty phases report 0 of 0; a phase reaching 100 percent does not
 mean the whole job succeeded. Unknown engine/download and Git denominators stay unknown.
+The CLI accepts only events whose `version` equals its `MIGRATOR_PROGRESS_VERSION`
+(the exporter's `PROGRESS_VERSION`, pinned by a test) and relays any other stdout line
+to stderr (HS2-Q77A53).
 
 A referenced HS1 attachment that is missing or not a readable file **fails export**
 before a portable manifest can discard its identity (HS2-FBVNJ6). It records no new

@@ -410,9 +410,9 @@ pub fn run_migrate_with_progress(
         .context("exporter stdout was not piped")?;
     for line in BufReader::new(output).lines() {
         let line = line?;
-        match serde_json::from_str::<MigrationProgress>(&line) {
-            Ok(event) if event.version == 1 => observe(event),
-            _ => eprintln!("{line}"),
+        match migration_progress::parse_migrator_progress(&line) {
+            Some(event) => observe(event),
+            None => eprintln!("{line}"),
         }
     }
     let status = child.wait()?;

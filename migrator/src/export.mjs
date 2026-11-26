@@ -474,8 +474,10 @@ function realpathOr(fs, file) {
  * engine first (it reads its own + older datadirs). If the datadir was written by a
  * newer PGLite than the bundle, the bundled engine can't initialize (a WASM abort),
  * so fall back to pglite-migrate, which fetches a matching engine on demand.
+ * `introspect.mjs` shares this probe (HS2-Q77A53). Returns `{ db, database }`; the
+ * caller closes `db`. `work` must be a disposable copy, never the live datadir.
  */
-async function openCluster(work) {
+export async function openCluster(work) {
   const bundled = await tryBundled(work);
   if (bundled.db) return bundled;
   if (bundled.tooNew) return openViaPgliteMigrate(work);

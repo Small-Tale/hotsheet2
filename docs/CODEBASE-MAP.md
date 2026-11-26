@@ -1039,8 +1039,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     opencode/                #   AGENTS.md instructions; opencode.json MCP; [drive] acp; [launch] v1 opencode --model; [session_push] v1 opencode-http (--port + OPENCODE_SERVER_PASSWORD); HS2-W42KWS selects supervised v2 launch and opencode-v2-http after a bounded version probe
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)
-    src/introspect.mjs       #   schema-dump helper
+    src/introspect.mjs       #   schema-dump helper; reuses export.mjs copyDatabase/openCluster (HS2-Q77A53)
     test/export.test.mjs     #   vitest: synthetic HS1 DB + cross-language conformance
+    test/engine-fallback.test.mjs # PG_VERSION-gated pglite-migrate fallback (HS2-D0V2NB)
+    test/introspect.test.mjs #   template1/postgres probe + temp cleanup (HS2-Q77A53)
   test-projects/             # full-binary E2E harnesses (not in-process unit tests)
     e2e-headless-claude.sh   #   headless loop: setup + drive hotsheet-mcp (serverless + server) [HS2-99]
   docs/                      # numbered requirements docs 00–37, dated audits, contracts/ (+ this map)
@@ -1382,7 +1384,8 @@ accounts with daily budgets in the policy form (`addPolicyAccount`, `removePolic
 | This project's own tickets (dogfood)                                         | A **standalone HS2 store** in its own git repo (separate from this code repo, so ticket churn stays out of code history — docs/02 §2.8 option 2). Migrated from HS1. Read with `hotsheet-cli -C <store> ls`; the store path is per-machine (not committed here — `.mcp.json` is gitignored).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 Migration progress producer entry points: `crates/hotsheet-cli/src/migration_progress.rs`
-(version-1 serializable events), `import::import_with_progress`, and
+(version-1 serializable events; `MIGRATOR_PROGRESS_VERSION` and
+`parse_migrator_progress` gate exporter lines, HS2-Q77A53), `import::import_with_progress`, and
 `run_migrate_with_progress` preserve the ordinary headless wrappers. The standalone
 `hotsheet-migrate --progress-json` streams machine records; internal `--hold-job-lock`
 holds native advisory locks until its stdin closes. `POST /__hotsheet/projects/migration-jobs`
