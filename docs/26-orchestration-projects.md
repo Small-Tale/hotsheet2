@@ -7412,7 +7412,11 @@ inspector sends the same operation again, which runs the step once, or drops it 
 denial. The permission list's own live updates drive this; nothing polls. A started
 step is followed under its operation id, each request waiting up to 8 seconds on the
 server, until its result is final: that is how the orchestrator collects a result
-(§26.12), and a retried attempt continues the same way. Every request names the browser's person
+(§26.12), and a retried attempt continues the same way. A request that gets no
+answer, a 5xx, 408 or 429 is asked again on the client's bounded backoff (1 s doubling,
+at most five tries in a row); one that keeps failing, or any other refusal, ends the
+following with a toast naming the step, and leaving the view ends a waiting retry
+without a toast (HS2-JGFPG4). A request with no answer reads "The Hot Sheet server could not be reached." in every browser (HS2-1HGTD7). Every request names the browser's person
 (the id the view keeps for this browser) as `requested_by`, so the audit records who
 pressed Run Validation beside the orchestrator that acted (HS2-ZYM6ZT).
 

@@ -5677,7 +5677,11 @@ transition history (HS2-XKXE7V).
 - **Ticket-store publication failures (HS2-ADHFKZ):** the client requests
   `GET /checkouts/{id}/repository/sync` once when a project is first shown, and again only
   on a `ticket_store_sync` change event for that checkout. A failed request keeps the last
-  report. The project shell shows `TicketStoreSyncBanner`, a warning-toned `ShellBanner`,
+  report. A request that gets no answer, a 5xx, 408 or 429 is asked again on the client's
+  bounded backoff (1 s doubling, at most five tries in a row); one that keeps failing, or
+  any other refusal, shows one toast naming the project, and showing the project again asks
+  again (HS2-JGFPG4). A request with no answer reads "The Hot Sheet server could not be
+  reached." in every browser (HS2-1HGTD7). The project shell shows `TicketStoreSyncBanner`, a warning-toned `ShellBanner`,
   while any linked Git ticket store is `rejected`, `conflict`, `rebase_in_progress`, or
   `history_recovery_required`, or has been `offline` or `blocked` (a Git lock file,
   HS2-6ACT5Y) for three or more passes. A `push_raced` store (another machine published

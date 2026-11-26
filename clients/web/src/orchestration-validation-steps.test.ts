@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseValidationOperation,
+  parseValidationRunAnswer,
   parseValidationStep,
   recoveredValidations,
   stepsToRun,
   validationOperation,
+  validationRunUnsettled,
   validationStepLabel,
   validationStepValue,
   type ValidationStepView,
@@ -122,5 +124,38 @@ describe('a waiting Run Validation recovered after a reload (HS2-NY0MRJ)', () =>
       ),
     ).toEqual([{ step_id: 'smoke', operation_id: op, request_id: `r-${op}` }]);
     expect(recoveredValidations([], 'launch')).toEqual([]);
+  });
+});
+
+describe('a Run Validation answer (HS2-JGFPG4)', () => {
+  it('reads the result state and the attempts left from a ValidationRunView', () => {
+    expect(parseValidationRunAnswer({ result: { state: 'running' }, attempts_left: 0 })).toEqual({
+      state: 'running',
+      attemptsLeft: 0,
+    });
+    expect(parseValidationRunAnswer({ result: { state: 'failed' }, attempts_left: 2 })).toEqual({
+      state: 'failed',
+      attemptsLeft: 2,
+    });
+  });
+
+  it('reads another shape as settled', () => {
+    for (const answer of [
+      undefined,
+      null,
+      'running',
+      {},
+      { result: null, attempts_left: 1.5 },
+      { result: { state: 7 }, attempts_left: -1 },
+      { result: 'running', attempts_left: '3' },
+    ])
+      expect(validationRunUnsettled(parseValidationRunAnswer(answer))).toBe(false);
+  });
+
+  it('is unsettled while running or while the policy allows another attempt', () => {
+    expect(validationRunUnsettled({ state: 'running', attemptsLeft: 0 })).toBe(true);
+    expect(validationRunUnsettled({ state: 'failed', attemptsLeft: 1 })).toBe(true);
+    expect(validationRunUnsettled({ state: 'failed', attemptsLeft: 0 })).toBe(false);
+    expect(validationRunUnsettled({ state: 'passed', attemptsLeft: 0 })).toBe(false);
   });
 });

@@ -1,3 +1,5 @@
+import { abortableDelay, boundedBackoffMs } from './bounded-backoff';
+
 /**
  * One cursor long poll over a versioned read (HS2-J89JC7, HS2-S3FKJ7). Each read passes the version it
  * last saw, so the server answers when what it shows changes; a new version is reported once. Failures
@@ -11,20 +13,7 @@ export function startVersionedLongPoll<T extends { version: string }>(options: {
 }): () => void {
   const controller = new AbortController();
   const stopped = () => controller.signal.aborted;
-  const wait =
-    options.delay ??
-    ((ms: number, abort: AbortSignal) =>
-      new Promise<void>((resolve) => {
-        const timer = window.setTimeout(resolve, ms);
-        abort.addEventListener(
-          'abort',
-          () => {
-            window.clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
-      }));
+  const wait = options.delay ?? abortableDelay;
   void (async () => {
     let version: string | undefined;
     let failures = 0;
@@ -40,7 +29,7 @@ export function startVersionedLongPoll<T extends { version: string }>(options: {
         options.onError(error);
         version = undefined;
         failures += 1;
-        await wait(Math.min(30_000, 1_000 * 2 ** Math.min(failures - 1, 5)), controller.signal);
+        await wait(boundedBackoffMs(failures), controller.signal);
       }
     }
   })();
