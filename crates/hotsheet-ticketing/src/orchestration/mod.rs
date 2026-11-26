@@ -198,7 +198,7 @@ pub use sessions::{
     OrchestratedSession, RecordedRequest, RequestKind, SafePoint, SafePointBlocker, SafePointFacts,
     SessionControl, SessionError, SessionOrigin, SessionOwner, SessionRegistry, SessionRole,
     SessionState, SessionTransition, SessionUpdate, StopRequest, decide_hand_back,
-    decide_safe_point, decide_stop, run_holder, session_label,
+    decide_safe_point, decide_stop, run_holder, run_worked_elsewhere, session_label,
 };
 pub use shared_plan::{SHARED_PLAN_PATH, SharedPlan, SharedPlanStore, SharedStep, merge_steps};
 pub use summary::{

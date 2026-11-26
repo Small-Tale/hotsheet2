@@ -494,7 +494,8 @@ impl OrchestrationRuntime {
         }
         // HS2-YC2P7K: a step whose scheduler run is unfinished and no unfinished
         // session works it (its start was refused, or its session was lost) needs a
-        // session again. The run is reused, so nothing is dispatched twice.
+        // session again. The run is reused, so nothing is dispatched twice. A run
+        // dispatched to a worker that is not this machine's is not (HS2-S5RH57).
         // HS2-ESVYQH: an `intervened` run is unfinished too. Its worker let the ticket
         // go; it needs a session again only when its handoff came back for corrections
         // that nobody has taken up, as the target's pool reports (read once per target,
@@ -505,6 +506,8 @@ impl OrchestrationRuntime {
             .filter(|run| !run.state.is_terminal())
             .collect();
         let sessions = self.session_list(owner_id, true)?;
+        // HS2-S5RH57: every record, finished ones included, names this machine's workers.
+        let every_session = self.session_list(owner_id, false)?;
         let mut returns: BTreeMap<String, Option<Vec<super::review_returns::ReturnedHandoff>>> =
             BTreeMap::new();
         // HS2-SK9B3T: a run on a site that is not its project's home is returned by the
@@ -525,6 +528,11 @@ impl OrchestrationRuntime {
                 .iter()
                 .any(|session| session.run_id.as_deref() == Some(run.run_id.as_str()))
             {
+                continue;
+            }
+            // HS2-S5RH57: another worker was given the run (a project's home assigned
+            // it to its own worker): it is worked there and needs no session here.
+            if hotsheet_ticketing::orchestration::run_worked_elsewhere(&every_session, run) {
                 continue;
             }
             // HS2-3REXQ7: a run that waits on a gate, `final_testing` or a validation

@@ -1068,3 +1068,63 @@ fn hs2_75q254_sessions_combine_and_a_duplicate_is_never_the_runs() {
     let twice = seen(&[Stopped, Lost]);
     assert_eq!(session_work(&twice, need), session_work(&twice, need));
 }
+
+/// HS2-S5RH57: a run is worked elsewhere only while it is dispatched to a worker no
+/// session record of this machine ran as. Every run state, with the run's worker
+/// unknown, one of this machine's (running, ended or lost), or someone else's.
+#[test]
+fn hs2_s5rh57_a_run_is_worked_elsewhere_only_when_dispatched_to_a_worker_none_of_ours_ran_as() {
+    use RunState::Dispatched;
+    let with_worker = |n: u128, state: SessionState, worker: &str| {
+        let mut found = session(n, state);
+        found.hosted = Some(HostedRef {
+            server_id: "server-a".into(),
+            session_id: format!("terminal-{n}"),
+            worker_id: worker.into(),
+        });
+        found
+    };
+    let ours = [
+        with_worker(1, SessionState::Lost, "site-worker-1"),
+        with_worker(2, SessionState::Running, "site-worker-2"),
+        // A start never confirmed has no worker yet.
+        session(3, SessionState::Requested),
+    ];
+    let run = |state: RunState, worker: Option<&str>| {
+        let mut run = test_run();
+        run.state = state;
+        run.worker_id = worker.map(Into::into);
+        run
+    };
+    // The home's dispatcher gave it to one of the home's own workers.
+    assert!(run_worked_elsewhere(
+        &ours,
+        &run(Dispatched, Some("home-worker"))
+    ));
+    // Our running session's worker, or a crashed session's whose run waits for its
+    // replacement: still ours.
+    for worker in ["site-worker-1", "site-worker-2"] {
+        assert!(!run_worked_elsewhere(&ours, &run(Dispatched, Some(worker))));
+    }
+    // Not dispatched, or nobody named: nothing is being worked anywhere else.
+    for state in RunState::ALL
+        .into_iter()
+        .filter(|state| *state != Dispatched)
+    {
+        assert!(
+            !run_worked_elsewhere(&ours, &run(state, Some("home-worker"))),
+            "{state:?}"
+        );
+    }
+    assert!(!run_worked_elsewhere(&ours, &run(Dispatched, None)));
+    // Empty, then refilled: with no session records at all any named worker is
+    // someone else's; once a session ran as it, it is ours again.
+    assert!(run_worked_elsewhere(
+        &[],
+        &run(Dispatched, Some("site-worker-2"))
+    ));
+    assert!(!run_worked_elsewhere(
+        &ours[1..2],
+        &run(Dispatched, Some("site-worker-2"))
+    ));
+}

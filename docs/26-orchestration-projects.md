@@ -4426,14 +4426,23 @@ no unfinished session works (its session start was refused, or its session was
 lost) is placeable work again: the next start for it, after any refusal backoff, is
 linked to the same run. A run that waits on a gate, its ticket in `final_testing` or a
 validation attempt needs no session, so it is not placed again until it needs work
-(HS2-3REXQ7, §26.24). A pass lists the sessions, and so learns of a lost one,
-before it reads the work.
+(HS2-3REXQ7, §26.24). Nor is a run `dispatched` to a worker that none of this
+machine's session records (finished ones included) ran as: another machine's worker
+holds it, as when a project's home assigned the ticket to its own worker (§26.30,
+HS2-S5RH57). A run whose worker is one of this machine's lost sessions is still
+placed again. A pass lists the sessions, and so learns of a lost one, before it
+reads the work.
 
 **Refill.** A free session given ready work (`keep`, `refill`) gets that work's run
 the same way: the executor's `assign` dispatches it and links it to the session,
 published as `session_assigned` on the run, and the decision log records `assigned`
 with the run. A session with an unfinished run reads as busy, so it is never refilled;
-one whose run finished is free again. The refilled session is then told the new
+one whose run finished is free again. So is one whose run was dispatched to a worker
+that is not this machine's (HS2-S5RH57): it has no work in that run, so it is
+refilled with other ready work of its site, or, with none, wound down by the idle rule
+(`idle_grace`, `keep_warm`, cooldown, then `idle` at its host's safe point; never in
+the middle of a turn). Existing reason codes only, so the app's wording covers it
+("nothing has needed it for a while"). The refilled session is then told the new
 ticket through its host's session push (HS2-R7QH35, §26.24); the target's dispatcher
 still assigns it.
 
@@ -7105,6 +7114,14 @@ read, or read without an actor, is not observed, and what was known of it stays.
   home's worker (`assigned_by_dispatcher`), and no second session starts. When the
   site claimed first, the home's worker is refused (409, naming the holder) and the
   run keeps `claimed_for_session`. Proven on two servers in both orders.
+- **The site's session after the home's worker won (HS2-S5RH57).** The session placed
+  on the site for that run is left with no work, since the run is the home worker's.
+  It is not stopped at once and never mid-turn: it is free capacity, so the next pass
+  refills it with other ready work of the site, or, with none, winds it down through
+  the idle rule at its host's safe point (decision `wind_down`, reason `idle`; the
+  session ends `stopped`, `wound_down`, not `lost`). No session is started again for
+  the home worker's run. Refilling first keeps a warm session in use; winding down
+  rather than keeping it avoids holding a site slot for work another machine does.
 - **Notifications, debounced.** "Home site _X_ is unavailable" (severity `warning`) is
   sent once the home has been unavailable **without a break for two minutes**
   (`HOME_OUTAGE_NOTIFY_AFTER_MS`): long enough to ride out a restart or a short drop,
