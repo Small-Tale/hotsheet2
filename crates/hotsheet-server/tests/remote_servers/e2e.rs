@@ -39,6 +39,31 @@ const MIB: u64 = 1024 * 1024;
 /// The synthetic provider token the Job monitor presents to the loopback provider.
 pub(super) const TOKEN: &str = "synthetic-token-for-tests";
 
+/// The detached Job monitor a fleet server starts, pointed at the loopback provider
+/// for GitHub Actions and (HS2-QV00AP) Buildkite and CircleCI, with synthetic tokens.
+fn loopback_monitor(provider_url: &str) -> DetachedJobMonitor {
+    DetachedJobMonitor::new("hotsheet-server")
+        .flags(
+            // HS2-R49D43: the unchanged-poll backoff capped, so a verdict after a slow
+            // step is seen at the next poll, not minutes later.
+            [
+                "--poll-ms",
+                "40",
+                "--max-poll-ms",
+                "500",
+                "--idle-exit-ms",
+                "3000",
+            ]
+            .map(String::from),
+        )
+        .env("HOTSHEET_GITHUB_API_URL", provider_url)
+        .env("GH_TOKEN", TOKEN)
+        .env("HOTSHEET_BUILDKITE_API_URL", provider_url)
+        .env("BUILDKITE_API_TOKEN", TOKEN)
+        .env("HOTSHEET_CIRCLECI_API_URL", provider_url)
+        .env("CIRCLECI_TOKEN", TOKEN)
+}
+
 /// A roomy machine with the fake tools installed. HS2-RCR4A6: with an OS it also
 /// reports its capabilities (HS2-ZY4Z4G), as a machine of that family would, so a
 /// step's requirements are matched against it without probing the real host.
@@ -308,25 +333,33 @@ impl Fleet {
     /// Two servers, both targets declared, bound, with remembered rules and allowed by a policy
     /// whose placement is not automatic yet.
     pub(super) async fn new() -> Self {
-        Self::build(Layout::Separate, false, None).await
+        Self::build(Layout::Separate, false, None, false).await
+    }
+
+    /// HS2-QV00AP: [`Fleet::new`] whose peer also starts a real Job monitor process
+    /// for its hosted watches and pipeline reads, pointed at the loopback provider as
+    /// the controller's is.
+    pub(super) async fn with_peer_monitor() -> Self {
+        Self::build(Layout::Separate, false, None, true).await
     }
 
     /// HS2-RCR4A6: the same two servers holding one project as two sites ([`Layout::Sites`]).
     pub(super) async fn sites() -> Self {
-        Self::build(Layout::Sites, false, None).await
+        Self::build(Layout::Sites, false, None, false).await
     }
 
     /// HS2-EQ7K35: the same two sites with the peer's target B as the project's home and
     /// the controller's target A a site of it. The controller announces a home outage
     /// after `notify_after`.
     pub(super) async fn sites_peer_home(notify_after: Duration) -> Self {
-        Self::build(Layout::Sites, true, Some(notify_after)).await
+        Self::build(Layout::Sites, true, Some(notify_after), false).await
     }
 
     async fn build(
         layout: Layout,
         peer_is_home: bool,
         home_notify_after: Option<Duration>,
+        peer_monitor: bool,
     ) -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
         hotsheet_aitools::enable_test_permission_vault();
@@ -375,6 +408,14 @@ impl Fleet {
                 plugin(root.path(), TOOL_B, &reports),
                 plugin(root.path(), TOOL_A, &reports),
             ]);
+        let peer_state = if peer_monitor {
+            peer_state.with_orchestration_runtime(
+                shared_runtime(&b_store, &peer_home, &Arc::new(Memory::default()))
+                    .with_job_monitor(Arc::new(loopback_monitor(&provider_url))),
+            )
+        } else {
+            peer_state
+        };
         let b_checkout = CheckoutRegistry::new(peer_home.join("checkouts.json"))
             .register(&b_project, None, None, vec![b_store.clone()])
             .unwrap();
@@ -492,24 +533,7 @@ impl Fleet {
         // in-memory credentials of the synthetic remote registration.
         let runtime = shared_runtime(a_store, home, memory)
             .with_session_executor(Arc::new(OwnedSessions))
-            .with_job_monitor(Arc::new(
-                DetachedJobMonitor::new("hotsheet-server")
-                    .flags(
-                        // HS2-R49D43: the unchanged-poll backoff capped, so a verdict after
-                        // a slow step is seen at the next poll, not minutes later.
-                        [
-                            "--poll-ms",
-                            "40",
-                            "--max-poll-ms",
-                            "500",
-                            "--idle-exit-ms",
-                            "3000",
-                        ]
-                        .map(String::from),
-                    )
-                    .env("HOTSHEET_GITHUB_API_URL", provider_url)
-                    .env("GH_TOKEN", TOKEN),
-            ));
+            .with_job_monitor(Arc::new(loopback_monitor(provider_url)));
         let runtime = match relink_retry {
             Some(first) => runtime.with_gate_relink_retry(first),
             None => runtime,

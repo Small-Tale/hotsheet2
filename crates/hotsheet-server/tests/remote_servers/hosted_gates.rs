@@ -899,3 +899,219 @@ async fn hs2_f7zg0f_a_hosted_ci_watch_that_ends_is_linked_again_on_its_host_unti
     assert_eq!(again["gate"]["watch_ref"], jobs[6].id.as_str(), "{again}");
     fleet.shut_down().await;
 }
+
+/// Wait, on change events of the host's Job directory (never a fixed delay), until the
+/// host's Job monitor has recorded what it read for one pipeline.
+async fn until_pipeline_read(
+    home: &std::path::Path,
+    provider: &'static str,
+    slug: &'static str,
+) -> hotsheet_jobs::PipelineRepository {
+    use hotsheet_jobs::{ChangeWaiter, PipelineRepositories, PipelineRepository};
+    let home = home.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let waiter = ChangeWaiter::new(&home.join("jobs")).unwrap();
+        let pipelines = PipelineRepositories::at(&home);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let known = pipelines.lookup(provider, slug);
+            if known != PipelineRepository::Unknown {
+                return known;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the host's monitor never read {provider} {slug}"
+            );
+            waiter.wait(deadline.saturating_duration_since(std::time::Instant::now()));
+        }
+    })
+    .await
+    .unwrap()
+}
+
+/// HS2-QV00AP: HS2-YA5S82 end to end. A Buildkite slug and a CircleCI `circleci/`
+/// slug name no repository, so the host checks them through the repository its own
+/// Job monitor read. Here that monitor is the real detached process the peer server
+/// starts, reading the pipeline from the loopback provider fake with a synthetic
+/// token. The first link answers the retryable `gate_repository_unknown` (503) and
+/// starts nothing; once the monitor has read the pipeline, the same link is watched
+/// on the host for a pipeline of a repository the checkout names, and refused
+/// `gate_repository_mismatch` for one of another repository. Synthetic data only.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_qv00ap_a_hosts_monitor_process_reads_the_pipeline_repository_it_checks() {
+    use hotsheet_jobs::{BUILDKITE_KIND, CIRCLECI_KIND, PipelineRepository};
+    let fleet = Fleet::with_peer_monitor().await;
+    git(
+        &fleet.b_project,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/acme/widgets.git",
+        ],
+    );
+    // What the provider says each pipeline builds.
+    fleet.provider.serve(
+        "/organizations/acme/pipelines/widgets-ci",
+        json!({"slug":"widgets-ci","repository":"git@github.com:Acme/Widgets.git"}),
+    );
+    fleet.provider.serve(
+        "/organizations/acme/pipelines/other-ci",
+        json!({"slug":"other-ci","repository":"git@github.com:acme/other.git"}),
+    );
+    fleet.provider.serve(
+        "/project/circleci/0b1c2d3e/4f5a6b7c",
+        json!({"slug":"circleci/0b1c2d3e/4f5a6b7c",
+            "vcs_info":{"vcs_url":"https://github.com/acme/widgets","provider":"GitHub"}}),
+    );
+    let orchestration = fleet.orchestration_ticket("Gate the pipeline work");
+    let ticket = fleet.target_ticket(Side::Peer, "Pipeline work");
+    let run = fleet
+        .ok(
+            "POST",
+            "/runs",
+            json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration.slug},
+                "target_id":TARGET_B,"connection_id":fleet.connection(Side::Peer),
+                "native_id":ticket.slug,"operation_id":"pipeline-run","mode":"dispatcher"}),
+        )
+        .await;
+    let gates = format!("/runs/{}/gates", run["run_id"].as_str().unwrap());
+    let commit = "f".repeat(40);
+    let link = |provider: &str, slug: &str| json!({"commit":commit,"provider":provider,"repository":slug,"actor":Fleet::ai()});
+    let peer_jobs = || {
+        JobStore::at(&fleet.peer_home)
+            .list(&fleet.b_checkout.id)
+            .unwrap()
+            .jobs
+    };
+    // The host's watch Jobs of one pipeline (an ended watch may be linked again).
+    let watched = |slug: &str| -> Vec<String> {
+        peer_jobs()
+            .into_iter()
+            .filter(|job| serde_json::to_string(&job.external).unwrap().contains(slug))
+            .map(|job| job.id)
+            .collect()
+    };
+    let unknown = |(status, reply): (StatusCode, Value)| {
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{reply}");
+        assert_eq!(reply["code"], "gate_repository_unknown", "{reply}");
+    };
+
+    // Nothing known yet, and the provider is out: the first link is retryable and
+    // starts the host's monitor, whose read fails transiently; asked again after that
+    // failed read, still retryable (never a mismatch), and nothing is watched.
+    fleet.provider.fail_with(Some(503));
+    let before = fleet.provider.requests();
+    unknown(
+        fleet
+            .call("POST", &gates, link(BUILDKITE_KIND, "acme/widgets-ci"))
+            .await,
+    );
+    let provider = fleet.provider.clone();
+    assert!(
+        tokio::task::spawn_blocking(move || provider.requested_beyond(before))
+            .await
+            .unwrap(),
+        "the host's monitor never asked the provider"
+    );
+    unknown(
+        fleet
+            .call("POST", &gates, link(BUILDKITE_KIND, "acme/widgets-ci"))
+            .await,
+    );
+    assert!(peer_jobs().is_empty());
+    assert!(
+        !audit_reasons(&fleet.peer_home, &fleet.b_checkout.id)
+            .iter()
+            .any(|(action, _, _)| action == "hosted_gate_watch"),
+        "nothing is decided, so nothing is audited"
+    );
+    // The provider is back: the monitor's next read (after its back-off) records it.
+    fleet.provider.fail_with(None);
+    assert_eq!(
+        until_pipeline_read(&fleet.peer_home, BUILDKITE_KIND, "acme/widgets-ci").await,
+        PipelineRepository::Known {
+            repository: "git@github.com:Acme/Widgets.git".into()
+        }
+    );
+    // Asked again: the repository is one the checkout names (any spelling), so the
+    // watch starts on the host, and asking once more is the same gate.
+    let linked = fleet
+        .ok("POST", &gates, link(BUILDKITE_KIND, "acme/widgets-ci"))
+        .await;
+    assert_eq!(linked["gate"]["state"], "pending", "{linked}");
+    assert_eq!(linked["gate"]["provider"], BUILDKITE_KIND);
+    let watch = linked["gate"]["watch_ref"].as_str().unwrap().to_owned();
+    assert!(
+        watched("acme/widgets-ci").contains(&watch),
+        "the watch runs on the host"
+    );
+    let again = fleet
+        .ok("POST", &gates, link(BUILDKITE_KIND, "acme/widgets-ci"))
+        .await;
+    assert_eq!(
+        (&again["created"], &again["gate"]["gate_id"]),
+        (&json!(false), &linked["gate"]["gate_id"])
+    );
+
+    // A pipeline of another repository: unknown first, then refused once read, and the
+    // host's credentials never watch it.
+    unknown(
+        fleet
+            .call("POST", &gates, link(BUILDKITE_KIND, "acme/other-ci"))
+            .await,
+    );
+    assert_eq!(
+        until_pipeline_read(&fleet.peer_home, BUILDKITE_KIND, "acme/other-ci").await,
+        PipelineRepository::Known {
+            repository: "git@github.com:acme/other.git".into()
+        }
+    );
+    let (status, refused) = fleet
+        .call("POST", &gates, link(BUILDKITE_KIND, "acme/other-ci"))
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{refused}");
+    assert_eq!(refused["code"], "gate_repository_mismatch");
+    assert!(watched("acme/other-ci").is_empty());
+    assert!(
+        audit_reasons(&fleet.peer_home, &fleet.b_checkout.id).contains(&(
+            "hosted_gate_watch".into(),
+            AuditOutcome::Denied,
+            "gate_repository_mismatch".into()
+        )),
+        "{:?}",
+        audit_reasons(&fleet.peer_home, &fleet.b_checkout.id)
+    );
+
+    // A CircleCI project slug: the same, through CircleCI's project read.
+    let circleci = "circleci/0b1c2d3e/4f5a6b7c";
+    unknown(
+        fleet
+            .call("POST", &gates, link(CIRCLECI_KIND, circleci))
+            .await,
+    );
+    assert_eq!(
+        until_pipeline_read(&fleet.peer_home, CIRCLECI_KIND, circleci).await,
+        PipelineRepository::Known {
+            repository: "https://github.com/acme/widgets".into()
+        }
+    );
+    let linked = fleet
+        .ok("POST", &gates, link(CIRCLECI_KIND, circleci))
+        .await;
+    assert_eq!(linked["gate"]["state"], "pending", "{linked}");
+    let watch = linked["gate"]["watch_ref"].as_str().unwrap().to_owned();
+    assert!(watched(circleci).contains(&watch));
+    assert!(watched("acme/other-ci").is_empty());
+    // The monitor read with the host's token; the token is in no machine-local record.
+    let record = std::fs::read_to_string(
+        fleet
+            .peer_home
+            .join("jobs")
+            .join(hotsheet_jobs::PIPELINE_REPOSITORIES_FILE),
+    )
+    .unwrap();
+    assert!(!record.contains(super::e2e::TOKEN));
+    cli_named(&fleet.peer_home, &["job", "watch"], &["stop"]);
+    cli_named(&fleet.home, &["job", "watch"], &["stop"]);
+}
