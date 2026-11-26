@@ -65,6 +65,9 @@ struct Inner {
     asks: Mutex<HashMap<String, PendingAsk>>,
     /// When the last ask settled, so a turn's stall clock restarts after a human answers.
     ask_settled_at: Mutex<Option<Instant>>,
+    /// Set by a Stop request from another thread. A turn blocked waiting on a human answer
+    /// emits no events, so its owner acts on this from inside the wait (HS2-K6HH96).
+    interrupt_wake: AtomicBool,
 }
 impl Inner {
     fn request(&self, method: &str, params: Value) -> Result<Value, DriveError> {
@@ -356,6 +359,7 @@ fn connect(transport: Box<dyn RpcTransport>, turn_timeout: Duration) -> Arc<Inne
         permission: Mutex::new(None),
         asks: Default::default(),
         ask_settled_at: Mutex::new(None),
+        interrupt_wake: AtomicBool::new(false),
     });
     let r = inner.clone();
     std::thread::spawn(move || {
@@ -401,6 +405,20 @@ impl AcpSession {
         *self.inner.permission.lock_or_recover() = Some(AcpPermission {
             policy,
             agent: agent.into(),
+        });
+    }
+
+    /// Wake a running turn when `control` requests a Stop (HS2-K6HH96). While OpenCode
+    /// waits on a permission answer it streams nothing, so the turn pump never gets back
+    /// to its own interrupt check; the waker lets the turn's owner send `session/cancel`
+    /// and answer the pending asks `cancelled` from inside its wait.
+    pub fn wake_on_interrupt(&self, control: &crate::drive::TurnControl) {
+        let inner = Arc::downgrade(&self.inner);
+        control.on_interrupt(move || {
+            if let Some(inner) = inner.upgrade() {
+                inner.interrupt_wake.store(true, Ordering::SeqCst);
+                inner.cvar.notify_all();
+            }
         });
     }
 }
@@ -453,6 +471,8 @@ struct AcpTurn {
     emitted_usage: bool,
     emitted_done: bool,
     started: Instant,
+    /// `session/cancel` was sent for this turn; a repeated interrupt sends nothing more.
+    cancel_sent: bool,
 }
 /// The first terminal outcome wins even if a prompt RPC resolves after closure or timeout.
 fn finish_once(done: &Mutex<Option<DoneReason>>, reason: DoneReason) {
@@ -462,6 +482,9 @@ fn finish_once(done: &Mutex<Option<DoneReason>>, reason: DoneReason) {
 impl AcpTurn {
     fn next(&mut self) -> Option<TurnEvent> {
         loop {
+            if self.inner.interrupt_wake.swap(false, Ordering::SeqCst) {
+                TurnHandle::interrupt(self);
+            }
             let notes = self.inner.notes.lock_or_recover();
             if self.cursor < notes.len() {
                 let v = notes[self.cursor].clone();
@@ -536,6 +559,10 @@ impl TurnHandle for AcpTurn {
             })
     }
     fn interrupt(&mut self) -> bool {
+        if self.cancel_sent {
+            return true;
+        }
+        self.cancel_sent = true;
         let sent = self
             .inner
             .notify("session/cancel", json!({"sessionId":self.session}));
@@ -595,6 +622,8 @@ impl AcpClient for AcpSession {
             }
         }
         let cursor = self.inner.notes.lock_or_recover().len();
+        // A Stop meant for an earlier turn never cancels this one.
+        self.inner.interrupt_wake.store(false, Ordering::SeqCst);
         let done = Arc::new(Mutex::new(None));
         let response = Arc::new(Mutex::new(None));
         let i = self.inner.clone();
@@ -636,6 +665,7 @@ impl AcpClient for AcpSession {
             emitted_usage: false,
             emitted_done: false,
             started: Instant::now(),
+            cancel_sent: false,
         }))
     }
 }
@@ -1259,6 +1289,71 @@ mod permission_tests {
         );
         assert_eq!(turn.wait(), DoneReason::Interrupted);
         assert!(h.quiet());
+    }
+
+    /// HS2-K6HH96 live check: Stop pressed while OpenCode waits on a permission answer.
+    /// The peer streams nothing then, so the turn's owner is parked inside `next_event`;
+    /// the control's waker must still send `session/cancel` and withdraw the popup.
+    #[test]
+    fn stop_requested_while_blocked_on_an_ask_cancels_from_inside_the_wait() {
+        let h = harness(Some(WAIT), REQUEST_TIMEOUT);
+        let control = crate::drive::TurnControl::default();
+        h.session.wake_on_interrupt(&control);
+        let (mut turn, prompt) = h.start();
+        h.inject(ask(5, "echo hs2-k6hh96"));
+        let request = h.asked();
+        assert!(h.quiet(), "nothing is sent before Stop");
+        let Harness {
+            session: _session,
+            to_client,
+            from_client,
+            bridge,
+            removed,
+            ..
+        } = h;
+        // The Stop and the peer run on another thread while this one is parked in
+        // `next_event`; the peer answers the cancel the way OpenCode does.
+        let peer = std::thread::spawn({
+            let control = control.clone();
+            move || {
+                control.request_interrupt();
+                let cancel = from_client.recv_timeout(WAIT).expect("session/cancel");
+                let reply = from_client.recv_timeout(WAIT).expect("ask reply");
+                to_client
+                    .send(
+                        json!({"jsonrpc":"2.0","id":prompt,"result":{"stopReason":"cancelled"}})
+                            .to_string(),
+                    )
+                    .unwrap();
+                (cancel, reply, from_client)
+            }
+        });
+        let mut events = Vec::new();
+        while let Some(event) = turn.next_event() {
+            let done = matches!(event, TurnEvent::Done(_));
+            events.push(event);
+            if done {
+                break;
+            }
+        }
+        let (cancel, reply, from_client) = peer.join().unwrap();
+        assert_eq!(cancel["method"], "session/cancel");
+        assert_eq!(cancel["params"]["sessionId"], "sess-1");
+        assert_eq!(reply["id"], 5);
+        assert_eq!(reply["result"]["outcome"], json!({"outcome":"cancelled"}));
+        assert_eq!(removed.recv_timeout(WAIT).unwrap().id, request.id);
+        assert!(bridge.pending().is_empty());
+        assert!(matches!(
+            events.last(),
+            Some(TurnEvent::Done(DoneReason::Interrupted))
+        ));
+        // The pump's own interrupt after the wake is idempotent: no second cancel.
+        assert!(turn.interrupt());
+        assert!(
+            from_client
+                .recv_timeout(Duration::from_millis(150))
+                .is_err()
+        );
     }
 
     #[test]

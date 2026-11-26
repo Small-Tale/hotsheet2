@@ -227,6 +227,10 @@ pub fn run_trigger_controlled(
             if let Some(policy) = permission_policy(t) {
                 acp.set_permission_policy(policy, plugin.id().to_string());
             }
+            // Stop reaches a turn parked on a permission ask, which streams nothing.
+            if let Some(control) = control {
+                acp.wake_on_interrupt(control);
+            }
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 model: t.model.clone(),
