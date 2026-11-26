@@ -49,6 +49,33 @@ describe('a run’s last reconciliation in words (HS2-XM692S)', () => {
     ]);
   });
 
+  it('says why a CI watch is not running in plain language, with the next step when it was given up (HS2-507DGZ)', () => {
+    const rows = reconciliationRows(
+      {
+        at_ms: 9,
+        disposition: 'hold_unverified',
+        findings: [{ source: 'ci_run', verification: 'unverifiable', reason: 'watch_gone' }],
+      },
+      clock,
+    );
+    expect(rows[1]).toEqual({
+      label: 'Not verified',
+      value:
+        'CI (the CI provider kept ending the watch; check the provider’s credentials and repository, then link the gate again)',
+    });
+    for (const reason of ['watch_lost', 'watch_ended', 'watch_gone']) {
+      const [, row] = reconciliationRows(
+        {
+          at_ms: 1,
+          disposition: 'hold_unverified',
+          findings: [{ source: 'ci_run', verification: 'unverifiable', reason }],
+        },
+        clock,
+      );
+      expect(row.value).not.toContain('_');
+    }
+  });
+
   it('reads the record’s reconciliation and ignores a missing or malformed one', () => {
     expect(parseRunReconciliation(undefined)).toBeUndefined();
     expect(parseRunReconciliation({ run_id: 'r' })).toBeUndefined();

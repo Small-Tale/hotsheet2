@@ -2235,8 +2235,8 @@ short or symbolic name is refused.
 | `passed`            | A covering run or execution succeeded                  | `superseded`                                                        |
 | `superseded`        | The link no longer stands for the run                  | nothing                                                             |
 
-Reason codes for `unknown` include `not_watched`, `watch_lost`, `watch_cancelled`,
-`gate_provider_unavailable`, `evidence_missing`, `evidence_not_covering`,
+Reason codes for `unknown` include `not_watched`, `watch_lost`, `watch_ended`,
+`watch_gone`, `watch_cancelled`, `gate_provider_unavailable`, `evidence_missing`, `evidence_not_covering`,
 `deployment_executor_unavailable`, `deployment_start_unconfirmed`,
 `gate_deployment_script_untracked` and `execution_lost` (HS2-G3VAK4).
 
@@ -2302,6 +2302,34 @@ monitor ([33](33-jobs.md)) runs, so whoever links or follows a gate makes sure o
 - A server that starts follows every owner with a gate still waiting on a provider,
   also when the gate's run is finished, so a watch left behind by a restart is
   observed again with nobody asking.
+
+A watch the monitor loses (`unknown`, `watch_lost`) still waits: the monitor reattaches
+the same Job. A watch the provider _ended_ without a verdict is different: nothing
+watches it any more. GitHub Actions and the other CI sources end a watch this way when
+the provider answers 404 for the repository, which can be transient or mean the
+credentials cannot read it yet. The decision (HS2-507DGZ) does both of the following, so
+a run never waits silently on a watch that will not come back:
+
+- The gate reads `unknown` with `watch_ended`, which still waits on the provider. The
+  gate follower links it again the way `gate link` does (this machine's adapter, or the
+  machine hosting the target), on the same back-off as a failed monitor start: 30
+  seconds after it first sees the end, then 60, then 120. Each re-link is a new watch,
+  so a provider that recovers meanwhile, or credentials fixed meanwhile, reach a
+  verdict with nobody linking by hand. A follower's step wait ends in time for the
+  next re-link; nothing polls.
+- When three re-links ended as well, the follower records `unknown` with `watch_gone`.
+  That reason waits on nothing: the follower stops, reconciliation reports the run's CI
+  source `unverifiable` with `watch_gone` (so the run is held for attention, not left
+  waiting), and the Orchestration view says what to do: check the provider's
+  credentials and the repository, then link the gate again (`gate link` through the CLI,
+  the server or MCP; the view has no link action yet). The gate stays `watch_gone` while its adapter still reads the
+  same ended watch. A later link watches again and clears it; if that watch ends too,
+  the follower re-links it with a fresh budget.
+
+The attempts are counted in the follower's memory, so a server restarted during the
+back-off starts the count again from when its follower first sees the ended watch; the
+budget stays bounded per follower.
+
 - All three call one workflow, `DetachedJobMonitor` in the shared runtime, which `job
 watch start` uses too. `gate link --no-monitor` starts none.
   `HOTSHEET_JOB_MONITOR_AUTOSTART=off` keeps a process from starting one on its own;
@@ -2539,16 +2567,18 @@ adapter's own records say about each, for GitHub Actions the watch Jobs. It read
 this machine's records only and contacts no provider, so it is answered whether or not
 the target is reachable.
 
-| A standing CI gate                                  | The adapter shows                                             | Finding                                                                    |
-| --------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| None linked                                         | -                                                             | `verified`, reason `no_gate`                                               |
-| `passed`                                            | Not read                                                      | `verified`                                                                 |
-| Waiting (`pending`, or `unknown` with `watch_lost`) | The same watch, still going                                   | `verified`                                                                 |
-| Any                                                 | Another live watch, or one the record did not name            | `verified`, reason `watch_adopted`                                         |
-| Waiting                                             | A verdict, or a watch stopped on purpose                      | `verified`: the work ended in the open                                     |
-| Waiting                                             | No watch at all                                               | `mismatched`, `recorded_work_missing`                                      |
-| Waiting                                             | A watch whose observer was lost                               | `unverifiable`, `watch_lost`                                               |
-| Any but `passed`                                    | Its records cannot be read, or no adapter serves the provider | `unverifiable`, `gate_provider_unavailable` or `gate_provider_unsupported` |
+| A standing CI gate                                                   | The adapter shows                                                                      | Finding                                                                                                 |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| None linked                                                          | -                                                                                      | `verified`, reason `no_gate`                                                                            |
+| `passed`                                                             | Not read                                                                               | `verified`                                                                                              |
+| Waiting (`pending`, or `unknown` with `watch_lost` or `watch_ended`) | The same watch, still going                                                            | `verified`                                                                                              |
+| Any                                                                  | Another live watch, or one the record did not name                                     | `verified`, reason `watch_adopted`                                                                      |
+| Waiting                                                              | A verdict, or a watch stopped on purpose                                               | `verified`: the work ended in the open                                                                  |
+| Waiting                                                              | No watch at all                                                                        | `mismatched`, `recorded_work_missing`                                                                   |
+| Waiting                                                              | A watch whose observer was lost                                                        | `unverifiable`, `watch_lost`                                                                            |
+| Waiting                                                              | A watch the provider ended without a verdict (the follower links it again, HS2-507DGZ) | `unverifiable`, `watch_ended`                                                                           |
+| `unknown` with `watch_gone` (re-links spent)                         | The same ended watch                                                                   | `unverifiable`, `watch_gone`: check the provider's credentials and repository, then link the gate again |
+| Any but `passed`                                                     | Its records cannot be read, or no adapter serves the provider                          | `unverifiable`, `gate_provider_unavailable` or `gate_provider_unsupported`                              |
 
 Several gates are combined: any unverifiable gate makes the source unverifiable, then
 a missing watch outranks a live one. Reconciliation records nothing about the gate

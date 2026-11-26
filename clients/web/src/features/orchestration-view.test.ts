@@ -366,6 +366,20 @@ describe('the selected run’s details (HS2-XM692S)', () => {
       expect(
         parseOrchestrationDetails({ gates: [gate('review', state)] }, undefined, undefined, 'api').gates?.[0].state,
       ).toBe(words);
+    // HS2-507DGZ: an unknown CI gate says why its watch is not running; another reason keeps the state.
+    const ci = (reason?: string) =>
+      parseOrchestrationDetails(
+        { gates: [{ ...gate('ci', 'unknown'), ...(reason ? { reason } : {}) }] },
+        undefined,
+        undefined,
+        'api',
+      ).gates?.[0].state;
+    expect(ci('watch_gone')).toBe(
+      'unknown: the CI provider kept ending the watch; check the provider’s credentials and repository, then link the gate again',
+    );
+    expect(ci('watch_ended')).toBe('unknown: the CI provider ended the watch; it is linked again automatically');
+    expect(ci('not_watched')).toBe('unknown');
+    expect(ci()).toBe('unknown');
   });
 });
 

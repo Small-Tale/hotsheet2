@@ -82,7 +82,8 @@ impl OrchestrationRuntime {
     /// run's waiting CI gates are the watches the CI adapter shows live (or there are
     /// none in flight); mismatched with `recorded_work_missing` when a watch the run
     /// waits on is gone; unverifiable with `watch_lost` or the adapter's code when it
-    /// cannot say.
+    /// cannot say, `watch_ended` while the follower links an ended watch again, and
+    /// `watch_gone` once it gave that up (HS2-507DGZ).
     pub fn run_ci_work(&self, owner_id: &str, run_id: &str) -> Observed<ExternalWork> {
         match self.gate_readings(owner_id, run_id, GateKind::Ci) {
             Ok(readings) => ci_work(&readings),

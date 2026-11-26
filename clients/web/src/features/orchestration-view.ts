@@ -20,7 +20,7 @@ import { parseProgressSummary, type ProgressSummaryView } from '../orchestration
 import { describeRefusal } from '../orchestration-refusals';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseContention, type ResourceContentionView } from '../orchestration-resources';
-import { parseRunReconciliation } from '../orchestration-run-checks';
+import { CI_WATCH_REASONS, parseRunReconciliation } from '../orchestration-run-checks';
 import {
   parseDecisionPage,
   parseExplanation,
@@ -282,8 +282,11 @@ const REVIEW_STATES: Record<string, string> = {
   passed: 'approved',
   failed: 'changes_requested',
 };
-function gateState(kind: string | undefined, state: string): string {
-  return kind === 'review' ? (REVIEW_STATES[state] ?? state) : state;
+function gateState(kind: string | undefined, state: string, reason?: string): string {
+  if (kind === 'review') return REVIEW_STATES[state] ?? state;
+  // HS2-507DGZ: an unknown CI gate says why its watch is not running, and what to do.
+  const why = state === 'unknown' && reason !== undefined ? CI_WATCH_REASONS[reason] : undefined;
+  return why ? `unknown: ${why}` : state;
 }
 
 export function parseOrchestrationDetails(
@@ -308,7 +311,7 @@ export function parseOrchestrationDetails(
       .filter((gate) => gate.superseded_by === undefined)
       .map((gate) => ({
         kind: text(gate.kind) ?? 'gate',
-        state: gateState(text(gate.kind), text(gate.state) ?? 'unknown'),
+        state: gateState(text(gate.kind), text(gate.state) ?? 'unknown', text(gate.reason)),
         provider: text(gate.provider),
         commit: text(gate.commit),
       })),

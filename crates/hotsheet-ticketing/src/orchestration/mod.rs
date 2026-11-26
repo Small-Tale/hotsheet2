@@ -77,7 +77,8 @@ pub use gates::{
     ArtifactRef, CiScope, Coverage, DeploymentScope, Gate, GateError, GateEvidence, GateFilter,
     GateKind, GateOutcome, GateReading, GateRegistry, GateState, GateSummary, GateTransition,
     Linked, MAX_GATE_HISTORY, MAX_GATES, NewGate, REVIEW_APPROVED, REVIEW_CHANGES_REQUESTED,
-    REVIEW_PROVIDER, REVIEW_REQUESTED, ReviewMark, summarize, valid_commit, valid_script,
+    REVIEW_PROVIDER, REVIEW_REQUESTED, ReviewMark, WATCH_ENDED, WATCH_GONE, WATCH_LOST, summarize,
+    valid_commit, valid_script,
 };
 pub use hosted_audit::{
     HostedSessionAuditEntry, HostedSessionAuditJournal, HostedSessionAuditPage,

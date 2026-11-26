@@ -16,8 +16,8 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     ArtifactRef, CiScope, Coverage, DenialReason, DeploymentScope, Gate, GateError, GateEvidence,
     GateFilter, GateKind, GateOutcome, GateReading, GateRegistry, GateState, GateSummary, NewGate,
-    Run, RunEvent, RunEventKind, RunEventSource, TargetAction, TargetDestination, summarize,
-    valid_commit, valid_script,
+    Run, RunEvent, RunEventKind, RunEventSource, TargetAction, TargetDestination, WATCH_ENDED,
+    WATCH_GONE, WATCH_LOST, summarize, valid_commit, valid_script,
 };
 use serde::{Deserialize, Serialize};
 
@@ -39,8 +39,11 @@ pub const MAX_GATE_WAIT_MS: u64 = 20_000;
 const REAUTHORIZE_MS: u64 = 10 * 60 * 1000;
 /// HS2-VVHVF0: after a monitor start that failed, a follower waits this long before it
 /// tries again, doubling up to the ceiling. A start is a process launch.
-const OBSERVER_RETRY_MS: u64 = 30_000;
+pub(super) const OBSERVER_RETRY_MS: u64 = 30_000;
 const MAX_OBSERVER_RETRY_MS: u64 = 15 * 60 * 1000;
+/// HS2-507DGZ: how many times a follower links again a CI watch the provider ended
+/// without a verdict, on the observer back-off, before the gate reads `watch_gone`.
+pub const GATE_RELINK_ATTEMPTS: u32 = 3;
 
 /// A provider adapter: the only source of gate evidence. An implementation answers
 /// from records it keeps itself (a watch Job, an execution record) and never from text
@@ -237,8 +240,13 @@ impl GateProvider for GithubActionsGates {
             Ci::Red { run } => GateReading::new(GateState::Failed).evidence(evidence(run)),
             Ci::Superseded => GateReading::new(GateState::Superseded).reason("branch_moved"),
             Ci::Cancelled => GateReading::new(GateState::Unknown).reason("watch_cancelled"),
+            // HS2-507DGZ: the provider ended the watch without a verdict; the gate
+            // follower links it again.
+            Ci::Unknown if reading.ended => {
+                GateReading::new(GateState::Unknown).reason(WATCH_ENDED)
+            }
             Ci::Unknown if reading.job_id.is_some() => {
-                GateReading::new(GateState::Unknown).reason("watch_lost")
+                GateReading::new(GateState::Unknown).reason(WATCH_LOST)
             }
             Ci::Unknown => GateReading::new(GateState::Unknown).reason("not_watched"),
         };
@@ -388,6 +396,16 @@ pub struct GateFollowState {
     /// HS2-VVHVF0: the delay after the last failed observer start, and when the next
     /// start may be tried.
     observer_retry: Option<(u64, u64)>,
+    /// HS2-507DGZ: each gate whose watch the provider ended, by gate id: the automatic
+    /// re-links made so far, the ended watch they answer, and when the next is due.
+    relink: BTreeMap<String, Relink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Relink {
+    attempts: u32,
+    watch_ref: Option<String>,
+    due_ms: u64,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -448,6 +466,14 @@ impl OrchestrationRuntime {
             (other.provider(), other.kind()) != (provider.provider(), provider.kind())
         });
         self.gate_providers.push(provider);
+        self
+    }
+
+    /// HS2-507DGZ: wait this long, instead of the observer back-off, before a follower
+    /// first links an ended CI watch again; later attempts double it (tests).
+    #[must_use]
+    pub fn with_gate_relink_retry(mut self, first: Duration) -> Self {
+        self.gate_relink_retry_ms = u64::try_from(first.as_millis()).unwrap_or(u64::MAX);
         self
     }
 
@@ -1053,8 +1079,15 @@ impl OrchestrationRuntime {
                 state.authorized.clear();
                 state.remote.clear();
                 state.observer_retry = None;
+                state.relink.clear();
                 return step;
             }
+            // HS2-507DGZ: a gate no longer followed (settled, superseded, given up) owes
+            // no re-link; one linked again later starts its attempts over.
+            state
+                .relink
+                .retain(|gate_id, _| gates.iter().any(|gate| &gate.gate_id == gate_id));
+            let mut ended: Vec<String> = Vec::new();
             // Before reading: a change in between is then seen by the wait.
             let waits_on = gates
                 .iter()
@@ -1116,9 +1149,25 @@ impl OrchestrationRuntime {
                     .cloned();
                 if let Some(destination) = destination {
                     match self.gate_refresh_hosted(gate.clone(), &destination, None, 0, tx) {
-                        Ok(done) => {
+                        Ok(mut done) => {
                             if done.changed {
                                 step.changed.push(done.gate.gate_id.clone());
+                            }
+                            // HS2-507DGZ: the host's watch ended; ask it to watch again.
+                            if let Some(after) = self.gate_relink(
+                                &done.gate,
+                                Some(&destination),
+                                &mut state.relink,
+                                now_ms,
+                                tx,
+                            ) {
+                                if !step.changed.contains(&after.gate_id) {
+                                    step.changed.push(after.gate_id.clone());
+                                }
+                                done.gate = after;
+                            }
+                            if done.gate.watch_ended() {
+                                ended.push(done.gate.gate_id.clone());
                             }
                             if let Some(watching) = done.watching.filter(|_| followed(&done.gate)) {
                                 hosted_watching = Some(hosted_watching.unwrap_or(true) && watching);
@@ -1148,10 +1197,30 @@ impl OrchestrationRuntime {
                         observed.push(provider.clone());
                     }
                 }
-                if let Ok((gate, true)) = self.gate_refresh(gate, tx) {
-                    step.changed.push(gate.gate_id);
+                let Ok((mut gate, changed)) = self.gate_refresh(gate, tx) else {
+                    continue;
+                };
+                if changed {
+                    step.changed.push(gate.gate_id.clone());
+                }
+                // HS2-507DGZ: the provider ended the watch; link it again when due.
+                if let Some(after) = self.gate_relink(&gate, None, &mut state.relink, now_ms, tx) {
+                    if !changed {
+                        step.changed.push(after.gate_id.clone());
+                    }
+                    gate = after;
+                }
+                if gate.watch_ended() {
+                    ended.push(gate.gate_id);
                 }
             }
+            // HS2-507DGZ: a wait ends in time for the next re-link that is due.
+            let relink_in = ended
+                .iter()
+                .filter_map(|gate_id| state.relink.get(gate_id))
+                .map(|relink| relink.due_ms.saturating_sub(now_ms).max(1))
+                .min();
+            let bounded = |wait: u64| relink_in.map_or(wait, |due| wait.min(due));
             // HS2-VVHVF0: a gate this follower may read is observed. The check is a
             // local lock probe at a moment the step is awake anyway; only a missing
             // observer launches anything, and a failed launch backs off.
@@ -1182,7 +1251,7 @@ impl OrchestrationRuntime {
             // cannot be reached, or answers at once with nothing new, did not wait:
             // the rest of the wait is spent here instead of asking again at once.
             if let Some((gate_id, cursor, destination)) = hosted_wait {
-                let wait = wait_ms.min(MAX_HOSTED_GATE_WAIT_MS);
+                let wait = bounded(wait_ms.min(MAX_HOSTED_GATE_WAIT_MS));
                 let asked = std::time::Instant::now();
                 let answer = self.gate(owner_id, &gate_id).map(|gate| {
                     self.gate_refresh_hosted(gate, &destination, Some(cursor), wait, tx)
@@ -1202,10 +1271,10 @@ impl OrchestrationRuntime {
                 Some((provider, cursor)) => provider.wait(
                     owner_id,
                     *cursor,
-                    Duration::from_millis(wait_ms.min(MAX_GATE_WAIT_MS)),
+                    Duration::from_millis(bounded(wait_ms.min(MAX_GATE_WAIT_MS))),
                 ),
                 None if hosted_failed => {
-                    let rest = Duration::from_millis(wait_ms.min(MAX_HOSTED_GATE_WAIT_MS));
+                    let rest = Duration::from_millis(bounded(wait_ms.min(MAX_HOSTED_GATE_WAIT_MS)));
                     self.gate_back_off(owner_id, None, rest);
                     break;
                 }
@@ -1213,6 +1282,79 @@ impl OrchestrationRuntime {
             }
         }
         step
+    }
+
+    /// HS2-507DGZ: link again a gate whose watch the provider ended without a verdict,
+    /// the way `gate link` does (this machine's adapter, or the machine hosting the
+    /// target), on the observer back-off: the first delay, doubling per attempt up to
+    /// the ceiling. After [`GATE_RELINK_ATTEMPTS`] re-links whose watches ended too, the
+    /// gate reads `watch_gone`: it waits on nothing and needs a person or an agent.
+    /// Returns the gate when this changed it.
+    fn gate_relink(
+        &self,
+        gate: &Gate,
+        destination: Option<&TargetDestination>,
+        relink: &mut BTreeMap<String, Relink>,
+        now_ms: u64,
+        tx: &mut Transaction<'_>,
+    ) -> Option<Gate> {
+        if !gate.watch_ended() {
+            return None;
+        }
+        let first = self.gate_relink_retry_ms;
+        let delay = |attempts: u32| {
+            first
+                .saturating_mul(1u64 << attempts.min(20))
+                .min(MAX_OBSERVER_RETRY_MS.max(first))
+        };
+        let entry = relink
+            .entry(gate.gate_id.clone())
+            .or_insert_with(|| Relink {
+                attempts: 0,
+                watch_ref: gate.watch_ref.clone(),
+                due_ms: now_ms.saturating_add(delay(0)),
+            });
+        // A watch the last re-link started ended as well.
+        let fresh = entry.watch_ref != gate.watch_ref;
+        if fresh {
+            entry.watch_ref.clone_from(&gate.watch_ref);
+            entry.due_ms = now_ms.saturating_add(delay(entry.attempts));
+        }
+        let spent = entry.attempts >= GATE_RELINK_ATTEMPTS;
+        if !(spent && fresh) && now_ms < entry.due_ms {
+            return None;
+        }
+        if spent {
+            relink.remove(&gate.gate_id);
+            let mut reading = GateReading::new(GateState::Unknown).reason(WATCH_GONE);
+            reading.watch_ref.clone_from(&gate.watch_ref);
+            return self
+                .gate_record(gate.clone(), reading, tx)
+                .ok()
+                .filter(|(_, changed)| *changed)
+                .map(|(gate, _)| gate);
+        }
+        entry.attempts += 1;
+        entry.due_ms = now_ms.saturating_add(delay(entry.attempts));
+        let gate = gate.clone();
+        let after = match destination {
+            Some(destination) => self
+                .hosted_gate_call(destination, &gate, Some(true), None, 0, tx)
+                .and_then(|reply| self.gate_record_hosted(gate, &reply, tx)),
+            None => {
+                let provider = self.gate_provider(&gate.provider, gate.kind)?.clone();
+                let run = self.run(&gate.owner_checkout_id, &gate.run_id).ok()?;
+                // A refused start spends the attempt; the next one is due later.
+                if provider.start(&gate, &run, true).is_ok() {
+                    provider.ensure_watching();
+                }
+                self.gate_refresh(gate, tx)
+            }
+        };
+        after
+            .ok()
+            .filter(|(_, changed)| *changed)
+            .map(|(gate, _)| gate)
     }
 
     /// HS2-WDQZ37: a bounded back-off after a host did not wait: on this machine's

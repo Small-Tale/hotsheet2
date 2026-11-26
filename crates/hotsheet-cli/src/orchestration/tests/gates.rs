@@ -716,6 +716,240 @@ fn hs2_5jbypv_a_sync_and_a_follower_wait_on_the_adapter_and_never_spin() {
     );
 }
 
+/// HS2-507DGZ: a clock a test moves by hand.
+struct Tick(std::sync::atomic::AtomicU64);
+impl hotsheet_ticketing::Clock for Tick {
+    fn now_ms(&self) -> u64 {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// HS2-507DGZ: the follower links again a watch the provider ended without a verdict,
+/// on a doubling back-off, and after three re-links that ended too records `watch_gone`
+/// and stops following. Covers repeated ends, a manual link restarting the budget, a
+/// newer commit superseding a gate mid-back-off, a follower restarted mid-back-off and
+/// a provider that recovers mid-back-off.
+#[test]
+fn hs2_507dgz_the_follower_relinks_an_ended_watch_then_gives_up_with_watch_gone() {
+    let tick = Tick(std::sync::atomic::AtomicU64::new(200));
+    let at = |ms: u64| tick.0.store(ms, Ordering::SeqCst);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &tick,
+        rng: &mut rng,
+    };
+    let (mut m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
+    let ci = Scripted::new(CI, GateKind::Ci);
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_gate_provider(ci.clone())
+        .with_gate_relink_retry(Duration::from_millis(100));
+    let (a, owner) = (sha('a'), m.owner.id.clone());
+    let ended = |job: &str| {
+        let mut reading = GateReading::new(GateState::Unknown).reason("watch_ended");
+        reading.watch_ref = Some(job.into());
+        reading
+    };
+    let record = |m: &Machine, gate: &str| {
+        let gate = m.runtime.gate(&m.owner.id, gate).unwrap();
+        (gate.state, gate.reason)
+    };
+    let relinks = |commit: &str| {
+        ci.starts()
+            .iter()
+            .filter(|(of, again)| of == commit && *again)
+            .count()
+    };
+    let gate = m
+        .runtime
+        .gate_link(&owner, &run, link(&a, CI), Some(&worker()), &mut tx)
+        .unwrap()
+        .gate
+        .gate_id;
+    let mut follow = GateFollowState::default();
+    // 1. The provider ends the watch: the gate waits on a re-link, not yet due.
+    ci.set(&a, ended("job-1"));
+    let step = m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    assert_eq!((step.active, step.changed), (true, vec![gate.clone()]));
+    assert_eq!(
+        record(&m, &gate),
+        (GateState::Unknown, Some("watch_ended".into()))
+    );
+    at(299);
+    m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    assert_eq!(relinks(&a), 0, "a re-link before its delay");
+    // 2. Each re-link is due after 100, 200 and 400 ms, and each watch ends again.
+    for (attempt, (due, job)) in [(300, "job-2"), (500, "job-3"), (900, "job-4")]
+        .into_iter()
+        .enumerate()
+    {
+        at(due - 1);
+        m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+        assert_eq!(relinks(&a), attempt, "re-linked early before {due}");
+        at(due);
+        let step = m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+        assert_eq!(relinks(&a), attempt + 1, "no re-link at {due}");
+        assert_eq!(step.changed, vec![gate.clone()]);
+        assert_eq!(record(&m, &gate), (GateState::Pending, None));
+        // The re-linked watch ends too; the next delay counts from when that is seen.
+        ci.set(&a, ended(job));
+        let step = m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+        assert_eq!(step.changed, vec![gate.clone()]);
+        // 3. After the third, the gate is given up at once and waits on nothing.
+        let reason = if attempt < 2 {
+            "watch_ended"
+        } else {
+            "watch_gone"
+        };
+        assert_eq!(record(&m, &gate), (GateState::Unknown, Some(reason.into())));
+    }
+    at(60_000);
+    assert!(
+        !m.runtime
+            .gate_follow_step(&owner, &mut follow, 0, &mut tx)
+            .active
+    );
+    assert_eq!(relinks(&a), 3);
+    assert_eq!(
+        gate_events(&m, &run).last(),
+        Some(&(
+            GateState::Unknown,
+            RunEventSource::Target,
+            Some("watch_gone".into())
+        ))
+    );
+    // 4. A link by hand watches again and restarts the budget: an end waits on a
+    // re-link again.
+    m.runtime
+        .gate_link(&owner, &run, link(&a, CI), Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(record(&m, &gate), (GateState::Pending, None));
+    ci.set(&a, ended("job-5"));
+    assert!(
+        m.runtime
+            .gate_follow_step(&owner, &mut follow, 0, &mut tx)
+            .active
+    );
+    assert_eq!(
+        record(&m, &gate),
+        (GateState::Unknown, Some("watch_ended".into()))
+    );
+    // 5. A newer commit supersedes the gate mid-back-off: it is never linked again.
+    let b = sha('b');
+    let newer = m
+        .runtime
+        .gate_link(&owner, &run, link(&b, CI), Some(&worker()), &mut tx)
+        .unwrap()
+        .gate
+        .gate_id;
+    at(61_000);
+    m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    assert_eq!(
+        relinks(&a),
+        4,
+        "only the link by hand watched the older commit"
+    );
+    assert_eq!(record(&m, &gate).0, GateState::Superseded);
+    // 6. The newer watch ends; a follower restarted mid-back-off counts from when it
+    // first saw the end, and still links again.
+    ci.set(&b, ended("job-6"));
+    m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    at(61_060);
+    let mut restarted = GateFollowState::default();
+    m.runtime
+        .gate_follow_step(&owner, &mut restarted, 0, &mut tx);
+    at(61_100);
+    m.runtime
+        .gate_follow_step(&owner, &mut restarted, 0, &mut tx);
+    assert_eq!(
+        relinks(&b),
+        0,
+        "the restarted follower kept the old schedule"
+    );
+    at(61_160);
+    m.runtime
+        .gate_follow_step(&owner, &mut restarted, 0, &mut tx);
+    assert_eq!(relinks(&b), 1);
+    // 7. The provider recovers meanwhile: the re-linked watch reaches a verdict and the
+    // follower ends.
+    ci.set(&b, verdict(CI, GateState::Passed, 8, &b, Coverage::Exact));
+    let step = m
+        .runtime
+        .gate_follow_step(&owner, &mut restarted, 0, &mut tx);
+    assert_eq!(step.changed, vec![newer.clone()]);
+    assert_eq!(record(&m, &newer), (GateState::Passed, None));
+    assert!(
+        !m.runtime
+            .gate_follow_step(&owner, &mut restarted, 0, &mut tx)
+            .active
+    );
+}
+
+/// HS2-507DGZ: a refused re-link spends its attempt and the next is tried later; the
+/// follower never starts a watch twice for one due time.
+#[test]
+fn hs2_507dgz_a_refused_relink_spends_its_attempt_and_backs_off() {
+    let tick = Tick(std::sync::atomic::AtomicU64::new(200));
+    let at = |ms: u64| tick.0.store(ms, Ordering::SeqCst);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &tick,
+        rng: &mut rng,
+    };
+    let (mut m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
+    let ci = Scripted::new(CI, GateKind::Ci);
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_gate_provider(ci.clone())
+        .with_gate_relink_retry(Duration::from_millis(100));
+    let (a, owner) = (sha('a'), m.owner.id.clone());
+    let gate = m
+        .runtime
+        .gate_link(&owner, &run, link(&a, CI), Some(&worker()), &mut tx)
+        .unwrap()
+        .gate
+        .gate_id;
+    let mut ended = GateReading::new(GateState::Unknown).reason("watch_ended");
+    ended.watch_ref = Some("job-1".into());
+    ci.set(&a, ended);
+    let mut follow = GateFollowState::default();
+    m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    ci.refuse.store(true, Ordering::SeqCst);
+    // Refused at 300, 500 and 900: the watch never changes, so each waits its delay.
+    for due in [300, 500, 900] {
+        at(due - 1);
+        assert!(
+            m.runtime
+                .gate_follow_step(&owner, &mut follow, 0, &mut tx)
+                .changed
+                .is_empty()
+        );
+        at(due);
+        m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+        m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    }
+    assert_eq!(
+        m.runtime.gate(&owner, &gate).unwrap().reason.as_deref(),
+        Some("watch_ended")
+    );
+    // The attempts are spent: at the next due time the gate is given up.
+    at(1_699);
+    m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    assert_eq!(
+        m.runtime.gate(&owner, &gate).unwrap().reason.as_deref(),
+        Some("watch_ended")
+    );
+    at(1_700);
+    m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    assert_eq!(
+        m.runtime.gate(&owner, &gate).unwrap().reason.as_deref(),
+        Some("watch_gone")
+    );
+    assert!(ci.starts().iter().all(|(_, again)| !again));
+}
+
 #[test]
 fn hs2_5jbypv_a_deployment_needs_a_passed_gate_and_a_person_for_production() {
     let mut rng = Rng(100);
@@ -1146,6 +1380,92 @@ fn judge_with(
             },
         )
         .unwrap();
+}
+
+/// HS2-507DGZ: over a real Job store, a watch Job the provider ended (`gone`) reads
+/// `watch_ended`; the follower watches again with a new Job each time, and gives up with
+/// `watch_gone` once three re-linked Jobs ended too. A link by hand then watches again.
+#[test]
+fn hs2_507dgz_the_github_actions_adapter_reads_an_ended_job_and_the_follower_rewatches() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
+    m.runtime = m.runtime.clone().with_gate_relink_retry(Duration::ZERO);
+    let (a, owner) = (sha('a'), m.owner.id.clone());
+    let github: LinkGate =
+        serde_json::from_value(json!({"commit": a, "repository": "example/widgets"})).unwrap();
+    let gate = m
+        .runtime
+        .gate_link(&owner, &run, github.clone(), Some(&worker()), &mut tx)
+        .unwrap()
+        .gate;
+    let store = JobStore::at(&m.home);
+    let mut follow = GateFollowState::default();
+    for attempt in 0..=3 {
+        let watched = m.runtime.gate(&owner, &gate.gate_id).unwrap();
+        assert_eq!(watched.state, GateState::Pending);
+        judge(
+            &m.home,
+            &owner,
+            watched.watch_ref.as_deref().unwrap(),
+            "gone",
+            &a,
+            0,
+        );
+        m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+        let after = m.runtime.gate(&owner, &gate.gate_id).unwrap();
+        // One Job per re-link, none once given up.
+        assert_eq!(
+            store.list(&owner).unwrap().jobs.len(),
+            (attempt + 2).min(4),
+            "attempt {attempt}"
+        );
+        if attempt < 3 {
+            // Re-linked at once (no delay here): a new Job, pending.
+            assert_eq!(after.state, GateState::Pending, "attempt {attempt}");
+            assert_ne!(after.watch_ref, watched.watch_ref);
+        } else {
+            assert_eq!(
+                (after.state, after.reason.as_deref()),
+                (GateState::Unknown, Some("watch_gone"))
+            );
+            assert_eq!(after.watch_ref, watched.watch_ref);
+        }
+    }
+    assert_eq!(store.list(&owner).unwrap().jobs.len(), 4);
+    // Given up: the follower ends, and a sync keeps the reason.
+    assert!(
+        !m.runtime
+            .gate_follow_step(&owner, &mut follow, 0, &mut tx)
+            .active
+    );
+    m.runtime
+        .gate_sync(
+            &owner,
+            &run,
+            &SyncGates::default(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        m.runtime
+            .gate(&owner, &gate.gate_id)
+            .unwrap()
+            .reason
+            .as_deref(),
+        Some("watch_gone")
+    );
+    // A link by hand watches again with a fifth Job.
+    let again = m
+        .runtime
+        .gate_link(&owner, &run, github, Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(again.gate.state, GateState::Pending);
+    assert_eq!(store.list(&owner).unwrap().jobs.len(), 5);
 }
 
 #[test]

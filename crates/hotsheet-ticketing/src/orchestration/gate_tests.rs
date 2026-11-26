@@ -439,6 +439,104 @@ fn hs2_5jbypv_late_duplicate_and_out_of_order_readings_never_move_a_gate_backwar
     }
 }
 
+/// HS2-507DGZ: an ended watch waits (the follower links it again), a spent one waits on
+/// nothing and stays so while the adapter reads the same ended watch; a new watch, live
+/// or ended again, or a verdict, moves it on.
+#[test]
+fn hs2_507dgz_an_ended_watch_waits_and_a_given_up_one_stays_until_a_new_watch() {
+    let a = sha('a');
+    let mut fixture = Fixture::new();
+    let gate = fixture.link(ci(10, &a)).unwrap().gate.gate_id;
+    let read = |state, reason: Option<&str>, watch: Option<&str>| {
+        let mut reading = GateReading::new(state);
+        reading.reason = reason.map(Into::into);
+        reading.watch_ref = watch.map(Into::into);
+        reading
+    };
+    let waits = |fixture: &Fixture| {
+        fixture
+            .registry
+            .get(OWNER, &gate)
+            .unwrap()
+            .awaits_provider()
+    };
+    for (reading, outcome, awaits) in [
+        (
+            read(GateState::Pending, None, Some("job-1")),
+            GateOutcome::Changed,
+            true,
+        ),
+        (
+            read(GateState::Unknown, Some(WATCH_ENDED), Some("job-1")),
+            GateOutcome::Changed,
+            true,
+        ),
+        // Repeated: nothing new.
+        (
+            read(GateState::Unknown, Some(WATCH_ENDED), Some("job-1")),
+            GateOutcome::Unchanged,
+            true,
+        ),
+        // The follower gave up on that watch.
+        (
+            read(GateState::Unknown, Some(WATCH_GONE), Some("job-1")),
+            GateOutcome::Changed,
+            false,
+        ),
+        // The adapter still reads the same ended watch, with or without its handle.
+        (
+            read(GateState::Unknown, Some(WATCH_ENDED), Some("job-1")),
+            GateOutcome::Unchanged,
+            false,
+        ),
+        (
+            read(GateState::Unknown, Some(WATCH_ENDED), None),
+            GateOutcome::Unchanged,
+            false,
+        ),
+        // Another watch that ended too: waiting again, for a fresh round of re-links.
+        (
+            read(GateState::Unknown, Some(WATCH_ENDED), Some("job-2")),
+            GateOutcome::Changed,
+            true,
+        ),
+        (
+            read(GateState::Unknown, Some(WATCH_GONE), Some("job-2")),
+            GateOutcome::Changed,
+            false,
+        ),
+        // A link watched it again.
+        (
+            read(GateState::Pending, None, Some("job-3")),
+            GateOutcome::Changed,
+            true,
+        ),
+        (
+            read(GateState::Unknown, Some(WATCH_LOST), Some("job-3")),
+            GateOutcome::Changed,
+            true,
+        ),
+    ] {
+        assert_eq!(
+            fixture.apply(&gate, reading.clone()).1,
+            outcome,
+            "{reading:?}"
+        );
+        assert_eq!(waits(&fixture), awaits, "{reading:?}");
+    }
+    // A verdict ends a given-up gate as it ends any other.
+    fixture.apply(
+        &gate,
+        read(GateState::Unknown, Some(WATCH_GONE), Some("job-3")),
+    );
+    let (after, outcome) = fixture.apply(&gate, verdict(GateState::Passed, 7, 1, &a));
+    assert_eq!(
+        (after.state, outcome),
+        (GateState::Passed, GateOutcome::Changed)
+    );
+    assert!(!after.awaits_provider());
+}
+
 #[test]
 fn hs2_5jbypv_linking_is_idempotent_and_a_newer_commit_supersedes_the_older_link() {
     let (a, b) = (sha('a'), sha('b'));

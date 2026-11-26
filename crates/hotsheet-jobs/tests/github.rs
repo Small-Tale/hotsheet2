@@ -824,6 +824,8 @@ fn provider_failures_are_retried_with_backoff_and_a_missing_repository_fails_the
         GateState::Unknown,
         "that failure says nothing about the commit"
     );
+    // HS2-507DGZ: and nothing watches it any more, unlike a lost watch.
+    assert!(gate_state(&fx.store, CHECKOUT, &target()).unwrap().ended);
 }
 
 #[test]
@@ -927,6 +929,8 @@ fn a_lost_watch_reads_unknown_and_resumes_under_the_same_job() {
     fx.store.reconcile(CHECKOUT, &NoProbe).unwrap();
     assert_eq!(fx.get(&job.id).status, Status::Lost);
     assert_eq!(gate(&fx), GateState::Unknown);
+    // HS2-507DGZ: a lost watch has not ended: the monitor reattaches it.
+    assert!(!gate_state(&fx.store, CHECKOUT, &target()).unwrap().ended);
     // Neither call starts a second Job: the monitor reattaches to this one.
     let options = CiWatchOptions::default();
     assert_eq!(
