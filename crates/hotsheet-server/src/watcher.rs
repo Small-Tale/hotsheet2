@@ -1077,8 +1077,6 @@ pub(crate) fn watch_loop(
     rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>,
     target: WatchTarget,
 ) {
-    use std::time::Duration;
-
     use std::sync::mpsc::RecvTimeoutError;
 
     let freshness = target.entry.freshness.clone();
@@ -1109,9 +1107,14 @@ pub(crate) fn watch_loop(
         };
         let mut batch = WatchBatch::default();
         batch.add(&target, first);
-        // Debounce a burst (editor save, git checkout touching many files).
-        while let Ok(next) = rx.recv_timeout(Duration::from_millis(150)) {
-            batch.add(&target, next);
+        // Debounce a burst (editor save, git checkout touching many files), but close the
+        // batch within a bound: a stream that never pauses must not starve it (HS2-TFBFRP).
+        let opened = Instant::now();
+        while let Some(wait) = watch_batch_wait(opened, Instant::now()) {
+            match rx.recv_timeout(wait) {
+                Ok(next) => batch.add(&target, next),
+                Err(_) => break,
+            }
         }
         let WatchBatch {
             mut paths,
@@ -1173,6 +1176,20 @@ pub(crate) fn watch_loop(
         }
         regenerate_target_worklists(&target);
     }
+}
+
+/// How long the watch loop waits for more events after the last one before applying a batch.
+const WATCH_BATCH_QUIET: Duration = Duration::from_millis(150);
+/// The longest a batch stays open while events keep arriving (HS2-TFBFRP). Without it, a
+/// continuous stream (a bulk import, or unrelated churn the stream reports) kept the batch
+/// open indefinitely and no ticket write in it was applied.
+const WATCH_BATCH_MAX: Duration = Duration::from_secs(1);
+
+/// How long to wait for the next event of a batch opened at `opened`, or `None` once the
+/// batch must be applied.
+fn watch_batch_wait(opened: Instant, now: Instant) -> Option<Duration> {
+    let left = WATCH_BATCH_MAX.checked_sub(now.saturating_duration_since(opened))?;
+    (!left.is_zero()).then(|| left.min(WATCH_BATCH_QUIET))
 }
 
 /// One debounced burst of watcher events: the ticket files to apply, how many queued
@@ -2124,6 +2141,95 @@ mod freshness_tests {
         );
         drop(handle);
         wait_for("the watcher to stop", || !entry.freshness.in_sync());
+    }
+
+    #[test]
+    fn hs2_tfbfrp_a_batch_closes_after_a_quiet_gap_or_its_bound() {
+        let opened = Instant::now();
+        assert_eq!(
+            super::watch_batch_wait(opened, opened),
+            Some(super::WATCH_BATCH_QUIET)
+        );
+        let late = opened + super::WATCH_BATCH_MAX - Duration::from_millis(40);
+        assert_eq!(
+            super::watch_batch_wait(opened, late),
+            Some(Duration::from_millis(40))
+        );
+        assert_eq!(
+            super::watch_batch_wait(opened, opened + super::WATCH_BATCH_MAX),
+            None
+        );
+        assert_eq!(
+            super::watch_batch_wait(opened, opened + super::WATCH_BATCH_MAX * 3),
+            None
+        );
+    }
+
+    /// A stream that never pauses for the quiet gap kept the batch open, so a ticket
+    /// write queued in it was never applied (HS2-TFBFRP). Each write must land while the
+    /// stream continues, including repeated writes to the same ticket.
+    #[test]
+    fn hs2_tfbfrp_a_continuous_event_stream_does_not_starve_a_ticket_write() {
+        let (dir, store) = store();
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let mut events = target.events.subscribe();
+        let (raw, rx) = std::sync::mpsc::channel();
+        let tx = QueuedSender {
+            tx: raw,
+            freshness: entry.freshness.clone(),
+        };
+        let looping = std::thread::spawn(move || watch_loop(rx, target));
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let noise = {
+            let tx = tx.clone();
+            let stop = stop.clone();
+            let lock = dir.path().join("tickets").join("not-a-ticket.lock");
+            std::thread::spawn(move || {
+                while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+                    tx.send(Ok(
+                        notify::Event::new(notify::EventKind::Any).add_path(lock.clone())
+                    ));
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            })
+        };
+        let ticket = create(&store, "written during a stream");
+        let path = store.ticket_path(&ticket.id);
+        let mut previous = "written during a stream";
+        for title in ["first edit", "second edit"] {
+            let body = std::fs::read_to_string(&path)
+                .unwrap()
+                .replace(previous, title);
+            std::fs::write(&path, body).unwrap();
+            previous = title;
+            tx.send(Ok(
+                notify::Event::new(notify::EventKind::Any).add_path(path.clone())
+            ));
+            wait_for("the ticket write to be applied mid-stream", || {
+                while let Ok(event) = events.try_recv() {
+                    if event.kind == "changed" && event.id == ticket.id.to_string() {
+                        return true;
+                    }
+                }
+                false
+            });
+            assert_eq!(
+                entry
+                    .index
+                    .lock()
+                    .unwrap()
+                    .content_hash(&ticket.id)
+                    .unwrap(),
+                Some(hotsheet_index::hash_bytes(&std::fs::read(&path).unwrap()))
+            );
+        }
+        assert!(!noise.is_finished(), "the stream was still running");
+        stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        noise.join().unwrap();
+        drop(tx);
+        looping.join().unwrap();
     }
 
     #[test]

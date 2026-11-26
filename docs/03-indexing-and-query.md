@@ -215,6 +215,9 @@ That reconciliation removes rows from the deleted store as well as indexing file
 When rows or a corrupt ticket's source hash change, it emits one store-scoped ticket
 invalidation so connected clients reread the index state.
 These parent and root monitors respond to filesystem events; they do not rescan idle stores.
+Their events only signal re-arming: on every platform the watch loop admits only paths under
+`tickets/`, so churn in a busy parent (often the shared temporary directory) never reaches it
+(HS2-TFBFRP).
 The parent is registered before its child watches. During startup, a missing child leaves the
 parent monitor running, and a directory identity sampled before and after child registration
 detects replacement during that call and triggers a fresh child registration
@@ -222,7 +225,9 @@ and full reconcile before the watcher becomes live.
 
 On change:
 
-1. **Debounce** rapid bursts (an editor save, a git checkout touching many files).
+1. **Debounce** rapid bursts (an editor save, a git checkout touching many files). A batch
+   is applied after a 150 ms pause in events, or at most 1 s after its first event, so a
+   stream that never pauses cannot hold a write back indefinitely (HS2-TFBFRP).
 2. **Detect what actually changed.** For each candidate file, compare its current
    content hash (or git blob OID when committed) against `content_hash` in the
    index. Unchanged → skip (this is what makes a `git pull` that rewrites mtimes

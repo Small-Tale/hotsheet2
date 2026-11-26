@@ -83,17 +83,18 @@ impl TicketsWatchScope {
 
     /// Narrow one native event's `paths` to the store's ticket paths. `None` drops the
     /// event; `Some(rescan)` delivers it, asking for a full rescan when events were dropped
-    /// while the store was away. Linux's tickets scope keeps every path when present,
-    /// but applies the same missing-root guard.
+    /// while the store was away. Every scope narrows: the native stream also watches the
+    /// store root and its parent for re-arm signals (HS2-R6FZ54), and on macOS that parent
+    /// is often the shared temporary directory, whose unrelated churn kept the watch loop's
+    /// debounce open so ticket writes went unapplied (HS2-TFBFRP). Linux and Windows also
+    /// apply the missing-root guard.
     pub(crate) fn admit_paths(&self, paths: &mut Vec<PathBuf>) -> Option<bool> {
+        paths.retain(|path| self.is_ticket_path(path));
+        if paths.is_empty() {
+            return None;
+        }
         if !self.guard_missing_root {
             return Some(false);
-        }
-        if self.watch_root {
-            paths.retain(|path| self.is_ticket_path(path));
-            if paths.is_empty() {
-                return None;
-            }
         }
         if !self.root.is_dir() {
             // The store moved away: these paths name files that are no longer here.
@@ -163,12 +164,38 @@ mod tests {
     }
 
     #[test]
-    fn hs2_vn96j5_the_unguarded_tickets_scope_admits_every_event_unchanged() {
+    fn hs2_tfbfrp_the_unguarded_tickets_scope_admits_only_ticket_paths() {
         let dir = tempfile::tempdir().unwrap();
-        let scope = TicketsWatchScope::new_with_guard(dir.path(), false, false);
-        let outside = dir.path().join(".git/index");
-        assert_eq!(paths(scope.admit(event(&[&outside]))), [outside]);
-        // macOS retains this behavior; Linux applies the missing-root guard (HS2-C3REQ1).
+        let root = dir.path().join("store");
+        std::fs::create_dir_all(root.join("tickets")).unwrap();
+        let scope = TicketsWatchScope::new_with_guard(&root, false, false);
+        let ticket = root.join("tickets/AB/01ABC.md");
+        // The parent and root watches report siblings and store files (HS2-TFBFRP): a busy
+        // shared temporary directory must not reach the watch loop.
+        let sibling = dir.path().join("other-test/AGENTS.md");
+        let lock = root.join(".hotsheet-note-mutation.lock");
+        assert!(scope.admit(event(&[&sibling])).is_none());
+        assert!(scope.admit(event(&[&lock])).is_none());
+        assert!(scope.admit(event(&[dir.path()])).is_none());
+        assert!(scope.admit(event(&[&root])).is_none());
+        assert_eq!(
+            paths(scope.admit(event(&[&sibling, &ticket, &lock]))),
+            std::slice::from_ref(&ticket)
+        );
+        let tickets = root.join("tickets");
+        assert_eq!(paths(scope.admit(event(&[&tickets]))), [tickets]);
+        let canonical = hotsheet_sync::paths::canonicalize(&root)
+            .unwrap()
+            .join("tickets/AB/01ABC.md");
+        assert_eq!(paths(scope.admit(event(&[&canonical]))), [canonical]);
+        // Errors and rescans still pass unfiltered.
+        assert!(matches!(
+            scope.admit(Err(notify::Error::generic("lost"))),
+            Some(Err(_))
+        ));
+        let rescan = Event::new(EventKind::Other).set_flag(notify::event::Flag::Rescan);
+        assert!(scope.admit(Ok(rescan)).unwrap().unwrap().need_rescan());
+        // macOS has no missing-root guard; Linux applies it (HS2-C3REQ1).
         let gone = TicketsWatchScope::new_with_guard(&dir.path().join("gone"), false, false);
         let ticket = dir.path().join("gone/tickets/AB/x.md");
         assert_eq!(paths(gone.admit(event(&[&ticket]))), [ticket]);
@@ -183,6 +210,8 @@ mod tests {
         let scope = TicketsWatchScope::new_with_guard(&root, false, true);
         assert_eq!(scope.watch_dir(), root.join("tickets"));
         let ticket = root.join("tickets/AB/01ABC.md");
+        // The parent watch's sibling churn never reaches the watch loop (HS2-TFBFRP).
+        assert!(scope.admit(event(&[&away])).is_none());
         let initial = scope.admit(event(&[&ticket])).unwrap().unwrap();
         assert!(!initial.need_rescan());
         for _round in 0..2 {
