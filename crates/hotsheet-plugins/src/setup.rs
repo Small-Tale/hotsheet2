@@ -1610,7 +1610,10 @@ fn remove_mcp_entry(
                 return Ok(None);
             }
             servers.remove(name);
-            let emptied = servers.is_empty();
+            // A JSONC `mcp` that the removal empties but that still holds a user comment
+            // stays as an object, so the comment survives (HS2-SYBMFV).
+            let emptied = servers.is_empty()
+                && !(jsonc && emptied_container_keeps_comments(&contents, key, name));
             if emptied {
                 object.remove(key);
             }
@@ -1679,6 +1682,16 @@ fn remove_jsonc_mcp_entry(contents: &str, key: &str, name: &str, emptied: bool) 
     } else {
         crate::jsonc::remove_member(contents, &[key, name]).ok()?
     }
+}
+
+/// Whether `<key>` still holds a comment once Hot Sheet's `<key>.<name>` member is spliced
+/// out of a JSONC config. A comment on the member's own line goes with it (HS2-DWS3NS);
+/// one on another line inside `<key>` is the user's and keeps the container (HS2-SYBMFV).
+fn emptied_container_keeps_comments(contents: &str, key: &str, name: &str) -> bool {
+    crate::jsonc::remove_member(contents, &[key, name])
+        .ok()
+        .flatten()
+        .is_some_and(|rest| crate::jsonc::member_has_comments(&rest, &[key]).unwrap_or(false))
 }
 
 /// Remove every Hot Sheet permission hook from a disabled tool's hook config
@@ -7108,6 +7121,61 @@ args = ["--path", "{store}"]
         fixture.write("opencode.json", foreign);
         fixture.refresh(&[]);
         assert_eq!(fixture.read("opencode.json").unwrap(), foreign);
+    }
+
+    /// HS2-SYBMFV: disabling a tool keeps the user's comments next to Hot Sheet's entry.
+    /// In Codex TOML a comment above Hot Sheet's header moves to the next table (or the end
+    /// of the file); in OpenCode JSONC an emptied `mcp` that still holds a comment stays.
+    #[test]
+    fn hs2_sybmfv_disabling_keeps_user_comments_next_to_the_entry() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        let ours =
+            "[mcp_servers.hotsheet]\ncommand = \"hotsheet-mcp\"\nargs = [\"--path\", \".\"]\n";
+        fixture.write(
+            ".toby/config.toml",
+            &format!("# Codex settings for this repo\n{ours}\n[tui]\nnotifications = true\n"),
+        );
+        fixture.refresh(&[]);
+        assert_eq!(
+            fixture.read(".toby/config.toml").unwrap(),
+            "# Codex settings for this repo\n\n[tui]\nnotifications = true\n"
+        );
+        // Only a comment is left: the file stays.
+        fixture.write(".toby/config.toml", &format!("# mine\n{ours}"));
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), "# mine\n");
+
+        let entry = "\"hotsheet\": { \"type\": \"local\", \"command\": [\"hotsheet-mcp\"] },";
+        fixture.write(
+            "opencode.json",
+            &format!("{{\n  \"theme\": \"dark\",\n  \"mcp\": {{\n    // add servers here\n    {entry}\n    /* keep */\n  }},\n}}\n"),
+        );
+        fixture.refresh(&[]);
+        assert_eq!(
+            fixture.read("opencode.json").unwrap(),
+            "{\n  \"theme\": \"dark\",\n  \"mcp\": {\n    // add servers here\n    /* keep */\n  },\n}\n"
+        );
+        // A comment on Hot Sheet's own line goes with it, so the emptied `mcp` goes too.
+        fixture.write(
+            "opencode.json",
+            &format!("{{\n  \"theme\": \"dark\",\n  \"mcp\": {{\n    {entry} // ours\n  }},\n}}\n"),
+        );
+        fixture.refresh(&[]);
+        assert_eq!(
+            fixture.read("opencode.json").unwrap(),
+            "{\n  \"theme\": \"dark\",\n}\n"
+        );
+        // Only `$schema` and the user's comment inside `mcp` remain: the file stays.
+        fixture.write(
+            "opencode.json",
+            &format!("{{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"mcp\": {{\n    // mine\n    {entry}\n  }},\n}}\n"),
+        );
+        fixture.refresh(&[]);
+        assert_eq!(
+            fixture.read("opencode.json").unwrap(),
+            "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"mcp\": {\n    // mine\n  },\n}\n"
+        );
     }
 
     /// HS2-3MH5FH: a valid Codex `config.toml` is edited in place. Only Hot Sheet's

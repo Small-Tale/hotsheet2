@@ -84,6 +84,16 @@ so a file setup merged into is restored byte for byte (HS2-DWS3NS). The result m
 re-parse to exactly the intended value or the file is left untouched, and the file
 is deleted only when nothing but `$schema` remains and no user comment survives.
 
+**Removal keeps the user's comments next to Hot Sheet's entry (HS2-SYBMFV).** A
+comment on another line is the user's; a comment on Hot Sheet's own lines or inside its
+entry is Hot Sheet content and goes with it. In Codex TOML, the comment lines directly
+above a removed header (Hot Sheet's table, or an emptied explicit `[mcp_servers]`) can
+be a file-header comment or a note on the table before, so they are kept verbatim: they
+move to the start of the next table's comments, or to the end of the file when no table
+follows. Blank lines alone there are dropped, so a merged file still restores exactly.
+In OpenCode JSONC, an `mcp` object that the removal empties stays, with no members, when
+a comment remains inside it; with no comment left it is removed as before.
+
 **Unreadable instruction files are never rewritten (HS2-HXMGN8).** The same rule covers
 the Markdown writers: the instruction target, the canonical target (`AGENTS.md` for
 tools that import it), refresh's reconciled instruction targets, and this checkout's
