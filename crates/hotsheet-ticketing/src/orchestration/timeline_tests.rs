@@ -1234,6 +1234,7 @@ fn hs2_ex594v_the_timeline_shows_current_home_outages() {
         detail: Some("unreachable".into()),
         announced: true,
         returned_at_ms: None,
+        regrouped: false,
     };
     let returning = HomeOutage {
         home_target_id: "docs".into(),

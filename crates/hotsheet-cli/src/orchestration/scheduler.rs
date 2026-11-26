@@ -658,6 +658,10 @@ impl OrchestrationRuntime {
         let sites = hotsheet_ticketing::orchestration::ProjectSites::active(
             &self.declarations(owner_id)?.targets,
         );
+        // HS2-1CC1TQ: the homes this machine's ledger holds as out, or as announced
+        // and not yet seen back.
+        let followed = self.home_outages_followed(owner_id);
+        let multi_site_homes = sites.homes_with_sites();
         // HS2-4JQ41V: an unlisted project with an unfinished run the scheduler
         // dispatched, or a running session, is read for its pool too, so a handoff its
         // worker left behind starts an integrator after that worker has gone. A run a
@@ -698,6 +702,15 @@ impl OrchestrationRuntime {
                             .filter(|home| policy.placement.role_session_entry(home).is_none()),
                     )
                     .filter(|target_id| sites.home_of(target_id) == *target_id),
+            )
+            // HS2-1CC1TQ: a home on record as out is read until it is seen back, even
+            // when its project has no work left, so its banner and its "back" notice
+            // follow what is true. The pass's retry time paces these reads.
+            .chain(
+                followed
+                    .iter()
+                    .map(|entry| entry.home_target_id.as_str())
+                    .filter(|home| multi_site_homes.iter().any(|known| known == home)),
             )
             // HS2-N5BDE4: an unlisted target, or one listing no tools, is Auto.
             .filter(|target_id| policy.target(target_id).enabled)

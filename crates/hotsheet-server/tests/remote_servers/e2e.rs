@@ -272,6 +272,8 @@ struct Timing {
     relink_retry: Option<Duration>,
     /// HS2-EX594V: the delay before a home outage is announced.
     home_notify_after: Option<Duration>,
+    /// HS2-1CC1TQ: the first wait before a home on record as out is read again.
+    home_recheck_after: Option<Duration>,
 }
 
 /// Which server hosts a target's checkout and its sessions.
@@ -327,38 +329,59 @@ pub(super) struct Fleet {
     /// HS2-EX594V: the controller's delay before a home outage is announced; `None`
     /// keeps the runtime's default.
     home_notify_after: Option<Duration>,
+    /// HS2-1CC1TQ: the controller's first wait before it reads a home on record as out
+    /// again; `None` keeps the runtime's default.
+    home_recheck_after: Option<Duration>,
 }
 
 impl Fleet {
     /// Two servers, both targets declared, bound, with remembered rules and allowed by a policy
     /// whose placement is not automatic yet.
     pub(super) async fn new() -> Self {
-        Self::build(Layout::Separate, false, None, false).await
+        Self::build(Layout::Separate, false, None, None, false).await
     }
 
     /// HS2-QV00AP: [`Fleet::new`] whose peer also starts a real Job monitor process
     /// for its hosted watches and pipeline reads, pointed at the loopback provider as
     /// the controller's is.
     pub(super) async fn with_peer_monitor() -> Self {
-        Self::build(Layout::Separate, false, None, true).await
+        Self::build(Layout::Separate, false, None, None, true).await
     }
 
     /// HS2-RCR4A6: the same two servers holding one project as two sites ([`Layout::Sites`]).
     pub(super) async fn sites() -> Self {
-        Self::build(Layout::Sites, false, None, false).await
+        Self::build(Layout::Sites, false, None, None, false).await
     }
 
     /// HS2-EQ7K35: the same two sites with the peer's target B as the project's home and
     /// the controller's target A a site of it. The controller announces a home outage
     /// after `notify_after`.
     pub(super) async fn sites_peer_home(notify_after: Duration) -> Self {
-        Self::build(Layout::Sites, true, Some(notify_after), false).await
+        Self::build(Layout::Sites, true, Some(notify_after), None, false).await
+    }
+
+    /// HS2-1CC1TQ: [`Self::sites_peer_home`] whose controller reads a home on record as
+    /// out again after `recheck_after` at first (doubling with the outage's age up to
+    /// thirty times that), so its loop sees the home back by itself.
+    pub(super) async fn sites_peer_home_rechecked(
+        notify_after: Duration,
+        recheck_after: Duration,
+    ) -> Self {
+        Self::build(
+            Layout::Sites,
+            true,
+            Some(notify_after),
+            Some(recheck_after),
+            false,
+        )
+        .await
     }
 
     async fn build(
         layout: Layout,
         peer_is_home: bool,
         home_notify_after: Option<Duration>,
+        home_recheck_after: Option<Duration>,
         peer_monitor: bool,
     ) -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
@@ -460,6 +483,7 @@ impl Fleet {
             Timing {
                 relink_retry: None,
                 home_notify_after,
+                home_recheck_after,
             },
         );
         let a_checkout = registry
@@ -506,6 +530,7 @@ impl Fleet {
             relink_retry: None,
             peer_is_home,
             home_notify_after,
+            home_recheck_after,
         };
         fleet.declare().await;
         fleet.policy(json!({})).await;
@@ -528,6 +553,7 @@ impl Fleet {
         let Timing {
             relink_retry,
             home_notify_after,
+            home_recheck_after,
         } = timing;
         // The runtime a server composes with `OrchestrationRuntime::live`, over the
         // in-memory credentials of the synthetic remote registration.
@@ -540,6 +566,10 @@ impl Fleet {
         };
         let runtime = match home_notify_after {
             Some(after) => runtime.with_home_notify_after(after),
+            None => runtime,
+        };
+        let runtime = match home_recheck_after {
+            Some(base) => runtime.with_home_recheck_after(base),
             None => runtime,
         };
         state(a_store, home)
@@ -1066,6 +1096,7 @@ impl Fleet {
             Timing {
                 relink_retry: self.relink_retry,
                 home_notify_after: self.home_notify_after,
+                home_recheck_after: self.home_recheck_after,
             },
         );
         next.spawn_run_recovery();

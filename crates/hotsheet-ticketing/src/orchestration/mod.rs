@@ -84,9 +84,9 @@ pub use gates::{
     valid_commit, valid_script,
 };
 pub use home_outage::{
-    HOME_OUTAGE_DIRECTORY, HOME_OUTAGE_NOTIFY_AFTER_MS, HomeNotice, HomeNoticeKind,
-    HomeObservation, HomeOutage, HomeOutageReason, HomeOutageStore, advance_outages, due_notices,
-    next_notice_at, observe_homes,
+    HOME_OUTAGE_DIRECTORY, HOME_OUTAGE_NOTIFY_AFTER_MS, HOME_RECHECK_BASE_MS, HOME_RECHECK_CAP_MS,
+    HomeNotice, HomeNoticeKind, HomeObservation, HomeOutage, HomeOutageReason, HomeOutageStore,
+    advance_outages, due_notices, next_notice_at, next_recheck_at, observe_homes,
 };
 pub use hosted_audit::{
     HostedSessionAuditEntry, HostedSessionAuditJournal, HostedSessionAuditPage,
