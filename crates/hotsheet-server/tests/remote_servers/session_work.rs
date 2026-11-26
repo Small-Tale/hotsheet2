@@ -6,6 +6,7 @@
 use super::orchestration::api;
 use super::sessions::{commit_all, drawer, git_project};
 use super::*;
+use hotsheet_server::AppState;
 use hotsheet_ticketing::checkouts::{Checkout, CheckoutRegistry};
 use hotsheet_ticketing::{NewTicket, StoreMetadata, ops};
 use std::collections::HashMap;
@@ -127,6 +128,20 @@ pub(super) struct World {
     pub(super) checkout: Checkout,
     pub(super) router: axum::Router,
     pub(super) base: String,
+    /// HS2-3H51NM: the serving state and its plugins, to restart it over the same home.
+    pub(super) host: AppState,
+    plugins: PathBuf,
+    /// HS2-3H51NM: the detached terminal broker's socket, when terminals outlive a
+    /// restart of the server, and the in-process broker serving it.
+    broker: Option<(PathBuf, tokio::task::JoinHandle<()>)>,
+}
+
+impl Drop for World {
+    fn drop(&mut self) {
+        if let Some((_, broker)) = &self.broker {
+            broker.abort();
+        }
+    }
 }
 
 impl World {
@@ -143,21 +158,45 @@ impl World {
         plugin_extra: &str,
         served: bool,
     ) -> Self {
+        Self::build(actions, agent, plugin_extra, served, false).await
+    }
+
+    /// HS2-3H51NM: terminals live in a detached broker (served in process over a Unix
+    /// socket), so they outlive a [`Self::restart`] as the planner's would.
+    pub(super) async fn with_broker(actions: &[&str], agent: &str, plugin_extra: &str) -> Self {
+        Self::build(actions, agent, plugin_extra, false, true).await
+    }
+
+    async fn build(
+        actions: &[&str],
+        agent: &str,
+        plugin_extra: &str,
+        served: bool,
+        broker: bool,
+    ) -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
         hotsheet_aitools::enable_test_permission_vault();
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let server_store = root.path().join("server-store");
         let reports = root.path().join("reports");
-        let host = state(&server_store, &home)
-            .with_capacity_source(Box::new(Roomy))
-            .with_capacity_cache(std::time::Duration::ZERO)
-            .with_plugin_dirs(vec![report_plugin(
-                root.path(),
-                &reports,
-                agent,
-                plugin_extra,
-            )]);
+        let plugins = report_plugin(root.path(), &reports, agent, plugin_extra);
+        let broker = broker.then(|| {
+            let socket = root.path().join("broker.sock");
+            let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+            let serving = tokio::spawn(hotsheet_terminals::serve_broker(
+                listener,
+                "planning-restart".into(),
+                Arc::new(hotsheet_terminals::TerminalManager::new()),
+            ));
+            (socket, serving)
+        });
+        let host = Self::serving(
+            &server_store,
+            &home,
+            &plugins,
+            broker.as_ref().map(|(socket, _)| socket.as_path()),
+        );
         let project = root.path().join("project");
         git_project(&project);
         let project_store = if served {
@@ -170,7 +209,7 @@ impl World {
         let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
             .register(&project, None, None, vec![project_store.clone()])
             .unwrap();
-        let router = app(host);
+        let router = app(host.clone());
         let base = format!("/checkouts/{}/orchestration", checkout.id);
         let world = Self {
             _root: root,
@@ -182,9 +221,55 @@ impl World {
             checkout,
             router,
             base,
+            host,
+            plugins,
+            broker,
         };
         world.bind_and_allow(actions).await;
         world
+    }
+
+    fn serving(store: &Path, home: &Path, plugins: &Path, broker: Option<&Path>) -> AppState {
+        let host = state(store, home)
+            .with_capacity_source(Box::new(Roomy))
+            .with_capacity_cache(std::time::Duration::ZERO)
+            .with_plugin_dirs(vec![plugins.to_path_buf()]);
+        match broker {
+            Some(socket) => host.with_terminal_broker_at(
+                hotsheet_server::terminal_broker::TerminalBroker::at(socket, "planning-restart"),
+            ),
+            None => host,
+        }
+    }
+
+    /// HS2-3H51NM: the server stops and a new one starts over the same home and store.
+    /// Without a broker the terminals this server hosts die with it; with one they live
+    /// on and the new server reaches them.
+    pub(super) async fn restart(&mut self) {
+        if self.broker.is_none() {
+            for tab in drawer(&self.router).await {
+                let id = tab["id"].as_str().unwrap();
+                let (status, _) = api(
+                    self.router.clone(),
+                    "DELETE",
+                    &format!("/terminals/{id}"),
+                    Value::Null,
+                    true,
+                )
+                .await;
+                assert_eq!(status, StatusCode::NO_CONTENT);
+            }
+        }
+        self.host.begin_stopping();
+        let next = Self::serving(
+            &self.server_store,
+            &self.home,
+            &self.plugins,
+            self.broker.as_ref().map(|(socket, _)| socket.as_path()),
+        );
+        next.spawn_run_recovery();
+        self.router = app(next.clone());
+        self.host = next;
     }
 
     pub(super) async fn call(&self, method: &str, path: &str, body: Value) -> (StatusCode, Value) {

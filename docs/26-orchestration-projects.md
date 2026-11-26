@@ -5771,7 +5771,11 @@ re-plans in the background; nothing pauses.
 - **Failure leaves the plan.** A refused merge fails the update as
   `plan_update_conflict` (with the step ids in `conflicts`) or `plan_update_invalid`;
   a planner whose tab ended before finishing fails it as `plan_update_planner_ended`
-  (learned on the next read). The live plan is unchanged and the draft is forgotten;
+  (learned on the next read). A host restart is no exception (HS2-3H51NM): the update
+  record and its draft live in the machine home, so a restarted host reads a drafting
+  update back and it finishes as before while its planner's terminal lives on (in the
+  detached terminal broker), and fails it on the next read when the terminal died with
+  the host, so the next Update Plan opens a new update. The live plan is unchanged and the draft is forgotten;
   the reason stays on the update until the next one opens.
 - **Cancel.** `plan update-cancel` ends a drafting update as `cancelled` and forgets the
   draft. The planner's tab stays open; its later draft writes are refused with

@@ -1046,3 +1046,188 @@ fn hs2_ysrt6y_update_plan_without_a_goal_plans_the_default_goal() {
     assert!(launch.role_prompt.contains("--plan-update"));
     assert_eq!(f.m.owner_store.list_tickets().unwrap().len(), 1);
 }
+
+/// HS2-3H51NM: a new runtime over the same machine home, as a restarted host builds,
+/// with `host` as its terminal host: the old one when the planner's terminal outlived
+/// the restart, a fresh one when it died with it.
+fn restarted(f: &Fixture, host: Arc<ScriptedHost>) -> OrchestrationRuntime {
+    OrchestrationRuntime::new(
+        f.m.home.clone(),
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(f.m.home.join("checkouts.json")),
+        hotsheet_ticketing::ProviderConfigRegistry::new(f.m._root.path().join("providers.json")),
+        Arc::new(super::Memory::default()),
+        Arc::new(super::Peer::default()),
+        id(10),
+    )
+    .unwrap()
+    .with_capacity_probe(f.probe.clone())
+    .with_session_host(host)
+}
+
+/// HS2-3H51NM: a plan update that drafts while its host restarts. When the planner
+/// survives, the restarted host reads the update record and its draft back, a press
+/// answers with that update, and `update-finish` swaps the plan as before. When the
+/// planner is lost with the restart, the next read fails the update as
+/// `plan_update_planner_ended` with the plan unchanged, and the next press opens a new
+/// update in a new planner rather than answering with the stale one forever.
+#[test]
+fn hs2_3h51nm_a_drafting_plan_update_across_a_host_restart() {
+    let mut rng = Rng(3_100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    let owner = f.m.owner.id.clone();
+    let goal = f.goal("Ship the release");
+    let work = |title: &str| {
+        ops::create(
+            &f.m.target_store,
+            ulid::Ulid::new(),
+            "TGT",
+            NOW.into(),
+            NewTicket {
+                title: title.into(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    let draft = |runtime: &OrchestrationRuntime,
+                 update: &str,
+                 ticket: &Ticket,
+                 tx: &mut Transaction<'_>| {
+        runtime.readiness_define(
+            &owner,
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": f.m.owner_connection(),
+                    "native_id": goal.id.to_string()},
+                "target_id": id(1), "connection_id": f.m.target_connection(),
+                "native_id": ticket.slug, "prerequisites": [], "plan_update": update,
+            }))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    };
+    let press = |runtime: &OrchestrationRuntime, tx: &mut Transaction<'_>| {
+        runtime.plan_update(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    };
+    let live = |runtime: &OrchestrationRuntime, tx: &mut Transaction<'_>| -> usize {
+        runtime.readiness_plan(&owner, tx).unwrap().steps.len()
+    };
+
+    // The planner survives the restart (its terminal outlives the host).
+    let first = press(&f.m.runtime, &mut tx).unwrap();
+    assert_eq!(first.state, PlanUpdateState::Drafting);
+    let terminal = first.session.clone().unwrap().session.session_id;
+    draft(
+        &f.m.runtime,
+        &first.update_id,
+        &work("Drafted before the restart"),
+        &mut tx,
+    )
+    .unwrap();
+    assert_eq!(live(&f.m.runtime, &mut tx), 0);
+    let survived = restarted(&f, f.host.clone());
+    let read = survived
+        .plan_status(&owner, &mut tx)
+        .unwrap()
+        .update
+        .unwrap();
+    assert_eq!(
+        (read.update_id.as_str(), read.state, read.draft_steps),
+        (first.update_id.as_str(), PlanUpdateState::Drafting, 1)
+    );
+    // A press answers with it; nothing new launches.
+    let again = press(&survived, &mut tx).unwrap();
+    assert_eq!(
+        (again.update_id.as_str(), again.outcome),
+        (first.update_id.as_str(), Some(UpdateOutcome::Existing))
+    );
+    assert_eq!(f.host.launches().len(), 1);
+    // The planner keeps drafting through the restarted host, then finishes: the swap.
+    draft(
+        &survived,
+        &first.update_id,
+        &work("Drafted after the restart"),
+        &mut tx,
+    )
+    .unwrap();
+    let applied = survived
+        .plan_update_finish(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(applied.state, PlanUpdateState::Applied);
+    assert_eq!(applied.swap.unwrap().added.len(), 2);
+    assert_eq!(live(&survived, &mut tx), 2);
+
+    // The planner is lost with the next restart, while another update drafts.
+    f.host.set_busy(&terminal, false);
+    let second = press(&survived, &mut tx).unwrap();
+    assert_eq!(second.outcome, Some(UpdateOutcome::Started));
+    draft(
+        &survived,
+        &second.update_id,
+        &work("Drafted before the planner was lost"),
+        &mut tx,
+    )
+    .unwrap();
+    let fresh = Arc::new(ScriptedHost::default());
+    let lost = restarted(&f, fresh.clone());
+    // The next read fails it: the plan stands, and the draft is gone.
+    let read = lost.plan_status(&owner, &mut tx).unwrap().update.unwrap();
+    assert_eq!(
+        (read.update_id.as_str(), read.state, read.reason.as_deref()),
+        (
+            second.update_id.as_str(),
+            PlanUpdateState::Failed,
+            Some("plan_update_planner_ended")
+        )
+    );
+    assert_eq!(read.draft_steps, 0);
+    assert_eq!(live(&lost, &mut tx), 2);
+    assert_eq!(
+        readiness_code(lost.plan_update_finish(
+            &owner,
+            &PlanUpdateRef::default(),
+            Some(&worker()),
+            &mut tx,
+        )),
+        "plan_update_not_open"
+    );
+    assert_eq!(
+        readiness_code(draft(
+            &lost,
+            &second.update_id,
+            &work("Drafted after the planner was lost"),
+            &mut tx
+        )),
+        "plan_update_not_open"
+    );
+    // A repeated read says the same, and the failure is audited once.
+    let reread = lost.plan_status(&owner, &mut tx).unwrap().update.unwrap();
+    assert_eq!(reread.state, PlanUpdateState::Failed);
+    let ended = lost
+        .audit(&owner, 0, 500)
+        .unwrap()
+        .entries
+        .into_iter()
+        .filter(|entry| {
+            entry.record.action == "plan_update_apply"
+                && entry.record.reason.as_deref() == Some("plan_update_planner_ended")
+        })
+        .count();
+    assert_eq!(ended, 1);
+    // The next press is not answered with the stale update: a new planner drafts a
+    // new one.
+    let third = press(&lost, &mut tx).unwrap();
+    assert_eq!(third.outcome, Some(UpdateOutcome::Started));
+    assert_ne!(third.update_id, second.update_id);
+    assert_eq!(third.state, PlanUpdateState::Drafting);
+    assert_eq!(fresh.launches().len(), 1);
+}
