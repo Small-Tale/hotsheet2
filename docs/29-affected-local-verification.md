@@ -634,10 +634,42 @@ metrics enter the history. Raw failures, user data, and machine-local paths are
 discarded. The `clients/web/scripts/lint-web-observations.mjs` helper is the
 `lint:web` entrypoint (HS2-9N8ZMD); it records the existing ESLint, catalog, and
 UI doctor order and first-failure behavior. Doctor
-JSON supplies catalog, TypeScript, ESLint, analyzer, and optional browser stage
+JSON supplies catalog, ESLint, analyzer, and optional browser stage
 outcomes. The doctor report does not provide per-stage wall time, so that duration
 remains unknown. The entrypoint and its static policy assertions passed the real
 lint command and exact-tree gate; covering main CI supplies full browser regression.
+
+### lint:web cost (HS2-N3XBS3)
+
+Two changes cut `lint:web` without narrowing any rule, threshold, or warning budget:
+
+- **ESLint pass reuse.** Before ESLint runs, the entrypoint hashes every file under
+  `clients/web` that the pass can read. It skips the ESLint config's ignored directories
+  and `.kerf-cache`, plus CSS, raster image, video, and font files. TypeScript types
+  those files through `vite/client` ambient modules, and no lint rule reads them. The hash
+  also covers npm's installed-tree record (`node_modules/.package-lock.json`) in the
+  package and in every directory above it, the ESLint arguments, and the Node version. If the hash equals the one recorded after the last passing run, ESLint is
+  skipped and the check is recorded as `reused`. A pass is recorded only when the inputs
+  hash the same after the run as before it. Any failure, and any run with reuse off,
+  deletes the record. ESLint's own `--cache` stays off: with type-aware rules, an edit to
+  one file can change the findings in an unchanged file that a per-file cache would skip.
+  Reuse is local only. `CI` set, or `HOTSHEET_LINT_WEB_REUSE=0`, always runs ESLint, so
+  CI's run is unchanged.
+- **One TypeScript check.** `lint:web` runs the doctor with
+  `target/lint-web-doctor-config.json`. That is `.kerf-ui-doctor.json` with only the
+  `typescript` stage off. Every runner of `lint:web` also runs `npm run typecheck`
+  (`tsc --noEmit`): the affected gate, where `web_lint` is always selected with `web` and
+  a typecheck is a budget floor; `gate-smoke.json`; `check-full.sh`; and the CI web step.
+  `tsc --noEmit` checks a superset of the doctor's program, because the doctor drops
+  gitignored files. A policy test pins every runner. `npm run ui:doctor` keeps its own
+  TypeScript stage.
+
+The doctor still runs `--full`. Its `--changed` mode narrows TypeScript and ESLint
+findings to the changed files, and Kerf's guidance reserves `--full` for gates. Most of
+the remaining doctor cost is the `kerfjs/ui-wiring` rule, which re-reads the application
+module graph once per linted file. That is filed upstream as KF-3J0GC6 and is not worked
+around here. Measurements are in
+[lint-web-performance-2026-11-26.md](lint-web-performance-2026-11-26.md).
 
 CI uploads available nextest/Vitest reports on success or failure as
 `gate-timing-reports`, with run and attempt metadata, and uploads the merged

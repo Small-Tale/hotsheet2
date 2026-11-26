@@ -188,6 +188,9 @@ one-start-per-waiter change, are measured in
 Repeated Git repository discovery in the machine server, and the stamp-validated cache
 that replaced it, are measured in
 [git-discovery-cache-2026-11-25.md](git-discovery-cache-2026-11-25.md) (HS2-CBZV9W).
+Where `lint:web` spends its time, ESLint pass reuse, and the TypeScript check the UI doctor
+no longer repeats are measured in
+[lint-web-performance-2026-11-26.md](lint-web-performance-2026-11-26.md) (HS2-N3XBS3).
 Local test dependency and timing baseline: [30-test-dependency-baseline-2026-11-02.md](30-test-dependency-baseline-2026-11-02.md), with its [proposed dependency manifest](local-verification-dependencies.proposed.yaml) (HS2-D461XW).
 
 | Doc                                                  | Topic                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Status                  |
