@@ -74,6 +74,17 @@ the comments, verifies the edited text parses to the intended value, and leaves 
 current file untouched. Disabling OpenCode leaves its entry in a commented
 `opencode.json` in place rather than rewriting the file (lossless removal: HS2-DWS3NS).
 
+**Unreadable instruction files are never rewritten (HS2-HXMGN8).** The same rule covers
+the Markdown writers: the instruction target, the canonical target (`AGENTS.md` for
+tools that import it), refresh's reconciled instruction targets, and this checkout's
+`.git/info/exclude`. Only a missing file starts empty. A file that exists but cannot be
+read, because it is not UTF-8 or cannot be opened, stops setup, refresh, and diagnosis
+before the first write. The error names the file, says Hot Sheet left it unchanged, and
+ends with "fix the file (or move it aside), then rerun `hotsheet-cli setup --refresh`".
+Such a file can be shared by several tools, so the project-open refresh reports this as
+one warning and does not hold a single tool. Removing a disabled tool's section skips an
+unreadable file without writing it.
+
 **Project open reports each refused config (HS2-52X9PN).** The server's project-open
 refresh treats a refusal like this per tool rather than for the whole run. It holds the
 tool whose config was refused and refreshes every other tool. A held tool is not a

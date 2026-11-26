@@ -4147,6 +4147,56 @@ fn hs2_rmq5xx_headless_setup_keeps_jsonc_opencode_config_and_refuses_broken_ones
 }
 
 #[test]
+fn hs2_hxmgn8_headless_setup_refuses_an_unreadable_agents_md_and_creates_a_missing_one() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(&store);
+        cmd.env("HOTSHEET_HOME", &home)
+            .args(args)
+            .arg("--project")
+            .arg(&project);
+        cmd
+    };
+    let agents = project.join("AGENTS.md");
+    let not_utf8: &[u8] = b"# Synthetic notes\n\xff\xfe\n";
+    std::fs::write(&agents, not_utf8).unwrap();
+    for args in [&["setup", "codex"][..], &["setup", "--refresh"][..]] {
+        let output = run(args).assert().failure().get_output().stderr.clone();
+        let stderr = String::from_utf8_lossy(&output);
+        assert!(
+            stderr.contains("cannot update AGENTS.md"),
+            "{args:?}: {stderr}"
+        );
+        assert!(stderr.contains("not UTF-8 text"), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains("hotsheet-cli setup --refresh"),
+            "{args:?}: {stderr}"
+        );
+        assert_eq!(std::fs::read(&agents).unwrap(), not_utf8);
+        assert!(!project.join(".codex").exists(), "{args:?}");
+    }
+
+    std::fs::remove_file(&agents).unwrap();
+    run(&["setup", "codex"]).assert().success();
+    assert!(
+        std::fs::read_to_string(&agents)
+            .unwrap()
+            .contains("hotsheet")
+    );
+}
+
+#[test]
 fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("tickets.hs2");

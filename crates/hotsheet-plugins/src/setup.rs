@@ -488,6 +488,13 @@ pub enum SetupError {
         path: String,
         reason: String,
     },
+    /// HS2-HXMGN8: an existing instruction file (or this checkout's `.git/info/exclude`)
+    /// that setup would edit cannot be read. It may be shared by several tools, so the
+    /// refusal names the file rather than one tool; nothing is written.
+    #[error(
+        "cannot update {path}: {reason}. Hot Sheet left the file unchanged. Fix the file (or move it aside), then rerun `hotsheet-cli setup --refresh`"
+    )]
+    UnreadableFile { path: String, reason: String },
 }
 
 impl SetupError {
@@ -1748,7 +1755,7 @@ fn canonical_instruction_plugin(
         return Ok(effective);
     };
     let native_path = project.join(&plugin.manifest.instructions.target);
-    let native = fs.read_to_string(&native_path).unwrap_or_default();
+    let native = read_existing_text(fs, project, &native_path)?.unwrap_or_default();
     let reference = instruction_reference_block(plugin);
     let native_is_reference = reference
         .as_ref()
@@ -1764,7 +1771,7 @@ fn canonical_instruction_plugin(
         return Ok(effective);
     }
     let canonical_path = project.join(&canonical.target);
-    let mut incoming = fs.read_to_string(&canonical_path).unwrap_or_default();
+    let mut incoming = read_existing_text(fs, project, &canonical_path)?.unwrap_or_default();
     let mut source_plugin = plugin.clone();
     source_plugin.manifest.instructions.target = canonical.target.clone();
     source_plugin.manifest.instructions.canonical = None;
@@ -1872,7 +1879,13 @@ fn write_instruction_reference(
     };
     let rel = &plugin.manifest.instructions.target;
     let target = project.join(rel);
-    let existing = fs.read_to_string(&target).unwrap_or_default();
+    // Retiring a reference never writes an unreadable file, matching the other removal
+    // paths; adding one refuses it (HS2-HXMGN8).
+    let existing = match read_existing_text(fs, project, &target) {
+        Ok(existing) => existing.unwrap_or_default(),
+        Err(_) if !active => return Ok(None),
+        Err(error) => return Err(error),
+    };
     let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
     let Some(block) = instruction_reference_block(plugin) else {
         return Ok(None);
@@ -1966,6 +1979,8 @@ fn setup_plugins_with_fs(
         // HS2-RMQ5XX: refuse an unreadable tool config before the first write, so the
         // refusal leaves the whole checkout unchanged rather than half set up.
         check_existing_configs(fs, project_dir, p)?;
+        // HS2-HXMGN8: the same for the instruction files and git exclude it edits.
+        check_existing_text(fs, project_dir, p, refresh_targets.unwrap_or_default())?;
     }
 
     let policy = ensure_push_policy(fs, project_dir)?;
@@ -2572,7 +2587,7 @@ fn write_guidance_target(
     active: bool,
 ) -> Result<(), SetupError> {
     let path = project.join(rel);
-    let existing = fs.read_to_string(&path).unwrap_or_default();
+    let existing = read_existing_text(fs, project, &path)?.unwrap_or_default();
     let mut rendered = render_guidance_sections(&existing, active);
     if rel == "AGENTS.md" {
         let config = crate::guidance_sources::load(project)?;
@@ -2888,7 +2903,7 @@ fn write_instruction_target(
     refresh_members: Option<&HashSet<String>>,
 ) -> Result<(), SetupError> {
     let target = project.join(rel);
-    let existing = fs.read_to_string(&target).ok();
+    let existing = read_existing_text(fs, project, &target)?;
     if writers.is_empty() && existing.is_none() {
         return Ok(()); // never create a file just to reconcile it
     }
@@ -3369,6 +3384,52 @@ fn project_exclude_file(project: &Path) -> Option<std::path::PathBuf> {
     Some(common.join("info/exclude"))
 }
 
+/// The current text of a file setup edits in place, or `None` when it does not exist
+/// (HS2-HXMGN8). Any other read failure, including bytes that are not UTF-8, refuses: the
+/// file is never treated as empty and rewritten with only Hot Sheet's sections.
+fn read_existing_text(
+    fs: &PlanFs,
+    project: &Path,
+    path: &Path,
+) -> Result<Option<String>, SetupError> {
+    match fs.read_to_string(path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(SetupError::UnreadableFile {
+            path: path
+                .strip_prefix(project)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/"),
+            reason: if error.kind() == std::io::ErrorKind::InvalidData {
+                "it is not UTF-8 text".into()
+            } else {
+                format!("it could not be read ({error})")
+            },
+        }),
+    }
+}
+
+/// Every existing instruction file `plugin` (or this refresh) may edit, and the checkout's
+/// local git exclude, must be readable before the first write (HS2-HXMGN8).
+fn check_existing_text(
+    fs: &PlanFs,
+    project: &Path,
+    plugin: &Plugin,
+    refresh_targets: &[String],
+) -> Result<(), SetupError> {
+    let instructions = &plugin.manifest.instructions;
+    let targets = std::iter::once(&instructions.target)
+        .chain(instructions.canonical.as_ref().map(|c| &c.target))
+        .chain(refresh_targets)
+        .filter(|rel| crate::is_safe_rel_path(rel))
+        .map(|rel| project.join(rel));
+    for path in targets.chain(project_exclude_file(project)) {
+        read_existing_text(fs, project, &path)?;
+    }
+    Ok(())
+}
+
 /// Keep a wholly Hot Sheet-owned machine config out of this checkout without changing its
 /// shared `.gitignore`. Existing mixed/user-owned configs remain visible to git.
 fn ensure_local_git_exclude(fs: &mut PlanFs, project: &Path, rel: &str) -> Result<(), SetupError> {
@@ -3376,7 +3437,7 @@ fn ensure_local_git_exclude(fs: &mut PlanFs, project: &Path, rel: &str) -> Resul
         return Ok(());
     };
     let entry = format!("/{}", rel.replace('\\', "/"));
-    let existing = fs.read_to_string(&target).unwrap_or_default();
+    let existing = read_existing_text(fs, project, &target)?.unwrap_or_default();
     if existing.lines().any(|line| line == entry) {
         return Ok(());
     }
@@ -6605,6 +6666,93 @@ args = ["--path", "{store}"]
             assert!(refreshed.unwrap_err().to_string().contains(rel));
             assert_eq!(snapshot_files(fixture.project.path()), before, "{rel}");
         }
+    }
+
+    /// HS2-HXMGN8: an instruction file or git exclude that exists but cannot be read is
+    /// never treated as empty. Explicit setup, refresh, and diagnosis all refuse before the
+    /// first write, name the file, and leave the checkout byte-identical.
+    #[test]
+    fn hs2_hxmgn8_unreadable_instruction_files_are_never_rewritten() {
+        let not_utf8: &[u8] = b"# Project notes\n\xff\xfe user text\n";
+        let cases: [(&str, &str, &str); 5] = [
+            ("codex", "AGENTS.md", "not UTF-8 text"),
+            ("claude", "AGENTS.md", "not UTF-8 text"),
+            ("claude", "CLAUDE.md", "not UTF-8 text"),
+            ("codex", ".git/info/exclude", "not UTF-8 text"),
+            // A shared file another enabled tool writes still blocks this tool's refresh.
+            ("codex", "CLAUDE.md", "not UTF-8 text"),
+        ];
+        for (tool, rel, reason) in cases {
+            let store = tempfile::tempdir().unwrap();
+            let project = tempfile::tempdir().unwrap();
+            let root = project.path();
+            std::fs::create_dir_all(root.join(".git/info")).unwrap();
+            std::fs::write(root.join(rel), not_utf8).unwrap();
+            let before = snapshot_files(root);
+            let enabled = HashSet::from(["claude".to_string(), "codex".to_string()]);
+            if tool == "codex" && rel == "CLAUDE.md" {
+                // Explicit Codex setup never edits CLAUDE.md, so it proceeds and leaves it.
+                run_setup_in(store.path(), root, Some(tool), false, None, &[]).unwrap();
+                assert_eq!(std::fs::read(root.join(rel)).unwrap(), not_utf8);
+            } else {
+                let error = run_setup_in(store.path(), root, Some(tool), false, None, &[])
+                    .unwrap_err()
+                    .to_string();
+                assert!(error.contains(&format!("cannot update {rel}")), "{error}");
+                assert!(error.contains(reason), "{error}");
+                assert!(
+                    error.contains("Hot Sheet left the file unchanged"),
+                    "{error}"
+                );
+                assert!(error.contains("hotsheet-cli setup --refresh"), "{error}");
+                assert_eq!(snapshot_files(root), before, "{tool} {rel}");
+            }
+            let before = snapshot_files(root);
+            for refused in [
+                refresh_setup_in(store.path(), root, Some(&enabled), &[]).map(|_| ()),
+                plan_refresh_setup_in(store.path(), root, Some(&enabled), &[]).map(|_| ()),
+            ] {
+                let error = refused.unwrap_err();
+                assert!(
+                    matches!(&error, SetupError::UnreadableFile { path, .. } if path == rel),
+                    "{tool} {rel}: {error}"
+                );
+            }
+            assert_eq!(snapshot_files(root), before, "{tool} {rel}");
+        }
+    }
+
+    /// HS2-HXMGN8: a file that cannot be opened refuses the same way, and a missing one is
+    /// still created.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_hxmgn8_permission_denied_refuses_and_missing_instructions_are_created() {
+        use std::os::unix::fs::PermissionsExt;
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path();
+        run_setup_in(store.path(), root, Some("codex"), false, None, &[]).unwrap();
+        assert!(
+            std::fs::read_to_string(root.join("AGENTS.md"))
+                .unwrap()
+                .contains("hotsheet")
+        );
+
+        let agents = root.join("AGENTS.md");
+        std::fs::write(&agents, "User text.\n").unwrap();
+        std::fs::set_permissions(&agents, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&agents).is_ok() {
+            // Running as a superuser: permissions cannot make the file unreadable.
+            std::fs::set_permissions(&agents, std::fs::Permissions::from_mode(0o644)).unwrap();
+            return;
+        }
+        let error = run_setup_in(store.path(), root, Some("codex"), false, None, &[])
+            .unwrap_err()
+            .to_string();
+        std::fs::set_permissions(&agents, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(error.contains("cannot update AGENTS.md"), "{error}");
+        assert!(error.contains("could not be read"), "{error}");
+        assert_eq!(std::fs::read_to_string(&agents).unwrap(), "User text.\n");
     }
 
     /// HS2-52X9PN: the project-open refresh holds a tool whose config setup refused. The
