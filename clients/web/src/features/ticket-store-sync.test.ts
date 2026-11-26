@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { TicketStoreSyncReport, TicketStoreSyncState } from '../api';
+import { ApiHttpError, type TicketStoreSyncReport, type TicketStoreSyncState } from '../api';
 import type { Project } from '../interactions/types';
 import { createTicketStoreSync } from './ticket-store-sync';
 
@@ -49,11 +49,16 @@ describe('createTicketStoreSync (HS2-ADHFKZ)', () => {
 
   it('keeps the last report when a reload fails', async () => {
     const request = vi.fn(async () => report('conflict'));
-    const sync = createTicketStoreSync(request);
+    const failures: unknown[] = [];
+    const sync = createTicketStoreSync(request, {
+      delay: () => Promise.resolve(),
+      onPersistentFailure: (_target, reason) => void failures.push(reason),
+    });
     await sync.load(PROJECT);
-    request.mockRejectedValueOnce(new Error('offline'));
+    request.mockRejectedValue(new Error('offline'));
     await sync.load(PROJECT);
     expect(sync.report(PROJECT.id)?.stores[0]?.health.state).toBe('conflict');
+    expect(failures).toHaveLength(1);
   });
 
   it('ignores a stale response that resolves after a newer one', async () => {
@@ -97,5 +102,127 @@ describe('createTicketStoreSync (HS2-ADHFKZ)', () => {
       expect(sync.report(PROJECT.id)).toBeDefined();
     });
     expect(request).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('retrying a failed sync-health load (HS2-JGFPG4)', () => {
+  function harness(options: { hold?: boolean } = {}) {
+    const delays: number[] = [],
+      held: Array<() => void> = [],
+      failures: Array<{ project: string; reason: unknown }> = [];
+    const delay = (ms: number, abort: AbortSignal) => {
+      delays.push(ms);
+      if (!options.hold) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        held.push(resolve);
+        abort.addEventListener(
+          'abort',
+          () => {
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    };
+    const onPersistentFailure = (target: Project, reason: unknown) =>
+      void failures.push({ project: target.id, reason });
+    return { delays, held, failures, options: { delay, onPersistentFailure } };
+  }
+
+  it('shows the banner after a transient first-load failure recovers', async () => {
+    const h = harness();
+    const request = vi
+      .fn<(target: Project) => Promise<TicketStoreSyncReport>>()
+      .mockRejectedValueOnce(new TypeError('network'))
+      .mockRejectedValueOnce(new ApiHttpError('busy', 503))
+      .mockResolvedValue(report('rejected'));
+    const sync = createTicketStoreSync(request, h.options);
+    sync.loadOnce(PROJECT);
+    await vi.waitFor(() => {
+      expect(sync.report(PROJECT.id)?.stores[0]?.health.state).toBe('rejected');
+    });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(h.delays).toEqual([1_000, 2_000]);
+    expect(h.failures).toEqual([]);
+  });
+
+  it('reports a failure that persists once, and asks again when the project is shown again', async () => {
+    const h = harness();
+    const request = vi
+      .fn<(target: Project) => Promise<TicketStoreSyncReport>>()
+      .mockRejectedValue(new TypeError('network'));
+    const sync = createTicketStoreSync(request, h.options);
+    sync.loadOnce(PROJECT);
+    await vi.waitFor(() => {
+      expect(h.failures).toHaveLength(1);
+    });
+    expect(request).toHaveBeenCalledTimes(5);
+    expect(h.delays).toEqual([1_000, 2_000, 4_000, 8_000]);
+    expect(h.failures[0]).toMatchObject({ project: PROJECT.id });
+    expect(sync.report(PROJECT.id)).toBeUndefined();
+    // The failed first show is forgotten: showing the project again asks again and fills the banner.
+    request.mockResolvedValue(report('synced'));
+    sync.loadOnce(PROJECT);
+    await vi.waitFor(() => {
+      expect(sync.report(PROJECT.id)?.stores[0]?.health.state).toBe('synced');
+    });
+    expect(request).toHaveBeenCalledTimes(6);
+    expect(h.failures).toHaveLength(1);
+  });
+
+  it('reports a refusal at once without asking again', async () => {
+    const h = harness();
+    const refusal = new ApiHttpError('no checkout', 404, 'checkout_not_found');
+    const request = vi.fn<(target: Project) => Promise<TicketStoreSyncReport>>().mockRejectedValue(refusal);
+    const sync = createTicketStoreSync(request, h.options);
+    await sync.load(PROJECT);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(h.delays).toEqual([]);
+    expect(h.failures).toEqual([{ project: PROJECT.id, reason: refusal }]);
+  });
+
+  it('ends a waiting retry quietly on reset, and a fresh first load fills again', async () => {
+    const h = harness({ hold: true });
+    const request = vi
+      .fn<(target: Project) => Promise<TicketStoreSyncReport>>()
+      .mockRejectedValueOnce(new TypeError('network'))
+      .mockResolvedValue(report('offline'));
+    const sync = createTicketStoreSync(request, h.options);
+    const waiting = sync.load(PROJECT);
+    await vi.waitFor(() => {
+      expect(h.delays).toEqual([1_000]);
+    });
+    sync.reset();
+    await waiting;
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(sync.report(PROJECT.id)).toBeUndefined();
+    expect(h.failures).toEqual([]);
+    sync.loadOnce(PROJECT);
+    await vi.waitFor(() => {
+      expect(sync.report(PROJECT.id)?.stores[0]?.health.state).toBe('offline');
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets a newer load own the project while an older one waits to retry', async () => {
+    const h = harness({ hold: true });
+    const request = vi
+      .fn<(target: Project) => Promise<TicketStoreSyncReport>>()
+      .mockRejectedValueOnce(new TypeError('network'))
+      .mockResolvedValueOnce(report('synced'))
+      .mockResolvedValue(report('rejected'));
+    const sync = createTicketStoreSync(request, h.options);
+    const older = sync.load(PROJECT);
+    await vi.waitFor(() => {
+      expect(h.delays).toEqual([1_000]);
+    });
+    await sync.load(PROJECT);
+    expect(sync.report(PROJECT.id)?.stores[0]?.health.state).toBe('synced');
+    // The older load's wait ends; it sees it was superseded and neither asks again nor reports.
+    for (const release of h.held.splice(0)) release();
+    await older;
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(sync.report(PROJECT.id)?.stores[0]?.health.state).toBe('synced');
+    expect(h.failures).toEqual([]);
   });
 });

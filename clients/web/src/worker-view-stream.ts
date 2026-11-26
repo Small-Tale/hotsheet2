@@ -1,3 +1,4 @@
+import { abortableDelay, boundedBackoffMs } from './bounded-backoff';
 import type { WorkerView } from './worker-view-model';
 
 export interface WorkerViewClient {
@@ -15,20 +16,7 @@ export function startWorkerViewStream(options: {
 }): () => void {
   const controller = new AbortController();
   const stopped = () => controller.signal.aborted;
-  const wait =
-    options.delay ??
-    ((ms: number, signal: AbortSignal) =>
-      new Promise<void>((resolve) => {
-        const timer = window.setTimeout(resolve, ms);
-        signal.addEventListener(
-          'abort',
-          () => {
-            window.clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
-      }));
+  const wait = options.delay ?? abortableDelay;
   for (const source of options.sources)
     void (async () => {
       let cursor: string | undefined;
@@ -45,7 +33,7 @@ export function startWorkerViewStream(options: {
           options.onError(source, error);
           cursor = undefined;
           failures += 1;
-          await wait(Math.min(30_000, 1_000 * 2 ** Math.min(failures - 1, 5)), controller.signal);
+          await wait(boundedBackoffMs(failures), controller.signal);
         }
       }
     })();

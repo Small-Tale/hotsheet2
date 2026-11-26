@@ -825,3 +825,166 @@ describe('Show Planner opens the planning session’s tab (HS2-FA8G9J)', () => {
     none.controller.dispose();
   });
 });
+
+describe('following a running validation (HS2-JGFPG4)', () => {
+  type Answer = Record<string, unknown> | Error;
+  const running = { result: { state: 'running' }, attempts_left: 0 };
+  const passed = { result: { state: 'passed' }, attempts_left: 0 };
+  function setup(answers: Answer[], options: { holdDelays?: boolean } = {}) {
+    const project = { id: 'orch', name: 'orch', root: '/synthetic/orch', apiPath: '/api/orch' } as Project;
+    const toasts: string[] = [],
+      waits: number[] = [],
+      delays: number[] = [],
+      held: Array<() => void> = [];
+    const viewMode = signal<WorkspaceViewMode>('orchestration');
+    const known: Record<string, unknown> = {
+      orchestrationTimeline: (_owner: string, after?: string) =>
+        after ? new Promise<never>(() => undefined) : Promise.resolve(demoTimeline('running')),
+      orchestrationRunGates: () => Promise.resolve({ gates: [] }),
+      orchestrationRunEvents: () => Promise.resolve({ entries: [] }),
+      orchestrationRun: () => Promise.resolve({ run_id: 'run-3' }),
+      orchestrationValidations: () => Promise.resolve([{ state: 'failed', step: { definition: { step_id: 'unit' } } }]),
+      orchestrationReadiness: () => Promise.resolve({}),
+      orchestrationSchedulerExplain: () => Promise.resolve({}),
+      orchestrationValidationRun: (_checkout: string, body: { wait_ms: number }) => {
+        waits.push(body.wait_ms);
+        const next = answers.shift() ?? passed;
+        return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
+      },
+    };
+    const client = new Proxy(known, {
+      get: (target, key: string) => target[key] ?? (() => new Promise<never>(() => undefined)),
+    }) as unknown as Api;
+    const controller = createOrchestrationViewController({
+      project: () => project,
+      viewMode,
+      fallbackViewMode: () => 'list',
+      orchestrationViewMode: signal<OrchestrationProjectViewMode>('orchestration'),
+      mobile: () => false,
+      confirm: () => Promise.resolve(false),
+      showToast: (message) => void toasts.push(message),
+      openTicket: () => Promise.resolve(),
+      showPermissionRequest: () => Promise.resolve(),
+      openOrchestrationSettings: () => undefined,
+      persistWorkspacePreferences: () => undefined,
+      planner: { propose: () => Promise.resolve({ ok: false, reason: 'synthetic' }) } as never,
+      personId: () => 'person-1',
+      createClient: () => client,
+      orchestrationProject: () => true,
+      delay: (ms, abort) => {
+        delays.push(ms);
+        if (!options.holdDelays) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          held.push(resolve);
+          abort.addEventListener(
+            'abort',
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    async function start() {
+      await vi.waitFor(() => {
+        expect(controller.timeline.value).toBeDefined();
+      });
+      controller.select('step-3');
+      await vi.waitFor(() => {
+        expect(controller.details.value?.validations?.map((step) => step.step_id)).toEqual(['unit']);
+      });
+      await controller.runValidation();
+    }
+    return { controller, toasts, waits, delays, held, viewMode, start };
+  }
+
+  it('asks again on the bounded backoff after a dropped request, then follows to the result', async () => {
+    const t = setup([
+      running,
+      new TypeError('network'),
+      new ApiHttpError('busy', 503),
+      running,
+      new ApiHttpError('timeout', 408),
+      passed,
+    ]);
+    await t.start();
+    await vi.waitFor(() => {
+      expect(t.waits).toEqual([0, 8_000, 8_000, 8_000, 8_000, 8_000]);
+    });
+    // The failures before an answer back off 1 s then 2 s; an answer resets the count.
+    expect(t.delays).toEqual([1_000, 2_000, 1_000]);
+    expect(t.toasts).toEqual([]);
+    t.controller.dispose();
+  });
+
+  it('stops after repeated failures and says so once', async () => {
+    const t = setup([running, ...Array.from({ length: 6 }, () => new TypeError('network'))]);
+    await t.start();
+    await vi.waitFor(() => {
+      expect(t.toasts).toEqual(['Validation step unit is no longer followed: network']);
+    });
+    expect(t.waits).toEqual([0, 8_000, 8_000, 8_000, 8_000, 8_000]);
+    expect(t.delays).toEqual([1_000, 2_000, 4_000, 8_000]);
+    t.controller.dispose();
+  });
+
+  it('does not ask again after a refusal, and names it', async () => {
+    const t = setup([running, new ApiHttpError('no such step', 404, 'validation_step_unknown')]);
+    await t.start();
+    await vi.waitFor(() => {
+      expect(t.toasts).toHaveLength(1);
+    });
+    expect(t.toasts[0]).toMatch(/^Validation step unit is no longer followed: /);
+    expect(t.waits).toEqual([0, 8_000]);
+    expect(t.delays).toEqual([]);
+    t.controller.dispose();
+  });
+
+  it('keeps following a failed result while the policy allows more attempts, reading the answer’s shape', async () => {
+    const t = setup([
+      { result: { state: 'failed' }, attempts_left: 2 },
+      { result: { state: 'failed' }, attempts_left: 1 },
+      { result: { state: 'failed' }, attempts_left: 0 },
+    ]);
+    await t.start();
+    await vi.waitFor(() => {
+      expect(t.waits).toEqual([0, 8_000, 8_000]);
+    });
+    expect(t.toasts).toEqual([]);
+    t.controller.dispose();
+  });
+
+  it('ends a waiting retry quietly when the view closes, and follows again once reopened', async () => {
+    const answers: Answer[] = [running, new TypeError('network')];
+    const t = setup(answers, { holdDelays: true });
+    await t.start();
+    await vi.waitFor(() => {
+      expect(t.delays).toEqual([1_000]);
+    });
+    // Leaving the view starts a new generation: the waiting retry ends without asking or a toast.
+    t.viewMode.value = 'list';
+    for (const release of t.held.splice(0)) release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(t.waits).toEqual([0, 8_000]);
+    expect(t.toasts).toEqual([]);
+    // Back on the view, a new Run Validation follows to its result again.
+    answers.push(running, passed);
+    t.viewMode.value = 'orchestration';
+    await t.start();
+    await vi.waitFor(() => {
+      expect(t.waits).toEqual([0, 8_000, 0, 8_000]);
+    });
+    expect(t.delays).toEqual([1_000]);
+    expect(t.toasts).toEqual([]);
+    t.controller.dispose();
+  });
+
+  it('keeps a permission refusal for its answer, read from the refusal itself', async () => {
+    const t = setup([new ApiHttpError('needs permission', 403, 'permission_required', 'req-1')]);
+    await t.start();
+    expect(t.toasts).toEqual(['A validation step waits for permission.']);
+    expect(t.waits).toEqual([0]);
+    t.controller.dispose();
+  });
+});

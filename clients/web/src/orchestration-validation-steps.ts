@@ -118,3 +118,27 @@ export function recoveredValidations(asks: readonly PendingOrchestratorAsk[], pr
     return parsed ? [{ step_id: parsed.stepId, operation_id: ask.operation_id, request_id: ask.request_id }] : [];
   });
 }
+
+/** What a `validations/run` answer (the contract's `ValidationRunView`) says about following it. */
+export interface ValidationRunAnswer {
+  /** The attempt's `ValidationState`; undefined when the answer carries none. */
+  state?: string;
+  /** Attempts the retry policy still allows after a `failed` result. */
+  attemptsLeft: number;
+}
+
+/** HS2-JGFPG4: read a `ValidationRunView`; an answer of another shape reads as settled. */
+export function parseValidationRunAnswer(answer: unknown): ValidationRunAnswer {
+  const record = typeof answer === 'object' && answer !== null ? (answer as Record<string, unknown>) : {};
+  const result = typeof record.result === 'object' && record.result !== null ? record.result : undefined;
+  const state = result && 'state' in result && typeof result.state === 'string' ? result.state : undefined;
+  const attempts = record.attempts_left;
+  return {
+    state,
+    attemptsLeft: typeof attempts === 'number' && Number.isInteger(attempts) && attempts > 0 ? attempts : 0,
+  };
+}
+
+/** Whether a run answer is still unsettled: running, or failed with attempts the policy still allows. */
+export const validationRunUnsettled = (answer: ValidationRunAnswer): boolean =>
+  answer.state === 'running' || answer.attemptsLeft > 0;

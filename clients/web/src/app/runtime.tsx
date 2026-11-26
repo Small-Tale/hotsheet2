@@ -2038,7 +2038,14 @@ export async function startHotSheetWebClient() {
   };
   // Ticket-store sync health for the shell's publication-failure strip (HS2-ADHFKZ): loaded when
   // a project is first shown and on `ticket_store_sync` change events, never on a timer.
-  const ticketStoreSync = createTicketStoreSync((target) => new Api(target.apiPath).checkoutRepositorySync(target.id));
+  // HS2-JGFPG4: a transient failure retries on the bounded backoff; one that persists is shown, not dropped.
+  const ticketStoreSync = createTicketStoreSync((target) => new Api(target.apiPath).checkoutRepositorySync(target.id), {
+    onPersistentFailure: (target, reason) => {
+      showToast(
+        `${target.name}: ticket sync health could not be read. ${reason instanceof Error ? reason.message : String(reason)}`,
+      );
+    },
+  });
   effect(() => {
     const current = project();
     if (!current) return;

@@ -8,6 +8,7 @@
 import { batch, computed, effect, type Signal, signal } from 'kerfjs';
 
 import { Api, ApiHttpError } from '../api';
+import { type BackoffDelay, isTransientRequestFailure, retryTransient } from '../bounded-backoff';
 import type { OrchestrationDecisionsDialogState } from '../components/orchestration-decisions-dialog';
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
 import type { OrchestrationProposeAvailability } from '../components/orchestration-timeline-view';
@@ -39,12 +40,14 @@ import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import {
   parseValidationOperation,
+  parseValidationRunAnswer,
   parseValidationStep,
   type PendingOrchestratorAsk,
   type PendingValidation,
   recoveredValidations,
   stepsToRun,
   validationOperation,
+  validationRunUnsettled,
 } from '../orchestration-validation-steps';
 import { collapsedTicketGroupKeys, toggleTicketGroupCollapsed } from '../ticket-group-state';
 import type { TicketLinkMatch } from '../ticket-link-resolution';
@@ -293,6 +296,8 @@ export interface OrchestrationViewDependencies {
    * answered, so it is sent again under its operation id.
    */
   readonly pendingOrchestratorRequests?: () => readonly PendingOrchestratorAsk[];
+  /** HS2-JGFPG4 seam: the bounded backoff's wait between retries of a transient failure. */
+  readonly delay?: BackoffDelay;
 }
 
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
@@ -438,6 +443,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   let streamKey = '',
     streamStop: (() => void) | undefined,
     generation = 0;
+  /** HS2-JGFPG4: aborts the backoff waits of validations followed under the current generation. */
+  let follows = new AbortController();
   const probed = new Set<string>();
 
   const isOrchestrationProject = (projectId: string | undefined) =>
@@ -538,6 +545,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       labelReader = undefined;
       streamKey = key;
       const run = ++generation;
+      follows.abort();
+      follows = new AbortController();
       batch(() => {
         timeline.value = undefined;
         remoteLabels.value = {};
@@ -853,18 +862,26 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         requested_by: dependencies.personId(),
       });
     };
-    const unsettled = (answer: Record<string, unknown>) => {
-      const result = answer.result as { state?: unknown } | undefined;
-      return result?.state === 'running' || (typeof answer.attempts_left === 'number' && answer.attempts_left > 0);
-    };
+    const unsettled = (answer: unknown) => validationRunUnsettled(parseValidationRunAnswer(answer));
+    const signal = follows.signal;
     const follow = async (entry: PendingValidation) => {
       // At most an hour of eight-second waits: the longest a step may run (§26.12), and a bound.
       for (let wait = 0; wait < 450 && run === generation; wait += 1) {
         try {
-          const answer = await call(entry, 8_000);
+          // HS2-JGFPG4: a dropped request is asked again on the bounded backoff, not given up on.
+          const answer = await retryTransient(() => call(entry, 8_000), {
+            signal,
+            delay: dependencies.delay,
+            wanted: () => run === generation,
+            // A card no longer planned stays unplanned; only the request's own failures are retried.
+            transient: (reason) => itemOf(entry) !== undefined && isTransientRequestFailure(reason),
+          });
           void refreshDetails();
           if (!unsettled(answer)) return;
-        } catch {
+        } catch (reason) {
+          if (signal.aborted || run !== generation) return;
+          dependencies.showToast(`Validation step ${entry.step_id} is no longer followed: ${describeRefusal(reason)}`);
+          void refreshDetails();
           return;
         }
       }
@@ -880,13 +897,13 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         next.delete(key);
         if (unsettled(answer)) void follow(entry);
       } catch (reason) {
-        const refusal = reason as { code?: string; requestId?: string };
-        if (refusal.code === 'permission_required' && refusal.requestId) {
+        const refusal = reason instanceof ApiHttpError ? reason : undefined;
+        if (refusal?.code === 'permission_required' && refusal.requestId) {
           if (!next.has(key)) asked += 1;
           next.set(key, { ...entry, request_id: refusal.requestId });
         } else {
           next.delete(key);
-          if (refusal.code === 'permission_denied') denied += 1;
+          if (refusal?.code === 'permission_denied') denied += 1;
           else failed ||= describeRefusal(reason);
         }
       }
@@ -1354,6 +1371,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     },
     placeTimeline,
     dispose() {
+      follows.abort();
       streamStop?.();
       eventsStop?.();
       labelReader?.reset();
