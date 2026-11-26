@@ -7142,7 +7142,11 @@ unknown measure is never shown as zero: with nothing known the row reads
 "Unknown (<reason>)". A cost total is labelled partial unless `cost.complete` is
 true ("$12.40 so far · partial: 1 work item has no cost (no usage recorded)"), reads
 "At least" when events have no price, and keeps its cents and up to four sub-cent
-digits rather than rounding (`clients/web/src/orchestration-progress.ts`). Per-run
+digits rather than rounding (`clients/web/src/orchestration-progress.ts`). A project the
+summary does not list has no recorded work, so its row says "no work yet" (or "no cost
+recorded yet" while the timeline shows work for it), never "not read"; a measure the summary
+leaves out reads "Unknown (not reported)", and only a summary read that failed, with none
+read before, reads "Unknown (the summary could not be read)" (HS2-70MHXJ). Per-run
 measures, utilization and external waits stay headless.
 
 ### Provisional assignments in the Workers view (HS2-N8H97X)

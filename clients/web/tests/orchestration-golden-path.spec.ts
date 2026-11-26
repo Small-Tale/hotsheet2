@@ -165,6 +165,11 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     await expect(noPlan).toContainText('Propose a plan to work through all open tickets of the chosen projects');
     await expect(toolbar).toContainText('No Plan Yet · Working through all open tickets');
     await settle(page, 'hs2-gsrfg0', 'no-plan-1440');
+    // A project with no work yet says so in the overview, never "not read" (HS2-70MHXJ).
+    const overview = page.locator('[data-orchestration-overview]');
+    await expect(overview).toContainText('0 done · 0 working · no work yet');
+    await expect(overview).not.toContainText('not read');
+    await widths(page, 'no-work-yet', 'hs2-70mhxj');
 
     // 4. The planner proposes; the plan is a dry run. No policy is saved, and Start Orchestration says it
     // saves the default one, with the way to review it (HS2-D9KP86).

@@ -109,7 +109,8 @@ function minutes(ms: number): string {
 
 /** "About 52 min on average over 3 runs · 1 unknown (run unfinished)", or "Unknown (run unfinished)". */
 export function leadTimeText(lead: DurationTotals | undefined): string {
-  if (!lead) return 'Unknown (not read)';
+  // HS2-70MHXJ: a summary that leaves the measure out says nothing about it; never "not read".
+  if (!lead) return 'Unknown (not reported)';
   if (lead.known === 0) return lead.unknown === 0 ? 'Unknown (no run yet)' : `Unknown (${why(lead.unknown_reasons)})`;
   const mean = lead.total_ms / lead.known,
     runs = `${lead.known} ${lead.known === 1 ? 'run' : 'runs'}`;
@@ -124,7 +125,7 @@ export function leadTimeText(lead: DurationTotals | undefined): string {
  * an unknown cost.
  */
 export function costText(cost: CostTotals | undefined): string {
-  if (!cost) return 'Unknown (not read)';
+  if (!cost) return 'Unknown (not reported)';
   if (cost.items_known === 0)
     return cost.items_unknown === 0 ? 'Unknown (no work yet)' : `Unknown (${why(cost.unknown_reasons)})`;
   const amount = `${cost.unpriced_events > 0 ? 'At least ' : ''}${moneyText(cost.known_usd)}`;
@@ -149,31 +150,49 @@ function tally(items: readonly TimelineItem[]) {
   };
 }
 
-/** The Progress rows: Done, Working now, Waiting (with how many wait for a person), Lead time, Cost. */
+/** HS2-70MHXJ: what a measure reads before the summary is read, or when its read failed. */
+const UNREAD = 'Unknown (the summary could not be read)';
+
+/**
+ * The Progress rows: Done, Working now, Waiting (with how many wait for a person), Lead time, Cost.
+ * HS2-70MHXJ: `unreadable` is a summary read that failed; until one is read the rows say Reading….
+ */
 export function progressRows(
   timeline: OrchestrationTimeline,
   summary: ProgressSummaryView | undefined,
+  unreadable = false,
 ): Array<{ label: string; value: string }> {
+  const pending = unreadable ? UNREAD : 'Reading…';
   const counts = tally(timeline.waves.flatMap((wave) => wave.items)),
     waiting = counts.total - counts.done - counts.working;
   return [
     { label: 'Done', value: `${counts.done} of ${counts.total}` },
     { label: 'Working now', value: String(counts.working) },
     { label: 'Waiting', value: counts.forYou > 0 ? `${waiting} (${counts.forYou} for you)` : String(waiting) },
-    { label: 'Lead time', value: summary ? leadTimeText(summary.totals.lead_time) : 'Reading…' },
-    { label: 'Cost', value: summary ? costText(summary.totals.cost) : 'Reading…' },
+    { label: 'Lead time', value: summary ? leadTimeText(summary.totals.lead_time) : pending },
+    { label: 'Cost', value: summary ? costText(summary.totals.cost) : pending },
   ];
 }
 
-/** The Projects rows: per target, its done and working steps and its cost. */
+/**
+ * The Projects rows: per target, its done and working steps and its cost. HS2-70MHXJ: the summary lists only
+ * targets with recorded work, so one it leaves out has no work yet (or none recorded on this machine), never
+ * "not read"; `unreadable` is a summary read that failed.
+ */
 export function projectRows(
   timeline: OrchestrationTimeline,
   summary: ProgressSummaryView | undefined,
+  unreadable = false,
 ): Array<{ label: string; value: string }> {
   const items = timeline.waves.flatMap((wave) => wave.items);
   return timeline.targets.map((target) => {
     const counts = tally(items.filter((item) => item.target.target_id === target.target_id)),
-      cost = summary ? costText(summary.targets[target.target_id]?.cost) : 'reading…';
+      figures = summary?.targets[target.target_id];
+    if (summary && !figures) {
+      const none = counts.done + counts.working === 0 ? 'no work yet' : 'no cost recorded yet';
+      return { label: target.label, value: `${counts.done} done · ${counts.working} working · ${none}` };
+    }
+    const cost = summary ? costText(figures?.cost) : unreadable ? 'Unknown (could not be read)' : 'reading…';
     const costPart = cost.startsWith('Unknown') ? `cost ${cost.charAt(0).toLowerCase()}${cost.slice(1)}` : cost;
     return { label: target.label, value: `${counts.done} done · ${counts.working} working · ${costPart}` };
   });

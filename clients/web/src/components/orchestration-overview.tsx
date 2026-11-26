@@ -27,6 +27,8 @@ export interface OrchestrationOverviewData {
   decisions?: SchedulerDecisionPage;
   /** HS2-XJEH08: the progress and cost summary's totals and per-project figures. */
   summary?: ProgressSummaryView;
+  /** HS2-70MHXJ: the summary read failed and none was read before, so its measures could not be read. */
+  summaryUnreadable?: boolean;
   /** HS2-5GRXFN: `scheduler plan`'s contention: each resource that deferred work, and who waits. */
   contention?: ResourceContentionView[];
   /** HS2-65AD6J: `scheduler plan`'s integrator of each project and the role sessions it does not start. */
@@ -83,7 +85,7 @@ export function OrchestrationOverview({ timeline, overview, projectName, clock }
       </List>
       <OrchestrationInspectorSection label="Progress">
         <ValueTable label="Progress" density="compact" stackBelow="narrow">
-          {progressRows(timeline, overview?.summary).map((row) => (
+          {progressRows(timeline, overview?.summary, overview?.summaryUnreadable).map((row) => (
             <ValueTableRow label={row.label} value={row.value} />
           ))}
         </ValueTable>
@@ -91,7 +93,7 @@ export function OrchestrationOverview({ timeline, overview, projectName, clock }
       {timeline.targets.length > 0 ? (
         <OrchestrationInspectorSection label="Projects">
           <ValueTable label="Projects" density="compact" stackBelow="narrow">
-            {projectRows(timeline, overview?.summary).map((row) => (
+            {projectRows(timeline, overview?.summary, overview?.summaryUnreadable).map((row) => (
               <ValueTableRow label={row.label} value={row.value} />
             ))}
           </ValueTable>

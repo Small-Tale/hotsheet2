@@ -923,3 +923,23 @@ describe('the overview’s placement for a plan nobody started (HS2-38R8J2)', ()
     expect(overview(false)).toContain('Paused; running work continues');
   });
 });
+
+describe('the overview’s progress for a project with no work, or an unread summary (HS2-70MHXJ)', () => {
+  it('says no work yet, and says when the summary could not be read, never "not read"', () => {
+    const fresh = { ...demoTimeline('proposed'), waves: [] };
+    const empty = String(
+      OrchestrationOverview({
+        timeline: fresh,
+        overview: { summary: { totals: {}, targets: {} } },
+        clock: demoClock,
+      }),
+    );
+    expect(empty).toContain('0 done · 0 working · no work yet');
+    expect(empty).not.toContain('not read');
+    const unread = String(
+      OrchestrationOverview({ timeline: fresh, overview: { summaryUnreadable: true }, clock: demoClock }),
+    );
+    expect(unread).toContain('Unknown (the summary could not be read)');
+    expect(unread).toContain('cost unknown (could not be read)');
+  });
+});

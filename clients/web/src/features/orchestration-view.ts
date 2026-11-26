@@ -385,6 +385,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         contention?: ResourceContentionView[];
         roles?: RoleStandingView[];
         summary?: ProgressSummaryView;
+        /** HS2-70MHXJ: the summary read failed and none was read before. */
+        summaryUnreadable?: boolean;
         error?: string;
       }
     | undefined
@@ -917,6 +919,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       // HS2-65AD6J: each project's integrator and the role sessions this pass does not start.
       roles: plan.status === 'fulfilled' ? parseRoleStandings(plan.value) : overview.value?.roles,
       summary: summary.status === 'fulfilled' ? parseProgressSummary(summary.value) : overview.value?.summary,
+      summaryUnreadable: summary.status === 'rejected' && overview.value?.summary === undefined,
       error:
         page.status === 'rejected' || plan.status === 'rejected' || summary.status === 'rejected'
           ? 'Some of the scheduler’s records could not be read.'
