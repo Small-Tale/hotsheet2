@@ -872,7 +872,9 @@ orchestration prompt-driven; the reversal and its reason are recorded there.
 ### Policy file
 
 `.hotsheet2/orchestration-policy.json` is checked in beside the target manifest:
-`schema_version: 1`, an opaque ULID `revision`, and a `policy` object. A missing
+`schema_version: 1`, an opaque ULID `revision`, a `policy` object and, once
+placement was first on, `placement_started_at_ms` (HS2-ZF5H5M: metadata beside the
+policy, written once and kept by every later change; see Not Started or Paused). A missing
 file reads as disabled and is never created by a read. Every omitted section takes
 its default, a newer version is an explicit unsupported-version error and is never
 overwritten, and a stored policy that no longer validates is treated as corrupt
@@ -5991,15 +5993,15 @@ readiness (§26.15), the runs (§26.9), the sessions this owner's orchestrator s
 (§26.16), the latest logged scheduler decision per step (§26.17), pending permission
 requests (§26.7), the bindings and the policy. It contacts no target, passes no gate and writes nothing.
 
-| Field           | Meaning                                                                                                          |
-| --------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `declared`      | The owner has a target declaration: it is an orchestration project, even with no target yet                      |
-| `phase`         | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`          |
-| `kick_off`      | `can_start`, `can_pause`, the policy revision, why Start is refused (`start_blocked`), and `default_policy`      |
-| `never_started` | HS2-38R8J2: placement was never turned on for the owner on this machine; absent while running and once it was on |
-| `waves`         | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on       |
-| `version`       | Changes exactly when what the timeline shows changes; time alone does not change it                              |
-| `wave_minutes`  | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes           |
+| Field           | Meaning                                                                                                                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `declared`      | The owner has a target declaration: it is an orchestration project, even with no target yet                                                           |
+| `phase`         | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`                                               |
+| `kick_off`      | `can_start`, `can_pause`, the policy revision, why Start is refused (`start_blocked`), and `default_policy`                                           |
+| `never_started` | HS2-38R8J2: placement was never turned on for the owner (HS2-ZF5H5M: on any machine sharing its policy file); absent while running and once it was on |
+| `waves`         | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on                                            |
+| `version`       | Changes exactly when what the timeline shows changes; time alone does not change it                                                                   |
+| `wave_minutes`  | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes                                                |
 
 **Waves.** Finished steps are **Done**. Once orchestration was kicked off, a step with an
 unfinished run is **Working Now**; every other step's wave is its depth over the
@@ -6132,11 +6134,20 @@ A read on the server also starts the target followers of §26.9.
   started by hand (or by a worker taking the Up Next mark) while placement was never on is
   phase `paused` with `never_started: true`: the header reads _Not Started · N Working_ (N
   the Working Now items) and keeps the dry-run banner. Once placement was ever on, a plan
-  with placement off reads _Paused · N Sessions_. The record is this machine's
-  `orchestration-placement-started.json` (`PlacementStartedStore`), kept for good with the
-  first time placement was on; the policy route writes it when a change turns placement
-  on (Start Orchestration, `policy start`, Apply Policy with placement on or Auto while a
-  plan exists) or changes a policy under which placement was on (Pause of an Auto plan).
+  with placement off reads _Paused · N Sessions_. HS2-ZF5H5M: the record is
+  `placement_started_at_ms` in the shared `.hotsheet2/orchestration-policy.json`, beside
+  the policy rather than in it, so every machine sharing the file agrees: a plan started
+  and paused on machine A reads Paused on machine B too. It holds the first time
+  placement was on, is written in the same write as the policy change that turns
+  placement on (Start Orchestration, `policy start`, Apply Policy with placement on or
+  Auto while a plan exists) or changes a policy under which placement was on (Pause of
+  an Auto plan), and is kept by every later change from any machine; the policy route's
+  answer does not include it. Before it existed the record was this machine's
+  `orchestration-placement-started.json` (`PlacementStartedStore`, HS2-38R8J2): that file
+  is no longer written, is still read when the shared file has no record, and its time
+  is carried into the shared file at the machine's next policy change. An older Hot Sheet
+  that refuses unknown fields reads a policy file with the record as corrupt, as it does
+  any newer policy field.
 - **Kick-off.** With no plan, **Propose Plan** starts the planning session of §26.25 in
   the tool the person drives with in this project. A proposed or paused plan has
   **Start Orchestration**, which turns `placement.automatic` on through the policy route

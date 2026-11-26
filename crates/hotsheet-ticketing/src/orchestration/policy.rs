@@ -577,6 +577,11 @@ struct PolicyDocument {
     revision: String,
     #[serde(rename = "policy")]
     body: PolicyBody,
+    /// HS2-ZF5H5M: when placement was first on for this project, from any machine that
+    /// shares this file. Metadata beside the policy, not part of it: written once, kept
+    /// by every later policy change, and never compared as content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    placement_started_at_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1291,6 +1296,27 @@ impl PolicyStore {
         declared: Option<&BTreeSet<String>>,
         tx: &mut Transaction<'_>,
     ) -> Result<PolicyView, OrchestrationError> {
+        self.set_started(request, declared, None, tx)
+    }
+
+    /// HS2-ZF5H5M: when placement was first on for this project, if ever, as the
+    /// shared file records it.
+    pub fn started_at(&self) -> Result<Option<u64>, OrchestrationError> {
+        Ok(self
+            .document()?
+            .and_then(|document| document.placement_started_at_ms))
+    }
+
+    /// [`Self::set`], also recording `started_at_ms` as the time placement was first on
+    /// when the file has none yet, in the same write. A recorded time is kept by every
+    /// later change, with or without one.
+    pub fn set_started(
+        &self,
+        request: SetPolicy,
+        declared: Option<&BTreeSet<String>>,
+        started_at_ms: Option<u64>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<PolicyView, OrchestrationError> {
         let request = SetPolicy {
             policy: request.policy.without_retired(),
             ..request
@@ -1319,6 +1345,10 @@ impl PolicyStore {
             schema_version: ORCHESTRATION_VERSION,
             revision: fresh_token(tx, previous.as_ref().map(|doc| doc.revision.as_str()))?,
             body: request.policy,
+            placement_started_at_ms: previous
+                .as_ref()
+                .and_then(|doc| doc.placement_started_at_ms)
+                .or(started_at_ms),
         };
         let mut bytes =
             serde_json::to_vec_pretty(&document).map_err(|_| OrchestrationError::Corrupt)?;
@@ -1335,7 +1365,9 @@ impl PolicyStore {
 /// HS2-38R8J2: when placement was first on for each owner on this machine, so a plan
 /// whose work was started by hand reads Not Started rather than Paused until a person
 /// ever started orchestration. Machine-local and kept for good; only the first time is
-/// recorded.
+/// recorded. HS2-ZF5H5M: superseded by the shared policy file's
+/// `placement_started_at_ms`; read as a fallback for a project started before, and
+/// carried into the shared file at its next policy change.
 #[derive(Clone)]
 pub struct PlacementStartedStore {
     storage: Storage,
