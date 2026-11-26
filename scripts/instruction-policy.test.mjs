@@ -53,6 +53,16 @@ test('HS2-JQAWX6 selects the essential shared rules inside a measured instructio
   assert.match(agents, /Push policy: `push-per-ticket`/);
 });
 
+test('HS2-DKSN1H installs the selected playbook skills in both tool mirrors', () => {
+  const selection = JSON.parse(read('guidance/rulesync/project-selection.json'));
+  assert.deepEqual(selection.skills, ['ui-ux-review', 'security-review', 'feature-health']);
+  for (const skill of selection.skills) {
+    const claude = read(`.claude/skills/${skill}/SKILL.md`);
+    assert.equal(read(`.agents/skills/${skill}/SKILL.md`), claude, `${skill} mirrors must match`);
+    assert.match(claude, new RegExp(`^---\\nname: ${skill}\\n`));
+  }
+});
+
 test('HS2-XJRJ9Z keeps the reviewed local guidance once in generated instructions', () => {
   const agents = read('AGENTS.md');
   const local = read('.rulesync/rules/project-local.md')

@@ -279,6 +279,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   .config/nextest.toml       # nextest profile: JUnit report at target/nextest/default/junit.xml for test-profile (HS2-3PX1E4)
   .hotsheet2/settings.json   # committed project settings, incl. the Quality AI command group (HS2-11285R)
   .claude/skills/{check-requirements-against-code,check-code-hygiene,analyze-code-quality}/ # quality-check skills run by those commands (Codex mirror: .agents/skills/)
+  .claude/skills/{ui-ux-review,security-review,feature-health}/ # pinned ai-playbook skills selected via guidance/rulesync (HS2-DKSN1H); write docs/security/ and docs/feature-health.md on first run (Codex mirror: .agents/skills/)
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 5.0.0-beta.117 + Web Awesome Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation

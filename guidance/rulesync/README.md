@@ -63,6 +63,14 @@ policy tests pin them. `deployment-scripts`, `release-scripts`,
 `gitgist-release-notes` and `project-bootstrap` do not apply until HS2-BYXA4V
 sets up distribution.
 
+It also selects three playbook skills (HS2-DKSN1H): `ui-ux-review`,
+`security-review` and `feature-health`. A skill costs only its description
+until it is invoked, so skills do not count against the instruction budget.
+`technical-changelog` and `prep-major-release` wait for HS2-BYXA4V. The
+installed `analyze-code-quality`, `check-code-hygiene` and
+`check-requirements-against-code` are Hot Sheet 2 variants, not the playbook
+copies.
+
 Generated `AGENTS.md` now exceeds Codex's default budget, so each Codex
 checkout must set `project_doc_max_bytes` above the ceiling in
 `scripts/instruction-policy.test.mjs` (40,000 bytes) in its git-excluded

@@ -14,5 +14,6 @@
     "kerf-ui-usage",
     "git-commit-and-push",
     "kerf-ui-interaction-defaults"
-  ]
+  ],
+  "skills": ["ui-ux-review", "security-review", "feature-health"]
 }
