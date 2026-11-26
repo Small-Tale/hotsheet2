@@ -695,9 +695,18 @@ lapsed requests first, then (HS2-8GE9HM) its oldest Denies and requests an Alway
 answered, once a day has passed since the answer: a Deny stays final for its operation
 at least that long, and a rule answers its key on its own. Waiting requests and an
 unused Allow Once are never dropped, so a list full of them refuses new asks with
-`capacity`. Rules are never dropped automatically: at 1,024 Always Allow is
-refused with `capacity` until a person forgets one (HS2-5675T5). The oldest decision
-record is dropped first.
+`capacity`. A live rule is never dropped automatically: at 1,024 Always Allow is
+refused with `capacity` until a person forgets one. Only a rule that can never answer
+again is forgotten on its own (HS2-5675T5): its target's declaration was removed (a
+removal is final; target ids are never reused) or its owner checkout is no longer
+registered on this machine. Such rules are forgotten when the target is removed, when
+Settings → Permissions lists the rules, and before Always Allow or `permission
+remember` answers `capacity`; each is a `permission_forget` journal entry (outcome
+`revoked`, reason `target_removed` or `owner_removed`, no actor) and the permission
+signal tells Settings → Permissions. Nothing is forgotten on a guess: an owner whose
+manifest cannot be read, a checkout whose directory is missing, or a target its
+manifest does not name at all (an older branch checked out) keeps its rules. The
+oldest decision record is dropped first.
 
 ### Judgment calls are decisions on the goal ticket
 
@@ -2237,9 +2246,22 @@ branch moved to another line supersede it (§33.11a). No declared identity names
 slugs, so the link must give `repository`. The hosted repository check compares a
 CircleCI `gh/` or `bb/` slug's repository, by host and path, with the hosted
 checkout's remotes (HS2-56MTYN). A Buildkite slug or a CircleCI
-`circleci/<org-id>/<project-id>` slug names no repository, so the hosted check still
-refuses such a watch of a target on another machine (`gate_repository_mismatch`;
-HS2-YA5S82).
+`circleci/<org-id>/<project-id>` slug names no repository, so the host compares the
+repository its own Job monitor read for that pipeline instead (HS2-YA5S82): the hosted
+watch request never calls a provider; it records that it wants the pipeline's
+repository (`<home>/jobs/pipeline-repositories.json`, at most 256 pipelines, a URL with
+user information never recorded) and makes sure the monitor runs; the monitor, with
+the host's credentials, reads Buildkite `GET organizations/{org}/pipelines/{slug}`
+(`repository`) or CircleCI `GET project/{slug}` (`vcs_info.vcs_url`), at most four per
+step, a transient failure retried with the poll back-off, and records the answer. Until
+then the request is answered `gate_repository_unknown` (503, retryable: the gate stays
+as it stands and the follower asks again after its back-off), never a mismatch. Once
+known, the pipeline's repository passes when one of the checkout's remotes is the same
+host and path; another repository, another host, or a pipeline the monitor could not
+read (403, 404, no repository) is refused with `gate_repository_mismatch`. A known
+repository older than an hour is read again the next time a watch wants it, the old
+answer counting meanwhile, so a pipeline moved to another repository is refused from
+then on.
 HS2-7H0S8R adds `jenkins` (`repository` is the job's full name, `folder/job`, workflow
 `*`; §33.11b), watched, read and refused on another machine the same way, with exact
 coverage. HS2-JZ1DD2 adds `azure-pipelines` (`repository` is
@@ -2282,8 +2304,11 @@ Reason codes for `unknown` include `not_watched`, `watch_lost`, `watch_ended`,
 Readings can arrive late, twice or out of order. A reading whose evidence ranks
 below the recorded evidence (an older run, or an earlier attempt of the same run) is
 ignored. A verdict is never replaced by `unknown` or, once passed, by anything but
-supersession. A repeated reading writes nothing and produces no event. A later
-attempt with the same verdict is recorded as news. A provider cannot move a gate
+supersession. A repeated reading writes nothing and produces no event, including the
+same verdict read by two readers at once, each stamping its own read time: evidence of
+the same run, attempt and commit keeps the time it was first recorded, decided under
+the registry lock (HS2-E0XM83). A later attempt with the same verdict is recorded as
+news. A provider cannot move a gate
 into or out of `awaiting_approval`. History keeps the first entry and the most
 recent 31.
 
@@ -6188,6 +6213,16 @@ A read on the server also starts the target followers of §26.9.
   says (HS2-89578K). The timeline item's `run.ci_gate` carries the run's CI verdict
   (its standing CI gates rolled up as `gates` does; absent when no CI gate stands), so
   a repair that is pending or passes reads plainly Done again.
+  Finished work whose deployment failed reads "Deploy failed", and finished work whose
+  review asks for changes (a review gate marked changes requested, typically after the
+  ticket was completed) reads "Changes requested", both warning tone, with the badge
+  **Done · Deploy failed** or **Done · Changes requested** and a **Next** row saying to
+  fix the deployment and request it again, or to make the changes and request the
+  review again (HS2-GPABYY). The run carries `deployment_gate` and `review_gate`
+  beside `ci_gate`, each rolled up from the run's standing gates of that kind and
+  absent when none stands. A card names CI first, then the deployment, then the
+  review; a review requested again or approved, and a deployment that passes, read
+  plainly Done again.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
@@ -6719,9 +6754,13 @@ tickets. A read-only device is refused by the existing write fence. Bounds: 256 
 `HOTSHEET_HOME/orchestration-line-observations/` (`LineObservations`). The target-lines
 read merges the live entries, and its long poll also watches that directory, so a push
 ends a waiting read at once; an expiry is seen at the one-second safety re-check. A read
-skips expired entries; the next push for the checkout drops them from the file, so it
-stays within its bounds. A checkout no owner pushes to any more keeps its expired
-entries until then (HS2-2WMQER).
+that finds an expired entry prunes it under the checkout's lock (reading the file again
+there, so a push that landed meanwhile is kept), and a push prunes too, so the file stays
+within its bounds even when no owner pushes to the checkout any more. Once no entry is
+left, whether by expiry or by the last owner's withdrawal, the file is removed; only the
+empty lock file stays. A read that prunes changes the watched directory, so a waiting read
+wakes once and the next read finds nothing to prune; reads that find nothing expired
+write nothing (HS2-2WMQER).
 
 **When the owner pushes.** The server's follower (`AppState::spawn_target_line_push`)
 recomputes each remote destination's lines on a run event, a scheduler wake or the

@@ -40,6 +40,7 @@ mod jenkins;
 mod lock;
 mod model;
 mod monitor;
+mod pipelines;
 mod probe;
 mod signal;
 mod slot;
@@ -78,6 +79,10 @@ pub use model::{
 pub use monitor::{
     CURRENT_STEP_KEY, CancelReply, Monitor, MonitorConfig, MonitorControl, MonitorExit,
     Observation, Observed, Poll, Tick, WATCH_STATE_KEY, Wake, WatchError, WatchSource,
+};
+pub use pipelines::{
+    MAX_PIPELINE_ENTRIES, PIPELINE_REPOSITORIES_FILE, PIPELINE_REPOSITORY_REFRESH_MS,
+    PipelineRepositories, PipelineRepository,
 };
 pub use probe::{JournalProbe, NoProbe, OwnerProbe, OwnerState};
 pub use signal::{ChangeWaiter, KeptWaiter};

@@ -404,8 +404,13 @@ impl OrchestrationRuntime {
             .collect()
     }
 
-    /// Every remembered rule on this machine, for Settings → Permissions.
+    /// Every remembered rule on this machine, for Settings → Permissions. Rules of
+    /// orphaned targets are forgotten first (HS2-5675T5), so the list shows what can
+    /// still answer.
     pub fn permission_rules_everywhere(&self) -> Vec<RuleView> {
+        let _ = self.forget_orphaned_permission_rules(hotsheet_ticketing::Clock::now_ms(
+            &super::request::Clock,
+        ));
         self.permission_ledger()
             .all_rules()
             .unwrap_or_default()
@@ -427,13 +432,27 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<Answered, OrchestrationError> {
         access::person(actor)?;
-        let answered = self.permission_ledger().answer(
-            owner_id,
-            request_id,
-            answer,
-            actor.and_then(|actor| actor.id.clone()),
-            tx,
-        )?;
+        let answer_once = |tx: &mut Transaction<'_>| {
+            self.permission_ledger().answer(
+                owner_id,
+                request_id,
+                answer,
+                actor.and_then(|actor| actor.id.clone()),
+                tx,
+            )
+        };
+        // HS2-5675T5: at the rule cap, forget the rules of orphaned targets and try once
+        // more; the cap still refuses when every rule is live.
+        let answered = match answer_once(tx) {
+            Err(OrchestrationError::Capacity)
+                if !self
+                    .forget_orphaned_permission_rules(tx.clock.now_ms())?
+                    .is_empty() =>
+            {
+                answer_once(tx)?
+            }
+            other => other?,
+        };
         if answered.changed {
             let (decision, outcome) = match answer {
                 PermissionAnswer::Deny => ("deny:once", AuditOutcome::Rejected),
@@ -499,15 +518,30 @@ impl OrchestrationRuntime {
         if !self.declared(owner_id)?.contains(&request.target_id) {
             return Err(OrchestrationError::NotFound);
         }
-        let (rule, created, also_allowed) = self.permission_ledger().remember(
-            hotsheet_ticketing::orchestration::PermissionKey {
-                target,
-                action: request.action,
-                tool: request.tool,
-            },
-            actor.and_then(|actor| actor.id.clone()),
-            tx,
-        )?;
+        let key = hotsheet_ticketing::orchestration::PermissionKey {
+            target,
+            action: request.action,
+            tool: request.tool,
+        };
+        let remember_once = |tx: &mut Transaction<'_>| {
+            self.permission_ledger().remember(
+                key.clone(),
+                actor.and_then(|actor| actor.id.clone()),
+                tx,
+            )
+        };
+        // HS2-5675T5: at the rule cap, forget the rules of orphaned targets and try once
+        // more; the cap still refuses when every rule is live.
+        let (rule, created, also_allowed) = match remember_once(tx) {
+            Err(OrchestrationError::Capacity)
+                if !self
+                    .forget_orphaned_permission_rules(tx.clock.now_ms())?
+                    .is_empty() =>
+            {
+                remember_once(tx)?
+            }
+            other => other?,
+        };
         if created {
             self.audit_record(
                 owner_id,
@@ -572,6 +606,83 @@ impl OrchestrationRuntime {
         )?;
         self.permission_signal();
         Ok(rule)
+    }
+
+    /// HS2-5675T5: forget, audited, every remembered rule whose target can no longer
+    /// act: its declaration was removed from the owner's manifest (a removal is final,
+    /// target ids are never reused), or its owner checkout is no longer registered on
+    /// this machine. A rule is never forgotten on a guess: an owner whose manifest
+    /// cannot be read, a checkout whose directory is missing (an unmounted volume), or
+    /// a target its manifest does not name at all (an older branch checked out) keeps
+    /// its rules. Each forgotten rule is a `permission_forget` entry (outcome
+    /// `revoked`, reason `target_removed` or `owner_removed`, no actor) in its owner's
+    /// journal, and Settings → Permissions is told. Answers the rules forgotten.
+    pub fn forget_orphaned_permission_rules(
+        &self,
+        now_ms: u64,
+    ) -> Result<Vec<PermissionRule>, OrchestrationError> {
+        let ledger = self.permission_ledger();
+        let rules = ledger.all_rules()?;
+        let owners: std::collections::BTreeSet<&str> = rules
+            .iter()
+            .map(|rule| rule.key.target.owner_checkout_id.as_str())
+            .collect();
+        let mut orphaned = std::collections::BTreeMap::new();
+        for owner_id in owners {
+            let targets = rules
+                .iter()
+                .map(|rule| &rule.key.target)
+                .filter(|target| target.owner_checkout_id == owner_id);
+            match self.checkouts.describe(owner_id) {
+                Err(CheckoutError::NotFound(_)) => {
+                    for target in targets {
+                        orphaned.insert(target.clone(), "owner_removed");
+                    }
+                }
+                Ok(owner) if owner.id == owner_id => {
+                    let Ok(manifest) = self.flow(&owner).and_then(|flow| flow.declarations())
+                    else {
+                        continue;
+                    };
+                    for target in targets {
+                        let removed = manifest.targets.iter().any(|declared| {
+                            declared.target_id == target.target_id
+                                && declared.state == DeclarationState::Removed
+                        });
+                        if removed {
+                            orphaned.insert(target.clone(), "target_removed");
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if orphaned.is_empty() {
+            return Ok(Vec::new());
+        }
+        let forgotten = ledger.forget_targets(&orphaned.keys().cloned().collect())?;
+        for rule in &forgotten {
+            let target = &rule.key.target;
+            self.audit_record(
+                &target.owner_checkout_id,
+                AuditRecord {
+                    at_ms: now_ms,
+                    actor_role: None,
+                    actor_id: None,
+                    target_id: Some(target.target_id.clone()),
+                    action: "permission_forget".into(),
+                    operation_id: None,
+                    outcome: AuditOutcome::Revoked,
+                    reason: orphaned.get(target).map(|reason| (*reason).to_owned()),
+                    permission_id: Some(rule.rule_id.clone()),
+                    requested_by: None,
+                },
+            )?;
+        }
+        if !forgotten.is_empty() {
+            self.permission_signal();
+        }
+        Ok(forgotten)
     }
 
     /// Show every waiting request through the prompt, as a server does when it starts

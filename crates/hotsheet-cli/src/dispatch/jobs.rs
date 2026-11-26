@@ -539,7 +539,9 @@ fn monitor(home: &Path, args: MonitorArgs) -> Result<()> {
         Arc::new(UlidSource),
         args.store_config(),
     );
-    let mut monitor = Monitor::new(store, info.owner, args.monitor_config());
+    // HS2-YA5S82: it also reads the pipeline repositories a hosted repository check wants.
+    let mut monitor = Monitor::new(store, info.owner, args.monitor_config())
+        .with_pipeline_repositories(hotsheet_jobs::PipelineRepositories::at(home));
     register_sources(&mut monitor, home);
     // HS2-6RQVFY: the monitor reads its store each step, so its stream starts in the
     // background rather than holding the first step for a start that took seconds.

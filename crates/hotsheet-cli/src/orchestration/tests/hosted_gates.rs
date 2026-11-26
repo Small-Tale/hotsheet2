@@ -606,13 +606,14 @@ fn hs2_56mtyn_a_remote_targets_circleci_gate_passes_the_check_through_the_reposi
         Path::new(&r.peer.hosted.target.root),
         "git@github.com:Acme/Widgets.git",
     );
-    // Another repository, the same path on another host, and a slug that names no
-    // repository are refused on the host before anything starts.
-    for refused in [
-        "gh/acme/other",
-        "bb/acme/widgets",
-        "circleci/0b1c2d3e/4f5a6b7c",
-    ] {
+    // Another repository and the same path on another host are refused on the host
+    // before anything starts. HS2-YA5S82: a slug that names no repository is not yet
+    // known there, never a mismatch.
+    assert!(matches!(
+        circleci("circleci/0b1c2d3e/4f5a6b7c", &mut tx),
+        Err(OrchestrationError::Gate(GateError::RepositoryUnknown))
+    ));
+    for refused in ["gh/acme/other", "bb/acme/widgets"] {
         assert!(
             matches!(
                 circleci(refused, &mut tx),
@@ -633,4 +634,123 @@ fn hs2_56mtyn_a_remote_targets_circleci_gate_passes_the_check_through_the_reposi
     // own watch.
     circleci("github/acme/widgets", &mut tx).unwrap();
     assert_eq!(r.host_jobs().len(), 2);
+}
+
+/// HS2-YA5S82: a Buildkite pipeline or a CircleCI `circleci/<org-id>/<project-id>` slug
+/// names no repository. The host answers a retryable `gate_repository_unknown` (503)
+/// and records that it wants the pipeline's repository, without a provider call and
+/// without starting anything; once its Job monitor has recorded the repository (played
+/// here through the monitor's own record), the watch is checked against the
+/// checkout's remotes by host and path: the same repository passes, another
+/// repository, the same path on another host, or a pipeline the monitor could not read
+/// is refused as a mismatch. Repeats, interleaving and a moved pipeline are covered.
+#[test]
+fn hs2_ya5s82_a_hosted_pipeline_slug_passes_once_the_hosts_monitor_read_its_repository() {
+    use hotsheet_jobs::{BUILDKITE_KIND, CIRCLECI_KIND, PipelineRepositories};
+    let mut rng = Rng(103);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let r = remote(&mut tx);
+    let a = sha('a');
+    let link = |provider: &str, slug: &str, tx: &mut Transaction<'_>| {
+        r.runtime.gate_link(
+            &r.owner,
+            &r.run,
+            serde_json::from_value(json!({"commit": a, "provider": provider,
+                "repository": slug}))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    };
+    git_remote(
+        Path::new(&r.peer.hosted.target.root),
+        "git@github.com:Acme/Widgets.git",
+    );
+    let host = PipelineRepositories::at(&r.peer.hosted.home);
+    // The host answers on its own (wall) clock, as its monitor records.
+    let record = |provider: &str, slug: &str, url: Option<&str>| {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        host.record(provider, slug, url, u64::try_from(now).unwrap())
+            .unwrap();
+    };
+    let unknown = |result: Result<GateView, OrchestrationError>| match result {
+        Err(error @ OrchestrationError::Gate(GateError::RepositoryUnknown)) => {
+            assert_eq!(error_status(&error), 503);
+            assert_eq!(error.code(), "gate_repository_unknown");
+        }
+        other => panic!("expected gate_repository_unknown, got {other:?}"),
+    };
+    let mismatch = |result: Result<GateView, OrchestrationError>| {
+        assert!(
+            matches!(
+                result,
+                Err(OrchestrationError::Gate(GateError::RepositoryMismatch))
+            ),
+            "{result:?}"
+        );
+    };
+    // Not known yet, asked twice: retryable, one want recorded, nothing started.
+    for _ in 0..2 {
+        unknown(link(BUILDKITE_KIND, "acme/widgets-ci", &mut tx));
+    }
+    unknown(link(CIRCLECI_KIND, "circleci/0b1c2d3e/4f5a6b7c", &mut tx));
+    assert_eq!(
+        host.wanted(),
+        vec![
+            (BUILDKITE_KIND.to_owned(), "acme/widgets-ci".to_owned()),
+            (
+                CIRCLECI_KIND.to_owned(),
+                "circleci/0b1c2d3e/4f5a6b7c".to_owned()
+            ),
+        ]
+    );
+    assert!(r.host_jobs().is_empty());
+    // The monitor reads the other pipelines first: refused as mismatches.
+    for (slug, url) in [
+        ("acme/other-ci", Some("git@github.com:acme/other.git")),
+        (
+            "acme/gitlab-ci",
+            Some("https://gitlab.com/acme/widgets.git"),
+        ),
+        ("acme/private-ci", None),
+    ] {
+        unknown(link(BUILDKITE_KIND, slug, &mut tx));
+        record(BUILDKITE_KIND, slug, url);
+        mismatch(link(BUILDKITE_KIND, slug, &mut tx));
+    }
+    assert!(r.host_jobs().is_empty());
+    // The pipeline that builds the checkout's repository (any URL spelling, any case)
+    // passes and is watched on the host; repeating the link finds the same watch.
+    record(
+        BUILDKITE_KIND,
+        "acme/widgets-ci",
+        Some("https://github.com/acme/widgets"),
+    );
+    let linked = link(BUILDKITE_KIND, "acme/widgets-ci", &mut tx).unwrap();
+    assert_eq!(linked.gate.provider, BUILDKITE_KIND);
+    assert_eq!(r.host_jobs().len(), 1);
+    link(BUILDKITE_KIND, "acme/widgets-ci", &mut tx).unwrap();
+    assert_eq!(r.host_jobs().len(), 1);
+    record(
+        CIRCLECI_KIND,
+        "circleci/0b1c2d3e/4f5a6b7c",
+        Some("git@github.com:acme/widgets.git"),
+    );
+    link(CIRCLECI_KIND, "circleci/0b1c2d3e/4f5a6b7c", &mut tx).unwrap();
+    assert_eq!(r.host_jobs().len(), 2);
+    assert!(host.wanted().is_empty());
+    // A pipeline moved to another repository is refused from then on.
+    record(
+        BUILDKITE_KIND,
+        "acme/widgets-ci",
+        Some("https://github.com/acme/elsewhere"),
+    );
+    mismatch(link(BUILDKITE_KIND, "acme/widgets-ci", &mut tx));
+    assert_eq!(r.own_jobs(), 0);
 }

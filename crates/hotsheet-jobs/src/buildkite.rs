@@ -293,6 +293,27 @@ impl<A: GithubApi> WatchSource for BuildkiteSource<A> {
         BUILDKITE_KIND
     }
 
+    /// HS2-YA5S82: `GET organizations/{org}/pipelines/{slug}`'s `repository`. A token
+    /// that may not read the pipeline (403) names none; a missing pipeline is gone.
+    fn pipeline_repository(&mut self, slug: &str) -> Option<Result<Option<String>, WatchError>> {
+        let (organization, pipeline) = slug.split_once('/')?;
+        let path = format!(
+            "organizations/{}/pipelines/{}",
+            query_value(organization),
+            query_value(pipeline)
+        );
+        Some(self.get(path).and_then(|response| {
+            match response.status {
+                200 => serde_json::from_str::<PipelineInfo>(&response.body)
+                    .map(|info| info.repository)
+                    .map_err(|_| transient(&response)),
+                403 => Ok(None),
+                404 => Err(WatchError::Gone),
+                _ => Err(transient(&response)),
+            }
+        }))
+    }
+
     fn poll(&mut self, job: &Job, _now_ms: u64) -> Result<Poll, WatchError> {
         let (target, floor) = job
             .external

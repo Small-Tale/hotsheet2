@@ -1700,3 +1700,68 @@ test('HS2-NY0MRJ a Run Validation that waits for permission is kept across a rel
     await server.stop(page);
   }
 });
+
+/**
+ * HS2-GPABYY: a step whose ticket was completed reads plainly Done until its review asks for changes, then its
+ * card says Changes requested (warning), its inspector badge Done · Changes requested and its Run section's Next
+ * what to do; requesting the review again and approving it read plainly Done again, and requesting and sending
+ * it back once more repeats the warning. Through the real server's review route, run sync and the timeline long poll.
+ */
+test('HS2-GPABYY a Done card whose review asks for changes reads as needing repair', async ({ page }) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const run = (await plan.dispatch()) as { run_id: string };
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const commit = 'c'.repeat(40);
+    const review = (mark: string) =>
+      send(server, 'POST', `${base}/runs/${run.run_id}/reviews`, {
+        review: mark,
+        commit: mark === 'requested' ? commit : undefined,
+        actor: scheduler,
+      });
+    await review('requested');
+    await server.request(`/tickets/${plan.first.id}`, 'PATCH', { status: 'completed' });
+    await send(server, 'POST', `${base}/runs/${run.run_id}/sync`, { actor: scheduler });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const line = card.locator('[data-orchestration-part="state"]');
+    const inspector = page.locator('[data-orchestration-inspector]');
+    const section = inspector.locator('[data-orchestration-section="Run"]');
+    const next = 'Its ticket is completed, but its review asks for changes: make them, then request the review again.';
+    await expect(view.locator('[aria-label="Done Column"]')).toContainText(plan.first.slug, { timeout: 30_000 });
+    await card.click();
+    // Requested and not yet answered: plainly Done.
+    await expect(inspector).toContainText('Done');
+    await expect(line).toHaveCount(0);
+    await expect(inspector).not.toContainText('Changes requested');
+    // Sent back after completion: the card needs repair, with what to do next.
+    await review('changes_requested');
+    await expect(line).toHaveText('Changes requested', { timeout: 30_000 });
+    await expect(line).toHaveAttribute('data-tone', 'warning');
+    await expect(inspector).toContainText('Done · Changes requested');
+    await expect(section).toContainText(next);
+    await visualPass(page, 'hs2-gpabyy', 'changes-requested', {
+      show: section,
+      check: () => expect(line).toHaveText('Changes requested'),
+      atPhone: () => card.click(),
+    });
+    // Requested again, then approved: plainly Done. Requested once more and sent back: the warning returns.
+    await review('requested');
+    await expect(line).toHaveCount(0, { timeout: 30_000 });
+    await review('approved');
+    await expect(inspector).toContainText('Done');
+    await expect(line).toHaveCount(0);
+    await expect(inspector).not.toContainText('Changes requested');
+    await review('requested');
+    await review('changes_requested');
+    await expect(line).toHaveText('Changes requested', { timeout: 30_000 });
+    await expect(section).toContainText(next);
+  } finally {
+    await server.stop(page);
+  }
+});

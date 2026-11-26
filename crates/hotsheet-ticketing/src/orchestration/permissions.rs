@@ -737,6 +737,30 @@ impl PermissionLedger {
         self.write_file(&file)?;
         Ok(rule)
     }
+
+    /// HS2-5675T5: forget every remembered rule whose target is in `orphaned` (a
+    /// target no longer declared, or one of an owner checkout that is gone), under the
+    /// ledger lock, and answer the rules forgotten, oldest first. The caller decides
+    /// what is orphaned; a rule of any other target is never touched, and nothing is
+    /// written when no rule matches.
+    pub fn forget_targets(
+        &self,
+        orphaned: &BTreeSet<TargetRef>,
+    ) -> Result<Vec<PermissionRule>, OrchestrationError> {
+        if orphaned.is_empty() {
+            return Ok(Vec::new());
+        }
+        let _lock = self.storage.lock()?;
+        let mut file = self.read_file()?;
+        let (forgotten, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut file.rules)
+            .into_iter()
+            .partition(|rule| orphaned.contains(&rule.key.target));
+        file.rules = kept;
+        if !forgotten.is_empty() {
+            self.write_file(&file)?;
+        }
+        Ok(forgotten)
+    }
 }
 
 impl PermissionLedger {

@@ -45,6 +45,10 @@ export interface TimelineRun {
   finished_at_ms?: number;
   /** HS2-89578K: the run's CI verdict (`passed`, `failed`, `pending`, …); absent when no CI gate stands for it. */
   ci_gate?: string;
+  /** HS2-GPABYY: the run's deployment verdict; absent when no deployment was requested. */
+  deployment_gate?: string;
+  /** HS2-GPABYY: the run's review verdict (`failed` is changes requested); absent when no review was requested. */
+  review_gate?: string;
 }
 
 export interface TimelinePermission {

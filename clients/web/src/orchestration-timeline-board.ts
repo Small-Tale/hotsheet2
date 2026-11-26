@@ -160,15 +160,31 @@ export function schedulerHold(
 
 /**
  * HS2-89578K: finished work whose run's CI gate failed (its ticket was completed before its CI went red): the
- * card reads as needing repair, not as plainly done. Undefined for any other state or verdict.
+ * card reads as needing repair, not as plainly done. HS2-GPABYY: so does finished work whose deployment failed,
+ * or whose review asks for changes. CI first, then the deployment, then the review. Undefined for any other
+ * state or verdict.
  */
-export function ciRepair(item: TimelineItem): { label: string; tone: SemanticTone; next: string } | undefined {
-  if (item.state !== 'done' || item.run?.ci_gate !== 'failed') return undefined;
-  return {
-    label: 'CI failed',
-    tone: 'warning',
-    next: 'Its ticket is completed, but its CI failed, so the work needs a fix: repair it as the Gates section says.',
-  };
+export function doneRepair(item: TimelineItem): { label: string; tone: SemanticTone; next: string } | undefined {
+  if (item.state !== 'done' || !item.run) return undefined;
+  if (item.run.ci_gate === 'failed')
+    return {
+      label: 'CI failed',
+      tone: 'warning',
+      next: 'Its ticket is completed, but its CI failed, so the work needs a fix: repair it as the Gates section says.',
+    };
+  if (item.run.deployment_gate === 'failed')
+    return {
+      label: 'Deploy failed',
+      tone: 'warning',
+      next: 'Its ticket is completed, but its deployment failed: fix the deployment and request it again as the Gates section says.',
+    };
+  if (item.run.review_gate === 'failed')
+    return {
+      label: 'Changes requested',
+      tone: 'warning',
+      next: 'Its ticket is completed, but its review asks for changes: make them, then request the review again.',
+    };
+  return undefined;
 }
 
 /** HS2-9FS7YX: what keeps an unfinished run from plain work: its own condition first, then a scheduler hold. */
@@ -213,9 +229,11 @@ export function stateBadge(item: TimelineItem): { label: string; tone: SemanticT
       return { label: 'Waits for permission', tone: 'warning' };
     case 'waits_for_decision':
       return { label: 'Waits for your decision', tone: 'warning' };
-    case 'done':
-      // HS2-89578K: done work whose CI failed needs repair.
-      return ciRepair(item) ? { label: 'Done · CI failed', tone: 'warning' } : { label: 'Done', tone: 'neutral' };
+    case 'done': {
+      // HS2-89578K, HS2-GPABYY: done work whose CI, deployment or review failed needs repair.
+      const repair = doneRepair(item);
+      return repair ? { label: `Done · ${repair.label}`, tone: 'warning' } : { label: 'Done', tone: 'neutral' };
+    }
     default:
       return item.state satisfies never;
   }
@@ -276,7 +294,7 @@ export function orchestrationLine(
   proposed: boolean,
   clock: ClockFormat = clockTime,
 ): TicketRowOrchestration {
-  const words = runNotice(item, clock) ?? ciRepair(item) ?? ledgerWords(item) ?? stateWords(item, proposed),
+  const words = runNotice(item, clock) ?? doneRepair(item) ?? ledgerWords(item) ?? stateWords(item, proposed),
     tool = toolLabel(item.tool);
   return {
     state: words?.label,

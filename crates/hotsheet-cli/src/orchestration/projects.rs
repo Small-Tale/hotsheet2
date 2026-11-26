@@ -570,6 +570,11 @@ impl OrchestrationRuntime {
                 tx,
             )?;
         }
+        if removed {
+            // HS2-5675T5: the removed target's remembered rules can never answer again;
+            // forget them (audited) now. The removal stands even if this cannot.
+            let _ = self.forget_orphaned_permission_rules(tx.clock.now_ms());
+        }
         if unbound || removed {
             self.audit_record(
                 &owner.id,

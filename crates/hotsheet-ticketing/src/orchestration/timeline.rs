@@ -268,8 +268,9 @@ pub struct TimelineInput<'a> {
     /// HS2-6GE7WM: the runs the scheduler dispatched for each step, by step id. Such a
     /// run may be on another site of the step's project than the one the step names.
     pub step_runs: &'a BTreeMap<String, BTreeSet<String>>,
-    /// HS2-89578K: each run's CI verdict, by run id, for the runs a CI gate stands for.
-    pub run_ci: &'a BTreeMap<String, GateState>,
+    /// HS2-89578K: each run's gate verdicts, by run id, for the runs a gate stands for
+    /// (HS2-GPABYY: deployment and review beside CI).
+    pub run_gates: &'a BTreeMap<String, RunGateVerdicts>,
     /// HS2-CQ0PNT: which targets are sites of one project, so a run, a label and a
     /// prerequisite are joined to a step through whichever site names the ticket, as
     /// readiness joins them. An empty grouping compares targets exactly.
@@ -326,6 +327,24 @@ pub struct TimelineRun {
     /// `failed` here, which its card shows as needing repair.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ci_gate: Option<GateState>,
+    /// HS2-GPABYY: the run's deployment verdict (its standing deployment gates rolled
+    /// up); absent when no deployment was requested. A completed ticket whose
+    /// deployment then failed is Done with `failed` here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deployment_gate: Option<GateState>,
+    /// HS2-GPABYY: the run's review verdict; absent when no review was requested.
+    /// `failed` is changes requested, which a Done card shows as needing repair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_gate: Option<GateState>,
+}
+
+/// HS2-89578K, HS2-GPABYY: one run's gate verdicts as its timeline item carries them,
+/// each rolled up from the run's standing gates of that kind; `None` when none stands.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RunGateVerdicts {
+    pub ci: Option<GateState>,
+    pub deployment: Option<GateState>,
+    pub review: Option<GateState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -736,21 +755,30 @@ fn item(
             .map(|reason| reason.code.clone())
             .collect(),
         waits_on,
-        run: run.map(|run| TimelineRun {
-            run_id: run.run_id.clone(),
-            state: run.state,
-            worker_id: run.worker_id.clone(),
-            lease_expires_at_ms: run.lease_expires_at_ms,
-            paused: run.paused.is_some(),
-            cancel_requested: run.cancel_requested,
-            unreachable_since_ms: run
-                .unreachable
-                .as_ref()
-                .map(|unreachable| unreachable.since_ms),
-            last_confirmed_at_ms: run.observed.as_ref().map(|observed| observed.at_ms),
-            created_at_ms: run.created_at_ms,
-            finished_at_ms: finished_at(run),
-            ci_gate: input.run_ci.get(&run.run_id).copied(),
+        run: run.map(|run| {
+            let verdicts = input
+                .run_gates
+                .get(&run.run_id)
+                .copied()
+                .unwrap_or_default();
+            TimelineRun {
+                run_id: run.run_id.clone(),
+                state: run.state,
+                worker_id: run.worker_id.clone(),
+                lease_expires_at_ms: run.lease_expires_at_ms,
+                paused: run.paused.is_some(),
+                cancel_requested: run.cancel_requested,
+                unreachable_since_ms: run
+                    .unreachable
+                    .as_ref()
+                    .map(|unreachable| unreachable.since_ms),
+                last_confirmed_at_ms: run.observed.as_ref().map(|observed| observed.at_ms),
+                created_at_ms: run.created_at_ms,
+                finished_at_ms: finished_at(run),
+                ci_gate: verdicts.ci,
+                deployment_gate: verdicts.deployment,
+                review_gate: verdicts.review,
+            }
         }),
         permission: permission.cloned(),
         decision: (state == ItemState::WaitsForDecision)

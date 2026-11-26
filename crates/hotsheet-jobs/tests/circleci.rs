@@ -627,3 +627,46 @@ fn hs2_56mtyn_a_project_read_refused_keeps_exact_coverage_and_cancel_skips_later
     step(&fx, &mut monitor);
     assert!(api.posts().is_empty());
 }
+
+/// HS2-YA5S82: a wanted CircleCI project's repository is read from `project/{slug}`'s
+/// `vcs_info.vcs_url` by the monitor and recorded.
+#[test]
+fn hs2_ya5s82_the_monitor_reads_a_wanted_projects_repository() {
+    use hotsheet_jobs::{PipelineRepositories, PipelineRepository};
+    let fx = fixture();
+    let api = FakeCircleci::default();
+    api.serve(
+        "project/circleci/0b1c2d3e/4f5a6b7c",
+        200,
+        json!({"slug": "circleci/0b1c2d3e/4f5a6b7c",
+            "vcs_info": {"vcs_url": "https://github.com/acme/widgets", "provider": "GitHub"}}),
+    );
+    let cache = PipelineRepositories::at(fx.home.path());
+    let mut monitor = Monitor::new(
+        fx.store.clone(),
+        "monitor-a",
+        MonitorConfig {
+            poll_ms: 100,
+            max_poll_ms: 400,
+            max_error_ms: 1_600,
+            idle_exit_ms: 2_000,
+        },
+    )
+    .with_pipeline_repositories(cache.clone());
+    monitor.register(Box::new(CircleciSource::new(api.clone())));
+    cache
+        .want(
+            CIRCLECI_KIND,
+            "circleci/0b1c2d3e/4f5a6b7c",
+            fx.store.now_ms(),
+        )
+        .unwrap();
+    monitor.tick().unwrap();
+    assert_eq!(
+        cache.lookup(CIRCLECI_KIND, "circleci/0b1c2d3e/4f5a6b7c"),
+        PipelineRepository::Known {
+            repository: "https://github.com/acme/widgets".into()
+        }
+    );
+    assert!(cache.wanted().is_empty());
+}

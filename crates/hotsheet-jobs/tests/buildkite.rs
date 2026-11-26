@@ -695,3 +695,88 @@ fn hs2_56mtyn_lookups_are_budgeted_per_poll_and_cancel_reaches_only_the_commits_
         "a later commit's build is not cancelled"
     );
 }
+
+/// HS2-YA5S82: the monitor reads the repository of each pipeline a hosted check wants,
+/// with this machine's credentials, and records it: a known repository, a pipeline the
+/// token may not read (403) or that is gone (404) as unreadable, and a transient failure
+/// tried again later. While a want it can read is outstanding the monitor is not idle.
+#[test]
+fn hs2_ya5s82_the_monitor_reads_and_records_a_wanted_pipelines_repository() {
+    use hotsheet_jobs::{PipelineRepositories, PipelineRepository};
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let cache = PipelineRepositories::at(fx.home.path());
+    let mut monitor = watcher(&fx, &api).with_pipeline_repositories(cache.clone());
+    // Nothing wanted: idle, and nothing is read.
+    let idle = monitor.tick().unwrap();
+    assert_eq!(idle.watching, 0);
+    assert!(api.0.lock().unwrap().log.is_empty());
+    api.serve(
+        PIPELINE,
+        200,
+        json!({"repository": "git@github.com:acme/widgets.git"}),
+    );
+    api.serve("organizations/acme/pipelines/private", 403, json!({}));
+    api.serve("organizations/acme/pipelines/flaky", 502, json!({}));
+    let now = fx.store.now_ms();
+    for slug in ["acme/widgets", "acme/private", "acme/missing", "acme/flaky"] {
+        cache.want(BUILDKITE_KIND, slug, now).unwrap();
+    }
+    // A provider this monitor has no source for stays wanted and keeps nothing busy.
+    cache.want("jenkins", "job/x", now).unwrap();
+    let tick = monitor.tick().unwrap();
+    assert_eq!(
+        cache.lookup(BUILDKITE_KIND, "acme/widgets"),
+        PipelineRepository::Known {
+            repository: "git@github.com:acme/widgets.git".into()
+        }
+    );
+    for unreadable in ["acme/private", "acme/missing"] {
+        assert_eq!(
+            cache.lookup(BUILDKITE_KIND, unreadable),
+            PipelineRepository::Unreadable,
+            "{unreadable}"
+        );
+    }
+    assert_eq!(
+        cache.lookup(BUILDKITE_KIND, "acme/flaky"),
+        PipelineRepository::Unknown
+    );
+    // The transient failure keeps the monitor awake until its retry is due.
+    assert_eq!(tick.idle_ms, 0);
+    assert!(tick.next_wake_ms > now);
+    let reads = |path: &str| {
+        api.0
+            .lock()
+            .unwrap()
+            .log
+            .iter()
+            .filter(|request| request.path == path)
+            .count()
+    };
+    // Repeated steps before the retry is due read nothing again.
+    monitor.tick().unwrap();
+    assert_eq!(reads("organizations/acme/pipelines/flaky"), 1);
+    assert_eq!(reads(PIPELINE), 1);
+    // Due: read again; it answers now.
+    api.serve(
+        "organizations/acme/pipelines/flaky",
+        200,
+        json!({"repository": "https://github.com/acme/flaky"}),
+    );
+    fx.clock.set(tick.next_wake_ms);
+    monitor.tick().unwrap();
+    assert_eq!(reads("organizations/acme/pipelines/flaky"), 2);
+    assert!(matches!(
+        cache.lookup(BUILDKITE_KIND, "acme/flaky"),
+        PipelineRepository::Known { .. }
+    ));
+    // Nothing it can read is wanted any more: idle again.
+    let settled = monitor.tick().unwrap();
+    fx.clock.set(settled.next_wake_ms);
+    assert!(monitor.tick().unwrap().idle_ms > 0);
+    assert_eq!(
+        cache.wanted(),
+        vec![("jenkins".to_owned(), "job/x".to_owned())]
+    );
+}

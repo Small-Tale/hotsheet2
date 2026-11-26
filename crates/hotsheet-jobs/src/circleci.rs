@@ -287,6 +287,26 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
         CIRCLECI_KIND
     }
 
+    /// HS2-YA5S82: `GET project/{slug}`'s `vcs_info.vcs_url`. A token that may not read
+    /// the project (403) names none; a missing project is gone.
+    fn pipeline_repository(&mut self, slug: &str) -> Option<Result<Option<String>, WatchError>> {
+        let project = slug
+            .split('/')
+            .map(query_value)
+            .collect::<Vec<_>>()
+            .join("/");
+        Some(self.get(format!("project/{project}")).and_then(|response| {
+            match response.status {
+                200 => serde_json::from_str::<Project>(&response.body)
+                    .map(|project| project.vcs_info.and_then(|info| info.vcs_url))
+                    .map_err(|_| transient(&response)),
+                403 => Ok(None),
+                404 => Err(WatchError::Gone),
+                _ => Err(transient(&response)),
+            }
+        }))
+    }
+
     fn poll(&mut self, job: &Job, _now_ms: u64) -> Result<Poll, WatchError> {
         let (target, floor) = job
             .external

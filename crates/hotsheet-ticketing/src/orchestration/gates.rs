@@ -394,6 +394,15 @@ impl Gate {
             // Only a verdict carries evidence.
             evidence = None;
         }
+        // HS2-E0XM83: a verdict that repeats the recorded evidence (the same run, attempt
+        // and commit) keeps the time it was first seen. Decided here, under the registry
+        // lock: two readers that read the same verdict at once each stamp their own
+        // time, and the later one must not record (and publish) it a second time.
+        if let (Some(new), Some(old)) = (&mut evidence, &self.evidence) {
+            if (new.order, new.attempt, &new.commit) == (old.order, old.attempt, &old.commit) {
+                new.at_ms = old.at_ms;
+            }
+        }
         // HS2-507DGZ: a gate whose automatic re-links were spent stays `watch_gone`
         // while its adapter still reads the same ended watch; a new watch clears it.
         if self.state == GateState::Unknown
@@ -484,6 +493,9 @@ pub enum GateError {
     /// HS2-G3VAK4: the deploy script is not tracked as an executable file at the gate's
     /// commit on the machine that hosts the target.
     DeploymentScriptUntracked,
+    /// HS2-YA5S82: the hosting machine has not yet read which repository the pipeline
+    /// builds (its Job monitor reads it); ask again later. Never a mismatch.
+    RepositoryUnknown,
 }
 
 impl GateError {
@@ -498,6 +510,7 @@ impl GateError {
             Self::DeploymentActive => "gate_deployment_active",
             Self::ArtifactMismatch => "gate_artifact_mismatch",
             Self::DeploymentScriptUntracked => "gate_deployment_script_untracked",
+            Self::RepositoryUnknown => "gate_repository_unknown",
         }
     }
 
@@ -514,6 +527,7 @@ impl GateError {
             Self::DeploymentActive,
             Self::ArtifactMismatch,
             Self::DeploymentScriptUntracked,
+            Self::RepositoryUnknown,
         ]
         .into_iter()
         .find(|error| error.code() == code)

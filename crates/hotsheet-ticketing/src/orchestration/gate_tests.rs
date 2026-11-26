@@ -949,11 +949,12 @@ fn hs2_5jbypv_requests_are_validated_and_a_damaged_file_is_never_evaluated() {
         GateError::DeploymentActive,
         GateError::ArtifactMismatch,
         GateError::DeploymentScriptUntracked,
+        GateError::RepositoryUnknown,
     ]
     .map(GateError::code)
     .into_iter()
     .collect();
-    assert_eq!(codes.len(), 9);
+    assert_eq!(codes.len(), 10);
     for code in &codes {
         assert_eq!(GateError::from_code(code).map(GateError::code), Some(*code));
     }
@@ -1239,4 +1240,45 @@ fn hs2_cq0pnt_a_target_roll_up_covers_every_site_of_its_project() {
             .unwrap(),
     );
     assert_eq!(rolled.gates.len(), 2);
+}
+
+/// HS2-E0XM83: two readers that read the same verdict at once, each from a snapshot
+/// taken before it, stamp it with their own read time. The registry records it once:
+/// the second is unchanged and keeps the first time, in either order and repeated. A
+/// newer attempt with the same verdict is still news.
+#[test]
+fn hs2_e0xm83_the_same_verdict_read_twice_at_once_is_recorded_once() {
+    let a = sha('a');
+    for later_first in [false, true] {
+        let mut fixture = Fixture::new();
+        let gate = fixture.link(ci(10, &a)).unwrap().gate.gate_id;
+        fixture.apply(&gate, GateReading::new(GateState::Pending));
+        let stamped = |at_ms: u64| {
+            let mut evidence = evidence(7, 1, &a, Coverage::Exact);
+            evidence.at_ms = at_ms;
+            GateReading::new(GateState::Passed).evidence(evidence)
+        };
+        let (first_at, second_at) = if later_first { (900, 500) } else { (500, 900) };
+        let (passed, outcome) = fixture.apply(&gate, stamped(first_at));
+        assert_eq!(outcome, GateOutcome::Changed);
+        let history = passed.history.len();
+        let stored = std::fs::read(fixture._home.path().join("orchestration-gates.json")).unwrap();
+        for _ in 0..2 {
+            let (again, outcome) = fixture.apply(&gate, stamped(second_at));
+            assert_eq!(outcome, GateOutcome::Unchanged, "later_first={later_first}");
+            assert_eq!(again.evidence.as_ref().unwrap().at_ms, first_at);
+            assert_eq!(again.history.len(), history);
+            assert_eq!(
+                std::fs::read(fixture._home.path().join("orchestration-gates.json")).unwrap(),
+                stored
+            );
+        }
+        // A re-run's attempt passing too is a new fact.
+        let mut rerun = evidence(7, 2, &a, Coverage::Exact);
+        rerun.at_ms = 1_000;
+        let (after, outcome) =
+            fixture.apply(&gate, GateReading::new(GateState::Passed).evidence(rerun));
+        assert_eq!(outcome, GateOutcome::Changed);
+        assert_eq!(after.evidence.as_ref().unwrap().attempt, 2);
+    }
 }
