@@ -4171,7 +4171,9 @@ paths:
       gate's commit with its own provider credentials and Job monitor; a remote orchestrator starts the watch and
       follows it with a cursor. Observing only; ordinary authenticated project data under the caller's device role. A
       watch of a repository the hosted checkout's own Git remotes do not name is refused with `gate_repository_mismatch`
-      (409) and audited on the host (HS2-K2YE6A).
+      (409) and audited on the host (HS2-K2YE6A). A Buildkite or CircleCI `circleci/` slug names no repository; until
+      the host's Job monitor has read the pipeline's repository the watch is answered `gate_repository_unknown` (503,
+      retryable), never a mismatch (HS2-YA5S82).
     post:
       operationId: watchHostedTargetGate
       requestBody:

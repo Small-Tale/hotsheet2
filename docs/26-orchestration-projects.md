@@ -2246,9 +2246,22 @@ branch moved to another line supersede it (§33.11a). No declared identity names
 slugs, so the link must give `repository`. The hosted repository check compares a
 CircleCI `gh/` or `bb/` slug's repository, by host and path, with the hosted
 checkout's remotes (HS2-56MTYN). A Buildkite slug or a CircleCI
-`circleci/<org-id>/<project-id>` slug names no repository, so the hosted check still
-refuses such a watch of a target on another machine (`gate_repository_mismatch`;
-HS2-YA5S82).
+`circleci/<org-id>/<project-id>` slug names no repository, so the host compares the
+repository its own Job monitor read for that pipeline instead (HS2-YA5S82): the hosted
+watch request never calls a provider; it records that it wants the pipeline's
+repository (`<home>/jobs/pipeline-repositories.json`, at most 256 pipelines, a URL with
+user information never recorded) and makes sure the monitor runs; the monitor, with
+the host's credentials, reads Buildkite `GET organizations/{org}/pipelines/{slug}`
+(`repository`) or CircleCI `GET project/{slug}` (`vcs_info.vcs_url`), at most four per
+step, a transient failure retried with the poll back-off, and records the answer. Until
+then the request is answered `gate_repository_unknown` (503, retryable: the gate stays
+as it stands and the follower asks again after its back-off), never a mismatch. Once
+known, the pipeline's repository passes when one of the checkout's remotes is the same
+host and path; another repository, another host, or a pipeline the monitor could not
+read (403, 404, no repository) is refused with `gate_repository_mismatch`. A known
+repository older than an hour is read again the next time a watch wants it, the old
+answer counting meanwhile, so a pipeline moved to another repository is refused from
+then on.
 HS2-7H0S8R adds `jenkins` (`repository` is the job's full name, `folder/job`, workflow
 `*`; §33.11b), watched, read and refused on another machine the same way, with exact
 coverage. HS2-JZ1DD2 adds `azure-pipelines` (`repository` is

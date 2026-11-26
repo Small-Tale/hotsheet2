@@ -949,11 +949,12 @@ fn hs2_5jbypv_requests_are_validated_and_a_damaged_file_is_never_evaluated() {
         GateError::DeploymentActive,
         GateError::ArtifactMismatch,
         GateError::DeploymentScriptUntracked,
+        GateError::RepositoryUnknown,
     ]
     .map(GateError::code)
     .into_iter()
     .collect();
-    assert_eq!(codes.len(), 9);
+    assert_eq!(codes.len(), 10);
     for code in &codes {
         assert_eq!(GateError::from_code(code).map(GateError::code), Some(*code));
     }

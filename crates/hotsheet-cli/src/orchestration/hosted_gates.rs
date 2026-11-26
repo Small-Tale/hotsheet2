@@ -168,19 +168,69 @@ fn circleci_repository(slug: &str) -> Option<(String, String)> {
     ))
 }
 
+/// HS2-YA5S82: what the hosted repository check concluded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RepositoryCheck {
+    /// A remote of the checkout names the repository the watch reads.
+    Names,
+    Mismatch,
+    /// The slug names no repository and the monitor has not read the pipeline yet.
+    NotYetKnown,
+}
+
+/// HS2-YA5S82: a slug that names no repository: every Buildkite `organization/pipeline`,
+/// and a CircleCI `circleci/<org-id>/<project-id>` project.
+fn names_no_repository(provider: &str, repository: &str) -> bool {
+    provider == hotsheet_jobs::BUILDKITE_KIND
+        || (provider == hotsheet_jobs::CIRCLECI_KIND && circleci_repository(repository).is_none())
+}
+
+/// Whether one of the checkout's remotes is the repository at `wanted` (host, path).
+fn remotes_name(root: &Path, wanted: &(String, String)) -> bool {
+    checkout_remote_urls(root).iter().any(|url| {
+        hotsheet_jobs::remote_host_path(url)
+            .is_some_and(|(host, path)| (host, path.to_ascii_lowercase()) == *wanted)
+    })
+}
+
 /// HS2-K2YE6A: whether the hosted checkout's own Git remotes name the repository a
 /// watch reads. HS2-56MTYN: a CircleCI slug is not a repository path; the repository
-/// it names must be a remote on the same host.
-fn checkout_names(root: &Path, provider: &str, repository: &str) -> bool {
+/// it names must be a remote on the same host. HS2-YA5S82: a slug that names no
+/// repository is compared through the repository this machine's Job monitor read for
+/// the pipeline (`pipelines`), never through a provider call here; until the monitor
+/// has read it the answer is [`RepositoryCheck::NotYetKnown`], and the want this
+/// records asks the monitor to read it.
+fn checkout_names(
+    root: &Path,
+    provider: &str,
+    repository: &str,
+    pipelines: &hotsheet_jobs::PipelineRepositories,
+    now_ms: u64,
+) -> RepositoryCheck {
+    let named = |names: bool| {
+        if names {
+            RepositoryCheck::Names
+        } else {
+            RepositoryCheck::Mismatch
+        }
+    };
+    if names_no_repository(provider, repository) {
+        return match pipelines.want(provider, repository, now_ms) {
+            Ok(hotsheet_jobs::PipelineRepository::Known { repository: url }) => named(
+                hotsheet_jobs::remote_host_path(&url).is_some_and(|(host, path)| {
+                    remotes_name(root, &(host, path.to_ascii_lowercase()))
+                }),
+            ),
+            Ok(hotsheet_jobs::PipelineRepository::Unreadable) => RepositoryCheck::Mismatch,
+            Ok(hotsheet_jobs::PipelineRepository::Unknown) | Err(_) => RepositoryCheck::NotYetKnown,
+        };
+    }
     if provider == hotsheet_jobs::CIRCLECI_KIND
         && let Some(wanted) = circleci_repository(repository)
     {
-        return checkout_remote_urls(root).iter().any(|url| {
-            hotsheet_jobs::remote_host_path(url)
-                .is_some_and(|(host, path)| (host, path.to_ascii_lowercase()) == wanted)
-        });
+        return named(remotes_name(root, &wanted));
     }
-    checkout_repositories(root).contains(&repository.to_ascii_lowercase())
+    named(checkout_repositories(root).contains(&repository.to_ascii_lowercase()))
 }
 
 /// The URL of every Git remote of a checkout.
@@ -286,11 +336,21 @@ impl OrchestrationRuntime {
         let checkout = self.owner(checkout_id)?;
         let provider = self.hosted_ci_provider(&watch)?;
         let gate = hosted_record(&checkout.id, &watch)?;
-        if !checkout_names(
+        let check = checkout_names(
             Path::new(&checkout.root),
             watch_provider(&watch)?,
             &watch.repository,
-        ) {
+            &hotsheet_jobs::PipelineRepositories::at(&self.home),
+            tx.clock.now_ms(),
+        );
+        if check == RepositoryCheck::NotYetKnown {
+            // HS2-YA5S82: the monitor reads the pipeline's repository; make sure it runs.
+            // Nothing is started for the watch itself, and nothing is audited: this is
+            // no decision yet.
+            provider.ensure_watching();
+            return Err(OrchestrationError::Gate(GateError::RepositoryUnknown));
+        }
+        if check == RepositoryCheck::Mismatch {
             let refused = GateError::RepositoryMismatch;
             let _ = self.audit_record(
                 &checkout.id,

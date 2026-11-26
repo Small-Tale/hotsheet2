@@ -645,6 +645,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 E::NotFound => 404,
                 E::ProviderUnsupported => 422,
                 E::ProviderUnavailable => 502,
+                // HS2-YA5S82: not known yet; the same request succeeds or is refused later.
+                E::RepositoryUnknown => 503,
                 E::NotPassed
                 | E::InvalidTransition
                 | E::RepositoryMismatch

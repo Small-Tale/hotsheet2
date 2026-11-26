@@ -493,6 +493,9 @@ pub enum GateError {
     /// HS2-G3VAK4: the deploy script is not tracked as an executable file at the gate's
     /// commit on the machine that hosts the target.
     DeploymentScriptUntracked,
+    /// HS2-YA5S82: the hosting machine has not yet read which repository the pipeline
+    /// builds (its Job monitor reads it); ask again later. Never a mismatch.
+    RepositoryUnknown,
 }
 
 impl GateError {
@@ -507,6 +510,7 @@ impl GateError {
             Self::DeploymentActive => "gate_deployment_active",
             Self::ArtifactMismatch => "gate_artifact_mismatch",
             Self::DeploymentScriptUntracked => "gate_deployment_script_untracked",
+            Self::RepositoryUnknown => "gate_repository_unknown",
         }
     }
 
@@ -523,6 +527,7 @@ impl GateError {
             Self::DeploymentActive,
             Self::ArtifactMismatch,
             Self::DeploymentScriptUntracked,
+            Self::RepositoryUnknown,
         ]
         .into_iter()
         .find(|error| error.code() == code)

@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use crate::error::JobError;
 use crate::feed::FeedLine;
 use crate::model::{ActiveStatus, FinalStatus, Job, LeaseToken, Outcome, ProducerFamily, Status};
+use crate::pipelines::PipelineRepositories;
 use crate::probe::NoProbe;
 use crate::steps::Step;
 use crate::store::{Acquire, Change, JobStore, JobUpdate, stopped_watching_outcome};
@@ -101,7 +102,18 @@ pub trait WatchSource: Send {
 
     /// The monitor stopped serving this Job; drop anything cached for it.
     fn forget(&mut self, _job_id: &str) {}
+
+    /// HS2-YA5S82: the remote URL of the repository the pipeline `slug` builds, read with
+    /// this machine's credentials, for a source whose slugs name no repository (Buildkite,
+    /// CircleCI). `None`: this source does not read pipeline repositories. `Ok(None)`:
+    /// the provider answered and names none this machine may read.
+    fn pipeline_repository(&mut self, _slug: &str) -> Option<Result<Option<String>, WatchError>> {
+        None
+    }
 }
+
+/// HS2-YA5S82: at most this many pipeline repositories are read in one monitor step.
+const PIPELINE_READS_PER_TICK: usize = 4;
 
 /// Poll and lifetime bounds. The defaults are the shipped behavior.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -176,6 +188,11 @@ pub struct Monitor {
     sources: Vec<Box<dyn WatchSource>>,
     watched: BTreeMap<Key, Watched>,
     idle_since_ms: Option<u64>,
+    /// HS2-YA5S82: where wanted pipeline repositories are read from and recorded.
+    pipelines: Option<PipelineRepositories>,
+    /// HS2-YA5S82: a pipeline read that failed transiently: when to try again, and how
+    /// many times it failed.
+    pipeline_retry: BTreeMap<Key, (u64, u32)>,
 }
 
 impl Monitor {
@@ -191,7 +208,17 @@ impl Monitor {
             sources: Vec::new(),
             watched: BTreeMap::new(),
             idle_since_ms: None,
+            pipelines: None,
+            pipeline_retry: BTreeMap::new(),
         }
+    }
+
+    /// HS2-YA5S82: also read the pipeline repositories a hosted check wants, and record
+    /// them there. The monitor does not exit idle while one it can read is wanted.
+    #[must_use]
+    pub fn with_pipeline_repositories(mut self, pipelines: PipelineRepositories) -> Self {
+        self.pipelines = Some(pipelines);
+        self
     }
 
     pub fn register(&mut self, source: Box<dyn WatchSource>) {
@@ -231,8 +258,9 @@ impl Monitor {
                 self.drop_job(&key);
             }
         }
+        let pipelines_due = self.read_pipelines();
         let now = self.store.now_ms();
-        let idle_ms = if self.watched.is_empty() {
+        let idle_ms = if self.watched.is_empty() && pipelines_due.is_none() {
             now.saturating_sub(*self.idle_since_ms.get_or_insert(now))
         } else {
             self.idle_since_ms = None;
@@ -242,6 +270,7 @@ impl Monitor {
             .watched
             .values()
             .map(|watched| watched.next_poll_ms.min(watched.next_renew_ms))
+            .chain(pipelines_due)
             .min()
             .unwrap_or_else(|| {
                 now.saturating_add(self.config.idle_exit_ms.saturating_sub(idle_ms).max(1))
@@ -251,6 +280,52 @@ impl Monitor {
             next_wake_ms,
             idle_ms,
         })
+    }
+
+    /// HS2-YA5S82: read the wanted pipeline repositories this monitor's sources can read,
+    /// a few per step, and record each answer. A transient failure is tried again with
+    /// the poll back-off. Answers when the next read is due, or `None` when nothing this
+    /// monitor can read is wanted.
+    fn read_pipelines(&mut self) -> Option<u64> {
+        let pipelines = self.pipelines.clone()?;
+        let wanted = pipelines.wanted();
+        self.pipeline_retry.retain(|key, _| wanted.contains(key));
+        let mut budget = PIPELINE_READS_PER_TICK;
+        let mut next: Option<u64> = None;
+        for key in wanted {
+            let Some(index) = self.source_index(&key.0) else {
+                continue;
+            };
+            let now = self.store.now_ms();
+            let due = self.pipeline_retry.get(&key).map_or(now, |retry| retry.0);
+            if now < due || budget == 0 {
+                let at = due.max(now.saturating_add(1));
+                next = Some(next.map_or(at, |next| next.min(at)));
+                continue;
+            }
+            budget -= 1;
+            let read = self.sources[index].pipeline_repository(&key.1);
+            let recorded = match read {
+                Some(Ok(repository)) => repository,
+                // A pipeline that is gone, or a source that cannot say, names none.
+                None | Some(Err(WatchError::Gone)) => None,
+                Some(Err(WatchError::Transient { retry_after_ms })) => {
+                    let errors = self.pipeline_retry.get(&key).map_or(0, |retry| retry.1) + 1;
+                    let backoff = self
+                        .config
+                        .poll_ms
+                        .saturating_mul(1u64 << errors.min(16))
+                        .min(self.config.max_error_ms);
+                    let at = now.saturating_add(retry_after_ms.unwrap_or(backoff).max(1));
+                    self.pipeline_retry.insert(key, (at, errors));
+                    next = Some(next.map_or(at, |next| next.min(at)));
+                    continue;
+                }
+            };
+            self.pipeline_retry.remove(&key);
+            let _ = pipelines.record(&key.0, &key.1, recorded.as_deref(), now);
+        }
+        next
     }
 
     /// Give every lease up so the Jobs read as stalled at once and the next monitor can
