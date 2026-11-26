@@ -460,6 +460,13 @@ out-of-`attachments/` paths leave the store empty with no checkpoint),
 <hotsheetDir>/attachments` covers absolute, traversal, and symlink escapes in the
 exporter with synthetic payloads.
 
+HS2-D0XKZS: `crates/hotsheet-cli/src/lib.rs` `import_store_tests` pin that import
+initializes only an absent store, keeps an existing store's metadata byte-identical,
+and refuses a dangling or permission-denied metadata entry without rewriting it;
+`crates/hotsheet-cli/tests/cli.rs #
+hs2_d0xkzs_import_exits_nonzero_instead_of_re_initializing_an_unopenable_store`
+checks the CLI exit status.
+
 HS2-WE1AW4: `migrator/test/export.test.mjs # direct entry detection` pins the
 exporter's direct-entry check against a synthetic Windows drive path, an npm-style
 bin symlink, a path with spaces, and a missing entry, and runs the exporter through

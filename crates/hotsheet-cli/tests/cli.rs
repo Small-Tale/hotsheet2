@@ -5472,6 +5472,32 @@ fn import_normalizes_close_state_and_retains_the_hs1_number() {
     assert!(!removed.contains("up_next: true"));
 }
 
+/// HS2-D0XKZS: import never re-initializes an existing store it cannot open.
+#[cfg(unix)]
+#[test]
+fn hs2_d0xkzs_import_exits_nonzero_instead_of_re_initializing_an_unopenable_store() {
+    let root = tempfile::tempdir().unwrap();
+    let store_path = root.path().join("store");
+    hotsheet_ticketing::FsStore::init(&store_path, &hotsheet_ticketing::StoreMetadata::new("KEEP"))
+        .unwrap();
+    let metadata = store_path.join("hotsheet-store.json");
+    let target = root.path().join("unmounted/hotsheet-store.json");
+    std::fs::remove_file(&metadata).unwrap();
+    std::os::unix::fs::symlink(&target, &metadata).unwrap();
+    let export = root.path().join("hotsheet-export.json");
+    std::fs::write(
+        &export,
+        r#"{"exportVersion":1,"project":{"ticketPrefix":"EXP"},"tickets":[{"ticket_number":"HS-1","title":"Synthetic"}]}"#,
+    )
+    .unwrap();
+    hs(&store_path)
+        .args(["import", export.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("refusing to re-initialize"));
+    assert_eq!(std::fs::read_link(&metadata).unwrap(), target);
+}
+
 #[test]
 fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery() {
     let root = tempfile::tempdir().unwrap();

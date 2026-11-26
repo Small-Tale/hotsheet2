@@ -304,15 +304,8 @@ pub fn run_import_with_progress(
     }
 
     // Create the store on first import, preferring the export's own prefix.
-    let store = match FsStore::open(store_path) {
-        Ok(store) => store,
-        Err(_) => {
-            let init_prefix = export.project.ticket_prefix.as_deref().unwrap_or(prefix);
-            let (store, _) = init_store(store_path, &StoreMetadata::new(init_prefix))?;
-            register_merge_driver(store_path);
-            store
-        }
-    };
+    let init_prefix = export.project.ticket_prefix.as_deref().unwrap_or(prefix);
+    let store = open_or_create_import_store(store_path, init_prefix)?;
 
     let base_dir = export_file.parent().unwrap_or_else(|| Path::new("."));
     let summary = import_with_progress(&store, &export, base_dir, observe)?;
@@ -326,6 +319,33 @@ pub fn run_import_with_progress(
         &format!("Import {} tickets from Hot Sheet 1", summary.written),
     );
     Ok(summary)
+}
+
+/// Open the import destination, creating it only when no store exists there yet
+/// (HS2-D0XKZS). Re-initializing rewrites `hotsheet-store.json`, so any other open
+/// failure (an unreadable or dangling metadata entry, a permission error) is returned
+/// with context instead of silently replacing the store's prefix and settings.
+fn open_or_create_import_store(store_path: &Path, init_prefix: &str) -> Result<FsStore> {
+    let open_error = match FsStore::open(store_path) {
+        Ok(store) => return Ok(store),
+        Err(error) => error,
+    };
+    let metadata_path = store_path.join(hotsheet_ticketing::STORE_METADATA_FILE);
+    match std::fs::symlink_metadata(&metadata_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let (store, _) = init_store(store_path, &StoreMetadata::new(init_prefix))?;
+            register_merge_driver(store_path);
+            Ok(store)
+        }
+        Err(error) => Err(anyhow::Error::new(open_error).context(format!(
+            "cannot inspect {} ({error}); refusing to re-initialize the store during import",
+            metadata_path.display()
+        ))),
+        Ok(_) => Err(anyhow::Error::new(open_error).context(format!(
+            "{} exists but could not be opened as a Hot Sheet store; refusing to re-initialize it during import. Repair or restore the store metadata, then retry",
+            metadata_path.display()
+        ))),
+    }
 }
 
 /// Migrate a Hot Sheet 1 project in one step: run the Node exporter against a COPY of
@@ -811,5 +831,95 @@ mod launch_session_tests {
         assert_eq!(exit_code_of(status("exit 0")), 0);
         assert_eq!(exit_code_of(status("exit 7")), 7);
         assert_eq!(exit_code_of(status("kill -TERM $$")), 128 + 15);
+    }
+}
+
+#[cfg(test)]
+mod import_store_tests {
+    use super::*;
+
+    fn export_file(dir: &Path) -> PathBuf {
+        let path = dir.join("export.json");
+        std::fs::write(
+            &path,
+            r#"{"exportVersion":1,"project":{"name":"Synthetic","ticketPrefix":"EXP"},
+               "tickets":[{"ticket_number":"HS-1","title":"Synthetic ticket"}]}"#,
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn hs2_d0xkzs_initializes_only_an_absent_store_and_keeps_an_existing_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let export = export_file(dir.path());
+        let fresh = dir.path().join("fresh.hs2");
+        run_import(&fresh, &export, "HS").unwrap();
+        assert_eq!(
+            FsStore::open(&fresh)
+                .unwrap()
+                .metadata()
+                .unwrap()
+                .ticket_prefix,
+            "EXP"
+        );
+
+        let existing = dir.path().join("existing.hs2");
+        init_store(&existing, &StoreMetadata::new("KEEP")).unwrap();
+        let before = std::fs::read(existing.join(hotsheet_ticketing::STORE_METADATA_FILE)).unwrap();
+        run_import(&existing, &export, "HS").unwrap();
+        assert_eq!(
+            std::fs::read(existing.join(hotsheet_ticketing::STORE_METADATA_FILE)).unwrap(),
+            before
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hs2_d0xkzs_a_dangling_metadata_link_fails_without_re_initializing() {
+        let dir = tempfile::tempdir().unwrap();
+        let export = export_file(dir.path());
+        let store = dir.path().join("store.hs2");
+        init_store(&store, &StoreMetadata::new("KEEP")).unwrap();
+        let metadata = store.join(hotsheet_ticketing::STORE_METADATA_FILE);
+        // The metadata lives on a volume that is not mounted right now.
+        let target = dir.path().join("unmounted/hotsheet-store.json");
+        std::fs::remove_file(&metadata).unwrap();
+        std::os::unix::fs::symlink(&target, &metadata).unwrap();
+
+        let error = format!("{:#}", run_import(&store, &export, "HS").unwrap_err());
+        assert!(error.contains("refusing to re-initialize"), "{error}");
+        assert_eq!(std::fs::read_link(&metadata).unwrap(), target);
+        assert!(!target.exists());
+        assert!(!store.join("tickets").read_dir().unwrap().any(|_| true));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hs2_d0xkzs_an_unreadable_metadata_target_stays_byte_identical() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let export = export_file(dir.path());
+        let store = dir.path().join("store.hs2");
+        init_store(&store, &StoreMetadata::new("KEEP")).unwrap();
+        let metadata = store.join(hotsheet_ticketing::STORE_METADATA_FILE);
+        let locked = dir.path().join("locked");
+        std::fs::create_dir(&locked).unwrap();
+        let target = locked.join("hotsheet-store.json");
+        std::fs::rename(&metadata, &target).unwrap();
+        std::os::unix::fs::symlink(&target, &metadata).unwrap();
+        let before = std::fs::read(&target).unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let enforced = std::fs::metadata(&metadata).is_err();
+        let result = run_import(&store, &export, "HS");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).unwrap();
+        if !enforced {
+            // Running with permission checks disabled (root): the store opens normally.
+            return;
+        }
+        let error = format!("{:#}", result.unwrap_err());
+        assert!(error.contains("refusing to re-initialize"), "{error}");
+        assert_eq!(std::fs::read_link(&metadata).unwrap(), target);
+        assert_eq!(std::fs::read(&target).unwrap(), before);
     }
 }
