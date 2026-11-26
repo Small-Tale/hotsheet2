@@ -42,6 +42,11 @@ pub(super) struct ScriptedHost {
     /// HS2-WHR4GS: runs once when the next setup is asked for, after the start
     /// reserved its terminal and before it launches: a stop that arrives meanwhile.
     pub(super) before_launch: OnceHook,
+    /// HS2-X3Z0HA: runs once after the next stop ended the terminal and before the
+    /// stopper records the end: a reader of the host's sessions in that window.
+    pub(super) after_stop: OnceHook,
+    /// HS2-X3Z0HA: the host refuses every stop while its sessions still answer.
+    pub(super) stop_failing: AtomicBool,
     /// HS2-9QQ0M9: runs once, with the terminal id, after the next push was answered
     /// and before the caller records that answer: a readiness event that lands while
     /// the push is under way.
@@ -198,8 +203,12 @@ impl SessionHost for ScriptedHost {
         if self.down.load(Ordering::SeqCst) {
             return Err(SessionHostError::Unavailable);
         }
+        if self.stop_failing.load(Ordering::SeqCst) {
+            return Err(SessionHostError::Unavailable);
+        }
         self.stops.fetch_add(1, Ordering::SeqCst);
         self.crash(session_id);
+        self.after_stop.fire();
         Ok(())
     }
     fn join_role(&self, _: &Checkout, session_id: &str, text: &str) -> PushAttempt {
@@ -1167,6 +1176,146 @@ fn hs2_gdjxgz_wind_down_happens_only_at_a_safe_point_the_host_confirms() {
         .unwrap()
         .unwrap();
     assert_eq!(record.end_reason.as_deref(), Some("wound_down"));
+}
+
+/// HS2-X3Z0HA: a reader of the host's sessions (the scheduler's loop, a sync) that runs
+/// after the terminal stopped and before the stop recorded its end learns the wind-down
+/// or the person's stop, never a lost session, and the stopper's own answer agrees. A
+/// session recorded lost would break the scheduler's count of role sessions that failed
+/// in a row and start more than its replacements allow.
+#[test]
+fn hs2_x3z0ha_a_reader_racing_a_stop_records_the_stop_not_a_lost_session() {
+    for (actor, reason) in [(worker(), "wound_down"), (human(), "person_stopped")] {
+        let mut rng = Rng(100);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        let f = Fixture::new(&[1, 2], &mut tx);
+        let owner = f.m.owner.id.clone();
+        f.git(&["init", "-q"]);
+        let view = f.started("op-1", 1, "codex", &mut tx);
+        let sid = view.session.session_id.clone();
+        let observed = Arc::new(Mutex::new(None));
+        let (runtime, seen, at) = (f.m.runtime.clone(), observed.clone(), owner.clone());
+        f.host.after_stop.arm(move || {
+            let mut rng = Rng(200);
+            let mut tx = Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            };
+            let summary = runtime
+                .sessions_sync(&at, Some(&worker()), &mut tx)
+                .unwrap();
+            *seen.lock().unwrap() = Some(
+                summary
+                    .sessions
+                    .iter()
+                    .map(|view| {
+                        (
+                            view.session.state,
+                            view.session.history.last().unwrap().reason.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            );
+        });
+        let stopped = f.stop(&sid, false, &actor, &mut tx).unwrap();
+        assert_eq!(
+            *observed.lock().unwrap(),
+            Some(vec![(SessionState::Stopped, Some(reason.to_string()))]),
+            "the racing reader learned the {reason}"
+        );
+        assert_eq!(stopped.session.state, SessionState::Stopped, "{reason}");
+        let record = f.m.runtime.session(&owner, &sid).unwrap();
+        assert!(
+            record
+                .history
+                .iter()
+                .all(|entry| entry.to != SessionState::Lost),
+            "{reason}: {:?}",
+            record.history
+        );
+        assert_eq!(
+            record.history.last().unwrap().reason.as_deref(),
+            Some(reason)
+        );
+        let hosted = HostedSessionRegistry::new(&f.m.home)
+            .get(&f.m.target.id, "op-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(hosted.end_reason.as_deref(), Some(reason));
+        assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+        // Repeated: the session is ended once and a later sync changes nothing.
+        assert_eq!(
+            session_error(f.stop(&sid, false, &actor, &mut tx)),
+            SessionError::NotActive
+        );
+        f.m.runtime
+            .sessions_sync(&owner, Some(&worker()), &mut tx)
+            .unwrap();
+        assert_eq!(f.m.runtime.session(&owner, &sid).unwrap(), record);
+    }
+}
+
+/// HS2-X3Z0HA: a stop the host refuses leaves no stop under way, so the terminal's later
+/// exit is a lost session again; and a stop after that refusal still winds down.
+#[test]
+fn hs2_x3z0ha_a_refused_stop_leaves_a_later_exit_lost() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let owner = f.m.owner.id.clone();
+    f.git(&["init", "-q"]);
+    let registry = HostedSessionRegistry::new(&f.m.home);
+    // Refused, then crashed: lost.
+    let first = f.started("op-1", 1, "codex", &mut tx);
+    f.host.stop_failing.store(true, Ordering::SeqCst);
+    assert_eq!(
+        session_error(f.stop(&first.session.session_id, false, &worker(), &mut tx)),
+        SessionError::HostUnavailable
+    );
+    let held = registry.get(&f.m.target.id, "op-1").unwrap().unwrap();
+    assert_eq!((held.stopping, held.ended_at_ms), (None, None));
+    f.host.stop_failing.store(false, Ordering::SeqCst);
+    f.host
+        .crash(&first.session.hosted.as_ref().unwrap().session_id);
+    f.m.runtime
+        .sessions_sync(&owner, Some(&worker()), &mut tx)
+        .unwrap();
+    let lost =
+        f.m.runtime
+            .session(&owner, &first.session.session_id)
+            .unwrap();
+    assert_eq!(lost.state, SessionState::Lost);
+    assert_eq!(
+        registry
+            .get(&f.m.target.id, "op-1")
+            .unwrap()
+            .unwrap()
+            .end_reason
+            .as_deref(),
+        Some("host_lost")
+    );
+    // Refused, then stopped again: wound down.
+    let second = f.started("op-2", 1, "codex", &mut tx);
+    f.host.stop_failing.store(true, Ordering::SeqCst);
+    assert_eq!(
+        session_error(f.stop(&second.session.session_id, false, &worker(), &mut tx)),
+        SessionError::HostUnavailable
+    );
+    f.host.stop_failing.store(false, Ordering::SeqCst);
+    let stopped = f
+        .stop(&second.session.session_id, false, &worker(), &mut tx)
+        .unwrap();
+    assert_eq!(stopped.session.state, SessionState::Stopped);
+    assert_eq!(
+        stopped.session.history.last().unwrap().control,
+        Some(SessionControl::WindDown)
+    );
 }
 
 #[test]
