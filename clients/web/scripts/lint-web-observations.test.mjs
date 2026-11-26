@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, it } from 'vitest';
 
@@ -294,7 +295,8 @@ it('HS2-N3XBS3 every runner of lint:web also runs the full web typecheck the doc
 // HS2-Q71ESX: this cold-imports the real flat config and every ESLint plugin it loads (about 1 s
 // alone), which exceeded the 5 s default during the full suite on shared CI runners.
 it('HS2-N3XBS3 reads the ESLint ignores from the real flat config', { timeout: 30_000 }, async () => {
-  const ignores = await loadEslintIgnores(new URL('.', packageRoot).pathname);
+  // HS2-S50D34: a URL's pathname is `/D:/…` on Windows; read the path the platform's way.
+  const ignores = await loadEslintIgnores(fileURLToPath(packageRoot));
   for (const dir of ['dist/**', 'target/**', 'node_modules/**', 'src-tauri/**']) assert.ok(ignores.includes(dir), dir);
 });
 
