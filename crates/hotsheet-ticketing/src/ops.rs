@@ -571,6 +571,13 @@ pub fn is_open(t: &Ticket) -> bool {
     )
 }
 
+/// Whether automatic selection (claim-next, the cross-source queue, distributed claim-next,
+/// and dispatcher assignment) may pick this ticket: open and not parked in Backlog
+/// (HS2-K6Q8TW). An exact claim still takes and starts a Backlog ticket (HS2-K6KG1T).
+pub fn auto_selectable(t: &Ticket) -> bool {
+    is_open(t) && t.status != Status::Backlog
+}
+
 /// A ticket whose work is finished (a `blocked_by` dependency is satisfied by this).
 pub fn is_done(t: &Ticket) -> bool {
     matches!(t.status, Status::Completed | Status::Verified)
@@ -2877,7 +2884,7 @@ pub fn claim_eta_expired(t: &Ticket, now: &Timestamp) -> bool {
 /// lease, and not waiting on remote CI in `final_testing`. Only automatic selection skips
 /// a blocked ticket; an exact claim may still take it (HS2-BAK4BC).
 fn claim_next_eligible(t: &Ticket, done: &HashSet<Ulid>, now: &Timestamp) -> bool {
-    is_open(t)
+    auto_selectable(t)
         && !is_blocked(t, done)
         && claim_available(t, now)
         && t.started_phase != Some(StartedPhase::FinalTesting)

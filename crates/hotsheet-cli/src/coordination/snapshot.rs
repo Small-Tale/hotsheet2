@@ -89,7 +89,7 @@ impl Coordinator {
             Some(
                 tickets
                     .into_iter()
-                    .filter(|t| t.up_next && ops::is_open(t))
+                    .filter(|t| t.up_next && ops::auto_selectable(t))
                     .map(|t| {
                         let claimed_by = if ops::claim_available(&t, &now) {
                             None

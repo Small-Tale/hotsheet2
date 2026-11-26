@@ -534,6 +534,11 @@ fn hs2_6wfczr_request_checks_name_each_refusal_reason() {
     });
     let parked = t.create("Not up next", "task", Priority::Default, &[]);
     t.edit(&parked, |ticket| ticket.up_next = false);
+    // HS2-K6Q8TW: Backlog is parked work even with a (legacy) Up Next flag.
+    let shelved = t.create("Backlog", "task", Priority::Default, &[]);
+    t.edit(&shelved, |ticket| {
+        ticket.status = hotsheet_model::Status::Backlog;
+    });
     let taken = t.create("Taken", "task", Priority::Default, &[]);
     let risky = t.create("Risky", "task", Priority::Default, &["tier:T2"]);
     register(&c, Role::Integrator, "integrator", "generation-1", NOW);
@@ -550,6 +555,7 @@ fn hs2_6wfczr_request_checks_name_each_refusal_reason() {
         (blocked.slug.as_str(), vec![RefusalReason::Blocked]),
         (claimed.slug.as_str(), vec![RefusalReason::Claimed]),
         (parked.slug.as_str(), vec![RefusalReason::NotReady]),
+        (shelved.slug.as_str(), vec![RefusalReason::NotReady]),
         ("HS-NOPE", vec![RefusalReason::NotReady]),
         (taken.slug.as_str(), vec![RefusalReason::Assigned]),
         (risky.slug.as_str(), vec![RefusalReason::Filtered]),

@@ -289,7 +289,7 @@ impl Coordinator {
                 );
                 ensure!(
                     ticket.up_next
-                        && ops::is_open(&ticket)
+                        && ops::auto_selectable(&ticket)
                         && ticket
                             .blocked_reason
                             .as_ref()

@@ -411,7 +411,7 @@ impl QueueFacts<'_> {
         preferences: &WorkerPreferences,
     ) -> Vec<RefusalReason> {
         let mut reasons = Vec::new();
-        if !ticket.up_next || !ops::is_open(ticket) {
+        if !ticket.up_next || !ops::auto_selectable(ticket) {
             reasons.push(RefusalReason::NotReady);
         }
         let reference = self.reference(ticket);
@@ -561,7 +561,9 @@ fn idle_reason(
     let waiting: Vec<&str> = queue
         .tickets
         .iter()
-        .filter(|ticket| ticket.up_next && ops::is_open(ticket) && preferences.admits(ticket))
+        .filter(|ticket| {
+            ticket.up_next && ops::auto_selectable(ticket) && preferences.admits(ticket)
+        })
         .filter(|ticket| !queue.ready(state, ticket))
         .map(|ticket| ticket.slug.as_str())
         .collect();

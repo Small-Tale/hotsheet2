@@ -358,23 +358,96 @@ fn hs2_k6kg1t_an_edit_that_ends_a_claim_names_it() {
     assert_eq!(ops_notice(&reclaimed, &working), None);
 }
 
+/// HS2-K6Q8TW: automatic selection skips parked Backlog work, even urgent or (legacy)
+/// Up Next Backlog, while an exact claim still takes and starts it. Moving it back to Not
+/// Started makes it selectable again.
 #[test]
-fn hs2_k6kg1t_claim_next_starts_a_backlog_ticket_it_selects() {
+fn hs2_k6q8tw_claim_next_skips_backlog_but_an_exact_claim_starts_it() {
     let (_d, store) = store();
-    let t = add(&store, 1, Status::Backlog);
+    let parked = add(&store, 1, Status::Backlog);
+    let mut urgent = store.read_ticket(&parked.id).unwrap();
+    urgent.priority = Priority::Highest;
+    urgent.up_next = true; // only reachable by a hand-edited or legacy file
+    store.write_ticket_committing(&urgent).unwrap();
+    let urgent = store.read_ticket(&parked.id).unwrap();
+    let ready = add(&store, 2, Status::NotStarted);
     let now = ts("2026-11-26T00:01:00Z");
-    let claimed = claim_next(&store, &now, now.plus_minutes(30), "w1", None)
+    let lease = now.plus_minutes(30);
+
+    assert_eq!(
+        peek_claim_next(&store, &now).unwrap().map(|t| t.id),
+        Some(ready.id)
+    );
+    let first = claim_next(&store, &now, lease.clone(), "w1", None)
         .unwrap()
-        .expect("the only open ticket is selected");
-    assert_eq!(claimed.id, t.id);
-    assert_eq!(claimed.status, Status::Started);
-    assert_eq!(claimed.started_phase, Some(StartedPhase::Analyzing));
-    let working = set(
+        .unwrap();
+    assert_eq!(first.id, ready.id);
+    assert!(
+        claim_next(&store, &now, lease.clone(), "w2", None)
+            .unwrap()
+            .is_none(),
+        "only parked work is left"
+    );
+    let (_e, sibling) = self::store();
+    assert!(
+        claim_next_across_with_eta(&[&sibling, &store], &now, lease.clone(), "w2", None, None)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(store.read_ticket(&parked.id).unwrap(), urgent, "untouched");
+
+    // Empty, then refilled by moving the parked ticket back to Not Started.
+    set(
         &store,
-        &t.id,
+        &parked.id,
         "2026-11-26T00:02:00Z",
-        phase(StartedPhase::Working),
+        status(Status::NotStarted),
     )
     .unwrap();
-    assert_eq!(working.claimed_by.as_deref(), Some("w1"));
+    let later = ts("2026-11-26T00:03:00Z");
+    let refilled = claim_next(&store, &later, later.plus_minutes(30), "w2", None)
+        .unwrap()
+        .expect("a Not Started ticket is selectable again");
+    assert_eq!(refilled.id, parked.id);
+    assert_eq!(refilled.status, Status::Started);
+
+    // Parked again and released: still skipped; an exact claim starts it.
+    release(&store, &parked.id, ts("2026-11-26T00:04:00Z"), "w2", false).unwrap();
+    set(
+        &store,
+        &parked.id,
+        "2026-11-26T00:05:00Z",
+        status(Status::Backlog),
+    )
+    .unwrap();
+    let after = ts("2026-11-26T00:06:00Z");
+    assert!(
+        claim_next(&store, &after, after.plus_minutes(30), "w3", None)
+            .unwrap()
+            .is_none()
+    );
+    let exact = claim_at(&store, &parked.id, "2026-11-26T00:07:00Z", "w3").unwrap();
+    assert_eq!(exact.status, Status::Started);
+}
+
+#[test]
+fn hs2_k6q8tw_auto_selectable_admits_only_open_non_backlog_statuses() {
+    let (_d, store) = store();
+    for (n, s, expected) in [
+        (1, Status::NotStarted, true),
+        (2, Status::Started, true),
+        (3, Status::Backlog, false),
+        (4, Status::Completed, false),
+        (5, Status::Verified, false),
+        (6, Status::Archive, false),
+        (7, Status::Deleted, false),
+    ] {
+        let t = add(&store, n, Status::NotStarted);
+        let t = if s == Status::NotStarted {
+            t
+        } else {
+            set(&store, &t.id, "2026-11-26T00:01:00Z", status(s)).unwrap()
+        };
+        assert_eq!(auto_selectable(&t), expected, "{s:?}");
+    }
 }

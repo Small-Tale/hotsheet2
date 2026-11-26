@@ -150,12 +150,20 @@ fn hs2_k6kg1t_claim_matrix_over_states_and_repeats() {
         )));
     assert!(!f.claimed().contains(&slug));
 
-    // claim-next selecting a Backlog ticket starts it too.
+    // HS2-K6Q8TW: claim-next skips a Backlog ticket; an exact claim starts it.
     let g = Fixture::new();
-    let next = g.new_ticket("only backlog", Some("backlog"));
-    g.run(&["claim-next", "--worker", "w"]).success();
-    assert_eq!(field(&g.show(&next), "status"), Some("started"));
-    g.run(&["edit", &next, "--started-phase", "working"])
+    let parked = g.new_ticket("only backlog", Some("backlog"));
+    g.run(&["claim-next", "--worker", "w"])
+        .success()
+        .stdout(predicate::str::contains("No claimable tickets."));
+    assert_eq!(field(&g.show(&parked), "status"), Some("backlog"));
+    let ready = g.new_ticket("ready", None);
+    g.run(&["claim-next", "--worker", "w"])
+        .success()
+        .stdout(predicate::str::contains(format!("Claimed {ready}")));
+    g.run(&["claim", &parked, "--worker", "w2"]).success();
+    assert_eq!(field(&g.show(&parked), "status"), Some("started"));
+    g.run(&["edit", &parked, "--started-phase", "working"])
         .success();
-    assert!(g.claimed().contains(&next));
+    assert!(g.claimed().contains(&parked));
 }

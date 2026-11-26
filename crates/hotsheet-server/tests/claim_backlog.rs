@@ -1,7 +1,7 @@
 //! HS2-K6KG1T: over HTTP and through the MCP shim's HTTP backend against a real server
 //! socket, a claim starts a Backlog ticket, a phase update keeps the claim, a phase outside
 //! Started is refused with 400 and writes nothing, and an update that ends a claim names it
-//! in `warnings`. Synthetic tickets only.
+//! in `warnings`. Automatic claim-next skips Backlog (HS2-K6Q8TW). Synthetic tickets only.
 
 use hotsheet_mcp::{Backend, HttpBackend, handle_message};
 use hotsheet_server::{AppState, app};
@@ -66,6 +66,28 @@ async fn hs2_k6kg1t_http_and_mcp_claims_start_backlog_and_keep_the_claim() {
     tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
 
     tokio::task::spawn_blocking(move || {
+        // HS2-K6Q8TW: automatic claim-next skips parked Backlog work over HTTP and MCP.
+        let parked = create_backlog(&base, "parked");
+        let (status, next) = request(
+            "POST",
+            &format!("{base}/claim-next"),
+            json!({"worker": "auto"}),
+        );
+        assert_eq!(status, 200);
+        assert!(next.is_null(), "HTTP claim-next skips Backlog: {next}");
+        let (failed, next) = tool(
+            &HttpBackend::new(&base, SECRET),
+            "hotsheet_claim_next",
+            json!({"worker": "auto"}),
+        );
+        assert!(
+            !failed && next.is_null(),
+            "MCP claim-next skips Backlog: {next}"
+        );
+        let (_, still) = request("GET", &format!("{base}/tickets/{parked}"), json!({}));
+        assert_eq!(still["status"], "backlog");
+        assert!(still["claimed_by"].is_null());
+
         // HTTP: refused phase, claim, phase, shelve.
         let slug = create_backlog(&base, "http backlog");
         let (status, refused) = request(

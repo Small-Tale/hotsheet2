@@ -111,7 +111,7 @@ fn candidates(store: &FsStore, now: &Timestamp) -> Result<Vec<Ulid>, DistError> 
     let mut c: Vec<_> = tickets
         .into_iter()
         .filter(|t| {
-            ops::is_open(t)
+            ops::auto_selectable(t)
                 && !ops::is_blocked(t, &done)
                 && ops::claim_available(t, now)
                 && t.started_phase != Some(StartedPhase::FinalTesting)
@@ -249,6 +249,38 @@ mod tests {
             Some("Waiting on a synthetic decision")
         );
         assert_eq!(candidates(&store, &ts("04")).unwrap(), vec![ready.id]);
+    }
+
+    /// HS2-K6Q8TW: distributed auto-selection skips a parked Backlog ticket, and picks it
+    /// up again once it is moved back to Not Started.
+    #[test]
+    fn hs2_k6q8tw_distributed_candidates_skip_backlog() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let parked = create(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("00"),
+            NewTicket {
+                title: "Parked".into(),
+                status: hotsheet_model::Status::Backlog,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(candidates(&store, &ts("01")).unwrap().is_empty());
+        ops::update(
+            &store,
+            &parked.id,
+            ts("02"),
+            ops::TicketPatch {
+                status: Some(hotsheet_model::Status::NotStarted),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(candidates(&store, &ts("03")).unwrap(), vec![parked.id]);
     }
 
     /// A bare remote + two clones that are each Hot Sheet stores holding the SAME two Up

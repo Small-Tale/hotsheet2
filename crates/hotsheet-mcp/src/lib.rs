@@ -8686,6 +8686,27 @@ mod tests {
         assert_eq!(dest.list_tickets().unwrap().len(), 1);
     }
 
+    /// HS2-K6Q8TW: serverless MCP claim-next skips a parked Backlog ticket; an exact claim
+    /// takes and starts it.
+    #[test]
+    fn hs2_k6q8tw_corebackend_claim_next_skips_backlog() {
+        let (_d, backend) = core();
+        let parked = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "parked", "status": "backlog", "priority": "highest" }),
+        );
+        let slug = parked["slug"].as_str().unwrap().to_string();
+        let next = call(&backend, "hotsheet_claim_next", json!({ "worker": "auto" }));
+        assert!(next.is_null(), "{next}");
+        let claimed = call(
+            &backend,
+            "hotsheet_claim",
+            json!({ "id": slug, "worker": "auto" }),
+        );
+        assert_eq!(claimed["status"], "started");
+    }
+
     /// HS2-K6KG1T: over serverless MCP, a claim starts a Backlog ticket, a phase update keeps
     /// the claim, a phase outside Started is refused, and an update that ends a claim says so.
     #[test]
