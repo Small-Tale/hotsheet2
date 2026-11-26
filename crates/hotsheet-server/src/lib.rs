@@ -40,6 +40,8 @@ pub mod media;
 pub mod multistore;
 pub mod notification_router;
 pub mod notifications;
+// HS2-H1CSSN: the owner of this server's orchestration loops and threads.
+pub mod orchestration_tasks;
 mod presence;
 pub mod project_activity;
 pub mod provider_advisory_claims;
@@ -276,6 +278,9 @@ pub struct AppState {
     pub(crate) command_schedule_kick: Arc<tokio::sync::Notify>,
     remote_runtime: Option<Arc<hotsheet_cli::remote_servers::RemoteRuntime>>,
     orchestration_runtime: Option<Arc<hotsheet_cli::orchestration::OrchestrationRuntime>>,
+    /// HS2-H1CSSN: this server's orchestration loops and threads, stopped and joined at
+    /// shutdown. Every runtime the server builds starts its threads under it.
+    orchestration_tasks: Arc<orchestration_tasks::OrchestrationTasks>,
     store: FsStore,
     /// Identity of the primary store at startup. An unscoped route must never silently
     /// switch to a different store placed at the same path (HS2-34XE8B).
@@ -658,6 +663,7 @@ impl AppState {
             store,
             remote_runtime: None,
             orchestration_runtime: None,
+            orchestration_tasks: Arc::default(),
             primary_instance_id,
             secret,
             remote_listener: false,
@@ -763,6 +769,23 @@ impl AppState {
         if !self.lifecycle.stopping.swap(true, Ordering::AcqRel) {
             self.lifecycle.stopping_changed.notify_waiters();
         }
+        // HS2-H1CSSN: orchestration threads wait on their own stop token.
+        self.orchestration_tasks.stop();
+    }
+
+    /// HS2-H1CSSN: this server's orchestration loops and threads.
+    pub fn orchestration_tasks(&self) -> &Arc<orchestration_tasks::OrchestrationTasks> {
+        &self.orchestration_tasks
+    }
+
+    /// HS2-H1CSSN: begin stopping, then wait at most `grace` for every orchestration
+    /// loop and thread to end.
+    pub async fn shutdown_orchestration(
+        &self,
+        grace: std::time::Duration,
+    ) -> orchestration_tasks::OrchestrationShutdown {
+        self.begin_stopping();
+        self.orchestration_tasks.shutdown(grace).await
     }
 
     /// Whether [`Self::begin_stopping`] has been called.

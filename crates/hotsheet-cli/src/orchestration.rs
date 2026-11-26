@@ -4,6 +4,8 @@
 mod access;
 mod assignment;
 mod auto_replan;
+// HS2-H1CSSN: the one bounded backoff of the follower loops.
+mod backoff;
 mod cancel_hold;
 mod capacity;
 mod capacity_watch;
@@ -45,6 +47,8 @@ mod step_process;
 mod step_program;
 mod summary;
 mod target_lines;
+// HS2-H1CSSN: the owner of the runtime's background threads.
+mod tasks;
 mod ticket_list;
 mod tickets;
 mod timeline;
@@ -56,6 +60,7 @@ mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION, REVIEW_RETURNED};
 pub use auto_replan::{AUTO_REPLAN_ACTION, AutoReplan};
+pub use backoff::{BACKOFF_FAST_STEP, BACKOFF_FIRST, BACKOFF_MAX, Backoff, is_fast_step};
 pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
     CAPACITY_RESAMPLE_MS, CapacityProbe, LocalServerCapacity, MAX_CAPACITY_WAIT_MS, ReadCapacity,
@@ -141,6 +146,7 @@ pub use sessions::{
     target_tool_setup, tool_ready,
 };
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
+pub use tasks::{RuntimeTasks, TasksShutdown};
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,
     TargetTicketRow, TargetTicketSearch,
@@ -218,7 +224,11 @@ pub struct OrchestrationRuntime {
     /// doubling per attempt (tests shorten it).
     gate_relink_retry_ms: u64,
     /// HS2-J7N3PQ: how a deadline timer waits until its instant (tests skip the wait).
-    timer_sleep: Arc<dyn Fn(std::time::Duration) + Send + Sync>,
+    /// `None` waits on the stop token of [`Self::tasks`] (HS2-H1CSSN).
+    timer_sleep: Option<Arc<dyn Fn(std::time::Duration) + Send + Sync>>,
+    /// HS2-H1CSSN: the owner of the background threads this runtime starts, shared by
+    /// its clones and, in the server, by every runtime the server builds.
+    tasks: Arc<RuntimeTasks>,
     /// HS2-M7EV18: hosted validation steps run in detached runner processes.
     detached_validation: bool,
     /// HS2-CRBR8X: who sent the request this runtime serves (a device certificate, a
@@ -280,7 +290,8 @@ impl OrchestrationRuntime {
             prompt: Arc::new(NoPrompt),
             capacity_resample: std::time::Duration::from_millis(capacity::CAPACITY_RESAMPLE_MS),
             gate_relink_retry_ms: gates::OBSERVER_RETRY_MS,
-            timer_sleep: Arc::new(std::thread::sleep),
+            timer_sleep: None,
+            tasks: Arc::default(),
             detached_validation: false,
             requester: None,
             home_notices: None,

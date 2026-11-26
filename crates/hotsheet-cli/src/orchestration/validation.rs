@@ -43,6 +43,10 @@ const MAX_RUNNING_EXECUTIONS: usize = 4;
 /// How long a stopped step's output readers are waited for before their streams are
 /// reported as unknown.
 const DRAIN_GRACE: Duration = Duration::from_secs(2);
+/// HS2-H1CSSN: how often a follower whose platform file watcher could not start reads
+/// its local record again (a local file read, never a request). It waits on the
+/// runtime's stop token meanwhile, so a stop ends it at once.
+const FALLBACK_RECHECK: Duration = Duration::from_secs(1);
 
 // ---- Hosted half ----
 
@@ -165,7 +169,8 @@ impl Execution {
 }
 
 /// Executions of this process, oldest first. They are deliberately not persisted: a
-/// process that is gone cannot vouch for a step it was running.
+/// process that is gone cannot vouch for a step it was running. Global because runtimes
+/// are built per request: a later request reads the execution an earlier one started.
 static EXECUTIONS: OnceLock<Mutex<Vec<Arc<Execution>>>> = OnceLock::new();
 
 fn executions() -> std::sync::MutexGuard<'static, Vec<Arc<Execution>>> {
@@ -180,6 +185,13 @@ fn executions() -> std::sync::MutexGuard<'static, Vec<Arc<Execution>>> {
 #[cfg(test)]
 pub(super) fn forget_executions() {
     executions().clear();
+}
+
+/// HS2-H1CSSN: a stopping process lets go of a detached execution it follows: it is
+/// forgotten, so a later reply reads the runner's record. It is not marked lost: the
+/// runner still runs, and a waiter answers `running` at the end of its own wait.
+fn let_go(execution: &Arc<Execution>) {
+    executions().retain(|known| !Arc::ptr_eq(known, execution));
 }
 
 fn new_execution(key: String) -> Arc<Execution> {
@@ -479,6 +491,8 @@ pub(super) fn execute_reporting(
         let (sender, over) = (sender.clone(), over.clone());
         let retaining = retain.and_then(super::validation_output::Retaining::start);
         readers += 1;
+        // HS2-H1CSSN: not a runtime task: it ends when the child's stream closes, and
+        // the wait below collects it within `DRAIN_GRACE`.
         std::thread::spawn(move || {
             let _ = sender.send((index, digest(stream, output_limit, &over, retaining)));
         });
@@ -660,53 +674,72 @@ impl OrchestrationRuntime {
         };
         let (home, checkout_id, running) =
             (self.home.clone(), checkout_id.to_owned(), execution.clone());
-        std::thread::spawn(move || {
-            let directory = super::validation_runner::steps_dir(&home, &checkout_id);
-            // HS2-WD475E: started in the background; until it runs, each wait ends at
-            // the one-second re-check below, so the record is still read promptly.
-            let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok();
-            let registry = HostedValidationRegistry::new(&home);
-            let mut asked_to_stop = false;
-            loop {
-                if !asked_to_stop && running.cancel.load(Ordering::SeqCst) {
-                    super::validation_runner::request_cancel(&home, &checkout_id, &execution_id);
-                    asked_to_stop = true;
-                }
-                match registry.record(&checkout_id, &execution_id) {
-                    Ok(Some(record)) => {
-                        if let Some(outcome) = record.outcome {
-                            running.finish(outcome);
-                            return;
-                        }
-                        // This process reaps its runner, so it knows when it ended; a
-                        // runner that ended without recording an end lost the step.
-                        if exited.load(Ordering::SeqCst) {
-                            let ended = registry
-                                .record(&checkout_id, &execution_id)
-                                .ok()
-                                .flatten()
-                                .and_then(|record| record.outcome);
-                            match ended {
-                                Some(outcome) => running.finish(outcome),
-                                None => running.lose(),
+        let tasks = self.tasks.clone();
+        // HS2-H1CSSN: owned by the runtime's tasks. A stopping owner stops following:
+        // the runner keeps running and records its end, which a later process reads.
+        let followed = execution.clone();
+        let spawned = self
+            .tasks
+            .spawn("orchestration-validation-follow", move || {
+                let directory = super::validation_runner::steps_dir(&home, &checkout_id);
+                // HS2-WD475E: started in the background; until it runs, each wait ends at
+                // the one-second re-check below, so the record is still read promptly.
+                let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok();
+                let registry = HostedValidationRegistry::new(&home);
+                let mut asked_to_stop = false;
+                loop {
+                    if !asked_to_stop && running.cancel.load(Ordering::SeqCst) {
+                        super::validation_runner::request_cancel(
+                            &home,
+                            &checkout_id,
+                            &execution_id,
+                        );
+                        asked_to_stop = true;
+                    }
+                    match registry.record(&checkout_id, &execution_id) {
+                        Ok(Some(record)) => {
+                            if let Some(outcome) = record.outcome {
+                                running.finish(outcome);
+                                return;
                             }
+                            // This process reaps its runner, so it knows when it ended; a
+                            // runner that ended without recording an end lost the step.
+                            if exited.load(Ordering::SeqCst) {
+                                let ended = registry
+                                    .record(&checkout_id, &execution_id)
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|record| record.outcome);
+                                match ended {
+                                    Some(outcome) => running.finish(outcome),
+                                    None => running.lose(),
+                                }
+                                return;
+                            }
+                        }
+                        Ok(None) | Err(_) => {
+                            running.lose();
                             return;
                         }
                     }
-                    Ok(None) | Err(_) => {
-                        running.lose();
+                    if tasks.is_stopping() {
+                        let_go(&running);
                         return;
                     }
-                }
-                // A local wait on this machine's own files; no request is made.
-                match &waiter {
-                    Some(waiter) => {
-                        waiter.wait(Duration::from_secs(1));
+                    // A local wait on this machine's own files; no request is made.
+                    match &waiter {
+                        Some(waiter) => {
+                            waiter.wait(FALLBACK_RECHECK);
+                        }
+                        None => {
+                            tasks.wait_stop(FALLBACK_RECHECK);
+                        }
                     }
-                    None => std::thread::sleep(Duration::from_secs(1)),
                 }
-            }
-        });
+            });
+        if spawned.is_err() {
+            let_go(&followed);
+        }
     }
 
     /// HS2-M7EV18: the reply for an execution this process does not hold: its recorded
@@ -748,7 +781,9 @@ impl OrchestrationRuntime {
                 Some(waiter) => {
                     waiter.wait(left);
                 }
-                None => std::thread::sleep(left.min(Duration::from_secs(1))),
+                None => {
+                    self.tasks.wait_stop(left.min(FALLBACK_RECHECK));
+                }
             }
         }
     }
@@ -919,6 +954,10 @@ impl OrchestrationRuntime {
                         let step_execution = execution_id.to_owned();
                         let checkout_id = checkout_id.to_owned();
                         let timeout = Duration::from_secs(u64::from(command.timeout_seconds));
+                        // HS2-H1CSSN: not a runtime task: the execution owns it (its
+                        // cancel flag stops it) and the step's timeout bounds it. A
+                        // process that dies first leaves the recorded group to the next
+                        // host's reap (HS2-HTS89S).
                         std::thread::spawn(move || {
                             // HS2-HTS89S: the group is recorded while it runs, so a
                             // later host can stop it if this process dies first.

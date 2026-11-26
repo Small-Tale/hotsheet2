@@ -1508,6 +1508,179 @@ fn hs2_j7n3pq_a_lapsed_validation_is_published_at_its_deadline() {
     assert_eq!(published().len(), count);
 }
 
+/// HS2-H1CSSN: a plan step waiting on a running validation attempt, read once so the
+/// deadline timer is armed. Returns the machine, its owner and the step.
+fn armed_lapse(m: &mut Machine, tx: &mut Transaction<'_>, orchestration: &Ticket) -> String {
+    let owner = m.owner.id.clone();
+    let a = target_ticket(m, "First");
+    let step_id = m
+        .runtime
+        .readiness_define(
+            &owner,
+            define(
+                m,
+                orchestration,
+                &a.slug,
+                json!([{"kind": "validation", "step_id": "smoke"}]),
+            ),
+            Some(&worker()),
+            tx,
+        )
+        .unwrap()
+        .readiness
+        .step
+        .step_id;
+    let ticket = json!({"native_id": orchestration.id.to_string()});
+    m.runtime
+        .validation_define(
+            &owner,
+            serde_json::from_value(json!({"ticket": ticket, "step": {"step_id": "smoke",
+                "target_id": id(1), "check": {"kind": "profile", "name": "smoke"},
+                "timeout_seconds": 20}}))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+        .unwrap();
+    let run_ticket = hotsheet_ticketing::orchestration::RunTicket {
+        connection_id: m.owner_connection(),
+        native_id: orchestration.id.to_string(),
+    };
+    hotsheet_ticketing::orchestration::ValidationRegistry::new(&m.home)
+        .begin(
+            &owner,
+            &run_ticket,
+            "smoke",
+            hotsheet_ticketing::orchestration::NewResult {
+                operation_id: "check-1".into(),
+                state: hotsheet_ticketing::orchestration::ValidationState::Running,
+                reason: None,
+                actor_id: Some("worker-1".into()),
+                run_id: None,
+            },
+            tx,
+        )
+        .unwrap();
+    m.runtime.readiness(&owner, &step_id, tx).unwrap();
+    assert!(m.runtime.lapse_timer(&owner).is_some());
+    step_id
+}
+
+/// HS2-H1CSSN: the deadline timer waits on the runtime's stop token, not a sleep: a
+/// shutdown wakes it long before its deadline (twenty seconds away here), it forgets
+/// its instant, publishes nothing, and its thread is joined.
+#[test]
+fn hs2_h1cssn_a_shutdown_wakes_the_lapse_timer_before_its_deadline() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, orchestration) = setup(
+        &[TargetAction::TicketsRead, TargetAction::ValidationRun],
+        &mut tx,
+    );
+    // A runtime of its own tasks, so only this test's timer is counted.
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_tasks(Arc::new(RuntimeTasks::default()));
+    let owner = m.owner.id.clone();
+    let step_id = armed_lapse(&mut m, &mut tx, &orchestration);
+    let before = levels(&m, &step_id);
+    assert_eq!(m.runtime.tasks().running(), 1);
+    let began = std::time::Instant::now();
+    let report = m.runtime.shutdown(std::time::Duration::from_secs(10));
+    assert!(
+        began.elapsed() < std::time::Duration::from_secs(5),
+        "{:?}",
+        began.elapsed()
+    );
+    assert_eq!(
+        report,
+        TasksShutdown {
+            joined: 1,
+            outstanding: 0
+        }
+    );
+    assert_eq!(m.runtime.tasks().running(), 0);
+    assert_eq!(m.runtime.lapse_timer(&owner), None);
+    assert_eq!(levels(&m, &step_id), before);
+    assert!(!levels(&m, &step_id).iter().any(|level| level == "stale"));
+    // A stopped owner arms nothing more: a later read starts no thread.
+    m.runtime.readiness(&owner, &step_id, &mut tx).unwrap();
+    assert_eq!(m.runtime.tasks().running(), 0);
+    assert_eq!(m.runtime.lapse_timer(&owner), None);
+}
+
+/// HS2-H1CSSN: a timer whose wait ends after its owner stopped (the test's wait is
+/// released only then) does not evaluate the plan at its instant, though that
+/// evaluation would publish `stale`. A fresh owner over the same home arms it again.
+#[test]
+fn hs2_h1cssn_a_timer_that_fires_after_shutdown_evaluates_nothing() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, orchestration) = setup(
+        &[TargetAction::TicketsRead, TargetAction::ValidationRun],
+        &mut tx,
+    );
+    let (release, released) = std::sync::mpsc::channel::<()>();
+    let released = Arc::new(Mutex::new(released));
+    let (entered, waiting) = std::sync::mpsc::channel::<()>();
+    let entered = Arc::new(Mutex::new(entered));
+    let tasks = Arc::new(RuntimeTasks::default());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_tasks(tasks.clone())
+        .with_timer_sleep(Arc::new(move |_wait| {
+            let _ = entered.lock().unwrap().send(());
+            let _ = released.lock().unwrap().recv();
+        }));
+    let owner = m.owner.id.clone();
+    let step_id = armed_lapse(&mut m, &mut tx, &orchestration);
+    waiting
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+    let before = levels(&m, &step_id);
+    // The owner stops while the timer waits; only then does its wait end.
+    tasks.stop();
+    release.send(()).unwrap();
+    let report = tasks.shutdown(std::time::Duration::from_secs(10));
+    assert_eq!(report.outstanding, 0);
+    assert_eq!(report.joined, 1);
+    assert_eq!(levels(&m, &step_id), before);
+    assert_eq!(m.runtime.lapse_timer(&owner), None);
+    // A new owner (a server started again over the same home) arms the timer again:
+    // the stopped one left no armed instant behind to block it.
+    let fresh = Arc::new(RuntimeTasks::default());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_tasks(fresh.clone())
+        .with_timer_sleep(Arc::new(|_wait| {}));
+    m.runtime.readiness(&owner, &step_id, &mut tx).unwrap();
+    let began = std::time::Instant::now();
+    while !levels(&m, &step_id).iter().any(|level| level == "stale")
+        && began.elapsed() < std::time::Duration::from_secs(10)
+    {
+        fresh.wait_stop(std::time::Duration::from_millis(20));
+    }
+    assert_eq!(
+        levels(&m, &step_id).last().map(String::as_str),
+        Some("stale")
+    );
+    assert_eq!(
+        fresh
+            .shutdown(std::time::Duration::from_secs(10))
+            .outstanding,
+        0
+    );
+}
+
 /// HS2-061YTB: a manual dispatch of a planned ticket whose step names requirements
 /// reads the target's machine through the gate and is refused, naming the
 /// requirement, until the machine meets it. A person's override goes ahead and is

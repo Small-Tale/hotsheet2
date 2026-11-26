@@ -183,6 +183,8 @@ impl ClaimSource for MachineClaims {
 /// A watch is keyed by machine home, the machine that holds the claim (empty for
 /// this one), namespace and resource.
 type Watch = (PathBuf, String, String, String);
+/// Global because runtimes are built per request and per command: one process waits
+/// once per resource, and its cap spans all of them (HS2-H1CSSN).
 static WATCHES: OnceLock<Mutex<BTreeSet<Watch>>> = OnceLock::new();
 fn watches() -> std::sync::MutexGuard<'static, BTreeSet<Watch>> {
     WATCHES
@@ -301,6 +303,10 @@ impl OrchestrationRuntime {
             if Instant::now() >= deadline {
                 return RemoteRelease::Ended("deadline".into());
             }
+            // HS2-H1CSSN: checked between requests; one in flight ends within its wait.
+            if self.tasks.is_stopping() {
+                return RemoteRelease::Ended(super::capacity_watch::STOPPING.into());
+            }
             let now_ms = tx.clock.now_ms();
             let stale = authorized
                 .as_ref()
@@ -339,7 +345,9 @@ impl OrchestrationRuntime {
                 });
             match reply {
                 Ok(ResourceWait { free: true }) => {
-                    self.scheduler_wake(owner_id);
+                    if !self.tasks.is_stopping() {
+                        self.scheduler_wake(owner_id);
+                    }
                     return RemoteRelease::Released;
                 }
                 // A peer that answers held long before the wait it was asked for is
@@ -409,24 +417,28 @@ impl OrchestrationRuntime {
                     // HS2-AP8KPT: a target checkout here whose project binds the
                     // namespace was read in that project's backend; wait there too.
                     let project = self.local_claim_project(owner_id, &entry.namespace);
-                    std::thread::Builder::new()
-                        .name("orchestration-claim-wait".into())
-                        .spawn(move || {
-                            let (home, _, namespace, resource) = &thread_key;
-                            // Free or not, the next pass reads the claim again and,
-                            // when it is still held, waits again.
-                            claims.wait_free(namespace, resource, MAX_WAIT, project.as_deref());
-                            watches().remove(&thread_key);
+                    let tasks = self.tasks.clone();
+                    // HS2-H1CSSN: owned by the runtime's tasks. The backend's wait
+                    // cannot be interrupted (it may be a remote backend's own wait), so
+                    // a stopping owner lets it end on its own and wakes nothing then.
+                    self.tasks.spawn("orchestration-claim-wait", move || {
+                        let (home, _, namespace, resource) = &thread_key;
+                        // Free or not, the next pass reads the claim again and,
+                        // when it is still held, waits again.
+                        claims.wait_free(namespace, resource, MAX_WAIT, project.as_deref());
+                        watches().remove(&thread_key);
+                        if !tasks.is_stopping() {
                             Self::scheduler_wake_at(home);
-                        })
+                        }
+                    })
                 }
                 Some((_, target)) => {
                     let runtime = self.clone();
                     let owner = owner_id.to_owned();
                     let actor = actor.clone();
-                    std::thread::Builder::new()
-                        .name("orchestration-remote-claim-wait".into())
-                        .spawn(move || {
+                    // HS2-H1CSSN: owned by the runtime's tasks, ended by its stop token.
+                    self.tasks
+                        .spawn("orchestration-remote-claim-wait", move || {
                             let (_, _, namespace, resource) = &thread_key;
                             let mut rng = super::request::Rng;
                             runtime.follow_remote_release(

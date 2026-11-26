@@ -22,7 +22,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-/// Settings watchers, one per `(server, machine home, owner)`.
+/// Settings watchers, one per `(server, machine home, owner)`. These three registries
+/// stay global (HS2-H1CSSN): their key names the server instance, and the change
+/// bookkeeping below is pure over the key so it is tested without a server.
 static WATCHERS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 /// The fingerprint each watched owner's settings had when last announced or read.
 static SEEN: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
@@ -127,23 +129,24 @@ pub(super) fn ensure_settings_watcher(state: &AppState, owner: &str) {
     watched.extend(initial.iter().map(|(target, _)| target.to_path_buf()));
     note_seen(state, &runtime, owner);
     let (state, owner) = (state.clone(), owner.to_owned());
-    let spawned = std::thread::Builder::new()
-        .name(format!("hotsheet-orchestration-settings-{owner}"))
-        .spawn({
-            let key = key.clone();
-            move || {
-                follow(
-                    &state,
-                    &runtime,
-                    &owner,
-                    &key,
-                    &paths,
-                    (watcher, watched),
-                    &rx,
-                );
-                forget(&key);
-            }
-        });
+    // HS2-H1CSSN: kept by this server's orchestration tasks and joined at shutdown; it
+    // sees the stop within one safety re-check.
+    let tasks = state.orchestration_tasks().threads().clone();
+    let spawned = tasks.spawn(&format!("hotsheet-orchestration-settings-{owner}"), {
+        let key = key.clone();
+        move || {
+            follow(
+                &state,
+                &runtime,
+                &owner,
+                &key,
+                &paths,
+                (watcher, watched),
+                &rx,
+            );
+            forget(&key);
+        }
+    });
     if spawned.is_err() {
         forget(&key);
     }
