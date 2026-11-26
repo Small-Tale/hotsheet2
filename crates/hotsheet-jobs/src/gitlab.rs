@@ -110,7 +110,12 @@ fn decide(
         } else {
             match relation(&pipeline.sha)? {
                 Some(known) => known,
-                None => break,
+                None => {
+                    // HS2-2RHDGQ: the lookup budget ran out; an older run not asked yet may
+                    // still cover the commit, so a diverged tip does not supersede it yet.
+                    diverged_first = false;
+                    break;
+                }
             }
         };
         match known {
@@ -526,4 +531,67 @@ fn steps_of(jobs: &[PipelineJob]) -> Vec<Step> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SHA: &str = "1111111111111111111111111111111111111111";
+
+    fn pipeline(id: u64, sha: &str) -> Pipeline {
+        Pipeline {
+            id,
+            sha: sha.into(),
+            reference: Some("main".into()),
+            status: Some("success".into()),
+            source: Some("push".into()),
+            name: None,
+            web_url: None,
+        }
+    }
+
+    /// HS2-2RHDGQ: six pipelines on another line, then one that covers the commit. A
+    /// spent lookup budget leaves the gate pending, never superseded, and a later poll
+    /// reaches the covering pipeline.
+    #[test]
+    fn hs2_2rhdgq_a_spent_budget_below_a_diverged_tip_is_not_superseded() {
+        let target = CiTarget::new("acme/widgets", SHA, "CI", "main").unwrap();
+        let mut pipelines: Vec<Pipeline> = (0..6)
+            .map(|n| pipeline(10 - n, &format!("elsewhere-{n}")))
+            .collect();
+        pipelines.push(pipeline(3, "covering"));
+        let budget = std::cell::Cell::new(5);
+        let mut relation = |sha: &str| {
+            if budget.get() == 0 {
+                return Ok(None);
+            }
+            budget.set(budget.get() - 1);
+            Ok(Some(if sha == "covering" {
+                Relation::Covers
+            } else {
+                Relation::Diverged
+            }))
+        };
+        assert_eq!(
+            decide(&target, None, &pipelines, &mut relation).unwrap(),
+            Decision::Pending { pipeline: None }
+        );
+        budget.set(7);
+        assert_eq!(
+            decide(&target, None, &pipelines, &mut relation).unwrap(),
+            Decision::Green { pipeline: 6 }
+        );
+        // Without a spent budget a branch that moved away still supersedes it.
+        let moved = vec![pipeline(2, "elsewhere"), pipeline(1, "older")];
+        let decision = decide(&target, None, &moved, |sha: &str| {
+            Ok(Some(if sha == "elsewhere" {
+                Relation::Diverged
+            } else {
+                Relation::Before
+            }))
+        })
+        .unwrap();
+        assert_eq!(decision, Decision::Superseded);
+    }
 }
