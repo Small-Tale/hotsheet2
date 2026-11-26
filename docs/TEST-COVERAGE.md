@@ -4734,7 +4734,8 @@ hs2_86mk1y` drives a `/bin/sh` stand-in through `run_trigger` and the real
   repeat finds it, a stopped one is started again, a settled gate starts none, a
   failed start leaves the link standing; a follower restarts a monitor that died,
   backs off a failing start (30 s, then 60 s) without launching between, and starts
-  nothing without a grant; a sync makes sure of it before waiting.
+  nothing without a grant; a sync makes sure of it before waiting. HS2-JE4QQZ: every
+  CI provider's adapter starts it, and a Buildkite link does.
 - `remote_servers/job_monitor.rs` (HS2-VVHVF0) links a gate over HTTP and a real
   monitor process the server started watches it to green against a loopback
   provider with no CLI call. Then the run is cancelled and the monitor stopped, and
