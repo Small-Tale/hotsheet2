@@ -1862,6 +1862,7 @@ impl TargetEvents for QuietFeed {
             overflow: false,
             speculation: None,
             remote_refs_changed: false,
+            pool_changed: false,
         })
     }
 }

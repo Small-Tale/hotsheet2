@@ -2774,7 +2774,9 @@ lock, retaining original typed evidence in Blocked state with the review note id
 An identical return replays without altering a later assignment or claim; conflicting
 evidence is rejected. A NEW stable `assign` operation reserves corrections. The
 original remains fenced from verification, integration and Done, even after the
-corrected ticket completes. Integrating, CI and ordinary blocked records cannot be
+corrected ticket completes. A return inside a scheduler-driven orchestration run keeps
+the run unfinished and its correction is placed again by the orchestrator (docs/26
+§26.24, HS2-ESVYQH). Integrating, CI and ordinary blocked records cannot be
 returned. Existing fields are reused, but the schema-three startup fence still
 applies before opening the pool; old mutators are not semantically compatible.
 

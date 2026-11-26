@@ -25,6 +25,8 @@ struct Feed {
     overflow: std::sync::atomic::AtomicBool,
     /// HS2-XA9DZA: the hosted checkout's remote-tracking refs moved; reported once.
     refs: std::sync::atomic::AtomicBool,
+    /// HS2-ESVYQH: the hosted checkout's coordination pool changed; reported once.
+    pool: std::sync::atomic::AtomicBool,
     /// HS2-VN8PDA: work done on the host while the next request waits.
     during: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
@@ -61,6 +63,11 @@ impl Feed {
     fn pushed(&self) {
         self.cursor.fetch_add(1, Ordering::SeqCst);
         self.refs.store(true, Ordering::SeqCst);
+    }
+    /// HS2-ESVYQH: the hosted checkout's coordination pool changed.
+    fn pool_changed(&self) {
+        self.cursor.fetch_add(1, Ordering::SeqCst);
+        self.pool.store(true, Ordering::SeqCst);
     }
     fn calls(&self) -> Vec<(Option<u64>, u64)> {
         self.calls
@@ -115,6 +122,7 @@ impl TargetEvents for Feed {
             overflow: self.overflow.load(Ordering::SeqCst),
             speculation: None,
             remote_refs_changed: since.is_some() && self.refs.swap(false, Ordering::SeqCst),
+            pool_changed: since.is_some() && self.pool.swap(false, Ordering::SeqCst),
         })
     }
 }
@@ -2199,4 +2207,66 @@ fn hs2_04ww8b_a_catch_up_reads_every_page() {
         .replan;
     assert_eq!(replan, AutoReplan::Started);
     assert_eq!(auto_replans(&m).len(), 1);
+}
+
+/// HS2-ESVYQH: a run its worker released may have had its handoff returned. A change
+/// of the target's pool (the review return) or of the run's ticket (its `## Review
+/// return` note) wakes the scheduler, with or without a session of the owner there;
+/// neither wakes it while the run is still worked (dispatched) with a session on it.
+#[test]
+fn hs2_esvyqh_a_pool_change_or_a_ticket_change_wakes_a_released_run() {
+    use hotsheet_ticketing::orchestration::{RunRegistry, RunUpdate};
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Handed off for review");
+    let run_id = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a");
+    let connection = m.target_connection();
+    let mut state = WatchState::default();
+    let step = |state: &mut WatchState, tx: &mut Transaction<'_>| {
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), state, 8_000, tx)
+            .woke_scheduler
+    };
+    step(&mut state, &mut tx);
+    // A session works the dispatched run: a pool change wakes nothing.
+    hosted_session(&m, &id(901), Some(run_id.clone()), &mut tx);
+    feed.pool_changed();
+    assert!(!step(&mut state, &mut tx));
+    // The worker handed off and released: each pool change and each change of the
+    // run's own ticket wakes the loop.
+    RunRegistry::new(&m.home)
+        .update(
+            &m.owner.id,
+            &run_id,
+            RunUpdate {
+                to: Some(RunState::Intervened),
+                reason: Some("claim_released".into()),
+                ..RunUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    for _ in 0..2 {
+        feed.pool_changed();
+        assert!(step(&mut state, &mut tx));
+    }
+    assert!(!step(&mut state, &mut tx), "nothing changed since");
+    feed.push(&connection, &ticket);
+    assert!(step(&mut state, &mut tx));
+    // Another ticket of the target is no news for the released run.
+    let other = target_ticket(&m, "Unrelated");
+    feed.push(&connection, &other);
+    assert!(!step(&mut state, &mut tx));
 }

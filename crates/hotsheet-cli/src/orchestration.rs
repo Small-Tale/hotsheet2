@@ -29,6 +29,7 @@ mod reconcile_sources;
 mod recovery;
 mod request;
 mod resources;
+mod review_returns;
 mod runs;
 mod scheduler;
 mod scheduler_apply;
@@ -52,7 +53,7 @@ mod validation_output;
 mod validation_runner;
 mod watch;
 pub use access::{ActionRequest, Authorized};
-pub use assignment::{Assignment, CLAIMED_FOR_SESSION};
+pub use assignment::{Assignment, CLAIMED_FOR_SESSION, REVIEW_RETURNED};
 pub use auto_replan::{AUTO_REPLAN_ACTION, AutoReplan};
 pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
@@ -107,6 +108,7 @@ pub use resources::{
     ClaimSource, ClaimsUnreachable, MAX_CLAIM_WATCHES, MAX_RESOURCE_WAIT_MS, MachineClaims,
     RemoteRelease, ResourceWait,
 };
+pub use review_returns::{ReturnedHandoff, assigner_live, returned_handoffs};
 pub use runs::{
     DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_EVENT_WAIT_MS, MAX_LEASE_MINUTES,
     RunStatus, RunView,

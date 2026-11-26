@@ -391,6 +391,7 @@ impl OrchestrationRuntime {
     fn scheduler_work(
         &self,
         owner_id: &str,
+        actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<Vec<WorkItem>, OrchestrationError> {
         // Steps blocked by a failed gate, per prerequisite ticket: the work on that
@@ -486,8 +487,18 @@ impl OrchestrationRuntime {
         // HS2-YC2P7K: a step whose scheduler run is unfinished and no unfinished
         // session works it (its start was refused, or its session was lost) needs a
         // session again. The run is reused, so nothing is dispatched twice.
-        let runs = self.run_list(owner_id, true)?;
+        // HS2-ESVYQH: an `intervened` run is unfinished too. Its worker let the ticket
+        // go; it needs a session again only when its handoff came back for corrections
+        // that nobody has taken up, as the target's pool reports (read once per target,
+        // only for such a run). A run awaiting review needs none.
+        let runs: Vec<_> = self
+            .run_list(owner_id, false)?
+            .into_iter()
+            .filter(|run| !run.state.is_terminal())
+            .collect();
         let sessions = self.session_list(owner_id, true)?;
+        let mut returns: BTreeMap<String, Option<Vec<super::review_returns::ReturnedHandoff>>> =
+            BTreeMap::new();
         for view in plan.steps {
             let step = view.readiness.step;
             if view.readiness.level != ReadinessLevel::InProgress {
@@ -510,6 +521,29 @@ impl OrchestrationRuntime {
             // placeable again only when the run needs work.
             if self.run_waits(owner_id, run, tx.clock.now_ms()).is_some() {
                 continue;
+            }
+            if run.state == hotsheet_ticketing::orchestration::RunState::Intervened {
+                let Some(actor) = actor else {
+                    continue;
+                };
+                let target_id = run.target.target_id.clone();
+                let read = match returns.get(&target_id) {
+                    Some(read) => read.clone(),
+                    None => {
+                        let read =
+                            self.target_returns(owner_id, &target_id, &run.operation_id, actor, tx);
+                        returns.insert(target_id, read.clone());
+                        read
+                    }
+                };
+                let returned = read.unwrap_or_default().iter().any(|found| {
+                    found.connection_id == run.target.connection_id
+                        && found.native_id == run.target.native_id
+                        && found.returned_at_ms >= super::assignment::dispatched_at(run)
+                });
+                if !returned {
+                    continue;
+                }
             }
             work.push(WorkItem {
                 step_id: step.step_id,
@@ -593,7 +627,7 @@ impl OrchestrationRuntime {
         // HS2-2FG91X: what the policy requires of every piece of work on a target is
         // added per site by the pure core (HS2-6NQKP9), so each site of a project is
         // judged by its own `placement.resources` entry.
-        let mut work = self.scheduler_work(owner_id, tx)?;
+        let mut work = self.scheduler_work(owner_id, actor, tx)?;
         let memory = SchedulerStore::new(&self.home).memory(owner_id)?;
         // Only a target that could take a session is contacted: confirmed work, a
         // policy that lets sessions run there, and no refusal still being waited out.
@@ -1509,6 +1543,7 @@ impl OrchestrationRuntime {
                     &found.session_id,
                     found.state.code(),
                     found.claim_at_ms,
+                    found.returned_at_ms,
                     &found.outcome,
                     &found.outcome_detail,
                 )
@@ -1625,6 +1660,8 @@ impl OrchestrationRuntime {
                 step_id: found.step_id.clone(),
                 run_id: Some(found.run_id.clone()),
                 reason: Some(found.state.code().into()),
+                // HS2-ESVYQH: a correction after a review return, not a first assignment.
+                detail: found.returned_at_ms.map(|_| REVIEW_RETURNED.into()),
                 outcome: found.outcome.clone(),
                 outcome_detail: found.outcome_detail.clone(),
                 retry_at_ms: found.claim_at_ms,

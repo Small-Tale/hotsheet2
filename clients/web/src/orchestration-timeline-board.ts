@@ -115,7 +115,8 @@ export function runAttention(
     return {
       label: 'No worker holds it',
       tone: 'warning',
-      next: 'Hand it off, record what happened with Correct…, or cancel the run.',
+      // HS2-ESVYQH: a released run may be a handoff in review or one returned for corrections.
+      next: 'Its handoff may be in review or back for corrections, which are placed again on their own; it is not done until its ticket is completed. Hand it off, record what happened with Correct…, or cancel the run.',
     };
   if (run.paused) return { label: 'Paused', tone: 'neutral', next: 'Resume it to let its worker continue.' };
   return undefined;

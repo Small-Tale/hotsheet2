@@ -4212,3 +4212,488 @@ fn hs2_yadh9c_a_conflicting_plan_update_is_refused_without_touching_running_work
     assert_eq!(next.state, PlanUpdateState::Drafting);
     assert_eq!(next.draft_steps, 3);
 }
+
+/// HS2-ESVYQH: an RFC 3339 instant of the test clock, as the pool records it.
+fn rfc3339(ms: u64) -> String {
+    time::OffsetDateTime::from_unix_timestamp_nanos(i128::from(ms) * 1_000_000)
+        .unwrap()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap()
+}
+
+/// HS2-ESVYQH: one pool assignment of the run's ticket in `phase`; a `returned_at`
+/// makes it a review return with its own `## Review return` note.
+fn handed(
+    id: &str,
+    worker: &str,
+    run: &hotsheet_ticketing::orchestration::Run,
+    phase: &str,
+    returned_at: Option<(u64, &str)>,
+) -> crate::coordination::Assignment {
+    let mut value = json!({
+        "id": id, "worker": worker, "generation": "g1",
+        "ticket": {"connection_id": run.target.connection_id, "native_id": run.target.native_id},
+        "slug": "TGT-1", "base": "0".repeat(40), "phase": phase, "commit": "b".repeat(40),
+        "handoff": {"kind": "code", "commit": "b".repeat(40)},
+        "return_route": {"kind": "human_relay"}
+    });
+    if let Some((at, note)) = returned_at {
+        value["phase"] = json!("blocked");
+        value["recovery_note"] = json!(note);
+        value["transitions"] = json!([{"kind": "review_return", "at": rfc3339(at)}]);
+    }
+    serde_json::from_value(value).unwrap()
+}
+
+impl Placed {
+    /// HS2-ESVYQH: the worker claims (or releases) the step's ticket, and the run
+    /// learns it from the target.
+    fn claim_as(&self, step_id: &str, worker_id: &str, tx: &mut Transaction<'_>) {
+        let run = self.run_of(step_id);
+        let ticket = ops::resolve(&self.m.target_store, &run.target.native_id)
+            .unwrap()
+            .unwrap();
+        ops::claim_with_eta(
+            &self.m.target_store,
+            &ticket.id,
+            &hotsheet_model::Timestamp::from(NOW),
+            hotsheet_model::Timestamp::from("2030-01-01T00:00:00Z"),
+            worker_id,
+            None,
+            None,
+        )
+        .unwrap();
+        self.m
+            .runtime
+            .run_sync(&self.owner(), &run.run_id, Some(&worker()), tx)
+            .unwrap();
+    }
+    fn release_as(&self, step_id: &str, worker_id: &str, tx: &mut Transaction<'_>) {
+        let run = self.run_of(step_id);
+        let ticket = ops::resolve(&self.m.target_store, &run.target.native_id)
+            .unwrap()
+            .unwrap();
+        ops::release(
+            &self.m.target_store,
+            &ticket.id,
+            NOW.into(),
+            worker_id,
+            false,
+        )
+        .unwrap();
+        self.m
+            .runtime
+            .run_sync(&self.owner(), &run.run_id, Some(&worker()), tx)
+            .unwrap();
+    }
+    fn assignment_details(&self) -> Vec<(Option<String>, Option<String>, Option<String>)> {
+        self.m
+            .runtime
+            .scheduler_decisions(&self.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter(|entry| {
+                entry.record.kind == hotsheet_ticketing::orchestration::DecisionKind::Assignment
+            })
+            .map(|entry| {
+                (
+                    entry.record.reason,
+                    entry.record.detail,
+                    entry.record.outcome,
+                )
+            })
+            .collect()
+    }
+}
+
+/// HS2-ESVYQH (docs/26 §26.24): a scheduler-placed worker hands off and its handoff
+/// is returned for corrections. The run stays unfinished and the step in progress
+/// through every round; while the pool's dispatcher is live it assigns the correction
+/// and the loop only waits; with no live assigner (a dispatcher-authority pool whose
+/// integrator alone is live) the session claims the correction after the wait and is
+/// told about that exact return, once; a correction in flight and a return older than
+/// the run's last dispatch claim nothing; a second return is claimed and told again;
+/// only the ticket's completion finishes the run.
+#[test]
+fn hs2_esvyqh_a_returned_handoff_is_placed_again_each_round_and_never_finishes_the_run() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{step}"));
+    let terminal = f.terminal(&session);
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    let run = f.run_of(&step);
+    let now_s = |ms: u64| i64::try_from(ms / 1000).unwrap();
+    let far = now_s(START) + 100_000;
+    // A dispatcher-authority pool: the session joined, the dispatcher and the
+    // integrator are live.
+    let base = |state: &mut crate::coordination::State, dispatcher_until: i64| {
+        state.authority = crate::coordination::Authority::Dispatcher;
+        state
+            .workers
+            .insert(worker_id.clone(), role(&worker_id, far));
+        state.dispatcher = Some(role("dispatcher-1", dispatcher_until));
+        state.integrator = Some(role("integrator-1", far));
+    };
+    f.pool(|state| base(state, far));
+    // The dispatcher assigns it; the worker claims, works and hands off.
+    f.claim_as(&step, &worker_id, &mut tx);
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Dispatched
+    );
+    f.at(&clock, START + MINUTE);
+    f.release_as(&step, &worker_id, &mut tx);
+    f.pool(|state| {
+        base(state, far);
+        let original = handed("a-1", &worker_id, &run, "handoff", None);
+        state.assignments.insert(original.id.clone(), original);
+    });
+    let after = f.m.runtime.run(&f.owner(), &run.run_id).unwrap();
+    assert_eq!(
+        (after.state, after.history.last().unwrap().reason.as_deref()),
+        (RunState::Intervened, Some("claim_released"))
+    );
+    // Awaiting review: nothing to assign, the step is in progress, the session keeps
+    // its run (busy, never refilled) and nothing is started for the step.
+    let tick = f.tick(&mut tx);
+    assert!(
+        tick.view.assignments.is_empty(),
+        "{:?}",
+        tick.view.assignments
+    );
+    assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+    assert_eq!(f.level(&step, &mut tx), ReadinessLevel::InProgress);
+    assert_eq!(
+        placement(&tick, &session.session_id).0,
+        PlacementAction::Keep
+    );
+    let listed = f.listed(&mut tx);
+    assert_eq!(listed[0].run_id.as_deref(), Some(run.run_id.as_str()));
+    assert_eq!(listed[0].activity, SessionActivity::Busy);
+
+    // 1. Returned while the dispatcher is live: it assigns the correction, so the
+    //    loop only reports that it waits on it.
+    let returned_1 = START + 2 * MINUTE;
+    f.at(&clock, returned_1);
+    f.pool(|state| {
+        base(state, far);
+        let original = handed(
+            "a-1",
+            &worker_id,
+            &run,
+            "handoff",
+            Some((returned_1, "01REVIEWRETURNNOTE0000001")),
+        );
+        state.assignments.insert(original.id.clone(), original);
+    });
+    let tick = f.tick(&mut tx);
+    let [waiting] = &tick.view.assignments[..] else {
+        panic!("one returned run: {:?}", tick.view.assignments);
+    };
+    assert_eq!(
+        (
+            waiting.run_id.as_str(),
+            waiting.state.code(),
+            waiting.returned_at_ms,
+            waiting.claim_at_ms,
+            waiting.outcome.as_deref()
+        ),
+        (
+            run.run_id.as_str(),
+            "awaiting_dispatcher",
+            Some(returned_1),
+            None,
+            None
+        )
+    );
+    assert_eq!(f.explain(&step, &mut tx).reason, "in_progress");
+    // A correction the dispatcher assigned is in flight: nothing is reported.
+    f.pool(|state| {
+        base(state, far);
+        let original = handed(
+            "a-1",
+            &worker_id,
+            &run,
+            "handoff",
+            Some((returned_1, "01REVIEWRETURNNOTE0000001")),
+        );
+        let correction = handed("a-2", &worker_id, &run, "accepted", None);
+        state.assignments.insert(original.id.clone(), original);
+        state.assignments.insert(correction.id.clone(), correction);
+    });
+    assert!(f.tick(&mut tx).view.assignments.is_empty());
+
+    // 2. That correction never happened and the dispatcher's lease lapses. The
+    //    integrator is still live, but in a dispatcher-authority pool it assigns
+    //    nothing: the wait counts from the return.
+    f.pool(|state| {
+        base(state, now_s(START));
+        let original = handed(
+            "a-1",
+            &worker_id,
+            &run,
+            "handoff",
+            Some((returned_1, "01REVIEWRETURNNOTE0000001")),
+        );
+        state.assignments.insert(original.id.clone(), original);
+    });
+    let due_1 = returned_1 + 2 * MINUTE;
+    let tick = f.tick(&mut tx);
+    let waiting = &tick.view.assignments[0];
+    assert_eq!(
+        (
+            waiting.state.code(),
+            waiting.dispatcher_live,
+            waiting.integrator_live,
+            waiting.claim_at_ms,
+            waiting.outcome.as_deref()
+        ),
+        (
+            "no_live_dispatcher",
+            Some(false),
+            Some(true),
+            Some(due_1),
+            None
+        )
+    );
+    assert_eq!(tick.view.schedule.retry_at_ms, Some(due_1));
+    let explained = f.explain(&step, &mut tx);
+    assert_eq!(
+        (explained.reason.as_str(), explained.retry_at_ms),
+        ("no_live_dispatcher", Some(due_1))
+    );
+    assert!(f.assignment_details().contains(&(
+        Some("no_live_dispatcher".into()),
+        Some("review_returned".into()),
+        None
+    )));
+    f.at(&clock, due_1 - 1);
+    assert!(f.tick(&mut tx).outcomes.is_empty());
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Intervened
+    );
+    // At the time: claimed for the session, which is told to correct that return.
+    f.at(&clock, due_1);
+    let tick = f.tick(&mut tx);
+    assert_eq!(tick.view.assignments[0].outcome.as_deref(), Some("claimed"));
+    let claimed = f.m.runtime.run(&f.owner(), &run.run_id).unwrap();
+    assert_eq!(
+        (
+            claimed.state,
+            claimed.worker_id.as_deref(),
+            claimed.history.last().unwrap().reason.as_deref()
+        ),
+        (
+            RunState::Dispatched,
+            Some(worker_id.as_str()),
+            Some("claimed_for_session")
+        )
+    );
+    let told = f.requests(&terminal);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains("returned your handoff"), "{told:?}");
+    assert!(told[0].contains("01REVIEWRETURNNOTE0000001"), "{told:?}");
+    assert!(told[0].contains(&format!("`{}`", f.slug(&run))), "{told:?}");
+    assert!(f.assignment_details().contains(&(
+        Some("no_live_dispatcher".into()),
+        Some("review_returned".into()),
+        Some("claimed".into())
+    )));
+    assert_eq!(f.level(&step, &mut tx), ReadinessLevel::InProgress);
+    for _ in 0..2 {
+        assert!(f.tick(&mut tx).view.assignments.is_empty());
+    }
+
+    // 3. The corrected work is handed off again. The first return is older than the
+    //    run's last dispatch, so it claims nothing more.
+    f.at(&clock, due_1 + MINUTE);
+    f.release_as(&step, &worker_id, &mut tx);
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Intervened
+    );
+    f.at(&clock, due_1 + 10 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert!(
+        tick.view.assignments.is_empty(),
+        "{:?}",
+        tick.view.assignments
+    );
+    assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+
+    // 4. The correction is returned too: a second round, claimed and told once more.
+    let returned_2 = due_1 + 11 * MINUTE;
+    f.at(&clock, returned_2);
+    f.pool(|state| {
+        base(state, now_s(START));
+        let original = handed(
+            "a-1",
+            &worker_id,
+            &run,
+            "handoff",
+            Some((returned_1, "01REVIEWRETURNNOTE0000001")),
+        );
+        let correction = handed(
+            "a-2",
+            &worker_id,
+            &run,
+            "handoff",
+            Some((returned_2, "01REVIEWRETURNNOTE0000002")),
+        );
+        state.assignments.insert(original.id.clone(), original);
+        state.assignments.insert(correction.id.clone(), correction);
+    });
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        (
+            tick.view.assignments[0].returned_at_ms,
+            tick.view.assignments[0].claim_at_ms
+        ),
+        (Some(returned_2), Some(returned_2 + 2 * MINUTE))
+    );
+    f.at(&clock, returned_2 + 2 * MINUTE);
+    assert_eq!(
+        f.tick(&mut tx).view.assignments[0].outcome.as_deref(),
+        Some("claimed")
+    );
+    let told = f.requests(&terminal);
+    assert_eq!(told.len(), 2, "{told:?}");
+    assert!(told[1].contains("01REVIEWRETURNNOTE0000002"), "{told:?}");
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Dispatched
+    );
+
+    // 5. Only the ticket's completion finishes the run and the step; the returned
+    //    records left in the pool are then nobody's business.
+    f.finish(&step, &mut tx);
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Completed
+    );
+    assert_eq!(f.level(&step, &mut tx), ReadinessLevel::Finished);
+    assert!(f.tick(&mut tx).view.assignments.is_empty());
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+}
+
+/// HS2-ESVYQH: a run whose session is lost while its handoff awaits review is not
+/// placed again; once the handoff is returned it is, through the ordinary placement,
+/// on the same run, and the new session's own claim is what the
+/// fallback then gives the correction to; a dry run reports the return and claims
+/// nothing; a pool that cannot be read concludes nothing.
+#[test]
+fn hs2_esvyqh_a_returned_run_whose_session_was_lost_is_placed_again_on_the_same_run() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let first = f.record(&format!("sched-start-{step}"));
+    let first_worker = first.hosted.as_ref().unwrap().worker_id.clone();
+    let run = f.run_of(&step);
+    f.claim_as(&step, &first_worker, &mut tx);
+    f.at(&clock, START + MINUTE);
+    f.release_as(&step, &first_worker, &mut tx);
+    let returned = START + 2 * MINUTE;
+    let pool = |workers: &[&str]| {
+        let workers: Vec<String> = workers.iter().map(|id| (*id).to_owned()).collect();
+        let run = run.clone();
+        let first_worker = first_worker.clone();
+        move |state: &mut crate::coordination::State| {
+            for id in &workers {
+                state.workers.insert(id.clone(), role(id, 4_000_000_000));
+            }
+            let original = handed(
+                "a-1",
+                &first_worker,
+                &run,
+                "handoff",
+                Some((returned, "01REVIEWRETURNNOTE0000001")),
+            );
+            state.assignments.insert(original.id.clone(), original);
+        }
+    };
+    // The session crashes while its handoff awaits review: the run needs no session
+    // then, so nothing is started for it.
+    f.pool(|state| {
+        state
+            .workers
+            .insert(first_worker.clone(), role(&first_worker, 4_000_000_000));
+        let original = handed("a-1", &first_worker, &run, "handoff", None);
+        state.assignments.insert(original.id.clone(), original);
+    });
+    f.host.crash(&f.terminal(&first));
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+        assert!(tick.view.assignments.is_empty());
+    }
+    assert_eq!(f.host.launches().len(), 1);
+    // Returned for corrections: the step is placed again.
+    f.pool(pool(&[&first_worker]));
+    f.at(&clock, returned);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)], "{:?}", tick.outcomes);
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+    let second = f
+        .records()
+        .into_iter()
+        .find(|session| {
+            session.state == SessionState::Running && session.session_id != first.session_id
+        })
+        .expect("a new session");
+    assert_eq!(second.run_id.as_deref(), Some(run.run_id.as_str()));
+    let second_worker = second.hosted.as_ref().unwrap().worker_id.clone();
+    // The new session reads the same return; it has not joined, so it is not given
+    // the claim yet.
+    let waiting = &tick.view.assignments[0];
+    assert_eq!(
+        (
+            waiting.session_id.as_str(),
+            waiting.state.code(),
+            waiting.joined
+        ),
+        (second.session_id.as_str(), "no_live_dispatcher", false)
+    );
+    // Automatic placement off: a pass past the time only reports.
+    let mut manual = policy();
+    manual.placement.automatic = Some(false);
+    f.set_policy(manual, &mut tx);
+    f.pool(pool(&[&first_worker, &second_worker]));
+    f.at(&clock, returned + 3 * MINUTE);
+    let dry = f.tick(&mut tx);
+    assert_eq!(dry.view.assignments[0].outcome, None);
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Intervened
+    );
+    // An unreadable pool concludes nothing.
+    let state =
+        std::path::Path::new(&f.m.target.root).join(".git/hotsheet-coordination/state.json");
+    std::fs::write(&state, b"not a pool").unwrap();
+    f.set_policy(policy(), &mut tx);
+    let tick = f.tick(&mut tx);
+    assert!(
+        tick.view.assignments.is_empty(),
+        "{:?}",
+        tick.view.assignments
+    );
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Intervened
+    );
+    // Readable again, joined: the correction is claimed for the new session.
+    f.pool(pool(&[&first_worker, &second_worker]));
+    let tick = f.tick(&mut tx);
+    assert_eq!(tick.view.assignments[0].outcome.as_deref(), Some("claimed"));
+    let claimed = f.m.runtime.run(&f.owner(), &run.run_id).unwrap();
+    assert_eq!(
+        (claimed.state, claimed.worker_id.as_deref()),
+        (RunState::Dispatched, Some(second_worker.as_str()))
+    );
+    assert_eq!(f.level(&step, &mut tx), ReadinessLevel::InProgress);
+}

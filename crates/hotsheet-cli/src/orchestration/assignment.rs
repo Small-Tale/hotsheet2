@@ -26,6 +26,10 @@ use super::*;
 /// would assign it.
 pub const CLAIMED_FOR_SESSION: &str = "claimed_for_session";
 
+/// HS2-ESVYQH: the decision-log detail of an assignment record for a run whose handoff
+/// was returned for corrections.
+pub const REVIEW_RETURNED: &str = "review_returned";
+
 /// HS2-5P112Z: what one pass's relay did for a worker session on a site that is not
 /// its project's home: what the home's pool answered, and whether the session was
 /// told its assignment.
@@ -145,6 +149,10 @@ pub struct Assignment {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub integrator_live: Option<bool>,
     pub queued_at_ms: u64,
+    /// HS2-ESVYQH: the run's handoff was returned for corrections at this time, and no
+    /// correction is in flight: the wait for an assigner counts from here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub returned_at_ms: Option<u64>,
     /// While nobody will assign it: when the session claims the ticket for itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claim_at_ms: Option<u64>,
@@ -166,6 +174,27 @@ pub struct Assignment {
     /// The worker id the session's claims carry.
     #[serde(skip)]
     pub(super) worker_id: String,
+    /// HS2-ESVYQH: the `## Review return` note the claim answers, for a returned run.
+    #[serde(skip)]
+    pub(super) review_note: Option<String>,
+}
+
+/// HS2-ESVYQH: what one read of a target's pool brought in.
+#[derive(Debug, Clone, Default)]
+struct PoolRead {
+    roles: HostedRoles,
+    /// Tickets with a returned handoff and no correction in flight.
+    returned: Vec<super::review_returns::ReturnedHandoff>,
+    /// The pool's assigning role is live; `None` when unknown.
+    assigner_live: Option<bool>,
+}
+
+/// When the run was last dispatched to a worker (0 if never).
+pub(super) fn dispatched_at(run: &Run) -> u64 {
+    run.history
+        .iter()
+        .rfind(|entry| entry.to == RunState::Dispatched)
+        .map_or(0, |entry| entry.at_ms)
 }
 
 /// The plan step a scheduler run (`sched-run-<step>` or `sched-run-<step>.<n>`)
@@ -196,7 +225,7 @@ impl OrchestrationRuntime {
         session: &OrchestratedSession,
         actor: &MutationActor,
         tx: &mut Transaction<'_>,
-    ) -> Option<HostedRoles> {
+    ) -> Option<PoolRead> {
         let (target, authorized) = self
             .session_gate(session, Some(actor), true, None, tx)
             .ok()?;
@@ -210,7 +239,11 @@ impl OrchestrationRuntime {
                 tx,
             )?;
             serde_json::from_value::<HostedSessionList>(reply)
-                .map(|list| list.roles)
+                .map(|list| PoolRead {
+                    roles: list.roles,
+                    returned: list.returned,
+                    assigner_live: list.assigner_live,
+                })
                 .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
         })();
         self.finish(&target, &authorized, &outcome, tx).ok()?;
@@ -221,6 +254,11 @@ impl OrchestrationRuntime {
     /// owner's orchestrator owns was given, decided against the target's pool. Each
     /// target's pool is read once, as `actor`; without one nothing is read and every
     /// run reads `pool_unknown`.
+    ///
+    /// HS2-ESVYQH: so is such a run that reads `intervened` because its handoff was
+    /// returned for corrections after it was last dispatched, while the pool shows no
+    /// correction in flight. Its wait counts from the return, and only the pool's
+    /// assigning role (by its authority) counts as one who will assign it.
     pub(super) fn scheduler_assignments(
         &self,
         owner_id: &str,
@@ -229,15 +267,16 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Vec<Assignment> {
+        // HS2-ESVYQH: every unfinished run, `intervened` included (HS2-RCR4A6).
         let (Ok(sessions), Ok(runs)) = (
             self.session_list(owner_id, true),
-            self.run_list(owner_id, true),
+            self.run_list(owner_id, false),
         ) else {
             return Vec::new();
         };
         let now_ms = tx.clock.now_ms();
         let wait_ms = u64::from(policy.placement.dispatcher_wait_minutes) * 60 * 1000;
-        let mut roles: BTreeMap<String, Option<HostedRoles>> = BTreeMap::new();
+        let mut roles: BTreeMap<String, Option<PoolRead>> = BTreeMap::new();
         // HS2-5P112Z: a run on a site that is not its project's home waits on the home's
         // pool, the one that assigns the whole project's work.
         let sites = self.active_project_sites(owner_id);
@@ -257,7 +296,7 @@ impl OrchestrationRuntime {
                 continue;
             };
             if run.mode != DispatchMode::Dispatcher
-                || run.state != RunState::Queued
+                || !matches!(run.state, RunState::Queued | RunState::Intervened)
                 || run.paused.is_some()
                 || run.cancel_requested
             {
@@ -265,32 +304,68 @@ impl OrchestrationRuntime {
             }
             let home = sites.home_of(&session.target_id).to_owned();
             let pool = match roles.get(&home) {
-                Some(known) => *known,
+                Some(known) => known.clone(),
                 None => {
                     let read = actor.and_then(|actor| {
                         if home == session.target_id {
                             self.pool_roles(session, actor, tx)
                         } else {
+                            // A site's relay carries its handoffs (HS2-5P112Z); the
+                            // home's pool route reports no returns.
                             self.home_pool(session, &home, None, &sites, actor, tx)
-                                .map(|reply| reply.roles)
+                                .map(|reply| PoolRead {
+                                    roles: reply.roles,
+                                    ..PoolRead::default()
+                                })
                         }
                     });
-                    roles.insert(home.clone(), read);
+                    roles.insert(home.clone(), read.clone());
                     read
                 }
             };
+            // HS2-ESVYQH: an intervened run is only this pass's business when its
+            // handoff came back for corrections since it was last dispatched.
+            let returned = (run.state == RunState::Intervened)
+                .then(|| {
+                    pool.as_ref()?.returned.iter().find(|found| {
+                        found.connection_id == run.target.connection_id
+                            && found.native_id == run.target.native_id
+                            && found.returned_at_ms >= dispatched_at(run)
+                    })
+                })
+                .flatten()
+                .cloned();
+            if run.state == RunState::Intervened && returned.is_none() {
+                continue;
+            }
             let queued_at_ms = queued_at(run);
             let backoff_until_ms = memory
                 .iter()
                 .find(|entry| entry.target_id == session.target_id)
                 .and_then(PlacementMemory::refused_until_ms);
-            let input = AssignmentInput {
-                dispatcher_live: pool.and_then(|pool| pool.dispatcher_live),
-                integrator_live: pool.and_then(|pool| pool.integrator_live),
-                queued_at_ms,
-                wait_ms,
-                backoff_until_ms,
-                now_ms,
+            let dispatcher_live = pool.as_ref().and_then(|pool| pool.roles.dispatcher_live);
+            let integrator_live = pool.as_ref().and_then(|pool| pool.roles.integrator_live);
+            let input = match &returned {
+                // Only the pool's assigning role gives out a correction.
+                Some(found) => {
+                    let assigner = pool.as_ref().and_then(|pool| pool.assigner_live);
+                    AssignmentInput {
+                        dispatcher_live: assigner,
+                        integrator_live: assigner.map(|_| false),
+                        queued_at_ms: found.returned_at_ms,
+                        wait_ms,
+                        backoff_until_ms,
+                        now_ms,
+                    }
+                }
+                None => AssignmentInput {
+                    dispatcher_live,
+                    integrator_live,
+                    queued_at_ms,
+                    wait_ms,
+                    backoff_until_ms,
+                    now_ms,
+                },
             };
             let decided = decide_assignment(&input);
             let joined = session.joined_at_ms.is_some();
@@ -301,11 +376,13 @@ impl OrchestrationRuntime {
                 home_target_id: (home != session.target_id).then_some(home),
                 step_id: step_of(run),
                 state: decided.state,
-                dispatcher_live: input.dispatcher_live,
-                integrator_live: input.integrator_live,
+                dispatcher_live,
+                integrator_live,
                 queued_at_ms,
+                returned_at_ms: returned.as_ref().map(|found| found.returned_at_ms),
                 claim_at_ms: (decided.state == AssignmentState::NoLiveDispatcher).then(|| {
-                    queued_at_ms
+                    input
+                        .queued_at_ms
                         .saturating_add(wait_ms)
                         .max(backoff_until_ms.unwrap_or(0))
                 }),
@@ -315,9 +392,49 @@ impl OrchestrationRuntime {
                 claim: decided.claim && joined,
                 retry_at_ms: decided.retry_at_ms,
                 worker_id: hosted.worker_id.clone(),
+                review_note: returned.map(|found| found.review_note),
             });
         }
         found
+    }
+
+    /// HS2-ESVYQH: the handoffs a target's pool returned for corrections with no
+    /// correction in flight, from its hosted session listing, read as `actor` like a
+    /// capacity read (`gates_observe`). `None` when it could not be asked.
+    pub(super) fn target_returns(
+        &self,
+        owner_id: &str,
+        target_id: &str,
+        filter_operation: &str,
+        actor: &MutationActor,
+        tx: &mut Transaction<'_>,
+    ) -> Option<Vec<super::review_returns::ReturnedHandoff>> {
+        let target = Self::target_ref(owner_id, target_id).ok()?;
+        let authorized = self
+            .authorize(
+                &target,
+                Some(actor),
+                ActionRequest::new(TargetAction::GatesObserve),
+                tx,
+            )
+            .ok()?;
+        let outcome = (|| {
+            // One operation id narrows the listing to (at most) that session: only the
+            // pool's facts are wanted.
+            let reply = self.hosted_call_at(
+                Self::destination(&authorized)?,
+                "/target-sessions",
+                "GET",
+                &format!("?operation_id={}", encode(filter_operation)),
+                None,
+                tx,
+            )?;
+            serde_json::from_value::<HostedSessionList>(reply)
+                .map(|list| list.returned)
+                .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+        })();
+        self.finish(&target, &authorized, &outcome, tx).ok()?;
+        outcome.ok()
     }
 
     /// HS2-5P112Z: the active grouping of the owner's targets into projects. An
@@ -567,16 +684,36 @@ impl OrchestrationRuntime {
                 Ok(_) => {
                     assignment.outcome = Some("claimed".into());
                     // HS2-R7QH35: the session is told the ticket is now its own.
-                    let _ =
-                        self.session_tell_ticket(owner_id, &assignment.session_id, Some(actor), tx);
+                    // HS2-ESVYQH: after a return, told to make the corrections, once
+                    // per return.
+                    let _ = match &assignment.review_note {
+                        Some(note) => self.session_tell(
+                            owner_id,
+                            &assignment.session_id,
+                            Some((RequestKind::Returned, Some(note.clone()))),
+                            Some(actor),
+                            tx,
+                        ),
+                        None => self.session_tell_ticket(
+                            owner_id,
+                            &assignment.session_id,
+                            Some(actor),
+                            tx,
+                        ),
+                    };
                 }
                 Err(error) => {
                     assignment.outcome = Some("refused".into());
                     assignment.outcome_detail = Some(error.code().into());
-                    if matches!(
-                        error,
-                        OrchestrationError::TargetOperation(TargetOpError::Conflict)
-                    ) {
+                    // HS2-ESVYQH: a returned run stays intervened whoever holds its
+                    // ticket, so a conflict there backs off like any refusal rather
+                    // than being tried on every pass.
+                    if assignment.returned_at_ms.is_none()
+                        && matches!(
+                            error,
+                            OrchestrationError::TargetOperation(TargetOpError::Conflict)
+                        )
+                    {
                         // Someone took the ticket meanwhile: the run learns who now,
                         // so the next pass does not try again.
                         let _ = self.run_sync(owner_id, &assignment.run_id, Some(actor), tx);
@@ -620,7 +757,12 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<Run, OrchestrationError> {
         let run = self.run(owner_id, &assignment.run_id)?;
-        if run.state != RunState::Queued || run.mode != DispatchMode::Dispatcher {
+        // HS2-ESVYQH: a returned run is intervened when its correction is claimed.
+        let claimable = match assignment.returned_at_ms {
+            Some(_) => run.state == RunState::Intervened,
+            None => run.state == RunState::Queued,
+        };
+        if !claimable || run.mode != DispatchMode::Dispatcher {
             return Err(OrchestrationError::Run(
                 hotsheet_ticketing::orchestration::RunError::NotActive,
             ));

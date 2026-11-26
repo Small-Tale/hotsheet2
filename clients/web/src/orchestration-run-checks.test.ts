@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { dispositionText, parseRunReconciliation, reconciliationRows } from './orchestration-run-checks';
+import {
+  dispositionText,
+  parseRunReconciliation,
+  reconciliationRows,
+  runEventText,
+  runReasonText,
+} from './orchestration-run-checks';
 
 const clock = (ms: number) => `t${ms}`;
 
@@ -63,5 +69,36 @@ describe('a run’s last reconciliation in words (HS2-XM692S)', () => {
       }),
     ).toEqual({ at_ms: 3, disposition: 'continue', findings: [{ source: 'ci_run', verification: 'verified' }] });
     expect(parseRunReconciliation({ reconciliation: { at_ms: 3, disposition: 'paused' } })?.findings).toEqual([]);
+  });
+});
+
+describe('a released or returned run in words (HS2-ESVYQH)', () => {
+  it('names the reasons a run changes and reads a newer one as words', () => {
+    for (const code of [
+      'claim_released',
+      'claim_taken',
+      'claim_confirmed',
+      'claimed_for_session',
+      'assigned_by_dispatcher',
+      'target_completed',
+    ])
+      expect(runReasonText(code)).not.toContain('_');
+    expect(runReasonText('claim_released')).toBe(
+      'its worker let the ticket go: a handoff, or a return for corrections',
+    );
+    expect(runReasonText('some_new_reason')).toBe('some new reason');
+  });
+
+  it('writes each event row: a release, a claim made again after a return, and one learned from the project', () => {
+    expect(runEventText({ kind: 'state', state: 'intervened', reason: 'claim_released', source: 'target' })).toBe(
+      'State: released by its worker (its worker let the ticket go: a handoff, or a return for corrections) · learned from the project',
+    );
+    expect(runEventText({ kind: 'state', state: 'dispatched', reason: 'claimed_for_session' })).toBe(
+      'State: dispatched (claimed for its session, with no dispatcher to assign it)',
+    );
+    expect(runEventText({ kind: 'session' })).toBe('Session');
+    expect(runEventText({ kind: 'session_request', reason: 'session_request_delivered' })).toBe(
+      'Session request (session request delivered)',
+    );
   });
 });

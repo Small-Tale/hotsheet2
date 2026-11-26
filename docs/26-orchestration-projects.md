@@ -5443,6 +5443,67 @@ host's own record, kept by the hosted half of §26.16 (`HostedSessionRegistry`):
 The orchestrator never reuses a withdrawn operation id: the new choice starts under
 `<op>.<n>`, so a fence never holds back live work.
 
+### A handoff returned for corrections (HS2-ESVYQH)
+
+**Decision.** An integrator may return a scheduler-placed worker's handoff for
+corrections (`coordination review-return`, docs/05 §5.9.1, HS2-65ETRJ/HS2-AEBJYN). A
+return never finishes the step and never leaves it waiting for good: the correction
+is placed again by the same means the loop used for the step, and the step stays in
+progress until the corrected work is integrated and its ticket completed. Any number
+of rounds work the same way.
+
+**What a return leaves behind.** The worker released its claim when it handed off, so
+the step's dispatcher-mode run reads `intervened` (reason `claim_released`). That run
+is unfinished: only the target ticket's completion finishes it (`target_completed`),
+so the step stays `in_progress` through every review and return, and nothing is
+dispatched twice. A session still linked to the run stays busy with it: it is never
+refilled with other work or wound down as idle, and it keeps the target's
+dispatcher (§26.30) while it lasts.
+
+**Who places the correction.**
+
+| The run's state after the return                     | What places the correction                                                                                                                                              |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The pool's assigning role is live                    | It assigns the correction under a new operation, by its own authority (`awaiting_dispatcher`). The loop only waits; it never names the worker                           |
+| No live assigning role, the run's session is running | After `placement.dispatcher_wait_minutes` from the return, an applied pass claims the ticket for the session (HS2-T16SK0, below), which is told to make the corrections |
+| The run's session is gone (lost, stopped)            | The step is placeable again: the ordinary placement (capacity, resources, backoff) starts a session on the same run, which then gets the correction as above            |
+| Awaiting review, or a correction already in flight   | Nothing: no session is started, nothing is claimed                                                                                                                      |
+
+- **The pool's facts.** The hosted session listing (`GET .../target-sessions`) reports
+  `returned`, one entry per ticket whose latest handoff was returned and that no other
+  unfinished assignment (a correction offered, accepted, handed off or being
+  integrated) covers, with `returned_at_ms` (the return's recorded time) and
+  `review_note` (its `## Review return` note), and `assigner_live`: whether the
+  role that assigns in that pool holds a live lease, its dispatcher under dispatcher
+  authority, else its integrator. Both are additive; an older host reports neither and
+  no correction is claimed for it.
+- **Which return counts.** Only one recorded after the run was last dispatched, so a
+  return the session already answered is not answered again, and a later return is.
+- **The claim.** The assignment fallback of HS2-T16SK0 takes an `intervened` run with
+  such a return as it takes a `queued` one: the wait counts from `returned_at_ms`,
+  only `assigner_live` counts as someone who will assign (a dispatcher-authority
+  pool's integrator does not), the session must have joined its pool, and a dry run
+  only reports. The claim moves the run to `dispatched` for the session's worker
+  (`claimed_for_session`). A claim that fails, a conflict included, backs the target
+  off like a refused start, since the run reads `intervened` whoever holds it.
+- **Telling the session.** It is sent a `returned` request (§26.24, HS2-R7QH35) naming
+  the ticket and the return's note, so it reads that note and corrects the work. Each
+  return is a new request, pushed once.
+- **Woken by the return.** The return changes the target's pool, not its tickets, after
+  its `## Review return` note. The hosting server's checkout watch (HS2-XA9DZA) also
+  watches `<git-common-dir>/hotsheet-coordination/state.json` and records a change of
+  it as `coordination_pool_changed`, which the target feed answers as
+  `pool_changed: true` (omitted when false, and by an older host). Either a pool
+  change or a change of the released run's own ticket wakes the loop while the run
+  reads `intervened`, whether or not a session of the owner is still there.
+- **Reported** like any assignment: the `assignments` member of `plan` and `tick` adds
+  `returned_at_ms`, the decision log's `assignment` record has detail
+  `review_returned`, and `scheduler explain` answers `no_live_dispatcher` with the
+  claim time.
+- **A worker on another site** of a project (§26.30, HS2-5P112Z) is not covered: the
+  home's pool route reports no returns, so its correction waits for the home's
+  dispatcher (HS2-SK9B3T).
+
 ## 26.25 Proposing the plan from goal tickets (HS2-HCW7MD)
 
 The maintainer's decision on the workspace design (HS2-HSMH2Q, Design v3): "On Start
