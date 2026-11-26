@@ -598,7 +598,11 @@ promise, types a path, and releases the list. It then checks that the input node
 focus, and caret survive a wide-to-narrow-to-wide pass, and that Connect provider posts the
 typed locator.
 
-HS2-31HBBC upgrades the pinned Kerf client packages to beta.135. Existing unit,
+HS2-6H9P37 upgrades the pinned Kerf client packages to beta.136. Existing unit,
+lint/doctor, catalog, and browser coverage carries the upgrade; no Hot Sheet behavior
+changes, and the catalog regenerates byte-identically.
+
+HS2-31HBBC upgraded the pinned Kerf client packages to beta.135. Existing unit,
 lint/doctor, catalog, and browser coverage carries the upgrade; no Hot Sheet behavior
 changes, and the catalog regenerates byte-identically.
 

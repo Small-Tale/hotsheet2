@@ -101,3 +101,20 @@ Running ESLint and the doctor at the same time would hide the shorter one on a
 multi-core host. That was not done: it changes the documented first-failure order, and
 the two passes together need more memory than the 7 GB CI runners guarantee (ESLint alone
 peaks near 3.3 GB, HS2-3TWWWD).
+
+## Kerf 5.0.0-beta.136 (HS2-6H9P37)
+
+KF-3J0GC6 is completed in Kerf, but the fix is not in beta.136. That release was published
+at 2026-11-25 12:59 UTC, and the KF-3J0GC6 fix landed on Kerf `main` later that day. The
+beta.136 `doctor/` directory is byte-identical to beta.135, and `eslint-plugin-kerfjs`
+changed only its version string. Two cold `lint:web` runs on the same tree, one before the
+upgrade and one after, used `HOTSHEET_LINT_WEB_REUSE=0` and an empty `.kerf-cache`. They
+confirm that nothing changed:
+
+| Run (load at start, at end) | Wall    | ESLint | Doctor  | CPU (user + sys) |
+| --------------------------- | ------- | ------ | ------- | ---------------- |
+| beta.135, before (22, 17)   | 435.7 s | 72.0 s | 362.9 s | 306 s + 91 s     |
+| beta.136, after (20, 85)    | 445.5 s | 67.5 s | 377.2 s | 311 s + 97 s     |
+
+The difference is within load noise. Re-measure when Hot Sheet upgrades to the first Kerf
+release that contains KF-3J0GC6.
