@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { ApiHttpError } from './api';
-import { boundedBackoffMs, isTransientRequestFailure, retryTransient } from './bounded-backoff';
+import {
+  boundedBackoffMs,
+  describeRequestFailure,
+  isTransientRequestFailure,
+  retryTransient,
+  SERVER_UNREACHABLE,
+} from './bounded-backoff';
 
 describe('the bounded backoff (HS2-JGFPG4)', () => {
   it('waits 1 s doubling to a 30 s cap', () => {
@@ -104,5 +110,21 @@ describe('retryTransient (HS2-JGFPG4)', () => {
       retryTransient(s.attempt, { signal: new AbortController().signal, transient: () => false }),
     ).rejects.toBeInstanceOf(TypeError);
     expect(s.calls()).toBe(1);
+  });
+});
+
+describe('describeRequestFailure (HS2-1HGTD7)', () => {
+  it('reads a request with no answer the same in every browser', () => {
+    expect(SERVER_UNREACHABLE).toBe('The Hot Sheet server could not be reached.');
+    for (const text of ['Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.'])
+      expect(describeRequestFailure(new TypeError(text))).toBe(SERVER_UNREACHABLE);
+  });
+
+  it('keeps the server’s own refusal and any other message', () => {
+    expect(describeRequestFailure(new ApiHttpError('The checkout is not open.', 404))).toBe(
+      'The checkout is not open.',
+    );
+    expect(describeRequestFailure(new Error('Unexpected answer.'))).toBe('Unexpected answer.');
+    expect(describeRequestFailure('plain')).toBe('plain');
   });
 });

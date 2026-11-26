@@ -922,7 +922,9 @@ describe('following a running validation (HS2-JGFPG4)', () => {
     const t = setup([running, ...Array.from({ length: 6 }, () => new TypeError('network'))]);
     await t.start();
     await vi.waitFor(() => {
-      expect(t.toasts).toEqual(['Validation step unit is no longer followed: network']);
+      expect(t.toasts).toEqual([
+        'Validation step unit is no longer followed: The Hot Sheet server could not be reached.',
+      ]);
     });
     expect(t.waits).toEqual([0, 8_000, 8_000, 8_000, 8_000, 8_000]);
     expect(t.delays).toEqual([1_000, 2_000, 4_000, 8_000]);
@@ -936,6 +938,7 @@ describe('following a running validation (HS2-JGFPG4)', () => {
       expect(t.toasts).toHaveLength(1);
     });
     expect(t.toasts[0]).toMatch(/^Validation step unit is no longer followed: /);
+    expect(t.toasts[0]).not.toContain('could not be reached');
     expect(t.waits).toEqual([0, 8_000]);
     expect(t.delays).toEqual([]);
     t.controller.dispose();

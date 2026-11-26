@@ -63,7 +63,7 @@ async function recordToasts(page: Page) {
 
 /** The shown toast at 1440, 1100, 390 and 1440 again, in the light then the dark scheme. */
 async function toastPass(page: Page, ticket: string, state: string, text: RegExp) {
-  const toast = page.locator('wa-toast-item:has(.app-toast)').filter({ hasText: text });
+  const toast = page.locator('wa-toast-item').filter({ has: page.locator('.app-toast', { hasText: text }) });
   const check = async (width: number) => {
     await expect(toast).toBeVisible();
     const box = (await toast.boundingBox())!;
@@ -188,7 +188,8 @@ test('HS2-CX563Y a sync-health read retries a transient failure and shows one to
     await strip.getByRole('button', { name: 'Add Project' }).click();
     await page.getByRole('button', { name: 'Local Project' }).click();
     await expect(projectTab(strip, 'beta')).toHaveAttribute('aria-selected', 'true');
-    const lasting = /^beta: ticket sync health could not be read\. /u;
+    // HS2-1HGTD7: the same plain sentence in every browser, never the browser's own network text.
+    const lasting = /^beta: ticket sync health could not be read\. The Hot Sheet server could not be reached\.$/u;
     await expect.poll(() => toasts(lasting), { timeout: 60_000 }).toHaveLength(1);
     expect(reads.beta).toBe(5);
     await expect(banner).toHaveCount(0);
@@ -255,7 +256,7 @@ test('HS2-CX563Y following a validation retries a dropped request and shows one 
       await expect(section).toContainText('smoke (command)');
       await section.getByRole('button', { name: 'Run Validation' }).click();
     };
-    const lasting = /^Validation step smoke is no longer followed: /u;
+    const lasting = /^Validation step smoke is no longer followed: The Hot Sheet server could not be reached\.$/u;
 
     // A dropped request and a 503, then the answer: followed to the end with no toast.
     follows.push('drop', '503', 'passed');

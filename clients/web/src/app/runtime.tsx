@@ -63,6 +63,7 @@ import {
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import { type AttachmentLabelEditing } from '../attachment-label-editing';
 import { type BoardColumnPage, isPerColumnBoardView } from '../board-pagination';
+import { describeRequestFailure } from '../bounded-backoff';
 import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import { claimHolderName } from '../claim-holder';
@@ -2041,9 +2042,7 @@ export async function startHotSheetWebClient() {
   // HS2-JGFPG4: a transient failure retries on the bounded backoff; one that persists is shown, not dropped.
   const ticketStoreSync = createTicketStoreSync((target) => new Api(target.apiPath).checkoutRepositorySync(target.id), {
     onPersistentFailure: (target, reason) => {
-      showToast(
-        `${target.name}: ticket sync health could not be read. ${reason instanceof Error ? reason.message : String(reason)}`,
-      );
+      showToast(`${target.name}: ticket sync health could not be read. ${describeRequestFailure(reason)}`);
     },
   });
   effect(() => {

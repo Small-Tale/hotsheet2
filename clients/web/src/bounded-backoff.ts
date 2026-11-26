@@ -39,6 +39,19 @@ export function isTransientRequestFailure(reason: unknown): boolean {
   return reason.status >= 500 || reason.status === 408 || reason.status === 429;
 }
 
+/** HS2-1HGTD7: a request that got no answer, in words that read the same in every browser. */
+export const SERVER_UNREACHABLE = 'The Hot Sheet server could not be reached.';
+
+/**
+ * A failed request in plain words. A request that got no answer rejects with the browser's own
+ * `TypeError` text ("Failed to fetch", "Load failed"), so it reads as {@link SERVER_UNREACHABLE};
+ * the server's own refusal keeps its message.
+ */
+export function describeRequestFailure(reason: unknown): string {
+  if (reason instanceof TypeError) return SERVER_UNREACHABLE;
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
 /** How many consecutive transient failures a one-shot read retries before it reports the failure. */
 export const TRANSIENT_RETRY_LIMIT = 5;
 

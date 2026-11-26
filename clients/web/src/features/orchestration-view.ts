@@ -8,7 +8,12 @@
 import { batch, computed, effect, type Signal, signal } from 'kerfjs';
 
 import { Api, ApiHttpError } from '../api';
-import { type BackoffDelay, isTransientRequestFailure, retryTransient } from '../bounded-backoff';
+import {
+  type BackoffDelay,
+  describeRequestFailure,
+  isTransientRequestFailure,
+  retryTransient,
+} from '../bounded-backoff';
 import type { OrchestrationDecisionsDialogState } from '../components/orchestration-decisions-dialog';
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
 import type { OrchestrationProposeAvailability } from '../components/orchestration-timeline-view';
@@ -880,7 +885,9 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
           if (!unsettled(answer)) return;
         } catch (reason) {
           if (signal.aborted || run !== generation) return;
-          dependencies.showToast(`Validation step ${entry.step_id} is no longer followed: ${describeRefusal(reason)}`);
+          // HS2-1HGTD7: a request with no answer reads the same in every browser.
+          const why = reason instanceof ApiHttpError ? describeRefusal(reason) : describeRequestFailure(reason);
+          dependencies.showToast(`Validation step ${entry.step_id} is no longer followed: ${why}`);
           void refreshDetails();
           return;
         }
