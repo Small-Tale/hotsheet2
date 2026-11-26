@@ -1244,7 +1244,7 @@ async fn request_on_peer(fleet: &Fleet, placed: &Placed) -> (String, String) {
 /// nothing is claimed. Waits on event streams and file changes, never on time.
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn hs2_sk9b3t_a_site_workers_returned_handoff_is_claimed_again_for_its_session() {
-    site_workers_returned_handoff(true).await;
+    site_workers_returned_handoff(SiteWorker::RegistersLocally).await;
 }
 
 /// HS2-26Z8KB (docs/26 §26.24, §26.30): the same, for a site worker that never
@@ -1253,10 +1253,32 @@ async fn hs2_sk9b3t_a_site_workers_returned_handoff_is_claimed_again_for_its_ses
 /// says so, yet its correction is claimed for it all the same.
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn hs2_26z8kb_a_site_worker_joined_only_through_the_home_pool_is_claimed_for() {
-    site_workers_returned_handoff(false).await;
+    site_workers_returned_handoff(SiteWorker::RelayOnly).await;
 }
 
-async fn site_workers_returned_handoff(registers_locally: bool) {
+/// HS2-RHKSXQ (docs/26 §26.24): the same, but the site worker's session is lost (its
+/// terminal dies on the peer) while its handoff awaits review. A pass then places
+/// nothing: the run is in review, not missing work. Once the home's integrator returns
+/// it, the loop reads the home's answer, starts a new session for the step on the peer
+/// on the same run, and claims the correction for that session's worker.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_rhksxq_a_lost_site_session_is_placed_again_on_its_returned_run() {
+    site_workers_returned_handoff(SiteWorker::LostInReview).await;
+}
+
+/// How the peer's worker behaves in [`site_workers_returned_handoff`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SiteWorker {
+    /// Registers in its own clone's pool, as the worker skill does.
+    RegistersLocally,
+    /// HS2-26Z8KB: never registers there; only the relay joins it to the home's pool.
+    RelayOnly,
+    /// HS2-RHKSXQ: registers locally, and its session is lost while in review.
+    LostInReview,
+}
+
+async fn site_workers_returned_handoff(variant: SiteWorker) {
+    let registers_locally = variant != SiteWorker::RelayOnly;
     const FIRST: &str = "3333333333333333333333333333333333333333";
     let mut fleet = Fleet::sites().await;
     // Each site names the shared store by its own connection id.
@@ -1402,6 +1424,39 @@ async fn site_workers_returned_handoff(registers_locally: bool) {
         .await;
     assert_eq!(fleet.readiness(&step).await["level"], "in_progress");
 
+    if variant == SiteWorker::LostInReview {
+        // HS2-RHKSXQ: the worker's terminal dies on the peer while it is in review. The
+        // loop learns the loss from the peer's feed; a pass places nothing for it.
+        let (status, _) = api(
+            fleet.side_router(Side::Peer),
+            "DELETE",
+            &format!("/terminals/{}", w.terminal),
+            Value::Null,
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let deadline = std::time::Instant::now() + 2 * MINUTE;
+        let mut cursor = 0;
+        loop {
+            let synced = fleet
+                .ok(
+                    "POST",
+                    &format!("/sessions/{}/sync", w.session_id),
+                    json!({"actor":Fleet::ai()}),
+                )
+                .await;
+            if synced["state"] == "lost" || synced["state"] == "stopped" {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the session was never lost: {synced}"
+            );
+            cursor = fleet.next_event(Some(&w_run), cursor).await;
+        }
+    }
+
     // Awaiting review is not a return: a pass claims nothing.
     let tick = fleet
         .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
@@ -1421,6 +1476,18 @@ async fn site_workers_returned_handoff(registers_locally: bool) {
             .await["state"],
         "intervened"
     );
+    // Nor does it place the step again while it is in review, its session lost or not.
+    let starts = |log: &[Value]| {
+        log.iter()
+            .filter(|entry| {
+                entry["kind"] == "start"
+                    && entry["outcome"] == "started"
+                    && entry["step_id"] == step.as_str()
+            })
+            .count()
+    };
+    assert_eq!(starts(&fleet.decisions().await), 1);
+    assert_eq!(fleet.sessions().await.len(), 1);
 
     // 2. The home's integrator returns it: a `## Review return` note on the ticket in
     // the home's clone, and the return in the home's pool. Both machines' sync loops
@@ -1466,6 +1533,31 @@ async fn site_workers_returned_handoff(registers_locally: bool) {
     assert_eq!(returned[0]["review_note"], note.to_string().as_str());
     converge(&fleet);
 
+    // HS2-RHKSXQ: the lost session's step is placed again on the peer, on the same run,
+    // and its new session takes up its role there.
+    let w = if variant == SiteWorker::LostInReview {
+        let again = fleet
+            .decided(
+                "the returned step placed again",
+                |entry| {
+                    entry["kind"] == "start"
+                        && entry["outcome"] == "started"
+                        && entry["step_id"] == step.as_str()
+                        && entry["session_id"] != w.session_id.as_str()
+                },
+                2 * MINUTE,
+            )
+            .await;
+        assert_eq!(again["run_id"], w_run.as_str(), "{again}");
+        let next = placed_from(&fleet, &again, TARGET_B).await;
+        assert_eq!(next.run_id.as_deref(), Some(w_run.as_str()));
+        received_prompt(&fleet.reports, &next.terminal, "`hotsheet-worker`");
+        fleet.join_pool(Side::Peer, &next.worker);
+        next
+    } else {
+        w
+    };
+
     let claimed = fleet
         .decided(
             "the site worker's correction claimed",
@@ -1501,9 +1593,16 @@ async fn site_workers_returned_handoff(registers_locally: bool) {
         );
     }
     assert_eq!(fleet.readiness(&step).await["level"], "in_progress");
-    // One run, one worker session, nothing started twice; the return is claimed once.
+    // One run, one worker session (two when the first was lost), nothing started twice;
+    // the return is claimed once.
     assert_eq!(fleet.runs().await.len(), 1);
-    assert_eq!(fleet.sessions().await.len(), 1);
+    let sessions = if variant == SiteWorker::LostInReview {
+        2
+    } else {
+        1
+    };
+    assert_eq!(fleet.sessions().await.len(), sessions);
+    assert_eq!(starts(&fleet.decisions().await), sessions);
     let claims = fleet
         .decisions()
         .await
