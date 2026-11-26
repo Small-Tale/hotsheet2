@@ -139,13 +139,18 @@ impl Sites {
     }
 
     fn assign(&self, ticket: &Ticket) {
+        self.offer("assignment-1", ticket, 0);
+    }
+
+    /// The home's authority offers the site worker `ticket` as assignment `id`.
+    fn offer(&self, id: &str, ticket: &Ticket, now_s: i64) {
         self.coordinator
             .assign(
                 "integrator",
                 "ig1",
-                0,
+                now_s,
                 Assignment {
-                    id: "assignment-1".into(),
+                    id: id.into(),
                     worker: WORKER.into(),
                     generation: GENERATION.into(),
                     ticket: hotsheet_ticketing::TicketRef {
@@ -680,4 +685,134 @@ fn hs2_rqdh0q_timed_asks_about_a_site_handoff_stop_at_the_cap() {
         "handoff_note_missing"
     )));
     assert!(!note.same_facts(&claim));
+}
+
+/// HS2-SK9B3T: a clock past the legacy integrator's lease (registered at 0 for an hour).
+struct AfterTheLease;
+impl hotsheet_ticketing::Clock for AfterTheLease {
+    fn now_ms(&self) -> u64 {
+        2 * 3600 * 1000
+    }
+}
+
+/// HS2-SK9B3T: the home's `target-pool` answer carries what the hosted session listing
+/// reports for a worker on the home itself (HS2-ESVYQH): the pool's handoffs returned
+/// for corrections with no correction in flight, named by the home's own connection id,
+/// and whether its assigning role is live. Read and join both report them; nothing is
+/// returned before the return or once a correction is offered; an older home's answer
+/// without them decodes as none.
+#[test]
+fn hs2_sk9b3t_the_home_pool_reports_its_returns_and_assigner_to_a_site_member() {
+    use crate::orchestration::ReturnedHandoff;
+    use crate::orchestration::site_pool::HostedPoolReply;
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let s = Sites::new();
+    let owner = s.m.target.id.clone();
+
+    // Joined and offered; nothing has been returned. The legacy pool's integrator
+    // assigns here and is live.
+    let empty = s.join(&mut tx);
+    assert!(empty.returned.is_empty(), "{empty:?}");
+    assert_eq!(empty.assigner_live, Some(true));
+    let ticket = s.ticket();
+    s.assign(&ticket);
+    ops::claim_with_eta(
+        &s.m.target_store,
+        &ticket.id,
+        &at(NOW),
+        at("2026-10-15T02:00:00Z"),
+        WORKER,
+        None,
+        None,
+    )
+    .unwrap();
+    git(&s.site, &["checkout", "-q", "-b", "site/returned"]);
+    let work = commit(&s.site, "returned.txt", "first try\n");
+    git(&s.site, &["push", "-q", "origin", "site/returned"]);
+    ops::release(&s.m.target_store, &ticket.id, at(NOW), WORKER, false).unwrap();
+    ops::add_note(
+        &s.m.target_store,
+        &ticket.id,
+        ulid::Ulid::new(),
+        at(NOW),
+        NoteKind::Regular,
+        format!("## Integration handoff\nBranch: site/returned\nCommit: {work}"),
+    )
+    .unwrap();
+    let handed = s.join(&mut tx);
+    assert_eq!(handed.assignment.unwrap().phase, Phase::Handoff);
+    // Awaiting review is not a return.
+    assert!(handed.returned.is_empty(), "{:?}", handed.returned);
+
+    // The home's integrator returns it for corrections, ten seconds in.
+    let note = ulid::Ulid::new();
+    ops::add_note(
+        &s.m.target_store,
+        &ticket.id,
+        note,
+        at(NOW),
+        NoteKind::Regular,
+        format!("## Review return\nassignment-1 {work}\nCorrect the synthetic behaviour."),
+    )
+    .unwrap();
+    s.coordinator
+        .review_return(
+            "integrator",
+            "ig1",
+            time::OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(10),
+            "assignment-1",
+            &note.to_string(),
+        )
+        .unwrap();
+    let expected = vec![ReturnedHandoff {
+        connection_id: s.m.target_connection(),
+        native_id: ticket.id.to_string(),
+        returned_at_ms: 10_000,
+        review_note: note.to_string(),
+    }];
+    let read = |worker, generation, tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .hosted_pool_read(&owner, worker, generation, tx)
+            .unwrap()
+    };
+    let anonymous = read(None, None, &mut tx);
+    let member = read(Some(WORKER), Some(GENERATION), &mut tx);
+    let joined = s.join(&mut tx);
+    for reply in [&anonymous, &member, &joined] {
+        assert_eq!(reply.returned, expected, "{reply:?}");
+        assert_eq!(reply.assigner_live, Some(true), "{reply:?}");
+    }
+    // On the wire, and as an older home answers: no returns, assigner unknown.
+    let wire = serde_json::to_value(&joined).unwrap();
+    assert_eq!(wire["returned"][0]["review_note"], note.to_string());
+    assert_eq!(wire["returned"][0]["returned_at_ms"], 10_000);
+    assert_eq!(wire["assigner_live"], true);
+    let older: HostedPoolReply = serde_json::from_value(serde_json::json!({
+        "pool": true, "joined": true,
+        "roles": {"integrator_live": true, "dispatcher_live": false}
+    }))
+    .unwrap();
+    assert!(older.returned.is_empty());
+    assert_eq!(older.assigner_live, None);
+
+    // The integrator's lease runs out: the return stands, and nobody will assign it.
+    let mut later_rng = Rng(200);
+    let mut later = Transaction {
+        clock: &AfterTheLease,
+        rng: &mut later_rng,
+    };
+    let lapsed = read(None, None, &mut later);
+    assert_eq!(lapsed.returned, expected);
+    assert_eq!(lapsed.assigner_live, Some(false));
+    assert_eq!(lapsed.roles.integrator_live, Some(false));
+
+    // A correction offered on the ticket is in flight: nothing is returned any more.
+    s.offer("correction-1", &ticket, 20);
+    let busy = read(None, None, &mut tx);
+    assert!(busy.returned.is_empty(), "{:?}", busy.returned);
+    assert_eq!(busy.assigner_live, Some(true));
 }

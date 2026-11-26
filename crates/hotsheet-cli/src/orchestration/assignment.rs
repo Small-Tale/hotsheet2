@@ -189,6 +189,25 @@ struct PoolRead {
     assigner_live: Option<bool>,
 }
 
+/// HS2-ESVYQH: `found` is a return of the run's ticket recorded after the run was last
+/// dispatched. HS2-SK9B3T: `found` comes from the pool of the project's `home` site,
+/// which names the ticket by the home's own connection id.
+pub(super) fn returned_for(
+    found: &super::review_returns::ReturnedHandoff,
+    run: &Run,
+    sites: &ProjectSites,
+    home: &str,
+) -> bool {
+    let connection = if home == run.target.target_id {
+        run.target.connection_id.clone()
+    } else {
+        sites.connection_on(&run.target.target_id, &run.target.connection_id, home)
+    };
+    found.connection_id == connection
+        && found.native_id == run.target.native_id
+        && found.returned_at_ms >= dispatched_at(run)
+}
+
 /// When the run was last dispatched to a worker (0 if never).
 pub(super) fn dispatched_at(run: &Run) -> u64 {
     run.history
@@ -310,12 +329,14 @@ impl OrchestrationRuntime {
                         if home == session.target_id {
                             self.pool_roles(session, actor, tx)
                         } else {
-                            // A site's relay carries its handoffs (HS2-5P112Z); the
-                            // home's pool route reports no returns.
+                            // HS2-SK9B3T: the home's pool route reports its returns and
+                            // whether its assigning role is live, as the hosted session
+                            // listing does for a worker on the home itself.
                             self.home_pool(session, &home, None, &sites, actor, tx)
                                 .map(|reply| PoolRead {
                                     roles: reply.roles,
-                                    ..PoolRead::default()
+                                    returned: reply.returned,
+                                    assigner_live: reply.assigner_live,
                                 })
                         }
                     });
@@ -325,13 +346,13 @@ impl OrchestrationRuntime {
             };
             // HS2-ESVYQH: an intervened run is only this pass's business when its
             // handoff came back for corrections since it was last dispatched.
+            // HS2-SK9B3T: the pool names the ticket by its home's connection id.
             let returned = (run.state == RunState::Intervened)
                 .then(|| {
-                    pool.as_ref()?.returned.iter().find(|found| {
-                        found.connection_id == run.target.connection_id
-                            && found.native_id == run.target.native_id
-                            && found.returned_at_ms >= dispatched_at(run)
-                    })
+                    pool.as_ref()?
+                        .returned
+                        .iter()
+                        .find(|found| returned_for(found, run, &sites, &home))
                 })
                 .flatten()
                 .cloned();
@@ -431,6 +452,49 @@ impl OrchestrationRuntime {
             )?;
             serde_json::from_value::<HostedSessionList>(reply)
                 .map(|list| list.returned)
+                .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+        })();
+        self.finish(&target, &authorized, &outcome, tx).ok()?;
+        outcome.ok()
+    }
+
+    /// HS2-SK9B3T: the returns of the pool that assigns `target_id`'s work: its own
+    /// listing's when it is its project's home (or in no project), else the home's
+    /// `target-pool` answer, read without a member as `gates_observe`. Each return names
+    /// its ticket by the home's own connection id ([`returned_for`] matches it).
+    pub(super) fn project_returns(
+        &self,
+        owner_id: &str,
+        target_id: &str,
+        filter_operation: &str,
+        sites: &ProjectSites,
+        actor: &MutationActor,
+        tx: &mut Transaction<'_>,
+    ) -> Option<Vec<super::review_returns::ReturnedHandoff>> {
+        let home = sites.home_of(target_id);
+        if home == target_id {
+            return self.target_returns(owner_id, target_id, filter_operation, actor, tx);
+        }
+        let target = Self::target_ref(owner_id, home).ok()?;
+        let authorized = self
+            .authorize(
+                &target,
+                Some(actor),
+                ActionRequest::new(TargetAction::GatesObserve),
+                tx,
+            )
+            .ok()?;
+        let outcome = (|| {
+            let reply = self.hosted_call_at(
+                Self::destination(&authorized)?,
+                "/target-pool",
+                "GET",
+                "",
+                None,
+                tx,
+            )?;
+            serde_json::from_value::<HostedPoolReply>(reply)
+                .map(|reply| reply.returned)
                 .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
         })();
         self.finish(&target, &authorized, &outcome, tx).ok()?;

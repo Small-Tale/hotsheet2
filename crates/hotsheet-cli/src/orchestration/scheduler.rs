@@ -499,6 +499,9 @@ impl OrchestrationRuntime {
         let sessions = self.session_list(owner_id, true)?;
         let mut returns: BTreeMap<String, Option<Vec<super::review_returns::ReturnedHandoff>>> =
             BTreeMap::new();
+        // HS2-SK9B3T: a run on a site that is not its project's home is returned by the
+        // home's pool.
+        let sites = self.active_project_sites(owner_id);
         for view in plan.steps {
             let step = view.readiness.step;
             if view.readiness.level != ReadinessLevel::InProgress {
@@ -527,20 +530,26 @@ impl OrchestrationRuntime {
                     continue;
                 };
                 let target_id = run.target.target_id.clone();
-                let read = match returns.get(&target_id) {
+                let home = sites.home_of(&target_id).to_owned();
+                let read = match returns.get(&home) {
                     Some(read) => read.clone(),
                     None => {
-                        let read =
-                            self.target_returns(owner_id, &target_id, &run.operation_id, actor, tx);
-                        returns.insert(target_id, read.clone());
+                        let read = self.project_returns(
+                            owner_id,
+                            &target_id,
+                            &run.operation_id,
+                            &sites,
+                            actor,
+                            tx,
+                        );
+                        returns.insert(home.clone(), read.clone());
                         read
                     }
                 };
-                let returned = read.unwrap_or_default().iter().any(|found| {
-                    found.connection_id == run.target.connection_id
-                        && found.native_id == run.target.native_id
-                        && found.returned_at_ms >= super::assignment::dispatched_at(run)
-                });
+                let returned = read
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|found| super::assignment::returned_for(found, run, &sites, &home));
                 if !returned {
                     continue;
                 }
