@@ -556,6 +556,17 @@ fn scheduled_owner(method: &Method, path: &str) -> Option<String> {
                 "policy" | "project-type",
             ],
         )
+        // HS2-TZJYKH: Start/Pause and role sessions are policy edits too.
+        | (
+            "PUT",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "policy",
+                "automatic" | "role-sessions",
+            ],
+        )
         | ("POST", ["checkouts", owner, "orchestration", "scheduler", _]) => {
             Some((*owner).to_owned())
         }
@@ -674,6 +685,16 @@ fn changed_owner(method: &Method, path: &str) -> Option<String> {
                 owner,
                 "orchestration",
                 "project-type" | "policy" | "targets",
+            ],
+        )
+        | (
+            "PUT",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "policy",
+                "automatic" | "role-sessions",
             ],
         )
         | (

@@ -54,6 +54,7 @@ import type {
   NotifierList,
   NotifierSettingField,
   OrchestrationAdmission,
+  OrchestrationAutomaticSet,
   OrchestrationBinding,
   OrchestrationCapabilities,
   OrchestrationCapacity,
@@ -1995,4 +1996,11 @@ export const parseOrchestrationPolicyView = shape<OrchestrationPolicyView>('orch
   enabled: isBoolean,
   revision: isNullableString,
   policy: (field) => field === null || isObject(field),
+});
+/** HS2-TZJYKH: the policy after Start or Pause, and whether the default policy was saved with it. */
+export const parseOrchestrationAutomaticSet = shape<OrchestrationAutomaticSet>('orchestration start or pause', {
+  enabled: isBoolean,
+  revision: isNullableString,
+  policy: (field) => field === null || isObject(field),
+  saved_default: isBoolean,
 });

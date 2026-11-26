@@ -7,7 +7,9 @@
 //! HS2-GDJXGZ orchestrator-owned sessions; HS2-HCW7MD Propose Plan.
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
-use hotsheet_cli::orchestration::{OrchestrationRuntime, request_cleanup_now};
+use hotsheet_cli::orchestration::{
+    MAX_TIMELINE_WAIT_MS, OrchestrationRuntime, request_cleanup_now,
+};
 use hotsheet_ticketing::{ProviderConfigRegistry, checkouts::CheckoutRegistry};
 use serde_json::{Value, json};
 
@@ -1156,59 +1158,6 @@ fn tool_capacity_route(
         ),
     })
 }
-/// HS2-TK9ADC: `policy` with one target's `placement.role_sessions` entry replaced
-/// by `edit` (`{target_id, roles}`), in place. HS2-R2N33M: no roles is kept as the
-/// choice of none; `auto` removes the entry, so the target is Auto again. Every other
-/// member round-trips unchanged.
-fn with_role_sessions(mut policy: Value, edit: &Value) -> Value {
-    let target = edit["target_id"].clone();
-    let entry =
-        (edit["auto"] != json!(true)).then(|| json!({"target_id": target, "roles": edit["roles"]}));
-    if !policy.is_object() {
-        policy = json!({});
-    }
-    let placement = &mut policy["placement"];
-    if !placement.is_object() {
-        *placement = json!({});
-    }
-    let mut list: Vec<Value> = placement["role_sessions"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    match (
-        list.iter().position(|item| item["target_id"] == target),
-        entry,
-    ) {
-        (Some(at), Some(entry)) => list[at] = entry,
-        (Some(at), None) => {
-            list.remove(at);
-        }
-        (None, Some(entry)) => list.push(entry),
-        (None, None) => {}
-    }
-    if let Some(object) = placement.as_object_mut() {
-        if list.is_empty() {
-            object.remove("role_sessions");
-        } else {
-            object.insert("role_sessions".into(), Value::Array(list));
-        }
-    }
-    policy
-}
-
-/// HS2-D9KP86: the policy with `placement.automatic` set; no policy is the default one.
-fn with_automatic(mut policy: Value, automatic: Value) -> Value {
-    if !policy.is_object() {
-        policy = json!({});
-    }
-    let placement = &mut policy["placement"];
-    if !placement.is_object() {
-        *placement = json!({});
-    }
-    placement["automatic"] = automatic;
-    policy
-}
-
 /// HS2-SYZB33: one policy warning as a line a person reads.
 fn policy_warning_line(warning: &Value) -> String {
     let text = |key: &str| warning[key].as_str().unwrap_or("unknown").to_owned();
@@ -1471,6 +1420,8 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
     // HS2-5JBYPV: a linked CI gate only advances while this machine's Job monitor runs.
     let mut ensure_monitor = false;
     let mut monitor_off = false;
+    // HS2-YCJDEB: `policy set` without a revision reads the current one first.
+    let mut read_revision = false;
     let (owner_id, (method, path, mut body)) = match arguments.command {
         OrchestrationCmd::StepRunner {
             checkout,
@@ -1565,32 +1516,42 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 PolicyCmd::Set {
                     file,
                     expected_revision,
-                } => (
-                    "PUT",
-                    prefix,
+                } => {
                     // `expected_revision` is filled in below when it was omitted.
-                    json!({"policy": policy_file(&file)?, "expected_revision": expected_revision,
-                        "read_revision": expected_revision.is_none()}),
-                ),
+                    read_revision = expected_revision.is_none();
+                    (
+                        "PUT",
+                        prefix,
+                        json!({"policy": policy_file(&file)?, "expected_revision": expected_revision}),
+                    )
+                }
                 PolicyCmd::Validate { file } => {
                     ("POST", format!("{prefix}/validate"), proposal(file)?)
                 }
                 PolicyCmd::DryRun { file } => {
                     ("POST", format!("{prefix}/dry-run"), proposal(file)?)
                 }
+                // HS2-TZJYKH: the runtime edits the stored policy at its revision; Start and
+                // Pause are the same route the Orchestration view's buttons call.
                 PolicyCmd::RoleSessions {
                     target,
                     roles,
                     auto,
                 } => (
                     "PUT",
-                    prefix,
-                    // Turned into the edited policy below, at the revision read.
-                    json!({"role_sessions_edit": {"target_id": target, "roles": roles, "auto": auto}}),
+                    format!("{prefix}/role-sessions"),
+                    json!({"target_id": target, "roles": roles, "auto": auto}),
                 ),
-                // Turned into the stored (or default) policy below, at the revision read.
-                PolicyCmd::Start => ("PUT", prefix, json!({"automatic_edit": true})),
-                PolicyCmd::Pause => ("PUT", prefix, json!({"automatic_edit": false})),
+                PolicyCmd::Start => (
+                    "PUT",
+                    format!("{prefix}/automatic"),
+                    json!({"automatic": true}),
+                ),
+                PolicyCmd::Pause => (
+                    "PUT",
+                    format!("{prefix}/automatic"),
+                    json!({"automatic": false}),
+                ),
             };
             (owner_id, request)
         }
@@ -1643,7 +1604,7 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             let owner_id = required(project)?;
             let mut path = format!("/checkouts/{owner_id}/orchestration/timeline");
             if let Some(after) = after {
-                let wait_ms = wait_seconds.min(20) * 1000;
+                let wait_ms = wait_seconds.saturating_mul(1000).min(MAX_TIMELINE_WAIT_MS);
                 path = format!("{path}?after={after}&wait_ms={wait_ms}");
             }
             (owner_id, ("GET", path, Value::Null))
@@ -1662,7 +1623,7 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 None => format!("/checkouts/{checkout_id}/orchestration/target-lines"),
             };
             if let Some(after) = after {
-                let wait_ms = wait_seconds.min(20) * 1000;
+                let wait_ms = wait_seconds.saturating_mul(1000).min(MAX_TIMELINE_WAIT_MS);
                 path = format!("{path}?after={after}&wait_ms={wait_ms}");
             }
             (checkout_id, ("GET", path, Value::Null))
@@ -1722,50 +1683,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             } else {
                 runtime
             };
-            // HS2-TK9ADC: one target's role sessions, edited into the stored policy.
-            if let Some(edit) = body
-                .as_object_mut()
-                .and_then(|object| object.remove("role_sessions_edit"))
-            {
-                let mut stored = runtime.request_now("GET", &path, &Value::Null)?;
-                // The actor this command attached stays with the request.
-                body["policy"] = with_role_sessions(stored["policy"].take(), &edit);
-                body["expected_revision"] = stored["revision"].take();
-                let mut answer = runtime.request_now(method, &path, &body)?;
-                // HS2-SYZB33: say when the entry names a site that is not its
-                // project's home, where it starts nothing.
-                let checked =
-                    runtime.request_now("POST", &format!("{path}/validate"), &json!({}))?;
-                if let Some(warnings) = checked.get("warnings") {
-                    answer["warnings"] = warnings.clone();
-                }
-                return Ok(answer);
-            }
-            // HS2-D9KP86: Start or Pause, edited into the stored policy, or into the
-            // default one when none is saved, as the Orchestration view's buttons do.
-            if let Some(automatic) = body
-                .as_object_mut()
-                .and_then(|object| object.remove("automatic_edit"))
-            {
-                let mut stored = runtime.request_now("GET", &path, &Value::Null)?;
-                let saved_default = stored["policy"].is_null();
-                body["policy"] = with_automatic(stored["policy"].take(), automatic);
-                body["expected_revision"] = stored["revision"].take();
-                let mut answer = runtime.request_now(method, &path, &body)?;
-                answer["saved_default"] = saved_default.into();
-                return Ok(answer);
-            }
             // HS2-YCJDEB: `policy set` without a revision is read-then-set, so a
             // repeated setup run is a no-op and a concurrent edit still conflicts.
-            if body.get("read_revision").is_some() {
-                let read = body["read_revision"] == true;
-                if let Some(object) = body.as_object_mut() {
-                    object.remove("read_revision");
-                }
-                if read {
-                    body["expected_revision"] =
-                        runtime.request_now("GET", &path, &Value::Null)?["revision"].take();
-                }
+            if read_revision {
+                body["expected_revision"] =
+                    runtime.request_now("GET", &path, &Value::Null)?["revision"].take();
             }
             // HS2-WN0MXZ: a validation run waits for its attempt unless told not to.
             if let Some(result) = validation::until_finished(&runtime, &path, &mut body) {

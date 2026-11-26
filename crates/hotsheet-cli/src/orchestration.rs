@@ -98,7 +98,10 @@ pub use planning::{
     DEFAULT_GOAL_TAG, DEFAULT_GOAL_TITLE, GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView,
     ProposeOutcome, ProposePlan,
 };
-pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
+pub use policy::{
+    AutomaticSet, DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation,
+    RoleSessionsSet, SetAutomatic, SetRoleSessions,
+};
 pub use projects::{
     AddHostedProject, AddProject, CHECKOUT_NOT_OPEN, HostedProjectChoice, ProjectView,
     RemoveProject, RemovedProject,

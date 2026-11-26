@@ -30,7 +30,8 @@ pub fn is_path(path: &str) -> bool {
                 _,
                 "orchestration",
                 "policy",
-                "validate" | "dry-run"
+                // HS2-TZJYKH: Start/Pause and one target's role sessions, edited in the runtime.
+                "validate" | "dry-run" | "automatic" | "role-sessions"
             ]
             // HS2-XHQ1EH: permission requests and remembered rules.
             | ["checkouts", _, "orchestration", "permissions"]
@@ -1303,6 +1304,24 @@ impl OrchestrationRuntime {
                 let actor = actor(body)?;
                 let request: SetPolicy = decode(body)?;
                 value(self.set_policy(owner, request, actor.as_ref(), tx)?)
+            }
+            // HS2-TZJYKH: one edit of the stored policy at its revision.
+            ("PUT", ["checkouts", owner, "orchestration", "policy", "automatic"]) => {
+                let actor = actor(body)?;
+                value(self.set_automatic(owner, decode(body)?, actor.as_ref(), tx)?)
+            }
+            (
+                "PUT",
+                [
+                    "checkouts",
+                    owner,
+                    "orchestration",
+                    "policy",
+                    "role-sessions",
+                ],
+            ) => {
+                let actor = actor(body)?;
+                value(self.set_role_sessions(owner, decode(body)?, actor.as_ref(), tx)?)
             }
             ("POST", ["checkouts", owner, "orchestration", "policy", "validate"]) => {
                 value(self.validate_policy(owner, decode(body)?)?)

@@ -73,6 +73,52 @@ describe('HS2-NBDXPW development strategy API', () => {
   });
 });
 
+describe('HS2-TZJYKH Start and Pause call the runtime automatic route', () => {
+  it('sends only the switch and a person, and reads saved_default back', async () => {
+    const answers = [
+      {
+        enabled: true,
+        revision: '01M8BKVHJ3Z4R8ZZCAP4H63KR2',
+        policy: { placement: { automatic: true } },
+        saved_default: true,
+      },
+      {
+        enabled: true,
+        revision: '01M8BKVHJ3Z4R8ZZCAP4H63KR3',
+        policy: { placement: { automatic: false } },
+        saved_default: false,
+      },
+    ];
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify(answers.shift())));
+    try {
+      const api = new Api('/api');
+      expect((await api.setOrchestrationAutomatic('orch 1', true)).saved_default).toBe(true);
+      expect((await api.setOrchestrationAutomatic('orch 1', false)).saved_default).toBe(false);
+      for (const [at, automatic] of [true, false].entries()) {
+        expect(urlOf(fetchMock.mock.calls[at][0])).toBe('/api/checkouts/orch%201/orchestration/policy/automatic');
+        const init = fetchMock.mock.calls[at][1]!;
+        expect(init.method).toBe('PUT');
+        expect(JSON.parse(init.body as string)).toEqual({ automatic, actor: { role: 'human' } });
+      }
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('refuses an answer without saved_default', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify({ enabled: true, revision: null, policy: null })));
+    try {
+      await expect(new Api('/api').setOrchestrationAutomatic('orch', true)).rejects.toThrow();
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});
+
 describe('server-busy tracking option (HS2-AZZ9TF)', () => {
   it('tracks ordinary requests but leaves quiet background clients off the busy indicator', async () => {
     let release: (() => void) | undefined;

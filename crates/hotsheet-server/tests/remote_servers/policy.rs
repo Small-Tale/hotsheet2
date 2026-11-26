@@ -457,4 +457,59 @@ async fn hs2_d9kp86_policy_start_saves_the_defaults_and_pause_turns_placement_of
     let resumed = cli_named(&home, &human, &command("start"));
     assert_eq!(resumed["policy"]["placement"]["automatic"], true);
     assert_eq!(resumed["policy"]["machine"]["max_sessions"], 5);
+
+    // HS2-TZJYKH: the route the CLI and the Orchestration view's buttons both use.
+    let automatic = format!("{base}/policy/automatic");
+    let person = json!({"role":"human","id":"maintainer"});
+    let put =
+        |body: Value, authorized: bool| api(router.clone(), "PUT", &automatic, body, authorized);
+    let (status, _) = put(json!({"automatic":false,"actor":person}), false).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, refused) = put(
+        json!({"automatic":false,"actor":{"role":"ai","id":"worker-1"}}),
+        true,
+    )
+    .await;
+    assert_eq!(
+        (status, refused["code"].clone()),
+        (StatusCode::FORBIDDEN, json!("forbidden"))
+    );
+    // A stale revision is the policy's conflict, and nothing changes.
+    let (status, stale) = put(
+        json!({"automatic":false,"expected_revision":paused["revision"],"actor":person}),
+        true,
+    )
+    .await;
+    assert_eq!(
+        (status, stale["code"].clone()),
+        (StatusCode::CONFLICT, json!("conflict"))
+    );
+    // The retired sentinel keys are not accepted.
+    let (status, _) = put(json!({"automatic_edit":false,"actor":person}), true).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, read) = api(
+        router.clone(),
+        "GET",
+        &format!("{base}/policy"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(read["revision"], resumed["revision"]);
+    // At the current revision Pause applies; repeated it keeps the revision.
+    let (status, http_paused) = put(
+        json!({"automatic":false,"expected_revision":resumed["revision"],"actor":person}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{http_paused}");
+    assert_eq!(http_paused["saved_default"], false);
+    assert_eq!(http_paused["policy"]["placement"]["automatic"], false);
+    assert_eq!(http_paused["policy"]["machine"]["max_sessions"], 5);
+    let (_, repeated) = put(json!({"automatic":false,"actor":person}), true).await;
+    assert_eq!(repeated["revision"], http_paused["revision"]);
+    // The CLI reads what the route wrote.
+    let shown = cli_named(&home, &human, &command("show"));
+    assert_eq!(shown["revision"], http_paused["revision"]);
 }

@@ -1254,6 +1254,91 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/policy/automatic:
+    description:
+      Start or Pause orchestration (HS2-D9KP86, HS2-TZJYKH) as one edit of the stored policy's placement.automatic,
+      made by the runtime at the stored revision. With no policy saved, the default policy is saved with the edit.
+    put:
+      operationId: setOrchestrationAutomatic
+      description:
+        Set placement.automatic at the expected revision, or at the current one when it is omitted. A repeat is a
+        no-op that keeps the revision; a stale revision is 409; an `ai` actor is refused with 403 `forbidden`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOrchestrationAutomatic'
+      responses:
+        '200':
+          description: The stored policy, and whether the default policy was saved with this edit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationAutomaticSet'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/policy/role-sessions:
+    description:
+      One target's placement.role_sessions entry (HS2-TK9ADC, HS2-TZJYKH), edited by the runtime in the stored policy
+      (or the default one) at the stored revision. Every other member is unchanged.
+    put:
+      operationId: setOrchestrationRoleSessions
+      description:
+        Replace the target's entry in place or add it last; no roles is the choice of none; `auto` removes the entry
+        so the target is Auto (HS2-R2N33M). A repeat is a no-op; a stale revision is 409; an `ai` actor is refused
+        with 403 `forbidden`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOrchestrationRoleSessions'
+      responses:
+        '200':
+          description: The stored policy, with any entry that has no effect (HS2-SYZB33).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRoleSessionsSet'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/policy/validate:
     description: Report every problem in a proposed or the stored policy (HS2-YCJDEB); never writes.
     post:
@@ -20811,7 +20896,7 @@ components:
             role_sessions:
               description:
                 Targets whose dispatcher or integrator the scheduler starts by itself (HS2-TK9ADC), when the target needs
-                one and its pool shows none live. Empty or absent leaves role sessions to a person.
+                one and its pool shows none live. A target the list does not name is Auto (HS2-R2N33M).
               type: array
               maxItems: 256
               items:
@@ -20824,8 +20909,8 @@ components:
                     type: string
                     pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
                   roles:
+                    description: The roles started here; empty is the choice of none (HS2-R2N33M, HS2-GRRX32).
                     type: array
-                    minItems: 1
                     maxItems: 2
                     uniqueItems: true
                     items:
@@ -20869,6 +20954,93 @@ components:
             - 'null'
         policy:
           $ref: '#/components/schemas/OrchestrationPolicy'
+      additionalProperties: false
+    SetOrchestrationAutomatic:
+      type: object
+      required:
+        - automatic
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        automatic:
+          description: true starts orchestration, false pauses it; running work continues.
+          type: boolean
+        expected_revision:
+          description: The stored revision the caller saw; omitted, the edit applies at the current one.
+          type: string
+      additionalProperties: false
+    OrchestrationAutomaticSet:
+      type: object
+      required:
+        - enabled
+        - revision
+        - policy
+        - saved_default
+      properties:
+        enabled:
+          type: boolean
+        revision:
+          type:
+            - string
+            - 'null'
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        policy:
+          anyOf:
+            - $ref: '#/components/schemas/OrchestrationPolicy'
+            - type: 'null'
+        saved_default:
+          description: No policy was saved before, so the default policy was saved with this edit.
+          type: boolean
+      additionalProperties: false
+    SetOrchestrationRoleSessions:
+      type: object
+      required:
+        - target_id
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        target_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        roles:
+          description: The roles the scheduler starts here by itself; empty starts none. Omit with `auto`.
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          items:
+            enum:
+              - dispatcher
+              - integrator
+        auto:
+          description: Remove the target's entry, so its role sessions are Auto (HS2-R2N33M).
+          type: boolean
+        expected_revision:
+          description: The stored revision the caller saw; omitted, the edit applies at the current one.
+          type: string
+      additionalProperties: false
+    OrchestrationRoleSessionsSet:
+      type: object
+      required:
+        - enabled
+        - revision
+        - policy
+      properties:
+        enabled:
+          type: boolean
+        revision:
+          type:
+            - string
+            - 'null'
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        policy:
+          anyOf:
+            - $ref: '#/components/schemas/OrchestrationPolicy'
+            - type: 'null'
+        warnings:
+          description: Entries that have no effect (HS2-SYZB33); absent when there are none.
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationPolicyWarning'
       additionalProperties: false
     OrchestrationPolicyProposal:
       type: object

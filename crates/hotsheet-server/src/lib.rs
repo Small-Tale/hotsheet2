@@ -2435,6 +2435,16 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/hosted-projects/{target}",
             axum::routing::delete(routes::orchestration::write),
         )
+        // HS2-TZJYKH: Start/Pause and one target's role sessions, each one edit of the
+        // stored policy at its revision.
+        .route(
+            "/checkouts/{owner}/orchestration/policy/automatic",
+            put(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/orchestration/policy/role-sessions",
+            put(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{owner}/orchestration/policy/validate",
             post(routes::orchestration::write),
