@@ -170,6 +170,11 @@ export const ORCHESTRATION_REFUSALS: Readonly<Record<string, RefusalText>> = {
   gate_not_passed: { message: 'The gate has not passed yet.' },
   gate_invalid_transition: { message: 'The gate cannot change that way from its current state.', next: READ_AGAIN },
   gate_repository_mismatch: { message: 'The gate names a different repository.' },
+  // HS2-YA5S82: the host's Job monitor has not read the pipeline's repository yet; the gate stays waiting.
+  gate_repository_unknown: {
+    message: 'The host has not read which repository this pipeline builds yet.',
+    next: RETRY,
+  },
   gate_deployment_active: { message: 'A deployment is already running.', next: 'Wait for it to finish.' },
   gate_artifact_mismatch: { message: 'The artifact does not match the one the gate checked.' },
   gate_deployment_script_untracked: {
