@@ -47,8 +47,9 @@ import {
   machineLabel,
   runNotice,
   runStateText,
+  sessionText,
   stateBadge,
-  toolLabel,
+  toolText,
 } from '../orchestration-timeline-board';
 import type { PendingValidation, ValidationStepView } from '../orchestration-validation-steps';
 import { OrchestrationBuiltAheadSection } from './orchestration-built-ahead-section';
@@ -220,17 +221,8 @@ function WhereItRuns({
         <ValueTableRow label="Project" value={placeText(site)} />
         {site.own ? <ValueTableRow label="Step's site" value={placeText(site.own)} /> : undefined}
         <ValueTableRow label="Machine" value={machineLabel(site)} />
-        <ValueTableRow label="Tool" value={toolLabel(item.tool) ?? 'Chosen when the work is placed'} />
-        <ValueTableRow
-          label="Session"
-          value={
-            item.session_id
-              ? `${toolLabel(item.tool) ?? 'AI'} session, ${item.session_state ?? 'state unknown'}`
-              : item.state === 'done'
-                ? 'Ended'
-                : 'Starts when the work is placed'
-          }
-        />
+        <ValueTableRow label="Tool" value={toolText(item)} />
+        <ValueTableRow label="Session" value={sessionText(item)} />
         <ValueTableRow
           label={working || item.state === 'done' ? 'Started' : 'Estimated start'}
           value={

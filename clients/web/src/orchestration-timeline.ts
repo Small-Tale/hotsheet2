@@ -107,6 +107,11 @@ export interface TimelineItem {
   model?: string;
   session_id?: string;
   session_state?: string;
+  /**
+   * HS2-JGNCAR: another worker took the step's ticket (a project's home assigned it to its own worker,
+   * HS2-S5RH57); the session placed for it here is free, so no session is named. Absent when false.
+   */
+  worked_elsewhere?: boolean;
   state: TimelineItemState;
   level: string;
   reasons?: string[];

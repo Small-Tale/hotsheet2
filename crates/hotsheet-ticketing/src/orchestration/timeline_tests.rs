@@ -124,6 +124,11 @@ fn run(n: u128, ticket: u128, state: RunState, created: u64, finished: Option<u6
 }
 
 fn session(n: u128, run: u128, tool: &str) -> OrchestratedSession {
+    session_as(n, run, tool, "worker-a")
+}
+
+/// A session hosted as `worker`, the worker id its claims carry.
+fn session_as(n: u128, run: u128, tool: &str, worker: &str) -> OrchestratedSession {
     serde_json::from_value(json!({
         "session_id": id(700 + n),
         "owner_checkout_id": OWNER,
@@ -135,6 +140,7 @@ fn session(n: u128, run: u128, tool: &str) -> OrchestratedSession {
         "created_at_ms": 5,
         "updated_at_ms": 5,
         "history": [],
+        "hosted": { "server_id": "api-server", "session_id": format!("term-{n}"), "worker_id": worker },
     }))
     .unwrap()
 }
@@ -1262,4 +1268,91 @@ fn hs2_ex594v_the_timeline_shows_current_home_outages() {
             .get("home_outages")
             .is_none()
     );
+}
+
+/// HS2-JGNCAR: once another worker holds the step's run (a project's home assigned the
+/// ticket to its own worker, HS2-S5RH57), the session placed here for it is free: the
+/// step names no session and no tool from it or from the decision that placed it, while
+/// the session idles, after it is wound down, and again when one of this machine's
+/// sessions does carry the run's worker.
+#[test]
+fn hs2_jgncar_a_session_freed_by_another_worker_is_not_the_steps() {
+    let mut fixture = Fixture::new(vec![step(2, L::InProgress, &[])]);
+    let mut taken = run(1, 2, RunState::Dispatched, NOW, None);
+    taken.worker_id = Some("home-worker".into());
+    fixture.runs = vec![taken];
+    fixture.hints.insert(
+        "step-2".into(),
+        PlacementHint {
+            at_ms: 9,
+            decision: "start".into(),
+            tool: Some("codex".into()),
+            model: Some("codex-model".into()),
+            session_id: Some(id(701)),
+            ..PlacementHint::default()
+        },
+    );
+    let item = |fixture: &Fixture| fixture.view().waves[1].items[0].clone();
+
+    // The site session still runs, idle, before its wind-down.
+    fixture.sessions = vec![session_as(1, 1, "codex", "site-worker")];
+    let idle = item(&fixture);
+    assert!(idle.worked_elsewhere);
+    assert_eq!((idle.session_id, idle.session_state), (None, None));
+    assert_eq!((idle.tool, idle.model), (None, None));
+    assert_eq!(idle.state, ItemState::Running);
+    assert_eq!(idle.run.unwrap().worker_id.as_deref(), Some("home-worker"));
+    // It still counts as one of the orchestrator's sessions.
+    assert_eq!(fixture.view().sessions, 1);
+    let json = serde_json::to_value(item(&fixture)).unwrap();
+    assert_eq!(json["worked_elsewhere"], true);
+    assert!(json.get("session_id").is_none());
+
+    // The plan step's own preferred tool still reads.
+    let mut preferred = fixture.steps[0].clone();
+    preferred.readiness.step.tool = Some("gemini".into());
+    let mut with_tool = Fixture::new(vec![preferred]);
+    with_tool.runs.clone_from(&fixture.runs);
+    with_tool.sessions.clone_from(&fixture.sessions);
+    assert_eq!(item(&with_tool).tool.as_deref(), Some("gemini"));
+
+    // Wound down: still not the step's session.
+    fixture.sessions[0].state = SessionState::Stopped;
+    let stopped = item(&fixture);
+    assert!(stopped.worked_elsewhere);
+    assert_eq!(stopped.session_id, None);
+    assert_eq!(fixture.view().sessions, 0);
+
+    // A later session of this machine hosted as the run's worker is the step's again.
+    fixture
+        .sessions
+        .push(session_as(2, 1, "claude", "home-worker"));
+    let ours = item(&fixture);
+    assert!(!ours.worked_elsewhere);
+    assert_eq!(ours.session_id, Some(id(702)));
+    assert_eq!(ours.tool.as_deref(), Some("claude"));
+    let json = serde_json::to_value(&ours).unwrap();
+    assert!(json.get("worked_elsewhere").is_none());
+
+    // A run of the session's own worker, and a run no session links to, are not.
+    fixture.sessions = vec![session_as(1, 1, "codex", "home-worker")];
+    assert!(!item(&fixture).worked_elsewhere);
+    assert_eq!(item(&fixture).session_id, Some(id(701)));
+    fixture.sessions.clear();
+    let unlinked = item(&fixture);
+    assert!(!unlinked.worked_elsewhere);
+    assert_eq!(unlinked.tool.as_deref(), Some("codex"));
+
+    // A finished run is no other worker's any more: its last session is named.
+    fixture.sessions = vec![session_as(1, 1, "codex", "site-worker")];
+    fixture.runs[0].state = RunState::Completed;
+    let done = fixture.view();
+    let done = done
+        .waves
+        .iter()
+        .flat_map(|wave| &wave.items)
+        .find(|item| item.step_id == "step-2")
+        .unwrap();
+    assert!(!done.worked_elsewhere);
+    assert_eq!(done.session_id, Some(id(701)));
 }

@@ -10,6 +10,8 @@
 //!   site's run both try to claim one ticket, and exactly one claim holds.
 //! - HS2-S5RH57: when the home's worker won, the site's session placed for that run
 //!   is wound down at its safe point (nothing else is ready) and never replaced.
+//! - HS2-JGNCAR: from the moment the home's worker holds the run, the timeline names no
+//!   session of the site as the run's, while that session idles and once it is stopped.
 //!
 //! Synthetic tickets and identifiers only. Nothing is waited for by time: every wait is
 //! woken by an event stream or a file change, with a deadline.
@@ -88,6 +90,19 @@ async fn session_until(fleet: &Fleet, session_id: &str, state: &str) -> Value {
         );
         cursor = fleet.next_event(None, cursor).await;
     }
+}
+
+/// HS2-JGNCAR: the controller's timeline item whose run is `run_id`.
+async fn run_item(fleet: &Fleet, run_id: &str) -> Value {
+    let timeline = fleet.ok("GET", "/timeline", Value::Null).await;
+    timeline["waves"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|wave| wave["items"].as_array().into_iter().flatten())
+        .find(|item| item["run"]["run_id"] == run_id)
+        .cloned()
+        .unwrap_or_else(|| panic!("no timeline item has run {run_id}: {timeline:#}"))
 }
 
 /// The controller's home-outage notifications once there are `count`, woken by the
@@ -360,6 +375,26 @@ async fn partitioned_claim(first: First) {
         assert_eq!(claims, 1, "{read:?}");
     }
 
+    // HS2-JGNCAR: the timeline names the site's session as the run's only while it
+    // works the run. Once the home's worker holds the ticket, the item names no session
+    // and says the work is another worker's, already while that session idles before
+    // its wind-down (it is read as still running after the timeline was read).
+    let item = run_item(&fleet, &run_id).await;
+    match first {
+        First::Home => {
+            assert_eq!(item["worked_elsewhere"], true, "{item:#}");
+            assert!(item.get("session_id").is_none(), "{item:#}");
+            assert!(item.get("session_state").is_none(), "{item:#}");
+            assert_eq!(item["run"]["worker_id"], HOME_WORKER, "{item:#}");
+            assert_eq!(fleet.session(&worker.session_id).await["state"], "running");
+        }
+        First::Site => {
+            assert!(item.get("worked_elsewhere").is_none(), "{item:#}");
+            assert_eq!(item["session_id"], worker.session_id.as_str(), "{item:#}");
+            assert_eq!(item["session_state"], "running", "{item:#}");
+        }
+    }
+
     // HS2-S5RH57: the site's session placed for the run has no work left in it once
     // the home's worker holds the ticket. Nothing else is ready, so it is wound down
     // by the idle rule at its host's safe point: stopped on purpose, not lost. The
@@ -396,6 +431,10 @@ async fn partitioned_claim(first: First) {
             (&json!("dispatched"), &json!(HOME_WORKER)),
             "{run:#}"
         );
+        // HS2-JGNCAR: wound down, the session is still not named as the run's.
+        let item = run_item(&fleet, &run_id).await;
+        assert_eq!(item["worked_elsewhere"], true, "{item:#}");
+        assert!(item.get("session_id").is_none(), "{item:#}");
     }
 
     // More passes start no second session for the step, and no role session.
