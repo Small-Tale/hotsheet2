@@ -1192,6 +1192,11 @@ backlog` release warning.
 socket (400 refusal, release `warnings`) and through the MCP shim's HTTP backend;
 `crates/hotsheet-mcp/src/lib.rs` covers the serverless backend.
 
+HS2-0R7XCR: `crates/hotsheet-server/tests/claim_backlog.rs` drives the provider-connection
+ticket route for a checkout's Git source on a real server socket. It covers the 400 phase
+refusal with nothing written, a phase edit that keeps the claim, and the release warning
+on a move to Backlog that a later edit does not repeat.
+
 HS2-K6Q8TW covers automatic selection skipping Backlog. `src/ops/claim_status_tests.rs`
 checks `auto_selectable` for every status, and has local and cross-source claim-next skip
 an urgent, legacy Up Next Backlog ticket. Moving it back to Not Started makes claim-next

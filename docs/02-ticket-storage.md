@@ -633,8 +633,9 @@ status is not Started is refused (HTTP and MCP 400) and writes nothing, instead 
 dropping the phase while reporting success. Setting `status: started` in the same edit
 starts the ticket at that phase; clearing the phase stays a no-op.
 An edit that ends a claim because the ticket left the active statuses says so: CLI
-`edit` prints a `Released <worker>'s claim on <slug>` warning, and the HTTP and MCP update
-results carry it in `warnings`. Starting a Backlog ticket keeps its holder's claim;
+`edit` prints a `Released <worker>'s claim on <slug>` warning, and the HTTP (store,
+checkout, and provider-connection routes) and MCP update results carry it in `warnings`;
+the provider-connection route also answers a refused phase with 400 (HS2-0R7XCR). Starting a Backlog ticket keeps its holder's claim;
 reopening a closed ticket still ends a stale one.
 Each actual phase change while Started appends a durable activity note, including
 the initial phase on claim. Repeating the same phase adds no note; leaving Started

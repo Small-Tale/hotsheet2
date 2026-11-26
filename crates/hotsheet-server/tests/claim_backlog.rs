@@ -161,3 +161,80 @@ async fn hs2_k6kg1t_http_and_mcp_claims_start_backlog_and_keep_the_claim() {
     .await
     .unwrap();
 }
+
+/// HS2-0R7XCR: the provider-connection ticket route answers a refused phase with 400, as
+/// the store and checkout routes do, and names a claim its edit released in `warnings`.
+#[tokio::test]
+async fn hs2_0r7xcr_provider_connection_patch_refuses_a_phase_and_names_a_release() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("project");
+    std::fs::create_dir(&root).unwrap();
+    let store_root = directory.path().join("AA.hs2");
+    let store = FsStore::init_git(&store_root, &StoreMetadata::new("AA")).unwrap();
+    let registry = directory.path().join("checkouts.json");
+    let registered = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry)
+        .register(&root, Some("project"), None, vec![store_root.clone()])
+        .unwrap();
+    let connection = registered.sources[0].connection_id.clone();
+    let now = hotsheet_model::Timestamp::new("2026-11-26T00:00:00Z");
+    let parked = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "AA",
+        now.clone(),
+        hotsheet_ticketing::NewTicket {
+            title: "parked".into(),
+            status: hotsheet_model::Status::Backlog,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_default_codex_home(directory.path().join("no-codex-home"))
+        .with_checkout_registry(&registry);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
+
+    tokio::task::spawn_blocking(move || {
+        let uri = format!("{base}/providers/{connection}/tickets/{}", parked.id);
+        let (status, refused) = request("PATCH", &uri, json!({"started_phase": "working"}));
+        assert_eq!(status, 400, "{refused}");
+        assert!(
+            refused["error"].as_str().unwrap().contains("not Started"),
+            "{refused}"
+        );
+        let (_, unchanged) = request("GET", &uri, json!({}));
+        assert_eq!(unchanged["status"], "backlog");
+
+        let (status, claimed) = request(
+            "POST",
+            &format!("{base}/tickets/{}/claim", parked.slug),
+            json!({"worker": "person"}),
+        );
+        assert_eq!(status, 200, "{claimed}");
+        assert_eq!(claimed["status"], "started");
+        let (status, working) = request("PATCH", &uri, json!({"started_phase": "working"}));
+        assert_eq!(status, 200, "{working}");
+        assert_eq!(working["claimed_by"], "person");
+        assert!(working.get("warnings").is_none(), "{working}");
+
+        let (status, shelved) = request("PATCH", &uri, json!({"status": "backlog"}));
+        assert_eq!(status, 200, "{shelved}");
+        assert!(shelved["claimed_by"].is_null());
+        assert!(
+            shelved["warnings"][0]
+                .as_str()
+                .unwrap()
+                .starts_with(&format!("Released person's claim on {}", parked.slug)),
+            "{shelved}"
+        );
+        // A later edit does not repeat the notice for the earlier release.
+        let (status, titled) = request("PATCH", &uri, json!({"title": "renamed"}));
+        assert_eq!(status, 200, "{titled}");
+        assert!(titled.get("warnings").is_none(), "{titled}");
+    })
+    .await
+    .unwrap();
+}

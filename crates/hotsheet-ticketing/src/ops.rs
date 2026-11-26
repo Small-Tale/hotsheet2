@@ -1056,11 +1056,16 @@ pub fn claim_released_by_edit_notice(before: &Ticket, after: &Ticket) -> Option<
     if after.claimed_by.is_some() {
         return None;
     }
-    Some(format!(
-        "Released {worker}'s claim on {}: its status is {}, which is not active. Claim it again to resume work.",
-        after.slug,
-        status_label(after.status)
-    ))
+    Some(released_claim_notice(worker, &after.slug, after.status))
+}
+
+/// The words of [`claim_released_by_edit_notice`], for callers that only see the ticket
+/// after the edit and find the release in its claim history (HS2-0R7XCR).
+pub fn released_claim_notice(worker: &str, slug: &str, status: Status) -> String {
+    format!(
+        "Released {worker}'s claim on {slug}: its status is {}, which is not active. Claim it again to resume work.",
+        status_label(status)
+    )
 }
 
 fn clear_claim_fields(ticket: &mut Ticket) {
