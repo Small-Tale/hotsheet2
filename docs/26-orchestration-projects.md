@@ -6840,7 +6840,8 @@ checks requirements and caps, not resources, which change from pass to pass.
 
 The placement is a `start` with reason `role_needed`, detail and `role` naming the
 role, and no steps. An integrator's start has reason `integrator_started` with detail
-`handoff_pending` instead (HS2-4JQ41V, below). It is applied under operation id `sched-role-<role>-<target>`
+`handoff_pending` instead (HS2-4JQ41V, below), or `ci_pending` when every pending handoff
+is already integrated and waits on its CI gate (HS2-GJ690N). It is applied under operation id `sched-role-<role>-<target>`
 (stable, so a repeated start is the same session), dispatches no run, passes the gate
 as a session start (`session_start` for its tool, §26.28), and launches in its role
 through the hosting machine's drawer like any orchestrator session (§26.16).
@@ -7365,8 +7366,10 @@ answer carries `integrator`, the card's **Integration** section follows **Run**:
   started", "Unavailable" (`integrator_unavailable` after the replacements were used
   up) or "Not running" (`none`). In a dry run a start or wind-down reads "Would
   start on the next pass (dry run)" or "Would wind down (dry run)".
-- **Why**: the reason and detail in words: "Handoffs wait to be integrated"
-  (`queue`), "An integrated commit waits on its CI gate" (`ci_pending`), "A worker it
+- **Why**: the reason and detail in words: "A handoff waits to be integrated"
+  (`handoff_pending`), "Handoffs wait to be integrated"
+  (`queue`), "An integrated commit waits on its CI gate" (`ci_pending`, a kept integrator's
+  or, HS2-GJ690N, a start's), "A worker it
   serves still has a run", "Nothing has needed it for a while" (`idle`), the
   scheduler's own reasons for a detail such as `target_cap` or `cooldown`, "Its
   project is turned off in the policy" (`target_disabled`) and "The project's

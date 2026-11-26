@@ -494,8 +494,11 @@ test('HS2-2751D6 a handoff waits on the integrator, its CI goes red and the fix 
       actor: scheduler,
     });
     await expect(row(gates, `CI · ${handoff.commit.slice(0, 7)}`)).toHaveText('Pending', { timeout: 30_000 });
-    // No integrator is live once it pushed, so a pass would still start one for the project's pool.
+    // No integrator is live once it pushed, so a pass would still start one for the project's pool, and
+    // HS2-GJ690N: says the integrated commit waits on its CI gate, not that a handoff waits to be integrated.
     await expect(row(integration, 'Integrator')).toHaveText('Would start on the next pass (dry run)');
+    await expect(row(integration, 'Why')).toHaveText('An integrated commit waits on its CI gate', { timeout: 30_000 });
+    await widths(page, 'ci-waits', 'hs2-gj690n', integration);
     await expect(secondLine).toHaveText(`Waits on ${first.slug}`);
     await expect(row(gates, 'What to do')).toHaveCount(0);
 

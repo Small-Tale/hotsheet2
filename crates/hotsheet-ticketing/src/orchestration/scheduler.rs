@@ -531,7 +531,8 @@ pub enum PlacementReason {
     /// dispatcher's; an integrator's decisions have reasons of their own.
     RoleNeeded,
     /// HS2-4JQ41V. Start: the project's home pool shows handoffs pending and no
-    /// integrator is live or starting; detail `handoff_pending`.
+    /// integrator is live or starting; detail `handoff_pending`, or HS2-GJ690N
+    /// `ci_pending` when every pending handoff is integrated and waits on its CI gate.
     IntegratorStarted,
     /// HS2-4JQ41V. Keep: the integrator is still needed; detail `queue` (handoffs wait
     /// to be integrated), `ci_pending` (an integrated commit waits on its CI gate) or
@@ -728,7 +729,7 @@ pub struct Unplaced {
     pub sites: Vec<SitePass>,
 }
 
-/// HS2-4JQ41V: the detail of an integrator start.
+/// HS2-4JQ41V: the detail of an integrator start (HS2-GJ690N: or `ci_pending`).
 pub const INTEGRATOR_HANDOFF_PENDING: &str = "handoff_pending";
 /// HS2-4JQ41V: the details of a kept integrator.
 pub const INTEGRATOR_QUEUE: &str = "queue";
@@ -2101,7 +2102,13 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 },
                 detail: Some(
                     if integrator {
-                        INTEGRATOR_HANDOFF_PENDING
+                        // HS2-GJ690N: when every pending handoff is already integrated and
+                        // waits on its CI gate, the start says so, as a kept integrator does.
+                        if pool.handoffs_pending > pool.ci_pending {
+                            INTEGRATOR_HANDOFF_PENDING
+                        } else {
+                            INTEGRATOR_CI_PENDING
+                        }
                     } else {
                         role.code()
                     }

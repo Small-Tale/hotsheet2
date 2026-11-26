@@ -4000,6 +4000,13 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   `machine_refused`, a live integrator and an unknown pool. The policy gate's one-slot
   allowance and `pool.ci_pending` in the capacity version only when reported are pinned
   too. `role_session_tests.rs` and `project_role_session_tests.rs` follow the new reasons.
+  `# hs2_gj690n_a_start_for_commits_waiting_on_ci_says_so` gives a start detail
+  `ci_pending` when every pending handoff waits on its CI gate, `handoff_pending` once a
+  handoff is queued beside it, back to CI repeatedly, nothing when the gates resolve,
+  and a refill (HS2-GJ690N); `clients/web/src/orchestration-scheduler.test.ts` words
+  that start, and `clients/web/tests/orchestration-golden-path.spec.ts # HS2-2751D6`
+  reads "An integrated commit waits on its CI gate" in the Integration section once the
+  handoff is pushed.
 - `tests/session_executor.rs # hs2_4jq41v` runs the real pass: three integrators whose
   role prompt fails are each wound down (the last with `replacements_exhausted`) and
   replaced, then no start for an hour with `integrator_unavailable` in the plan and a

@@ -131,6 +131,10 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
       'Would start the integrator of API: a handoff waits to be integrated',
     );
     expect(say({ ...integrator, outcome: 'permission_required' })).toBe('The integrator of API waits for permission');
+    // HS2-GJ690N: a start while every pending handoff waits on its CI gate says so.
+    expect(say({ ...integrator, detail: 'ci_pending', mode: 'dry_run' })).toBe(
+      'Would start the integrator of API: an integrated commit waits on its CI gate',
+    );
     expect(say({ target_id: 'web', reason: 'role_needed', detail: 'dispatcher', tool: 'claude' })).toBe(
       'Started the dispatcher of Web on Claude',
     );
@@ -324,6 +328,9 @@ describe('why integration is or is not running (HS2-65AD6J)', () => {
     expect(why({ standing: 'none' })).toBe('no handoff waits to be integrated');
     expect(why({ standing: 'start', reason: 'integrator_started', detail: 'handoff_pending' })).toBe(
       'a handoff waits to be integrated',
+    );
+    expect(why({ standing: 'start', reason: 'integrator_started', detail: 'ci_pending' })).toBe(
+      'an integrated commit waits on its CI gate',
     );
     expect(why({ standing: 'keep', reason: 'integrator_kept', detail: 'queue' })).toBe(
       'handoffs wait to be integrated',
