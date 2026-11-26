@@ -7,7 +7,12 @@ import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { type TicketPriority } from '../components/ticket-row';
 import { type TicketViewActionSpec } from '../components/workspace-header';
 import { featureOn } from '../feature-areas';
-import { canBulkUpdate, ticketGroupDisabledReason, ticketGroupMenuModel } from '../ticket-bulk-operations';
+import {
+  canBulkUpdate,
+  ticketGroupDisabledReason,
+  ticketGroupMenuModel,
+  ticketUpNextDisabledReason,
+} from '../ticket-bulk-operations';
 import { isTicketDropTarget, NEW_TICKET_LAUNCHER_DROP_KEY } from '../ticket-drop-target';
 import { ticketGroupKey, type TicketGroupOption, ticketGroupValue } from '../ticket-groups';
 import {
@@ -23,6 +28,8 @@ export interface TicketViewSurfaceDependencies {
   canStageNewTicketAttachments: () => boolean;
   capabilitiesFor: (connectionId: string) => Capabilities;
   isGitSource: (connectionId: string) => boolean;
+  /** A connection's ticket source display name, for the Up Next disabled reason (HS2-Y32T8A). */
+  sourceNameFor?: (connectionId: string) => string | undefined;
   customViewFor: (view: TicketView, projectId?: string) => CustomView | undefined;
   priority: (value?: string) => TicketPriority;
   selectedTicketSlugs: Signal<string[]>;
@@ -50,6 +57,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
     canStageNewTicketAttachments,
     capabilitiesFor,
     isGitSource,
+    sourceNameFor,
     customViewFor,
     priority,
     selectedTicketSlugs,
@@ -142,6 +150,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
           const value = tickets.value.find((item) => item.slug === slug)?.status;
           return value === 'not_started' || value === 'started';
         }),
+        upNextDisabledReason: ticketUpNextDisabledReason(selected, capabilitiesFor, sourceNameFor),
         hideUpNext: menu.hideUpNext,
         verifyAction: allCompleted && (capabilities?.update ?? true),
         notWorkingAction: onlyCompleted && (capabilities?.not_working_report ?? false) && featureOn('not-working'),

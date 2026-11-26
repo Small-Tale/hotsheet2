@@ -703,6 +703,35 @@ describe('TicketRow', () => {
     expect(star(false)).toContain('fill="none"');
   });
 
+  it('keeps the Up Next star mounted but disabled with its provider reason (HS2-Y32T8A)', () => {
+    const reason = 'GitLab issues tickets do not support Up Next.',
+      star = (upNextDisabledReason?: string, presentation: 'list' | 'column' = 'list') =>
+        /<button[^>]*data-action="toggle-row-up-next"[^>]*>/u.exec(
+          String(
+            TicketRow({
+              slug: 'HS2-GL',
+              title: 'GitLab issue',
+              status: 'not_started',
+              priority: 'default',
+              category: 'task',
+              tags: [],
+              presentation,
+              upNextDisabledReason,
+            }),
+          ),
+        )?.[0] ?? '';
+    for (const presentation of ['list', 'column'] as const) {
+      expect(star(reason, presentation)).toContain(' disabled');
+      expect(star(reason, presentation)).toContain(`title="${reason}"`);
+      expect(star(reason, presentation)).toContain('aria-label="Add to Up Next"');
+    }
+    expect(star()).not.toContain(' disabled');
+    expect(star()).toContain('title="Add to Up Next"');
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    expect(css).toMatch(/\.ticket-list-row__up-next:disabled \{[^}]*cursor: not-allowed;/u);
+    expect(css).toContain('.ticket-list-row__up-next:not(:disabled):hover');
+  });
+
   it('offers Up Next only for not-started and started lifecycle states', () => {
     for (const status of ['not_started', 'started'] as const)
       expect(

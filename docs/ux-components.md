@@ -965,7 +965,8 @@ always retain native clipboard behavior.
   shown as removable pending evidence, cleared on cancellation, and uploaded after the
   ticket is created when the selected provider supports both operations. Category choices use
   the shared colored/iconic picker in both its selected and menu presentations;
-  the star sends explicit Up Next placement and takes precedence over Backlog-view creation;
+  the star sends explicit Up Next placement and takes precedence over Backlog-view creation,
+  and is disabled, unpressed, with its reason for a source without Up Next (HS2-Y32T8A);
   created mock tickets derive their category icon/color from that same choice model.
   The provider destination is plain "Creating in" text for one writable source and a compact
   Kerf source `Select` for several (HS2-NZMJBJ); the demo settings switch between the two
@@ -1027,7 +1028,9 @@ always retain native clipboard behavior.
   A quieter, vertically
   centered secondary flow holds the persistent independently operable outline/filled
   Up Next star, status, short owner name, and all tags; it wraps without hiding or
-  collapsing metadata at narrow widths. A completed or verified ticket with a derived
+  collapsing metadata at narrow widths. A source without the `up_next` capability keeps
+  the star mounted but disabled with its reason as the tooltip (`upNextDisabledReason`,
+  demo setting "Provider Without Up Next", HS2-Y32T8A). A completed or verified ticket with a derived
   `latest_confidence` adds the compact `ConfidenceBadge` pill (gauge icon + percentage,
   band-tinted) just before its tags in both list rows and board cards (HS2-A0Q6G6).
   Any other status never shows a score, even when the wire still carries one. The

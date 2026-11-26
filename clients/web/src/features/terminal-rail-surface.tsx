@@ -26,7 +26,7 @@ import { effectiveSearch, type InlineSearchToken } from '../inline-search';
 import { type Project } from '../interactions/types';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { ticketBoardGroups } from '../ticket-board-layout';
-import { canBulkUpdate } from '../ticket-bulk-operations';
+import { canBulkUpdate, ticketUpNextDisabledReason } from '../ticket-bulk-operations';
 import { columnTicketDropKey, isTicketDropTarget } from '../ticket-drop-target';
 import {
   ALL_TICKETS_SCOPE,
@@ -48,6 +48,8 @@ export interface TerminalRailSurfaceDependencies {
   activeWorkspaceSort: () => WorkspaceSortPreference;
   allTicketsSearchAvailable: () => boolean;
   capabilitiesFor: (connectionId: string) => Capabilities;
+  /** A connection's ticket source display name, for the Up Next disabled reason (HS2-Y32T8A). */
+  sourceNameFor?: (connectionId: string) => string | undefined;
   customViewsFor: (projectId?: string) => CustomView[];
   hideVerifiedColumn: () => boolean;
   pendingPermissions: () => PermissionItem[];
@@ -111,6 +113,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
     activeWorkspaceSort,
     allTicketsSearchAvailable,
     capabilitiesFor,
+    sourceNameFor,
     customViewsFor,
     hideVerifiedColumn,
     pendingPermissions,
@@ -248,6 +251,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
               selection.length > 0 &&
               selection.every((ticket) => ticket.status === 'not_started' || ticket.status === 'started')
             }
+            selectedTicketsUpNextDisabledReason={ticketUpNextDisabledReason(selection, capabilitiesFor, sourceNameFor)}
             selectedTicketsMutable={canBulkUpdate(selection, capabilitiesFor)}
           />
         ),

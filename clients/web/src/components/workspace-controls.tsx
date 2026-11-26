@@ -136,6 +136,11 @@ export interface WorkspaceHeaderProps {
   selectedTicketCount?: number;
   selectedTicketsUpNext?: WorkspaceUpNextState;
   selectedTicketsUpNextEligible?: boolean;
+  /**
+   * Why the selected tickets' providers cannot change Up Next (HS2-Y32T8A): the toggle and its overflow
+   * entry stay mounted, disabled, with this reason as their explanation.
+   */
+  selectedTicketsUpNextDisabledReason?: string;
   selectedTicketsMutable?: boolean;
   /**
    * The selected project is not ready (HS2-H0QGK7): every control stays in place but is disabled, and
@@ -385,6 +390,7 @@ function WorkspaceOverflowControls({
   settingsCount,
   selectedTicketsUpNext,
   selectedTicketsUpNextEligible,
+  selectedTicketsUpNextDisabledReason,
   presentation,
   orchestration,
   unavailableReason,
@@ -406,6 +412,7 @@ function WorkspaceOverflowControls({
   settingsCount: number;
   selectedTicketsUpNext: WorkspaceUpNextState;
   selectedTicketsUpNextEligible: boolean;
+  selectedTicketsUpNextDisabledReason?: string;
   presentation: WorkspaceControlsPresentation;
 }) {
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
@@ -442,7 +449,9 @@ function WorkspaceOverflowControls({
       items={[
         {
           label: 'Toggle Up Next',
-          disabled: ticketActionsDisabled || !selectedTicketsUpNextEligible,
+          disabled:
+            ticketActionsDisabled || !selectedTicketsUpNextEligible || Boolean(selectedTicketsUpNextDisabledReason),
+          disabledReason: selectedTicketsUpNextDisabledReason,
           icon: <WorkspaceUpNextIcon state={selectedTicketsUpNext} />,
           details: <>{workspaceUpNextDetails(selectedTicketsUpNext)}</>,
           attributes: {
@@ -560,6 +569,7 @@ export function WorkspaceControls({
   selectedTicketCount = 0,
   selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
+  selectedTicketsUpNextDisabledReason,
   selectedTicketsMutable = true,
   unavailableReason,
 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
@@ -618,12 +628,14 @@ export function WorkspaceControls({
       <>
         <button
           type="button"
-          disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
+          disabled={
+            ticketActionsDisabled || !selectedTicketsUpNextEligible || Boolean(selectedTicketsUpNextDisabledReason)
+          }
           {...TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.attrs}
           aria-label="Toggle Up Next for Selected Tickets"
           aria-pressed={selectedTicketsUpNext === 'mixed' ? 'mixed' : String(selectedTicketsUpNext === 'all')}
           data-selected-chrome="none"
-          title={unavailableReason ?? 'Toggle Up Next for selected tickets'}
+          title={unavailableReason ?? selectedTicketsUpNextDisabledReason ?? 'Toggle Up Next for selected tickets'}
         >
           <WorkspaceUpNextIcon state={selectedTicketsUpNext} />
         </button>
@@ -671,6 +683,7 @@ export function WorkspaceControls({
       settingsCount={settingsCount}
       selectedTicketsUpNext={selectedTicketsUpNext}
       selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
+      selectedTicketsUpNextDisabledReason={selectedTicketsUpNextDisabledReason}
       presentation={presentation}
       orchestration={orchestration}
       unavailableReason={unavailableReason}

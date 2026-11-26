@@ -76,7 +76,12 @@ import { syncConversationScroll } from '../conversation-scroll';
 import { draftFiles } from '../draft-file-recovery';
 import { featureOn } from '../feature-areas';
 import type { NotWorkingTarget, PendingEvidence, Project, UnhealthyServerRecovery } from '../interactions/types';
-import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSources } from '../new-ticket-source';
+import {
+  newTicketUpNextDisabledReason,
+  type ProjectTicketSources,
+  type TicketSourceChoice,
+  writableTicketSources,
+} from '../new-ticket-source';
 import type { DesktopRemoteDiscovery, DesktopRemotePairing, DesktopRemoteServer } from '../remote-projects/client';
 import type { RenderMetrics } from '../render-metrics';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityState } from '../terminal-visibility';
@@ -627,6 +632,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           details={composerDetails.value}
           category={composerCategory.value}
           upNext={composerUpNext.value}
+          upNextDisabledReason={newTicketUpNextDisabledReason(composerTarget)}
           priority={ticketPriorityValue(composerPriority.value)}
           backlog={composerBacklog.value}
           providerName={composerTarget?.name ?? provider?.name ?? 'Hot Sheet Git'}

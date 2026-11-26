@@ -131,6 +131,13 @@ before any request reaches the tracker, instead of succeeding and reading back u
 Clearing Up Next (`up_next: false`) is accepted because it is the only state their tickets
 hold, so undo and full-field patches keep working. An AI command ticket created in such a
 source is created without Up Next rather than failing the run.
+The web client follows the capability, never the provider name (HS2-Y32T8A): for a
+ticket whose source reports `up_next: false`, the row and card star, the inspector and
+reader star, the ticket menu's Toggle Up Next, the toolbar's selected-ticket toggle and
+its overflow entry, and the new-ticket composer's star stay in place but disabled, with
+the reason ("<source> tickets do not support Up Next.") as their tooltip; a source that
+later reports `up_next: true` (HS2-13R2AS) enables them with no client change. A bulk
+Up Next request that reaches the client anyway is refused locally with the same reason.
 
 The maintainer decision on HS2-9KZSD4 settles the mapping direction below: an external
 ticket will reference a group by an `hs-group:<id>` label whose id is the project

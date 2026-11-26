@@ -221,6 +221,9 @@ describe('layered ticket reader stack', () => {
     expect(linkedReaderPatchAllowed(only('notes'), { ...add, expected_token: 't' })).toBe(true);
     expect(linkedReaderPatchAllowed(only('notes'), { ...add, title: 'x' })).toBe(false);
     expect(linkedReaderPatchAllowed(only('update'), {})).toBe(true);
+    // HS2-Y32T8A: Up Next needs the provider's up_next capability as well as update.
+    expect(linkedReaderPatchAllowed(only('update'), { up_next: true })).toBe(false);
+    expect(linkedReaderPatchAllowed({ ...only('update'), up_next: true }, { up_next: true })).toBe(true);
     // HS2-J4G9GB: an existing-note response link needs its own capability.
     const link = { note_id: 'N1', response_to: 'R1' };
     expect(linkedReaderPatchAllowed(only('note_edit'), link)).toBe(false);

@@ -10,6 +10,7 @@ import {
   projectBulkTicketCounts,
   ticketGroupDisabledReason,
   ticketGroupMenuModel,
+  ticketUpNextDisabledReason,
 } from './ticket-bulk-operations';
 
 const ticket = (slug: string, connection_id = 'git', tags: string[] = []): TicketRow => ({
@@ -216,5 +217,42 @@ describe('bulk ticket operations', () => {
     });
     expect(ticketGroupMenuModel([sprintA, sprintB], twins, lookup)).toMatchObject({ current: undefined });
     expect(ticketGroupMenuModel([c, external], [], lookup)?.disabledReason).toContain('groups');
+  });
+
+  it('disables Up Next from the descriptor capability, never the provider name (HS2-Y32T8A)', () => {
+    const caps = {
+        git: { update: true, up_next: true },
+        gitlab: { update: true, up_next: false },
+        jira: { update: true, up_next: false },
+        readOnly: { update: false, up_next: true },
+      } as unknown as Record<string, Capabilities>,
+      lookup = (id: string) => caps[id],
+      names = (id: string) => ({ gitlab: 'GitLab issues', jira: 'Jira PROJ' })[id];
+    expect(ticketUpNextDisabledReason([], lookup, names)).toBeUndefined();
+    expect(ticketUpNextDisabledReason([ticket('A'), ticket('B')], lookup, names)).toBeUndefined();
+    // Not-yet-loaded capabilities are not known to refuse; the server still refuses a real gap.
+    expect(ticketUpNextDisabledReason([ticket('A', 'unknown')], lookup, names)).toBeUndefined();
+    expect(ticketUpNextDisabledReason([ticket('G', 'gitlab')], lookup, names)).toBe(
+      'GitLab issues tickets do not support Up Next.',
+    );
+    expect(ticketUpNextDisabledReason([ticket('G', 'gitlab'), ticket('H', 'gitlab')], lookup, names)).toBe(
+      'GitLab issues tickets do not support Up Next.',
+    );
+    expect(ticketUpNextDisabledReason([ticket('G', 'gitlab')], lookup)).toBe(
+      "This ticket's provider does not support Up Next.",
+    );
+    expect(ticketUpNextDisabledReason([ticket('A'), ticket('G', 'gitlab')], lookup, names)).toBe(
+      'One or more selected ticket providers do not support Up Next.',
+    );
+    expect(ticketUpNextDisabledReason([ticket('G', 'gitlab'), ticket('J', 'jira')], lookup, names)).toBe(
+      'One or more selected ticket providers do not support Up Next.',
+    );
+    expect(ticketUpNextDisabledReason([ticket('R', 'readOnly')], lookup, names)).toBe('This ticket cannot be edited.');
+    expect(ticketUpNextDisabledReason([ticket('A'), ticket('R', 'readOnly')], lookup, names)).toBe(
+      'One or more selected ticket providers do not support updates.',
+    );
+    // A provider that gains Up Next (HS2-13R2AS) enables it with no client change.
+    caps.gitlab = { update: true, up_next: true } as unknown as Capabilities;
+    expect(ticketUpNextDisabledReason([ticket('G', 'gitlab')], lookup, names)).toBeUndefined();
   });
 });

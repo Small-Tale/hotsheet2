@@ -187,6 +187,8 @@ const NOTE_ADD_FIELDS = new Set(['note', 'note_kind']),
  */
 export function linkedReaderPatchAllowed(capabilities: Capabilities, patch: Record<string, unknown>): boolean {
   const keys = Object.keys(patch).filter((key) => key !== 'expected_token');
+  // HS2-Y32T8A: Up Next is its own reported capability (GitLab and Jira refuse it).
+  if (keys.includes('up_next') && !capabilities.up_next) return false;
   if (keys.includes('note_id') && keys.includes('note_kind') && !capabilities.note_kind_edit) return false;
   // HS2-J4G9GB: linking an existing note as a response is its own reported capability.
   if (keys.includes('note_id') && keys.includes('response_to') && !capabilities.note_response_link) return false;

@@ -219,12 +219,15 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
 /**
  * Wire the TicketRow Up Next star under `root` (HS2-NRW5ZR). The handlers run in the capture phase and
  * stop propagation so the row's own click and Enter/Space selection never see the star, which keeps the
- * star keyboard-operable inside a selectable row. `toggle` receives the star's row.
+ * star keyboard-operable inside a selectable row. `toggle` receives the star's row; a disabled star
+ * (HS2-Y32T8A) is still kept from selecting its row but never toggles.
  */
 export function wireTicketRowUpNextToggle(root: HTMLElement, toggle: (row: HTMLElement) => void): () => void {
   const lifetime = createScope(),
     selector = '[data-action="toggle-row-up-next"]',
     run = (target: Element) => {
+      // A provider without Up Next disables the star (HS2-Y32T8A); a disabled star never toggles.
+      if ((target as HTMLButtonElement).disabled) return;
       const row = target.closest<HTMLElement>('[data-ticket-slug]');
       if (row) toggle(row);
     };

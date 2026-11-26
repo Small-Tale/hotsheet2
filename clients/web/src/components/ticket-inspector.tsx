@@ -95,6 +95,11 @@ export interface TicketInspectorProps {
   activeTab?: InspectorTab;
   upNext?: boolean;
   upNextEligible?: boolean;
+  /**
+   * Why the ticket's provider cannot change Up Next (HS2-Y32T8A): the star stays mounted, disabled,
+   * with this reason as its tooltip.
+   */
+  upNextDisabledReason?: string;
   /** The ticket has an unresolved `feedback_needed` note — it is waiting on the user. */
   feedbackNeeded?: boolean;
   closeReason?: TicketCloseReason;
@@ -210,6 +215,7 @@ export function ticketInspectorPanel({
   activeTab: requestedTab = 'info',
   upNext = false,
   upNextEligible = status === 'not_started' || status === 'started',
+  upNextDisabledReason,
   feedbackNeeded = false,
   closeReason,
   latestConfidence,
@@ -263,8 +269,9 @@ export function ticketInspectorPanel({
           type="button"
           class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`}
           {...INSPECTOR_AND_EDITOR_ACTIONS.toggleInspectorUpNext.attrs}
-          disabled={contentLoading}
+          disabled={contentLoading || Boolean(upNextDisabledReason)}
           aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
+          title={upNextDisabledReason}
         >
           <LucideIcon
             icon={Star}

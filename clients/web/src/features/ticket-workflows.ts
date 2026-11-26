@@ -60,6 +60,7 @@ import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes'
 import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from '../new-ticket-attachments';
 import {
   newTicketCreationSourceId,
+  newTicketUpNextDisabledReason,
   type ProjectTicketSources,
   rememberNewTicketSource,
   type TicketSourceChoice,
@@ -77,6 +78,7 @@ import {
   canAtomicallyBulkUpdate,
   canBulkUpdate,
   projectBulkTicketCounts,
+  ticketUpNextDisabledReason,
 } from '../ticket-bulk-operations';
 import {
   duplicateReference,
@@ -1529,6 +1531,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         reportBulkFailure(requestedProject, 'One or more selected ticket providers do not support ticket updates.');
         return false;
       }
+      // The Up Next controls are disabled for such providers; this covers any other route (HS2-Y32T8A).
+      const upNextRefusal =
+        action.kind === 'up-next' ? ticketUpNextDisabledReason(selected, capabilitiesFor) : undefined;
+      if (upNextRefusal) {
+        reportBulkFailure(requestedProject, upNextRefusal);
+        return false;
+      }
       const operations: BulkOperation[] = selected.flatMap((ticket) => {
         const patch = bulkTicketPatch(ticket, action);
         return patch ? [{ slug: ticket.slug, id: ticket.id, patch }] : [];
@@ -2790,7 +2799,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     const client = new Api(origin.apiPath),
       files = submitted.map((item) => item.file),
       batch_id = browserRandomId(),
-      placement = newTicketCreationPlacement(composerUpNext.value, composerBacklog.value),
+      // A source without Up Next creates the ticket outside it, as its disabled star shows (HS2-Y32T8A).
+      placement = newTicketCreationPlacement(
+        composerUpNext.value && !newTicketUpNextDisabledReason(target),
+        composerBacklog.value,
+      ),
       finishLocalCreation = beginLocalTicketCreation();
     let completedEpoch: number | undefined;
     composerSubmitting.value = true;

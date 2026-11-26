@@ -328,7 +328,7 @@ import { wireTerminalSearchCountFit } from '../terminal-search-count-fit';
 import { parseTerminalVisibilityState, TERMINAL_VISIBILITY_STORAGE_KEY } from '../terminal-visibility';
 import { applyThemePreference, readThemePreference } from '../theme-preference';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
-import { BulkTicketMutationSequencer } from '../ticket-bulk-operations';
+import { BulkTicketMutationSequencer, ticketUpNextDisabledReason } from '../ticket-bulk-operations';
 import { loadLastTicketCategory } from '../ticket-category-preference';
 import { type DuplicateTarget } from '../ticket-close';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
@@ -2239,6 +2239,12 @@ export async function startHotSheetWebClient() {
       defaultProvider(),
       composerSource.value ?? lastTicketSourceByProject.value[selectedProjectId.value],
     );
+  /** The open project's ticket source display name for a connection (HS2-Y32T8A). */
+  const ticketSourceName = (connectionId: string) =>
+    defaultProviders.value[project()?.id ?? '']?.sources.find((source) => source.connectionId === connectionId)?.name;
+  /** Why a workspace ticket's provider cannot change Up Next, or undefined (HS2-Y32T8A). */
+  const upNextDisabledReasonFor = (ticket: Pick<WireTicketRow, 'connection_id'>) =>
+    ticketUpNextDisabledReason([ticket], (connectionId) => providerCapabilities.value[connectionId], ticketSourceName);
   const canStageNewTicketAttachments = () => {
     const capabilities = newTicketSource()?.capabilities;
     return (capabilities?.create ?? true) && (capabilities?.attachments ?? true);
@@ -4042,6 +4048,7 @@ export async function startHotSheetWebClient() {
     groupName: featureOn('ticket-groups') ? rowGroupName(ticket) : undefined,
     upNext: ticket.up_next,
     upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
+    upNextDisabledReason: upNextDisabledReasonFor(ticket),
     feedbackNeeded: ticket.needs_review ?? ticket.feedback_needed,
     blocked: hasUnresolvedBlocker(ticket),
     selected: selectedTicketSlugs.value.includes(ticket.slug),
@@ -6539,6 +6546,7 @@ export async function startHotSheetWebClient() {
   const { ticketViewTitle, ticketViewActionSpec, ticketContextMenuSurface } = createTicketViewSurface({
     canStageNewTicketAttachments,
     capabilitiesFor,
+    sourceNameFor: ticketSourceName,
     isGitSource: (connectionId) =>
       Boolean(
         defaultProviders.value[project()?.id ?? '']?.sources.some(
@@ -6622,6 +6630,7 @@ export async function startHotSheetWebClient() {
       titleEditingSurface,
     });
   const { gallerySourceFor, readerLayersSurfaceProps } = createReaderLayersSurface({
+    upNextDisabledReasonFor,
     ago,
     attachmentContext,
     attachmentItems,
@@ -6807,6 +6816,7 @@ export async function startHotSheetWebClient() {
     }),
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
+    sourceNameFor: ticketSourceName,
     ticketGroups,
     activeWorkspaceSort,
     allTicketsSearchAvailable,
@@ -6842,6 +6852,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
+    sourceNameFor: ticketSourceName,
     minimizedTickets: () => minimizedDialogs.items(),
     settingsInspector: (current) => orchestrationSurfaceRef.current?.inspector(current),
     desktopRemoteServers,

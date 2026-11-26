@@ -444,6 +444,23 @@ describe('WorkspaceHeader', () => {
     expect(selected).not.toMatch(/data-action="open-selected-ticket-actions"[^>]*disabled/);
   });
 
+  it('disables the selected-ticket Up Next toggle and its overflow entry with the provider reason (HS2-Y32T8A)', () => {
+    const reason = 'One or more selected ticket providers do not support Up Next.',
+      markup = String(
+        WorkspaceHeader({
+          projectName: 'Hot Sheet 2',
+          mode: 'list',
+          selectedTicketCount: 2,
+          selectedTicketsUpNextEligible: true,
+          selectedTicketsUpNextDisabledReason: reason,
+        }),
+      );
+    expect(markup).toMatch(/<button[^>]*disabled[^>]*data-action="toggle-selected-up-next"[^>]*title="[^"]*Up Next\."/);
+    expect(markup).toContain(`title="${reason}"`);
+    expect(markup).toMatch(/data-workspace-overflow-action="toggle-selected-up-next"/);
+    expect(markup).not.toMatch(/data-action="open-selected-ticket-actions"[^>]*disabled/);
+  });
+
   it.each([
     [[], 'none'],
     [[false], 'none'],

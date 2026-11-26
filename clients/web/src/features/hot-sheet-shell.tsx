@@ -114,7 +114,7 @@ import { showsStaleSourceNotice } from '../source-stale-notice';
 import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
 import { activeTerminalVisibilityGroup, TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
-import { canBulkUpdate } from '../ticket-bulk-operations';
+import { canBulkUpdate, ticketUpNextDisabledReason } from '../ticket-bulk-operations';
 import { projectGroupRegistrySync, ticketGroupOperation } from '../ticket-group-state';
 import {
   ALL_TICKETS_SCOPE,
@@ -137,6 +137,8 @@ export interface HotSheetShellDependencies {
   announcerPanel: () => AnnouncerPlacements | undefined;
   appRegionSize: (id: AppRegionId) => number;
   capabilitiesFor: (connectionId: string) => Capabilities;
+  /** A connection's ticket source display name, for the Up Next disabled reason (HS2-Y32T8A). */
+  sourceNameFor?: (connectionId: string) => string | undefined;
   conversationOpen: Signal<boolean>;
   corruptRecovery: Signal<Record<string, CorruptTicketRecoveryState>>;
   corruptTickets: Signal<CorruptTicket[]>;
@@ -264,6 +266,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     announcerPanel,
     appRegionSize,
     capabilitiesFor,
+    sourceNameFor,
     conversationOpen,
     corruptRecovery,
     corruptTickets,
@@ -811,6 +814,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               selection.length > 0 &&
               selection.every((ticket) => ticket.status === 'not_started' || ticket.status === 'started')
             }
+            selectedTicketsUpNextDisabledReason={ticketUpNextDisabledReason(selection, capabilitiesFor, sourceNameFor)}
             selectedTicketsMutable={canBulkUpdate(selection, capabilitiesFor)}
           />
         }
