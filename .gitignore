@@ -50,6 +50,8 @@ pnpm-debug.log*
 /clients/macos-screensaver/build/
 /coverage/
 coverage/
+# HS2-H0T69J: architecture coverage files are documentation, not test output.
+!docs/architecture/coverage/
 /test-results/
 **/test-results/
 /playwright-report/
