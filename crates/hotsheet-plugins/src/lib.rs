@@ -59,6 +59,16 @@ pub enum PluginError {
     /// HS2-AHG7HW: a `[capacity]` declaration that contradicts itself.
     #[error("plugin '{id}' has an invalid capacity declaration: {reason}")]
     InvalidCapacity { id: String, reason: &'static str },
+    /// HS2-80JHZD: an id that is not a safe single path segment (see
+    /// [`is_valid_plugin_id`]). The id names the install directory, so it must never
+    /// carry `/`, `..`, or other characters that could escape the plugin root.
+    #[error(
+        "invalid plugin id {0:?}: use 1-64 lowercase ASCII letters, digits, or hyphens, starting with a letter or digit"
+    )]
+    InvalidId(String),
+    /// HS2-80JHZD: declared write targets that would escape the project.
+    #[error("plugin '{id}' declares write targets that escape the project: {targets}")]
+    UnsafeTargets { id: String, targets: String },
     #[error("reading plugin dir {path}: {source}")]
     Io {
         path: String,
@@ -589,11 +599,23 @@ impl Plugin {
         source: PluginSource,
     ) -> Result<Self, PluginError> {
         let manifest: Manifest = toml::from_str(manifest_raw)?;
+        // HS2-80JHZD: the id becomes an install-directory name and every write target is
+        // joined under the project, so no loaded plugin may carry an unsafe one.
+        if !is_valid_plugin_id(&manifest.id) {
+            return Err(PluginError::InvalidId(manifest.id));
+        }
         let plugin = Plugin {
             manifest,
             source,
             files,
         };
+        let unsafe_targets = plugin.unsafe_targets();
+        if !unsafe_targets.is_empty() {
+            return Err(PluginError::UnsafeTargets {
+                id: plugin.manifest.id.clone(),
+                targets: unsafe_targets.join(", "),
+            });
+        }
         plugin.require(&plugin.manifest.instructions.section)?;
         if let Some(reason) = plugin.manifest.capacity.and_then(CapacitySpec::problem) {
             return Err(PluginError::InvalidCapacity {
@@ -852,6 +874,18 @@ pub fn is_safe_rel_path(p: &str) -> bool {
         && Path::new(p)
             .components()
             .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
+}
+
+/// Whether `id` is a valid plugin id (HS2-80JHZD): 1-64 characters of lowercase ASCII
+/// letters, digits, and hyphens, starting with a letter or digit. A valid id is always a
+/// single normal path segment, so joining it under the plugin root cannot escape it.
+pub fn is_valid_plugin_id(id: &str) -> bool {
+    let bytes = id.as_bytes();
+    (1..=64).contains(&bytes.len())
+        && bytes[0] != b'-'
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'-')
 }
 
 // ---- registry --------------------------------------------------------------------

@@ -3759,6 +3759,13 @@ a search path: **bundled built-ins → `${HOTSHEET_HOME:-~/.hotsheet2}/plugins/`
 `.hotsheet2/plugins/`**. Both binaries load the same registry, which is what lets a
 headless CLI set up a project for a plugin the user dropped in.
 
+**Path safety at load (HS2-80JHZD).** A manifest `id` names the plugin's install
+directory, so it must be 1-64 lowercase ASCII letters, digits, or hyphens, starting with
+a letter or digit (`[a-z0-9][a-z0-9-]{0,63}`). The loader also refuses any declared write
+target that is absolute or climbs out with `..`. A plugin that breaks either rule fails
+to load: `plugin install` reports the error, and discovery skips it. `plugin remove <id>`
+checks the same id rule before touching the filesystem and exits non-zero on a bad id.
+
 **Trust gate (mandatory, not optional).** A manifest is inert data, but what it
 _writes_ is a supply-chain surface: a plugin's instruction template steers an agent,
 and its launch command _executes_. So:
