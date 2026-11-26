@@ -195,3 +195,18 @@ cliOrchUsesSpeculation = cliOrchestration -> orchSpeculation "Updates orchestrat
 cliOrchUsesResources = cliOrchestration -> orchResourceClaims "Reads held namespaces and offline policy" "Rust call"
 cliCoordUsesSpeculation = cliCoordination -> orchSpeculation "Evaluates provisional readiness for reservations" "Rust call"
 cliCoordReadsJobs = cliCoordination -> orchJobStore "Reads CI watch Jobs for gate commits" "Rust call"
+
+// HS2-P27EJM: server
+lifecycleWritesMachine = serverLifecycle -> machineData "Writes instance files and writer locks under the machine home" "Local files"
+pairingPersists = serverPairing -> machineData "Persists the device catalog with a file lock and atomic replace" "Local file"
+writeBehindPersists = serverWriteBehind -> machineData "Persists outbox operations in the per-store SQLite file" "SQLite"
+advisoryPersists = serverAdvisory -> machineData "Persists provisional advisory claims" "SQLite"
+permissionsPersist = serverPermissions -> machineData "Persists encrypted remembered permission rules" "Local file"
+notifiersPersist = serverNotifiers -> machineData "Reads channel configuration and appends the delivery journal" "Local files"
+pluginsWriteCheckout = serverPlugins -> checkoutData "Writes managed instructions, skills, MCP entries and hooks" "Filesystem"
+bridgeOpensStream = bridge -> serverEvents "Opens the change WebSocket or long-polls since a cursor" "WebSocket / HTTP long poll"
+bridgeForwardsPairing = bridge -> serverPairing "Forwards pairing, redeem and device-management requests" "HTTP(S)"
+bridgeAttachesTerminal = bridge -> serverTerminal "Forwards the terminal attach WebSocket" "WebSocket"
+toolRunsHook = aiTool -> cli "Runs the Hot Sheet permission and session hooks" "Process"
+hookAsksPermission = cli -> serverPermissions "Posts the tool's permission ask and waits for the decision" "HTTP"
+serverLinksAiTools = serverAiTools -> coreLib "Uses ticket, settings and machine-home utilities" "Rust crate dependency"
