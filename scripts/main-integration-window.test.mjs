@@ -1493,6 +1493,7 @@ function strategyFixture(selection) {
   for (const path of [
     'scripts/gate-ticket-profile.mjs',
     'scripts/gate-budget.mjs',
+    'scripts/gate-browser-budget.mjs',
     'scripts/gate-timings.mjs',
     'scripts/test-profile.mjs',
   ])
