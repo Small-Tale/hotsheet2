@@ -2,11 +2,17 @@
 
 `v1/openapi.yaml` describes the server-owned HTTP surface. The JSON Schemas in the
 same directory describe each `/ws/sync` text frame and the `/ws/poll` response.
-The OpenAPI file inventories all 203 current server router paths and their HTTP methods,
+The OpenAPI file inventories all 348 current server router paths and their HTTP methods,
 with request and response DTO schemas, status codes, query parameters, and media
 types (HS2-11BVBS). Run `npm run contract:sync` from `clients/web` after changing
 the router. A newly discovered operation is marked `route-only` until its wire
 contract is modeled.
+
+The committed `openapi.yaml` is exactly what `contract:sync` writes (HS2-ZVB932).
+Prettier is its only line wrapper (`proseWrap: always` for `docs/contracts/**/*.yaml`),
+so hand edits to descriptions stay canonical after `npm run format`.
+`node scripts/check-openapi-routes.mjs` and the web unit suite fail when a sync
+would change the file, or when the path count above differs from the file.
 These are transport contracts: authorization, Git writes, claim decisions, and
 permission policy remain on the server. A client may own a temporary draft or
 optimistic display, but it must reconcile with the returned server ticket.

@@ -8,6 +8,12 @@
       "options": {
         "proseWrap": "preserve"
       }
+    },
+    {
+      "files": "docs/contracts/**/*.yaml",
+      "options": {
+        "proseWrap": "always"
+      }
     }
   ]
 }

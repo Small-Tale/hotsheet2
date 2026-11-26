@@ -204,7 +204,8 @@ The numbered requirements docs (source of truth for behavior; status in
 Versioned client HTTP and event contracts live in
 [`docs/contracts/v1/`](contracts/README.md). The OpenAPI route inventory is
 synchronized from `crates/hotsheet-server/src/lib.rs` by
-`clients/web/scripts/sync-openapi-routes.mjs`; its real-server contract check is
+`clients/web/scripts/sync-openapi-routes.mjs`, whose output must equal the committed
+file (`--check`, HS2-ZVB932); its real-server contract check is
 `clients/web/tests/contracts.spec.ts`. Every current path has typed
 operations, including the notifier administration routes (HS2-R5HTZN); newly
 synchronized routes receive a `route-only` marker until their request and response

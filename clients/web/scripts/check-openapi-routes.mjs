@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import YAML from 'yaml';
 
-import { routeMethods } from './sync-openapi-routes.mjs';
+import { contractSyncErrors, routeMethods } from './sync-openapi-routes.mjs';
 
 const server = new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url);
 const contract = new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url);
@@ -39,10 +39,13 @@ export function routeCoverageErrors(source, spec) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const errors = routeCoverageErrors(readFileSync(server, 'utf8'), YAML.parse(readFileSync(contract, 'utf8')));
-    if (errors.length) {
+    // HS2-ZVB932: the committed contract is generated output; byte-check it and the README route count.
+    const syncErrors = await contractSyncErrors();
+    if (errors.length || syncErrors.length) {
       for (const error of errors) console.error(`HS2-140YMZ ${error}`);
+      for (const error of syncErrors) console.error(`HS2-ZVB932 ${error}`);
       process.exitCode = 1;
-    } else console.log('HS2-140YMZ server routes have concrete OpenAPI operations');
+    } else console.log('HS2-140YMZ server routes have concrete OpenAPI operations; contract:sync is a no-op');
   } catch (error) {
     console.error(`HS2-140YMZ route/OpenAPI check failed: ${error.message}`);
     process.exitCode = 1;

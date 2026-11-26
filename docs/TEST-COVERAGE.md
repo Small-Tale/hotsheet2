@@ -1692,6 +1692,15 @@ and multipart routes, terminal WebSocket upgrade, provider outbox, guidance,
 permission, and analytics DTOs. The contract test rejects any remaining
 `route-only` marker and compiles every component schema.
 
+HS2-ZVB932 makes `npm run contract:sync` reproduce the committed
+`docs/contracts/v1/openapi.yaml` byte for byte: Prettier (`proseWrap: always`
+for `docs/contracts/**/*.yaml`) is the only line wrapper. Unit tests in
+`clients/web/scripts/sync-openapi-routes.test.mjs` cover convergence of any hand
+wrapping to one fixpoint, kept folded block styles, route-only stubs with path
+parameters, stale-contract and stale-README-count errors, and a `--check` run
+against the real files in CI. `node scripts/check-openapi-routes.mjs` (local
+gate) runs the same byte and README route-count check.
+
 HS2-BF79YX adds model, CLI, authenticated REST, browser contract, and local-gate
 tests for versioned development presets, override precedence, invalid policy
 combinations, and migration with an unset setting. The unset path preserves the
