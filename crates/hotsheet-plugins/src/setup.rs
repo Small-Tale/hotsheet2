@@ -6728,6 +6728,11 @@ args = ["--path", "{store}"]
             let project = tempfile::tempdir().unwrap();
             let root = project.path();
             std::fs::create_dir_all(root.join(".git/info")).unwrap();
+            // Set both tools up first so refresh includes them through their managed setup.
+            // Detection alone depends on `claude`/`codex` being on PATH, which CI lacks.
+            for managed in ["claude", "codex"] {
+                run_setup_in(store.path(), root, Some(managed), false, None, &[]).unwrap();
+            }
             std::fs::write(root.join(rel), not_utf8).unwrap();
             let before = snapshot_files(root);
             let enabled = HashSet::from(["claude".to_string(), "codex".to_string()]);
