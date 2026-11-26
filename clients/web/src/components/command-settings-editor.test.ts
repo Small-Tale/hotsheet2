@@ -355,4 +355,30 @@ describe('CommandSettingsEditor', () => {
     expect(markup).toContain('data-lucide="pencil"');
     expect(markup).toContain('data-lucide="trash-2"');
   });
+  it('edits whether a scheduled AI command stays in the sidebar, off by default (HS2-MA31ZN)', () => {
+    const render = (command: Record<string, unknown>) =>
+      String(
+        CommandSettingsEditor({
+          commands: [{ id: 'r', title: 'Review', kind: 'ai', prompt: 'Review it', ...command }],
+          editingId: 'r',
+        }),
+      );
+    const off = render({});
+    const toggle = off.match(/<input[^>]*name="show_when_scheduled"[^>]*>/)?.[0] ?? '';
+    expect(toggle).toContain('role="switch"');
+    expect(toggle).toContain('data-action="toggle-command-show-when-scheduled"');
+    expect(toggle).not.toMatch(/\schecked/);
+    expect(off).toContain('Show in sidebar while scheduled');
+    expect(off).toContain('runs it once now');
+    expect(render({ show_when_scheduled: true }).match(/<input[^>]*name="show_when_scheduled"[^>]*>/)?.[0]).toMatch(
+      /\schecked/,
+    );
+    const shell = String(
+      CommandSettingsEditor({
+        commands: [{ id: 's', title: 'Lint', kind: 'shell', command: 'npm run lint' }],
+        editingId: 's',
+      }),
+    );
+    expect(shell).not.toContain('name="show_when_scheduled"');
+  });
 });

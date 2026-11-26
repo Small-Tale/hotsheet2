@@ -5950,6 +5950,7 @@ export async function startHotSheetWebClient() {
     customViewsFor,
     effectiveDriveSelection,
     commandRunFor,
+    commandSchedules: (projectId) => commandSchedules.viewsByProject.value[projectId] ?? [],
     commandIcon,
     aiToolLabel,
     liveStates: sidebarLiveStates,

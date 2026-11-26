@@ -15,6 +15,7 @@ import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { PopoverDialogSurface } from '@kerfjs/ui/surface-scaffold';
+import { Switch } from '@kerfjs/ui/switch';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -345,6 +346,14 @@ function CommandDetailFields({
               ...SCHEDULE_ACTIONS.map((value) => ({ value, label: SCHEDULE_ACTION_LABELS[value] })),
             ]}
             hint="What clicking the command does. Schedules use it unless they override it."
+          />
+          {/* Scheduled commands leave the sidebar unless kept (HS2-MA31ZN); a click still runs once now. */}
+          <Switch
+            label="Show in sidebar while scheduled"
+            name="show_when_scheduled"
+            checked={command.show_when_scheduled === true}
+            action={COMMANDS_AND_AI_ACTIONS.toggleCommandShowWhenScheduled.value}
+            hint="A scheduled command is hidden from the sidebar unless this is on. Clicking it runs it once now, like an unscheduled command; the schedule is unchanged."
           />
         </>
       )}

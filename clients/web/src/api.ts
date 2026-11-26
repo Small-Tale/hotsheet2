@@ -1747,6 +1747,8 @@ export interface CommandDefinition {
   action?: 'create_ticket' | 'new_ai_session' | 'reuse_or_new_ai_session';
   icon?: string;
   color?: string;
+  /** Keep an AI command's sidebar button while it has an active schedule; absent hides it (HS2-MA31ZN). */
+  show_when_scheduled?: boolean;
 }
 export interface CustomView {
   id: string;

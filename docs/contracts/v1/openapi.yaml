@@ -29820,6 +29820,12 @@ components:
           type: string
         color:
           type: string
+        show_when_scheduled:
+          description: >-
+            HS2-MA31ZN: keep an AI command's sidebar button while it has an active (unpaused)
+            schedule. Absent or false hides a scheduled command from the sidebar; a click on a
+            kept one runs it once now, like an unscheduled command.
+          type: boolean
       additionalProperties: false
     CommandScheduleAction:
       type: string

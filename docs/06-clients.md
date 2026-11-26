@@ -1214,6 +1214,18 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   `delivery_uncertain` on the same qualified occurrence ticket; the scheduler does not
   send it again. A person or agent inspects that ticket and the provider session before
   resuming work (HS2-NR0VRF). The schedule editor is tracked by HS2-17663F.
+  **Scheduled commands in the sidebar (HS2-MA31ZN).** An AI command with an active
+  schedule (saved and not paused) is hidden from the project sidebar by default, since
+  its schedule runs it. Its **Edit Command** dialog has a **Show in sidebar while
+  scheduled** switch, stored per command as `show_when_scheduled: true` (absent when
+  off, and settable headlessly with `hotsheet-cli settings set commands`). The option
+  lives on the command rather than in project settings so each scheduled command can
+  choose. A paused schedule never runs, so its command shows like any other. Clicking a
+  kept scheduled command behaves once, now, exactly like an unscheduled click: it runs
+  the command's own action (or the legacy click when it has none), creates the ticket
+  immediately with only the `hs2-command` tag, and leaves the schedule, its next runs,
+  and its history unchanged. The schedule's action override and open-ticket skip apply
+  only to scheduled occurrences.
   Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling. Press-and-hold
   remains reserved for output/history. A context or overflow menu will provide “Run in

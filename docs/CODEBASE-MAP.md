@@ -349,7 +349,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-refresh.ts # refreshProject: stale-response generation, git-only first paint, authoritative row/count/selection/projection merge (HS2-BSSWGV), index/source error ownership separate from mutation errors (HS2-4Q44N2)
       terminal-drawer.ts # Terminal drawer visibility, selection, tab/input focus, serialized terminal/shell/AI-chat creation, closeDrawerTabIds (HS2-BSSWGV)
       settings-surface.tsx # Settings workspace projection, including shared ticket-source connections (HS2-BSSWGV) and project development strategy (HS2-NBDXPW)
-      sidebar-surface.ts # Left sidebar projection: settings/notification navigation or project stats, views, commands, Drive (HS2-BSSWGV)
+      sidebar-surface.ts # Left sidebar projection: settings/notification navigation or project stats, views, commands (actively scheduled AI commands filtered out unless kept by `command-schedules.ts` `sidebarCommandDefinitions`, HS2-MA31ZN), Drive (HS2-BSSWGV)
       ticket-view-surface.tsx # Ticket view titles, view action spec, ticket context-menu surface (HS2-K0VC2C)
       terminal-operations-surface.ts # Terminal operations dashboard per-project summary (HS2-K0VC2C); grid sidebar live numbers on a local minute clock, the persisted page (`hotsheet.terminals.sidebar-page`), and its Kerf PagedView wiring (HS2-EZSQDF)
       inspector-surface.ts # Selected-ticket inspector props, not-working dialog props, attachment items (HS2-K0VC2C)

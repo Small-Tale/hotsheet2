@@ -59,6 +59,8 @@ export const COMMANDS_AND_AI_ACTIONS = {
   selectCommandAiEffort: action('select-command-ai-effort'),
   openCommandManualModel: action('open-command-manual-model'),
   openCommandSchedule: action('open-command-schedule'),
+  /** The Edit Command dialog's "Show in sidebar while scheduled" switch (HS2-MA31ZN). */
+  toggleCommandShowWhenScheduled: action('toggle-command-show-when-scheduled'),
   saveCommandSchedule: action('save-command-schedule'),
   cancelCommandSchedule: action('cancel-command-schedule'),
   deleteCommandSchedule: action('delete-command-schedule'),

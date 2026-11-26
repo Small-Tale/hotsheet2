@@ -27,6 +27,28 @@ export const commandClickActionLabel = (action: ScheduleAction | undefined) =>
 /** What a schedule inheriting this command's action does; schedules never signaled, so unset is ticket-only. */
 export const scheduleInheritedAction = (commandAction: ScheduleAction | undefined): ScheduleAction =>
   commandAction ?? 'create_ticket';
+/**
+ * The commands an active schedule runs: a saved schedule that is not paused (HS2-MA31ZN). A paused
+ * schedule never runs, so its command counts as unscheduled.
+ */
+export function activelyScheduledCommandIds(views: readonly ScheduleView[]): Set<string> {
+  return new Set(views.filter((view) => !view.schedule.paused).map((view) => view.schedule.command_id));
+}
+
+/**
+ * The commands the project sidebar shows (HS2-MA31ZN): an AI command with an active schedule is hidden
+ * unless its `show_when_scheduled` option is on. Order and every other command are unchanged.
+ */
+export function sidebarCommandDefinitions<T extends { id: string; kind?: string; show_when_scheduled?: boolean }>(
+  definitions: readonly T[],
+  views: readonly ScheduleView[],
+): T[] {
+  const scheduled = activelyScheduledCommandIds(views);
+  return definitions.filter(
+    (command) => command.kind !== 'ai' || command.show_when_scheduled === true || !scheduled.has(command.id),
+  );
+}
+
 export type RecurrenceKind =
   'once' | 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'selected_dates';
 const RECURRENCE_KINDS: readonly RecurrenceKind[] = [

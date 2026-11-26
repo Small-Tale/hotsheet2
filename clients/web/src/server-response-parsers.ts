@@ -1745,6 +1745,7 @@ export const parseCommandDefinition = shape<CommandDefinition>(
     command: isString,
     prompt: isString,
     action: isScheduleActionValue,
+    show_when_scheduled: isBoolean,
   },
 );
 

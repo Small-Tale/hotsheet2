@@ -15,7 +15,7 @@ import type {
 import { createCommandGroupDialog } from '../command-group-dialog';
 import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } from '../command-order';
 import type { ScheduleView } from '../command-schedules';
-import { addCommandGroupName } from '../command-settings-workflow';
+import { addCommandGroupName, editCommandDefinition } from '../command-settings-workflow';
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandGroupDialog } from '../components/command-group-dialog';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
@@ -252,18 +252,9 @@ export function closeCommandEditorDemo() {
   commandEditorEditingId.value = undefined;
   commandEditorIconSearch.value = '';
 }
+/** The demo edits through the production workflow, so new command fields (HS2-MA31ZN) work here too. */
 export function updateCommandEditorField(id: string, field: string, value: string) {
-  commandEditorCommands.value = commandEditorCommands.value.map((command) => {
-    if (command.id !== id) return command;
-    const updated: CommandDefinition = { ...command };
-    if (field === 'args') updated.args = value.split('\n').filter((argument) => argument.length > 0);
-    else if (field === 'id' || field === 'title') updated[field] = value;
-    else if (
-      ['program', 'group', 'cwd', 'confirmation', 'command', 'prompt', 'tool', 'color', 'icon', 'kind'].includes(field)
-    )
-      (updated as unknown as Record<string, unknown>)[field] = value || undefined;
-    return updated;
-  });
+  commandEditorCommands.value = editCommandDefinition(commandEditorCommands.value, id, field, value);
   if (field === 'id' && commandEditorEditingId.value === id) commandEditorEditingId.value = value;
 }
 export function reorderCommandEditorSetting(sourceId: string, target: CommandDropTarget) {

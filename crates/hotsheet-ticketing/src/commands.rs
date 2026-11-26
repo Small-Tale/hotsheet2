@@ -48,6 +48,14 @@ pub struct CommandDefinition {
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Keep an AI command's sidebar button while it has an active schedule (HS2-MA31ZN).
+    /// Absent (false) hides a scheduled command from the sidebar; the schedule still runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub show_when_scheduled: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn is_program_kind(kind: &CommandKind) -> bool {
@@ -126,6 +134,52 @@ mod tests {
             serde_json::to_value(&explicit).unwrap()["action"],
             "reuse_or_new_ai_session"
         );
+    }
+
+    /// HS2-MA31ZN: the sidebar option is optional, omitted when off, and editable headlessly
+    /// through the same validating settings writer as every other command field.
+    #[test]
+    fn hs2_ma31zn_show_when_scheduled_is_optional_and_round_trips() {
+        let hidden: CommandDefinition = serde_json::from_value(serde_json::json!(
+            {"id": "review", "title": "Review", "kind": "ai", "prompt": "Review"}
+        ))
+        .unwrap();
+        assert!(!hidden.show_when_scheduled);
+        assert!(
+            serde_json::to_value(&hidden)
+                .unwrap()
+                .get("show_when_scheduled")
+                .is_none()
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::Settings::new(dir.path());
+        let command = |show: serde_json::Value| {
+            serde_json::json!([{"id": "review", "title": "Review", "kind": "ai",
+                "prompt": "Review", "show_when_scheduled": show}])
+        };
+        settings
+            .set(
+                "commands",
+                command(serde_json::json!(true)),
+                crate::Scope::Local,
+            )
+            .unwrap();
+        let shown = &from_settings(&settings).unwrap()[0];
+        assert!(shown.show_when_scheduled);
+        assert_eq!(
+            serde_json::to_value(shown).unwrap()["show_when_scheduled"],
+            true
+        );
+        assert!(
+            settings
+                .set(
+                    "commands",
+                    command(serde_json::json!("yes")),
+                    crate::Scope::Local
+                )
+                .is_err()
+        );
+        assert!(from_settings(&settings).unwrap()[0].show_when_scheduled);
     }
 
     /// HS2-17Y2EC: `hotsheet-cli settings set commands` goes through this writer, so a

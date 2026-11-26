@@ -10,7 +10,7 @@ import type {
   ToolConnection,
 } from '../api';
 import type { createClientNotifications } from '../client-notifications';
-import { commandClickActionLabel } from '../command-schedules';
+import { commandClickActionLabel, type ScheduleView, sidebarCommandDefinitions } from '../command-schedules';
 import type { AiToolDescriptor } from '../components/drive-options-menu';
 import type { NotificationView } from '../components/notification-navigation';
 import type { SettingsCategory } from '../components/settings-navigation';
@@ -83,6 +83,8 @@ export interface SidebarSurfaceDependencies {
   customViewsFor: (projectId: string) => CustomView[];
   effectiveDriveSelection: (projectId: string) => AiToolDefaults;
   commandRunFor: (commandId: string) => CommandRun | undefined;
+  /** The project's command schedules; an actively scheduled AI command leaves the sidebar (HS2-MA31ZN). */
+  commandSchedules?: (projectId: string) => readonly ScheduleView[];
   commandIcon: (command: CommandDefinition) => string;
   aiToolLabel: (tool: string) => string;
   /** The server-pushed live state the Live section reads (HS2-JTTQMY, HS2-F788GW). */
@@ -145,6 +147,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     customViewsFor,
     effectiveDriveSelection,
     commandRunFor,
+    commandSchedules,
     commandIcon,
     aiToolLabel,
     liveStates,
@@ -275,22 +278,24 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         dropTargetViewId: views.find((view) => isTicketDropTarget(viewTicketDropKey(view.id)))?.id,
         statsSelected,
         commandGroupLabel: 'Project commands',
-        commands: commandDefinitions.value.map((command) => {
-          const latest = commandRunFor(command.id);
-          return {
-            id: command.id,
-            label: command.title,
-            color: command.color ?? 'transparent',
-            icon: commandIcon(command),
-            kind: command.kind,
-            group: command.group,
-            ...(command.kind === 'ai' ? { actionLabel: commandClickActionLabel(command.action) } : {}),
-            running: latest?.state === 'running',
-            lastRun: latest
-              ? `${latest.state}${latest.exit_code === undefined ? '' : ` (exit ${latest.exit_code})`}`
-              : undefined,
-          };
-        }),
+        commands: sidebarCommandDefinitions(commandDefinitions.value, commandSchedules?.(current.id) ?? []).map(
+          (command) => {
+            const latest = commandRunFor(command.id);
+            return {
+              id: command.id,
+              label: command.title,
+              color: command.color ?? 'transparent',
+              icon: commandIcon(command),
+              kind: command.kind,
+              group: command.group,
+              ...(command.kind === 'ai' ? { actionLabel: commandClickActionLabel(command.action) } : {}),
+              running: latest?.state === 'running',
+              lastRun: latest
+                ? `${latest.state}${latest.exit_code === undefined ? '' : ` (exit ${latest.exit_code})`}`
+                : undefined,
+            };
+          },
+        ),
         commandGroupExpanded: commandGroupExpanded.value,
         collapsedCommandGroups: commandGroupsCollapsed.value[current.id],
         driveRunning: drive.running,
