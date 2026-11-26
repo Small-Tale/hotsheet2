@@ -2060,7 +2060,7 @@ impl OrchestrationRuntime {
 
     /// Apply a change to a session and publish what changed for its run. Every session
     /// update goes through here, so the stream and the record cannot drift apart.
-    fn session_apply(
+    pub(super) fn session_apply(
         &self,
         owner_id: &str,
         session_id: &str,

@@ -1244,6 +1244,19 @@ async fn request_on_peer(fleet: &Fleet, placed: &Placed) -> (String, String) {
 /// nothing is claimed. Waits on event streams and file changes, never on time.
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn hs2_sk9b3t_a_site_workers_returned_handoff_is_claimed_again_for_its_session() {
+    site_workers_returned_handoff(true).await;
+}
+
+/// HS2-26Z8KB (docs/26 §26.24, §26.30): the same, for a site worker that never
+/// registers in its own site clone's pool. The relay makes it a member of the home's
+/// pool, and that membership is what makes it joined: the peer's own listing never
+/// says so, yet its correction is claimed for it all the same.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_26z8kb_a_site_worker_joined_only_through_the_home_pool_is_claimed_for() {
+    site_workers_returned_handoff(false).await;
+}
+
+async fn site_workers_returned_handoff(registers_locally: bool) {
     const FIRST: &str = "3333333333333333333333333333333333333333";
     let mut fleet = Fleet::sites().await;
     // Each site names the shared store by its own connection id.
@@ -1309,24 +1322,57 @@ async fn hs2_sk9b3t_a_site_workers_returned_handoff_is_claimed_again_for_its_ses
     let w = placed_step(&fleet, &step, TARGET_B, "os:windows").await;
     let w_run = w.run_id.clone().unwrap();
 
-    // The worker takes up its role on its own machine, as the worker skill does, and the
-    // relay joins it to the home's pool. It claims the ticket the dispatcher gave it.
+    // The worker takes up its role on its own machine, as the worker skill does (or,
+    // HS2-26Z8KB, never registers there), and the relay joins it to the home's pool. It
+    // claims the ticket the dispatcher gave it.
     received_prompt(&fleet.reports, &w.terminal, "`hotsheet-worker`");
-    fleet.join_pool(Side::Peer, &w.worker);
-    let synced = fleet
-        .ok(
-            "POST",
-            &format!("/sessions/{}/sync", w.session_id),
-            json!({"actor":Fleet::ai()}),
-        )
-        .await;
-    assert!(synced["joined_at_ms"].as_u64().is_some(), "{synced}");
+    if registers_locally {
+        fleet.join_pool(Side::Peer, &w.worker);
+        let synced = fleet
+            .ok(
+                "POST",
+                &format!("/sessions/{}/sync", w.session_id),
+                json!({"actor":Fleet::ai()}),
+            )
+            .await;
+        assert!(synced["joined_at_ms"].as_u64().is_some(), "{synced}");
+    }
     pool_until(&fleet, "joined by the peer's worker", |state| {
         state
             .workers
             .get(&w.worker)
             .is_some_and(|member| member.generation == w.session_id)
     });
+    if !registers_locally {
+        // The peer's own clone has no such member, so its listing says not joined.
+        let synced = fleet
+            .ok(
+                "POST",
+                &format!("/sessions/{}/sync", w.session_id),
+                json!({"actor":Fleet::ai()}),
+            )
+            .await;
+        let peer_pool = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+            fleet.project(Side::Peer),
+            &fleet.b_store,
+            fleet.peer_home.clone(),
+        )
+        .unwrap()
+        .state()
+        .ok();
+        assert!(
+            peer_pool.is_none_or(|state| !state.workers.contains_key(&w.worker)),
+            "{synced}"
+        );
+        // An applied pass relays the session to the home, whose answer is that it is a
+        // member: from then on it is joined (only the first time is kept).
+        let tick = fleet
+            .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+            .await;
+        assert_eq!(tick["mode"], "applied", "{tick}");
+        let joined = fleet.session(&w.session_id).await;
+        assert!(joined["joined_at_ms"].as_u64().is_some(), "{joined}");
+    }
     assert_eq!(claim(&fleet, Side::Peer, &windows, &w.worker).await, 200);
     fleet
         .run_until(&w_run, "dispatched", |status| {
