@@ -103,6 +103,12 @@ const LAUNCHING_CRATES: &[&str] = &[
 /// Signal-only helpers that never run git or user code, so they may inherit the env.
 const ALLOWED_BARE: &[&str] = &["\"kill\"", "\"taskkill\""];
 
+/// Test fixture programs that may re-launch only themselves (HS2-5E0D96). `hs-fake-agent`'s
+/// `--spawn-hold-ms` starts its own executable as a grandchild for the process-tree cases; its
+/// environment already came through the scrubbed launch constructor, so nothing new leaks.
+/// The count only decreases.
+const FIXTURE_SELF_RELAUNCH: &[&str] = &["hotsheet-terminals/src/bin/fake_agent.rs"];
+
 /// `text` with every inline `#[cfg(test)]` / `#[cfg(all(test, ...))]` module body removed.
 fn without_test_modules(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -168,7 +174,31 @@ fn launching_crates_start_processes_through_the_scrubbed_launch_constructor() {
     // Built at runtime so this file does not match itself.
     let needle = format!("{}::new(", "Command");
     let mut offenders = Vec::new();
+    for fixture in FIXTURE_SELF_RELAUNCH {
+        assert!(
+            crates.join(fixture).is_file(),
+            "exempt fixture {fixture} is gone; drop it"
+        );
+    }
+    assert_eq!(
+        FIXTURE_SELF_RELAUNCH.len(),
+        1,
+        "HS2-5E0D96: the fixture exemption only shrinks"
+    );
     for file in files {
+        let relative = file
+            .strip_prefix(crates)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if FIXTURE_SELF_RELAUNCH.contains(&relative.as_str()) {
+            let text = std::fs::read_to_string(&file).unwrap();
+            assert!(
+                text.contains("Command::new(program)") && text.contains("current_exe()"),
+                "{relative} may only re-launch its own executable (HS2-5E0D96)"
+            );
+            continue;
+        }
         let text = std::fs::read_to_string(&file).unwrap();
         // Production code only: inline test modules may spawn fixtures directly.
         let compact: String = without_test_modules(&text)
