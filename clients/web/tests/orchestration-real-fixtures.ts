@@ -187,11 +187,19 @@ export const SYNTHETIC_TOOL = 'hs-synthetic-agent';
 /**
  * The synthetic tool. HS2-G2X7RT: `reportsStart` declares a `SessionStart` hook, so a session of it is
  * `tool_ready: false` until that hook reports in, as a real tool on a first-run question is.
+ *
+ * HS2-91AF8K: `refusesRolePrompt` makes it a tool whose session can take messages from its host and refuses
+ * every one, so each role prompt a scheduler-started session is sent fails (`role_prompt_failed`). See
+ * `refusingAgent`.
  */
-export async function syntheticTool(home: string, { reportsStart = false }: { reportsStart?: boolean } = {}) {
+export async function syntheticTool(
+  home: string,
+  { reportsStart = false, refusesRolePrompt = false }: { reportsStart?: boolean; refusesRolePrompt?: boolean } = {},
+) {
   const plugin = join(home, 'plugins', SYNTHETIC_TOOL);
   await mkdir(plugin, { recursive: true });
   await writeFile(join(plugin, 'instructions.md'), 'Synthetic agent\n');
+  const refusing = refusesRolePrompt ? await refusingAgent(plugin) : undefined;
   await writeFile(
     join(plugin, 'manifest.toml'),
     [
@@ -217,8 +225,20 @@ export async function syntheticTool(home: string, { reportsStart = false }: { re
       'command = "hotsheet-mcp"',
       'args = ["--path", "{store}"]',
       '[launch]',
-      `program = ${JSON.stringify(process.execPath)}`,
-      `args = ["-e", "process.stdout.write('ready\\\\n'); setInterval(() => {}, 1000000)"]`,
+      ...(refusing
+        ? [
+            `program = ${JSON.stringify(refusing)}`,
+            'args = []',
+            // The OpenCode TUI's own session push: the host gives the session a loopback port to post to.
+            '[session_push]',
+            'mechanism = "opencode-http"',
+            'port_args = ["{port}"]',
+            'password_env = "SYNTHETIC_AGENT_PASSWORD"',
+          ]
+        : [
+            `program = ${JSON.stringify(process.execPath)}`,
+            `args = ["-e", "process.stdout.write('ready\\\\n'); setInterval(() => {}, 1000000)"]`,
+          ]),
       ...(reportsStart
         ? [
             '[hooks]',
@@ -232,6 +252,47 @@ export async function syntheticTool(home: string, { reportsStart = false }: { re
       '',
     ].join('\n'),
   );
+}
+
+/**
+ * HS2-91AF8K: the launch program of a synthetic tool that refuses its role prompt, through the session push
+ * an OpenCode 1 TUI offers (`opencode-http`): it answers the host's version check as OpenCode 1, listens on
+ * the loopback port the host gave it, and answers every message with HTTP 400, so the host records the role
+ * prompt as failed and the scheduler acts on it at once. Once it listens it reports its session start the way a
+ * `SessionStart` hook does (`POST /terminals/{id}/ai-connection`), which is the host's cue to try a prompt it
+ * could not deliver yet. Only its own fixture files and the server's documented routes; nothing in the server
+ * is test-only. POSIX only, like the browser suite's other spawned fixtures.
+ */
+async function refusingAgent(plugin: string) {
+  const script = join(plugin, 'refusing-agent.cjs');
+  await writeFile(
+    script,
+    [
+      "const http = require('node:http');",
+      "if (process.argv.includes('--version')) { process.stdout.write('1.0.0\\n'); process.exit(0); }",
+      'const port = Number(process.argv[process.argv.length - 1]);',
+      'const refuse = (request, response) => {',
+      "  response.writeHead(400, { 'content-type': 'application/json' });",
+      "  response.end(JSON.stringify({ name: 'SyntheticRefusal', message: 'this agent takes no role' }));",
+      '};',
+      "http.createServer(refuse).listen(port, '127.0.0.1', () => {",
+      "  process.stdout.write('ready\\n');",
+      '  const { HOTSHEET_SERVER: server, HOTSHEET_SECRET: secret, HOTSHEET_TERMINAL_ID: terminal } = process.env;',
+      '  if (!server || !terminal) return;',
+      '  fetch(`${server}/terminals/${terminal}/ai-connection`, {',
+      "    method: 'POST',",
+      "    headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': secret ?? '' },",
+      `    body: JSON.stringify({ agent: ${JSON.stringify(SYNTHETIC_TOOL)} }),`,
+      '  }).catch(() => undefined);',
+      '});',
+      '',
+    ].join('\n'),
+  );
+  const program = join(plugin, 'refusing-agent');
+  await writeFile(program, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`, {
+    mode: 0o755,
+  });
+  return program;
 }
 
 /**

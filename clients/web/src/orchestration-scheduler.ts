@@ -437,8 +437,19 @@ const NOT_STARTED: Readonly<Record<string, string>> = {
   policy_opt_out: 'the project’s Coordination Sessions leave the integrator out, so it integrates by hand',
 };
 
+/**
+ * HS2-91AF8K: what a person can do while a role is unavailable, beside waiting for the scheduler to look again: see
+ * why the AI tool does not take up its role (a sign-in or a first-run question shows in its terminal), or do the
+ * role's work themselves.
+ */
+const BY_HAND: Readonly<Record<string, string>> = {
+  integrator: 'integrate handoffs by hand',
+  dispatcher: 'assign ready work by hand',
+};
+
 const unavailable = (role: string) =>
-  `the ${role}s the scheduler started did not take up their role, so none starts for a while`;
+  `the ${role}s the scheduler started did not take up their role, so none starts for a while. ` +
+  `Open the AI tool in a terminal of this project to check that it starts and is signed in, or ${BY_HAND[role]} until then`;
 
 /** Why a role session stands as it does, as a phrase; undefined when the scheduler gives no reason. */
 export function roleReasonPhrase(standing: Pick<RoleStandingView, 'standing' | 'reason' | 'detail'>) {
