@@ -4,6 +4,7 @@ import {
   chosenSite,
   decisionText,
   explanationRows,
+  heldExplanation,
   integratorRows,
   lastPassText,
   latestDecisions,
@@ -63,6 +64,36 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
       { label: 'Requirement', value: 'os:windows' },
       { label: 'Next', value: 'Looked at again when something it waits on changes' },
     ]);
+  });
+
+  it('says why a running card’s step whose sessions never took up its work starts no more, and what to do (HS2-ADASY5)', () => {
+    const held = heldExplanation({
+      standing: 'not_placed',
+      reason: 'never_joined',
+      detail: 'replacements_exhausted',
+      retry_at_ms: 9,
+      running: true,
+    })!;
+    expect(explanationRows(held, clock, 5)).toEqual([
+      {
+        label: 'Scheduler',
+        value:
+          'Waits: the sessions started for it ended before they took up the work, so none starts for a while (last pass t5)',
+      },
+      {
+        label: 'What to do',
+        value:
+          'Open the AI tool in a terminal of its project to check that it starts and is signed in, or work the ticket by hand',
+      },
+      { label: 'Next', value: 'Looked at again by t9' },
+    ]);
+    expect(decisionText(decision({ kind: 'unplaced', step_id: 'step-3', reason: 'never_joined' }), timeline)).toBe(
+      'Deferred API-12: the sessions started for it ended before they took up the work, so none starts for a while',
+    );
+    // A run that runs, or that the next pass starts again, holds nothing back.
+    expect(heldExplanation({ standing: 'running', reason: 'in_progress', running: true })).toBeUndefined();
+    expect(heldExplanation({ standing: 'start', reason: 'ready_work' })).toBeUndefined();
+    expect(heldExplanation(undefined)).toBeUndefined();
   });
 
   it('names steps by slug, title or a short id', () => {

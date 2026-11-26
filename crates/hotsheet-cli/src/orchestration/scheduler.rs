@@ -1145,6 +1145,20 @@ impl OrchestrationRuntime {
                 }
                 // HS2-4JQ41V: who integrates the work once it is handed off.
                 let view = self.scheduler_plan(owner_id, actor, tx)?;
+                // HS2-ADASY5: a run whose session is gone is placed again; when this pass
+                // does not (its sessions never joined until the replacements ran out, or
+                // what it needs is held) the step says why, and when it is looked at again.
+                if let Some(standing) = view
+                    .schedule
+                    .standing(&step.readiness.step.step_id)
+                    .filter(|standing| standing.standing == "not_placed")
+                {
+                    answer.standing = standing.standing.into();
+                    answer.reason = standing.reason.into();
+                    answer.detail = standing.detail;
+                    answer.retry_at_ms = standing.retry_at_ms;
+                    answer.sites = standing.sites;
+                }
                 if view.enabled {
                     let home = hotsheet_ticketing::orchestration::ProjectSites::active(
                         &self.declarations(owner_id)?.targets,

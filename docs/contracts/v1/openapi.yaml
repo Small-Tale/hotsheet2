@@ -24850,11 +24850,13 @@ components:
             - refusal_backoff
             - requirement_unmet
             - requirement_unknown
+            - never_joined
         detail:
           description: The limit, policy rule, tool exclusion or resource behind the reason; for `requirement_unmet` and
             `requirement_unknown` the requirement, such as `os:windows` (HS2-ZY4Z4G). For `no_tool_available`,
             `model_unresolved` or `no_matching_model` when a pattern-only Models list resolves to no reported model
-            (HS2-0VTQFF).
+            (HS2-0VTQFF). For `never_joined`, `replacements_exhausted` when the sessions started for the work's run ended
+            without joining until its replacements ran out, and none starts before `retry_at_ms` (HS2-ADASY5).
           type: string
         retry_at_ms:
           description: When the reason is known to end.

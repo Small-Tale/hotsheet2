@@ -77,6 +77,11 @@ export interface OrchestrationInspectorDetails {
   explanation?: SchedulerExplanation;
   /** HS2-65AD6J: for a card with a run, its project's integrator in a fresh pass (`scheduler explain`). */
   integrator?: RoleStandingView;
+  /**
+   * HS2-ADASY5: for a card with a run whose session is gone, why a fresh pass does not start one again
+   * (`scheduler explain` standing `not_placed`), such as sessions that ended before they took up the work.
+   */
+  held?: SchedulerExplanation;
   /** HS2-9XJEZC: the card's validation steps with their latest evidence. */
   validations?: readonly ValidationStepView[];
   /** HS2-9XJEZC: Run Validation requests that wait on a person's answer. */
@@ -385,8 +390,12 @@ function stateDetail(
           clock={clock}
         />
       );
-    case 'provisional':
     case 'running':
+      // HS2-ADASY5: a run whose session is gone and that the scheduler does not start again says why.
+      return details?.held ? (
+        <OrchestrationWhyNotRunningSection item={item} timeline={timeline} explanation={details.held} clock={clock} />
+      ) : undefined;
+    case 'provisional':
     case 'done':
       return undefined;
     default:

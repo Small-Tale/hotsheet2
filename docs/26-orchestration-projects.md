@@ -5280,13 +5280,13 @@ and one started by hand with `session start`, are never acted on.
 (`crates/hotsheet-ticketing/src/orchestration/joining.rs`), from this machine's
 records as the pass's listing brought them in line with the host:
 
-| The session                                                 | What a pass does                                                           |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Joined (`joined_at_ms`), whenever that was                  | Nothing, ever                                                              |
-| Not joined, within `join_minutes` of running                | Kept; the end of that time is a retry time of the schedule                 |
-| Its role prompt `failed`                                    | `wind_down`, reason `role_prompt_failed`, at once                          |
-| Not joined when `join_minutes` is up                        | `wind_down`, reason `never_joined`                                         |
-| Either, after two sessions of its run were stopped unjoined | `keep`, reason `never_joined`, detail `replacements_exhausted`: a person's |
+| The session                                          | What a pass does                                                           |
+| ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| Joined (`joined_at_ms`), whenever that was           | Nothing, ever                                                              |
+| Not joined, within `join_minutes` of running         | Kept; the end of that time is a retry time of the schedule                 |
+| Its role prompt `failed`                             | `wind_down`, reason `role_prompt_failed`, at once                          |
+| Not joined when `join_minutes` is up                 | `wind_down`, reason `never_joined`                                         |
+| Either, after two sessions of its run ended unjoined | `keep`, reason `never_joined`, detail `replacements_exhausted`: a person's |
 
 `placement.join_minutes` defaults to 10, the role prompt's own delivery window, so a
 prompt still pending then has failed anyway (1 to 1440).
@@ -5302,10 +5302,22 @@ run's stream, and the next pass finds the run with no live session and places it
 again (§26.19, "Repeats and replacements"): a new session under
 `sched-start-<step>.<n>` that names the old one in `replaces`, on the same run.
 
-**Bounded.** Replacements are counted from the records: sessions of the same run
-that stopped without ever joining. After two, the next session is kept and reported,
-so a tool that cannot take up its role is not restarted for ever. Nothing runs on a
-timer.
+**Bounded.** Replacements are counted from the records: sessions of the same run,
+latest generation first, that ended without ever joining, whether wound down for it
+(`stopped`) or lost before they joined (`lost`: the AI tool crashed at launch, or
+its terminal died). A session that joined took up its work: one lost or stopped
+later is replaced as before and starts the count over (HS2-ADASY5). After two
+failures in a row, the next session is kept and reported, so a tool that cannot take
+up its role is not restarted for ever. When that session, or the third, is gone as
+well, the step is not started again for an hour after the last one ended
+(`INTEGRATOR_UNAVAILABLE_MS`, the same hour as a role session's): its start is taken
+out of the pass and the step is `unplaced` with reason `never_joined`, detail
+`replacements_exhausted` and that `retry_at_ms`. `scheduler explain` reports the same
+for the step although its run is in progress (standing `not_placed`), and its running
+card shows Why It Is Not Running with what a person can do: check that the AI tool
+starts and is signed in, or work the ticket by hand. The loop wakes at the retry time
+and starts one session on the same run; if it fails too, the hour starts again.
+Nothing runs on a timer.
 
 ### Telling a refilled session its ticket (HS2-R7QH35)
 
@@ -6847,7 +6859,8 @@ its integrator when work waits to be integrated, without configuration.
   or its terminal died) is a failed attempt too, counted with those wound down for not
   joining; one that joined and was lost or stopped later took up its role, is
   replaced as before, and starts the count over (HS2-D1W59D). A start the host
-  refused is the refusal backoff's, not counted here.
+  refused is the refusal backoff's, not counted here. Worker sessions of a run follow
+  the same rule (HS2-ADASY5, §26.24 "Bounded").
   After `MAX_JOIN_REPLACEMENTS` (2) replacements failed in a row the last is wound
   down too, with detail `replacements_exhausted`, never kept in its slot, and the
   project reports `integrator_unavailable` (detail `replacements_exhausted`, with

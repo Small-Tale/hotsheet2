@@ -682,6 +682,11 @@ pub enum Blocker {
     /// (an older peer, an unread value, a toolchain its owner did not declare);
     /// `detail` names the requirement. Nothing starts on a guess.
     RequirementUnknown,
+    /// HS2-ADASY5: the scheduler's sessions for the work's run ended without ever
+    /// joining (wound down for not joining, or lost: the AI tool crashed at launch)
+    /// until its replacements were exhausted; none starts for it before
+    /// `retry_at_ms`. Detail `replacements_exhausted`.
+    NeverJoined,
 }
 
 impl Blocker {
@@ -700,6 +705,7 @@ impl Blocker {
             Self::RefusalBackoff => "refusal_backoff",
             Self::RequirementUnmet => "requirement_unmet",
             Self::RequirementUnknown => "requirement_unknown",
+            Self::NeverJoined => "never_joined",
         }
     }
 }

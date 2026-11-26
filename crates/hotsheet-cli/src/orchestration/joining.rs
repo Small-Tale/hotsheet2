@@ -5,9 +5,9 @@
 //! next pass places it again. The decision is the pure `decide_join`; a person's
 //! session and a session started by hand are never touched.
 use hotsheet_ticketing::orchestration::{
-    JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, OrchestratedSession, Placement, PlacementAction,
-    PlacementReason, PolicyBody, RoleBlocker, RoleUnplaced, Schedule, SessionOwner, SessionRole,
-    SessionState, decide_join,
+    Blocker, JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, OrchestratedSession, Placement,
+    PlacementAction, PlacementReason, PolicyBody, RoleBlocker, RoleUnplaced, Schedule,
+    SessionOwner, SessionRole, SessionState, Unplaced, decide_join,
 };
 
 use std::collections::BTreeMap;
@@ -70,6 +70,53 @@ fn failed_in_a_row<'a>(sessions: impl Iterator<Item = &'a OrchestratedSession>) 
     u32::try_from(failed).unwrap_or(u32::MAX)
 }
 
+/// HS2-ADASY5: the operation base of a scheduler-started worker session: its
+/// `sched-start-<step>` without the generation suffix of a replacement.
+fn worker_base(operation_id: &str) -> &str {
+    match operation_id.rsplit_once('.') {
+        Some((base, n)) if n.parse::<u32>().is_ok_and(|n| n >= 2) => base,
+        _ => operation_id,
+    }
+}
+
+/// The scheduler's worker sessions under `base`, latest generation first.
+fn worker_generations<'a>(
+    records: &'a [OrchestratedSession],
+    base: &str,
+) -> Vec<&'a OrchestratedSession> {
+    let mut sessions: Vec<(u32, &OrchestratedSession)> = records
+        .iter()
+        .filter(|session| {
+            session.owner == SessionOwner::Orchestrator && session.role == SessionRole::Worker
+        })
+        .filter_map(|session| {
+            super::session_executor::generation(base, &session.operation_id).map(|n| (n, session))
+        })
+        .collect();
+    sessions.sort_by_key(|(n, _)| std::cmp::Reverse(*n));
+    sessions.into_iter().map(|(_, session)| session).collect()
+}
+
+/// The latest scheduler-started worker session under `base`.
+fn latest_worker<'a>(
+    records: &'a [OrchestratedSession],
+    base: &str,
+) -> Option<&'a OrchestratedSession> {
+    worker_generations(records, base).into_iter().next()
+}
+
+/// The worker sessions under `base` that worked `run_id`, latest generation first, for
+/// [`failed_in_a_row`].
+fn worker_failures<'a>(
+    records: &'a [OrchestratedSession],
+    base: &str,
+    run_id: &'a str,
+) -> impl Iterator<Item = &'a OrchestratedSession> {
+    worker_generations(records, base)
+        .into_iter()
+        .filter(move |session| session.run_id.as_deref() == Some(run_id))
+}
+
 impl OrchestrationRuntime {
     /// Rewrite a computed schedule for the sessions that have not joined their role:
     /// each one to act on gets a `wind_down` (reason `never_joined` or
@@ -107,16 +154,11 @@ impl OrchestrationRuntime {
             else {
                 continue;
             };
-            // Sessions of this run already stopped without ever joining.
-            let replaced = records
-                .iter()
-                .filter(|other| {
-                    other.session_id != session.session_id
-                        && other.run_id.as_ref() == Some(run_id)
-                        && other.state == SessionState::Stopped
-                        && other.joined_at_ms.is_none()
-                })
-                .count();
+            // HS2-ADASY5: sessions of this run that ended without ever joining, in a
+            // row before this one, whether wound down or lost.
+            let replaced = worker_failures(&records, worker_base(&session.operation_id), run_id)
+                .skip_while(|other| other.session_id != session.session_id)
+                .skip(1);
             let decided = decide_join(&JoinInput {
                 joined: session.joined_at_ms.is_some(),
                 role_prompt: session.role_prompt,
@@ -126,7 +168,7 @@ impl OrchestrationRuntime {
                     .find(|entry| entry.to == SessionState::Running)
                     .map_or(session.created_at_ms, |entry| entry.at_ms),
                 join_ms,
-                replaced: u32::try_from(replaced).unwrap_or(u32::MAX),
+                replaced: failed_in_a_row(replaced),
                 now_ms,
             });
             if let Some(at) = decided.retry_at_ms {
@@ -165,8 +207,85 @@ impl OrchestrationRuntime {
                 placement.detail = Some(REPLACEMENTS_EXHAUSTED.into());
             }
         }
+        Self::worker_exhausted(&records, &runs, schedule, now_ms);
         for (role, blocker) in JOIN_CHECKED_ROLES {
             Self::role_joining(&records, role, blocker, join_ms, schedule, now_ms);
+        }
+    }
+
+    /// HS2-ADASY5: a step whose run had its replacements, every session the scheduler
+    /// started for it having ended without joining (wound down for not joining, or lost
+    /// before it joined: its AI tool crashed at launch), is not started again for
+    /// [`INTEGRATOR_UNAVAILABLE_MS`] after the last of them ended. Its start is taken out
+    /// of the pass and the step reports `never_joined`, detail `replacements_exhausted`,
+    /// with that retry time. One start follows the hour; a session that joined starts
+    /// the count over.
+    fn worker_exhausted(
+        records: &[OrchestratedSession],
+        runs: &[hotsheet_ticketing::orchestration::Run],
+        schedule: &mut Schedule,
+        now_ms: u64,
+    ) {
+        let mut held: Vec<(String, String, u64)> = Vec::new();
+        for placement in &schedule.placements {
+            if placement.action != PlacementAction::Start
+                || placement
+                    .role
+                    .is_some_and(|role| role != SessionRole::Worker)
+            {
+                continue;
+            }
+            for step_id in &placement.steps {
+                let base = format!("sched-start-{step_id}");
+                // The latest session started for the step names the run it worked.
+                let Some(run_id) = latest_worker(records, &base).and_then(|latest| {
+                    latest
+                        .run_id
+                        .as_ref()
+                        .filter(|run_id| runs.iter().any(|run| &run.run_id == *run_id))
+                }) else {
+                    continue;
+                };
+                let failed: Vec<&OrchestratedSession> =
+                    worker_failures(records, &base, run_id).collect();
+                if failed_in_a_row(failed.iter().copied()) <= MAX_JOIN_REPLACEMENTS {
+                    continue;
+                }
+                let until = failed[0]
+                    .updated_at_ms
+                    .saturating_add(INTEGRATOR_UNAVAILABLE_MS);
+                if until > now_ms {
+                    held.push((step_id.clone(), placement.target_id.clone(), until));
+                }
+            }
+        }
+        for (step_id, target_id, until) in held {
+            for placement in &mut schedule.placements {
+                if placement.action == PlacementAction::Start {
+                    placement.steps.retain(|step| step != &step_id);
+                }
+            }
+            schedule.placements.retain(|placement| {
+                placement.action != PlacementAction::Start || !placement.steps.is_empty()
+            });
+            let score = schedule
+                .ranking
+                .iter()
+                .find(|ranked| ranked.step_id == step_id)
+                .map(|ranked| ranked.score)
+                .unwrap_or_default();
+            schedule.unplaced.retain(|item| item.step_id != step_id);
+            schedule.unplaced.push(Unplaced {
+                step_id,
+                target_id,
+                reason: Blocker::NeverJoined,
+                detail: Some(REPLACEMENTS_EXHAUSTED.into()),
+                retry_at_ms: Some(until),
+                score,
+                sites: Vec::new(),
+            });
+            schedule.retry_at_ms =
+                Some(schedule.retry_at_ms.map_or(until, |known| known.min(until)));
         }
     }
 

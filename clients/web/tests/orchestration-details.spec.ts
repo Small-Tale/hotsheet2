@@ -1222,6 +1222,109 @@ test('HS2-D1W59D an integrator that crashes at launch is not restarted without b
 });
 
 /**
+ * HS2-ADASY5: a worker whose AI tool crashes at launch, before it ever joins the pool, is a failed attempt of its
+ * step's run. The synthetic tool exits as soon as it starts (`crashesAtLaunch`), so each worker the real scheduler
+ * starts for the ready step is lost; after three in a row the step is not started again for an hour, and its
+ * running card says why and what a person can do (docs/26 §26.24, "Bounded"). Before the fix the scheduler started
+ * a new worker on every pass.
+ */
+test('HS2-ADASY5 a worker that crashes at launch is not restarted without bound and its card says why', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({
+    canonicalRoot: true,
+    seed: async (fixture) => {
+      await gitCheckout(fixture);
+      await syntheticTool(fixture.env.HOTSHEET_HOME!, { crashesAtLaunch: true });
+    },
+  });
+  try {
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const person = { role: 'human', id: 'maintainer' };
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: SYNTHETIC_TOOL,
+      actor: person,
+    });
+    const plan = await planTwoSteps(server);
+    const policy = async (automatic: boolean) => {
+      const current = (await send(server, 'GET', `${base}/policy`)) as { revision?: string | null };
+      await send(server, 'PUT', `${base}/policy`, {
+        expected_revision: current.revision ?? null,
+        policy: {
+          machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+          tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 8 }],
+          targets: [{ target_id: TARGET, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 8 }],
+          placement: { automatic, actor: 'scheduler-1', cooldown_minutes: 0, role_sessions: [] },
+        },
+        actor: person,
+      });
+    };
+    type Session = { role: string; state: string; owner: string; joined_at_ms?: number | null };
+    const workers = async () =>
+      ((await send(server, 'GET', `${base}/sessions`)) as unknown as Session[]).filter(
+        (session) => session.role === 'worker',
+      );
+    const explain = async () =>
+      (await send(server, 'POST', `${base}/scheduler/explain`, {
+        target_id: TARGET,
+        connection_id: plan.first.connection_id,
+        native_id: plan.first.id,
+        actor: person,
+      })) as { standing: string; reason: string; detail?: string; retry_at_ms?: number };
+
+    await policy(true);
+    await expect
+      .poll(
+        async () => {
+          const explained = await explain();
+          return {
+            held: [explained.standing, explained.reason, explained.detail ?? null],
+            live: (await workers()).filter((session) => ['requested', 'running'].includes(session.state)).length,
+          };
+        },
+        { timeout: 90_000 },
+      )
+      .toEqual({ held: ['not_placed', 'never_joined', 'replacements_exhausted'], live: 0 });
+    // Further passes start no fourth: the next one runs on the policy change that stops automatic placement.
+    await send(server, 'POST', `${base}/scheduler/tick`, { actor: scheduler });
+    await policy(false);
+    const sessions = await workers();
+    expect(sessions.map((session) => [session.owner, session.state, session.joined_at_ms ?? null])).toEqual(
+      Array.from({ length: 3 }, () => ['orchestrator', 'lost', null]),
+    );
+    expect((await explain()).retry_at_ms).toEqual(expect.any(Number));
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const why = page.locator('[data-orchestration-inspector] [data-orchestration-section="Why It Is Not Running"]');
+    const row = (label: string) => why.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    await card.click();
+    await expect(row('Scheduler').locator('dd')).toHaveText(
+      /^Waits: the sessions started for it ended before they took up the work, so none starts for a while/,
+      { timeout: 30_000 },
+    );
+    await expect(row('What to do').locator('dd')).toHaveText(
+      'Open the AI tool in a terminal of its project to check that it starts and is signed in, or work the ticket by hand',
+    );
+    await expect(row('Next').locator('dd')).toHaveText(/^Looked at again by .+/);
+    await expect(why).not.toContainText('_');
+    await visualPass(page, 'hs2-adasy5', 'worker-held', {
+      show: why,
+      check: () => expect(row('What to do')).toHaveCount(1),
+      atPhone: () => card.click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
  * HS2-6ES76F: the integrator's standing from a real handoff. The project is a git checkout whose coordination pool
  * has work handed off through the headless coordination CLI (`handOffInPool`), and every state is the real
  * scheduler's pass over it: none before the handoff, not started while the policy's Coordination Sessions leave the
