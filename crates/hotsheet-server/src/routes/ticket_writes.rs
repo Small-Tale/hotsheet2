@@ -273,7 +273,18 @@ pub(crate) fn do_update_with_ticket(
         &ticket.slug,
         &commit_claim,
     )?;
-    let updated = ops::update(&entry.store, &ticket.id, now(), patch)?;
+    // The check above fails fast; this one, on the ticket read under the ticket
+    // transaction, is authoritative against a write landing in between (HS2-W3JD5K).
+    let expected_token = req.expected_token.as_deref();
+    let updated = ops::update_if(&entry.store, &ticket.id, now(), patch, |current| {
+        if expected_token.is_some_and(|token| token != current.updated_at.as_str()) {
+            return Err(ApiError::ticket_changed(format!(
+                "ticket '{}' changed since it was read",
+                current.slug
+            )));
+        }
+        Ok(())
+    })?;
     // An optional note append/edit rides the same update call (parity with CLI + MCP).
     // An edit may change only the confidence (HS2-CY4CWC); empty text is never written.
     let note_text_edit = req.note.filter(|t| !t.is_empty());

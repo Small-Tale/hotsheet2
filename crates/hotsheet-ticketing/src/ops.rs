@@ -813,14 +813,33 @@ pub fn update(
     now: Timestamp,
     patch: TicketPatch,
 ) -> Result<Ticket, StoreError> {
+    update_if(store, id, now, patch, |_| Ok(()))
+}
+
+/// [`update`], gated on `precondition` seeing the ticket as read inside the ticket
+/// transaction. A caller's optimistic-concurrency check belongs here, not before the
+/// call: a check made before the lock misses a write that lands in between (HS2-W3JD5K).
+/// A failed precondition writes nothing.
+pub fn update_if<E: From<StoreError>>(
+    store: &FsStore,
+    id: &Ulid,
+    now: Timestamp,
+    patch: TicketPatch,
+    precondition: impl FnOnce(&Ticket) -> Result<(), E>,
+) -> Result<Ticket, E> {
     // Validate before the transaction so an invalid group name writes nothing.
     let group = match patch.group {
-        Some(Some(name)) => Some(hotsheet_model::normalize_group_name(&name)?),
+        Some(Some(name)) => Some(
+            hotsheet_model::normalize_group_name(&name)
+                .map_err(StoreError::from)
+                .map_err(E::from)?,
+        ),
         Some(None) => Some(None),
         None => None,
     };
     store.with_ticket_transaction(|| {
         let mut t = store.read_ticket(id)?;
+        precondition(&t)?;
         let before = t.clone();
         let previous_status = t.status;
         let previous_phase = t.started_phase;
@@ -1626,6 +1645,45 @@ pub fn rate_ai_content(
     explanation: Option<String>,
     actor: Option<hotsheet_model::NoteActor>,
 ) -> Result<Ticket, StoreError> {
+    rate_ai_content_if(
+        store,
+        ticket_id,
+        now,
+        AiContentRating {
+            target,
+            rating,
+            explanation,
+            actor,
+        },
+        |_| Ok(()),
+    )
+}
+
+/// One [`rate_ai_content_if`] rating: the rated target, the rating (`None` withdraws
+/// it), an optional explanation, and the stable rater.
+pub struct AiContentRating<'a> {
+    pub target: &'a str,
+    pub rating: Option<hotsheet_model::AiFeedbackRating>,
+    pub explanation: Option<String>,
+    pub actor: Option<hotsheet_model::NoteActor>,
+}
+
+/// [`rate_ai_content`], gated on `precondition` seeing the ticket as read inside the
+/// ticket transaction, as [`update_if`] is (HS2-W3JD5K). A failed precondition writes
+/// nothing.
+pub fn rate_ai_content_if<E: From<StoreError>>(
+    store: &FsStore,
+    ticket_id: &Ulid,
+    now: Timestamp,
+    request: AiContentRating<'_>,
+    precondition: impl FnOnce(&Ticket) -> Result<(), E>,
+) -> Result<Ticket, E> {
+    let AiContentRating {
+        target,
+        rating,
+        explanation,
+        actor,
+    } = request;
     if actor
         .as_ref()
         .and_then(|actor| actor.id.as_deref())
@@ -1634,7 +1692,8 @@ pub fn rate_ai_content(
         return Err(StoreError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "AI feedback requires a stable rater id",
-        )));
+        ))
+        .into());
     }
     let valid_target = ["note:", "activity:", "conversation:"]
         .iter()
@@ -1647,10 +1706,12 @@ pub fn rate_ai_content(
         return Err(StoreError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "AI feedback target must be a non-empty note, activity, or conversation id",
-        )));
+        ))
+        .into());
     }
     store.with_ticket_transaction(|| {
         let mut ticket = store.read_ticket(ticket_id)?;
+        precondition(&ticket)?;
         // HS2-HB31Z3: a note rating names a live note on this ticket (deleting a note
         // removes its ratings). Withdrawal is unaffected; activity and conversation ids
         // live outside the ticket and keep shape-only validation.
@@ -1662,7 +1723,8 @@ pub fn rate_ai_content(
             return Err(StoreError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "AI feedback note target must name a note on this ticket",
-            )));
+            ))
+            .into());
         }
         let previous = ticket.notes.iter_mut().rev().find(|note| {
             note.ai_feedback_value()
@@ -1673,7 +1735,8 @@ pub fn rate_ai_content(
             return Err(StoreError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "cannot withdraw a rating that does not exist",
-            )));
+            ))
+            .into());
         }
         let detail = explanation
             .map(|value| value.trim().to_owned())
@@ -8360,3 +8423,7 @@ mod claim_next_across_tests;
 #[cfg(test)]
 #[path = "ops/claim_blocked_tests.rs"]
 mod claim_blocked_tests;
+
+#[cfg(test)]
+#[path = "ops/precondition_tests.rs"]
+mod precondition_tests;

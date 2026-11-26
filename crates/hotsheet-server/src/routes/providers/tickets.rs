@@ -218,29 +218,49 @@ pub(crate) fn do_rate_ai_feedback(
 ) -> Result<(ApiTicket, Ticket), ApiError> {
     let (feedback, note_actor) = parse_ai_feedback(feedback, actor)?;
     let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
-    if expected_token.is_some_and(|expected| expected != ticket.updated_at.as_str()) {
-        return Err(ApiError::ticket_changed(
-            hotsheet_ticketing::provider::TICKET_CHANGED_SINCE_READ,
-        ));
-    }
-    let updated = ops::rate_ai_content(
+    // The token is compared with the ticket read under the ticket transaction, so a
+    // write landing after the resolve above is a conflict (HS2-W3JD5K).
+    let updated = ops::rate_ai_content_if(
         &entry.store,
         &ticket.id,
         now(),
-        &feedback.target,
-        feedback.rating,
-        feedback.explanation,
-        Some(note_actor),
+        ops::AiContentRating {
+            target: &feedback.target,
+            rating: feedback.rating,
+            explanation: feedback.explanation,
+            actor: Some(note_actor),
+        },
+        |current| {
+            if expected_token.is_some_and(|expected| expected != current.updated_at.as_str()) {
+                return Err(RateError::Changed);
+            }
+            Ok(())
+        },
     )
-    .map_err(|error| {
-        if error.is_io_kind(std::io::ErrorKind::InvalidInput) {
-            ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
-        } else {
-            ApiError::from(error)
+    .map_err(|error| match error {
+        RateError::Changed => {
+            ApiError::ticket_changed(hotsheet_ticketing::provider::TICKET_CHANGED_SINCE_READ)
         }
+        RateError::Store(error) if error.is_io_kind(std::io::ErrorKind::InvalidInput) => {
+            ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+        }
+        RateError::Store(error) => ApiError::from(error),
     })?;
     state.changed_in(entry, "updated", &updated);
     Ok((api_ticket(entry, &updated)?, updated))
+}
+
+/// Why a direct AI-feedback rating was refused: a stale token, or the store's own error
+/// (whose invalid-input kind maps to 400).
+enum RateError {
+    Changed,
+    Store(hotsheet_ticketing::StoreError),
+}
+
+impl From<hotsheet_ticketing::StoreError> for RateError {
+    fn from(error: hotsheet_ticketing::StoreError) -> Self {
+        Self::Store(error)
+    }
 }
 
 fn parse_ai_feedback(

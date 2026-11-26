@@ -5,6 +5,8 @@
 
 mod machine_config;
 mod source_observation;
+#[cfg(test)]
+mod token_lock_tests;
 pub(crate) use machine_config::seed_before_untrack;
 pub use machine_config::{
     MACHINE_STORE_CONFIG_DIR, PROVIDER_CONFIG_FILE, PROVIDER_MIGRATION_FILE, ProviderConfigSeed,
@@ -1116,8 +1118,25 @@ pub enum ProviderError {
 
 /// The `Conflict` message for a ticket whose `expected_token` no longer matches (HS2-9S8CV1).
 pub const TICKET_CHANGED_SINCE_READ: &str = "ticket changed since it was read";
+
 /// The same expected-token mismatch, worded for a remote provider's issue (HS2-9S8CV1).
 pub const ISSUE_CHANGED_SINCE_READ: &str = "issue changed since it was read";
+
+/// Refuse a git-provider write whose `expected_token` no longer matches `current`.
+/// Call it on the ticket read inside the ticket transaction (HS2-W3JD5K).
+fn expect_token(
+    ticket: &str,
+    expected: Option<&str>,
+    current: &hotsheet_model::Ticket,
+) -> Result<(), ProviderError> {
+    if expected.is_some_and(|token| token != current.updated_at.as_str()) {
+        return Err(ProviderError::Conflict {
+            ticket: ticket.into(),
+            message: TICKET_CHANGED_SINCE_READ.into(),
+        });
+    }
+    Ok(())
+}
 
 impl ProviderError {
     /// A stale `expected_token`, which a client may resolve by re-reading and retrying; every
@@ -1547,6 +1566,34 @@ pub struct GitProvider {
     fail_close_once: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(test)]
     test_capabilities: Option<ProviderCapabilities>,
+    #[cfg(test)]
+    before_ticket_lock: BeforeTicketLockHook,
+}
+
+/// Test-only interleaving point between resolving a ticket and taking the store's ticket
+/// transaction, so a test can land a competing write exactly there (HS2-W3JD5K).
+#[cfg(test)]
+type TestHookFn = Box<dyn FnOnce() + Send>;
+
+#[cfg(test)]
+#[derive(Clone, Default)]
+struct BeforeTicketLockHook(Arc<Mutex<Option<TestHookFn>>>);
+
+#[cfg(test)]
+impl std::fmt::Debug for BeforeTicketLockHook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BeforeTicketLockHook")
+    }
+}
+
+#[cfg(test)]
+impl BeforeTicketLockHook {
+    fn run(&self) {
+        let hook = self.0.lock_or_recover().take();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
 }
 
 impl GitProvider {
@@ -1562,6 +1609,8 @@ impl GitProvider {
             fail_close_once: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             #[cfg(test)]
             test_capabilities: None,
+            #[cfg(test)]
+            before_ticket_lock: BeforeTicketLockHook::default(),
         }
     }
 
@@ -1594,6 +1643,13 @@ impl GitProvider {
     fn with_test_capabilities(mut self, capabilities: ProviderCapabilities) -> Self {
         self.test_capabilities = Some(capabilities);
         self
+    }
+
+    /// Run `hook` once, the next time a token-checked write has resolved its ticket and
+    /// is about to take the ticket transaction (HS2-W3JD5K).
+    #[cfg(test)]
+    fn before_next_ticket_lock(&self, hook: impl FnOnce() + Send + 'static) {
+        *self.before_ticket_lock.0.lock_or_recover() = Some(Box::new(hook));
     }
 
     fn ticket(&self, native_id: &str) -> Result<hotsheet_model::Ticket, ProviderError> {
@@ -1752,20 +1808,20 @@ impl TicketProvider for GitProvider {
             });
         }
         let ticket = self.ticket(native_id)?;
-        if expected_token.is_some_and(|token| token != ticket.updated_at.as_str()) {
-            return Err(ProviderError::Conflict {
-                ticket: ticket.slug,
-                message: TICKET_CHANGED_SINCE_READ.into(),
-            });
-        }
-        let updated = ops::rate_ai_content(
+        #[cfg(test)]
+        self.before_ticket_lock.run();
+        // Checked under the ticket transaction, as in `update` (HS2-W3JD5K).
+        let updated = ops::rate_ai_content_if(
             &self.store,
             &ticket.id,
             now,
-            &feedback.target,
-            feedback.rating,
-            feedback.explanation,
-            Some(actor),
+            ops::AiContentRating {
+                target: &feedback.target,
+                rating: feedback.rating,
+                explanation: feedback.explanation,
+                actor: Some(actor),
+            },
+            |current| expect_token(&ticket.slug, expected_token, current),
         )?;
         Ok(ApiTicket::from_provider(
             &updated,
@@ -1855,16 +1911,6 @@ impl TicketProvider for GitProvider {
         patch: ProviderPatch,
     ) -> Result<ApiTicket, ProviderError> {
         let ticket = self.ticket(native_id)?;
-        if patch
-            .expected_token
-            .as_deref()
-            .is_some_and(|token| token != ticket.updated_at.as_str())
-        {
-            return Err(ProviderError::Conflict {
-                ticket: native_id.into(),
-                message: TICKET_CHANGED_SINCE_READ.into(),
-            });
-        }
         let blocked_by = patch
             .blocked_by
             .as_deref()
@@ -1872,7 +1918,13 @@ impl TicketProvider for GitProvider {
             .map(|v| self.blockers(Some(&ticket.id), v))
             .transpose()?;
         let group = self.group_change(patch.group)?;
-        let updated = ops::update(
+        #[cfg(test)]
+        self.before_ticket_lock.run();
+        // The token is compared with the ticket read under the ticket transaction, so a
+        // write landing after the resolve above is a conflict, not a lost update
+        // (HS2-W3JD5K).
+        let expected_token = patch.expected_token;
+        let updated = ops::update_if(
             &self.store,
             &ticket.id,
             now,
@@ -1891,6 +1943,7 @@ impl TicketProvider for GitProvider {
                 blocked_reason: patch.blocked_reason,
                 group,
             },
+            |current| expect_token(native_id, expected_token.as_deref(), current),
         )?;
         Ok(ApiTicket::from_provider(
             &updated,

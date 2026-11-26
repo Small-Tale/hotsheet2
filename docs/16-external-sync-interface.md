@@ -309,10 +309,14 @@ never an independent source of truth and can be discarded. Project configuration
 machine-local credentials are not a ticket repository.
 
 Writes use provider concurrency controls where available (ETag/version/update token)
-and return a typed conflict when the remote changed. Rate limits, auth failures, and
-unsupported transitions remain distinguishable errors. Offline writes are allowed
-only for providers that can durably queue and safely replay idempotent mutations;
-otherwise external tickets are read-only while offline.
+and return a typed conflict when the remote changed. The Git provider compares the
+token with the ticket read under the store's ticket transaction, so of two writers
+holding the same token exactly one succeeds and the other gets that conflict
+(HS2-W3JD5K). The GitHub, GitLab and Jira adapters compare it with a fresh read just
+before an unconditional write, which leaves a short window for a remote edit. Rate
+limits, auth failures, and unsupported transitions remain distinguishable errors.
+Offline writes are allowed only for providers that can durably queue and safely
+replay idempotent mutations; otherwise external tickets are read-only while offline.
 
 Provider-native ids and URLs remain visible so users can move naturally between Hot
 Sheet and their organization's tracker.
