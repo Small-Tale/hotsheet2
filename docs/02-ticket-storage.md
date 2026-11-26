@@ -1564,8 +1564,8 @@ current `started` ask, with the tool the ask names. It runs the turn in-process 
 `hotsheet-cli trigger`, then records the end exactly as the server does, so the ask reads
 `finished`, or `failed` with the reason (for example `the tool exited with status 3`)
 (HS2-SPVT6W). That session runs in the tool's default permission mode with no permission
-bridge, the headless trigger default: Codex approvals are auto-approved inside its
-workspace-write sandbox.
+bridge, the headless trigger default: Codex runs inside its workspace-write sandbox and
+any approval it asks for is declined, never granted (HS2-0G1FP6).
 
 `HOTSHEET_SYNC_AI_ALLOWED_TOOLS`, when set, limits which tools a stall may start
 (comma-separated ids). Every process cargo launches gets `repair-fixture` only, so no test

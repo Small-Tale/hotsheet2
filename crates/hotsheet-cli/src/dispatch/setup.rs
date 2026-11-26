@@ -1685,8 +1685,10 @@ pub(crate) struct TriggerArgs {
     /// can't reach anything but the Hot Sheet shim (HS2-103 isolation).
     #[arg(long)]
     mcp_config: Option<PathBuf>,
-    /// Claude permission mode for headless work (e.g. `acceptEdits`,
-    /// `bypassPermissions`). Defaults to `acceptEdits`.
+    /// Permission mode for headless work: a Claude mode (e.g. `acceptEdits`,
+    /// `bypassPermissions`), or a Codex approval policy (e.g. `on-request`). Defaults to
+    /// the plugin's declared default. This run has no permission bridge, so any Codex
+    /// approval it raises is declined, never granted (HS2-0G1FP6).
     #[arg(long)]
     permission_mode: Option<String>,
     /// Set an env var for the launched tool (repeatable): `--env CODEX_HOME=/path`.

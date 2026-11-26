@@ -28,8 +28,8 @@ pub struct SafeTrigger {
     // Drive codex via its isolated-home shared daemon (reuse one instance) vs. a fresh
     // app-server process per turn (HS2-B7C66H).
     shared_daemon: bool,
-    // A live permission bridge to block approvals on a human (HS2-Q1F6HV); None = auto-
-    // approve (the CLI's headless default).
+    // A live permission bridge to block approvals on a human (HS2-Q1F6HV); None = decline
+    // every approval, never grant one (the CLI's headless default, HS2-0G1FP6).
     permission_bridge: Option<std::sync::Arc<crate::permission::SharedPermissionBridge>>,
     // Kept alive so the shim dir survives every turn; dropped when the SafeTrigger is.
     _shim: launch_safety::ShimDir,
@@ -348,7 +348,8 @@ impl SafeTrigger {
     }
 
     /// Attach a live permission bridge so a driven codex's approvals **block for a human**
-    /// (the server route-back) instead of auto-approving (HS2-Q1F6HV). Builder-style.
+    /// (the server route-back) instead of declining them (HS2-Q1F6HV, HS2-0G1FP6).
+    /// Builder-style.
     pub fn with_permission_bridge(
         mut self,
         bridge: std::sync::Arc<crate::permission::SharedPermissionBridge>,
