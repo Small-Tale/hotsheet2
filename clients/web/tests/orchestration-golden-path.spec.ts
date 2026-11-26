@@ -99,7 +99,14 @@ async function proposePlan(server: Server, base: string, target: string) {
  */
 async function settle(page: Page, ticket: string, name: string) {
   await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))),
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve(undefined);
+          });
+        });
+      }),
   );
   await capture(page, ticket, name);
 }
