@@ -54,12 +54,17 @@ fn role_sessions_of(
     by_target
 }
 
-/// HS2-4JQ41V: stopped integrators that never joined, counted down from the latest
-/// generation until one that joined or still runs.
+/// HS2-4JQ41V: role sessions that ended without ever joining, counted down from the
+/// latest generation until one that joined or still runs. HS2-D1W59D: one lost before
+/// it joined (its tool crashed at launch, or its terminal died) is a failed attempt
+/// like one wound down for not joining, so a tool that always crashes at start uses up
+/// the same `MAX_JOIN_REPLACEMENTS` and is never restarted without bound. One the host
+/// refused to start (`Failed`) is the refusal backoff's, not counted here.
 fn failed_in_a_row<'a>(sessions: impl Iterator<Item = &'a OrchestratedSession>) -> u32 {
     let failed = sessions
         .take_while(|session| {
-            session.state == SessionState::Stopped && session.joined_at_ms.is_none()
+            matches!(session.state, SessionState::Stopped | SessionState::Lost)
+                && session.joined_at_ms.is_none()
         })
         .count();
     u32::try_from(failed).unwrap_or(u32::MAX)

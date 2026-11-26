@@ -296,8 +296,8 @@ fn judge_green(home: &std::path::Path, checkout: &str, job_id: &str, head: &str,
 /// host drops off the network while the gate waits. The controller's gate follower keeps
 /// the gate `pending` (never a verdict, never lost work) and backs off instead of
 /// spinning on the unreachable host; the verdict the host's watch reached meanwhile is
-/// recorded once when the host is back. Waits on connection attempts and on the gate
-/// event stream, never on a fixed delay.
+/// recorded once when the host is back. Waits on connection attempts (counted over a
+/// bounded window, HS2-Q9SPRV) and on the gate event stream, never on a fixed delay.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
     let mut fleet = Fleet::new().await;
@@ -341,23 +341,44 @@ async fn hs2_1p1hjt_a_hosted_ci_watch_waits_out_its_host_going_offline() {
 
     // 1. The host drops off the network. Its address now refuses every connection at
     // once, and counts them: the controller keeps trying the host, but backs off.
+    //
+    // HS2-Q9SPRV: every controller loop that contacts the host connects here (the
+    // target follower, the gate follower, the identity check before each call, a
+    // request already in flight when the host left), and TLS hides which loop a
+    // connection belongs to, so attempts from different loops arrive within
+    // milliseconds of each other even while each loop backs off. Counting the first
+    // three attempts therefore failed about half the time. The rate is measured over
+    // `WINDOW` from the first attempt instead: the target follower backs off 1 s, 2 s,
+    // 4 s between failed steps (two connections each), and the gate follower, whose
+    // long poll the host's leaving cut short, spends the rest of its 8 s wait backing
+    // off. Seven to nine attempts are seen in the window; `MAX_IN_WINDOW` leaves more
+    // than four times that for a busy host, while a loop that spun would connect
+    // hundreds of times. At least three show the controller keeps trying the host.
+    const WINDOW: std::time::Duration = std::time::Duration::from_millis(3500);
+    const MAX_IN_WINDOW: usize = 40;
     fleet.peer_offline().await;
     let refusing = tokio::net::TcpListener::bind(fleet.peer_address)
         .await
         .unwrap();
-    let started = std::time::Instant::now();
-    for _ in 0..3 {
-        let (connection, _) =
-            tokio::time::timeout(std::time::Duration::from_secs(60), refusing.accept())
-                .await
-                .expect("the controller stopped trying the host")
-                .unwrap();
-        drop(connection);
+    let (first, _) = tokio::time::timeout(std::time::Duration::from_secs(60), refusing.accept())
+        .await
+        .expect("the controller never tried the host")
+        .unwrap();
+    drop(first);
+    let window_end = tokio::time::Instant::now() + WINDOW;
+    let mut attempts = 1;
+    while let Ok(accepted) = tokio::time::timeout_at(window_end, refusing.accept()).await {
+        drop(accepted.unwrap());
+        attempts += 1;
+        assert!(
+            attempts <= MAX_IN_WINDOW,
+            "over {MAX_IN_WINDOW} connection attempts within {WINDOW:?}: the controller spins \
+             on an unreachable host"
+        );
     }
-    let elapsed = started.elapsed();
     assert!(
-        elapsed >= std::time::Duration::from_millis(500),
-        "three connection attempts in {elapsed:?}: the controller spins on an unreachable host"
+        attempts >= 3,
+        "{attempts} connection attempts in {WINDOW:?}: the controller stopped trying the host"
     );
     // The gate still waits: an unreachable host is neither a verdict nor lost work.
     let gate = fleet
