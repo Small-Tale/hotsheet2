@@ -8,6 +8,13 @@
 //! seen: an update newer than that one covers it, because its planner saw the ticket.
 //! Every follower of the owner's targets shares the one file under its lock. It is
 //! advisory: a file that cannot be decoded reads as empty and is replaced.
+//!
+//! HS2-04WW8B adds the *seen* baseline: the open tickets a follower's catch-up listed
+//! (or a ticket event showed) on each *seeded* target. A handshake, an overflow or a
+//! reconnect lists the target's open tickets; one neither seen, handed nor named by a
+//! step was created while no follower saw it, and becomes pending. The first catch-up
+//! of a target only seeds its baseline: the default-goal planner already works
+//! through every open ticket then.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -23,9 +30,15 @@ pub const REPLAN_MEMORY_DIR: &str = "orchestration-replan";
 /// The most tickets the memory remembers as handed to a re-plan; the oldest key is
 /// forgotten first.
 pub const MAX_REPLAN_HANDED: usize = 4_096;
+/// HS2-04WW8B: the most open tickets the seen baseline holds; past it the smallest key
+/// is forgotten first (it may count as new once at a later catch-up).
+pub const MAX_REPLAN_SEEN: usize = 8_192;
+/// HS2-04WW8B: the most targets whose baseline is seeded.
+pub const MAX_REPLAN_TARGETS: usize = 256;
 /// The longest connection or native id remembered.
 const MAX_KEY_BYTES: usize = 512;
-const MAX_MEMORY_BYTES: usize = 4 * 1024 * 1024;
+/// Room for every bound at its longest ids (HS2-04WW8B).
+const MAX_MEMORY_BYTES: usize = 32 * 1024 * 1024;
 
 /// A target ticket, by connection and canonical native id.
 pub type ReplanKey = (String, String);
@@ -37,6 +50,21 @@ pub struct ReplanMemory {
     handed: BTreeSet<ReplanKey>,
     /// Tickets waiting for an update, with the latest plan update when each was seen.
     pending: BTreeMap<ReplanKey, Option<String>>,
+    /// HS2-04WW8B: open tickets a catch-up listed or an event showed.
+    seen: BTreeSet<ReplanKey>,
+    /// HS2-04WW8B: targets whose baseline was seeded by a first catch-up.
+    seeded: BTreeSet<String>,
+}
+
+/// HS2-04WW8B: one catch-up listing of a target's open tickets.
+#[derive(Debug, Clone, Copy)]
+pub struct CatchUp<'a> {
+    pub target_id: &'a str,
+    /// The target's ticket sources that were listed.
+    pub connections: &'a [String],
+    /// Every open ticket of those sources was listed (no page bound was reached), so
+    /// a remembered ticket that is absent closed meanwhile.
+    pub complete: bool,
 }
 
 impl ReplanMemory {
@@ -46,8 +74,10 @@ impl ReplanMemory {
         if !open {
             self.handed.remove(&key);
             self.pending.remove(&key);
+            self.seen.remove(&key);
             return false;
         }
+        self.saw(key.clone());
         if self.handed.contains(&key) {
             return false;
         }
@@ -57,6 +87,62 @@ impl ReplanMemory {
         self.handed.insert(key.clone());
         self.pending.insert(key, latest.map(Into::into));
         true
+    }
+
+    /// HS2-04WW8B: an open ticket was seen (an event of a ticket a step names, say), so
+    /// a later catch-up does not count it as new.
+    pub fn saw(&mut self, key: ReplanKey) {
+        if self.seen.contains(&key) {
+            return;
+        }
+        if self.seen.len() >= MAX_REPLAN_SEEN {
+            self.seen.pop_first();
+        }
+        self.seen.insert(key);
+    }
+
+    /// Whether the target's baseline was seeded.
+    pub fn seeded(&self, target_id: &str) -> bool {
+        self.seeded.contains(target_id)
+    }
+
+    /// HS2-04WW8B: a catch-up listed `listed`, the target's open tickets. The first one
+    /// of a target seeds its baseline and hands nothing. Later, an open ticket neither
+    /// seen, handed nor `planned` becomes pending with `latest`, the latest plan update
+    /// now. A complete listing also forgets the remembered tickets of those sources it
+    /// did not list: they closed meanwhile, so reopening one counts again. Answers how
+    /// many tickets became pending.
+    pub fn catch_up(
+        &mut self,
+        listing: CatchUp<'_>,
+        listed: &[ReplanKey],
+        planned: impl Fn(&ReplanKey) -> bool,
+        latest: Option<&str>,
+    ) -> usize {
+        let mut fresh = 0;
+        if self.seeded.contains(listing.target_id) {
+            for key in listed {
+                if !self.seen.contains(key) && !self.handed.contains(key) && !planned(key) {
+                    fresh += usize::from(self.observe(key.clone(), true, latest));
+                }
+            }
+        } else {
+            if self.seeded.len() >= MAX_REPLAN_TARGETS {
+                self.seeded.pop_first();
+            }
+            self.seeded.insert(listing.target_id.to_owned());
+        }
+        if listing.complete {
+            let gone =
+                |key: &ReplanKey| listing.connections.contains(&key.0) && !listed.contains(key);
+            self.seen.retain(|key| !gone(key));
+            self.handed.retain(|key| !gone(key));
+            self.pending.retain(|key, _| !gone(key));
+        }
+        for key in listed {
+            self.saw(key.clone());
+        }
+        fresh
     }
 
     /// Settle what no longer needs an update: tickets a step names now, and tickets an
@@ -79,8 +165,16 @@ impl ReplanMemory {
         self.handed.len()
     }
 
+    /// HS2-04WW8B: how many open tickets the baseline holds.
+    pub fn seen(&self) -> usize {
+        self.seen.len()
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.handed.is_empty() && self.pending.is_empty()
+        self.handed.is_empty()
+            && self.pending.is_empty()
+            && self.seen.is_empty()
+            && self.seeded.is_empty()
     }
 
     /// Bounded, and every key a plausible id: anything else is not this memory.
@@ -93,8 +187,15 @@ impl ReplanMemory {
         };
         self.handed.len() <= MAX_REPLAN_HANDED
             && self.pending.len() <= MAX_REPLAN_HANDED
+            && self.seen.len() <= MAX_REPLAN_SEEN
+            && self.seeded.len() <= MAX_REPLAN_TARGETS
             && self.handed.iter().all(key_ok)
             && self.pending.keys().all(key_ok)
+            && self.seen.iter().all(key_ok)
+            && self
+                .seeded
+                .iter()
+                .all(|target| valid_identifier(target).is_ok())
             && self
                 .pending
                 .values()
@@ -120,6 +221,11 @@ struct MemoryFile {
     schema_version: u32,
     handed: Vec<TicketEntry>,
     pending: Vec<TicketEntry>,
+    /// HS2-04WW8B; absent from a file written before the baseline existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    seen: Vec<TicketEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    seeded: Vec<String>,
 }
 
 impl MemoryFile {
@@ -137,6 +243,8 @@ impl MemoryFile {
                 .iter()
                 .map(|(key, after)| entry(key, after.as_ref()))
                 .collect(),
+            seen: memory.seen.iter().map(|key| entry(key, None)).collect(),
+            seeded: memory.seeded.iter().cloned().collect(),
         }
     }
 
@@ -149,6 +257,8 @@ impl MemoryFile {
                 .into_iter()
                 .map(|entry| (key(&entry), entry.after))
                 .collect(),
+            seen: self.seen.iter().map(key).collect(),
+            seeded: self.seeded.into_iter().collect(),
         }
     }
 }
@@ -182,7 +292,11 @@ impl ReplanMemoryStore {
             return Ok(ReplanMemory::default());
         };
         let file: MemoryFile = decode(&bytes)?;
-        if file.handed.len() > MAX_REPLAN_HANDED || file.pending.len() > MAX_REPLAN_HANDED {
+        if file.handed.len() > MAX_REPLAN_HANDED
+            || file.pending.len() > MAX_REPLAN_HANDED
+            || file.seen.len() > MAX_REPLAN_SEEN
+            || file.seeded.len() > MAX_REPLAN_TARGETS
+        {
             return Err(OrchestrationError::Corrupt);
         }
         let memory = file.into_memory();

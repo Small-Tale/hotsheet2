@@ -1750,12 +1750,18 @@ fn hs2_bqn0m5_a_new_target_ticket_replans_the_default_goal_once() {
         .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
         .unwrap();
 
-    // An overflow cannot say which tickets are new: nothing is started.
+    // HS2-04WW8B: an overflow cannot say which tickets are new, so the target's open
+    // tickets are listed; the one no step names and nobody saw starts one update.
     let unseen = target_ticket(&m, "Missed in an overflow");
     feed.push(&m.target_connection(), &unseen);
     feed.overflow.store(true, Ordering::SeqCst);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
     assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
     feed.overflow.store(false, Ordering::SeqCst);
+    assert_eq!(auto_replans(&m).len(), 4);
+    m.runtime
+        .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
 
     // An explicit goal takes precedence: no re-plan, and no target followed for it.
     let explicit = m.orchestration_ticket("Ship the release");
@@ -1778,7 +1784,7 @@ fn hs2_bqn0m5_a_new_target_ticket_replans_the_default_goal_once() {
     let paused = target_ticket(&m, "New while paused");
     feed.push(&m.target_connection(), &paused);
     assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
-    assert_eq!(auto_replans(&m).len(), 3);
+    assert_eq!(auto_replans(&m).len(), 4);
 }
 
 /// HS2-BQN0M5: an update that started after a pending ticket was seen covered it, so
@@ -1920,7 +1926,9 @@ fn hs2_g6f5bp_the_replan_memory_survives_a_restart() {
     // memory file says so.
     let mut before = WatchState::default();
     assert!(step(&mut before, &mut tx).active, "handshake");
-    assert!(!memory_file.exists(), "nothing remembered yet");
+    // HS2-04WW8B: the handshake only seeded the target's (empty) baseline.
+    assert!(remembered().seeded(&id(1)));
+    assert_eq!((remembered().pending(), remembered().handed()), (0, 0));
     host.set_busy(&planner, true);
     let pending = target_ticket(&m, "Pending at the restart");
     feed.push(&m.target_connection(), &pending);
@@ -1982,4 +1990,213 @@ fn hs2_g6f5bp_the_replan_memory_survives_a_restart() {
     step(&mut again, &mut tx);
     assert!(!memory_file.exists(), "forgotten on pause");
     assert_eq!(auto_replans(&m).len(), 3);
+}
+
+/// HS2-04WW8B: tickets created while no follower saw them are caught up. The first
+/// step after the re-plan applies seeds the target's baseline and starts nothing;
+/// after down-time (a fresh follower, as a restart gives) the handshake lists the
+/// target's open tickets and one nobody saw starts exactly one update; repeated
+/// handshakes start nothing new; a reconnect and an overflow catch up the same way; a
+/// ticket a step names, or one closed meanwhile, starts nothing.
+#[test]
+fn hs2_04ww8b_tickets_created_while_unseen_are_caught_up() {
+    use super::sessions::{Probe, ScriptedHost, roomy};
+    let feed = Arc::new(Feed::default());
+    let mut m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let host = Arc::new(ScriptedHost::default());
+    let probe = Arc::new(Probe::default());
+    probe.set(|observation| *observation = roomy());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_probe(probe)
+        .with_session_host(host.clone());
+    let mut rng = Rng(9_400);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let owner = m.owner.id.clone();
+    let remembered = || {
+        hotsheet_ticketing::orchestration::ReplanMemoryStore::new(&m.home, &owner)
+            .unwrap()
+            .read()
+            .unwrap()
+    };
+    let step = |state: &mut WatchState, tx: &mut Transaction<'_>| {
+        m.runtime.watch_step(&owner, &id(1), state, 8_000, tx)
+    };
+    let cancel = |tx: &mut Transaction<'_>| {
+        m.runtime
+            .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), tx)
+            .unwrap();
+    };
+    // Open tickets before the re-plan applies.
+    for n in 0..3 {
+        target_ticket(&m, &format!("Existing {n}"));
+    }
+    let proposal = m
+        .runtime
+        .plan_propose(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let planner = proposal.session.session.session_id.clone();
+    let goal = proposal.goals[0].clone();
+    placement(&m, true);
+
+    // Seed: the handshake lists every open ticket and starts nothing.
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert!(remembered().seeded(&id(1)));
+    assert_eq!(remembered().seen(), 3);
+    assert_eq!((remembered().pending(), remembered().handed()), (0, 0));
+    assert!(auto_replans(&m).is_empty());
+    // A second handshake (a restart with nothing new) starts nothing either.
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert!(auto_replans(&m).is_empty());
+
+    // Down-time: the server stops, a ticket is written into the target, no event is
+    // ever seen for it. The restarted follower's handshake starts exactly one update.
+    drop(state);
+    let missed = target_ticket(&m, "Created while the server was down");
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 1);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    cancel(&mut tx);
+    // Repeated handshakes and its own later change start nothing new.
+    for _ in 0..2 {
+        let mut again = WatchState::default();
+        assert_eq!(step(&mut again, &mut tx).replan, AutoReplan::Idle);
+    }
+    feed.push(&m.target_connection(), &missed);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!(auto_replans(&m).len(), 1);
+
+    // A reconnect: the events request fails, a ticket appears meanwhile, and the step
+    // that succeeds again catches up.
+    feed.failing.store(true, Ordering::SeqCst);
+    assert!(step(&mut state, &mut tx).failed);
+    let during_outage = target_ticket(&m, "Created during an outage");
+    feed.failing.store(false, Ordering::SeqCst);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 2);
+    cancel(&mut tx);
+    assert_eq!(remembered().pending(), 0);
+    let _ = during_outage;
+
+    // An overflow: the same.
+    target_ticket(&m, "Lost in an overflow");
+    feed.overflow.store(true, Ordering::SeqCst);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    feed.overflow.store(false, Ordering::SeqCst);
+    assert_eq!(auto_replans(&m).len(), 3);
+    cancel(&mut tx);
+
+    // A ticket a step names already is not new.
+    let planned = target_ticket(&m, "Planned while unseen");
+    m.runtime
+        .readiness_define(
+            &owner,
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": m.owner_connection(), "native_id": goal.native_id},
+                "target_id": id(1), "connection_id": m.target_connection(),
+                "native_id": planned.id.to_string(),
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!(auto_replans(&m).len(), 3);
+
+    // Closed meanwhile: found while the planner works it waits as pending; closed
+    // before the next handshake, it is forgotten and starts nothing.
+    host.set_busy(&planner, true);
+    let brief = target_ticket(&m, "Closed before the planner was free");
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Deferred);
+    assert_eq!(remembered().pending(), 1);
+    set_status(&m, &brief, Status::Completed);
+    host.set_busy(&planner, false);
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!((remembered().pending(), remembered().handed()), (0, 3));
+    assert_eq!(auto_replans(&m).len(), 3);
+
+    // Paused, a ticket appears, then resumed: the first step after seeds again and
+    // starts nothing; the planner works through every open ticket then.
+    placement(&m, false);
+    step(&mut state, &mut tx);
+    assert!(!remembered().seeded(&id(1)), "forgotten on pause");
+    target_ticket(&m, "Created while paused");
+    placement(&m, true);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert!(remembered().seeded(&id(1)));
+    assert_eq!(auto_replans(&m).len(), 3);
+}
+
+/// HS2-04WW8B: a catch-up reads a listing longer than one page to its end, so a
+/// ticket on the second page is neither missed at the seed nor counted as new later.
+#[test]
+fn hs2_04ww8b_a_catch_up_reads_every_page() {
+    use super::sessions::{Probe, ScriptedHost, roomy};
+    let feed = Arc::new(Feed::default());
+    let mut m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let host = Arc::new(ScriptedHost::default());
+    let probe = Arc::new(Probe::default());
+    probe.set(|observation| *observation = roomy());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_probe(probe)
+        .with_session_host(host);
+    let mut rng = Rng(9_500);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let owner = m.owner.id.clone();
+    let page = crate::orchestration::MAX_TARGET_TICKET_PAGE as usize;
+    for n in 0..=page {
+        target_ticket(&m, &format!("Existing {n}"));
+    }
+    m.runtime
+        .plan_propose(
+            &owner,
+            serde_json::from_value(json!({"tool": "claude"})).unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    placement(&m, true);
+    let mut state = WatchState::default();
+    let replan = m
+        .runtime
+        .watch_step(&owner, &id(1), &mut state, 8_000, &mut tx)
+        .replan;
+    assert_eq!(replan, AutoReplan::Idle);
+    let memory = hotsheet_ticketing::orchestration::ReplanMemoryStore::new(&m.home, &owner)
+        .unwrap()
+        .read()
+        .unwrap();
+    assert_eq!(memory.seen(), page + 1, "both pages listed");
+    // One more, unseen: exactly one update, after a restart.
+    target_ticket(&m, "Created while the server was down");
+    let mut state = WatchState::default();
+    let replan = m
+        .runtime
+        .watch_step(&owner, &id(1), &mut state, 8_000, &mut tx)
+        .replan;
+    assert_eq!(replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 1);
 }

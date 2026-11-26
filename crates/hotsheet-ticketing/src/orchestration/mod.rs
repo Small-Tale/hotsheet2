@@ -150,7 +150,8 @@ pub use reconcile_sources::{
     session_work, validation_attempt, validation_work,
 };
 pub use replan_memory::{
-    MAX_REPLAN_HANDED, REPLAN_MEMORY_DIR, ReplanKey, ReplanMemory, ReplanMemoryStore,
+    CatchUp as ReplanCatchUp, MAX_REPLAN_HANDED, MAX_REPLAN_SEEN, REPLAN_MEMORY_DIR, ReplanKey,
+    ReplanMemory, ReplanMemoryStore,
 };
 pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,
