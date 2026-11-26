@@ -32,9 +32,15 @@ async function openTwoProjects(
   // The run starts sessions under the real default policy (2 GB free memory, 90% CPU, 5 GB free disk), which
   // a busy CI runner may not meet; the test build's roomy capacity keeps admission independent of the
   // machine running the test (HS2-D9KP86, as HS2-YWN8JT does for the Rust real-server tests).
+  // Sessions need an AI tool. A developer machine may have one installed, a CI runner has none, so the
+  // fixture home always carries the synthetic agent (HS2-D9KP86).
   const server = await realTicketServer({
     ...fixture,
     env: { HOTSHEET_TEST_ROOMY_CAPACITY: '1', ...fixture.env },
+    seed: async (context) => {
+      await syntheticTool(context.env.HOTSHEET_HOME!);
+      await fixture.seed?.(context);
+    },
   });
   const projects = [{ id: server.checkoutId, root: server.root, name: 'Launch' }];
   await mkdir(join(dirname(server.root), 'web'), { recursive: true });
@@ -329,7 +335,20 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     });
     // Running asks a person before the first session starts; the request shows over the header.
     const ignore = page.getByRole('button', { name: 'Ignore', exact: true });
-    await expect(ignore).toBeVisible({ timeout: 30_000 });
+    try {
+      await expect(ignore).toBeVisible({ timeout: 30_000 });
+    } catch (error) {
+      // Say why no session was asked for: the scheduler's own explanation of the ready step.
+      const explained = await server
+        .request(`${base}/scheduler/explain`, 'POST', {
+          target_id: web,
+          connection_id: second.connection_id,
+          native_id: second.id,
+          actor: { role: 'human', id: 'maintainer' },
+        })
+        .catch((reason: unknown) => String(reason));
+      throw new Error(`${String(error)}\nscheduler explain: ${JSON.stringify(explained)}`, { cause: error });
+    }
     await widths(page, 'started-default', 'hs2-d9kp86');
     await ignore.click();
     await expect(ignore).toHaveCount(0);
@@ -426,7 +445,6 @@ test('HS2-2751D6 a handoff waits on the integrator, its CI goes red and the fix 
   const provider = await fakeGithubActions();
   const server = await openTwoProjects(page, {
     env: { ...provider.env(), HOTSHEET_JOB_MONITOR_AUTOSTART: 'on' },
-    seed: (fixture) => syntheticTool(fixture.env.HOTSHEET_HOME!),
     gitWeb: true,
   });
   const base = `/checkouts/${server.checkoutId}/orchestration`;
