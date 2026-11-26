@@ -144,7 +144,7 @@ impl FsStore {
         let rollback = |moved: &[(PathBuf, PathBuf)]| {
             for (from, to) in moved.iter().rev() {
                 // Best effort: the original failure is what the caller must see.
-                let _ = fs::rename(to, from);
+                let _ = hotsheet_sync::files::replace(to, from);
             }
         };
         for item in &plan {
@@ -155,7 +155,7 @@ impl FsStore {
                 .target
                 .parent()
                 .map_or(Ok(()), fs::create_dir_all)
-                .and_then(|()| fs::rename(source, &item.target));
+                .and_then(|()| hotsheet_sync::files::replace(source, &item.target));
             if let Err(source_error) = moved_result {
                 rollback(&moved);
                 return Err(StoreError::IoAt {
