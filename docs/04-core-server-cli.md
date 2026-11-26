@@ -874,7 +874,9 @@ non-socket state remains in that home. Live owned legacy sockets are still disco
 Socket ownership, stale-path handling, and cleanup are described in [05](05-ai-tool-plugins.md)
 §5.4. `hotsheet-cli serve --list` works without
 selecting a store: it deduplicates registrations by server identity, health-checks live
-processes, labels stale/unhealthy/invalid records, lists every hosted store, and never
+processes with one patient `GET /health` probe (1 s connect, 3 s whole request, matching
+the web bridge's first probe, so a live server on a busy machine is not labeled
+unhealthy; HS2-H4CBZ5), labels stale/unhealthy/invalid records, lists every hosted store, and never
 prints bearer secrets. Every registration a server writes also carries its `launcher`
 label, `build_revision`, and `executable` path (HS2-GWFEAA): the binary takes
 `--launcher <label>` (or `HOTSHEET_SERVER_LAUNCHER`), the CLI passes `cli`, and the web
