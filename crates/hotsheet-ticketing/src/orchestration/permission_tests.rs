@@ -2,6 +2,8 @@
 //! Synthetic homes only. Covers the state-transition matrix and repeated, out-of-order,
 //! interleaved and empty-then-refill sequences.
 
+use std::collections::BTreeSet;
+
 use super::*;
 
 struct Clock(std::cell::Cell<u64>);
@@ -1021,4 +1023,118 @@ fn hs2_8ge9hm_requests_an_always_allow_answered_make_room_after_a_day() {
     // The rule still answers the key, including the operation whose record went.
     assert!(matches!(f.ask(&ask(&work, "op-0")), Asked::Remembered(_)));
     assert_eq!(operations(&f).len(), MAX_PERMISSION_REQUESTS);
+}
+
+/// HS2-5675T5: forgetting the rules of orphaned targets drops exactly those rules,
+/// keeps every other one answering, writes nothing when nothing matches, and frees
+/// room at the 1,024-rule cap for the next Always Allow; repeated, empty and refilled.
+#[test]
+fn hs2_5675t5_forgetting_orphaned_targets_drops_only_their_rules() {
+    let mut f = Fixture::new();
+    let ledger = f.ledger.clone();
+    let gone_owner = TargetRef {
+        owner_checkout_id: "gone-0123456789ab".into(),
+        target_id: target(9).target_id,
+    };
+    let keys = [
+        key(1, PermissionAction::WorkStart, None),
+        key(1, PermissionAction::SessionStart, Some("codex")),
+        key(2, PermissionAction::WorkStart, None),
+        PermissionKey {
+            target: gone_owner.clone(),
+            action: PermissionAction::TicketsWrite,
+            tool: None,
+        },
+    ];
+    for key in &keys {
+        ledger.remember(key.clone(), None, &mut f.tx()).unwrap();
+    }
+    let path = f._home.path().join("orchestration-permissions.json");
+    // Nothing orphaned, or an orphan with no rule: nothing is written.
+    let before = std::fs::read(&path).unwrap();
+    assert!(ledger.forget_targets(&BTreeSet::new()).unwrap().is_empty());
+    assert!(
+        ledger
+            .forget_targets(&BTreeSet::from([target(7)]))
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    // Target 1 (two rules) and the gone owner's target are forgotten, oldest first.
+    let forgotten = ledger
+        .forget_targets(&BTreeSet::from([target(1), gone_owner.clone()]))
+        .unwrap();
+    let forgotten_keys: Vec<_> = forgotten.into_iter().map(|rule| rule.key).collect();
+    assert_eq!(
+        forgotten_keys,
+        vec![keys[0].clone(), keys[1].clone(), keys[3].clone()]
+    );
+    let left: Vec<_> = ledger
+        .all_rules()
+        .unwrap()
+        .into_iter()
+        .map(|rule| rule.key)
+        .collect();
+    assert_eq!(left, vec![keys[2].clone()]);
+    // The live rule still answers; a forgotten key asks again.
+    assert!(matches!(
+        f.ask(&ask(&keys[2], "work-2")),
+        Asked::Remembered(_)
+    ));
+    assert!(matches!(
+        f.ask(&ask(&keys[0], "work-1")),
+        Asked::Pending { filed: true, .. }
+    ));
+    // Repeating it changes nothing.
+    let after = std::fs::read(&path).unwrap();
+    assert!(
+        ledger
+            .forget_targets(&BTreeSet::from([target(1), gone_owner]))
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), after);
+    // Refilled: a rule remembered again for a forgotten key is a new rule.
+    let (rule, created, _) = ledger.remember(keys[0].clone(), None, &mut f.tx()).unwrap();
+    assert!(created);
+    assert_eq!(ledger.all_rules().unwrap().last().unwrap(), &rule);
+}
+
+/// HS2-5675T5: at the cap Always Allow and remember are refused; forgetting the rules
+/// of one orphaned target makes room, and the cap applies again once refilled.
+#[test]
+fn hs2_5675t5_forgetting_orphaned_targets_frees_the_rule_cap() {
+    let mut f = Fixture::new();
+    let rules: Vec<PermissionRule> = (0..MAX_PERMISSION_RULES as u128)
+        .map(|index| PermissionRule {
+            rule_id: ulid::Ulid::from((1u128 << 102) + index).to_string(),
+            key: key(100 + index, PermissionAction::WorkStart, None),
+            created_at_ms: 1_000,
+            created_by: None,
+            request_id: None,
+        })
+        .collect();
+    seed(&f, &[], &rules);
+    let ledger = f.ledger.clone();
+    let fresh = key(1, PermissionAction::WorkStart, None);
+    let waiting = pending_id(f.ask(&ask(&fresh, "op-1")));
+    assert!(matches!(
+        ledger.remember(fresh.clone(), None, &mut f.tx()),
+        Err(OrchestrationError::Capacity)
+    ));
+    assert!(matches!(
+        f.answer(&waiting, PermissionAnswer::AlwaysAllow),
+        Err(OrchestrationError::Capacity)
+    ));
+    let forgotten = ledger
+        .forget_targets(&BTreeSet::from([target(100)]))
+        .unwrap();
+    assert_eq!(forgotten, vec![rules[0].clone()]);
+    let answered = f.answer(&waiting, PermissionAnswer::AlwaysAllow).unwrap();
+    assert!(answered.rule.is_some());
+    assert_eq!(ledger.all_rules().unwrap().len(), MAX_PERMISSION_RULES);
+    assert!(matches!(
+        ledger.remember(key(2, PermissionAction::WorkStart, None), None, &mut f.tx()),
+        Err(OrchestrationError::Capacity)
+    ));
 }

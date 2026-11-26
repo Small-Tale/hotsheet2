@@ -1209,3 +1209,264 @@ fn hs2_e16fwj_every_ledger_change_signals_the_servers_on_this_machine() {
     assert_ne!(refilled, first);
     assert!(waiter.wait(std::time::Duration::ZERO));
 }
+
+fn remember(f: &Fixture, target_id: &str, action: PermissionAction, tx: &mut Transaction<'_>) {
+    f.runtime
+        .permission_remember(
+            &f.owner.id,
+            RememberPermission {
+                target_id: target_id.into(),
+                action,
+                tool: None,
+            },
+            Some(&human()),
+            tx,
+        )
+        .unwrap();
+}
+
+fn listed_rules(f: &Fixture) -> Vec<(String, PermissionAction)> {
+    f.runtime
+        .permission_rules_everywhere()
+        .into_iter()
+        .map(|view| (view.rule.key.target.target_id, view.rule.key.action))
+        .collect()
+}
+
+fn orphan_forgets(f: &Fixture) -> Vec<(Option<String>, Option<String>)> {
+    f.runtime
+        .audit(&f.owner.id, 0, 500)
+        .unwrap()
+        .entries
+        .into_iter()
+        .filter(|entry| entry.record.action == "permission_forget")
+        .map(|entry| {
+            assert_eq!(entry.record.outcome, AuditOutcome::Revoked);
+            assert_eq!(entry.record.actor_id, None);
+            (entry.record.target_id, entry.record.reason)
+        })
+        .collect()
+}
+
+fn declare_two(f: &Fixture, tx: &mut Transaction<'_>) {
+    let revision = f.runtime.declarations(&f.owner.id).unwrap().revision;
+    let target = |n: u128, label: &str| TargetDeclaration {
+        target_id: id(n),
+        state: DeclarationState::Active,
+        label: label.into(),
+        expected_repository_identity: None,
+        site_of: None,
+    };
+    f.runtime
+        .replace(
+            &f.owner.id,
+            ReplaceTargets {
+                expected_revision: revision,
+                targets: vec![target(1, "Synthetic target"), target(2, "Second target")],
+            },
+            tx,
+        )
+        .unwrap();
+}
+
+/// HS2-5675T5: removing a target forgets its remembered rules, audited, and Settings →
+/// Permissions no longer lists them; the other target's rules keep answering. A
+/// manifest that cannot be read forgets nothing; an owner checkout that is no longer
+/// registered forgets its rules. Repeats change nothing.
+#[test]
+fn hs2_5675t5_removing_a_target_or_its_owner_forgets_only_its_rules() {
+    let f = fixture();
+    let mut rng = Rng(500);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_local(&f, &mut tx);
+    declare_two(&f, &mut tx);
+    remember(&f, &id(1), PermissionAction::WorkStart, &mut tx);
+    remember(&f, &id(1), PermissionAction::TicketsWrite, &mut tx);
+    remember(&f, &id(2), PermissionAction::WorkStart, &mut tx);
+    // Every rule is live: listing forgets nothing, however often.
+    for _ in 0..2 {
+        assert_eq!(listed_rules(&f).len(), 3);
+    }
+    assert!(orphan_forgets(&f).is_empty());
+    // Removing the second target forgets its one rule at once.
+    let before = f.runtime.permission_signal_now();
+    let removed = f
+        .runtime
+        .remove_project(
+            &TargetRef {
+                owner_checkout_id: f.owner.id.clone(),
+                target_id: id(2),
+            },
+            RemoveProject::default(),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(removed.removed);
+    assert_ne!(f.runtime.permission_signal_now(), before);
+    assert_eq!(
+        listed_rules(&f),
+        vec![
+            (id(1), PermissionAction::WorkStart),
+            (id(1), PermissionAction::TicketsWrite),
+        ]
+    );
+    assert_eq!(
+        orphan_forgets(&f),
+        vec![(Some(id(2)), Some("target_removed".to_owned()))]
+    );
+    // Repeating the removal, and listing again, forget nothing more.
+    f.runtime
+        .remove_project(
+            &TargetRef {
+                owner_checkout_id: f.owner.id.clone(),
+                target_id: id(2),
+            },
+            RemoveProject::default(),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(listed_rules(&f).len(), 2);
+    assert_eq!(orphan_forgets(&f).len(), 1);
+    // The live target's rule still answers its action without asking.
+    let allowed = f.runtime.authorize(
+        &reference(&f),
+        Some(&ai("worker-1")),
+        act(TargetAction::TicketsWrite, None, op("write-1")),
+        &mut tx,
+    );
+    assert!(allowed.is_ok(), "the live rule answers");
+    // A manifest that cannot be read is no proof of removal: nothing is forgotten.
+    let manifest = std::path::Path::new(&f.owner.root).join(".hotsheet2/orchestration.json");
+    let kept = std::fs::read(&manifest).unwrap();
+    std::fs::write(&manifest, b"not json").unwrap();
+    assert_eq!(listed_rules(&f).len(), 2);
+    std::fs::write(&manifest, &kept).unwrap();
+    assert_eq!(listed_rules(&f).len(), 2);
+    assert_eq!(orphan_forgets(&f).len(), 1);
+    // The owner checkout is unregistered: its remaining rules go, audited in its
+    // journal, and the listing is empty; a later listing changes nothing.
+    hotsheet_ticketing::checkout_removal::remove_checkout(
+        &f.runtime.providers,
+        &f.runtime.checkouts,
+        &f.owner.id,
+        false,
+    )
+    .unwrap();
+    assert!(listed_rules(&f).is_empty());
+    assert!(listed_rules(&f).is_empty());
+    assert_eq!(
+        orphan_forgets(&f),
+        vec![
+            (Some(id(2)), Some("target_removed".to_owned())),
+            (Some(id(1)), Some("owner_removed".to_owned())),
+            (Some(id(1)), Some("owner_removed".to_owned())),
+        ]
+    );
+}
+
+/// HS2-5675T5: at the 1,024-rule cap, Always Allow and remember first forget the rules
+/// of removed targets and then succeed; with every rule live they are still refused.
+#[test]
+fn hs2_5675t5_the_rule_cap_makes_room_from_removed_targets_only() {
+    use hotsheet_ticketing::orchestration::MAX_PERMISSION_RULES;
+    let f = fixture();
+    let mut rng = Rng(600);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_local(&f, &mut tx);
+    declare_two(&f, &mut tx);
+    // The ledger is full: `second` rules for target 2, the rest for live target 1.
+    let seed = |second: usize| {
+        let rules: Vec<Value> = (0..MAX_PERMISSION_RULES as u128)
+            .map(|index| {
+                json!({
+                    "rule_id": ulid::Ulid::from((1u128 << 102) + index).to_string(),
+                    "target": {
+                        "owner_checkout_id": f.owner.id,
+                        "target_id": id(if (index as usize) < second { 2 } else { 1 }),
+                    },
+                    "action": "session_start",
+                    "tool": format!("tool-{index}"),
+                    "created_at_ms": 1_000,
+                })
+            })
+            .collect();
+        std::fs::write(
+            f.home.join("orchestration-permissions.json"),
+            serde_json::to_vec(&json!({"schema_version": 1, "requests": [], "rules": rules}))
+                .unwrap(),
+        )
+        .unwrap();
+    };
+    let remember_work = |tx: &mut Transaction<'_>| {
+        f.runtime.permission_remember(
+            &f.owner.id,
+            RememberPermission {
+                target_id: id(1),
+                action: PermissionAction::WorkStart,
+                tool: None,
+            },
+            Some(&human()),
+            tx,
+        )
+    };
+    // Every rule live: still refused, nothing forgotten.
+    seed(0);
+    let refused = remember_work(&mut tx);
+    assert!(
+        matches!(refused, Err(OrchestrationError::Capacity)),
+        "{refused:?}"
+    );
+    assert_eq!(listed_rules(&f).len(), MAX_PERMISSION_RULES);
+    // Target 2's rules while it is declared are live too: still refused.
+    seed(4);
+    assert!(matches!(
+        remember_work(&mut tx),
+        Err(OrchestrationError::Capacity)
+    ));
+    // Target 2 removed by hand in the shared manifest (as another machine would):
+    // the next remember forgets its rules and succeeds.
+    let revision = f.runtime.declarations(&f.owner.id).unwrap().revision;
+    f.runtime
+        .replace(
+            &f.owner.id,
+            ReplaceTargets {
+                expected_revision: revision,
+                targets: vec![
+                    TargetDeclaration {
+                        target_id: id(1),
+                        state: DeclarationState::Active,
+                        label: "Synthetic target".into(),
+                        expected_repository_identity: None,
+                        site_of: None,
+                    },
+                    TargetDeclaration {
+                        target_id: id(2),
+                        state: DeclarationState::Removed,
+                        label: "Second target".into(),
+                        expected_repository_identity: None,
+                        site_of: None,
+                    },
+                ],
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let remembered = remember_work(&mut tx).unwrap();
+    assert!(remembered.created);
+    let listed = listed_rules(&f);
+    assert_eq!(listed.len(), MAX_PERMISSION_RULES - 3);
+    assert!(listed.iter().all(|(target, _)| *target == id(1)));
+    assert_eq!(listed.last(), Some(&(id(1), PermissionAction::WorkStart)));
+    assert_eq!(
+        orphan_forgets(&f),
+        vec![(Some(id(2)), Some("target_removed".to_owned())); 4]
+    );
+}

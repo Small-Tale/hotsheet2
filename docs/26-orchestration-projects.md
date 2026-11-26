@@ -695,9 +695,18 @@ lapsed requests first, then (HS2-8GE9HM) its oldest Denies and requests an Alway
 answered, once a day has passed since the answer: a Deny stays final for its operation
 at least that long, and a rule answers its key on its own. Waiting requests and an
 unused Allow Once are never dropped, so a list full of them refuses new asks with
-`capacity`. Rules are never dropped automatically: at 1,024 Always Allow is
-refused with `capacity` until a person forgets one (HS2-5675T5). The oldest decision
-record is dropped first.
+`capacity`. A live rule is never dropped automatically: at 1,024 Always Allow is
+refused with `capacity` until a person forgets one. Only a rule that can never answer
+again is forgotten on its own (HS2-5675T5): its target's declaration was removed (a
+removal is final; target ids are never reused) or its owner checkout is no longer
+registered on this machine. Such rules are forgotten when the target is removed, when
+Settings → Permissions lists the rules, and before Always Allow or `permission
+remember` answers `capacity`; each is a `permission_forget` journal entry (outcome
+`revoked`, reason `target_removed` or `owner_removed`, no actor) and the permission
+signal tells Settings → Permissions. Nothing is forgotten on a guess: an owner whose
+manifest cannot be read, a checkout whose directory is missing, or a target its
+manifest does not name at all (an older branch checked out) keeps its rules. The
+oldest decision record is dropped first.
 
 ### Judgment calls are decisions on the goal ticket
 

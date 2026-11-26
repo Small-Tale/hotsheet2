@@ -1074,3 +1074,54 @@ async fn hs2_jwv5s1_a_person_removes_the_retired_files_through_http_and_the_cli(
     assert_eq!(listed["retired"]["grants_file"], false);
     assert_eq!(listed["retired"]["approvals_file"], false);
 }
+
+/// HS2-5675T5: removing a project through the server forgets its remembered rules, so
+/// Settings → Permissions no longer lists them, audited as `permission_forget` with
+/// `target_removed`; removing it again changes nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_5675t5_removing_a_project_forgets_its_rules_in_settings() {
+    let fixture = self_target().await;
+    let router = fixture.router.clone();
+    let card = fixture.ask("op-remembered").await;
+    let (status, resolved) = api(
+        router.clone(),
+        "POST",
+        &format!("/permissions/{card}"),
+        json!({"decision":"allow","scope":"always"}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{resolved}");
+    assert_eq!(fixture.orchestrator_rules().await.len(), 1);
+    for round in 0..2 {
+        let (status, removed) = api(
+            router.clone(),
+            "DELETE",
+            &format!("{}/projects/{TARGET}", fixture.base),
+            json!({"actor":{"role":"human","id":"maintainer"}}),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{round}: {removed}");
+        assert_eq!(removed["removed"], round == 0, "{removed}");
+        assert!(fixture.orchestrator_rules().await.is_empty(), "{round}");
+    }
+    let (status, audit) = api(
+        router.clone(),
+        "GET",
+        &format!("{}/audit?after=0", fixture.base),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{audit}");
+    let forgets: Vec<&Value> = audit["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["action"] == "permission_forget")
+        .collect();
+    assert_eq!(forgets.len(), 1, "{audit:#}");
+    assert_eq!(forgets[0]["reason"], "target_removed");
+    assert_eq!(forgets[0]["outcome"], "revoked");
+}
