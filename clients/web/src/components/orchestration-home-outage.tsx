@@ -21,7 +21,7 @@ export function OrchestrationHomeOutage({ timeline, clock }: OrchestrationHomeOu
   const banners = homeOutageBanners(timeline, clock);
   if (banners.length === 0) return <></>;
   return (
-    <List controlInsets="trl" gap="s" rootAttributes={{ 'data-orchestration-home-outages': String(banners.length) }}>
+    <List controlInsets="trl" gap="xs" rootAttributes={{ 'data-orchestration-home-outages': String(banners.length) }}>
       {banners.map((banner) => (
         <StateBanner
           copyLayout="stacked"
