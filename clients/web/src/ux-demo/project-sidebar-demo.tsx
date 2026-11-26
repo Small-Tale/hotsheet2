@@ -327,6 +327,8 @@ const SCHEDULED_DEMO_COMMAND: CommandDefinition = {
   prompt: 'Review the day',
   color: '#3b82f6',
   icon: 'file-text',
+  // Its tickets move to Trash once completed (HS2-27C161).
+  cleanup: 'delete',
 };
 const SCHEDULED_DEMO_VIEW: ScheduleView = {
   schedule: {

@@ -84,6 +84,12 @@ const kind = (command: CommandDefinition) => command.kind ?? 'program';
 /** The Action choice that stores no action and keeps the legacy click (HS2-17Y2EC). */
 const COMMAND_DEFAULT_CLICK = 'default';
 const TYPE_LABELS: Record<'program' | 'shell' | 'ai', string> = { program: 'Program', shell: 'Shell', ai: 'AI' };
+/** Auto-Cleanup choices for an AI command's tickets (HS2-27C161); None stores no field. */
+const COMMAND_CLEANUP_CHOICES = [
+  { value: 'none', label: 'None' },
+  { value: 'archive', label: 'Archive' },
+  { value: 'delete', label: 'Delete' },
+];
 
 /** The inline style setting a command row/dialog icon tile to its color; undefined when transparent. */
 function commandIconStyle(command: CommandDefinition) {
@@ -346,6 +352,14 @@ function CommandDetailFields({
               ...SCHEDULE_ACTIONS.map((value) => ({ value, label: SCHEDULE_ACTION_LABELS[value] })),
             ]}
             hint="What clicking the command does. Schedules use it unless they override it."
+          />
+          {/* What happens to this command's tickets once done (HS2-27C161); Delete is the restorable Trash. */}
+          <Select
+            name="cleanup"
+            label="Auto-Cleanup"
+            value={command.cleanup ?? 'none'}
+            choices={COMMAND_CLEANUP_CHOICES}
+            hint="When a ticket from this command is completed or verified, archive it or move it to Trash. A ticket you restore stays."
           />
           {/* Scheduled commands leave the sidebar unless kept (HS2-MA31ZN); a click still runs once now. */}
           <Switch

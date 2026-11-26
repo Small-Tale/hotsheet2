@@ -349,8 +349,11 @@ pub fn from_settings(
         })
 }
 
+/// The provenance tag prefix every AI command ticket carries (HS2-G5J2E7).
+pub const COMMAND_TAG_PREFIX: &str = "hs2-command:";
+
 pub fn command_tag(command_id: &str) -> String {
-    format!("hs2-command:{command_id}")
+    format!("{COMMAND_TAG_PREFIX}{command_id}")
 }
 
 pub fn occurrence_tag(command_id: &str, date: &str) -> String {

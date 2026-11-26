@@ -51,6 +51,8 @@ export function editCommandDefinition(
         delete updated.effort;
         delete updated.action;
         delete updated.show_when_scheduled;
+        delete updated.cleanup;
+        delete updated.cleanup_since;
       } else if (value === 'shell') {
         delete updated.program;
         delete updated.args;
@@ -60,6 +62,8 @@ export function editCommandDefinition(
         delete updated.effort;
         delete updated.action;
         delete updated.show_when_scheduled;
+        delete updated.cleanup;
+        delete updated.cleanup_since;
       } else {
         delete updated.program;
         delete updated.args;
@@ -69,6 +73,15 @@ export function editCommandDefinition(
       // The editor's default choice stores no action, keeping the legacy click (HS2-17Y2EC).
       if (isScheduleAction(value)) updated.action = value;
       else delete updated.action;
+    } else if (field === 'cleanup') {
+      // None is the default and stores nothing (HS2-27C161).
+      // The settings writer stamps cleanup_since when cleanup turns on and keeps it across
+      // Archive and Delete; turning it off drops it here too.
+      if (value === 'archive' || value === 'delete') updated.cleanup = value;
+      else {
+        delete updated.cleanup;
+        delete updated.cleanup_since;
+      }
     } else if (field === 'show_when_scheduled') {
       // Off is the default and stores nothing (HS2-MA31ZN).
       if (value === 'true') updated.show_when_scheduled = true;

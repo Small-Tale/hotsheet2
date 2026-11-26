@@ -595,6 +595,8 @@ fn hs1_command_definition(
         icon: command.icon.clone(),
         color: command.color.clone(),
         show_when_scheduled: false,
+        cleanup: Default::default(),
+        cleanup_since: None,
     }))
 }
 

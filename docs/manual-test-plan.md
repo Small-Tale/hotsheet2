@@ -734,6 +734,22 @@ it. Hover the button and confirm the tooltip begins with the chosen action. The 
 suite covers the click against a real server without a provider; this check covers the
 live hand-off.
 
+### Command ticket auto-cleanup on live providers (HS2-27C161)
+
+Use the safe synthetic GitHub test repository, then a GitLab and a Jira test project if
+connected. Make one of them the checkout's default source, give a synthetic AI command
+Auto-Cleanup Archive and Action Create Ticket Only, click it, and complete the ticket in
+Hot Sheet. Confirm the response shows the ticket in Archive (on GitHub, the
+`status:archived` label) with an Auto-Cleanup note. Switch to Delete and repeat; confirm
+the ticket lands in Hot Sheet's Trash and Restore brings it back to Completed without
+being cleaned up again. Close one more command ticket directly in the provider's own UI,
+click the command again, and confirm that run moves it too. Only tickets completed after
+Auto-Cleanup was turned on move: a command ticket completed while it was None stays put
+after the next run, and switching Archive to Delete keeps the command's `cleanup_since`
+while None and back restamps it. A provider that refuses
+Archive keeps the ticket and logs a warning. The hermetic suites cover Markdown stores
+and an injected provider; this check covers the provider-native markers.
+
 ### Command edit survives an immediate reload (HS2-25HAK3)
 
 Playwright cannot route the `keepalive` request a real page unload sends, so the browser test

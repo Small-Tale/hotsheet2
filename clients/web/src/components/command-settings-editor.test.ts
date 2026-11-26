@@ -381,4 +381,27 @@ describe('CommandSettingsEditor', () => {
     );
     expect(shell).not.toContain('name="show_when_scheduled"');
   });
+  it('edits an AI command auto-cleanup, defaulting to None (HS2-27C161)', () => {
+    const render = (command: Record<string, unknown>) =>
+      String(
+        CommandSettingsEditor({
+          commands: [{ id: 'r', title: 'Review', kind: 'ai', prompt: 'Review it', ...command }],
+          editingId: 'r',
+        }),
+      );
+    const none = render({});
+    const select = none.match(/<kui-select[^>]*name="cleanup"[^>]*>/)?.[0] ?? '';
+    expect(select).toMatch(/value="none"/);
+    expect(none).toContain('Auto-Cleanup');
+    for (const label of ['None', 'Archive', 'Delete']) expect(none).toContain(`>${label}<`);
+    expect(none).toContain('completed or verified, archive it or move it to Trash');
+    expect(render({ cleanup: 'delete' }).match(/<kui-select[^>]*name="cleanup"[^>]*>/)?.[0]).toMatch(/value="delete"/);
+    const shell = String(
+      CommandSettingsEditor({
+        commands: [{ id: 's', title: 'Lint', kind: 'shell', command: 'npm run lint' }],
+        editingId: 's',
+      }),
+    );
+    expect(shell).not.toContain('name="cleanup"');
+  });
 });

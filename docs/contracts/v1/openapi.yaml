@@ -29826,6 +29826,21 @@ components:
             schedule. Absent or false hides a scheduled command from the sidebar; a click on a
             kept one runs it once now, like an unscheduled command.
           type: boolean
+        cleanup:
+          description: >-
+            HS2-27C161: what happens to the command's tickets once they reach Completed or
+            Verified. Absent or none keeps them; archive sets Archive; delete moves them to the
+            restorable Trash. A ticket with the cleanup note is never cleaned up again.
+          type: string
+          enum: [none, archive, delete]
+        cleanup_since:
+          description: >-
+            HS2-27C161: when cleanup was turned on, as RFC 3339. The settings writer stamps it
+            when cleanup turns on from none, keeps it across archive and delete, and removes it
+            at none; a value sent by a client is ignored. Only tickets that reached Completed or
+            Verified at or after it are cleaned up.
+          type: string
+          format: date-time
       additionalProperties: false
     CommandScheduleAction:
       type: string

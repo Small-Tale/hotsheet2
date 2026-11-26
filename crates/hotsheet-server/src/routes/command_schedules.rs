@@ -497,7 +497,10 @@ pub(crate) async fn run_ai(
         let command = command.clone();
         tokio::task::spawn_blocking(move || {
             let source = checkout_source_for_create(&state, &reference, None)?;
-            create_occurrence_ticket(&state, &reference, &source, &command, None)
+            let ticket = create_occurrence_ticket(&state, &reference, &source, &command, None)?;
+            // Each run also tidies earlier completed tickets no change event reached (HS2-27C161).
+            crate::command_cleanup::sweep(&state, &source.connection_id, &command);
+            Ok::<_, ApiError>(ticket)
         })
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??
@@ -705,6 +708,8 @@ fn occurrence_ticket(
     occurrence_tag: String,
 ) -> Result<(ApiTicket, command_schedules::OccurrenceOutcome), ApiError> {
     let source = checkout_source_for_create(state, reference, None)?;
+    // Each occurrence also tidies earlier completed tickets no change event reached (HS2-27C161).
+    crate::command_cleanup::sweep(state, &source.connection_id, command);
     // HS2-17Y2EC: the schedule's override, else the command's action, else ticket-only.
     let queued = if schedule.effective_action(command.action) == ScheduleAction::CreateTicket {
         command_schedules::OccurrenceOutcome::Created

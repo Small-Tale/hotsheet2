@@ -18540,6 +18540,130 @@ test('hides a scheduled AI command from the sidebar until kept, and a kept one r
   }
 });
 
+test('archives, then trashes, AI command tickets completed after Auto-Cleanup is chosen in its editor (HS2-27C161)', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer({ env: { PATH: '/usr/bin:/bin' } });
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(
+      `${server.root}/.hotsheet2/settings.json`,
+      JSON.stringify({
+        $hotsheetSchema: 1,
+        commands: [
+          {
+            id: 'review',
+            kind: 'ai',
+            title: 'Review synthetic plan',
+            prompt: 'Review a synthetic plan.',
+            action: 'create_ticket',
+          },
+        ],
+      }),
+    );
+    await mockProject(page);
+    // Commands and AI runs are the real server's; the rest is the project fixture.
+    await page.route(
+      /\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups|command-runs|checkouts\/demo-checkout\/(command-schedules|commands\/[^/]+\/ai-run))(\/.*)?$/,
+      async (route) => {
+        const incoming = new URL(route.request().url());
+        const path = projectScopedServerPath(
+          server.checkoutId,
+          incoming.pathname
+            .replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', `/checkouts/${server.checkoutId}`)
+            .replace('/__hotsheet/project-api/demo-checkout', ''),
+        );
+        const response = await proxyFetch(route, {
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      },
+    );
+    const storedCleanup = async () =>
+      (await server.request<Array<{ id: string; cleanup?: string }>>(`/checkouts/${server.checkoutId}/commands`)).find(
+        (command) => command.id === 'review',
+      )?.cleanup;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    const sidebarCommand = page.getByRole('button', { name: 'Review synthetic plan AI command', exact: true }),
+      commandDialog = page.locator('#command-editor-dialog'),
+      row = page.locator('[data-component="command-settings-editor"] [data-command-id="review"]').first(),
+      chooseCleanup = async (value: 'archive' | 'delete') => {
+        await page.getByLabel('Settings View').click();
+        await page.getByRole('button', { name: 'Commands', exact: true }).click();
+        await row.dblclick();
+        const cleanup = commandDialog.locator('kui-select[name="cleanup"]');
+        await expect(cleanup).toHaveJSProperty('value', (await storedCleanup()) ?? 'none');
+        await cleanup.locator('.kui-select__trigger').click();
+        await cleanup.locator(`.kui-select__option[data-value="${value}"]`).click();
+        await expect(cleanup).toHaveJSProperty('value', value);
+        return cleanup;
+      },
+      // Run the command from the sidebar, then complete its ticket the way any worker would.
+      runAndComplete = async () => {
+        await page.getByLabel('List View').click();
+        const runResponse = page.waitForResponse((response) => response.url().endsWith('/ai-run'));
+        await sidebarCommand.click();
+        const run = (await (await runResponse).json()) as { ticket: FullTicket };
+        await server.request(`/tickets/${run.ticket.id}`, 'PATCH', { status: 'completed' });
+        return run.ticket.id;
+      },
+      ticketState = async (id: string) => {
+        const ticket = await server.request<FullTicket>(`/tickets/${id}`);
+        return `${ticket.status}:${ticket.notes.some((note) => note.text.startsWith('Auto-Cleanup '))}`;
+      };
+
+    // None (the default) keeps a completed ticket where it is.
+    const kept = await runAndComplete();
+    await expect.poll(() => ticketState(kept)).toBe('completed:false');
+
+    const cleanup = await chooseCleanup('archive');
+    for (const [label, width, height, colorScheme] of [
+      ['wide-light', 1440, 900, 'light'],
+      ['medium-light', 900, 800, 'light'],
+      ['narrow-light', 390, 844, 'light'],
+      ['narrow-dark', 390, 844, 'dark'],
+      ['wide-dark', 1440, 900, 'dark'],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await page.emulateMedia({ colorScheme });
+      await cleanup.scrollIntoViewIfNeeded();
+      await expect(cleanup).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`hs2-27c161-editor-${label}.png`), animations: 'disabled' });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: 'light' });
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(storedCleanup).toBe('archive');
+    const archived = await runAndComplete();
+    await expect.poll(() => ticketState(archived)).toBe('archive:true');
+    // A ticket completed before cleanup was turned on stays put, even after that run's sweep.
+    expect(await ticketState(kept)).toBe('completed:false');
+    const since = async () =>
+      (
+        await server.request<Array<{ id: string; cleanup_since?: string }>>(`/checkouts/${server.checkoutId}/commands`)
+      ).find((command) => command.id === 'review')?.cleanup_since;
+    const archivedSince = await since();
+    expect(archivedSince).toBeTruthy();
+
+    // Delete moves the next completed ticket to Trash; the earlier tickets stay as they were.
+    await chooseCleanup('delete');
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(storedCleanup).toBe('delete');
+    // Switching Archive to Delete keeps when cleanup was turned on.
+    expect(await since()).toBe(archivedSince);
+    const trashed = await runAndComplete();
+    await expect.poll(() => ticketState(trashed)).toBe('deleted:true');
+    expect(await ticketState(archived)).toBe('archive:true');
+    expect(await ticketState(kept)).toBe('completed:false');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('shows a skipped scheduled command with its outstanding ticket link (HS2-17663F)', async ({ page }, testInfo) => {
   const server = await realTicketServer();
   const ticketSlug = 'HS2-DEMO01';

@@ -222,7 +222,18 @@ pub(crate) async fn usage_metrics_summary(
 }
 
 fn command_revision<T: Serialize>(value: &T) -> Result<String, ApiError> {
-    let bytes = serde_json::to_vec(value)
+    let mut value = serde_json::to_value(value)
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    // The settings writer owns `cleanup_since` (HS2-27C161), so an editor that never saw the
+    // stamp it added is not a conflicting write.
+    if let Some(items) = value.as_array_mut() {
+        for item in items {
+            if let Some(object) = item.as_object_mut() {
+                object.remove(hotsheet_ticketing::command_cleanup::CLEANUP_SINCE_FIELD);
+            }
+        }
+    }
+    let bytes = serde_json::to_vec(&value)
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(format!("\"{:x}\"", Sha256::digest(bytes)))
 }

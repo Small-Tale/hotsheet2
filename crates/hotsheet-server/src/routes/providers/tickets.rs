@@ -533,6 +533,13 @@ pub(crate) fn do_provider_update(
         _ => {}
     }
     reindex_hosted_provider_write(state, connection_id, id);
+    // A completed command ticket in an external provider is cleaned up now, and the caller
+    // sees the archived or trashed result (HS2-27C161).
+    let ticket = if status.is_some() {
+        crate::command_cleanup::after_provider_write(state, connection_id, ticket)
+    } else {
+        ticket
+    };
     Ok((ticket, timing))
 }
 

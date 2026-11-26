@@ -1746,6 +1746,9 @@ export const parseCommandDefinition = shape<CommandDefinition>(
     prompt: isString,
     action: isScheduleActionValue,
     show_when_scheduled: isBoolean,
+    cleanup: (value): value is NonNullable<CommandDefinition['cleanup']> =>
+      value === 'none' || value === 'archive' || value === 'delete',
+    cleanup_since: isString,
   },
 );
 

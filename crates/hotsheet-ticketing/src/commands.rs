@@ -52,6 +52,17 @@ pub struct CommandDefinition {
     /// Absent (false) hides a scheduled command from the sidebar; the schedule still runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub show_when_scheduled: bool,
+    /// What happens to an AI command's tickets once they are completed (HS2-27C161).
+    /// Absent is `none`: they stay where they are.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::command_cleanup::CommandCleanup::is_none"
+    )]
+    pub cleanup: crate::command_cleanup::CommandCleanup,
+    /// When `cleanup` was turned on, as RFC 3339 (HS2-27C161). The settings writer owns it;
+    /// only tickets completed at or after it are cleaned up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_since: Option<String>,
 }
 
 fn is_false(value: &bool) -> bool {
@@ -65,8 +76,27 @@ fn is_program_kind(kind: &CommandKind) -> bool {
 pub fn from_settings(
     settings: &crate::Settings,
 ) -> Result<Vec<CommandDefinition>, crate::SettingsError> {
-    settings
-        .get_effective("commands")?
+    let mut value = settings.get_effective("commands")?;
+    // HS2-27C161: a command with cleanup on but no `cleanup_since` counts from now, and the
+    // stamp is persisted so nothing completed earlier is ever swept.
+    if let Some(commands) = value.as_mut()
+        && crate::command_cleanup::needs_cleanup_since(commands)
+    {
+        let prior = commands.clone();
+        crate::command_cleanup::stamp_cleanup_since(
+            Some(&prior),
+            commands,
+            &crate::command_cleanup::now_rfc3339(),
+        );
+        // The writer stamps its own instant, so read back what it stored when it can.
+        if persist_cleanup_since(settings, commands)
+            && let Some(stored) = settings.get_effective("commands")?
+            && !crate::command_cleanup::needs_cleanup_since(&stored)
+        {
+            *commands = stored;
+        }
+    }
+    value
         .map(serde_json::from_value)
         .transpose()
         .map(|v| v.unwrap_or_default())
@@ -74,6 +104,23 @@ pub fn from_settings(
             key: "commands".into(),
             source,
         })
+}
+
+/// Write stamped commands back to the most specific scope that holds them; whether it
+/// wrote. A failed write keeps the in-memory stamp, and the next read tries again.
+fn persist_cleanup_since(settings: &crate::Settings, commands: &serde_json::Value) -> bool {
+    for scope in [
+        crate::Scope::Local,
+        crate::Scope::Shared,
+        crate::Scope::Global,
+    ] {
+        match settings.get("commands", scope) {
+            Ok(Some(_)) => return settings.set("commands", commands.clone(), scope).is_ok(),
+            Ok(None) => {}
+            Err(_) => return false,
+        }
+    }
+    false
 }
 
 /// Settings key holding the project's explicitly kept command groups (HS2-EZ5KMC).
@@ -180,6 +227,139 @@ mod tests {
                 .is_err()
         );
         assert!(from_settings(&settings).unwrap()[0].show_when_scheduled);
+    }
+
+    /// HS2-27C161: cleanup defaults to none (stored absent), round-trips archive and delete,
+    /// and the settings writer behind `hotsheet-cli settings set commands` refuses others.
+    #[test]
+    fn hs2_27c161_command_cleanup_round_trips_and_validates() {
+        use crate::command_cleanup::CommandCleanup;
+        let plain: CommandDefinition = serde_json::from_value(serde_json::json!(
+            {"id": "review", "title": "Review", "kind": "ai", "prompt": "Review"}
+        ))
+        .unwrap();
+        assert_eq!(plain.cleanup, CommandCleanup::None);
+        assert!(
+            serde_json::to_value(&plain)
+                .unwrap()
+                .get("cleanup")
+                .is_none()
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::Settings::new(dir.path());
+        let command = |cleanup: &str| {
+            serde_json::json!([{"id": "review", "title": "Review", "kind": "ai",
+                "prompt": "Review", "cleanup": cleanup}])
+        };
+        for (raw, expected) in [
+            ("archive", CommandCleanup::Archive),
+            ("delete", CommandCleanup::Delete),
+            ("none", CommandCleanup::None),
+        ] {
+            settings
+                .set("commands", command(raw), crate::Scope::Local)
+                .unwrap();
+            let stored = &from_settings(&settings).unwrap()[0];
+            assert_eq!(stored.cleanup, expected);
+            assert_eq!(
+                serde_json::to_value(stored)
+                    .unwrap()
+                    .get("cleanup")
+                    .is_some(),
+                expected != CommandCleanup::None
+            );
+        }
+        assert!(
+            settings
+                .set("commands", command("purge"), crate::Scope::Local)
+                .is_err()
+        );
+        assert_eq!(
+            from_settings(&settings).unwrap()[0].cleanup,
+            CommandCleanup::None
+        );
+    }
+
+    /// HS2-27C161: every write through the settings writer (the server's command saves and
+    /// `hotsheet-cli settings set commands`) stamps `cleanup_since` when cleanup turns on,
+    /// keeps it across Archive and Delete, and drops it at None.
+    #[test]
+    fn hs2_27c161_settings_writer_owns_cleanup_since() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::Settings::new(dir.path());
+        let write = |cleanup: &str, since: Option<&str>| {
+            let mut command = serde_json::json!({"id": "review", "title": "Review", "kind": "ai",
+                "prompt": "Review", "cleanup": cleanup});
+            if let Some(since) = since {
+                command["cleanup_since"] = since.into();
+            }
+            settings
+                .set(
+                    "commands",
+                    serde_json::json!([command]),
+                    crate::Scope::Local,
+                )
+                .unwrap();
+            from_settings(&settings).unwrap().remove(0).cleanup_since
+        };
+        let first = write("archive", Some("2001-01-01T00:00:00Z")).expect("stamped");
+        assert_ne!(first, "2001-01-01T00:00:00Z", "turning it on records now");
+        assert_eq!(write("delete", None).as_deref(), Some(first.as_str()));
+        assert_eq!(
+            write("archive", Some("2030-01-01T00:00:00Z")).as_deref(),
+            Some(first.as_str())
+        );
+        assert_eq!(write("none", Some(first.as_str())), None);
+        let again = write("delete", None).expect("restamped");
+        let parse = |raw: &str| crate::command_cleanup::parse_instant(raw).unwrap();
+        assert!(parse(&again) >= parse(&first));
+        // set_if (the server's save path) stamps the same way.
+        let written = settings
+            .set_if(
+                "commands",
+                serde_json::json!([{"id": "review", "title": "Review", "kind": "ai",
+                    "prompt": "Review", "cleanup": "archive"}]),
+                crate::Scope::Local,
+                |_| true,
+            )
+            .unwrap();
+        assert!(written);
+        assert_eq!(
+            from_settings(&settings).unwrap()[0]
+                .cleanup_since
+                .as_deref(),
+            Some(again.as_str())
+        );
+    }
+
+    /// HS2-27C161: a command stored with cleanup on but no `cleanup_since` counts from its
+    /// first read, and that stamp is persisted, so later reads keep it.
+    #[test]
+    fn hs2_27c161_missing_cleanup_since_is_stamped_and_persisted_on_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::Settings::new(dir.path());
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "commands".into(),
+            serde_json::json!([{"id": "review", "title": "Review", "kind": "ai",
+                "prompt": "Review", "cleanup": "archive"}]),
+        );
+        settings.replace_scope(crate::Scope::Local, &map).unwrap();
+        let stamped = from_settings(&settings).unwrap()[0]
+            .cleanup_since
+            .clone()
+            .expect("stamped on read");
+        let stored = settings
+            .get("commands", crate::Scope::Local)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored[0]["cleanup_since"], stamped.as_str());
+        assert_eq!(
+            from_settings(&settings).unwrap()[0]
+                .cleanup_since
+                .as_deref(),
+            Some(stamped.as_str())
+        );
     }
 
     /// HS2-17Y2EC: `hotsheet-cli settings set commands` goes through this writer, so a
