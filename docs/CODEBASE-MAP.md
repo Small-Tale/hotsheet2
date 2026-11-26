@@ -2,8 +2,12 @@
 
 For the audited architecture and its source links, see the
 [Structurizr baseline](architecture/README.md). The model records runtime
-and data ownership. The [coverage matrix](architecture/coverage.md) maps
-shared crates and source files to those owners.
+and data ownership. The [coverage matrix](architecture/coverage/overview.md) maps
+shared crates and source files to those owners. Per-area chapters and
+coverage files follow the README's depth standard (HS2-H0T69J);
+`scripts/architecture-coverage.mjs` lists the modules each area must map and
+resolves `path:line` citations, with area roots in
+`docs/architecture/areas.json`.
 
 `scripts/check.sh` runs `scripts/local-gate.mjs`, reusing the HS2-FCCRCK
 `scripts/gate-plan.mjs` dependency plan and exact-input stage receipts. The

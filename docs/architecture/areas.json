@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "threshold_lines": 500,
+  "source_extensions": [".rs", ".ts", ".tsx", ".mjs", ".js", ".swift"],
+  "test_patterns": [
+    "/tests/",
+    "/test/",
+    "/benches/",
+    "/e2e/",
+    "_tests.rs",
+    "_test.rs",
+    "/tests.rs",
+    ".test.ts",
+    ".test.tsx",
+    ".test.mjs",
+    ".spec.ts",
+    ".spec.tsx",
+    ".d.ts"
+  ],
+  "areas": [
+    {
+      "key": "orchestration",
+      "ticket": "HS2-RJB111",
+      "coverage": ["coverage/orchestration.md"],
+      "roots": [
+        "crates/hotsheet-ticketing/src/orchestration",
+        "crates/hotsheet-ticketing/src/advisory_claim",
+        "crates/hotsheet-ticketing/src/claim_",
+        "crates/hotsheet-ticketing/src/distclaim",
+        "crates/hotsheet-ticketing/src/distwork",
+        "crates/hotsheet-ticketing/src/gitref_cas",
+        "crates/hotsheet-ticketing/src/provisional",
+        "crates/hotsheet-resource-claims/src",
+        "crates/hotsheet-jobs/src"
+      ]
+    },
+    {
+      "key": "core",
+      "ticket": "HS2-AH9HAK",
+      "coverage": ["coverage/core.md"],
+      "roots": [
+        "crates/hotsheet-model/src",
+        "crates/hotsheet-ticketing/src",
+        "crates/hotsheet-index/src",
+        "crates/hotsheet-extsync/src",
+        "crates/hotsheet-sync/src",
+        "crates/hotsheet-tls/src",
+        "crates/hotsheet-process-journal/src"
+      ]
+    },
+    {
+      "key": "cli",
+      "ticket": "HS2-TW2DKM",
+      "coverage": ["coverage/cli.md"],
+      "roots": ["crates/hotsheet-cli/src", "crates/hotsheet-mcp/src", "migrator/src"],
+      "list_every_entry": ["crates/hotsheet-cli/src/dispatch"]
+    },
+    {
+      "key": "server",
+      "ticket": "HS2-P27EJM",
+      "coverage": ["coverage/server.md"],
+      "roots": [
+        "crates/hotsheet-server/src",
+        "crates/hotsheet-terminals/src",
+        "crates/hotsheet-aitools/src",
+        "crates/hotsheet-plugins/src",
+        "crates/hotsheet-notify/src",
+        "clients/macos-screensaver/Sources"
+      ],
+      "list_every_entry": ["crates/hotsheet-server/src/routes"]
+    },
+    {
+      "key": "web",
+      "ticket": "HS2-T6SD67 and HS2-AYKHVV",
+      "coverage": ["coverage/web-host.md", "coverage/web-client.md"],
+      "roots": ["clients/web/src-tauri/src", "clients/web/src"]
+    }
+  ]
+}

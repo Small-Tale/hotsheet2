@@ -1,3 +1,5 @@
+// Deployment environments. Shared; HS2-M81CCP owns changes.
+
 desktopUnix = deploymentEnvironment "Desktop on Unix" {
     desktopMachine = deploymentNode "Contributor machine" "User-run desktop installation. The server and broker have independent lifecycles." "macOS / Unix" {
         desktopUi = containerInstance desktop

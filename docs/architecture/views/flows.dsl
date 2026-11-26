@@ -1,45 +1,6 @@
-systemContext hs2 "HS2-Context" "People, tool integrations, authoritative providers, and host services." {
-    include *?
-    autoLayout lr
-    default
-}
-container hs2 "HS2-WorkspaceRuntime" "Main desktop and web runtime, headless entry points, Git storage, and terminal ownership." {
-    include developer web desktop bridge server cli mcp broker launchRelay tickets searchIndex checkoutData machineData aiTool
-    exclude serverRunsCli bridgeReadsCheckout cliUsesMachine serverDeliversBridgeEvents bridgeDeliversWebEvents
-    autoLayout tb
-}
-container hs2 "HS2-ProviderBoundaries" "Authoritative Git or external provider records, local indexed reads, and Git synchronization." {
-    include server cli tickets searchIndex gitRemote github gitlab jira
-    exclude cliCallsServer serverRunsCli
-    autoLayout lr
-}
-container hs2 "HS2-MigrationAndStandby" "Optional local processes for legacy import and the macOS standby display." {
-    include bridge migrator legacy tickets server standby saver
-    exclude bridgeCallsServer serverDeliversBridgeEvents serverCallsGitStore
-    autoLayout lr
-}
-component web "HS2-WebComponents" "Workspace state, checkout API access, event workers, and terminal frontend." {
-    include webWorkspace webApi webChanges webTerminal bridge
-    autoLayout lr
-}
-component server "HS2-TicketComponents" "Checkout routing, provider authority, and local index reconciliation." {
-    include bridge serverTrust serverTickets serverSources serverIndex serverEvents tickets searchIndex github gitlab jira
-    exclude eventsDeliverBridge
-    autoLayout lr
-}
-component server "HS2-ExecutionComponents" "Command admission, sessions, permission boundary, and terminal ownership." {
-    include bridge checkoutData serverTrust serverSchedule serverTickets serverDrive serverTerminal broker aiTool
-    autoLayout lr
-}
-component server "HS2-HostSupport" "Job observation, resource backends, notifications, and machine-local state." {
-    include serverJobs serverNotify serverResources machineData github gitlab ciServices notifierServices sharedClaims gitRemote standby
-    autoLayout lr
-}
-component server "HS2-OrchestrationComponents" "Plan inputs, readiness, authorization, run state, session placement, and job observations." {
-    include bridge checkoutData machineData serverTrust serverOrch serverTickets serverDrive serverJobs serverResources github gitlab
-    exclude jobsUseMachine
-    autoLayout lr
-}
+// Cross-layer dynamic views (end-to-end flows).
+// Owned by HS2-M81CCP. New views use keys prefixed HS2-Flow-.
+
 dynamic server "HS2-WebGitTicketWrite" "One checkout-scoped Git write through the browser bridge and the server." {
     bridgeUsesTrust "Forwards the checkout-qualified request with its corresponding authority"
     trustAdmitsTickets "Admits the request to the checkout ticket API"
@@ -99,16 +60,4 @@ dynamic hs2 "HS2-LegacyImport" "Local import of a copied legacy database into an
     migrationReadsLegacy "Exports from a copy of the HS1 database"
     migrationWritesStore "Imports records and attachments into the Git store"
     autoLayout lr
-}
-deployment hs2 "Desktop on Unix" "HS2-DesktopDeployment" "User-managed Tauri/Node/Rust deployment with a detached terminal broker." {
-    include *
-    autoLayout tb
-}
-deployment hs2 "Headless and serverless" "HS2-HeadlessDeployment" "Direct CLI and serverless MCP paths." {
-    include *
-    autoLayout lr
-}
-deployment hs2 "Remote browser and peer server" "HS2-RemoteDeployment" "A paired browser, orchestrator, and a user-managed Hot Sheet target server." {
-    include *
-    autoLayout tb
 }

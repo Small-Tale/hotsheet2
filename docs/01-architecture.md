@@ -4,7 +4,7 @@
 
 Hot Sheet 2 is a local-first ticketing and AI work coordination system.
 The [Structurizr baseline](architecture/README.md) maps the audited runtime,
-storage and trust boundaries. Its [coverage matrix](architecture/coverage.md)
+storage and trust boundaries. Its [coverage matrix](architecture/coverage/overview.md)
 links each boundary to implementation and test evidence.
 
 The [earlier overview diagram](diagrams/architecture.svg) and its
@@ -21,7 +21,7 @@ provider contracts, checkout links, settings, ticket coordination and the
 orchestration domain. Separate crates implement the local search index,
 native provider adapters, AI-tool setup and drive, terminals, jobs, resource
 leases, notifications and shared infrastructure. The
-[crate ownership table](architecture/coverage.md#cargo-workspace-ownership)
+[crate ownership table](architecture/coverage/overview.md#cargo-workspace-ownership)
 maps the complete workspace. [04-core-server-cli.md](04-core-server-cli.md)
 
 ### hotsheet-server (binary)

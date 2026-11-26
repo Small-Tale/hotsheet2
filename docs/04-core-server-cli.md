@@ -5,7 +5,7 @@
 > §9.2 and the maintainer-confirmation note there.
 
 The original shared-core proposal below describes the intended reuse boundary.
-The [audited architecture baseline](architecture/coverage.md#cargo-workspace-ownership)
+The [audited architecture baseline](architecture/coverage/overview.md#cargo-workspace-ownership)
 maps that boundary to the separate crates and runtime entry points in the
 published implementation.
 
