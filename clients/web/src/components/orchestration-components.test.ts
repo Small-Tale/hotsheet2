@@ -4,6 +4,7 @@ import { findTimelineItem } from '../orchestration-timeline-board';
 import { demoClock, demoDecisions, demoSummary, demoTimeline } from '../ux-demo/orchestration-fixtures';
 import { OrchestrationDecisionsDialog } from './orchestration-decisions-dialog';
 import { OrchestrationInspector, orchestrationInspectorPanel } from './orchestration-inspector';
+import { OrchestrationOverview } from './orchestration-overview';
 import { OrchestrationTimelineView } from './orchestration-timeline-view';
 import { OrchestrationToolbar } from './orchestration-toolbar';
 
@@ -909,5 +910,16 @@ describe('the Orchestration view fills its area (HS2-3JH0QV)', () => {
     const css = readFileSync(new URL('./orchestration-timeline-view.css', import.meta.url), 'utf8');
     expect(css).toContain('grid-template-rows: auto minmax(0, 1fr);');
     expect(css).toMatch(/\.orchestration-timeline-view__body \{[^}]*grid-row: 2;/);
+  });
+});
+
+describe('the overview’s placement for a plan nobody started (HS2-38R8J2)', () => {
+  it('says Not started while work started by hand continues, and Paused once it was started', () => {
+    const overview = (never: boolean) =>
+      String(
+        OrchestrationOverview({ timeline: { ...demoTimeline('paused'), never_started: never }, clock: demoClock }),
+      );
+    expect(overview(true)).toContain('Not started; work started by hand continues');
+    expect(overview(false)).toContain('Paused; running work continues');
   });
 });

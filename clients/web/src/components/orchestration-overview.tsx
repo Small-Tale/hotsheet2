@@ -49,7 +49,10 @@ const placementText = (timeline: OrchestrationTimeline) =>
     : timeline.phase === 'proposed'
       ? 'Not started; the plan is a dry run'
       : timeline.phase === 'paused'
-        ? 'Paused; running work continues'
+        ? // HS2-38R8J2: work started by hand under a plan nobody started is not a pause.
+          timeline.never_started
+          ? 'Not started; work started by hand continues'
+          : 'Paused; running work continues'
         : 'Nothing is placed';
 
 /**
