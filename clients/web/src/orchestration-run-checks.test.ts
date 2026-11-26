@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   dispositionText,
+  gateNextStep,
   parseRunReconciliation,
   reconciliationRows,
   RELINKABLE_WATCH_REASONS,
@@ -203,5 +204,46 @@ describe('a released or returned run in words (HS2-ESVYQH)', () => {
     expect(runEventText({ kind: 'session_request', reason: 'session_request_delivered' })).toBe(
       'Session request (session request delivered)',
     );
+  });
+});
+
+describe('HS2-N9BFHW a reconciliation event reads in the Checked row’s words', () => {
+  it('words each disposition, never the code', () => {
+    expect(runEventText({ kind: 'reconciled', reason: 'hold_unverified', source: 'orchestrator' })).toBe(
+      'Checked · Held: something it depends on could not be verified',
+    );
+    expect(runEventText({ kind: 'reconciled', reason: 'continue' })).toBe(
+      'Checked · The run’s worker holds its ticket',
+    );
+    expect(runEventText({ kind: 'reconciled', reason: 'a_newer_outcome' })).toBe('Checked · A newer outcome');
+    expect(runEventText({ kind: 'reconciled' })).toBe('Reconciled');
+    for (const code of ['continue', 'wait_for_dispatcher', 'retry_dispatch', 'retry_cancel', 'needs_attention'])
+      expect(runEventText({ kind: 'reconciled', reason: code })).not.toContain('_');
+  });
+});
+
+describe('HS2-2751D6 a failed gate says what a person does next', () => {
+  it('names the fix for a failed CI or deployment gate and nothing otherwise', () => {
+    expect(gateNextStep([])).toBeUndefined();
+    for (const state of ['pending', 'passed', 'unknown: nothing watches it yet', 'awaiting_approval'])
+      expect(gateNextStep([{ kind: 'ci', state }])).toBeUndefined();
+    expect(gateNextStep([{ kind: 'review', state: 'failed' }])).toBeUndefined();
+    const ci = gateNextStep([{ kind: 'ci', state: 'failed' }]);
+    expect(ci).toContain('link the new commit’s CI gate');
+    expect(ci).toContain('waits until it passes');
+    expect(gateNextStep([{ kind: 'deployment', state: 'failed' }])).toContain('request it again');
+    // CI first when both failed; a passed one beside a failed one still asks for the fix.
+    expect(
+      gateNextStep([
+        { kind: 'deployment', state: 'failed' },
+        { kind: 'ci', state: 'failed' },
+      ]),
+    ).toBe(ci);
+    expect(
+      gateNextStep([
+        { kind: 'ci', state: 'passed' },
+        { kind: 'ci', state: 'failed' },
+      ]),
+    ).toBe(ci);
   });
 });

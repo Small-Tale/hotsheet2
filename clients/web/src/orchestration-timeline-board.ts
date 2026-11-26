@@ -63,6 +63,9 @@ export function stateWords(item: TimelineItem, proposed: boolean): { label: stri
     case 'waits_for_prerequisite': {
       const wait = firstWait(item);
       if (proposed) return { label: wait ? `After ${wait}` : 'After its prerequisites', tone: 'neutral' };
+      // HS2-2751D6: a prerequisite whose CI failed is repaired before this can start.
+      if (wait && item.waits_on?.[0]?.reason === 'gate_failed')
+        return { label: `Waits on ${wait} · CI failed`, tone: 'warning' };
       return { label: wait ? `Waits on ${wait}` : 'Waits on a prerequisite', tone: 'neutral' };
     }
     case 'waits_for_permission':
@@ -122,6 +125,48 @@ export function runAttention(
   return undefined;
 }
 
+/**
+ * HS2-9FS7YX: a running card's work that the scheduler holds back, so nobody is at work on it although its run is
+ * unfinished. The step's latest logged decision, made after its run was created, either leaves it unplaced while no
+ * session runs for it (its sessions ended before they took up the work until the replacements ran out, or a
+ * resource stays held), or keeps a session that never took up the work and is left for a person. Undefined for a
+ * finished run, a session at work and a decision older than the run.
+ */
+export function schedulerHold(
+  item: TimelineItem,
+  clock: ClockFormat = clockTime,
+): { label: string; tone: SemanticTone; next: string } | undefined {
+  const run = item.run,
+    hint = item.placement;
+  if (item.state !== 'running' && item.state !== 'provisional') return undefined;
+  if (!run || !hint || ['completed', 'failed', 'cancelled'].includes(run.state) || hint.at_ms < run.created_at_ms)
+    return undefined;
+  if (hint.decision === 'keep' && hint.reason === 'never_joined' && hint.detail === 'replacements_exhausted')
+    return {
+      label: 'Session did not join',
+      tone: 'warning',
+      next: 'Its session never took up the work and is left for you: check it in its terminal, or work the ticket by hand.',
+    };
+  if (hint.decision !== 'unplaced' || item.session_state === 'running') return undefined;
+  return {
+    label: hint.retry_at_ms === undefined ? 'Held' : `Held until ${clock(hint.retry_at_ms)}`,
+    tone: 'warning',
+    next:
+      hint.retry_at_ms === undefined
+        ? 'No session works it now; the scheduler starts one when what it waits on changes.'
+        : `No session works it now; the scheduler starts one again by ${clock(hint.retry_at_ms)}.`,
+  };
+}
+
+/** HS2-9FS7YX: what keeps an unfinished run from plain work: its own condition first, then a scheduler hold. */
+export function runNotice(
+  item: TimelineItem,
+  clock: ClockFormat = clockTime,
+): { label: string; tone: SemanticTone; next?: string } | undefined {
+  if (item.state !== 'running' && item.state !== 'provisional') return undefined;
+  return runAttention(item.run) ?? schedulerHold(item, clock);
+}
+
 const RUN_STATES: Readonly<Record<string, string>> = {
   requested: 'Requested; its project has not been asked yet',
   queued: 'Queued for its project’s dispatcher',
@@ -140,6 +185,8 @@ export function runStateText(run: Pick<TimelineRun, 'state' | 'paused'>): string
 
 /** The badge an inspector shows for an item's state. */
 export function stateBadge(item: TimelineItem): { label: string; tone: SemanticTone } {
+  // HS2-9FS7YX: work the scheduler holds back is not running, though its run is unfinished.
+  if (schedulerHold(item)) return { label: 'Held', tone: 'warning' };
   switch (item.state) {
     case 'running':
       return { label: 'Running', tone: 'pop' };
@@ -210,10 +257,12 @@ function cardStatus(item: TimelineItem): TicketStatus {
  * where it runs (machine · tool) and the goal ticket. Shared by the timeline's cards and, through
  * {@link targetLineOrchestration}, a target project's List and Columns (HS2-S3FKJ7).
  */
-export function orchestrationLine(item: TimelineItem, proposed: boolean): TicketRowOrchestration {
-  const working = item.state === 'running' || item.state === 'provisional',
-    attention = working ? runAttention(item.run) : undefined,
-    words = attention ?? ledgerWords(item) ?? stateWords(item, proposed),
+export function orchestrationLine(
+  item: TimelineItem,
+  proposed: boolean,
+  clock: ClockFormat = clockTime,
+): TicketRowOrchestration {
+  const words = runNotice(item, clock) ?? ledgerWords(item) ?? stateWords(item, proposed),
     tool = toolLabel(item.tool);
   return {
     state: words?.label,
@@ -265,11 +314,12 @@ export function timelineCard(
   selectedStep: string | undefined,
   clock: ClockFormat = clockTime,
 ): TicketRowProps {
-  // HS2-FXY5QM: a run nobody is plainly working on says so on its line, without the busy spinner.
-  const working = (item.state === 'running' || item.state === 'provisional') && !runAttention(item.run),
+  // HS2-FXY5QM: a run nobody is plainly working on says so on its line, without the busy spinner. HS2-9FS7YX: so
+  // does one the scheduler holds back.
+  const working = (item.state === 'running' || item.state === 'provisional') && !runNotice(item, clock),
     tool = toolLabel(item.tool),
     slug = itemSlug(item),
-    orchestration = orchestrationLine(item, timeline.phase === 'proposed');
+    orchestration = orchestrationLine(item, timeline.phase === 'proposed', clock);
   return {
     slug,
     qualifiedId: orchestrationCardId(item.step_id),

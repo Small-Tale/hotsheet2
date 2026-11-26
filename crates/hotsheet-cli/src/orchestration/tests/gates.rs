@@ -2280,3 +2280,105 @@ fn hs2_gd3nnk_a_review_is_requested_answered_and_requested_again_on_a_run() {
         ]
     );
 }
+
+/// HS2-N9BFHW: a CI gate that reaches its verdict while the run's last reconciliation
+/// could not verify CI reconciles the run again from the follower, so the run no longer
+/// reads as held for CI. A run never reconciled, or one whose gate only changed without
+/// settling, is left alone; a gate that settles again changes nothing.
+#[test]
+fn hs2_n9bfhw_a_settled_gate_reconciles_a_run_held_unverified_for_it() {
+    use hotsheet_ticketing::orchestration::{Disposition, ExternalSource, Verification};
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
+    let ci = Scripted::new(CI, GateKind::Ci);
+    m.runtime = m.runtime.clone().with_gate_provider(ci.clone());
+    let (a, b, owner) = (sha('a'), sha('b'), m.owner.id.clone());
+    let ci_finding = |m: &Machine| {
+        m.runtime
+            .run(&owner, &run)
+            .unwrap()
+            .reconciliation
+            .map(|found| {
+                let finding = found
+                    .findings
+                    .into_iter()
+                    .find(|finding| finding.source == ExternalSource::CiRun)
+                    .unwrap();
+                (found.disposition, finding.verification, finding.reason)
+            })
+    };
+    let reconciled = |m: &Machine| {
+        m.runtime
+            .run_events(&owner, 0, 500, Some(&run), 0)
+            .unwrap()
+            .entries
+            .iter()
+            .filter(|entry| entry.record.kind == RunEventKind::Reconciled)
+            .count()
+    };
+    let mut follow = GateFollowState::default();
+    m.runtime
+        .gate_link(&owner, &run, link(&a, CI), Some(&worker()), &mut tx)
+        .unwrap();
+    // Never reconciled: a verdict leaves the run's record without a reconciliation.
+    ci.set(&a, verdict(CI, GateState::Failed, 1, &a, Coverage::Exact));
+    let step = m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    assert_eq!(step.changed.len(), 1);
+    assert_eq!(ci_finding(&m), None);
+    // A new commit whose watch is lost: a person's reconcile holds the run unverified.
+    m.runtime
+        .gate_link(&owner, &run, link(&b, CI), Some(&worker()), &mut tx)
+        .unwrap();
+    ci.set(
+        &b,
+        GateReading::new(GateState::Unknown).reason("watch_lost"),
+    );
+    m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    m.runtime
+        .run_reconcile(&owner, &run, Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(
+        ci_finding(&m),
+        Some((
+            Disposition::HoldUnverified,
+            Verification::Unverifiable,
+            Some("watch_lost".into())
+        ))
+    );
+    let before = reconciled(&m);
+    // The gate changes without a verdict: still held, nothing reconciled again.
+    ci.set(&b, GateReading::new(GateState::Pending));
+    assert_eq!(
+        m.runtime
+            .gate_follow_step(&owner, &mut follow, 0, &mut tx)
+            .changed
+            .len(),
+        1
+    );
+    assert_eq!(reconciled(&m), before);
+    assert_eq!(
+        ci_finding(&m).map(|found| found.0),
+        Some(Disposition::HoldUnverified)
+    );
+    // The verdict arrives: the follower reconciles the run, which continues with CI
+    // verified, and the Reconciled event tells the inspector.
+    ci.set(&b, verdict(CI, GateState::Passed, 2, &b, Coverage::Exact));
+    let step = m.runtime.gate_follow_step(&owner, &mut follow, 0, &mut tx);
+    assert_eq!(step.changed.len(), 1);
+    assert_eq!(
+        ci_finding(&m),
+        Some((Disposition::Continue, Verification::Verified, None))
+    );
+    assert_eq!(reconciled(&m), before + 1);
+    // Settled again: nothing left to follow, nothing reconciled again.
+    assert!(
+        !m.runtime
+            .gate_follow_step(&owner, &mut follow, 0, &mut tx)
+            .active
+    );
+    assert_eq!(reconciled(&m), before + 1);
+}

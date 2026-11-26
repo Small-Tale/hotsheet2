@@ -95,6 +95,8 @@ fn hints(records: &[DecisionRecord]) -> BTreeMap<String, PlacementHint> {
                 model: record.model.clone(),
                 session_id: record.session_id.clone(),
                 outcome: record.outcome.clone(),
+                detail: record.detail.clone(),
+                retry_at_ms: record.retry_at_ms,
             },
         );
     }

@@ -431,6 +431,10 @@ test('HS2-A7YCB2 Link Again watches a CI gate the provider kept ending, and word
     await send(server, 'POST', `${base}/runs/${run.run_id}/reconcile`, { actor: scheduler });
     await expect(runSection).toContainText('Not verified', { timeout: 30_000 });
     await expect(runSection).toContainText('CI (the CI provider kept ending the watch');
+    // HS2-N9BFHW: the Events row words the reconciliation as the Checked row does, never its code.
+    const events = page.locator('[data-orchestration-inspector] [data-orchestration-section="Events"]');
+    await expect(events).toContainText('Checked · Held: something it depends on could not be verified');
+    await expect(events).not.toContainText('hold unverified');
     await visualPass(page, 'hs2-a7ycb2', 'watch-gone', {
       show: gates,
       check: () => expect(linkAgain).toBeVisible(),
@@ -452,7 +456,17 @@ test('HS2-A7YCB2 Link Again watches a CI gate the provider kept ending, and word
     // The watch reaches its verdict with nobody linking again.
     provider.run(REPO, { id: 11, sha: commit, status: 'completed', conclusion: 'success' });
     await expect(gates).toContainText('Passed', { timeout: 60_000 });
+    // HS2-N9BFHW: the verdict reconciles the run the CI gate held, so its Run section no longer reads CI as not
+    // verified, and the Events say it continues.
+    await expect(runSection).not.toContainText('Not verified', { timeout: 30_000 });
+    await expect(runSection).toContainText('The run’s worker holds its ticket');
+    await expect(events).toContainText('Checked · The run’s worker holds its ticket');
     await capture(page, 'hs2-a7ycb2', 'linked-again-passed-1440');
+    await visualPass(page, 'hs2-n9bfhw', 'gate-settled', {
+      show: events,
+      check: () => expect(runSection).not.toContainText('Not verified'),
+      atPhone: () => card.click(),
+    });
     expect(provider.requests.every((request) => request.startsWith('GET '))).toBe(true);
   } finally {
     await execute(server.cli, ['job', 'watch', 'stop'], { cwd: server.root, env: server.env }).catch(() => undefined);
@@ -484,9 +498,14 @@ test('HS2-A7YCB2 the inspector demo shows each CI gate state, with Link Again on
     await expect(gates).toContainText(words);
     await expect(gates.getByRole('button', { name: 'Link Again' })).toBeEnabled();
   }
+  // HS2-2751D6: a failed gate says what to do and offers no Link Again.
+  await choose('failed');
+  await expect(gates).toContainText('Fix the work and push the fix');
+  await expect(gates.getByRole('button', { name: 'Link Again' })).toHaveCount(0);
   // Reset returns the pending gate.
   await page.locator('[data-settings="orchestration"] [data-action="reset-settings"]').dispatchEvent('click');
   await expect(gates.getByRole('button', { name: 'Link Again' })).toHaveCount(0);
+  await expect(gates).not.toContainText('Fix the work');
 });
 
 test('HS2-77SRHC a ready card says why it is not running and the overview lists the scheduler’s decisions', async ({
@@ -1304,7 +1323,15 @@ test('HS2-ADASY5 a worker that crashes at launch is not restarted without bound 
     const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
     const why = page.locator('[data-orchestration-inspector] [data-orchestration-section="Why It Is Not Running"]');
     const row = (label: string) => why.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    // HS2-9FS7YX: the card reads held with when it starts again, not Working with the busy spinner, and so do the
+    // inspector's badge and its Run section.
+    await expect(card.locator('[data-orchestration-part="state"]')).toHaveText(/^Held until .+/, { timeout: 30_000 });
+    await expect(card).toHaveAttribute('data-busy', 'false');
     await card.click();
+    await expect(page.locator('[data-orchestration-inspector] [data-component="badge"]').first()).toHaveText('Held');
+    await expect(page.locator('[data-orchestration-inspector] [data-orchestration-section="Run"]')).toContainText(
+      /No session works it now; the scheduler starts one again by .+/,
+    );
     await expect(row('Scheduler').locator('dd')).toHaveText(
       /^Waits: the sessions started for it ended before they took up the work, so none starts for a while/,
       { timeout: 30_000 },
@@ -1318,6 +1345,11 @@ test('HS2-ADASY5 a worker that crashes at launch is not restarted without bound 
       show: why,
       check: () => expect(row('What to do')).toHaveCount(1),
       atPhone: () => card.click(),
+    });
+    // The board re-renders its cards at each width, so the pass scrolls nothing: the held card is in Working Now,
+    // the column every width opens on (HS2-3KHE7R).
+    await visualPass(page, 'hs2-9fs7yx', 'card-held', {
+      check: () => expect(card.locator('[data-orchestration-part="state"]')).toHaveText(/^Held until .+/),
     });
   } finally {
     await server.stop(page);

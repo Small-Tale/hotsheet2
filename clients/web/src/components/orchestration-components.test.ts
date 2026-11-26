@@ -476,6 +476,44 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(sections(inspector('step-3', { details: { loading: false } }))).not.toContain('Why It Is Not Running');
   });
 
+  it('HS2-2751D6 says what to do under a failed CI gate, and nothing under a pending one', () => {
+    const gates = (state: string) =>
+      inspector('step-3', { details: { loading: false, gates: [{ kind: 'ci', state, commit: '3f9c2a1d00' }] } });
+    const failed = gates('failed');
+    expect(failed).toContain('CI · 3f9c2a1');
+    expect(failed).toContain('>What to do<');
+    expect(failed).toContain('link the new commit’s CI gate, which replaces this one');
+    expect(gates('pending')).not.toContain('>What to do<');
+  });
+
+  it('HS2-9FS7YX badges a running card the scheduler holds back as Held and says when it starts again', () => {
+    const running = item('step-3');
+    const held = String(
+      OrchestrationInspector({
+        item: {
+          ...running,
+          session_state: 'lost',
+          placement: {
+            at_ms: running.run!.created_at_ms + 1,
+            decision: 'unplaced',
+            reason: 'never_joined',
+            detail: 'replacements_exhausted',
+            retry_at_ms: running.run!.created_at_ms + 3_600_000,
+          },
+        },
+        timeline: demoTimeline('running'),
+        clock: demoClock,
+        details: { loading: false },
+      }),
+    );
+    expect(held).toMatch(/data-component="badge"[^>]*>Held</);
+    expect(held).not.toMatch(/data-component="badge"[^>]*>Running</);
+    expect(held).toContain('No session works it now; the scheduler starts one again by 14:55.');
+    // Its run controls stay, so a person can still cancel or correct it.
+    expect(held).toContain('data-control=');
+    expect(inspector('step-3')).toMatch(/data-component="badge"[^>]*>Running</);
+  });
+
   it('HS2-15G5T4 places the Plan section after what the card waits on, before its Run', () => {
     const sections = (markup: string) =>
       [...markup.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);

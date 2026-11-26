@@ -2639,7 +2639,12 @@ a missing watch outranks a live one. Reconciliation records nothing about the ga
 itself; the gate follower or the next `gate sync` brings the gate in line with the
 same reading. A live watch makes `may_start(ci_run)` false, and `gate link` never
 starts a second watch while one is live: the watch is found or reattached by its
-target, and only a finished one is watched again.
+target, and only a finished one is watched again. When the follower records a CI or
+deployment gate reaching its verdict (`passed` or `failed`) while the run's last
+reconciliation found that source (`ci_run` or `deployment`) `unverifiable`, it
+reconciles the run again, as whoever dispatched it, so the run no longer reads as held
+for a source that has since answered (HS2-N9BFHW). A run never reconciled, a finished
+run, and a gate that changes without a verdict are left alone.
 
 ### Deployments (HS2-BYEB60)
 
@@ -6146,7 +6151,8 @@ A read on the server also starts the target followers of §26.9.
 - **Cards** are the shared `TicketRow` with its new **orchestration line**: the state in
   words with a tone (Ready, Waits on API-12, Waits for permission, Waits for your
   decision on LCH-1, Provisional on WEB-33; running and done say it through the status
-  badge), where it runs (machine · tool) and the goal ticket. List and Columns take the
+  badge; "Waits on API-12 · CI failed", warning, when the prerequisite's CI gate failed,
+  readiness reason `gate_failed`, HS2-2751D6), where it runs (machine · tool) and the goal ticket. List and Columns take the
   same prop, and a target project's own List and Columns show it on its planned
   tickets (§26.29, HS2-S3FKJ7). Work started ahead of a pending gate words its ledger
   record exactly as a worker's card does (HS2-H5H9QP, the same `provisionalLine` as
@@ -6158,13 +6164,27 @@ A read on the server also starts the target followers of §26.9.
   line instead of the busy Working state (HS2-FXY5QM): "Project unreachable" (warning),
   "Cancelling", "No worker holds it" (warning; the run is `intervened`: its worker let go
   of the claim, or a person or another worker took it) and "Paused", in that order when
-  several hold. The inspector's Run section words the run state ("Dispatched to a
-  worker", "No worker holds it") and adds a **Next** row with what a person can do.
+  several hold. After those, a running card whose step the scheduler holds back reads
+  held, not Working with the busy spinner (HS2-9FS7YX): the timeline item's `placement`
+  (the step's latest logged decision, now with its `detail` and `retry_at_ms`), made
+  after the run was created, leaves the step `unplaced` while no session runs for it
+  ("Held until 15:00", warning; "Held" without a retry time), for example once its
+  sessions ended before they took up the work until the replacements ran out
+  (`never_joined` / `replacements_exhausted`, HS2-ADASY5), or keeps a session that never
+  joined with its replacements exhausted, left for a person ("Session did not join",
+  warning). The inspector's badge then reads **Held** (warning) instead of Running, and
+  its Why It Is Not Running section says why. The inspector's Run section words the run
+  state ("Dispatched to a worker", "No worker holds it") and adds a **Next** row with
+  what a person can do, including when the scheduler starts a session again.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
   §26.14, each a person's act with a confirmation where undo cannot help), then the
-  run's gates, validation steps and latest events. The maintainer's default decision
+  run's gates, validation steps and latest events. A failed CI gate adds a **What to
+  do** row to Gates: fix the work and push the fix, link the new commit's CI gate (which
+  supersedes the failed one, so it leaves the list), and work that needs this ticket's CI
+  waits until it passes; a failed deployment asks for the deployment again (HS2-2751D6).
+  The maintainer's default decision
   (HS2-PR984R): once the scheduler has placed or would place the step on another site of
   its project (`scheduler explain`'s `site`), Where It Runs names that chosen site and its
   machine, with a **Step's site** row naming the site the step itself names, so it agrees
@@ -7214,7 +7234,9 @@ out), and **Differs** each `mismatched` one. A run whose state changed since kee
 outcome (HS2-68DWAM) and reads "Not checked since its last change". The inspector
 reads the run record (`GET /checkouts/{owner}/orchestration/runs/{run}`) with its
 gates, events and validations whenever the timeline's version changes; a new outcome
-is a `reconciled` run event, so it shows without polling. Words live in
+is a `reconciled` run event, so it shows without polling. The Events rows word that
+event with the same disposition words ("Checked · Held: something it depends on could
+not be verified"), never the code (HS2-N9BFHW). Words live in
 `clients/web/src/orchestration-run-checks.ts`.
 
 ### Validation and Run Validation (HS2-9XJEZC)
