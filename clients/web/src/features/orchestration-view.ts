@@ -22,6 +22,7 @@ import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } fro
 import { parseContention, type ResourceContentionView } from '../orchestration-resources';
 import { CI_WATCH_REASONS, parseRunReconciliation, relinkRequest } from '../orchestration-run-checks';
 import {
+  heldExplanation,
   parseDecisionPage,
   parseExplanation,
   parseIntegratorStanding,
@@ -743,6 +744,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       ),
       error: failed ? 'Some of this run’s records could not be read.' : undefined,
       integrator: parseIntegratorStanding(value(explained)),
+      held: heldExplanation(value(explained)),
       pendingValidations: pending,
     };
   }

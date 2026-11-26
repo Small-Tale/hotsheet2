@@ -72,6 +72,8 @@ const REASONS: Readonly<Record<string, string>> = {
   // HS2-ZY4Z4G: the detail names the requirement, such as `os:windows`.
   requirement_unmet: 'its project’s machine does not meet a requirement of the step',
   requirement_unknown: 'its project’s machine has not said whether it meets a requirement of the step',
+  // HS2-ADASY5: the sessions started for its run ended before they took up the work, until the replacements ran out.
+  never_joined: 'the sessions started for it ended before they took up the work, so none starts for a while',
   permission_required: 'it waits for a person’s permission',
   actor_required: 'the scheduler has not looked at it yet',
   // HS2-2Y535C: the explain answer's own codes for a step the pass did not rank.
@@ -167,6 +169,10 @@ const STANDINGS: Readonly<Record<string, string>> = {
   not_ready: 'It is not ready',
 };
 
+/** HS2-ADASY5: the next step for a person when the sessions started for a step never take up its work. */
+const NEVER_JOINED_NEXT =
+  'Open the AI tool in a terminal of its project to check that it starts and is signed in, or work the ticket by hand';
+
 /** The Why It Is Not Running rows from `scheduler explain`, with the time of the scheduler's last pass. */
 export function explanationRows(
   explanation: SchedulerExplanation,
@@ -189,6 +195,8 @@ export function explanationRows(
   if (explanation.site && passed.length > 0) rows.push({ label: 'Site', value: siteLabel(explanation.site, timeline) });
   for (const pass of passed)
     rows.push({ label: `Not on ${siteLabel(pass.target_id, timeline)}`, value: sentence(sitePassText(pass)) });
+  // HS2-ADASY5: what a person can do while the step's sessions do not take up its work.
+  if (explanation.reason === 'never_joined') rows.push({ label: 'What to do', value: NEVER_JOINED_NEXT });
   if (explanation.retry_at_ms !== undefined)
     rows.push({ label: 'Next', value: `Looked at again by ${clock(explanation.retry_at_ms)}` });
   else if (explanation.standing === 'not_placed')
@@ -310,6 +318,15 @@ export function parseDecisionPage(value: Record<string, unknown>): SchedulerDeci
 }
 
 /** Read `scheduler explain`, or undefined when it is not that shape. */
+/**
+ * HS2-ADASY5: a card with a run whose session is gone and that a fresh pass does not start again; undefined for
+ * one that runs or will start.
+ */
+export function heldExplanation(value: Record<string, unknown> | undefined): SchedulerExplanation | undefined {
+  const explanation = parseExplanation(value);
+  return explanation?.standing === 'not_placed' ? explanation : undefined;
+}
+
 export function parseExplanation(value: Record<string, unknown> | undefined): SchedulerExplanation | undefined {
   if (!value || typeof value.standing !== 'string' || typeof value.reason !== 'string') return undefined;
   const placement = value.placement as Record<string, unknown> | undefined;

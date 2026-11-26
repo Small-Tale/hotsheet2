@@ -4970,3 +4970,231 @@ fn hs2_esvyqh_a_returned_run_whose_session_was_lost_is_placed_again_on_the_same_
     );
     assert_eq!(f.level(&step, &mut tx), ReadinessLevel::InProgress);
 }
+
+/// `(reason, detail, retry_at_ms)` of the pass's unplaced entry for `step`, if any.
+fn step_blocked(
+    tick: &TickView,
+    step: &str,
+) -> Option<(&'static str, Option<String>, Option<u64>)> {
+    tick.view
+        .schedule
+        .unplaced
+        .iter()
+        .find(|item| item.step_id == step)
+        .map(|item| (item.reason.code(), item.detail.clone(), item.retry_at_ms))
+}
+
+/// HS2-ADASY5: the worker generation `n` of `step` lost at launch: started (by this
+/// pass or the next), then its terminal is gone before it joined.
+fn worker_crashes(f: &Placed, step: &str, n: u32, tx: &mut Transaction<'_>) {
+    let base = format!("sched-start-{step}");
+    starts_generation(f, &base, n, tx);
+    let started = f.record(&generation_of(&base, n));
+    assert_eq!(started.role, SessionRole::Worker);
+    f.host.crash(&f.terminal(&started));
+}
+
+/// HS2-ADASY5: a scheduler-started worker whose AI tool crashes at launch, before it
+/// ever joins, is a failed attempt of its run. After three such sessions in a row the
+/// step is not started again: it reports `never_joined`, detail
+/// `replacements_exhausted`, until an hour after the last loss, and then gets one
+/// start, on the same run.
+#[test]
+fn hs2_adasy5_a_worker_that_crashes_before_joining_is_bounded_then_reported() {
+    use hotsheet_ticketing::orchestration::DecisionKind;
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let step = f.ready("Crashes at launch", &mut tx);
+    let base = format!("sched-start-{step}");
+    let mut lost_at = START;
+    for n in 1..=3 {
+        lost_at = START + u64::from(n) * MINUTE;
+        f.at(&clock, lost_at);
+        worker_crashes(&f, &step, n, &mut tx);
+    }
+    let run = f.run_of(&step);
+    // The pass that learns of the third loss, and every pass after it, starts nothing
+    // and says why, however often it runs.
+    for _ in 0..3 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(role_starts(&tick, &base), 0, "{:?}", tick.outcomes);
+        assert_eq!(
+            step_blocked(&tick, &step),
+            Some((
+                "never_joined",
+                Some("replacements_exhausted".into()),
+                Some(lost_at + 60 * MINUTE)
+            ))
+        );
+        assert!(
+            tick.view.schedule.retry_at_ms.unwrap() <= lost_at + 60 * MINUTE,
+            "the loop wakes by then"
+        );
+    }
+    for n in 1..=3 {
+        let record = f.record(&generation_of(&base, n));
+        assert_eq!(record.state, SessionState::Lost, "generation {n}");
+        assert_eq!(record.joined_at_ms, None);
+        assert_eq!(record.run_id.as_deref(), Some(run.run_id.as_str()));
+    }
+    assert_eq!(f.host.launches().len(), 3, "no fourth launch");
+    // Explain says the same for the step.
+    let explained = f.explain(&step, &mut tx);
+    let explained = serde_json::to_value(&explained).unwrap();
+    assert_eq!(explained["standing"], "not_placed", "{explained}");
+    assert_eq!(explained["reason"], "never_joined");
+    assert_eq!(explained["detail"], "replacements_exhausted");
+    assert_eq!(explained["retry_at_ms"], json!(lost_at + 60 * MINUTE));
+    let log =
+        f.m.runtime
+            .scheduler_decisions(&f.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries;
+    assert!(log.iter().any(|entry| {
+        entry.record.kind == DecisionKind::Unplaced
+            && entry.record.reason.as_deref() == Some("never_joined")
+            && entry.record.detail.as_deref() == Some("replacements_exhausted")
+    }));
+    // Just before the hour: still held back. At the hour: the fourth generation, once,
+    // on the same run.
+    f.at(&clock, lost_at + 60 * MINUTE - 1);
+    assert_eq!(role_starts(&f.tick(&mut tx), &base), 0);
+    f.at(&clock, lost_at + 60 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(role_starts(&tick, &base), 1, "{:?}", tick.outcomes);
+    assert!(step_blocked(&tick, &step).is_none());
+    let fourth = f.record(&generation_of(&base, 4));
+    assert_eq!(fourth.state, SessionState::Running);
+    assert_eq!(fourth.run_id.as_deref(), Some(run.run_id.as_str()));
+    assert_eq!(role_starts(&f.tick(&mut tx), &base), 0);
+    // It crashes too: held back again at once, for another hour.
+    let again = lost_at + 61 * MINUTE;
+    f.at(&clock, again);
+    f.host.crash(&f.terminal(&fourth));
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(role_starts(&tick, &base), 0, "{:?}", tick.outcomes);
+        assert_eq!(
+            step_blocked(&tick, &step).map(|(.., retry)| retry),
+            Some(Some(again + 60 * MINUTE))
+        );
+    }
+    assert_eq!(f.host.launches().len(), 4);
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+}
+
+/// HS2-ADASY5: a worker that joined its pool and was lost later did take up its work:
+/// it is replaced as before, however many lost-before-joining generations came first,
+/// and the failures in a row start over from it.
+#[test]
+fn hs2_adasy5_a_worker_lost_after_joining_is_replaced_and_resets_the_count() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let step = f.ready("Joins once", &mut tx);
+    let base = format!("sched-start-{step}");
+    for n in 1..=2 {
+        worker_crashes(&f, &step, n, &mut tx);
+    }
+    // The third joins, then its terminal dies.
+    starts_generation(&f, &base, 3, &mut tx);
+    let third = f.record(&generation_of(&base, 3));
+    let worker_id = third.hosted.as_ref().unwrap().worker_id.clone();
+    f.pool(|state| {
+        state
+            .workers
+            .insert(worker_id.clone(), role(&worker_id, 4_000_000_000));
+    });
+    let tick = f.tick(&mut tx);
+    assert_eq!(placed(&tick, &third.session_id).0, PlacementAction::Keep);
+    assert!(f.record(&third.operation_id).joined_at_ms.is_some());
+    f.at(&clock, START + MINUTE);
+    f.host.crash(&f.terminal(&third));
+    f.pool(|_| {});
+    // Replaced, though two failures came before it.
+    let tick = starts_generation(&f, &base, 4, &mut tx);
+    assert!(step_blocked(&tick, &step).is_none());
+    assert_eq!(f.record(&third.operation_id).state, SessionState::Lost);
+    // The count starts over: two more crashes are replaced, the third is held back.
+    f.host
+        .crash(&f.terminal(&f.record(&generation_of(&base, 4))));
+    for n in 5..=6 {
+        worker_crashes(&f, &step, n, &mut tx);
+    }
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(role_starts(&tick, &base), 0, "{:?}", tick.outcomes);
+        assert_eq!(
+            step_blocked(&tick, &step).map(|(reason, ..)| reason),
+            Some("never_joined")
+        );
+    }
+    assert_eq!(f.host.launches().len(), 6);
+}
+
+/// HS2-ADASY5: wound down for not joining (`Stopped`) and lost before joining (`Lost`)
+/// count together for a worker's run. Two lost generations leave a third that never
+/// joins kept with `replacements_exhausted` rather than wound down; once it is lost
+/// too, the step is held back. Another step's failures never count toward this one.
+#[test]
+fn hs2_adasy5_stopped_and_lost_workers_that_never_joined_count_together() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let step = f.ready("Mixed", &mut tx);
+    let base = format!("sched-start-{step}");
+    // Generation 1 never joins: wound down when its time is up.
+    f.tick(&mut tx);
+    let first = f.record(&base);
+    f.at(&clock, START + 10 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &first.session_id),
+        (PlacementAction::WindDown, "never_joined", None)
+    );
+    assert_eq!(f.record(&base).state, SessionState::Stopped);
+    // Generation 2 crashes at launch.
+    worker_crashes(&f, &step, 2, &mut tx);
+    // Generation 3 runs and never joins: two failures came before it, so it is kept
+    // and reported rather than wound down.
+    starts_generation(&f, &base, 3, &mut tx);
+    let third = f.record(&generation_of(&base, 3));
+    f.at(&clock, START + 30 * MINUTE);
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+        assert_eq!(
+            placed(&tick, &third.session_id),
+            (
+                PlacementAction::Keep,
+                "never_joined",
+                Some("replacements_exhausted".into())
+            )
+        );
+    }
+    // Another step's run starts and is unaffected by this one's failures.
+    let other = f.ready("Unrelated", &mut tx);
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        role_starts(&tick, &format!("sched-start-{other}")),
+        1,
+        "{:?}",
+        tick.outcomes
+    );
+    // The kept third is lost: the step is held back for an hour.
+    let lost_at = START + 31 * MINUTE;
+    f.at(&clock, lost_at);
+    f.host.crash(&f.terminal(&third));
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(role_starts(&tick, &base), 0, "{:?}", tick.outcomes);
+        assert_eq!(
+            step_blocked(&tick, &step),
+            Some((
+                "never_joined",
+                Some("replacements_exhausted".into()),
+                Some(lost_at + 60 * MINUTE)
+            ))
+        );
+        assert!(step_blocked(&tick, &other).is_none());
+    }
+    assert_eq!(f.host.launches().len(), 4);
+}

@@ -459,6 +459,23 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(inspector('step-1')).not.toContain('data-control=');
   });
 
+  it('HS2-ADASY5 says why a running card whose sessions never took up its work is not started again', () => {
+    const sections = (markup: string) =>
+      [...markup.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
+    const held = inspector('step-3', {
+      details: {
+        loading: false,
+        held: { standing: 'not_placed', reason: 'never_joined', detail: 'replacements_exhausted', retry_at_ms: 9 },
+      },
+    });
+    expect(sections(held).slice(0, 4)).toEqual(['Where It Runs', 'Why It Is Not Running', 'Plan', 'Run']);
+    expect(held).toContain('ended before they took up the work');
+    expect(held).toContain('or work the ticket by hand');
+    expect(held).toContain('Looked at again by');
+    // Without a held explanation a running card has no such section.
+    expect(sections(inspector('step-3', { details: { loading: false } }))).not.toContain('Why It Is Not Running');
+  });
+
   it('HS2-15G5T4 places the Plan section after what the card waits on, before its Run', () => {
     const sections = (markup: string) =>
       [...markup.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
