@@ -454,7 +454,10 @@ test('typing never writes to the server and one blur saves the whole edit withou
   await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
   await expect.poll(storedDraft).toBeUndefined();
 
-  // Continuing after the save bases the next write off the committed token; still no prompt.
+  // Continuing after the save bases the next write off the committed token; still no prompt. The
+  // editor closes only once the delayed save answers, so this step always runs after it; the
+  // during-the-save order is pinned in ticket-editor-autosave-transitions.spec.ts (HS2-7D3MPP).
+  await expect(editor).toBeHidden();
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   await editor.fill('Intro\n- the sign in flow is quite awkward\n- and the sign out too');
   await page.waitForTimeout(400);

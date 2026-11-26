@@ -902,6 +902,24 @@ while holding the batch response. The test then reopens Details and types, and
 releases the batch. It asserts exactly one details PATCH to the archived ticket, the
 row leaving the open view, and no leftover recovery draft.
 
+HS2-7D3MPP walks the ticket-editor autosave transitions through the shipped
+inspector in `clients/web/tests/ticket-editor-autosave-transitions.spec.ts`:
+
+- A reload whose recovery copy conflicts with a newer server value shows the field-conflict card instead of discarding the text; the copy survives another reload; Apply saves once on the server token and clears it; Use Theirs clears it without a write; reopening is clean.
+- Page hide saves an open Details edit and keeps the editor open; typing after returning saves once more on the committed token without a conflict.
+- A held blur save with an edit typed before it answers and after it answers: the answer never closes the focused editor or sends the newer typing, and the next blur saves it without a prompt.
+- Selecting another ticket inside the 150 ms typing pause, with the caret at the start and at the end: one PATCH to the edited ticket, the neighbour untouched, no leftover copy, and no stale restore.
+- A failed blur save shows the error, keeps the editor text and its local copy; a second focus loss sends nothing; reopening restores the copy and blur saves it.
+- A stale cached detail refreshed after the edit began: the blur save merges on the refreshed token with no 409 retry, and an untouched open editor adopts the refreshed text.
+
+`clients/web/tests/ticket-edit-sequencing.spec.ts` now waits for the editor to close
+before its edits-after-save step, so that step deterministically follows the save.
+`clients/web/src/debounced-autosave.test.ts` pins that a flush sends only what was
+queued when it began (in both orders), a page-hide flush still sends a waiting value,
+a failed save is not resent without new typing, and cancel during a save drops queued
+text. `clients/web/src/ticket-draft-store.test.ts` covers the pure
+`planTicketDraftRestore` decision (none, restore, merge, conflict, native intent).
+
 HS2-P9A21R covers the five-view phone toolbar and reachable sidebar toggle
 through the shipped shell in `clients/web/tests/shell-composition.spec.ts`.
 `mobile-layout.spec.ts` keeps overlay and resize navigation in the affected

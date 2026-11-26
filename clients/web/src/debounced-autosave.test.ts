@@ -306,6 +306,119 @@ describe('createFocusLossAutosave (HS2-RE1PS6)', () => {
     await expect(autosave.flush()).resolves.toBe(true);
     expect(saved).toEqual(['one', 'two']);
   });
+
+  it('HS2-7D3MPP leaves text typed behind an in-flight save for the next flush, in either order', async () => {
+    let release: (value: boolean) => void = () => {};
+    const saved: string[] = [];
+    const autosave = createFocusLossAutosave(
+      (value: string) =>
+        new Promise<boolean>((resolve) => {
+          saved.push(value);
+          release = resolve;
+        }),
+      { delay: 10 },
+    );
+    autosave.schedule('first');
+    const blur = autosave.flush();
+    // A second focus-loss flush (another listener, page hide) arrives with nothing queued.
+    const echo = autosave.flush();
+    // The user goes back into the editor and types before the first save answers.
+    autosave.schedule('first second');
+    release(true);
+    await expect(blur).resolves.toBe(true);
+    await expect(echo).resolves.toBe(true);
+    // Neither flush sends the newer typing: it waits for the next focus loss.
+    expect(saved).toEqual(['first']);
+    expect(autosave.pending()).toBe(true);
+    const next = autosave.flush();
+    expect(saved).toEqual(['first', 'first second']);
+    release(true);
+    await expect(next).resolves.toBe(true);
+    // After the save answered, an edit is likewise held until the next flush.
+    autosave.schedule('first second third');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(saved).toEqual(['first', 'first second']);
+    const last = autosave.flush();
+    release(true);
+    await expect(last).resolves.toBe(true);
+    expect(saved).toEqual(['first', 'first second', 'first second third']);
+    expect(autosave.pending()).toBe(false);
+  });
+
+  it('HS2-7D3MPP still sends a value that was waiting when a flush began behind an active save', async () => {
+    let release: (value: boolean) => void = () => {};
+    const saved: string[] = [];
+    const autosave = createFocusLossAutosave(
+      (value: string) =>
+        new Promise<boolean>((resolve) => {
+          saved.push(value);
+          release = resolve;
+        }),
+    );
+    autosave.schedule('one');
+    const first = autosave.flush();
+    autosave.schedule('two');
+    // Page hide flushes while 'one' is in flight: 'two' was already waiting, so it is sent after.
+    const hide = autosave.flush();
+    autosave.schedule('two and three');
+    release(true);
+    await expect(first).resolves.toBe(true);
+    await vi.waitFor(() => {
+      expect(saved).toEqual(['one', 'two and three']);
+    });
+    release(true);
+    await expect(hide).resolves.toBe(true);
+  });
+
+  it('HS2-7D3MPP reports a failed save, keeps the local copy, and does not resend without new typing', async () => {
+    const persisted: string[] = [],
+      saved: string[] = [];
+    let ok = false;
+    const autosave = createFocusLossAutosave(
+      async (value: string) => {
+        saved.push(value);
+        return ok;
+      },
+      { persist: (value) => persisted.push(value), delay: 10 },
+    );
+    autosave.schedule('draft');
+    await expect(autosave.flush()).resolves.toBe(false);
+    expect(saved).toEqual(['draft']);
+    expect(persisted).toEqual(['draft']);
+    expect(autosave.pending()).toBe(false);
+    // A second focus loss with no typing has nothing to send; the caller's local copy is the retry.
+    await expect(autosave.flush()).resolves.toBe(true);
+    expect(saved).toEqual(['draft']);
+    // Restoring the copy schedules it again, and the next flush retries it.
+    ok = true;
+    autosave.schedule('draft');
+    await expect(autosave.flush()).resolves.toBe(true);
+    expect(saved).toEqual(['draft', 'draft']);
+  });
+
+  it('HS2-7D3MPP cancel during an in-flight save drops queued text but lets the save finish', async () => {
+    let release: (value: boolean) => void = () => {};
+    const saved: string[] = [];
+    const autosave = createFocusLossAutosave(
+      (value: string) =>
+        new Promise<boolean>((resolve) => {
+          saved.push(value);
+          release = resolve;
+        }),
+    );
+    autosave.schedule('mine');
+    const flushing = autosave.flush();
+    // The selection changes: the editor's owner cancels while the blur save is still running.
+    autosave.schedule('mine plus');
+    autosave.cancel();
+    expect(autosave.pending()).toBe(true);
+    release(true);
+    await expect(flushing).resolves.toBe(true);
+    expect(saved).toEqual(['mine']);
+    expect(autosave.pending()).toBe(false);
+    await expect(autosave.flush()).resolves.toBe(true);
+    expect(saved).toEqual(['mine']);
+  });
 });
 
 describe('createCoalescedInput (HS2-9CWDSB)', () => {

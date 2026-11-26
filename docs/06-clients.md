@@ -1019,9 +1019,20 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   instead of one per pause, and nothing this client typed can come back as "their"
   version. Reopening an editor whose local copy differs from its base restores the copy on
   the same base (a toast says so); if the ticket changed meanwhile the copy is merged when
-  the edits are disjoint and otherwise discarded in favour of the current value. A
+  the edits are disjoint. When the same text changed, the copy is never discarded: the
+  editor opens on the current value and the field-conflict card shows both versions; the
+  copy survives reloads and selection changes until the card is resolved (Use Theirs, or
+  a successful Apply of the merged value) (HS2-7D3MPP). A
   successful save or an explicit cancel clears the copy; tag chips remain immediate
-  discrete saves (HS2-RE1PS6). Sometimes a list refresh would deselect the ticket being edited,
+  discrete saves (HS2-RE1PS6). A focus-loss save sends only what was typed before focus
+  left: text typed after the user returns to an editor whose save is still in flight is
+  kept for the next focus loss, and that save's answer does not close the editor while it
+  has focus or unsaved text. Page hide saves an open edit and leaves the editor open; the
+  next blur saves later typing on the committed token. A failed save shows the error,
+  keeps the text and its local copy, and reopening the editor restores the copy for retry.
+  A recently viewed ticket shown from cache and refreshed after an edit began is
+  reconciled like a live refresh, so the blur save uses the refreshed token and an editor
+  with nothing typed adopts the refreshed text (HS2-7D3MPP). Sometimes a list refresh would deselect the ticket being edited,
   for example when another worker completes it or it leaves the active filter. Its unsaved
   edit is then saved to that ticket first, while the ticket is still listed and selected.
   Only after that does the refresh remove it, so the edit is never dropped. A refresh that

@@ -95,8 +95,8 @@ import {
   captureTicketDraft,
   clearTicketDraft,
   loadTicketDraft,
+  planTicketDraftRestore,
   prepareCommittedDraftCleanup,
-  reconcileStoredTicketDraft,
   saveTicketDraft,
   type TicketDraftField,
   ticketDraftKey,
@@ -913,9 +913,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   /**
    * The recovery copy for a field the user is about to edit, rebased onto the field's current value:
-   * the stored draft continues on the same base when nothing changed, merges when the remote change
-   * is disjoint, and is dropped (the current value wins) when it cannot be merged. `undefined` when
-   * there is nothing to restore.
+   * the stored draft continues on the same base when nothing changed and merges when the remote
+   * change is disjoint. When it cannot be merged, the field-conflict card offers both versions and
+   * the copy stays until the card is resolved (HS2-7D3MPP); the editor opens on the current value.
+   * `undefined` when there is nothing to restore into the editor.
    */
   function restoreTicketDraft(
     field: TicketDraftField,
@@ -925,19 +926,32 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     const storage = draftStorage(),
       key = selectedDraftKey(field, noteId);
     if (!storage || !key) return undefined;
-    const stored = loadTicketDraft(storage, key);
-    if (!stored || (stored.draft === stored.base && !stored.pendingIntent) || stored.draft === current) {
-      if (stored) clearTicketDraft(storage, key);
+    const plan = planTicketDraftRestore(loadTicketDraft(storage, key), current);
+    if (plan.kind === 'none') {
+      if (plan.clear) clearTicketDraft(storage, key);
       return undefined;
     }
-    const next = reconcileStoredTicketDraft(stored, current);
-    if (next.kind === 'conflict') {
-      clearTicketDraft(storage, key);
-      showToast('An unsaved edit could not be merged with a newer version of this ticket and was discarded.');
+    if (plan.kind === 'conflict') {
+      showFieldConflict({
+        key: field === 'note' ? `note:${noteId ?? ''}` : field,
+        field,
+        label: ticketFieldLabel(field),
+        base: plan.base,
+        mine: plan.mine,
+        theirs: plan.theirs,
+      });
       return undefined;
     }
     showToast('Restored an unsaved edit.');
-    return { draft: next.draft, base: next.base };
+    return { draft: plan.draft, base: plan.base };
+  }
+  /** A resolved field conflict settles the field's recovery copy: the user chose what to keep (HS2-7D3MPP). */
+  function clearConflictRecoveryCopy(conflict: TicketFieldConflict) {
+    const field = DRAFT_FIELDS.find((item) => item === conflict.field);
+    if (!field) return;
+    const storage = draftStorage(),
+      key = selectedDraftKey(field, field === 'note' ? conflict.key.slice('note:'.length) : undefined);
+    if (storage && key) clearTicketDraft(storage, key);
   }
   const savingDraft =
     <T>(
@@ -2336,7 +2350,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         if (!cached || shown?.qualified_id !== result.ticket.qualified_id) presentTicket(result.ticket);
         else if (!sameTicketRevision(shown, result.ticket)) {
           // Replace stale cached content; keep an edit the user already began against the shown copy.
-          if (ticketEditInProgress()) selectedTicket.value = result.ticket;
+          // Reconciling (not a bare swap) also moves the committed base, so the blur save sends the
+          // refreshed token instead of the cached one and an untouched open editor adopts the
+          // refreshed text (HS2-7D3MPP).
+          if (ticketEditInProgress()) reconcileRefreshedSelected(shown, result.ticket);
           else presentTicket(result.ticket);
         }
         return result.ticket;
@@ -3028,6 +3045,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     attachmentEpochs: () => ({ composer: composerAttachmentEpoch, notWorking: notWorkingAttachmentEpoch }),
     applyTicketPatch,
     restoreTicketDraft,
+    clearConflictRecoveryCopy,
     flushTicketDrafts,
     flushSelectedTicketEdits,
     captureTicketDraftRecovery,

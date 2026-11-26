@@ -5186,6 +5186,7 @@ export async function startHotSheetWebClient() {
     dismissFeedbackDelivery,
     attachmentEpochs,
     restoreTicketDraft,
+    clearConflictRecoveryCopy,
     flushTicketDrafts,
     flushSelectedTicketEdits,
     captureTicketDraftRecovery,
@@ -7345,8 +7346,16 @@ export async function startHotSheetWebClient() {
   async function settleDetailsFinish(task: DetailsFinishTask) {
     const saved = await task.saved,
       mode = task.reader ? readerDetailsMode : detailsMode;
+    // The user went back into the editor (or typed) while this save ran: keep it open (HS2-7D3MPP).
+    const focused = document.activeElement;
     if (
       saved &&
+      !(task.reader ? readerDetailsAutosave : detailsAutosave).pending() &&
+      !(
+        focused instanceof HTMLTextAreaElement &&
+        focused.name === 'markdown-source' &&
+        Boolean(focused.closest('[data-component="ticket-reader"]')) === task.reader
+      ) &&
       selectedTicket.value?.id === task.ticketId &&
       (task.reader ? readerDetailsEditGeneration : detailsEditGeneration) === task.generation
     )
@@ -7662,6 +7671,7 @@ export async function startHotSheetWebClient() {
     savedViewBusy,
     deleteSavedView,
     restoreTicketDraft,
+    clearConflictRecoveryCopy,
     savedViewHelpOpen,
     closeSavedViewDelete,
     savedViewDeleteBusy,
