@@ -375,6 +375,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion
       project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows; explicit local feedback-dismissal intent and response-append retry routing (HS2-VBFSZJ)
+      selection-prune.ts      # Post-bulk selection prune that saves the open ticket's unsaved edit before deselecting it (HS2-41KEQD)
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
       terminal-limits-settings.ts # Loads, applies, and saves the machine-wide terminal limits for App Settings → Terminal memory (HS2-Y5DYC0)
       feature-areas.ts       # Feature areas controller (HS2-3GJZGG): reads /feature-settings once, re-reads on pushed `feature_settings` events and resync, saves a Features switch at once

@@ -1025,7 +1025,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   for example when another worker completes it or it leaves the active filter. Its unsaved
   edit is then saved to that ticket first, while the ticket is still listed and selected.
   Only after that does the refresh remove it, so the edit is never dropped. A refresh that
-  keeps the ticket listed does not write mid-typing (HS2-QW3PGE).
+  keeps the ticket listed does not write mid-typing (HS2-QW3PGE). A bulk change (or its
+  undo or redo) that moves the open ticket out of the current view follows the same rule:
+  an edit typed while the change was in flight is saved to that ticket before the selection
+  prune deselects it, never cancelled; with nothing unsaved the prune is immediate
+  (HS2-41KEQD).
   The freeform blocked reason uses the same silent blur-flush path and is the single source
   of truth for blocked presentation: a non-empty reason persists and shows the badge/rail,
   an empty edit sends `null` to clear it, and the authoritative response exits

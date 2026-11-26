@@ -147,6 +147,7 @@ import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { reconcileWorkerTicketSelection } from '../worker-ticket-refresh';
 import type { WorkerTicketDetails } from '../worker-view-model';
 import type { StoredPendingAttachment } from '../workspace-session';
+import { pruneSelectionSavingEdits } from './selection-prune';
 
 interface TicketWorkflowMutableState {
   blockedReasonDraftBase: string;
@@ -1272,17 +1273,29 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       return [workerDetails.value[selectedQualified]];
     return tickets.value.filter((ticket) => selected.has(ticket.slug));
   }
+  // An open edit of a ticket the bulk change moved out of view is saved, not cancelled, before the
+  // ticket is deselected (HS2-41KEQD), matching the refresh path (HS2-QW3PGE).
   function pruneSelectionForCurrentView() {
-    const next = selectionVisibleInView(tickets.value, selectedTicketSlugs.value, selectedView.value);
-    if (next.length === selectedTicketSlugs.value.length) return;
-    selectedTicketSlugs.value = next;
-    if (state.ticketSelectionAnchor && !next.includes(state.ticketSelectionAnchor))
-      state.ticketSelectionAnchor = next[0];
-    if (selectedTicket.value && !next.includes(selectedTicket.value.slug)) {
-      cancelTicketDrafts();
-      selectedTicket.value = null;
-    }
-    if (next.length !== 1) selectedTicket.value = null;
+    const projectId = project()?.id;
+    pruneSelectionSavingEdits({
+      visibleSelection: () => selectionVisibleInView(tickets.value, selectedTicketSlugs.value, selectedView.value),
+      selectedSlugs: () => selectedTicketSlugs.value,
+      selectedTicketSlug: () => selectedTicket.value?.slug,
+      flushSelectedTicketEdits,
+      stillCurrent: () => project()?.id === projectId,
+      apply: (next) => {
+        batch(() => {
+          selectedTicketSlugs.value = [...next];
+          if (state.ticketSelectionAnchor && !next.includes(state.ticketSelectionAnchor))
+            state.ticketSelectionAnchor = next[0];
+          if (selectedTicket.value && !next.includes(selectedTicket.value.slug)) {
+            cancelTicketDrafts();
+            selectedTicket.value = null;
+          }
+          if (next.length !== 1) selectedTicket.value = null;
+        });
+      },
+    });
   }
   interface BulkOperation {
     slug: string;

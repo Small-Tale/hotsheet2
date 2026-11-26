@@ -866,6 +866,24 @@ The shipped parent in `clients/web/tests/ticket-edit-sequencing.spec.ts` edits
 Details, delivers a held poll change event whose refresh omits the ticket, and
 asserts exactly one PATCH that carries the edit and no leftover recovery draft.
 
+HS2-41KEQD applies the same rule to the selection prune after a bulk change. In
+`clients/web/src/features/selection-prune.test.ts` a real focus-loss autosave checks:
+
+- A pending edit is saved to the ticket that is leaving the view before the prune, and a later blur writes nothing more.
+- With no pending edit, the prune is immediate and writes nothing.
+- An open ticket that stays in view is not flushed while other rows are pruned (HS2-RE1PS6).
+- A save in flight plus a later edit, with a repeated prune: both saves go to the same ticket before the deselect.
+- An edit typed after an earlier save is saved too.
+- A failed save still prunes, and its local recovery copy survives.
+- A ticket that is back in view when the save settles stays selected.
+- A project switch cancels the deferred prune.
+
+In `clients/web/tests/ticket-edit-sequencing.spec.ts` the shipped list archives the
+selected ticket from the keyboard (More Actions for Selected Tickets, then Archive)
+while holding the batch response. The test then reopens Details and types, and
+releases the batch. It asserts exactly one details PATCH to the archived ticket, the
+row leaving the open view, and no leftover recovery draft.
+
 HS2-P9A21R covers the five-view phone toolbar and reachable sidebar toggle
 through the shipped shell in `clients/web/tests/shell-composition.spec.ts`.
 `mobile-layout.spec.ts` keeps overlay and resize navigation in the affected
