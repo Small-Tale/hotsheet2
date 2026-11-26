@@ -1594,6 +1594,18 @@ answers `cancelled`. Stopping the turn sends `session/cancel`, answers each pend
 too. Time spent waiting on a human does not count toward the turn's stall timeout. A bare
 headless run with no bridge refuses every ask and never selects an allow option.
 
+A driven Codex app-server connection answers its approval requests
+(`execCommandApproval`, `applyPatchApproval`, `item/commandExecution/requestApproval`,
+`item/fileChange/requestApproval`) through the same bridge when one is attached: a
+remembered rule answers at once, anything else waits for a person, then the safe deny.
+Every server caller attaches the bridge. A bare headless run has none: `hotsheet-cli
+trigger`, `hotsheet-cli work`, and the serverless `sync --run-repair` session. Such a run
+declines every approval with the method's own refusal (`denied` or `reject`) and never
+grants one, matching the ACP refusal (HS2-0G1FP6). Under the default `approvalPolicy`
+`never`, Codex raises no approvals, so nothing changes. A run started with an asking
+policy such as `--permission-mode on-request` continues after each refusal without the
+refused action. A caller that needs approvals granted attaches a permission bridge.
+
 The client applies a user's decision optimistically: the popup and its clickable actions
 disappear in the same render that begins the network request, preventing latency from
 looking like a missed click or allowing duplicate answers. The presumed history entry is

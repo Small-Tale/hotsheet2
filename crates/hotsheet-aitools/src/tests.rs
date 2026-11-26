@@ -2134,3 +2134,141 @@ fn hs2_spvt6w_session_result_names_why_a_turn_did_not_complete() {
         Err("credentials rejected".to_string())
     );
 }
+
+/// A stand-in `codex app-server` (a shell script speaking the JSON-RPC stdio protocol):
+/// it records the `thread/start` request, raises one command approval during the turn,
+/// records Hot Sheet's reply, then completes the turn (HS2-0G1FP6).
+#[cfg(unix)]
+fn fake_codex_app_server_plugin(dir: &std::path::Path) -> hotsheet_plugins::Plugin {
+    use std::os::unix::fs::PermissionsExt;
+
+    let script = dir.join("fake-codex.sh");
+    std::fs::write(
+        &script,
+        r#"#!/bin/sh
+while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id" ;;
+    *'"method":"initialized"'*) : ;;
+    *'"method":"thread/start"'*)
+      printf '%s\n' "$line" > "$FAKE_CODEX_OUT.thread"
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"thread":{"id":"thread-1"}}}\n' "$id" ;;
+    *'"method":"turn/start"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"turn":{"id":"turn-1"}}}\n' "$id"
+      printf '%s\n' '{"jsonrpc":"2.0","id":"approval-1","method":"item/commandExecution/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","command":["rm","-rf","build"]}}'
+      IFS= read -r reply
+      printf '%s\n' "$reply" > "$FAKE_CODEX_OUT.reply"
+      printf '%s\n' '{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed"}}}' ;;
+    *)
+      if [ -n "$id" ]; then printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id"; fi ;;
+  esac
+done
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let plugin_dir = dir.join("fakecodex");
+    std::fs::create_dir_all(&plugin_dir).unwrap();
+    std::fs::write(
+        plugin_dir.join("manifest.toml"),
+        format!(
+            r#"id = "fakecodex"
+display_name = "Fake Codex"
+product_name = "Fake Codex"
+tier = "cli-agent"
+[detection]
+binaries = ["sh"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+[drive]
+transport = "app-server"
+program = "{}"
+interrupt = true
+"#,
+            script.display()
+        ),
+    )
+    .unwrap();
+    std::fs::write(plugin_dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
+    hotsheet_plugins::Plugin::from_fs_dir(&plugin_dir).unwrap()
+}
+
+/// Drive one turn of the fake app-server through the live trigger and return why it
+/// ended, the `thread/start` request, and the approval reply the fake recorded.
+#[cfg(unix)]
+fn drive_fake_codex_approval(
+    tmp: &std::path::Path,
+    bridge: Option<std::sync::Arc<crate::permission::SharedPermissionBridge>>,
+) -> (DoneReason, serde_json::Value, serde_json::Value) {
+    let plugin = fake_codex_app_server_plugin(tmp);
+    let out = tmp.join("fake-codex-out");
+    let mut t = live("work", tmp);
+    t.permission_mode = Some("on-request".into());
+    t.env = vec![
+        ("FAKE_CODEX_OUT".into(), out.display().to_string()),
+        ("HOTSHEET_PERMISSION_PROJECT".into(), "proj-0g1fp6".into()),
+        ("HOTSHEET_NATIVE_SECRETS".into(), "deny".into()),
+        ("HOME".into(), tmp.display().to_string()),
+    ];
+    t.permission_bridge = bridge;
+    let mut reg = ConnectionRegistry::new(5_000);
+    let done = run_trigger(&plugin, &t, &mut reg, &mut |_| {}).expect("fake codex turn");
+    let read = |suffix: &str| -> serde_json::Value {
+        let text = std::fs::read_to_string(format!("{}.{suffix}", out.display()))
+            .unwrap_or_else(|e| panic!("fake codex wrote no {suffix}: {e}"));
+        serde_json::from_str(text.trim()).unwrap()
+    };
+    (done.reason, read("thread"), read("reply"))
+}
+
+/// HS2-0G1FP6: a bare headless run (`hotsheet-cli trigger --permission-mode on-request`
+/// with no server) attaches no permission bridge, so a Codex approval is declined over
+/// the real stdio transport, never granted, and the turn still completes.
+#[cfg(unix)]
+#[test]
+fn hs2_0g1fp6_a_headless_codex_turn_without_a_bridge_declines_its_approval() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (reason, thread, reply) = drive_fake_codex_approval(tmp.path(), None);
+    assert_eq!(reason, DoneReason::Completed);
+    assert_eq!(thread["params"]["approvalPolicy"], "on-request");
+    assert_eq!(reply["id"], "approval-1");
+    assert_eq!(reply["result"], serde_json::json!({ "decision": "reject" }));
+}
+
+/// HS2-0G1FP6: with a permission bridge attached the decision is the bridge's, unchanged:
+/// a remembered allow rule for the project grants the same approval.
+#[cfg(unix)]
+#[test]
+fn hs2_0g1fp6_a_codex_turn_with_a_bridge_answers_from_its_rules() {
+    use crate::permission::{Decision, PermissionBridge, Rule, SharedPermissionBridge};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let bridge = std::sync::Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
+        vec![Rule {
+            project: "proj-0g1fp6".into(),
+            tool: "item/commandExecution/requestApproval".into(),
+            action: "rm -rf build".into(),
+            exact_action: None,
+            pattern: None,
+            description: None,
+            decision: Decision::Allow,
+            persist: false,
+            connection: None,
+            tool_wide: false,
+        }],
+    )));
+    let (reason, _, reply) = drive_fake_codex_approval(tmp.path(), Some(bridge.clone()));
+    assert_eq!(reason, DoneReason::Completed);
+    assert_eq!(reply["id"], "approval-1");
+    assert_eq!(reply["result"], serde_json::json!({ "decision": "accept" }));
+    assert!(bridge.pending().is_empty());
+}

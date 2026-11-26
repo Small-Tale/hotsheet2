@@ -350,7 +350,7 @@ fn drive_one_ticket(
         },
     )?;
     // Attach the server's permission bridge so a driven codex's approvals block for a human
-    // answering over POST /permissions instead of auto-approving (HS2-Q1F6HV).
+    // answering over POST /permissions instead of being declined (HS2-Q1F6HV, HS2-0G1FP6).
     if let Some(bridge) = &ctx.permission_bridge {
         safe = safe.with_permission_bridge(bridge.clone());
     }

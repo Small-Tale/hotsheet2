@@ -784,7 +784,12 @@ not OpenCode's own decision to ask. In a disposable project whose `opencode.json
 and `git status`. Allow it and confirm the command runs. Send the prompt again, Deny it,
 and confirm OpenCode reports the refusal and the popup closes. Send it a third time and
 press Stop while the popup shows. Confirm the popup is withdrawn and the turn ends as
-stopped. Not yet verified live.
+stopped. Verified live on 2026-11-26 with opencode 2.4.1 (`{"permission":{"bash":"ask"}}`
+resolves to `shell: ask`): Allow ran the command and a repeated command asked again; Deny
+did not run it, and OpenCode ends the turn (`stopReason: cancelled`, shown as interrupted)
+rather than replying; an ask left unanswered past the 600 s ACP turn timeout still
+completed after Allow. That check found Stop ignored while the turn waited on an ask;
+the ACP interrupt waker fixes it.
 
 ### OpenCode session push in a real TUI (HS2-PEJ962)
 

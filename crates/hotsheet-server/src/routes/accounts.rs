@@ -7,7 +7,6 @@ use crate::{AppState, github_app_config};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use hotsheet_sync::LockExt;
 use hotsheet_ticketing::ProviderConnection;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -29,23 +28,7 @@ pub(crate) async fn list_stores(
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub(crate) enum GitHubAuthStatus {
-    Pending,
-    Authorized { credential_reference: String },
-    Denied,
-    Expired,
-    Cancelled,
-    Error { message: String },
-}
-
-pub(crate) struct GitHubAuthSession {
-    status: tokio::sync::watch::Sender<GitHubAuthStatus>,
-    client_id: String,
-    web_base: String,
-    credential_reference: String,
-}
+pub(crate) use crate::github_auth_sessions::{GitHubAuthSession, GitHubAuthStatus};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct StartGitHubAuthBody {
@@ -79,37 +62,42 @@ pub(crate) async fn start_github_device_auth(
         .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))?;
     let session_id = ulid::Ulid::new().to_string();
     let credential_reference = format!("github-app-{}", session_id.to_ascii_lowercase());
-    let (status, _) = tokio::sync::watch::channel(GitHubAuthStatus::Pending);
-    let session = Arc::new(GitHubAuthSession {
-        status,
-        client_id: client_id.clone(),
-        web_base: web_base.clone(),
-        credential_reference: credential_reference.clone(),
-    });
+    // HS2-NNWG8H: the flow blocks restart and compaction only until GitHub's deadline.
+    let expires_at = state
+        .github_auth_sessions
+        .now()
+        .saturating_add(i64::try_from(authorization.expires_in).unwrap_or(i64::MAX));
+    let session = Arc::new(GitHubAuthSession::new(
+        GitHubAuthStatus::Pending,
+        client_id.clone(),
+        web_base.clone(),
+        credential_reference.clone(),
+        expires_at,
+    ));
     state
         .github_auth_sessions
-        .lock_or_recover()
         .insert(session_id.clone(), session.clone());
     let device_code = authorization.device_code.clone();
     let mut interval = authorization.interval.max(1);
     let keys = state.key_registry();
+    let clock = state.github_auth_sessions.clock();
     std::thread::spawn(move || {
         let client =
             hotsheet_extsync::GitHubDeviceClient::live(client_id.clone(), web_base.clone());
         loop {
             std::thread::sleep(Duration::from_secs(interval));
-            if !matches!(*session.status.borrow(), GitHubAuthStatus::Pending) {
+            if session.expire_if_overdue(clock()) {
                 break;
             }
             match client.poll(&device_code) {
                 Ok(hotsheet_extsync::DevicePoll::Pending) => {}
                 Ok(hotsheet_extsync::DevicePoll::SlowDown) => interval = interval.saturating_add(5),
                 Ok(hotsheet_extsync::DevicePoll::Expired) => {
-                    let _ = session.status.send(GitHubAuthStatus::Expired);
+                    session.finish(GitHubAuthStatus::Expired);
                     break;
                 }
                 Ok(hotsheet_extsync::DevicePoll::Denied) => {
-                    let _ = session.status.send(GitHubAuthStatus::Denied);
+                    session.finish(GitHubAuthStatus::Denied);
                     break;
                 }
                 Ok(hotsheet_extsync::DevicePoll::Authorized(bundle)) => {
@@ -139,11 +127,11 @@ pub(crate) async fn start_github_device_auth(
                             message: error.to_string(),
                         },
                     };
-                    let _ = session.status.send(next);
+                    session.finish(next);
                     break;
                 }
                 Err(error) => {
-                    let _ = session.status.send(GitHubAuthStatus::Error {
+                    session.finish(GitHubAuthStatus::Error {
                         message: error.to_string(),
                     });
                     break;
@@ -168,9 +156,7 @@ pub(crate) async fn wait_github_device_auth(
 ) -> Result<Json<GitHubAuthStatus>, ApiError> {
     let session = state
         .github_auth_sessions
-        .lock_or_recover()
         .get(&session_id)
-        .cloned()
         .ok_or_else(|| ApiError::not_found(&session_id))?;
     let mut status = session.status.subscribe();
     let pending = matches!(*status.borrow(), GitHubAuthStatus::Pending);
@@ -187,11 +173,9 @@ pub(crate) async fn cancel_github_device_auth(
 ) -> Result<StatusCode, ApiError> {
     let session = state
         .github_auth_sessions
-        .lock_or_recover()
         .get(&session_id)
-        .cloned()
         .ok_or_else(|| ApiError::not_found(&session_id))?;
-    let _ = session.status.send(GitHubAuthStatus::Cancelled);
+    session.finish(GitHubAuthStatus::Cancelled);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -209,9 +193,7 @@ pub(crate) async fn list_github_auth_repositories(
 ) -> Result<Json<GitHubRepositoriesResponse>, ApiError> {
     let session = state
         .github_auth_sessions
-        .lock_or_recover()
         .get(&session_id)
-        .cloned()
         .ok_or_else(|| ApiError::not_found(&session_id))?;
     if !matches!(
         *session.status.borrow(),
@@ -784,17 +766,18 @@ mod installation_url_tests {
             .with_default_codex_home(dir.path().join("no-codex-home"))
             .with_machine_home(dir.path().join("machine-home"));
         // Start at the post-authorization boundary: OAuth approval itself is external.
-        let (status, _) = tokio::sync::watch::channel(GitHubAuthStatus::Authorized {
-            credential_reference: credential.into(),
-        });
-        state.github_auth_sessions.lock_or_recover().insert(
+        let expires_at = state.github_auth_sessions.now() + 900;
+        state.github_auth_sessions.insert(
             "synthetic-session".into(),
-            Arc::new(GitHubAuthSession {
-                status,
-                client_id: "synthetic-client".into(),
-                web_base: origin.clone(),
-                credential_reference: credential.into(),
-            }),
+            Arc::new(GitHubAuthSession::new(
+                GitHubAuthStatus::Authorized {
+                    credential_reference: credential.into(),
+                },
+                "synthetic-client".into(),
+                origin.clone(),
+                credential.into(),
+                expires_at,
+            )),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let server_origin = format!("http://{}", listener.local_addr().unwrap());

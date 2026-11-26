@@ -981,7 +981,10 @@ external apps, `hotsheet-cli launch`; HS2-CGVHTM). Missing or invalid metadata i
 explicit unknown state. The server advertises authenticated restart and quiescence only
 with its admission gate active. A restart first refuses new mutations/background passes,
 then proceeds only when mutations, sync/drive passes, commands, setup refreshes, AI turns,
-permission requests, authentication flows, and server-owned terminals are quiescent;
+permission requests, in-flight authentication flows, and server-owned terminals are
+quiescent. A GitHub device flow counts only while it is pending and before GitHub's
+`expires_in` deadline; denied, expired, failed, cancelled, and authorized flows never block,
+and each check prunes overdue flows without a timer (HS2-NNWG8H);
 broker-hosted terminals may survive the process replacement. The client uses this path for
 protocol or store-schema upgrades and local-host build replacement only when both
 capabilities are explicit, waits for the

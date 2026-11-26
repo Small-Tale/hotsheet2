@@ -75,8 +75,8 @@ struct Inner {
     /// closes instead of letting them run out their request timeout. Drive sessions keep
     /// waiting for the timeout.
     fail_pending_on_close: bool,
-    /// How approval ServerRequests are decided; `None` = permissively auto-approve (the
-    /// back-compat default, and what the isolated headless launch expects).
+    /// How approval ServerRequests are decided; `None` = decline every approval (a bare
+    /// headless run has nobody to ask, so it never grants one, HS2-0G1FP6).
     permission: Mutex<Option<PermissionPolicy>>,
     active_approval: AtomicU64,
 }
@@ -162,8 +162,8 @@ impl Inner {
         }
     }
 
-    /// Headless approval policy is `never`, so approval ServerRequests shouldn't fire;
-    /// if one does (e.g. an MCP elicitation), answer permissively so the turn can't hang.
+    /// Answer an approval ServerRequest at once so the turn can't hang: through the attached
+    /// permission policy, or declined when none is attached (HS2-0G1FP6).
     fn auto_answer_server_request(&self, v: &Value) {
         if self.closed.load(Ordering::Acquire) {
             return;
@@ -222,8 +222,9 @@ impl Inner {
     }
 }
 
-/// Decide a Codex approval ServerRequest (`docs/05` §5.7). Without a policy, auto-approve
-/// (back-compat — what the isolated headless launch expects). With one, the
+/// Decide a Codex approval ServerRequest (`docs/05` §5.7). Without a policy, decline it:
+/// a bare headless run has no human to ask, so it never grants (HS2-0G1FP6, matching the
+/// ACP refusal of HS2-K6HH96). With one, the
 /// [`PermissionBridge`] answers from its allow-rules and anything it can't auto-resolve
 /// falls back to the policy `default`. An unknown request method → empty result (no-op).
 #[cfg(test)]
@@ -241,7 +242,7 @@ fn decide_approval_with_pending(
         return json!({}); // not an approval we recognize → empty result
     };
     let decision = match policy {
-        None => Decision::Allow,
+        None => Decision::Deny,
         Some(p) => resolve_decision(p, method, params, on_pending),
     };
     let tok = if decision == Decision::Allow { yes } else { no };
@@ -412,15 +413,15 @@ impl CodexAppServer {
         Ok(client)
     }
 
-    /// Route Codex approval ServerRequests through a permission policy instead of
-    /// auto-approving (HS2-0QGW07 / §5.7). Set it before running a turn; without one,
-    /// approvals are auto-approved (the isolated headless default).
     /// Select the `approvalPolicy` for threads opened from now on (HS2-NHRDMW); see
     /// [`codex_approval_policy`] for the mapping.
     pub fn set_approval_policy(&self, mode: Option<&str>) {
         *self.approval_policy.lock_or_recover() = codex_approval_policy(mode);
     }
 
+    /// Route Codex approval ServerRequests through a permission policy (HS2-0QGW07 /
+    /// §5.7). Set it before running a turn; without one, every approval is declined, never
+    /// granted (HS2-0G1FP6).
     pub fn set_permission_policy(&self, policy: PermissionPolicy) {
         {
             let mut p = self.inner.permission.lock_or_recover();
@@ -1678,16 +1679,69 @@ mod approval_tests {
     }
 
     #[test]
-    fn no_policy_auto_approves_and_maps_reply_tokens() {
-        // Back-compat: without a policy, approvals are granted with the method's token.
-        let exec = decide_approval(None, "execCommandApproval", &json!({"command": ["ls"]}));
-        assert_eq!(exec["decision"], "approved");
-        let item = decide_approval(None, "item/fileChange/requestApproval", &json!({}));
-        assert_eq!(item["decision"], "accept");
-        // An unrecognized request → empty result.
+    fn hs2_0g1fp6_no_policy_declines_every_approval_and_maps_reply_tokens() {
+        // A bare headless run has nobody to ask: every approval method gets its decline
+        // token and never its grant token (HS2-0G1FP6).
+        for (method, no, yes) in [
+            ("execCommandApproval", "denied", "approved"),
+            ("applyPatchApproval", "denied", "approved"),
+            ("item/commandExecution/requestApproval", "reject", "accept"),
+            ("item/fileChange/requestApproval", "reject", "accept"),
+        ] {
+            let reply = decide_approval(None, method, &json!({"command": ["rm", "-rf", "x"]}));
+            assert_eq!(reply, json!({ "decision": no }), "{method}");
+            assert_ne!(reply["decision"], yes, "{method} must never be granted");
+        }
+        // An unrecognized request → empty result (no decision either way).
         assert_eq!(
             decide_approval(None, "somethingElse", &json!({})),
             json!({})
+        );
+    }
+
+    /// The reader-thread path a live connection takes: with no policy attached, an approval
+    /// ServerRequest is answered at once with the decline token (HS2-0G1FP6).
+    #[test]
+    fn hs2_0g1fp6_a_connection_without_a_policy_writes_a_decline_reply() {
+        struct Capture(Arc<Mutex<Vec<String>>>);
+        impl RpcWriter for Capture {
+            fn send(&mut self, msg: &str) -> std::io::Result<()> {
+                self.0.lock_or_recover().push(msg.to_string());
+                Ok(())
+            }
+        }
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let inner = Inner {
+            writer: Mutex::new(Box::new(Capture(sent.clone()))),
+            request_timeout: REQUEST_TIMEOUT,
+            next_id: AtomicI64::new(1),
+            pending: Mutex::new(HashMap::new()),
+            notes: Mutex::new(Vec::new()),
+            cvar: Condvar::new(),
+            closed: AtomicBool::new(false),
+            fail_pending_on_close: false,
+            permission: Mutex::new(None),
+            active_approval: AtomicU64::new(0),
+        };
+        inner.on_message(
+            &json!({"jsonrpc":"2.0","id":"a-1","method":"item/commandExecution/requestApproval",
+                "params":{"command":["git","push"]}})
+            .to_string(),
+        );
+        inner.on_message(
+            &json!({"jsonrpc":"2.0","id":7,"method":"applyPatchApproval","params":{}}).to_string(),
+        );
+        let replies: Vec<Value> = sent
+            .lock_or_recover()
+            .iter()
+            .map(|m| serde_json::from_str(m).unwrap())
+            .collect();
+        assert_eq!(
+            replies,
+            vec![
+                json!({"jsonrpc":"2.0","id":"a-1","result":{"decision":"reject"}}),
+                json!({"jsonrpc":"2.0","id":7,"result":{"decision":"denied"}}),
+            ]
         );
     }
 

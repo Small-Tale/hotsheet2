@@ -52,8 +52,9 @@ pub struct LiveTrigger {
     /// `app-server` process per connection (HS2-B7C66H). Requires `CODEX_HOME` in `env`.
     pub shared_daemon: bool,
     /// A live permission bridge to **block approvals on a human** (HS2-Q1F6HV). `None` =
-    /// auto-approve for Codex (the headless default; a bare CLI run has no human UI) and
-    /// refuse for ACP. The app-server (codex) and ACP (OpenCode) transports consult it.
+    /// a bare headless run with no human UI: Codex approvals are declined (HS2-0G1FP6) and
+    /// ACP asks refused (HS2-K6HH96), never granted. The app-server (codex) and ACP
+    /// (OpenCode) transports consult it.
     pub permission_bridge: Option<std::sync::Arc<crate::permission::SharedPermissionBridge>>,
     /// Injected clock.
     pub now_ms: u64,
@@ -191,7 +192,8 @@ pub fn run_trigger_controlled(
             };
             // Attach the live permission bridge (if any): approvals now BLOCK the turn for a
             // human answering over the server route-back instead of auto-approving
-            // (HS2-Q1F6HV). Without one, the isolated headless default (auto-approve) holds.
+            // (HS2-Q1F6HV). Without one, every approval is declined, never granted
+            // (HS2-0G1FP6).
             // The chat's selected approval policy (HS2-NHRDMW); the sandbox stays
             // workspace-write whatever the policy.
             app.set_approval_policy(t.permission_mode.as_deref());
@@ -226,6 +228,10 @@ pub fn run_trigger_controlled(
             // (HS2-K6HH96); without a bridge they are refused, never granted.
             if let Some(policy) = permission_policy(t) {
                 acp.set_permission_policy(policy, plugin.id().to_string());
+            }
+            // Stop reaches a turn parked on a permission ask, which streams nothing.
+            if let Some(control) = control {
+                acp.wake_on_interrupt(control);
             }
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
