@@ -696,7 +696,12 @@ fn decide(
         } else {
             match relation(&run.head_sha)? {
                 Some(known) => known,
-                None => break,
+                None => {
+                    // HS2-2RHDGQ: the lookup budget ran out; an older run not asked yet may
+                    // still cover the commit, so a diverged tip does not supersede it yet.
+                    diverged_first = false;
+                    break;
+                }
             }
         };
         match known {
@@ -1571,6 +1576,45 @@ mod tests {
                 ]
             ),
             Decision::Pending { run: Some(0) }
+        );
+    }
+
+    #[test]
+    fn hs2_2rhdgq_a_spent_budget_below_a_diverged_tip_is_not_superseded() {
+        // Six runs on another line, then a run that covers the commit: with five lookups
+        // per poll the walk stops before the covering run, so the poll stays pending.
+        let mut runs: Vec<Run> = (0..6)
+            .map(|n| {
+                run(
+                    10 - n,
+                    &format!("elsewhere-{n}"),
+                    "completed",
+                    Some("success"),
+                )
+            })
+            .collect();
+        runs.push(run(3, "covering", "completed", Some("success")));
+        let budget = std::cell::Cell::new(5);
+        let mut relation = |head: &str| {
+            if budget.get() == 0 {
+                return Ok(None);
+            }
+            budget.set(budget.get() - 1);
+            Ok(Some(if head == "covering" {
+                Relation::Covers
+            } else {
+                Relation::Diverged
+            }))
+        };
+        assert_eq!(
+            decide(&target(), None, &runs, &mut relation).unwrap(),
+            Decision::Pending { run: None }
+        );
+        // The next poll's budget reaches the covering run.
+        budget.set(7);
+        assert_eq!(
+            decide(&target(), None, &runs, &mut relation).unwrap(),
+            Decision::Green { run: 6 }
         );
     }
 
