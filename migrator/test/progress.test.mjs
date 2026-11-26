@@ -47,11 +47,14 @@ describe('measured export progress and complete attachment evidence', () => {
       ]);
       expect(fs.lstatSync(path.join(destination, 'link')).isSymbolicLink()).toBe(true);
       expect(fs.readFileSync(path.join(source, 'one'), 'utf8')).toBe('123');
+      // Staging reads HS1 payloads only from <hotsheetDir>/attachments (HS2-N250VD).
+      fs.mkdirSync(path.join(source, 'attachments'));
+      fs.renameSync(path.join(source, 'one'), path.join(source, 'attachments', 'one'));
       const exported = {
         tickets: [
           {
             attachments: [
-              { original_filename: 'one', stored_path: path.join(source, 'one') },
+              { original_filename: 'one', stored_path: path.join(source, 'attachments', 'one') },
               { original_filename: 'absent', stored_path: '/missing/payload' },
             ],
           },

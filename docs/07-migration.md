@@ -41,7 +41,13 @@
 > (for example, `attachments/0/shot.png`); the physical staged copy uses the host
 > filesystem's path separators (HS2-2MEZPW). `hotsheet import` copies them into `attachments/<new-ulid>/`
 > (basename-sanitized). Source files resolve by basename under
-> `<.hotsheet>/attachments/` so a moved project still works.
+> `<.hotsheet>/attachments/` so a moved project still works; the exporter uses the
+> recorded HS1 path only when it resolves (after symbolic links) inside that same
+> directory and otherwise refuses before staging. The importer, including explicit
+> attachment recovery, requires every `stored_path` to be relative, free of `..`, and
+> canonically under `<export dir>/attachments/`; an absolute, traversing, or
+> symlink-escaping path fails with an error naming the HS1 ticket and attachment.
+> Shape errors are rejected before any checkpoint or ticket write (HS2-N250VD).
 >
 > **Built (HS2-PWYTS8):** selecting an HS1 project in the local client detects the
 > exact database marker and opens a destination-only import prompt that identifies

@@ -5494,13 +5494,14 @@ fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery
       "tickets": [{"ticket_number":"HS-1","title":"Original title",
         "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",
         "attachments":[
-          {"original_filename":"first.png","stored_path":"first.png"},
-          {"original_filename":"second.png","stored_path":"second.png"}
+          {"original_filename":"first.png","stored_path":"attachments/first.png"},
+          {"original_filename":"second.png","stored_path":"attachments/second.png"}
         ]}]
     }"#,
     )
     .unwrap();
-    std::fs::write(root.path().join("first.png"), b"FIRST").unwrap();
+    std::fs::create_dir_all(root.path().join("attachments")).unwrap();
+    std::fs::write(root.path().join("attachments/first.png"), b"FIRST").unwrap();
     run()
         .args(["import", export.to_str().unwrap()])
         .assert()
@@ -5526,13 +5527,13 @@ fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery
         .success();
     let edited = store.read_ticket(&ticket.id).unwrap();
     // Completed files no longer need the staging source on a retry.
-    std::fs::remove_file(root.path().join("first.png")).unwrap();
+    std::fs::remove_file(root.path().join("attachments/first.png")).unwrap();
     run()
         .args(["import", export.to_str().unwrap()])
         .assert()
         .failure();
     assert!(checkpoint.is_file());
-    std::fs::write(root.path().join("second.png"), b"SECOND").unwrap();
+    std::fs::write(root.path().join("attachments/second.png"), b"SECOND").unwrap();
     run()
         .args(["import", export.to_str().unwrap()])
         .assert()

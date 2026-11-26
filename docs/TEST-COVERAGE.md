@@ -450,6 +450,16 @@ HS2-2MEZPW: the migrator export test checks portable slash-delimited JSON
 destination. A Unix export/import fixture round-trips staged payload bytes
 through the built CLI. Native Windows migrator coverage remains required.
 
+HS2-N250VD: `crates/hotsheet-cli/src/import.rs` tests
+`hs2_n250vd_rejects_escaping_stored_paths_before_any_write` (absolute, `..`, and
+out-of-`attachments/` paths leave the store empty with no checkpoint),
+`hs2_n250vd_rejects_a_staged_symlink_that_leaves_the_attachment_directory`, and
+`hs2_n250vd_missing_original_filename_uses_the_staged_file_name`; the
+`import_recovery.rs` bundle-escape test applies the same rule to explicit recovery.
+`migrator/test/export.test.mjs # stages a recorded HS1 path only inside
+<hotsheetDir>/attachments` covers absolute, traversal, and symlink escapes in the
+exporter with synthetic payloads.
+
 HS2-WE1AW4: `migrator/test/export.test.mjs # direct entry detection` pins the
 exporter's direct-entry check against a synthetic Windows drive path, an npm-style
 bin symlink, a path with spaces, and a missing entry, and runs the exporter through

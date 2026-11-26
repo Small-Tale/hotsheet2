@@ -101,15 +101,8 @@ fn export(path: &Path) -> Result<ExportFile> {
 }
 
 fn source_path(base: &Path, attachment: &ExportAttachment) -> Result<PathBuf> {
-    if Path::new(&attachment.stored_path).is_absolute() {
-        bail!("recovery requires a portable export with relative attachment paths");
-    }
-    let base = hotsheet_sync::paths::canonicalize(base)?;
-    let source = hotsheet_sync::paths::canonicalize(base.join(&attachment.stored_path))?;
-    if !source.starts_with(&base) {
-        bail!("export attachment escapes the portable bundle");
-    }
-    Ok(source)
+    // The same containment rule as ordinary import (HS2-N250VD).
+    crate::import::contained_attachment_source(base, &attachment.stored_path)
 }
 
 fn source_hash(base: &Path, attachment: &ExportAttachment) -> Result<String> {
@@ -437,11 +430,12 @@ mod tests {
         let file = directory.path().join("export.json");
         let value = serde_json::json!({"exportVersion":1,"project":{"name":"Recovery","ticketPrefix":"HS2"},"tickets":[{
             "ticket_number":"HS-1","title":"Original title","details":"Original details","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",
-            "attachments":[{"original_filename":"first.png","stored_path":"first.png"},{"original_filename":"second.png","stored_path":"second.png"}]
+            "attachments":[{"original_filename":"first.png","stored_path":"attachments/first.png"},{"original_filename":"second.png","stored_path":"attachments/second.png"}]
         }]});
         std::fs::write(&file, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
-        std::fs::write(directory.path().join("first.png"), b"FIRST").unwrap();
-        std::fs::write(directory.path().join("second.png"), b"SECOND").unwrap();
+        std::fs::create_dir_all(directory.path().join("attachments")).unwrap();
+        std::fs::write(directory.path().join("attachments/first.png"), b"FIRST").unwrap();
+        std::fs::write(directory.path().join("attachments/second.png"), b"SECOND").unwrap();
         let export = export(&file).unwrap();
         crate::import::import(&store, &export, directory.path()).unwrap();
         let id = import_id(&export.project, &export.tickets[0], 0);
@@ -626,7 +620,11 @@ mod tests {
             std::fs::read(f.store.root().join(OMISSIONS_FILE)).unwrap(),
             bytes
         );
-        std::fs::write(f.directory.path().join("first.png"), b"CHANGED SOURCE").unwrap();
+        std::fs::write(
+            f.directory.path().join("attachments/first.png"),
+            b"CHANGED SOURCE",
+        )
+        .unwrap();
         assert!(!diagnose(f.store.root(), &f.file).unwrap()[0].omission_confirmed);
         assert!(crate::import_completion::verify_export(f.store.root(), &f.file).is_err());
         // Explicitly restoring later revokes the old omission and copies only current selected bytes.
@@ -672,7 +670,7 @@ mod tests {
     fn missing_staged_sources_and_bundle_escapes_are_reported_without_modification() {
         let f = fixture();
         let key = remove(&f, 0);
-        std::fs::remove_file(f.directory.path().join("first.png")).unwrap();
+        std::fs::remove_file(f.directory.path().join("attachments/first.png")).unwrap();
         let before = snapshot(f.directory.path());
         let rows = diagnose(f.store.root(), &f.file).unwrap();
         assert!(rows[0].source_error.is_some());
@@ -681,14 +679,25 @@ mod tests {
         assert!(recover(f.store.root(), &f.file, &[], &[key]).is_err());
         assert_eq!(snapshot(f.directory.path()), before);
         let mut attachment = f.export.tickets[0].attachments[0].clone();
-        attachment.stored_path = "../outside.png".into();
-        assert!(source_path(f.directory.path(), &attachment).is_err());
+        for escape in [
+            "../outside.png",
+            "attachments/../first.png",
+            "attachments/../../outside.png",
+            "first.png",
+            "attachments",
+        ] {
+            attachment.stored_path = escape.into();
+            assert!(source_path(f.directory.path(), &attachment).is_err());
+        }
         #[cfg(unix)]
         {
             let outside = tempfile::NamedTempFile::new().unwrap();
-            std::os::unix::fs::symlink(outside.path(), f.directory.path().join("escape.png"))
-                .unwrap();
-            attachment.stored_path = "escape.png".into();
+            std::os::unix::fs::symlink(
+                outside.path(),
+                f.directory.path().join("attachments/escape.png"),
+            )
+            .unwrap();
+            attachment.stored_path = "attachments/escape.png".into();
             assert!(source_path(f.directory.path(), &attachment).is_err());
         }
         attachment.stored_path = f.file.display().to_string();

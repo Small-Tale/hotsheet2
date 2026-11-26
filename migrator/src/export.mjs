@@ -343,7 +343,12 @@ export function stageAttachments(fs, path, hotsheetDir, outPath, exportObj, obse
   // must not disappear from evidence and accidentally authorize source cleanup.
   for (const ticket of exportObj.tickets) {
     for (const attachment of ticket.attachments ?? []) {
-      const src = resolveAttachmentSource(fs, path, hotsheetDir, attachment.stored_path);
+      const { src, outside } = resolveAttachmentSource(fs, path, hotsheetDir, attachment.stored_path);
+      if (outside) {
+        throw new Error(
+          `Referenced HS1 attachment is outside ${path.join(hotsheetDir, 'attachments')}: ${attachment.stored_path}. Move the payload into that directory before importing; no completion or cleanup proof was recorded.`,
+        );
+      }
       if (!src || !fs.statSync(src).isFile()) {
         throw new Error(
           `Referenced HS1 attachment is missing: ${attachment.stored_path}. Restore the source payload before importing; no completion or cleanup proof was recorded.`,
@@ -405,13 +410,32 @@ export function copyDatabase(fs, path, source, destination, observe = () => {}) 
 /**
  * HS1 `stored_path` is an absolute path under `<.hotsheet>/attachments/`. Resolve by
  * basename against this project's attachments dir first (so a project copied to
- * another machine still works), then fall back to the raw stored path.
+ * another machine still works), then fall back to the recorded path only when it
+ * resolves (after symbolic links, when the filesystem can say) inside that same
+ * directory (HS2-N250VD). A crafted HS1 database must never stage an arbitrary local
+ * file into a Git-pushed ticket store. Returns `{ src }` or `{ outside: true }`.
  */
-function resolveAttachmentSource(fs, path, hotsheetDir, storedPath) {
-  const byBasename = path.join(hotsheetDir, 'attachments', path.basename(storedPath));
-  if (fs.existsSync(byBasename)) return byBasename;
-  if (fs.existsSync(storedPath)) return storedPath;
-  return null;
+export function resolveAttachmentSource(fs, path, hotsheetDir, storedPath) {
+  const root = path.resolve(hotsheetDir, 'attachments');
+  const realRoot = realpathOr(fs, root);
+  const inside = (candidate) => {
+    const relative = path.relative(realRoot, realpathOr(fs, candidate));
+    return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+  };
+  for (const candidate of [path.join(root, path.basename(storedPath)), path.resolve(root, storedPath)]) {
+    if (fs.existsSync(candidate)) return inside(candidate) ? { src: candidate } : { outside: true };
+  }
+  return {};
+}
+
+/** `fs.realpathSync(file)` when the filesystem provides it, else the lexical path. */
+function realpathOr(fs, file) {
+  if (typeof fs.realpathSync !== 'function') return file;
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    return file;
+  }
 }
 
 // ---- engine + database selection -------------------------------------------------

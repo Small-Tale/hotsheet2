@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use hotsheet_model::{
@@ -245,6 +245,7 @@ pub fn import_with_progress(
     // Import writes checkpoints and settings even when there are no ticket writes.
     // Admit the workflow before either path can mutate a stale checkout (HS2-YCEQNT).
     store.with_ticket_transaction(|| Ok::<(), StoreError>(()))?;
+    validate_attachment_paths(export)?;
     let total = export.tickets.len() as u64;
     observe(MigrationProgress::measured(
         "import_tickets",
@@ -751,6 +752,98 @@ fn copy_attachments(
     Ok(n)
 }
 
+/// Staged attachments live under this directory beside the export JSON.
+const STAGED_ATTACHMENT_DIRECTORY: &str = "attachments";
+
+/// Why an export `stored_path` cannot name a staged payload (HS2-N250VD).
+fn stored_path_shape_error(stored_path: &str) -> Option<&'static str> {
+    let path = Path::new(stored_path);
+    if stored_path.is_empty() {
+        return Some("is empty");
+    }
+    if path.is_absolute() || path.has_root() {
+        return Some("is absolute");
+    }
+    let mut normal = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => normal.push(part),
+            Component::CurDir => {}
+            Component::ParentDir => return Some("contains `..`"),
+            Component::RootDir | Component::Prefix(_) => return Some("is absolute"),
+        }
+    }
+    if normal.len() < 2 || normal[0] != STAGED_ATTACHMENT_DIRECTORY {
+        return Some("is not under the staged `attachments/` directory");
+    }
+    None
+}
+
+/// Resolve an export attachment to its staged payload, refusing any path that is
+/// absolute, climbs with `..`, or whose canonical target (after symbolic links)
+/// leaves `<base_dir>/attachments/` (HS2-N250VD). A hand-edited or received export
+/// must never pull an arbitrary local file into a Git-pushed ticket store.
+pub(crate) fn contained_attachment_source(base_dir: &Path, stored_path: &str) -> Result<PathBuf> {
+    if let Some(reason) = stored_path_shape_error(stored_path) {
+        bail!(
+            "attachment stored_path {stored_path:?} {reason}; re-export with the Hot Sheet migrator, which stages payloads as `attachments/<n>/<file>` beside the export JSON"
+        );
+    }
+    let root = base_dir.join(STAGED_ATTACHMENT_DIRECTORY);
+    let canonical_root = hotsheet_sync::paths::canonicalize(&root)
+        .with_context(|| format!("opening staged attachment directory {}", root.display()))?;
+    let candidate = base_dir.join(stored_path);
+    let source = hotsheet_sync::paths::canonicalize(&candidate)
+        .with_context(|| format!("reading staged attachment {}", candidate.display()))?;
+    if !source.starts_with(&canonical_root) || source == canonical_root {
+        bail!(
+            "attachment stored_path {stored_path:?} resolves outside the staged `attachments/` directory (through a symbolic link); re-export with the Hot Sheet migrator"
+        );
+    }
+    Ok(source)
+}
+
+/// The human label naming the ticket and attachment an import error concerns.
+pub(crate) fn attachment_label(ticket: &str, att: &ExportAttachment) -> String {
+    format!(
+        "HS1 {ticket} attachment {:?} (stored_path {:?})",
+        att.original_filename.as_deref().unwrap_or(""),
+        att.stored_path
+    )
+}
+
+fn export_ticket_label(ticket: &ExportTicket) -> String {
+    match ticket.ticket_number.as_deref() {
+        Some(number) => format!("ticket {number}"),
+        None => format!("ticket {:?}", ticket.title),
+    }
+}
+
+/// The display name for an attachment without an original filename: the staged
+/// payload's file name, never the whole export path.
+fn staged_file_name(stored_path: &str) -> &str {
+    Path::new(stored_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(stored_path)
+}
+
+/// Refuse an export whose attachment paths could escape the staged bundle before
+/// any checkpoint, ticket, or payload is written (HS2-N250VD).
+fn validate_attachment_paths(export: &ExportFile) -> Result<()> {
+    for ticket in &export.tickets {
+        for att in &ticket.attachments {
+            if let Some(reason) = stored_path_shape_error(&att.stored_path) {
+                bail!(
+                    "{}: stored_path {reason}; re-export with the Hot Sheet migrator, which stages payloads as `attachments/<n>/<file>` beside the export JSON. Nothing was imported.",
+                    attachment_label(&export_ticket_label(ticket), att)
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Restore one explicitly selected missing payload while preserving destination metadata.
 /// Ordinary import calls this only for identities covered by its pending checkpoint.
 pub(crate) fn restore_missing_attachment(
@@ -772,7 +865,8 @@ pub(crate) fn restore_missing_attachment(
             Err(error) => return Err(error.into()),
         }
     }
-    let src = base_dir.join(&att.stored_path);
+    let src = contained_attachment_source(base_dir, &att.stored_path)
+        .with_context(|| attachment_label(&format!("ticket {id}"), att))?;
     let bytes = std::fs::read(&src)
         .with_context(|| format!("reading staged attachment {}", src.display()))?;
     let (filename, created_at, metadata) = if let Some(existing) = existing {
@@ -793,7 +887,7 @@ pub(crate) fn restore_missing_attachment(
             att.original_filename
                 .as_deref()
                 .filter(|s| !s.is_empty())
-                .unwrap_or(&att.stored_path),
+                .unwrap_or_else(|| staged_file_name(&att.stored_path)),
             att.created_at
                 .clone()
                 .map(Timestamp::new)
@@ -991,6 +1085,13 @@ mod tests {
         serde_json::from_str(json).unwrap()
     }
 
+    /// A staged payload path under `<staging>/attachments/`, creating the directory.
+    fn staged(staging: &tempfile::TempDir, name: &str) -> PathBuf {
+        let root = staging.path().join("attachments");
+        std::fs::create_dir_all(&root).unwrap();
+        root.join(name)
+    }
+
     fn attachment_export() -> ExportFile {
         let mut export = export_json();
         export.tickets.truncate(1);
@@ -999,7 +1100,7 @@ mod tests {
             .map(|name| ExportAttachment {
                 id: None,
                 original_filename: Some(name.to_string()),
-                stored_path: name.to_string(),
+                stored_path: format!("attachments/{name}"),
                 created_at: Some("2026-08-01T01:00:00Z".to_string()),
             })
             .collect();
@@ -1065,7 +1166,7 @@ mod tests {
         let (_dir, store) = temp_store();
         let staging = tempfile::tempdir().unwrap();
         let export = attachment_export();
-        std::fs::write(staging.path().join("first.png"), b"FIRST").unwrap();
+        std::fs::write(staged(&staging, "first.png"), b"FIRST").unwrap();
         let mut events = Vec::new();
         assert!(
             import_with_progress(&store, &export, staging.path(), &mut |event| events
@@ -1079,7 +1180,7 @@ mod tests {
             .collect();
         assert_eq!(copied, vec![(Some(0), Some(2)), (Some(1), Some(2))]);
         assert!(!events.iter().any(|event| event.phase == "import_settings"));
-        std::fs::write(staging.path().join("second.png"), b"SECOND").unwrap();
+        std::fs::write(staged(&staging, "second.png"), b"SECOND").unwrap();
         events.clear();
         let summary = import_with_progress(&store, &export, staging.path(), &mut |event| {
             events.push(event)
@@ -1125,7 +1226,7 @@ mod tests {
         let (_dir, store) = temp_store();
         let staging = tempfile::tempdir().unwrap();
         let export = attachment_export();
-        std::fs::write(staging.path().join("first.png"), b"FIRST").unwrap();
+        std::fs::write(staged(&staging, "first.png"), b"FIRST").unwrap();
         assert!(import(&store, &export, staging.path()).is_err());
         let mut ticket = store.list_tickets().unwrap().remove(0);
         let id = ticket.id;
@@ -1161,11 +1262,11 @@ mod tests {
                 intents: Vec::new(),
             });
         store.write_ticket(&ticket).unwrap();
-        std::fs::remove_file(staging.path().join("first.png")).unwrap();
+        std::fs::remove_file(staged(&staging, "first.png")).unwrap();
         // Repeated failures retain both the checkpoint and the user's changes.
         assert!(import(&store, &export, staging.path()).is_err());
         assert_eq!(store.read_ticket(&id).unwrap(), ticket);
-        std::fs::write(staging.path().join("second.png"), b"SECOND").unwrap();
+        std::fs::write(staged(&staging, "second.png"), b"SECOND").unwrap();
         assert_eq!(
             import(&store, &export, staging.path()).unwrap(),
             ImportSummary {
@@ -1202,14 +1303,14 @@ mod tests {
         let (_dir, store) = temp_store();
         let staging = tempfile::tempdir().unwrap();
         let export = attachment_export();
-        std::fs::write(staging.path().join("first.png"), b"FIRST").unwrap();
+        std::fs::write(staged(&staging, "first.png"), b"FIRST").unwrap();
         assert!(import(&store, &export, staging.path()).is_err());
         let ticket = store.list_tickets().unwrap().remove(0);
         let first_id = ticket.attachments[0].id;
         let deleted = store
             .remove_attachment(&ticket.id, &first_id, "2026-09-22T13:00:00Z".into())
             .unwrap();
-        std::fs::write(staging.path().join("second.png"), b"SECOND").unwrap();
+        std::fs::write(staged(&staging, "second.png"), b"SECOND").unwrap();
         assert_eq!(
             import(&store, &export, staging.path()).unwrap().attachments,
             1
@@ -1226,7 +1327,7 @@ mod tests {
         let (_dir, store) = temp_store();
         let staging = tempfile::tempdir().unwrap();
         let export = attachment_export();
-        std::fs::write(staging.path().join("first.png"), b"FIRST").unwrap();
+        std::fs::write(staged(&staging, "first.png"), b"FIRST").unwrap();
         assert!(import(&store, &export, staging.path()).is_err());
         let ticket = store.list_tickets().unwrap().remove(0);
         let id = ticket.id;
@@ -1241,11 +1342,11 @@ mod tests {
                 .join("renamed.png"),
         )
         .unwrap();
-        let second_id = FsStore::legacy_attachment_id(&id, "second.png");
+        let second_id = FsStore::legacy_attachment_id(&id, "attachments/second.png");
         let blocked_destination = store.attachment_dir(&id).join(second_id.to_string());
         // A directory in place of the payload prevents the store writer's copy.
         std::fs::create_dir_all(blocked_destination.join("second.png")).unwrap();
-        std::fs::write(staging.path().join("second.png"), b"SECOND").unwrap();
+        std::fs::write(staged(&staging, "second.png"), b"SECOND").unwrap();
         assert!(import(&store, &export, staging.path()).is_err());
         assert_eq!(store.read_attachment(&id, &first_id).unwrap().1, b"FIRST");
         assert_eq!(store.read_ticket(&id).unwrap(), renamed);
@@ -1302,7 +1403,7 @@ mod tests {
         pending.version = 1;
         pending.write(&store, &id).unwrap();
         for name in ["first.png", "second.png"] {
-            std::fs::write(staging.path().join(name), name).unwrap();
+            std::fs::write(staged(&staging, name), name).unwrap();
         }
         assert_eq!(
             import(&store, &export, staging.path()).unwrap(),
@@ -1350,7 +1451,7 @@ mod tests {
         let legacy = build_ticket(&export.tickets[0], id, "HS", &HashMap::new());
         store.write_ticket(&legacy).unwrap();
         for name in ["first.png", "second.png"] {
-            std::fs::write(staging.path().join(name), name).unwrap();
+            std::fs::write(staged(&staging, name), name).unwrap();
         }
         assert_eq!(
             import(&store, &export, staging.path()).unwrap(),
@@ -1728,5 +1829,108 @@ mod tests {
             .join(ticket.attachments[0].id.to_string())
             .join("shot.png");
         assert_eq!(std::fs::read(file).unwrap(), b"PNGDATA");
+    }
+
+    fn single_attachment_export(stored_path: &str, original: Option<&str>) -> ExportFile {
+        let mut export = attachment_export();
+        export.tickets[0].attachments = vec![ExportAttachment {
+            id: None,
+            original_filename: original.map(str::to_string),
+            stored_path: stored_path.to_string(),
+            created_at: None,
+        }];
+        export
+    }
+
+    #[test]
+    fn hs2_n250vd_rejects_escaping_stored_paths_before_any_write() {
+        // A synthetic secret beside the staging directory that a traversal would reach.
+        let outside = tempfile::tempdir().unwrap();
+        let secret = outside.path().join("secret.txt");
+        std::fs::write(&secret, b"SYNTHETIC-SECRET").unwrap();
+        let staging = tempfile::tempdir().unwrap();
+        staged(&staging, "present.png");
+        let absolute = secret.display().to_string();
+        for (stored_path, reason) in [
+            (absolute.as_str(), "is absolute"),
+            ("../secret.txt", "contains `..`"),
+            ("attachments/../../secret.txt", "contains `..`"),
+            ("attachments/0/../../present.png", "contains `..`"),
+            ("present.png", "not under the staged `attachments/`"),
+            ("attachments", "not under the staged `attachments/`"),
+            ("", "is empty"),
+        ] {
+            let (_dir, store) = temp_store();
+            let error = import(
+                &store,
+                &single_attachment_export(stored_path, Some("leak.txt")),
+                staging.path(),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains(reason), "{stored_path:?}: {error}");
+            assert!(error.contains("HS1 ticket HS-1"), "{error}");
+            assert!(error.contains("\"leak.txt\""), "{error}");
+            assert!(error.contains("Nothing was imported"), "{error}");
+            assert!(store.list_tickets().unwrap().is_empty());
+            assert!(!store.root().join(PENDING_IMPORT_DIRECTORY).exists());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hs2_n250vd_rejects_a_staged_symlink_that_leaves_the_attachment_directory() {
+        let outside = tempfile::tempdir().unwrap();
+        let secret = outside.path().join("secret.txt");
+        std::fs::write(&secret, b"SYNTHETIC-SECRET").unwrap();
+        let staging = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(&secret, staged(&staging, "link.png")).unwrap();
+        let (_dir, store) = temp_store();
+        let error = import(
+            &store,
+            &single_attachment_export("attachments/link.png", Some("link.png")),
+            staging.path(),
+        )
+        .unwrap_err();
+        let message = format!("{error:#}");
+        assert!(message.contains("resolves outside"), "{message}");
+        assert!(message.contains("attachment \"link.png\""), "{message}");
+        // The payload never reached the store; a retry stays pending, not complete.
+        let ticket = &store.list_tickets().unwrap()[0];
+        assert!(ticket.attachments.is_empty());
+        let id = ticket.id;
+        assert!(PendingImport::read(&store, &id).unwrap().is_some());
+
+        // A symlink that stays inside the staged directory is an ordinary payload.
+        let real = staged(&staging, "real.png");
+        std::fs::write(&real, b"INSIDE").unwrap();
+        std::fs::remove_file(staged(&staging, "link.png")).unwrap();
+        std::os::unix::fs::symlink(&real, staged(&staging, "link.png")).unwrap();
+        assert_eq!(
+            import(
+                &store,
+                &single_attachment_export("attachments/link.png", Some("link.png")),
+                staging.path(),
+            )
+            .unwrap()
+            .attachments,
+            1
+        );
+    }
+
+    #[test]
+    fn hs2_n250vd_missing_original_filename_uses_the_staged_file_name() {
+        let staging = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(staging.path().join("attachments/0")).unwrap();
+        std::fs::write(staging.path().join("attachments/0/shot.png"), b"PNG").unwrap();
+        let (_dir, store) = temp_store();
+        import(
+            &store,
+            &single_attachment_export("./attachments/0/shot.png", None),
+            staging.path(),
+        )
+        .unwrap();
+        let ticket = &store.list_tickets().unwrap()[0];
+        assert_eq!(ticket.attachments[0].filename, "shot.png");
     }
 }
