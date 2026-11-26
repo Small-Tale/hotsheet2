@@ -1258,7 +1258,8 @@ target with nothing left to follow is not contacted.
 **Targets followed for new tickets (HS2-BQN0M5).** While the default goal is
 re-planned automatically (§26.25), every active project target is followed as well,
 acting as the scheduler's actor. An event for an open ticket that no step names starts
-one background Update Plan. When the re-plan stops applying, a target with nothing
+one background Update Plan; after a handshake, an overflow or a reconnect the follower
+lists the target's open tickets instead (HS2-04WW8B). When the re-plan stops applying, a target with nothing
 else to follow is no longer contacted.
 
 **Session changes on the same feed (HS2-257Q2Z).** When a session an orchestrator
@@ -5601,9 +5602,24 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   unfinished run works is read through the gate (`tickets_read`). If the ticket is open
   (any status except completed, verified, archive, deleted or moved), it becomes
   _pending_. The event for a ticket that is created or reopened is what starts a
-  re-plan. A handshake, an `overflow` or a reconnect cannot say which tickets are new,
-  so it starts nothing. An event that names no ticket (a store reconciliation) starts
-  nothing either.
+  re-plan. An event that names no ticket (a store reconciliation) starts nothing.
+- **Caught up after unseen history (HS2-04WW8B).** A handshake (a server start or a
+  new follower), an `overflow` or a reconnect cannot say which tickets are new. The
+  follower then lists the target's open tickets of every source through the gate
+  (`tickets_read`, the same read as `target_ticket_list`, HS2-D85G19; at most 10
+  pages of 100 per source) and treats an open ticket that no step names, that was
+  not handed before and that is not in the remembered _seen_ baseline as pending,
+  coalesced into one update as below. The baseline holds the open tickets earlier
+  listings found and the tickets events showed (bounded to 8,192, smallest key
+  forgotten first). A target's first listing after the re-plan starts to apply (its
+  first follower step then, handshake or not) only seeds the baseline and starts
+  nothing: the default-goal planner already works through every open ticket. A
+  complete listing forgets remembered tickets that closed meanwhile, so a pending
+  ticket closed while the server was down starts nothing, and one reopened later
+  counts again. A listing that fails changes nothing and is tried again at the next
+  such step. A server starts following its re-planned targets at start-up, and a
+  stopping server's change feed answers nothing more, so a follower catches up with
+  the next server instead.
 - **Coalesced.** All pending tickets go into one background **Update Plan**. That
   includes a burst on one page, and the tickets of later pages while an update still
   drafts. A pending ticket is settled once a step names it, or once a plan update
@@ -5623,13 +5639,12 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   the machine home (private, bounded to 4,096 handed tickets, oldest forgotten first)
   and shared by the owner's followers under its lock. After a server restart a ticket
   the planner left out stays left out, and a ticket that was still pending starts its
-  update at the follower's first step (its handshake hands nothing new but asks for
-  what was pending). The file is advisory: one that does not decode reads as empty and
+  update at the follower's first step (its handshake's catch-up asks for what was
+  pending together with what it finds new). The file is advisory: one that does not decode reads as empty and
   is replaced, and while it cannot be read at all (another schema version, an
   unreadable home) the follower keeps its own in-process copy and writes nothing.
-  When the re-plan stops applying the memory is forgotten, on disk as well. A ticket
-  created while no server followed the target is still not seen until it changes, as
-  for an `overflow` (HS2-04WW8B).
+  When the re-plan stops applying the memory is forgotten, on disk as well, the seen
+  baseline included, so the next time it applies the baseline is seeded afresh.
 - **Audit.** Each automatic update is audited as `plan_update_auto` (with
   `plan_update_started`, `plan_update_existing` or the refusal reason) instead of
   `plan_update`. Its finish and cancel are audited as for any update.
@@ -5757,7 +5772,11 @@ re-plans in the background; nothing pauses.
 - **Failure leaves the plan.** A refused merge fails the update as
   `plan_update_conflict` (with the step ids in `conflicts`) or `plan_update_invalid`;
   a planner whose tab ended before finishing fails it as `plan_update_planner_ended`
-  (learned on the next read). The live plan is unchanged and the draft is forgotten;
+  (learned on the next read). A host restart is no exception (HS2-3H51NM): the update
+  record and its draft live in the machine home, so a restarted host reads a drafting
+  update back and it finishes as before while its planner's terminal lives on (in the
+  detached terminal broker), and fails it on the next read when the terminal died with
+  the host, so the next Update Plan opens a new update. The live plan is unchanged and the draft is forgotten;
   the reason stays on the update until the next one opens.
 - **Cancel.** `plan update-cancel` ends a drafting update as `cancelled` and forgets the
   draft. The planner's tab stays open; its later draft writes are refused with

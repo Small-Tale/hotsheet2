@@ -10,6 +10,7 @@ use super::session_work::{
 };
 use super::sessions::{drawer, git_project};
 use super::*;
+use hotsheet_server::AppState;
 use hotsheet_ticketing::checkouts::{Checkout, CheckoutRegistry};
 use hotsheet_ticketing::{NewTicket, StoreMetadata, TicketPatch, ops};
 use std::path::PathBuf;
@@ -24,6 +25,10 @@ struct TwoProjects {
     owner: Checkout,
     target_store: PathBuf,
     target: Checkout,
+    /// HS2-04WW8B: the serving state, its store and plugins, to restart it.
+    host: AppState,
+    server_store: PathBuf,
+    plugins: PathBuf,
     router: axum::Router,
     base: String,
 }
@@ -35,15 +40,9 @@ impl TwoProjects {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("home");
         let reports = root.path().join("reports");
-        let host = state(&root.path().join("server-store"), &home)
-            .with_capacity_source(Box::new(Roomy))
-            .with_capacity_cache(std::time::Duration::ZERO)
-            .with_plugin_dirs(vec![report_plugin(
-                root.path(),
-                &reports,
-                PUSH_AGENT,
-                PUSH_PLUGIN,
-            )]);
+        let server_store = root.path().join("server-store");
+        let plugins = report_plugin(root.path(), &reports, PUSH_AGENT, PUSH_PLUGIN);
+        let host = Self::serving(&server_store, &home, &plugins);
         let registry = CheckoutRegistry::new(home.join("checkouts.json"));
         let project = |name: &str, prefix: &str| {
             let path = root.path().join(name);
@@ -65,11 +64,51 @@ impl TwoProjects {
             owner,
             target_store,
             target,
-            router: app(host),
+            router: app(host.clone()),
+            host,
+            server_store,
+            plugins,
             base,
         };
         world.bind().await;
         world
+    }
+
+    fn serving(
+        store: &std::path::Path,
+        home: &std::path::Path,
+        plugins: &std::path::Path,
+    ) -> AppState {
+        state(store, home)
+            .with_capacity_source(Box::new(Roomy))
+            .with_capacity_cache(std::time::Duration::ZERO)
+            .with_plugin_dirs(vec![plugins.to_path_buf()])
+    }
+
+    /// HS2-04WW8B: the server stops; the terminals it hosts die with its process.
+    async fn stop(&self) {
+        for tab in drawer(&self.router).await {
+            let id = tab["id"].as_str().unwrap();
+            let (status, _) = api(
+                self.router.clone(),
+                "DELETE",
+                &format!("/terminals/{id}"),
+                Value::Null,
+                true,
+            )
+            .await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+        }
+        self.host.begin_stopping();
+    }
+
+    /// HS2-04WW8B: a new server starts over the same home; its start-up alone follows
+    /// the targets again.
+    fn start(&mut self) {
+        let next = Self::serving(&self.server_store, &self.home, &self.plugins);
+        next.spawn_run_recovery();
+        self.router = app(next.clone());
+        self.host = next;
     }
 
     async fn call(&self, method: &str, path: &str, body: Value) -> (StatusCode, Value) {
@@ -394,4 +433,85 @@ async fn hs2_tzccbj_the_server_follows_a_target_only_for_the_default_goal() {
             count(audit, is_follower_authorized) > 0
         })
         .await;
+}
+
+/// HS2-04WW8B: the follower's catch-up listing of the target's open tickets (and any
+/// other read it records), succeeded.
+fn is_target_read_done(entry: &Value) -> bool {
+    is_target_read(entry) && entry["outcome"] == "succeeded"
+}
+
+/// HS2-04WW8B: on a real server, a ticket written headlessly into the target while the
+/// server is down is caught up when it starts again: its start-up follows the target,
+/// the follower's handshake lists the target's open tickets, and exactly one automatic
+/// Update Plan starts. The ticket that existed before the re-plan applied was only
+/// seeded, and another restart starts nothing more.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_04ww8b_a_ticket_created_while_the_server_was_down_replans_once() {
+    let mut world = TwoProjects::new().await;
+    world.target_ticket("Synthetic existing work");
+    let (status, proposed) = world
+        .call(
+            "POST",
+            "/planning/propose",
+            json!({"tool":REPORT_TOOL,"operation_id":"press-1",
+                "actor":{"role":"human","id":"maintainer"}}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{proposed}");
+    assert_eq!(proposed["goals"][0]["default_goal"], true, "{proposed}");
+    let terminal = proposed["session"]["session"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    received_prompt(&world.reports, &terminal, "press-1");
+    // The follower's first step seeds the baseline: a listing, and no update.
+    world
+        .audit_until("the seeding listing", |audit| {
+            count(audit, is_target_read_done) > 0
+        })
+        .await;
+    world.replannable().await;
+    assert_eq!(count(&world.audit().await, is_auto), 0);
+
+    // The server stops. A ticket is written into the target's store meanwhile, as a
+    // headless CLI would; no server sees it happen.
+    world.stop().await;
+    let reads = count(&world.audit().await, is_target_read_done);
+    world.target_ticket("Synthetic work created while the server was down");
+
+    // The server starts again: exactly one automatic update, after the new follower's
+    // catch-up listing.
+    world.start();
+    let audit = world
+        .audit_until("the catch-up's automatic update", |audit| {
+            count(audit, is_auto) == 1
+        })
+        .await;
+    let auto = audit.iter().position(is_auto).unwrap();
+    assert!(
+        count(&audit[..auto], is_target_read_done) > reads,
+        "the update started before the restarted follower listed the target: {audit:?}"
+    );
+    assert_eq!(audit[auto]["outcome"], "succeeded", "{audit:?}");
+    assert_eq!(audit[auto]["reason"], "plan_update_started", "{audit:?}");
+    assert!(
+        audit[auto]["actor_id"]
+            .as_str()
+            .is_some_and(|actor| actor.starts_with("orchestrator")),
+        "{audit:?}"
+    );
+
+    // Another restart with nothing new: the next follower lists the target again and
+    // starts nothing more.
+    world.stop().await;
+    let reads = count(&world.audit().await, is_target_read_done);
+    world.start();
+    let audit = world
+        .audit_until("the second restart's listing", |audit| {
+            count(audit, is_target_read_done) > reads
+        })
+        .await;
+    assert_eq!(count(&audit, is_auto), 1, "{audit:?}");
+    world.host.begin_stopping();
 }

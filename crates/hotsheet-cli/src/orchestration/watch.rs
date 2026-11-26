@@ -388,15 +388,20 @@ impl OrchestrationRuntime {
             }
         }
         // HS2-BQN0M5: a new or reopened ticket no step names re-plans the default goal.
-        // After a handshake, an overflow or a reconnect nothing says which are new.
+        // After a handshake, an overflow or a reconnect nothing says which are new: the
+        // target's open tickets are listed instead (HS2-04WW8B).
         match (&replanner, &state.authorized) {
             (Some(actor), Some((authorized, _))) => {
                 let mut named = tickets.clone();
                 named.extend(runs.iter().map(|run| run.target.clone()));
-                let events: &[TargetTicketEvent] = if caught_up { &[] } else { &page.events };
+                let seen = if caught_up {
+                    super::auto_replan::Seen::Unknown
+                } else {
+                    super::auto_replan::Seen::Events(&page.events)
+                };
                 step.replan = self.replan_follow(
                     (owner_id, target_id),
-                    events,
+                    seen,
                     &named,
                     (authorized, actor),
                     &mut state.replan,

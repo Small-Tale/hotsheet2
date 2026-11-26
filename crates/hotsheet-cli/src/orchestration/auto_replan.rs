@@ -17,29 +17,48 @@
 //! - **Once per ticket.** A ticket handed to a re-plan does not start another one while
 //!   it stays open, even when the planner chose to leave it out. Closing it forgets it,
 //!   so a reopened ticket counts again.
-//! - **Unknown history starts nothing.** A handshake, an overflow or a reconnect cannot
-//!   say which tickets are new, so it hands none to a re-plan.
+//! - **Caught up after unseen history (HS2-04WW8B).** A handshake, an overflow or a
+//!   reconnect cannot say which tickets are new, so it lists the target's open tickets
+//!   through the gate (`tickets_read`, bounded to [`MAX_CATCH_UP_PAGES`] pages per
+//!   source) and hands those neither named by a step, handed before nor in the
+//!   remembered *seen* baseline to one re-plan, coalesced as above. A target's first
+//!   catch-up after the re-plan applies (its first step then, handshake or not) only
+//!   seeds its baseline: the default-goal planner already works through every open
+//!   ticket then. A complete listing forgets remembered tickets that closed meanwhile;
+//!   a listing that fails changes nothing and is tried again at the next such step.
 //! - **Remembered across restarts (HS2-G6F5BP).** The memory is machine-local per
 //!   owner (`ReplanMemoryStore`), shared by the owner's followers under its lock. After
 //!   a restart a skipped ticket stays skipped, and a pending one starts its update at
-//!   the first step (a handshake hands nothing new, but settles and asks for what was
-//!   pending). A memory file that cannot be read falls back to the follower's own
+//!   the first step (the handshake's catch-up settles and asks for what was pending,
+//!   together with what it finds new). A memory file that cannot be read falls back to the follower's own
 //!   in-process copy; one that does not decode is replaced.
 
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    DeclarationState, PlanningState, ReplanKey, ReplanMemory, ReplanMemoryStore, RunTarget,
-    TargetOpError, current_planner, planning_state,
+    DeclarationState, PlanningState, ReplanCatchUp, ReplanKey, ReplanMemory, ReplanMemoryStore,
+    RunTarget, TargetOpError, current_planner, planning_state,
 };
 use serde_json::Value;
 
 use super::plan_update::UpdatePlan;
+use super::ticket_list::{MAX_TARGET_TICKET_PAGE, TargetTicketSearch};
 use super::*;
 
 /// The audit action of an Update Plan this module starts.
 pub const AUTO_REPLAN_ACTION: &str = "plan_update_auto";
 /// A target ticket, by connection and canonical id.
 type Key = ReplanKey;
+/// HS2-04WW8B: the most pages of open tickets one catch-up lists per source.
+pub const MAX_CATCH_UP_PAGES: usize = 10;
+
+/// HS2-04WW8B: what a follower step knows about the history it missed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Seen<'a> {
+    /// These events are everything that happened since the last step.
+    Events(&'a [super::TargetTicketEvent]),
+    /// A handshake, an overflow or a reconnect: anything may have happened.
+    Unknown,
+}
 
 /// What a follower step did about re-planning.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -116,7 +135,7 @@ impl OrchestrationRuntime {
     pub(super) fn replan_follow(
         &self,
         ids: (&str, &str),
-        events: &[super::TargetTicketEvent],
+        events: Seen<'_>,
         named: &[RunTarget],
         access: (&Authorized, &MutationActor),
         cached: &mut ReplanMemory,
@@ -167,14 +186,66 @@ impl OrchestrationRuntime {
             .map_or(true, |memory| !memory.is_empty())
     }
 
+    /// HS2-04WW8B: list the open tickets of every source of the target, at most
+    /// [`MAX_CATCH_UP_PAGES`] pages each. Answers the sources, their open tickets and
+    /// whether every one was listed; audited once as the follower's `tickets_read`.
+    fn replan_listing(
+        &self,
+        (owner_id, target_id): (&str, &str),
+        authorized: &Authorized,
+        tx: &mut Transaction<'_>,
+    ) -> Option<(Vec<String>, Vec<Key>, bool)> {
+        let connections: Vec<String> = authorized
+            .resolution
+            .sources
+            .iter()
+            .flatten()
+            .map(|source| source.connection_id.clone())
+            .collect();
+        let mut listed = Vec::new();
+        let mut complete = true;
+        let mut outcome = Ok(());
+        'sources: for connection in &connections {
+            let mut search = TargetTicketSearch {
+                limit: Some(MAX_TARGET_TICKET_PAGE),
+                ..TargetTicketSearch::default()
+            };
+            for _ in 0..MAX_CATCH_UP_PAGES {
+                match self.ticket_page_authorized(authorized, connection, &search, tx) {
+                    Ok(page) => {
+                        listed.extend(
+                            page.tickets
+                                .into_iter()
+                                .map(|row| (connection.clone(), row.native_id)),
+                        );
+                        search.cursor = page.next_cursor;
+                        if search.cursor.is_none() {
+                            continue 'sources;
+                        }
+                    }
+                    Err(error) => {
+                        outcome = Err(error.code());
+                        break 'sources;
+                    }
+                }
+            }
+            complete = false;
+        }
+        if let Ok(reference) = Self::target_ref(owner_id, target_id) {
+            let _ = self.record_outcome(&reference, authorized, outcome.is_ok(), outcome.err(), tx);
+        }
+        outcome.ok().map(|()| (connections, listed, complete))
+    }
+
     /// HS2-BQN0M5: one follower step's part in re-planning. `events` are the page's
-    /// ticket events (none after a handshake, an overflow or a reconnect), `named` the
+    /// ticket events, or `Unknown` after a handshake, an overflow or a reconnect (a
+    /// catch-up then lists the target's open tickets, HS2-04WW8B); `named` the
     /// target tickets a step names or a run works now, `actor` the one
     /// [`Self::replan_actor`] answered for this step.
     fn replan_step(
         &self,
         (owner_id, target_id): (&str, &str),
-        events: &[super::TargetTicketEvent],
+        seen: Seen<'_>,
         named: &[RunTarget],
         (authorized, actor): (&Authorized, &MutationActor),
         memory: &mut ReplanMemory,
@@ -188,22 +259,46 @@ impl OrchestrationRuntime {
                 .iter()
                 .any(|ticket| &ticket.connection_id == connection && &ticket.native_id == native)
         };
+        let latest_update = || {
+            self.plan_updates(owner_id)
+                .and_then(|store| store.latest())
+                .ok()
+                .flatten()
+                .map(|update| update.update_id)
+        };
         let mut candidates: Vec<Key> = Vec::new();
+        let events = match seen {
+            Seen::Events(events) => events,
+            Seen::Unknown => &[],
+        };
         for event in events {
             let key = (event.connection_id.clone(), event.native_id.clone());
             // A store reconciliation names no ticket; it cannot say what is new.
-            if event.native_id.is_empty() || is_named(&key) || candidates.contains(&key) {
+            if event.native_id.is_empty() || candidates.contains(&key) {
+                continue;
+            }
+            if is_named(&key) {
+                // HS2-04WW8B: seen, so a later catch-up does not count it as new.
+                memory.saw(key);
                 continue;
             }
             candidates.push(key);
         }
+        // A target not seeded yet (the re-plan just started to apply) is listed once
+        // to seed its baseline, whatever the step saw.
+        if (seen == Seen::Unknown || !memory.seeded(target_id))
+            && let Some((connections, listed, complete)) =
+                self.replan_listing((owner_id, target_id), authorized, tx)
+        {
+            let listing = ReplanCatchUp {
+                target_id,
+                connections: &connections,
+                complete,
+            };
+            memory.catch_up(listing, &listed, is_named, latest_update().as_deref());
+        }
         if !candidates.is_empty() {
-            let latest = self
-                .plan_updates(owner_id)
-                .and_then(|store| store.latest())
-                .ok()
-                .flatten()
-                .map(|update| update.update_id);
+            let latest = latest_update();
             let mut failed = None;
             for (connection_id, native_id) in candidates {
                 let target = TargetTicket {

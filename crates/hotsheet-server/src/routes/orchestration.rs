@@ -116,6 +116,16 @@ impl TargetEvents for ServerEvents {
         wait_ms: u64,
     ) -> Result<TargetEventPage, OrchestrationError> {
         let state = &self.0;
+        // HS2-04WW8B: a stopping server reports nothing more. Its own followers end, and
+        // a follower elsewhere keeps its cursor and catches up with the next server.
+        let stopping = || {
+            OrchestrationError::TargetOperation(
+                hotsheet_ticketing::orchestration::TargetOpError::Failed,
+            )
+        };
+        if state.is_stopping() {
+            return Err(stopping());
+        }
         // Ticket changes are published under the git connection id of their store.
         let sources: std::collections::HashSet<&str> = checkout
             .sources
@@ -213,7 +223,7 @@ impl TargetEvents for ServerEvents {
                 return Ok(page);
             };
             let waited = handle.block_on(async {
-                tokio::time::timeout(std::time::Duration::from_millis(wait_ms), async {
+                let next = tokio::time::timeout(std::time::Duration::from_millis(wait_ms), async {
                     loop {
                         match receiver.recv().await {
                             Ok(event) if event.cursor.is_some_and(|at| at <= cursor) => {}
@@ -235,9 +245,15 @@ impl TargetEvents for ServerEvents {
                             Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
                         }
                     }
-                })
-                .await
+                });
+                tokio::select! {
+                    waited = next => Some(waited),
+                    () = state.stopping() => None,
+                }
             });
+            let Some(waited) = waited else {
+                return Err(stopping());
+            };
             match waited {
                 Ok(Some(Ok(event))) => {
                     take(&mut page, &event);
@@ -547,6 +563,12 @@ impl AppState {
                 // enables automatic placement. With none, nothing is started.
                 for owner in shared.scheduler_owners() {
                     ensure_scheduler_blocking(&state, &owner);
+                    // HS2-04WW8B: and its targets while the default goal is re-planned
+                    // automatically, so tickets created while this server was down are
+                    // caught up at start-up, not at some later request.
+                    if !shared.replan_targets(&owner).is_empty() {
+                        ensure_watchers_blocking(&state, &owner);
+                    }
                 }
                 // HS2-HTS89S: validation steps a previous host process left running
                 // are stopped.

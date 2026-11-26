@@ -676,3 +676,211 @@ async fn hs2_pw43n9_a_reply_to_the_planners_question_is_pushed_into_the_planner(
         "{shown}"
     );
 }
+
+/// HS2-3H51NM: the audit's reasons for `action`, in order.
+async fn audit_reasons(world: &World, action: &str) -> Vec<String> {
+    let (status, audit) = world.call("GET", "/audit?limit=10000", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{audit}");
+    audit["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["action"] == action)
+        .map(|entry| entry["reason"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+/// HS2-3H51NM: Propose Plan, wait for the planner's prompt, and press Update Plan once
+/// it is idle. Answers the planner as an actor, its terminal and the drafting update.
+async fn drafting_update(world: &World) -> (Value, String, String) {
+    let person = json!({"role":"human","id":"maintainer"});
+    let (status, proposed) = world
+        .call(
+            "POST",
+            "/planning/propose",
+            json!({"tool":REPORT_TOOL,"operation_id":"press-1","actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{proposed}");
+    let terminal = proposed["session"]["session"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let worker = proposed["session"]["worker_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    received_prompt(&world.reports, &terminal, "press-1");
+    replannable(world).await;
+    let (status, update) = world
+        .call(
+            "POST",
+            "/planning/update",
+            json!({"tool":REPORT_TOOL,"operation_id":"update-1","actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{update}");
+    assert_eq!(update["state"], "drafting", "{update}");
+    let update_id = update["update_id"].as_str().unwrap().to_owned();
+    received_prompt(
+        &world.reports,
+        &terminal,
+        &format!("plan update `{update_id}`"),
+    );
+    (json!({"role":"ai","id":worker}), terminal, update_id)
+}
+
+/// HS2-3H51NM: define a step for `native` in the plan update's draft.
+async fn draft_step(
+    world: &World,
+    planner: &Value,
+    goal: &str,
+    native: &str,
+    update: &str,
+) -> (StatusCode, Value) {
+    world
+        .call(
+            "POST",
+            "/readiness/define",
+            json!({"actor":planner,"ticket":{"native_id":goal},
+                "target_id":TARGET,"connection_id":world.checkout.sources[0].connection_id,
+                "native_id":native,"prerequisites":[],"plan_update":update}),
+        )
+        .await
+}
+
+/// HS2-3H51NM (HS2-190RDX): the server restarts while a plan update drafts and its
+/// planner's terminal lives on in the detached terminal broker. The restarted server
+/// reads the update and its draft back, the planner keeps drafting, and
+/// `update_finish` swaps the live plan as before.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_3h51nm_a_drafting_update_survives_a_restart_with_its_planner() {
+    let mut world = World::with_broker(&["tickets_read"], PUSH_AGENT, PUSH_PLUGIN).await;
+    let goal = world.ticket("Ship the synthetic release");
+    let before = world.ticket("Add the synthetic export");
+    let after = world.ticket("Add the synthetic import");
+    let (planner, terminal, update_id) = drafting_update(&world).await;
+    let (status, defined) =
+        draft_step(&world, &planner, &goal.slug, &before.slug, &update_id).await;
+    assert_eq!(status, StatusCode::OK, "{defined}");
+
+    world.restart().await;
+    // The planner's terminal is still there, reached through the broker.
+    let tabs = drawer(&world.router).await;
+    assert!(
+        tabs.iter().any(|tab| tab["id"] == terminal.as_str()),
+        "{tabs:?}"
+    );
+    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    assert_eq!(shown["update"]["update_id"], update_id.as_str(), "{shown}");
+    assert_eq!(shown["update"]["state"], "drafting", "{shown}");
+    assert_eq!(shown["update"]["draft_steps"], 1, "{shown}");
+    assert_eq!(plan_steps(&world, Some(&update_id)).await.len(), 1);
+    assert!(
+        plan_steps(&world, None).await.is_empty(),
+        "the live plan runs on"
+    );
+    // A press answers with the drafting update.
+    let (status, again) = world
+        .call(
+            "POST",
+            "/planning/update",
+            json!({"tool":REPORT_TOOL,"operation_id":"update-2",
+                "actor":{"role":"human","id":"maintainer"}}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{again}");
+    assert_eq!(again["outcome"], "existing", "{again}");
+    assert_eq!(again["update_id"], update_id.as_str(), "{again}");
+
+    // The planner drafts on and finishes: the swap.
+    let (status, defined) = draft_step(&world, &planner, &goal.slug, &after.slug, &update_id).await;
+    assert_eq!(status, StatusCode::OK, "{defined}");
+    let (status, applied) = world
+        .call(
+            "POST",
+            "/planning/update_finish",
+            json!({"actor":planner,"update_id":update_id}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{applied}");
+    assert_eq!(applied["state"], "applied", "{applied}");
+    assert_eq!(
+        applied["swap"]["added"].as_array().map(Vec::len),
+        Some(2),
+        "{applied}"
+    );
+    assert_eq!(plan_steps(&world, None).await.len(), 2);
+    assert!(
+        !audit_reasons(&world, "plan_update_apply")
+            .await
+            .contains(&"plan_update_planner_ended".to_owned())
+    );
+    world.host.begin_stopping();
+}
+
+/// HS2-3H51NM (HS2-190RDX): the server restarts while a plan update drafts and the
+/// planner's terminal dies with it. The next read fails the update as
+/// `plan_update_planner_ended` with the live plan unchanged and the draft gone, and the
+/// next Update Plan opens a new update in a new planner instead of answering with the
+/// stale one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_3h51nm_a_drafting_update_fails_when_its_planner_is_lost_in_a_restart() {
+    let mut world = World::new(&["tickets_read"], PUSH_AGENT, PUSH_PLUGIN).await;
+    let goal = world.ticket("Ship the synthetic release");
+    let work = world.ticket("Add the synthetic export");
+    let (planner, terminal, update_id) = drafting_update(&world).await;
+    let (status, defined) = draft_step(&world, &planner, &goal.slug, &work.slug, &update_id).await;
+    assert_eq!(status, StatusCode::OK, "{defined}");
+
+    world.restart().await;
+    assert!(drawer(&world.router).await.is_empty(), "the planner died");
+    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    assert_eq!(shown["update"]["update_id"], update_id.as_str(), "{shown}");
+    assert_eq!(shown["update"]["state"], "failed", "{shown}");
+    assert_eq!(
+        shown["update"]["reason"], "plan_update_planner_ended",
+        "{shown}"
+    );
+    assert_eq!(shown["update"]["draft_steps"], 0, "{shown}");
+    assert!(
+        plan_steps(&world, None).await.is_empty(),
+        "the live plan stands"
+    );
+    assert_eq!(
+        audit_reasons(&world, "plan_update_apply").await,
+        ["plan_update_planner_ended"]
+    );
+    // The lost planner's late writes are refused.
+    let (status, refused) = draft_step(&world, &planner, &goal.slug, &work.slug, &update_id).await;
+    assert!(status.is_client_error(), "{status} {refused}");
+    let (status, refused) = world
+        .call(
+            "POST",
+            "/planning/update_finish",
+            json!({"actor":planner,"update_id":update_id}),
+        )
+        .await;
+    assert!(status.is_client_error(), "{status} {refused}");
+
+    // Update Plan is not answered with the stale update: a new planner drafts a new one.
+    let (status, next) = world
+        .call(
+            "POST",
+            "/planning/update",
+            json!({"tool":REPORT_TOOL,"operation_id":"update-2",
+                "actor":{"role":"human","id":"maintainer"}}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{next}");
+    assert_eq!(next["outcome"], "started", "{next}");
+    assert_eq!(next["state"], "drafting", "{next}");
+    assert_ne!(next["update_id"], update_id.as_str(), "{next}");
+    let started = next["session"]["session"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_ne!(started, terminal, "a new planner");
+    assert_eq!(drawer(&world.router).await.len(), 1);
+    world.host.begin_stopping();
+}

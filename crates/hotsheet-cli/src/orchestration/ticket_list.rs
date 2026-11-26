@@ -210,31 +210,38 @@ impl OrchestrationRuntime {
             ActionRequest::new(TargetAction::TicketsRead),
             tx,
         )?;
-        let outcome = (|| {
-            Self::check_source(&authorized, &request.connection_id)?;
-            let reply = self.hosted_call_at(
-                Self::destination(&authorized)?,
-                "/target-tickets/list",
-                "GET",
-                &format!(
-                    "?connection_id={}{}",
-                    encode(&request.connection_id),
-                    request.search.query()
-                ),
-                None,
-                tx,
-            )?;
-            let page: TargetTicketPage = serde_json::from_value(reply)
-                .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?;
-            // A peer never answers more than was asked.
-            if page.tickets.len() > request.search.page_size() {
-                return Err(OrchestrationError::Observation(
-                    TargetFailure::InvalidResponse,
-                ));
-            }
-            Ok(page)
-        })();
+        let outcome =
+            self.ticket_page_authorized(&authorized, &request.connection_id, &request.search, tx);
         self.finish(&target, &authorized, &outcome, tx)?;
         outcome
+    }
+
+    /// One page of a source's open tickets under an authorization the caller holds
+    /// (`tickets_read`) and audits.
+    pub(super) fn ticket_page_authorized(
+        &self,
+        authorized: &Authorized,
+        connection_id: &str,
+        search: &TargetTicketSearch,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TargetTicketPage, OrchestrationError> {
+        Self::check_source(authorized, connection_id)?;
+        let reply = self.hosted_call_at(
+            Self::destination(authorized)?,
+            "/target-tickets/list",
+            "GET",
+            &format!("?connection_id={}{}", encode(connection_id), search.query()),
+            None,
+            tx,
+        )?;
+        let page: TargetTicketPage = serde_json::from_value(reply)
+            .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?;
+        // A peer never answers more than was asked.
+        if page.tickets.len() > search.page_size() {
+            return Err(OrchestrationError::Observation(
+                TargetFailure::InvalidResponse,
+            ));
+        }
+        Ok(page)
     }
 }
