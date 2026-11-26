@@ -2291,8 +2291,11 @@ Reason codes for `unknown` include `not_watched`, `watch_lost`, `watch_ended`,
 Readings can arrive late, twice or out of order. A reading whose evidence ranks
 below the recorded evidence (an older run, or an earlier attempt of the same run) is
 ignored. A verdict is never replaced by `unknown` or, once passed, by anything but
-supersession. A repeated reading writes nothing and produces no event. A later
-attempt with the same verdict is recorded as news. A provider cannot move a gate
+supersession. A repeated reading writes nothing and produces no event, including the
+same verdict read by two readers at once, each stamping its own read time: evidence of
+the same run, attempt and commit keeps the time it was first recorded, decided under
+the registry lock (HS2-E0XM83). A later attempt with the same verdict is recorded as
+news. A provider cannot move a gate
 into or out of `awaiting_approval`. History keeps the first entry and the most
 recent 31.
 
