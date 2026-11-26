@@ -118,3 +118,20 @@ confirm that nothing changed:
 
 The difference is within load noise. Re-measure when Hot Sheet upgrades to the first Kerf
 release that contains KF-3J0GC6.
+
+## Kerf 5.0.0-beta.137 (HS2-N4G74W)
+
+beta.137 is the first release with the KF-3J0GC6 fix: the `kerfjs/ui-wiring` rule caches
+module sources and resolved imports instead of re-walking the entry graph for every linted
+file, and the doctor groups identical projected core configs. Two cold `lint:web` runs on
+the same tree, one on beta.136 just before the upgrade and one on beta.137 just after, used
+`HOTSHEET_LINT_WEB_REUSE=0` and an empty `.kerf-cache`:
+
+| Run (load at start, at end) | Wall    | ESLint | Doctor  | CPU (user + sys) |
+| --------------------------- | ------- | ------ | ------- | ---------------- |
+| beta.136, before (17, 15)   | 297.2 s | 61.1 s | 235.1 s | 286 s + 70 s     |
+| beta.137, after (19, 8)     | 179.9 s | 61.3 s | 117.5 s | 197 s + 28 s     |
+
+The doctor stage halves (235 s to 118 s), and CPU time falls by about 130 s, which load
+cannot explain. ESLint is unchanged, as expected. The doctor is still about two-thirds of
+a cold `lint:web`, and the typed ESLint pass is the remaining third.
