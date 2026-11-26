@@ -8,6 +8,49 @@ interface KerfProfile {
   exceptions: Array<{ id: string; rules: string[]; target: string; rationale: string }>;
 }
 
+/**
+ * HS2-AF1Q16: the exact reviewed profile exceptions, in file order. This list only shrinks: removing
+ * a stale entry deletes its id here, and adding one needs a reviewed ticket that names its owner. On
+ * 2026-11-26 an analyzer run without exceptions matched only these 17 of the former 48 entries.
+ */
+const PROFILE_EXCEPTION_IDS = [
+  'web-awesome-quick-ticket-parts',
+  'intentional-nested-inset-attachment-gallery',
+  'intentional-nested-inset-markdown-editor',
+  'intentional-nested-inset-quick-ticket-composer',
+  'intentional-nested-inset-terminal-dashboard',
+  'intentional-nested-inset-ticket-code-review',
+  'intentional-nested-inset-halted-session-question',
+  'state-modifier-classes-ai-conversation',
+  'state-modifier-classes-connection-state-banner',
+  'state-modifier-classes-markdown-editor',
+  'state-modifier-classes-note-card',
+  'state-modifier-classes-terminal-dashboard',
+  'state-modifier-classes-ticket-empty-state',
+  'state-modifier-classes-ticket-inspector-panel',
+  'state-modifier-classes-ticket-inspector',
+  'state-modifier-classes-ticket-row',
+  'state-modifier-classes-sidebar-panel',
+];
+
+/**
+ * HS2-AF1Q16: open Kerf tickets (kerf.hs2) whose capability retires an exception. Tests cannot
+ * read the Kerf store, so this list is checked in. When a ticket ships or is archived, remove it
+ * here; the exceptions that still name it then fail until they are removed or re-owned.
+ */
+const OPEN_KERF_OWNERS: Record<string, string> = {
+  'KF-A9H745': 'KUI-L004: recognize or declare intentional nested inset surfaces',
+  'KF-R55A9X': 'KUI-L008: classify app-owned base/modifier dynamic class expressions',
+};
+
+/**
+ * HS2-AF1Q16: Hot Sheet adoption tickets for exceptions where Kerf already ships the capability, so
+ * there is no upstream gap. The rationale names the ticket as `Pending adoption HS2-XXXXXX`.
+ */
+const ADOPTION_OWNERS: Record<string, string> = {
+  'HS2-CR912H': 'Move the quick ticket composer shell to Kerf DialogSurface',
+};
+
 interface KerfDoctorConfig {
   mode: string;
   stages: Record<string, boolean>;
@@ -100,65 +143,63 @@ function constantString(initializer: ts.JsxAttributeValue): string | undefined {
 }
 
 describe('Kerf application UI profile', () => {
-  it('limits exceptions to exact reviewed integration boundaries', () => {
+  it('HS2-AF1Q16 limits exceptions to exact, still-applicable, owned integration boundaries', () => {
     const profile = JSON.parse(
       readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8'),
     ) as KerfProfile;
     expect(profile.scope).toBe('workspace');
-    expect(profile.exceptions).toHaveLength(48);
-    for (const exception of profile.exceptions.slice(0, 16)) {
-      expect(exception.id).toMatch(/^web-awesome-/);
-      expect(exception.rules).toEqual(['KUI-L011']);
-      expect(exception.target).toMatch(/^src\/(?:components|ux-demo)\/[a-z0-9-]+\.css$/);
-      expect(exception.target).not.toMatch(/[?*]|\.\./);
-      if (exception.id === 'web-awesome-project-close-parts') {
-        expect(exception.rationale).toContain('raw Web Awesome modal');
-        expect(exception.rationale).toContain('KF-E2J9ND; adoption HS2-FXAAA6');
-      } else expect(exception.rationale).toContain('Web Awesome shadow parts');
-    }
-    expect(profile.exceptions.slice(16, 17)).toEqual([
-      {
-        id: 'mobile-side-panel-safe-area-composition',
-        rules: ['KUI-L004'],
-        target: 'src/components/app-shell.tsx',
-        rationale:
-          'The mobile shell deliberately composes safe-area padding on its app-owned sidebar and inspector content inside Kerf overlay regions.',
-      },
-    ]);
-    // HS2-M6B8AD reviewed every remaining nested-inset and dynamic-class review finding site by
-    // site; each exception is exact (one file, one rule) and its rationale names the classes or
-    // expressions it covers, so a new finding elsewhere still fails the gate.
-    const reviewed = profile.exceptions.slice(17);
-    expect(reviewed.length).toBeGreaterThan(0);
-    const ids = new Set<string>(),
-      targets = new Set<string>(),
-      stale: string[] = [];
-    for (const exception of reviewed) {
-      expect(exception.id).toMatch(/^(?:intentional-nested-inset|state-modifier-classes)-[a-z0-9-]+$/);
-      expect(exception.rules).toEqual([exception.id.startsWith('intentional-') ? 'KUI-L004' : 'KUI-L008']);
-      expect(exception.target).toMatch(/^src\/(?:components|ux-demo)\/[a-z0-9-]+\.tsx$/);
-      expect(existsSync(new URL(`../${exception.target}`, import.meta.url)), exception.target).toBe(true);
-      expect(exception.rationale).toMatch(/^Reviewed HS2-[0-9A-Z]{6}: /);
-      const source = readFileSync(new URL(`../${exception.target}`, import.meta.url), 'utf8');
-      if (exception.rules[0] === 'KUI-L004') {
-        expect(exception.rationale).toMatch(/design: [a-z][a-z0-9-]*__[a-z0-9-]+/);
-        const classes = [...exception.rationale.matchAll(/\b[a-z][a-z0-9-]*__[a-z0-9-]+(?:--[a-z0-9-]+)?\b/g)].map(
-          ([name]) => name,
-        );
-        for (const name of classes) if (!source.includes(name)) stale.push(`${exception.id}: ${name}`);
-      } else {
-        expect(exception.rationale).toMatch(/Expressions: class(?:Name)?=\{/);
+    // The count only decreases (AGENTS.md "Doctor and profile exceptions"): pin the exact ids.
+    expect(profile.exceptions.map((exception) => exception.id)).toEqual(PROFILE_EXCEPTION_IDS);
+    const targets = new Set<string>(),
+      problems: string[] = [],
+      usedOwners = new Set<string>();
+    for (const exception of profile.exceptions) {
+      const [rule] = exception.rules;
+      expect(exception.rules, exception.id).toHaveLength(1);
+      expect(exception.target).toMatch(/^src\/(?:components|ux-demo)\/[a-z0-9-]+\.(?:css|tsx)$/);
+      targets.add(`${rule} ${exception.target}`);
+      const url = new URL(`../${exception.target}`, import.meta.url);
+      if (!existsSync(url)) {
+        problems.push(`${exception.id}: target ${exception.target} does not exist`);
+        continue;
+      }
+      const source = readFileSync(url, 'utf8');
+      // Each exception must still describe a construct its rule flags in its target.
+      if (rule === 'KUI-L011') {
+        expect(exception.id).toMatch(/^web-awesome-[a-z0-9-]+-parts$/);
+        expect(exception.target).toMatch(/\.css$/);
+        if (!source.includes('::part(')) problems.push(`${exception.id}: ${exception.target} has no ::part()`);
+      } else if (rule === 'KUI-L004') {
+        expect(exception.id).toMatch(/^intentional-nested-inset-[a-z0-9-]+$/);
+        expect(exception.rationale).toMatch(/^Reviewed HS2-[0-9A-Z]{6}: design: [a-z][a-z0-9-]*__[a-z0-9-]+/);
+        const classes = [...exception.rationale.matchAll(/\b[a-z][a-z0-9-]*__[a-z0-9-]+(?:--[a-z0-9-]+)?\b/g)];
+        for (const [name] of classes)
+          if (!source.includes(name)) problems.push(`${exception.id}: ${name} is not in ${exception.target}`);
+      } else if (rule === 'KUI-L008') {
+        expect(exception.id).toMatch(/^state-modifier-classes-[a-z0-9-]+$/);
+        expect(exception.rationale).toMatch(/^Reviewed HS2-[0-9A-Z]{6}: .* Expressions: class(?:Name)?=\{/);
         const sourceWithoutWhitespace = source.replace(/\s+/g, '');
         for (const expression of exception.rationale.split('Expressions: ')[1].split(' | '))
           if (!sourceWithoutWhitespace.includes(expression.replace(/\s+/g, '')))
-            stale.push(`${exception.id}: ${expression}`);
+            problems.push(`${exception.id}: ${expression} is not in ${exception.target}`);
+      } else problems.push(`${exception.id}: ${rule} has no reviewed exception policy`);
+      // Every exception names its removal owner: an open Kerf gap, or a Hot Sheet adoption ticket when
+      // Kerf already ships the capability. Archived or unknown KF slugs (e.g. KF-E2J9ND) fail.
+      const kerfSlugs = [...exception.rationale.matchAll(/\bKF-[0-9A-Z]{6}\b/g)].map(([slug]) => slug);
+      for (const slug of kerfSlugs)
+        if (slug in OPEN_KERF_OWNERS) usedOwners.add(slug);
+        else problems.push(`${exception.id}: ${slug} is not an open Kerf owner`);
+      const adoption = /^Pending adoption (HS2-[0-9A-Z]{6}):/.exec(exception.rationale)?.[1];
+      if (adoption !== undefined) {
+        if (adoption in ADOPTION_OWNERS) usedOwners.add(adoption);
+        else problems.push(`${exception.id}: ${adoption} is not a listed adoption owner`);
       }
-      expect(ids.has(exception.id), exception.id).toBe(false);
-      ids.add(exception.id);
-      targets.add(`${exception.rules[0]} ${exception.target}`);
+      if (kerfSlugs.length === 0 && adoption === undefined) problems.push(`${exception.id}: names no owner`);
     }
-    expect(targets.size).toBe(reviewed.length);
-    expect(stale).toEqual([]);
+    expect(problems).toEqual([]);
+    expect(targets.size).toBe(profile.exceptions.length);
+    // An owner whose exceptions are all gone is removed from its list too.
+    expect([...usedOwners].sort()).toEqual([...Object.keys(OPEN_KERF_OWNERS), ...Object.keys(ADOPTION_OWNERS)].sort());
     // Kerf's corrected MessageComposer catalog (KF-Z00DKT) retired the false KUI-L203 exception (HS2-T8SPNP).
     expect(profile.exceptions.some((exception) => exception.rules.includes('KUI-L203'))).toBe(false);
   });
