@@ -48,6 +48,24 @@ describe('ProjectRestoreError', () => {
     expect(markup).toMatch(/data-emphasis="primary"[^>]*data-action="close-project-tab"/);
   });
 
+  it('puts Technical Details in the EmptyState secondary region, apart from the centered actions (HS2-1ZKMS9)', () => {
+    const failure = {
+        root: '/work/gone',
+        name: 'gone',
+        error: "ENOENT: no such file or directory, realpath '/work/gone'",
+      },
+      markup = String(ProjectRestoreError(failure)),
+      [beforeSecondary, secondary] = markup.split('class="kui-empty-state__secondary"');
+    // The disclosure is the secondary region's content, never part of the action zone (Kerf KF-GZDZXH).
+    expect(secondary).toContain('data-project-unavailable-details');
+    expect(secondary).toContain('Technical Details');
+    expect(beforeSecondary).not.toContain('data-project-unavailable-details');
+    expect(beforeSecondary.split('class="kui-empty-state__action"')[1]).toContain('data-action="close-project-tab"');
+    // Collapsed by default; `detailsOpen` opens it initially.
+    expect(markup).not.toMatch(/<details[^>]*\bopen\b/);
+    expect(String(ProjectRestoreError({ ...failure, detailsOpen: true }))).toMatch(/<details[^>]*\bopen\b/);
+  });
+
   it('disables Retry and marks the state busy while a retry runs', () => {
     const markup = String(ProjectRestoreError({ root: '/work/x', name: 'x', error: 'Failed to fetch', busy: true }));
     expect(markup).toContain('Retrying…');

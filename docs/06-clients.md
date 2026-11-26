@@ -1714,7 +1714,8 @@ checkout name>`, where the host is the machine name the peer last reported on th
   Unavailable), and the project's ticket repository link names a repository that is gone (Ticket
   Repository Not Found); any other error reads Project Unavailable with Retry primary. The exact
   error, known stale-server process, and remembered root stay available behind a collapsed Technical
-  Details disclosure for diagnosis. The shell never drops a region for a
+  Details disclosure for diagnosis, set start-aligned below the centered actions so its chevron stays
+  beside its title when open (HS2-1ZKMS9, Kerf EmptyState `secondaryContent`). The shell never drops a region for a
   selected tab that is not ready (unavailable, a remote project loading or reconnecting, or a
   project still opening): the project sidebar, inspector, workspace toolbar, New Ticket action, and
   terminal drawer keep the user's visibility and sizes, the rails and drawer show an empty state,
