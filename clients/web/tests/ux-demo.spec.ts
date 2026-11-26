@@ -9468,7 +9468,7 @@ test('keeps element ids unique across the command settings editor examples', asy
 test('edits custom command color and icon in the command settings editor', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=command-settings-editor');
-  const editor = page.locator('[data-component="command-settings-editor"][data-load-state="ready"]');
+  const editor = page.locator('[data-component="command-settings-editor"][data-load-state="ready"]').first();
   await editor.scrollIntoViewIfNeeded();
   await expect(editor).toBeVisible();
   // The WYSIWYG list groups draggable rows; each row exposes an overflow menu (HS2-D9JBXT).
