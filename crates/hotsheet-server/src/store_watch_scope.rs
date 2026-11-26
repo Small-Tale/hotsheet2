@@ -89,17 +89,21 @@ impl TicketsWatchScope {
     /// debounce open so ticket writes went unapplied (HS2-TFBFRP). Linux and Windows also
     /// apply the missing-root guard.
     pub(crate) fn admit_paths(&self, paths: &mut Vec<PathBuf>) -> Option<bool> {
+        // HS2-MY8BWM: the missing-root guard runs before narrowing. While the store is
+        // away, inotify names its files by paths that may no longer start with the
+        // store's `tickets/` spellings, so narrowing first dropped them silently and the
+        // returned store was never rescanned.
+        if self.guard_missing_root && !self.root.is_dir() {
+            // The store moved away: these paths name files that are no longer here.
+            self.missed.store(true, Ordering::SeqCst);
+            return None;
+        }
         paths.retain(|path| self.is_ticket_path(path));
         if paths.is_empty() {
             return None;
         }
         if !self.guard_missing_root {
             return Some(false);
-        }
-        if !self.root.is_dir() {
-            // The store moved away: these paths name files that are no longer here.
-            self.missed.store(true, Ordering::SeqCst);
-            return None;
         }
         self.delivered.fetch_add(1, Ordering::SeqCst);
         Some(self.missed.swap(false, Ordering::SeqCst))
@@ -228,6 +232,35 @@ mod tests {
             let next = scope.admit(event(&[&ticket])).unwrap().unwrap();
             assert!(!next.need_rescan(), "the rescan is requested only once");
         }
+    }
+
+    /// HS2-MY8BWM: while the store is away, an event named by a path outside the store's
+    /// `tickets/` spellings (inotify's view of the moved directory) still marks the store
+    /// missed, so the first event after its return asks for a rescan.
+    #[test]
+    fn hs2_my8bwm_an_away_event_outside_the_ticket_paths_still_marks_the_store_missed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("store");
+        let away = dir.path().join("away");
+        std::fs::create_dir_all(root.join("tickets/AB")).unwrap();
+        let scope = TicketsWatchScope::new_with_guard(&root, false, true);
+        let ticket = root.join("tickets/AB/01ABC.md");
+        std::fs::rename(&root, &away).unwrap();
+        let moved = away.join("tickets/AB/01ABD.md");
+        assert!(scope.admit(event(&[&moved])).is_none());
+        std::fs::rename(&away, &root).unwrap();
+        // Present again: an unrelated sibling is still narrowed away (HS2-TFBFRP)...
+        assert!(scope.admit(event(&[&away])).is_none());
+        // ...and the first ticket event asks for the rescan the away event recorded.
+        let first = scope.admit(event(&[&ticket])).unwrap().unwrap();
+        assert!(first.need_rescan());
+        assert!(
+            !scope
+                .admit(event(&[&ticket]))
+                .unwrap()
+                .unwrap()
+                .need_rescan()
+        );
     }
 
     #[test]
