@@ -231,8 +231,8 @@ they name; comparisons go through the project key:
 - A ticket of the project has at most one plan step (§26.15). Planning it through
   another site changes that step and moves it to that site (a new revision), and
   `find_target` through either site finds it.
-- A ticket of the project has at most one active run, whichever site dispatched it
-  (`run_target_active`), and a worker at most one active direct run per project
+- A ticket of the project has at most one unfinished run, whichever site dispatched
+  it (`run_target_active`), and a worker at most one active direct run per project
   (`run_worker_busy`, §26.9).
 - Readiness joins a ticket by project: a prerequisite named through one site is an
   edge to the step planned through another, an active run or a confirmed read through
@@ -1127,9 +1127,15 @@ transition. A person's correction is the one exception to the edges (§26.14).
 - **Duplicates.** The same operation id returns the same run and never claims
   twice, including a run that already failed. The same id for a different ticket,
   mode or worker is a conflict.
-- **One active run per target ticket**, whatever the operation or worker
-  (`run_target_active`). A worker that already holds an active direct run on a target
-  takes no second ticket there (`run_worker_busy`). HS2-SHH7WW: for targets declared as
+- **One unfinished run per target ticket**, whatever the operation or worker
+  (`run_target_active`). HS2-0P90V8: an `intervened` run counts: its worker let the
+  ticket go (in review, returned for corrections, or taken over), but the run still
+  owns the ticket, so no second run starts there. Only a person's correction or
+  cancellation, the ticket's completion, or re-placing the same run (HS2-ESVYQH) moves
+  it on. `run list --active` leaves out finished runs only, so it lists an
+  `intervened` run too. A worker that already holds an active (`requested`, `queued`
+  or `dispatched`) direct run on a target takes no second ticket there
+  (`run_worker_busy`); a worker whose run is `intervened` has let go and is free. HS2-SHH7WW: for targets declared as
   sites of one project both hold per project, whichever site the ticket is reached
   through (§26.2).
 - **Authority.** Dispatch passes the gate as `work_start` with the operation id, so
@@ -5253,7 +5259,9 @@ continuing). Nothing else is read for it.
 
 The wait is `placement.dispatcher_wait_minutes` (default 2, §26.17), counted from
 when the run was queued. A claim is only given to a session that joined the pool in
-its role (§26.16, "Joining"); one that has not is reported with `joined: false` and
+its role (§26.16, "Joining"; a session on a site that is not its project's home has
+joined when it is a member of the home's pool too, §26.30, HS2-26Z8KB); one that has
+not is reported with `joined: false` and
 no time, and its joining, published as `session_joined`, wakes the loop. A session
 that never joins is replaced (below). A pass decides from what it reads then: a dispatcher that
 comes up during the wait is left to assign, and one that leaves (its lease lapses)
@@ -7021,6 +7029,17 @@ offered the run's exact ticket to it, the session is told with the request kind
 `site_assigned` (§26.16). The host pushes the same request only once. The session's
 waiting run reads the home's pool in `scheduler_assignments`. Its assignment names
 `home_target_id`, and the waiting rules of §26.24 apply to the home's dispatcher.
+
+**Joined on a site (HS2-26Z8KB).** A session on such a site counts as joined when it
+is a member of either pool: its own site clone's (the host's listing, as for any
+session) or its project's home pool. The relay itself makes it a member of the home's
+pool, so that membership counts only once the session's role reached it (`role_prompt`
+`delivered`, `at_launch` or `unsupported`); a prompt still `pending`, or `failed`, is
+left to the join check (§26.24). When the home's `POST` reply says `joined` and the
+session has no `joined_at_ms` yet, the relay records it then (only the first time is
+kept) and publishes `session_joined` on the run, which wakes the loop. So a site
+worker that registers only through the relay is given its claim (§26.24) and is not
+wound down as `never_joined`.
 
 **Handing off over a pushed branch.** The worker on the site:
 

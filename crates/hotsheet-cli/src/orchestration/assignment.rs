@@ -10,9 +10,9 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AssignmentInput, AssignmentState, DispatchMode, Disposition, ExternalSource,
     OrchestratedSession, PlacementAction, PlacementMemory, PlacementOutcome, PolicyBody,
-    ProjectSites, RequestKind, Run, RunReconciliation, RunState, RunUpdate, SessionOwner,
-    SessionRole, SessionState, SourceFinding, TargetAction, TargetOpError, Verification,
-    decide_assignment,
+    ProjectSites, RequestKind, RolePrompt, Run, RunReconciliation, RunState, RunUpdate,
+    SessionOwner, SessionRole, SessionState, SessionUpdate, SourceFinding, TargetAction,
+    TargetOpError, Verification, decide_assignment,
 };
 use serde::Serialize;
 
@@ -74,6 +74,24 @@ pub const SITE_EVIDENCE_LAG: [&str; 4] = [
 /// A handoff that has not reached the home by then is not going to without someone:
 /// the run is marked as needing a person, and only an event asks the home again.
 pub const SITE_HANDOFF_GIVE_UP_MS: u64 = 30 * 60 * 1000;
+
+/// HS2-26Z8KB: whether the relay records a site session as joined now: it has not
+/// joined yet, the home's pool answers that it is a member, and its role reached it
+/// (delivered, given at launch, or the tool takes no message). The relay itself made
+/// it a member, so with a prompt still pending or failed it proves nothing, and the
+/// join check (HS2-NPTKS8) decides as before.
+pub fn joins_through_home(
+    joined_at_ms: Option<u64>,
+    role_prompt: Option<RolePrompt>,
+    home_member: bool,
+) -> bool {
+    joined_at_ms.is_none()
+        && home_member
+        && matches!(
+            role_prompt,
+            Some(RolePrompt::Delivered | RolePrompt::AtLaunch | RolePrompt::Unsupported)
+        )
+}
 
 /// HS2-RCR4A6: the next time after `now_ms` to ask the home again about a release
 /// the run saw at `released_at_ms`: one second after it, then doubling up to a minute
@@ -630,6 +648,31 @@ impl OrchestrationRuntime {
                 continue;
             };
             let pool = self.home_pool(session, home, Some(run), &sites, actor, tx);
+            // HS2-26Z8KB: a site session is joined when it is a member of its project's
+            // home pool, too, not only of its own site clone's pool: a site worker that
+            // registers only through this relay is joined once the home says so, so
+            // its claim does not wait on a local registration that never comes and the
+            // join check does not wind it down. The relay made it a member itself, so
+            // that counts only once its role reached it: a prompt still pending or
+            // failed is left to the join check. The join is kept (only the first time
+            // counts) and published as `session_joined`, which wakes the loop.
+            if joins_through_home(
+                session.joined_at_ms,
+                session.role_prompt,
+                pool.as_ref().is_some_and(|reply| reply.joined),
+            ) {
+                let _ = self.session_apply(
+                    owner_id,
+                    &session.session_id,
+                    SessionUpdate {
+                        joined_at_ms: Some(tx.clock.now_ms()),
+                        actor_id: actor.id.clone(),
+                        ..SessionUpdate::default()
+                    },
+                    false,
+                    tx,
+                );
+            }
             // HS2-3JGPDR: the home's pool names the ticket by the home's connection id.
             let offered = pool
                 .as_ref()

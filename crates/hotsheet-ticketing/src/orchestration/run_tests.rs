@@ -86,6 +86,11 @@ fn hs2_ebhdsb_every_state_edge_is_allowed_or_refused_exactly() {
             state.is_active(),
             matches!(state, Requested | Queued | Dispatched)
         );
+        // HS2-0P90V8: an intervened run still owns its ticket.
+        assert_eq!(
+            state.holds_target(),
+            matches!(state, Requested | Queued | Dispatched | Intervened)
+        );
         // A finished run takes no edge at all.
         if state.is_terminal() {
             assert!(RunState::ALL.iter().all(|next| !state.may_become(*next)));
@@ -321,6 +326,119 @@ fn hs2_ebhdsb_duplicate_busy_and_conflicting_dispatches() {
         ));
     }
     assert_eq!(registry.list(OWNER, false).unwrap().len(), count);
+}
+
+/// HS2-0P90V8: an intervened run (its worker let the ticket go) still owns its
+/// ticket: no second run starts there, through any operation, worker or mode, until
+/// the run is handed back, corrected, cancelled or finished. Its worker is free.
+#[test]
+fn hs2_0p90v8_an_intervened_run_still_holds_its_ticket() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = RunRegistry::new(home.path());
+    let clock = Clock(100.into());
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let second_runs = [
+        new("op-2", "t1", DispatchMode::Direct, Some("worker-2")),
+        new("op-3", "t1", DispatchMode::Direct, Some("worker-1")),
+        new("op-4", "t1", DispatchMode::Dispatcher, None),
+    ];
+    let refused = |registry: &RunRegistry, tx: &mut Transaction<'_>| {
+        for other in second_runs.clone() {
+            assert!(matches!(
+                registry.begin(OWNER, other, None, tx),
+                Err(OrchestrationError::Run(RunError::TargetActive))
+            ));
+        }
+    };
+    let (first, _) = registry
+        .begin(
+            OWNER,
+            new("op-1", "t1", DispatchMode::Direct, Some("worker-1")),
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    for (state, reason) in [
+        (RunState::Dispatched, "claim_confirmed"),
+        (RunState::Intervened, "claim_released"),
+    ] {
+        registry
+            .update(OWNER, &first.run_id, to(state, reason), &mut tx)
+            .unwrap();
+        refused(&registry, &mut tx);
+    }
+    // Listed as unfinished: `--active` leaves out finished runs only.
+    let active = registry.list(OWNER, true).unwrap();
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].state, RunState::Intervened);
+    // The same operation is still the same run, not a second one.
+    let (again, created) = registry
+        .begin(
+            OWNER,
+            new("op-1", "t1", DispatchMode::Direct, Some("worker-1")),
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    assert!(!created);
+    assert_eq!(again.run_id, first.run_id);
+    // Its worker let go, so it may take another ticket.
+    registry
+        .begin(
+            OWNER,
+            new("op-5", "t2", DispatchMode::Direct, Some("worker-1")),
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    // Handed back and let go again (repeated): still held.
+    for (state, reason) in [
+        (RunState::Dispatched, "claim_confirmed"),
+        (RunState::Intervened, "handed_off"),
+        (RunState::Dispatched, "claim_confirmed"),
+        (RunState::Intervened, "claim_taken"),
+    ] {
+        registry
+            .update(OWNER, &first.run_id, to(state, reason), &mut tx)
+            .unwrap();
+        refused(&registry, &mut tx);
+    }
+    // A person cancels it: the ticket is free again, exactly once.
+    registry
+        .update(
+            OWNER,
+            &first.run_id,
+            to(RunState::Cancelled, "operator_fix"),
+            &mut tx,
+        )
+        .unwrap();
+    let (next, created) = registry
+        .begin(OWNER, second_runs[0].clone(), None, &mut tx)
+        .unwrap();
+    assert!(created);
+    assert!(matches!(
+        registry.begin(OWNER, second_runs[2].clone(), None, &mut tx),
+        Err(OrchestrationError::Run(RunError::TargetActive))
+    ));
+    // The new run is let go and then completed by the ticket: free again.
+    for (state, reason) in [
+        (RunState::Dispatched, "claim_confirmed"),
+        (RunState::Intervened, "claim_released"),
+        (RunState::Completed, "ticket_completed"),
+    ] {
+        registry
+            .update(OWNER, &next.run_id, to(state, reason), &mut tx)
+            .unwrap();
+    }
+    registry
+        .begin(OWNER, second_runs[2].clone(), None, &mut tx)
+        .unwrap();
+    // The other ticket's run and the new dispatcher run.
+    assert_eq!(registry.list(OWNER, true).unwrap().len(), 2);
 }
 
 #[test]

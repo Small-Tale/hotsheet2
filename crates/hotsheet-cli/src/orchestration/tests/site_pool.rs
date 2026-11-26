@@ -635,6 +635,32 @@ fn hs2_rcr4a6_a_released_handoff_is_asked_about_again_with_a_doubling_interval()
     assert!(!SITE_EVIDENCE_LAG.contains(&"handoff_out_of_scope"));
 }
 
+/// HS2-26Z8KB: membership of the home's pool makes a site session joined only while
+/// it has not joined, and only once its role reached it; the relay's own registration
+/// says nothing about a session whose prompt is pending, failed or not yet known.
+#[test]
+fn hs2_26z8kb_home_membership_joins_a_site_session_only_once_its_role_reached_it() {
+    use crate::orchestration::assignment::joins_through_home;
+    use hotsheet_ticketing::orchestration::RolePrompt;
+    let mut prompts: Vec<Option<RolePrompt>> = RolePrompt::ALL.into_iter().map(Some).collect();
+    prompts.push(None);
+    for prompt in prompts {
+        let reached = matches!(
+            prompt,
+            Some(RolePrompt::Delivered | RolePrompt::AtLaunch | RolePrompt::Unsupported)
+        );
+        assert_eq!(
+            joins_through_home(None, prompt, true),
+            reached,
+            "{prompt:?}"
+        );
+        // Not a member of the home's pool: nothing to record.
+        assert!(!joins_through_home(None, prompt, false), "{prompt:?}");
+        // Already joined (either pool): the first time is kept.
+        assert!(!joins_through_home(Some(1), prompt, true), "{prompt:?}");
+    }
+}
+
 /// HS2-RQDH0Q: the timed asks end. Every ask is in the future and no later than the
 /// cap, the last one is the cap itself, and from the cap on there is none. A newer
 /// release starts the schedule over; the same release never does.

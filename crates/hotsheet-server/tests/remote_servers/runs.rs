@@ -313,6 +313,25 @@ async fn remote_dispatch_supervise_and_cancel_through_the_cli(pairing: Pairing) 
         )
         .contains("run_not_active")
     );
+    // HS2-0P90V8: the intervened run still owns the ticket, so a second dispatch of
+    // it through the real peer is refused and claims nothing there; `--active`
+    // still lists the run.
+    for (operation, worker_id) in [
+        ("op-run-0p90v8-a", "remote-worker-2"),
+        ("op-run-0p90v8-b", "remote-worker-1"),
+    ] {
+        assert!(fail(&other(&first_id, operation, worker_id)).contains("run_target_active"));
+        let unclaimed = peer_store.read_ticket(&first.id).unwrap();
+        assert!(unclaimed.claimed_by.is_none(), "{operation}");
+        assert_eq!(unclaimed.claim_count, 1, "{operation}");
+    }
+    let listed = cli_named(
+        &home,
+        &worker,
+        &["run", "list", "--project", &owner.id, "--active"],
+    );
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["state"], "intervened");
     // The ticket is finished on the peer; the run completes and the orchestration
     // ticket records it.
     ops::update(

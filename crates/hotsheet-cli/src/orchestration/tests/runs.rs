@@ -215,6 +215,26 @@ fn hs2_ebhdsb_direct_dispatch_claims_once_and_follows_takeover_to_completion() {
         ),
         RunError::NotActive
     );
+    // HS2-0P90V8: the intervened run still owns the ticket. A second dispatch there
+    // is refused before anything is claimed, whatever the worker or mode.
+    for (operation, body) in [
+        ("op-0p90v8-a", json!({"worker_id":"worker-b"})),
+        ("op-0p90v8-b", json!({"worker_id":"worker-a"})),
+        ("op-0p90v8-c", json!({"mode":"dispatcher"})),
+    ] {
+        assert_eq!(
+            run_error(m.runtime.run_dispatch(
+                &m.owner.id,
+                dispatch(&m, &orchestration, &first.id.to_string(), operation, body),
+                Some(&worker()),
+                &mut tx
+            )),
+            RunError::TargetActive
+        );
+        let unclaimed = m.target_store.read_ticket(&first.id).unwrap();
+        assert!(unclaimed.claimed_by.is_none());
+        assert!(!unclaimed.up_next);
+    }
     ops::claim_with_eta(
         &m.target_store,
         &first.id,
