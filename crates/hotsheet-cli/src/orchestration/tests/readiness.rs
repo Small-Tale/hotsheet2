@@ -15,8 +15,7 @@ use super::tickets::{
 };
 use super::*;
 
-#[path = "../../../../test-support/fixture_program.rs"]
-mod fixture_program;
+use super::fixture_program;
 
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
     ops::create(

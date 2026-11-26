@@ -177,7 +177,7 @@ fn executions() -> std::sync::MutexGuard<'static, Vec<Arc<Execution>>> {
 
 /// HS2-7BTV98: a test stands in for a restart of the hosting process: every execution
 /// it held in memory is gone, and only what the machine recorded remains.
-#[cfg(all(test, unix))]
+#[cfg(test)]
 pub(super) fn forget_executions() {
     executions().clear();
 }

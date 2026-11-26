@@ -1,5 +1,9 @@
 //! HS2-WN0MXZ: validation steps through the shared runtime against real processes in
 //! a real target checkout. Synthetic stores, commands and identities only.
+//!
+//! HS2-5E0D96: steps run the portable fixture program (`hs-fake-agent`) with a script of
+//! its flags instead of `sh` lines, so this suite runs on every platform. Only the cases
+//! that need Unix itself (signals, raw wait statuses, fork, process groups) are gated.
 use std::sync::atomic::AtomicBool;
 
 use hotsheet_model::{NoteKind, Ticket};
@@ -13,6 +17,7 @@ use hotsheet_ticketing::remote_servers::TargetReply;
 use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
 use serde_json::{Value, json};
 
+use super::fixture_program;
 use super::tickets::{
     Machine, NOW, RemotePeer, bind_and_allow, human, machine, unsupported, worker,
 };
@@ -24,13 +29,43 @@ use crate::orchestration::validation::{
 /// SHA-256 of the two bytes `ok`.
 const OK_SHA256: &str = "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df";
 
-/// Write the target project's own profile file: each profile is a shell line.
+/// HS2-5E0D96: the portable step program, which runs on every platform.
+fn program() -> String {
+    fixture_program::path()
+}
+/// HS2-5E0D96: the step program's arguments for one script of its flags.
+fn script(flags: &str) -> Vec<String> {
+    vec!["--run".into(), flags.into()]
+}
+/// The checkout's own script, named relative to the checkout with a directory part.
+#[cfg(unix)]
+const CHECK_SCRIPT: &str = "scripts/check.sh";
+#[cfg(windows)]
+const CHECK_SCRIPT: &str = "scripts\\check";
+/// HS2-5E0D96: write [`CHECK_SCRIPT`], which passes when its first argument is `one`:
+/// a `sh` script on Unix, a batch script found through PATHEXT on Windows.
+fn write_check_script(scripts: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let path = scripts.join("check.sh");
+        std::fs::write(&path, "#!/bin/sh\n[ \"$1\" = one ]\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    #[cfg(windows)]
+    std::fs::write(
+        scripts.join("check.cmd"),
+        "@if \"%~1\"==\"one\" (exit /b 0) else (exit /b 1)\r\n",
+    )
+    .unwrap();
+}
+/// Write the target project's own profile file: each profile is one fixture script.
 fn profiles(root: &str, profiles: &[(&str, &str)]) {
     let directory = Path::new(root).join(".hotsheet2");
     std::fs::create_dir_all(&directory).unwrap();
     let profiles: Vec<Value> = profiles
         .iter()
-        .map(|(name, line)| json!({"name": name, "program": "/bin/sh", "args": ["-c", line]}))
+        .map(|(name, line)| json!({"name": name, "program": program(), "args": script(line)}))
         .collect();
     std::fs::write(
         directory.join("validation-profiles.json"),
@@ -131,7 +166,7 @@ fn hs2_wn0mxz_a_profile_step_runs_in_the_target_and_records_references_only() {
         &m.target.root,
         &[(
             "smoke",
-            "printf ok; printf secret-output >&2; pwd > ran-here; echo x >> runs",
+            "--print-template ok --print-stderr secret-output --write-cwd ran-here --append runs x",
         )],
     );
     let ticket = m.orchestration_ticket("Coordinate");
@@ -204,7 +239,7 @@ fn hs2_wn0mxz_a_profile_step_runs_in_the_target_and_records_references_only() {
     let audit = serde_json::to_string(&m.runtime.audit(&m.owner.id, 0, 500).unwrap()).unwrap();
     for text in [note.text.as_str(), record.as_str(), audit.as_str()] {
         assert!(!text.contains("secret-output"));
-        assert!(!text.contains("printf"));
+        assert!(!text.contains("--print-template"));
     }
     // The same request again is the same result: nothing runs twice.
     let again = m
@@ -273,13 +308,10 @@ fn hs2_wn0mxz_failed_steps_retry_as_allowed_and_expected_evidence_decides() {
         &m.target.root,
         &[
             // Fails the first time it runs and passes after that.
-            (
-                "flaky",
-                "if [ -f seen ]; then exit 0; else touch seen; exit 3; fi",
-            ),
-            ("three", "exit 3"),
-            ("says-ok", "printf ok"),
-            ("says-no", "printf no"),
+            ("flaky", "--fail-once seen 3"),
+            ("three", "--exit 3"),
+            ("says-ok", "--print-template ok"),
+            ("says-no", "--print-template no"),
         ],
     );
     let ticket = m.orchestration_ticket("Coordinate");
@@ -364,7 +396,7 @@ fn hs2_wn0mxz_a_command_step_waits_for_a_person_and_a_profile_step_does_not() {
         rng: &mut rng,
     };
     bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
-    profiles(&m.target.root, &[("smoke", "exit 0")]);
+    profiles(&m.target.root, &[("smoke", "--exit 0")]);
     let ticket = m.orchestration_ticket("Coordinate");
     m.runtime
         .validation_define(
@@ -381,8 +413,8 @@ fn hs2_wn0mxz_a_command_step_waits_for_a_person_and_a_profile_step_does_not() {
             define(
                 &ticket,
                 json!({"step_id": "custom", "timeout_seconds": 20, "retry": {"max_attempts": 2},
-                    "check": {"kind": "command", "program": "/bin/sh",
-                        "args": ["-c", "echo x >> custom-runs; [ -f allow ]"]}}),
+                    "check": {"kind": "command", "program": program(),
+                        "args": script("--append custom-runs x --require-file allow")}}),
             ),
             Some(&worker()),
             &mut tx,
@@ -498,7 +530,7 @@ fn hs2_xhq1eh_running_a_step_asks_and_its_own_records_need_only_an_actor() {
     };
     // A remembered dispatch rule says nothing about validation.
     bind_and_allow(&m, 1, &[TargetAction::WorkStart], &mut tx);
-    profiles(&m.target.root, &[("smoke", "echo x >> runs")]);
+    profiles(&m.target.root, &[("smoke", "--append runs x")]);
     let ticket = m.orchestration_ticket("Coordinate");
     // HS2-TZT505 / HS2-BJE1C1: defining a step changes only the orchestration
     // project's own record: it needs an identified actor and asks nobody.
@@ -628,15 +660,18 @@ fn hs2_wn0mxz_skipped_unavailable_and_timed_out_are_told_apart() {
     bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
     profiles(
         &m.target.root,
-        &[("build", "[ -f built ]"), ("deploy", "echo x >> deploys")],
+        &[
+            ("build", "--require-file built"),
+            ("deploy", "--append deploys x"),
+        ],
     );
     // A profile whose program does not exist on the host, beside the shell ones.
     let path = Path::new(&m.target.root).join(".hotsheet2/validation-profiles.json");
     let mut file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     file["profiles"].as_array_mut().unwrap().extend([
         json!({"name": "missing-program", "program": "hotsheet-no-such-program-wn0mxz"}),
-        json!({"name": "slow", "program": "/bin/sh", "args": ["-c", "sleep 30"]}),
-        json!({"name": "script", "program": "scripts/check.sh", "args": ["one"]}),
+        json!({"name": "slow", "program": program(), "args": script("--hold-ms 30000")}),
+        json!({"name": "script", "program": CHECK_SCRIPT, "args": ["one"]}),
     ]);
     std::fs::write(&path, file.to_string()).unwrap();
     let ticket = m.orchestration_ticket("Coordinate");
@@ -747,15 +782,7 @@ fn hs2_wn0mxz_skipped_unavailable_and_timed_out_are_told_apart() {
     );
     let scripts = Path::new(&m.target.root).join("scripts");
     std::fs::create_dir(&scripts).unwrap();
-    std::fs::write(scripts.join("check.sh"), "#!/bin/sh\n[ \"$1\" = one ]\n").unwrap();
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            scripts.join("check.sh"),
-            std::fs::Permissions::from_mode(0o755),
-        )
-        .unwrap();
-    }
+    write_check_script(&scripts);
     assert_eq!(
         until_finished(&m, &ticket, "script", "op-s2", &mut tx)
             .result
@@ -804,10 +831,7 @@ fn hs2_wn0mxz_a_running_step_is_reattached_reported_to_its_run_and_never_run_twi
     // The step waits for a file, so the test decides when it ends.
     profiles(
         &m.target.root,
-        &[(
-            "gated",
-            "echo x >> starts; while [ ! -f go ]; do sleep 0.05; done",
-        )],
+        &[("gated", "--append starts x --wait-file go")],
     );
     let ticket = m.orchestration_ticket("Coordinate");
     let target_ticket = ops::create(
@@ -990,8 +1014,8 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
     let start = |n: u128, line: &str, wait_ms: u64| HostedValidationStart {
         execution_id: id(n),
         check: hotsheet_ticketing::orchestration::ValidationCheck::Command {
-            program: "/bin/sh".into(),
-            args: vec!["-c".into(), line.into()],
+            program: program(),
+            args: script(line),
         },
         timeout_seconds: 20,
         wait_ms,
@@ -1006,7 +1030,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
         .runtime
         .hosted_validation_start(
             &m.target.id,
-            start(1, "echo x >> hosted-runs; exit 4", 8_000),
+            start(1, "--append hosted-runs x --exit 4", 8_000),
             &mut tx,
         )
         .unwrap();
@@ -1018,7 +1042,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
         .runtime
         .hosted_validation_start(
             &m.target.id,
-            start(1, "echo y >> hosted-runs", 8_000),
+            start(1, "--append hosted-runs y", 8_000),
             &mut tx,
         )
         .unwrap();
@@ -1044,17 +1068,17 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
     for bad in [
         HostedValidationStart {
             execution_id: "not-a-ulid".into(),
-            ..start(2, "true", 0)
+            ..start(2, "--exit 0", 0)
         },
         HostedValidationStart {
             timeout_seconds: 0,
-            ..start(2, "true", 0)
+            ..start(2, "--exit 0", 0)
         },
         HostedValidationStart {
             timeout_seconds: 3601,
-            ..start(2, "true", 0)
+            ..start(2, "--exit 0", 0)
         },
-        start(2, "true", MAX_VALIDATION_WAIT_MS + 1),
+        start(2, "--exit 0", MAX_VALIDATION_WAIT_MS + 1),
     ] {
         assert!(matches!(
             m.runtime
@@ -1074,7 +1098,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
     );
     assert!(
         m.runtime
-            .hosted_validation_start("unknown-checkout", start(2, "true", 0), &mut tx)
+            .hosted_validation_start("unknown-checkout", start(2, "--exit 0", 0), &mut tx)
             .is_err()
     );
     assert_eq!(
@@ -1089,17 +1113,13 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
     for n in 10..14 {
         let running = m
             .runtime
-            .hosted_validation_start(
-                &m.target.id,
-                start(n, "while [ ! -f release ]; do sleep 0.05; done", 0),
-                &mut tx,
-            )
+            .hosted_validation_start(&m.target.id, start(n, "--wait-file release", 0), &mut tx)
             .unwrap();
         assert_eq!(running.state, HostedExecutionState::Running);
     }
     assert!(matches!(
         m.runtime
-            .hosted_validation_start(&m.target.id, start(14, "true", 0), &mut tx),
+            .hosted_validation_start(&m.target.id, start(14, "--exit 0", 0), &mut tx),
         Err(OrchestrationError::Capacity)
     ));
     assert_eq!(
@@ -1119,18 +1139,19 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
     }
     assert_eq!(
         m.runtime
-            .hosted_validation_start(&m.target.id, start(14, "true", 8_000), &mut tx)
+            .hosted_validation_start(&m.target.id, start(14, "--exit 0", 8_000), &mut tx)
             .unwrap()
             .state,
         HostedExecutionState::Finished
     );
     // Output is digested, never kept; past the limit the step is stopped.
     let root = Path::new(&m.target.root);
+    let step_program = program();
     let sh = |line: &str, limit: u64| {
         execute(
             root,
-            "/bin/sh",
-            &["-c".into(), line.into()],
+            &step_program,
+            &script(line),
             std::time::Duration::from_secs(20),
             limit,
             7,
@@ -1139,44 +1160,61 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
             None,
         )
     };
-    let small = sh("printf ok; printf problem >&2; exit 2", 1024);
+    let small = sh("--print-template ok --print-stderr problem --exit 2", 1024);
     assert_eq!(
         (small.end, small.exit_code, small.started_at_ms),
         (ExecutionEnd::Exited, Some(2), 7)
     );
     assert_eq!(small.stdout.unwrap().sha256, OK_SHA256);
     assert_eq!(small.stderr.unwrap().bytes, 7);
-    let exact = sh("printf 0123456789", 10);
+    let exact = sh("--print-template 0123456789", 10);
     assert_eq!(
         (exact.end, exact.stdout.unwrap().bytes),
         (ExecutionEnd::Exited, 10)
     );
-    let loud = sh("while :; do echo 0123456789; done", 4096);
+    let loud = sh("--flood 0123456789", 4096);
     assert_eq!(
         (loud.end, loud.exit_code),
         (ExecutionEnd::OutputLimit, None)
     );
     assert!(loud.stdout.is_none());
-    let quick = sh("printf 0123456789ab", 10);
+    let quick = sh("--print-template 0123456789ab", 10);
     assert_eq!(quick.end, ExecutionEnd::OutputLimit);
     // HS2-H1EK8R: a signalled step names the signal, so its sender can be told apart.
-    let killed = sh("kill -9 $$", 1024);
-    assert_eq!(
-        (killed.end, killed.exit_code, killed.signal),
-        (ExecutionEnd::Signalled, None, Some(9))
-    );
-    let terminated = sh("kill -TERM $$", 1024);
-    assert_eq!(
-        (terminated.end, terminated.signal),
-        (ExecutionEnd::Signalled, Some(15))
-    );
+    // Unix only (HS2-5E0D96): Windows processes end by exit code, never by a signal.
+    #[cfg(unix)]
+    {
+        let shell = |line: &str| {
+            execute(
+                root,
+                "/bin/sh",
+                &["-c".into(), line.into()],
+                std::time::Duration::from_secs(20),
+                1024,
+                7,
+                &AtomicBool::new(false),
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                None,
+            )
+        };
+        let killed = shell("kill -9 $$");
+        assert_eq!(
+            (killed.end, killed.exit_code, killed.signal),
+            (ExecutionEnd::Signalled, None, Some(9))
+        );
+        let terminated = shell("kill -TERM $$");
+        assert_eq!(
+            (terminated.end, terminated.signal),
+            (ExecutionEnd::Signalled, Some(15))
+        );
+    }
     assert_eq!(small.signal, None);
     // A step's children end with it.
     let started = std::time::Instant::now();
     let family = execute(
         root,
-        "/bin/sh",
-        &["-c".into(), "sleep 30 & sleep 30".into()],
+        &step_program,
+        &script("--spawn-hold-ms 30000 --hold-ms 30000"),
         std::time::Duration::from_millis(200),
         1024,
         7,
@@ -1198,6 +1236,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
 /// HS2-H1EK8R: only a status that names a signal reads as `signalled`. A status the
 /// host could not read proves nothing, so the step is `exit_code_unknown` (unverified),
 /// never a failure by a signal nobody observed; an exit code is kept as it was.
+/// Unix only (HS2-5E0D96): it builds raw Unix wait statuses.
 #[cfg(unix)]
 #[test]
 fn hs2_h1ek8r_only_an_observed_signal_reads_as_signalled() {
@@ -1246,6 +1285,7 @@ fn hs2_h1ek8r_only_an_observed_signal_reads_as_signalled() {
 /// HS2-H1EK8R: a step named by a bare program starts without forking the hosting
 /// process. A fork of a multi-threaded host could abort in the child before `exec`
 /// (macOS libSystem fork handlers), which read as the step being SIGKILLed.
+/// Unix only (HS2-5E0D96): Windows starts processes without fork.
 #[cfg(unix)]
 #[test]
 fn hs2_h1ek8r_a_bare_program_starts_without_forking_the_host() {
@@ -1368,14 +1408,12 @@ fn hs2_w02pta_a_step_sees_only_the_reviewed_environment() {
     let root = tempfile::tempdir().unwrap();
     let probe = execute(
         root.path(),
-        "/bin/sh",
-        &[
-            "-c".into(),
-            "test -z \"${HOTSHEET_HOME+x}\" || exit 3; test -n \"$PATH\" || exit 4; \
-             test \"$HOTSHEET_VALIDATION_EXECUTION_ID\" = 01ARZ3NDEKTSV4RRFFQ69G5FAV || exit 5; \
-             test \"$CI\" = true || exit 6"
-                .into(),
-        ],
+        &program(),
+        &script(
+            "--require-unset HOTSHEET_HOME --require-set PATH \
+             --require-env HOTSHEET_VALIDATION_EXECUTION_ID 01ARZ3NDEKTSV4RRFFQ69G5FAV \
+             --require-env CI true",
+        ),
         std::time::Duration::from_secs(20),
         1024,
         7,
@@ -1405,8 +1443,8 @@ fn hs2_zcr3y7_small_output_is_kept_on_the_host_and_read_back_by_digest() {
     let start = |n: u128, line: &str| HostedValidationStart {
         execution_id: id(n),
         check: hotsheet_ticketing::orchestration::ValidationCheck::Command {
-            program: "/bin/sh".into(),
-            args: vec!["-c".into(), line.into()],
+            program: program(),
+            args: script(line),
         },
         timeout_seconds: 20,
         wait_ms: 8_000,
@@ -1424,7 +1462,7 @@ fn hs2_zcr3y7_small_output_is_kept_on_the_host_and_read_back_by_digest() {
         .runtime
         .hosted_validation_start(
             &m.target.id,
-            start(40, "printf ok; printf problem >&2"),
+            start(40, "--print-template ok --print-stderr problem"),
             &mut tx,
         )
         .unwrap();
@@ -1475,7 +1513,7 @@ fn hs2_zcr3y7_small_output_is_kept_on_the_host_and_read_back_by_digest() {
     }
     // The same output again is kept once (its empty stderr is a third copy).
     m.runtime
-        .hosted_validation_start(&m.target.id, start(41, "printf ok"), &mut tx)
+        .hosted_validation_start(&m.target.id, start(41, "--print-template ok"), &mut tx)
         .unwrap();
     let copies = |dir: &Path| {
         std::fs::read_dir(dir)
@@ -1488,11 +1526,7 @@ fn hs2_zcr3y7_small_output_is_kept_on_the_host_and_read_back_by_digest() {
     // A stream over the cap keeps its digest only, and leaves no partial file.
     let big = m
         .runtime
-        .hosted_validation_start(
-            &m.target.id,
-            start(42, "head -c 4194305 /dev/zero"),
-            &mut tx,
-        )
+        .hosted_validation_start(&m.target.id, start(42, "--print-zeros 4194305"), &mut tx)
         .unwrap();
     let big = big.outcome.unwrap().stdout.unwrap();
     assert_eq!(big.bytes, MAX_RETAINED_STREAM_BYTES + 1);
@@ -1550,8 +1584,8 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
     let start = |n: u128, line: &str, wait_ms: u64| HostedValidationStart {
         execution_id: id(n),
         check: hotsheet_ticketing::orchestration::ValidationCheck::Command {
-            program: "/bin/sh".into(),
-            args: vec!["-c".into(), line.into()],
+            program: program(),
+            args: script(line),
         },
         timeout_seconds: 20,
         wait_ms,
@@ -1562,7 +1596,7 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
         .runtime
         .hosted_validation_start(
             &m.target.id,
-            start(50, "echo x >> runs; exit 3", 8_000),
+            start(50, "--append runs x --exit 3", 8_000),
             &mut tx,
         )
         .unwrap();
@@ -1572,32 +1606,32 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
         .runtime
         .hosted_validation_start(
             &m.target.id,
-            start(
-                51,
-                "echo y >> runs; while [ ! -f gate ]; do sleep 0.05; done",
-                0,
-            ),
+            start(51, "--append runs y --wait-file gate", 0),
             &mut tx,
         )
         .unwrap();
     assert_eq!(running.state, HostedExecutionState::Running);
-    // HS2-PJYNND: its group, so the test can prove the loop ends with it.
-    let registry = hotsheet_ticketing::orchestration::HostedValidationRegistry::new(&m.home);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let looping = loop {
-        if let Some(process) = registry
-            .record(&m.target.id, &id(51))
-            .unwrap()
-            .unwrap()
-            .process
-        {
-            break process;
+    // HS2-PJYNND: its group, so the test can prove the loop ends with it. Unix only
+    // (HS2-5E0D96): only Unix runs a step as a process group and records it.
+    #[cfg(unix)]
+    let looping = {
+        let registry = hotsheet_ticketing::orchestration::HostedValidationRegistry::new(&m.home);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            if let Some(process) = registry
+                .record(&m.target.id, &id(51))
+                .unwrap()
+                .unwrap()
+                .process
+            {
+                break process;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the step's group was never recorded"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the step's group was never recorded"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(20));
     };
     forget_executions();
     // Finished: answered from the record, by read and by a repeated start.
@@ -1608,7 +1642,7 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
         m.runtime
             .hosted_validation_start(
                 &m.target.id,
-                start(50, "echo x >> runs; exit 3", 0),
+                start(50, "--append runs x --exit 3", 0),
                 &mut tx,
             )
             .unwrap(),
@@ -1626,7 +1660,7 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
     );
     let late = m
         .runtime
-        .hosted_validation_start(&m.target.id, start(51, "echo z >> runs", 8_000), &mut tx)
+        .hosted_validation_start(&m.target.id, start(51, "--append runs z", 8_000), &mut tx)
         .unwrap();
     assert_eq!(late.state, HostedExecutionState::Unknown);
     std::fs::write(&gate, "").unwrap();
@@ -1645,7 +1679,7 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
     forget_executions();
     let after = m
         .runtime
-        .hosted_validation_start(&m.target.id, start(52, "echo c >> runs", 8_000), &mut tx)
+        .hosted_validation_start(&m.target.id, start(52, "--append runs c", 8_000), &mut tx)
         .unwrap();
     assert_eq!(after.state, HostedExecutionState::Finished);
     assert_eq!(after.outcome.unwrap().end, ExecutionEnd::Cancelled);
@@ -1674,6 +1708,7 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
     sorted.sort_unstable();
     assert_eq!(sorted, ["x", "y"]);
     // HS2-PJYNND: no loop survives: the released step's whole group has ended.
+    #[cfg(unix)]
     assert!(
         group_ends(looping.pid),
         "the step's loop outlived its release"
@@ -1836,11 +1871,8 @@ fn hs2_wn0mxz_a_remote_target_runs_the_step_and_an_unconfirmed_one_stays_running
     profiles(
         &hosted.target.root,
         &[
-            ("smoke", "printf ok; echo x >> remote-runs"),
-            (
-                "gated",
-                "echo x >> gated-runs; while [ ! -f go ]; do sleep 0.05; done",
-            ),
+            ("smoke", "--print-template ok --append remote-runs x"),
+            ("gated", "--append gated-runs x --wait-file go"),
         ],
     );
     for name in ["smoke", "gated", "refused"] {
@@ -1955,7 +1987,7 @@ fn hs2_17abm2_cancelling_stops_a_running_step_and_records_cancelled() {
         &m.target.root,
         &[(
             "gated",
-            "echo x >> starts; while [ ! -f go ]; do sleep 0.05; done; echo done >> ends",
+            "--append starts x --wait-file go --append ends done",
         )],
     );
     let ticket = m.orchestration_ticket("Coordinate");
@@ -2110,9 +2142,9 @@ fn hs2_17abm2_a_cancel_racing_the_steps_exit_records_how_it_ended() {
     profiles(
         &m.target.root,
         &[
-            ("quick", "printf ok"),
-            ("gated", "while [ ! -f go ]; do sleep 0.05; done"),
-            ("marked", "echo x >> marked-runs"),
+            ("quick", "--print-template ok"),
+            ("gated", "--wait-file go"),
+            ("marked", "--append marked-runs x"),
         ],
     );
     let ticket = m.orchestration_ticket("Coordinate");
@@ -2288,8 +2320,8 @@ fn hs2_17abm2_the_hosted_stop_ends_an_execution_once() {
     let start = |n: u128, line: &str, wait_ms: u64| HostedValidationStart {
         execution_id: id(n),
         check: hotsheet_ticketing::orchestration::ValidationCheck::Command {
-            program: "/bin/sh".into(),
-            args: vec!["-c".into(), line.into()],
+            program: program(),
+            args: script(line),
         },
         timeout_seconds: 20,
         wait_ms,
@@ -2300,7 +2332,7 @@ fn hs2_17abm2_the_hosted_stop_ends_an_execution_once() {
     };
     let running = m
         .runtime
-        .hosted_validation_start(&m.target.id, start(1, "sleep 30", 0), &mut tx)
+        .hosted_validation_start(&m.target.id, start(1, "--hold-ms 30000", 0), &mut tx)
         .unwrap();
     assert_eq!(running.state, HostedExecutionState::Running);
     let stopped = m
@@ -2321,7 +2353,7 @@ fn hs2_17abm2_the_hosted_stop_ends_an_execution_once() {
     // A step that already ended keeps its own end.
     let exited = m
         .runtime
-        .hosted_validation_start(&m.target.id, start(2, "exit 3", 8_000), &mut tx)
+        .hosted_validation_start(&m.target.id, start(2, "--exit 3", 8_000), &mut tx)
         .unwrap();
     assert_eq!(exited.outcome.as_ref().unwrap().exit_code, Some(3));
     let late = m
@@ -2339,7 +2371,7 @@ fn hs2_17abm2_the_hosted_stop_ends_an_execution_once() {
         .runtime
         .hosted_validation_start(
             &m.target.id,
-            start(3, "echo x >> stop-runs", 8_000),
+            start(3, "--append stop-runs x", 8_000),
             &mut tx,
         )
         .unwrap();
@@ -2390,8 +2422,8 @@ fn hs2_yynw9f_profiles_are_listed_checked_and_read_through_the_gate() {
     std::fs::write(
         directory.join("validation-profiles.json"),
         json!({"schema_version": 1, "profiles": [
-            {"name": "smoke", "program": "/bin/sh", "args": ["-c", "printf ok"]},
-            {"name": "slow", "program": "/bin/sh", "args": ["-c", "sleep 30"], "timeout_seconds": 1},
+            {"name": "smoke", "program": program(), "args": script("--print-template ok")},
+            {"name": "slow", "program": program(), "args": script("--hold-ms 30000"), "timeout_seconds": 1},
         ]})
         .to_string(),
     )
@@ -2451,7 +2483,7 @@ fn hs2_yynw9f_profiles_are_listed_checked_and_read_through_the_gate() {
     std::fs::write(
         directory.join("validation-profiles.json"),
         json!({"schema_version": 1, "profiles": [
-            {"name": "slow", "program": "/bin/sh", "args": ["-c", "sleep 30"], "timeout_seconds": 1},
+            {"name": "slow", "program": program(), "args": script("--hold-ms 30000"), "timeout_seconds": 1},
         ]})
         .to_string(),
     )
@@ -2488,10 +2520,7 @@ fn hs2_5zt4gy_repeated_validation_waits_are_audited_once() {
         rng: &mut rng,
     };
     bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
-    profiles(
-        &m.target.root,
-        &[("gated", "while [ ! -f go ]; do sleep 0.05; done")],
-    );
+    profiles(&m.target.root, &[("gated", "--wait-file go")]);
     let ticket = m.orchestration_ticket("Coordinate");
     m.runtime
         .validation_define(
@@ -2566,7 +2595,7 @@ fn hs2_zym6zt_the_audit_names_the_person_a_validation_run_was_requested_by() {
             define(
                 &ticket,
                 json!({"step_id": "custom", "timeout_seconds": 20,
-                    "check": {"kind": "command", "program": "/bin/sh", "args": ["-c", "exit 0"]}}),
+                    "check": {"kind": "command", "program": program(), "args": script("--exit 0")}}),
             ),
             Some(&worker()),
             &mut tx,
@@ -2665,6 +2694,8 @@ fn hs2_zym6zt_the_audit_names_the_person_a_validation_run_was_requested_by() {
 }
 
 /// HS2-PJYNND: whether process group `group` has no member left within ten seconds.
+/// Unix only (HS2-5E0D96): it probes a process group; a Windows step is a job object,
+/// whose tree end `validation_portable` covers.
 #[cfg(unix)]
 fn group_ends(pid: u32) -> bool {
     let group = libc::pid_t::try_from(pid).unwrap();
@@ -2681,6 +2712,7 @@ fn group_ends(pid: u32) -> bool {
 
 /// HS2-PJYNND: a test that ends before it releases a looping step, by a failed
 /// assertion or otherwise, still stops the step's whole group when its machine drops.
+/// Unix only (HS2-5E0D96): it observes the step's process group.
 #[cfg(unix)]
 #[test]
 fn hs2_pjynnd_a_dropped_machine_stops_the_steps_it_still_runs() {
@@ -2762,7 +2794,10 @@ fn hs2_4f1sws_a_paused_run_refuses_validation_steps_that_name_it() {
         ],
         &mut tx,
     );
-    profiles(&m.target.root, &[("smoke", "printf ok; echo x >> runs")]);
+    profiles(
+        &m.target.root,
+        &[("smoke", "--print-template ok --append runs x")],
+    );
     let ticket = m.orchestration_ticket("Coordinate");
     let target_ticket = ops::create(
         &m.target_store,

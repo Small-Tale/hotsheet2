@@ -1,6 +1,9 @@
 //! HS2-1Y45MZ: isolated real TLS, CLI and service/MCP flows.
 #[path = "remote_servers/support.rs"]
 mod support;
+// HS2-6EW369: the portable fixture program that validation steps run.
+#[path = "../../test-support/fixture_program.rs"]
+mod fixture_program;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use hotsheet_cli::remote_servers::MtlsRemoteTransport;
@@ -588,6 +591,6 @@ mod target_tickets;
 mod timeline;
 #[path = "remote_servers/tool_capacity.rs"]
 mod tool_capacity;
-#[cfg(unix)]
+// HS2-5E0D96: runs the portable fixture program, so on every platform.
 #[path = "remote_servers/validation.rs"]
 mod validation;

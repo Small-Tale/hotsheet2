@@ -15,6 +15,16 @@
 //! | `sh -c 'printf "x:%s" "$VAR"'` | `--print-template 'x:{env:VAR}'` |
 //! | `sh -c '… "$1"' fake` plus appended args | `… {arg:1} … --` |
 //! | `sh -c <one appended argument>` | `--run <one appended argument>` |
+//! | `printf ok >&2` | `--print-stderr ok` (HS2-5E0D96) |
+//! | `echo x >> runs` | `--append runs x` |
+//! | `pwd > here` | `--write-cwd here` |
+//! | `while [ ! -f go ]; do sleep 0.05; done` | `--wait-file go` |
+//! | `[ -f allow ]` | `--require-file allow` |
+//! | `if [ -f seen ]; then exit 0; else touch seen; exit 3; fi` | `--fail-once seen 3` |
+//! | `while :; do echo x; done` | `--flood x` |
+//! | `head -c 4096 /dev/zero` | `--print-zeros 4096` |
+//! | `sleep 30 & …` | `--spawn-hold-ms 30000 …` |
+//! | `test -z "${NAME+x}"` / `test -n "$NAME"` | `--require-unset NAME` / `--require-set NAME` |
 //!
 //! The binary is built with the workspace (`cargo nextest run --workspace` builds it). Include
 //! this file with `#[path = "../../test-support/fixture_program.rs"] mod fixture_program;`;

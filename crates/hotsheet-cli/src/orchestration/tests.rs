@@ -18,6 +18,10 @@ use hotsheet_ticketing::{ProviderCapabilities, SecretError};
 
 use super::*;
 
+// HS2-6EW369: the portable fixture program that test steps and profiles run.
+#[path = "../../../test-support/fixture_program.rs"]
+mod fixture_program;
+
 mod access;
 mod capacity;
 mod gates;
@@ -51,9 +55,10 @@ mod ticket_list;
 mod tickets;
 mod timeline;
 mod tool_capacity;
-// The step suites below script their steps in POSIX sh; `validation_portable` runs
-// the process-control essentials on every platform (HS2-2R32SD).
-#[cfg(unix)]
+// HS2-5E0D96: the step suites run the portable fixture program on every platform;
+// `validation_portable` runs the process-control essentials with each platform's own
+// shell (HS2-2R32SD). `validation_runner` stays Unix-only: detached runners are
+// enabled on Linux and macOS only, and the suite ends a runner with SIGKILL.
 mod validation;
 mod validation_portable;
 #[cfg(unix)]

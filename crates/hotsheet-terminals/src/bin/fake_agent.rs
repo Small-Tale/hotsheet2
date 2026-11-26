@@ -28,6 +28,17 @@
 //!   --require-env N v     # exit 1 at once unless environment variable N equals v (HS2-6EW369)
 //!   --run "--exit 3"      # run the whitespace-separated flags of one argument (HS2-6EW369)
 //!   --wait-line           # block until one line (or end of input) arrives on stdin (HS2-YM55P3)
+//!   --print-stderr "t"    # write t to stderr without a newline (HS2-5E0D96)
+//!   --append f "t"        # append the line t to file f, created if missing (HS2-5E0D96)
+//!   --write-cwd f         # write the working directory to file f (HS2-5E0D96)
+//!   --wait-file f         # block until file f exists (HS2-5E0D96)
+//!   --require-file f      # exit 1 at once unless file f exists (HS2-5E0D96)
+//!   --fail-once f 3       # if file f is missing, create it and exit 3 at once (HS2-5E0D96)
+//!   --flood "t"           # write the line t forever, until the output is closed (HS2-5E0D96)
+//!   --print-zeros 4096    # write this many zero bytes to stdout (HS2-5E0D96)
+//!   --spawn-hold-ms 500   # start a child that holds the inherited streams this long (HS2-5E0D96)
+//!   --require-unset N     # exit 1 at once if environment variable N is set (HS2-5E0D96)
+//!   --require-set N       # exit 1 at once unless environment variable N is set and non-empty
 //!   --                    # end of the script; later arguments are positional ({arg:1}, …)
 //! ```
 //!
@@ -37,13 +48,17 @@
 //! prompt), and `--` stands in for `"$@"`, the arguments a host appends after the configured
 //! ones (a push mechanism's `--port <p>`).
 //!
+//! HS2-5E0D96: the orchestration validation suites script their steps with the file, stream,
+//! environment and process-tree flags above instead of `sh` lines, so their sequences
+//! (retries, cancel, held steps, timeouts ending the whole tree) also run on Windows.
+//!
 //! `--serve-opencode` makes the agent push-capable the way the `opencode-http` mechanism
 //! expects: it listens on the `--port` its host appends, behind HTTP Basic auth with
 //! `OPENCODE_SERVER_PASSWORD`, then ends a turn (busy, then idle) so its host knows it
 //! is ready. Each prompt it receives is appended to
 //! `<report-dir>/<HOTSHEET_TERMINAL_ID>.prompts`, one JSON line each.
 
-use std::io::Write;
+use std::io::{Read as _, Write};
 use std::time::Duration;
 
 fn main() {
@@ -183,6 +198,93 @@ fn main() {
                     std::process::exit(1);
                 }
                 i += 2;
+            }
+            "--print-stderr" => {
+                let _ = write!(std::io::stderr(), "{}", val(i));
+                i += 1;
+            }
+            "--append" => {
+                let text = args.get(i + 2).map(String::as_str).unwrap_or("");
+                let appended = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(val(i))
+                    .and_then(|mut file| writeln!(file, "{text}"));
+                if let Err(e) = appended {
+                    eprintln!("hs-fake-agent: append failed: {e}");
+                    exit_code = 2;
+                }
+                i += 2;
+            }
+            "--write-cwd" => {
+                let cwd = std::env::current_dir().unwrap_or_default();
+                if let Err(e) = std::fs::write(val(i), cwd.to_string_lossy().as_bytes()) {
+                    eprintln!("hs-fake-agent: write-cwd failed: {e}");
+                    exit_code = 2;
+                }
+                i += 1;
+            }
+            "--wait-file" => {
+                let _ = w.flush();
+                // The fixture has no other way to learn of the file; the test creates it.
+                while !std::path::Path::new(val(i)).exists() {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                i += 1;
+            }
+            "--require-file" => {
+                if !std::path::Path::new(val(i)).exists() {
+                    let _ = w.flush();
+                    std::process::exit(1);
+                }
+                i += 1;
+            }
+            "--fail-once" => {
+                if !std::path::Path::new(val(i)).exists() {
+                    let _ = std::fs::write(val(i), "");
+                    let _ = w.flush();
+                    std::process::exit(args.get(i + 2).and_then(|c| c.parse().ok()).unwrap_or(1));
+                }
+                i += 2;
+            }
+            "--print-zeros" => {
+                let count = val(i).parse::<u64>().unwrap_or(0);
+                if std::io::copy(&mut std::io::repeat(0).take(count), &mut w).is_err() {
+                    exit_code = 2;
+                }
+                i += 1;
+            }
+            "--flood" => {
+                let line = val(i);
+                while writeln!(w, "{line}").is_ok() {}
+                std::process::exit(2);
+            }
+            "--spawn-hold-ms" => {
+                let _ = w.flush();
+                // The child inherits this process's streams, as a shell's `sleep &` would.
+                if let Err(e) = std::env::current_exe().and_then(|program| {
+                    std::process::Command::new(program)
+                        .args(["--hold-ms", val(i)])
+                        .spawn()
+                }) {
+                    eprintln!("hs-fake-agent: spawn failed: {e}");
+                    exit_code = 2;
+                }
+                i += 1;
+            }
+            "--require-unset" => {
+                if std::env::var_os(val(i)).is_some() {
+                    let _ = w.flush();
+                    std::process::exit(1);
+                }
+                i += 1;
+            }
+            "--require-set" => {
+                if std::env::var_os(val(i)).is_none_or(|value| value.is_empty()) {
+                    let _ = w.flush();
+                    std::process::exit(1);
+                }
+                i += 1;
             }
             other => {
                 eprintln!("hs-fake-agent: unknown flag {other}");

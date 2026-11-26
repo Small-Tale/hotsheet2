@@ -1,7 +1,11 @@
 //! HS2-WN0MXZ: validation steps run on a real second server over authenticated TLS
 //! through the owned CLI process, and through the stdio MCP tool on a live service.
+//!
+//! HS2-5E0D96: steps run the portable fixture program (`hs-fake-agent`) with a script of
+//! its flags instead of `sh` lines, so this suite runs on every platform.
 use super::orchestration::api;
 use super::*;
+use crate::fixture_program;
 use hotsheet_ticketing::checkouts::CheckoutRegistry;
 use hotsheet_ticketing::{NewTicket, StoreMetadata, ops};
 
@@ -24,13 +28,14 @@ fn ticket(store: &FsStore, prefix: &str, title: &str) -> hotsheet_model::Ticket 
     .unwrap()
 }
 
-/// The target project's own profile file: each profile is one shell line.
+/// The target project's own profile file: each profile is one fixture script.
 fn profiles(project: &std::path::Path, profiles: &[(&str, &str)]) {
     let directory = project.join(".hotsheet2");
     std::fs::create_dir_all(&directory).unwrap();
+    let program = fixture_program::path();
     let profiles: Vec<Value> = profiles
         .iter()
-        .map(|(name, line)| json!({"name": name, "program": "/bin/sh", "args": ["-c", line]}))
+        .map(|(name, line)| json!({"name": name, "program": program, "args": ["--run", line]}))
         .collect();
     std::fs::write(
         directory.join("validation-profiles.json"),
@@ -61,16 +66,10 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
         &[
             (
                 "smoke",
-                "printf ok; printf synthetic-secret >&2; echo x >> smoke-runs",
+                "--print-template ok --print-stderr synthetic-secret --append smoke-runs x",
             ),
-            (
-                "flaky",
-                "if [ -f seen ]; then exit 0; else touch seen; exit 3; fi",
-            ),
-            (
-                "held",
-                "while [ ! -f release ]; do sleep 0.05; done; echo x >> held-ends",
-            ),
+            ("flaky", "--fail-once seen 3"),
+            ("held", "--wait-file release --append held-ends x"),
         ],
     );
     let expected = identity(&peer_home);
@@ -252,7 +251,12 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
         .map(|note| note.text.clone())
         .collect();
     assert!(notes.contains(passed["result"]["result_id"].as_str().unwrap()));
-    for forbidden in [SECRET, peer.origin.as_str(), "synthetic-secret", "printf"] {
+    for forbidden in [
+        SECRET,
+        peer.origin.as_str(),
+        "synthetic-secret",
+        "--print-template",
+    ] {
         assert!(!record.contains(forbidden));
         assert!(!notes.contains(forbidden));
     }
@@ -305,11 +309,11 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
             "--target",
             TARGET,
             "--program",
-            "/bin/sh",
+            &fixture_program::path(),
             "--arg",
-            "-c",
+            "--run",
             "--arg",
-            "echo x >> custom-runs; exit 7",
+            "--append custom-runs x --exit 7",
             "--expect-exit",
             "7",
         ],
@@ -535,9 +539,9 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
     profiles(
         &project,
         &[
-            ("smoke", "printf ok; echo x >> smoke-runs"),
-            ("gated", "while [ ! -f go ]; do sleep 0.05; done"),
-            ("held", "while [ ! -f never ]; do sleep 0.05; done"),
+            ("smoke", "--print-template ok --append smoke-runs x"),
+            ("gated", "--wait-file go"),
+            ("held", "--wait-file never"),
         ],
     );
     let router = app(host.clone());
@@ -807,7 +811,8 @@ async fn hs2_zcr3y7_kept_output_is_read_by_digest_on_the_hosting_machine() {
         "POST",
         &format!("/checkouts/{}/target-validations", checkout.id),
         json!({"execution_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "check":{"kind":"command","program":"/bin/sh","args":["-c","printf ok"]},
+            "check":{"kind":"command","program":fixture_program::path(),
+                "args":["--run","--print-template ok"]},
             "timeout_seconds":20,"wait_ms":8000}),
         true,
     )
