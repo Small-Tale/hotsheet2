@@ -41,8 +41,8 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('SharedWorker change-stream port hub', () => {
   it('shares a bounded direct-poll pool across tabs without a mux path', async () => {
-    // This test covers the shared hub's four-slot pool. The no-Web-Locks pacing
-    // path is covered separately in change-poll-slots.test.ts.
+    // This test covers the shared hub's four-slot pool. The no-Web-Locks leased
+    // path is covered separately in change-poll-slot-leases.test.ts (HS2-QS2P6B).
     vi.stubGlobal('navigator', {
       locks: { request: (_name: string, _options: unknown, callback: () => Promise<unknown>) => callback() },
     });

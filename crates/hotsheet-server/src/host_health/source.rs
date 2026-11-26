@@ -13,8 +13,10 @@ use super::Level;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Probe<T> {
     /// This platform has no reader for the signal.
-    #[cfg_attr(any(target_os = "macos", target_os = "linux"), allow(dead_code))]
-    // HS2-DTAVQA: macOS and Linux build every signal reading explicitly.
+    #[cfg_attr(
+        any(target_os = "macos", target_os = "linux"),
+        allow(dead_code, reason = "HS2-DTAVQA: macOS and Linux read every signal")
+    )]
     Unsupported,
     /// The reader failed this tick.
     Unavailable,
@@ -240,7 +242,7 @@ fn statvfs_disk(path: &std::path::Path) -> Option<DiskReading> {
     })
 }
 
-#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))] // HS2-MEQ46T
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))] // HS2-MEQ46T: only macOS and Linux sample CPU.
 fn logical_cpus() -> f64 {
     std::thread::available_parallelism().map_or(1.0, |count| count.get() as f64)
 }
@@ -1003,7 +1005,7 @@ pub(crate) mod windows {
 // ---- pure parsers ------------------------------------------------------------------------
 
 /// `ps -A -o %cpu=,comm=`: whole-machine busy share and the busiest process's executable name.
-#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))] // HS2-MEQ46T
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))] // HS2-MEQ46T: only macOS and Linux sample CPU.
 pub(crate) fn parse_ps(text: &str, logical_cpus: f64) -> Option<CpuReading> {
     let mut total = 0.0;
     let mut top: Option<(f64, &str)> = None;

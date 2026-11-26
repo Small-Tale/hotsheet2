@@ -254,6 +254,8 @@ pub fn import_with_progress(
         "tickets",
     ));
     let prefix = store.metadata()?.ticket_prefix;
+    // The last-resort creation time for a ticket with no usable timestamp (HS2-K7JG39).
+    let imported_at = Timestamp::from_datetime(time::OffsetDateTime::now_utc());
 
     let already: HashSet<Ulid> = store.list_tickets()?.into_iter().map(|t| t.id).collect();
 
@@ -310,8 +312,16 @@ pub fn import_with_progress(
             pending.write(store, id)?;
         }
         if !already.contains(id) {
-            store.write_ticket(&build_ticket(src, *id, &prefix, &id_by_number))?;
+            let (ticket, warnings) = build_ticket(src, *id, &prefix, &id_by_number, &imported_at);
+            store.write_ticket(&ticket)?;
             summary.written += 1;
+            for warning in warnings {
+                eprintln!("{warning}");
+                observe(MigrationProgress {
+                    warning: Some(warning),
+                    ..MigrationProgress::phase("warning")
+                });
+            }
         }
         summary.attachments += copy_attachments(store, base_dir, id, &mut pending, observe)?;
         if !src.attachments.is_empty() {
@@ -914,17 +924,18 @@ fn build_ticket(
     id: Ulid,
     prefix: &str,
     id_by_number: &HashMap<&str, Ulid>,
-) -> Ticket {
-    let created = src.created_at.clone().unwrap_or_default();
-    let updated = src.updated_at.clone().unwrap_or_else(|| created.clone());
+    imported_at: &Timestamp,
+) -> (Ticket, Vec<String>) {
+    // Never write an empty or unparseable timestamp (HS2-K7JG39).
+    let times = crate::import_timestamps::resolve(src, &export_ticket_label(src), imported_at);
 
     let mut t = Ticket::new(
         id,
         derive_slug(&id, prefix),
         src.title.clone(),
         src.category.clone().unwrap_or_else(|| "issue".to_string()),
-        created,
-        updated,
+        times.created_at,
+        times.updated_at,
     );
     // Retain the HS1 ticket number so legacy references (in titles/details/notes across the
     // migrated project) resolve and search against the new ticket (HS2-4H2ZR1).
@@ -934,8 +945,8 @@ fn build_ticket(
     t.up_next = src.up_next;
     t.tags = src.tags.clone();
     t.details = src.details.clone().unwrap_or_default();
-    t.completed_at = src.completed_at.clone().map(Timestamp::from);
-    t.verified_at = src.verified_at.clone().map(Timestamp::from);
+    t.completed_at = times.completed_at;
+    t.verified_at = times.verified_at;
     // Normalize HS1 terminal states into a coherent HS2 status + close outcome.
     // Backlog is inactive but not closed; deleted/archive are no longer actionable.
     t.up_next &= t.status.is_active();
@@ -949,10 +960,9 @@ fn build_ticket(
             t.close_reason = Some(CloseReason::Completed);
         }
         Status::Deleted | Status::Archive => {
-            t.closed_at = src
+            t.closed_at = times
                 .deleted_at
                 .clone()
-                .map(Timestamp::from)
                 .or_else(|| Some(t.updated_at.clone()));
             t.close_reason = Some(CloseReason::Obsolete);
         }
@@ -969,12 +979,13 @@ fn build_ticket(
     t.notes = src
         .notes
         .iter()
-        .map(|n| {
+        .zip(times.note_created_at)
+        .map(|(n, note_created_at)| {
             let id =
                 n.id.as_deref()
                     .and_then(|s| Ulid::from_string(s).ok())
                     .unwrap_or_else(Ulid::new);
-            let created_at = n.created_at.clone().map(Timestamp::new).unwrap_or_else(|| {
+            let created_at = note_created_at.unwrap_or_else(|| {
                 Timestamp::from_datetime(
                     time::OffsetDateTime::from_unix_timestamp_nanos(
                         i128::from(id.timestamp_ms()) * 1_000_000,
@@ -1013,7 +1024,7 @@ fn build_ticket(
         })
         .collect();
 
-    t
+    (t, times.warnings)
 }
 
 fn parse_priority(s: Option<&str>) -> Priority {
@@ -1448,7 +1459,13 @@ mod tests {
         let staging = tempfile::tempdir().unwrap();
         let export = attachment_export();
         let id = import_id(&export.project, &export.tickets[0], 0);
-        let legacy = build_ticket(&export.tickets[0], id, "HS", &HashMap::new());
+        let (legacy, _) = build_ticket(
+            &export.tickets[0],
+            id,
+            "HS",
+            &HashMap::new(),
+            &Timestamp::new("2026-11-27T00:00:00Z"),
+        );
         store.write_ticket(&legacy).unwrap();
         for name in ["first.png", "second.png"] {
             std::fs::write(staged(&staging, name), name).unwrap();
@@ -1576,6 +1593,92 @@ mod tests {
             }
         );
         assert_eq!(store.list_tickets().unwrap().len(), 2, "no duplicates");
+    }
+
+    /// Import with every progress event recorded.
+    fn import_observed(store: &FsStore, export: &ExportFile) -> Vec<MigrationProgressEvent> {
+        let mut events = Vec::new();
+        import_with_progress(store, export, Path::new("."), &mut |event| {
+            events.push(event)
+        })
+        .unwrap();
+        events
+    }
+
+    type MigrationProgressEvent = crate::migration_progress::MigrationProgress;
+
+    fn warnings(events: &[MigrationProgressEvent]) -> Vec<String> {
+        events
+            .iter()
+            .filter(|event| event.phase == "warning")
+            .filter_map(|event| event.warning.clone())
+            .collect()
+    }
+
+    #[test]
+    fn hs2_k7jg39_null_created_at_imports_a_real_timestamp_and_warns_once() {
+        let (_dir, store) = temp_store();
+        let mut export = export_json();
+        // HS-1200 is completed: created_at null, updated_at null, so the close time,
+        // the update time, and the creation time all come from completed_at.
+        export.tickets[0].created_at = None;
+        export.tickets[0].updated_at = None;
+        export.tickets[0].notes[0].created_at = Some("2026-08-04T00:00:00Z".into());
+        let id = import_id(&export.project, &export.tickets[0], 0);
+
+        let events = import_observed(&store, &export);
+        assert_eq!(
+            warnings(&events),
+            vec![
+                "warning: HS1 ticket HS-1200 has no created_at; its creation time was set to its earliest recorded time (completed_at)"
+            ]
+        );
+        let ticket = store.read_ticket(&id).unwrap();
+        for value in [&ticket.created_at, &ticket.updated_at] {
+            assert_eq!(value.as_str(), "2026-08-02T00:00:00Z");
+            assert!(value.instant().is_some());
+        }
+        assert_eq!(
+            ticket.closed_at.as_ref().map(Timestamp::as_str),
+            Some("2026-08-02T00:00:00Z")
+        );
+        // The identity is unchanged by the fallback, so reimport stays idempotent
+        // and a skipped ticket reports nothing.
+        let again = import_observed(&store, &export);
+        assert!(warnings(&again).is_empty());
+        assert_eq!(store.list_tickets().unwrap().len(), 2, "no duplicates");
+    }
+
+    #[test]
+    fn hs2_k7jg39_ticket_without_any_recorded_time_uses_the_import_time() {
+        let (_dir, store) = temp_store();
+        let mut export = export_json();
+        export.tickets.truncate(1);
+        let src = &mut export.tickets[0];
+        src.status = Some("not_started".into());
+        src.created_at = Some(String::new());
+        src.updated_at = None;
+        src.completed_at = None;
+        src.notes.clear();
+        let id = import_id(&export.project, &export.tickets[0], 0);
+        let before = time::OffsetDateTime::now_utc();
+
+        let events = import_observed(&store, &export);
+        let after = time::OffsetDateTime::now_utc();
+        assert_eq!(
+            warnings(&events),
+            vec![
+                "warning: HS1 ticket HS-1200 created_at is not an RFC 3339 timestamp; it was not imported",
+                "warning: HS1 ticket HS-1200 has an unusable created_at; its creation time was set to the import time",
+            ]
+        );
+        let ticket = store.read_ticket(&id).unwrap();
+        let created = ticket
+            .created_at
+            .instant()
+            .expect("a parseable creation time");
+        assert!(before <= created && created <= after);
+        assert_eq!(ticket.updated_at, ticket.created_at);
     }
 
     #[test]

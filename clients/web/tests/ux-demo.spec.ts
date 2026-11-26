@@ -9601,7 +9601,7 @@ test('keeps the Markdown preview focus ring inset so an overflow-hidden editor c
   expect(geometry.offset).toBeLessThan(0);
   expect(geometry.within).toBe(true);
   await page.locator('.markdown-editor').screenshot({
-    path: 'target/visual-captures/claude-501/-Users-westphal-Documents-hotsheet2/88cd2d15-f2a9-4f29-8bb4-c672b5069c22/scratchpad/0WD3YK-markdown-preview-focus-inset.png',
+    path: test.info().outputPath('0WD3YK-markdown-preview-focus-inset.png'),
   });
 });
 

@@ -13,6 +13,21 @@ import {
 } from './quick-ticket-composer';
 
 describe('QuickTicketComposer', () => {
+  it('HS2-Y32T8A disables the Up Next star, unpressed, for a source without Up Next', () => {
+    const reason = 'Jira PROJ tickets do not support Up Next.',
+      star = (props: Partial<Parameters<typeof QuickTicketComposer>[0]>) =>
+        /<button[^>]*data-action="toggle-new-ticket-up-next"[^>]*>/u.exec(
+          String(QuickTicketComposer({ expanded: true, ...props })),
+        )?.[0] ?? '';
+    const disabled = star({ upNext: true, upNextDisabledReason: reason });
+    expect(disabled).toContain(' disabled');
+    expect(disabled).toContain('aria-pressed="false"');
+    expect(disabled).toContain(`title="${reason}"`);
+    const enabled = star({ upNext: true });
+    expect(enabled).not.toContain(' disabled');
+    expect(enabled).toContain('aria-pressed="true"');
+  });
+
   it('HS2-2Z11A5 identifies a follow-up source in the shared creation dialog', () => {
     const markup = String(QuickTicketComposer({ expanded: true, followUpSource: 'HS2-SOURCE' }));
     expect(markup).toContain('Create follow-up to HS2-SOURCE');

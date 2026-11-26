@@ -996,7 +996,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         if (githubAuth.value?.session === started.session_id) githubAuth.value = { ...githubAuth.value, copied: ok };
       });
       const result = await client.waitGitHubAuth(started.session_id);
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Async cancellation may replace the live auth signal while this request is pending.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Async cancellation may replace the live auth signal while this request is pending. (HS2-DHYGXJ)
       if (githubAuth.value?.session !== started.session_id || result.state === 'pending') return;
       if (result.state === 'authorized') {
         closeGitHubPopup();

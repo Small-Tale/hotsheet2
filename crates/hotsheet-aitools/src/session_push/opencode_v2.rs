@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use hotsheet_sync::secret::SecretString;
 use serde_json::json;
 
 use super::http::{HttpPort, HttpRequest, basic_auth_header, query_escape};
@@ -13,7 +14,7 @@ pub const MECHANISM: &str = "opencode-v2-http";
 
 pub struct OpenCodeV2Push {
     base_url: String,
-    authorization: String,
+    authorization: SecretString,
     session_id: String,
     http: Arc<dyn HttpPort>,
 }
@@ -22,7 +23,7 @@ impl OpenCodeV2Push {
     pub fn new(port: u16, password: &str, session_id: String, http: Arc<dyn HttpPort>) -> Self {
         Self {
             base_url: format!("http://127.0.0.1:{port}"),
-            authorization: basic_auth_header("opencode", password),
+            authorization: basic_auth_header("opencode", password).into(),
             session_id,
             http,
         }
@@ -120,6 +121,7 @@ mod tests {
                 .authorization
                 .as_ref()
                 .unwrap()
+                .expose()
                 .starts_with("Basic ")
         );
     }

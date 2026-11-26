@@ -130,7 +130,7 @@ pub struct AdapterDescriptor {
 pub struct ConnectionContext {
     pub connection: String,
     pub settings: BTreeMap<String, String>,
-    pub credential: Option<String>,
+    pub credential: Option<hotsheet_sync::secret::SecretString>,
 }
 
 impl std::fmt::Debug for ConnectionContext {

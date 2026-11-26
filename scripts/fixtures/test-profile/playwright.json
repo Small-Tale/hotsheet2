@@ -1,7 +1,7 @@
 {
  "config": {
   "argv": [
-   "/Users/westphal/.nvm/versions/node/v22.23.2/bin/node",
+   "/root/bin/node",
    "/root/node_modules/.bin/playwright",
    "test",
    "--reporter=json"

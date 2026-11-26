@@ -31,6 +31,11 @@ export interface QuickTicketComposerProps {
   details?: string;
   category?: string;
   upNext?: boolean;
+  /**
+   * Why the selected source cannot start a ticket in Up Next (HS2-Y32T8A): the star stays mounted,
+   * unpressed and disabled, with this reason as its tooltip.
+   */
+  upNextDisabledReason?: string;
   /** The new ticket's priority (HS2-V72HCC). */
   priority?: TicketPriority;
   /** Create the ticket in Backlog instead of Not Started (HS2-V72HCC); Up Next clears it. */
@@ -190,7 +195,8 @@ export function QuickTicketComposer({
   followUpSource,
   details = '',
   category = 'task',
-  upNext = false,
+  upNext: requestedUpNext = false,
+  upNextDisabledReason,
   priority = 'default',
   backlog = false,
   providerName = 'Hot Sheet',
@@ -211,6 +217,8 @@ export function QuickTicketComposer({
   // Files staged for a source that takes attachments stay listed after switching to one that does
   // not; creation is blocked until the user removes them or switches back (HS2-8HHHK3).
   const strandedAttachments = strandedNewTicketAttachments(attachments.length, attachmentsEnabled);
+  // A source without Up Next never shows the star pressed, even when the draft chose it elsewhere.
+  const upNext = requestedUpNext && !upNextDisabledReason;
   return (
     <wa-dialog
       class="quick-ticket-dialog"
@@ -276,9 +284,10 @@ export function QuickTicketComposer({
               type="button"
               class="quick-ticket-composer__up-next"
               {...SEARCH_AND_COMPOSER_ACTIONS.toggleNewTicketUpNext.attrs}
+              disabled={Boolean(upNextDisabledReason)}
               aria-pressed={String(upNext)}
               aria-label={upNext ? 'Remove new ticket from Up Next' : 'Add new ticket to Up Next'}
-              title={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
+              title={upNextDisabledReason ?? (upNext ? 'Remove from Up Next' : 'Add to Up Next')}
             >
               <LucideIcon size="s" icon={Star} name="star" appearance={upNext ? 'solid' : 'outline'} />
             </button>

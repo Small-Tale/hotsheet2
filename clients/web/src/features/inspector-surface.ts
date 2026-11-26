@@ -30,6 +30,7 @@ import { type TicketPriority } from '../components/ticket-row';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type NotWorkingTarget, type Project } from '../interactions/types';
 import { type ProjectTicketSources } from '../new-ticket-source';
+import { ticketUpNextDisabledReason } from '../ticket-bulk-operations';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { followUpLinkAvailability } from '../ticket-follow-up-link';
 import { type TicketTitleEditSurface } from '../ticket-title-editing';
@@ -269,6 +270,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       activeTab: inspectorTab.value,
       upNext: ticket.up_next,
       upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
+      upNextDisabledReason: ticketUpNextDisabledReason([ticket], capabilitiesFor, () => source?.name),
       feedbackNeeded: ticket.needs_review || fullTicketFeedbackNeeded(ticket),
       closeReason: ticket.close_reason,
       latestConfidence: ticket.latest_confidence,
@@ -328,6 +330,12 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       activeTab: inspectorTab.value,
       upNext: row.up_next,
       upNextEligible: row.status === 'not_started' || row.status === 'started',
+      upNextDisabledReason: ticketUpNextDisabledReason(
+        [row],
+        () => capabilities,
+        () =>
+          defaultProviders.value[current.id]?.sources.find((source) => source.connectionId === row.connection_id)?.name,
+      ),
       feedbackNeeded: row.needs_review ?? row.feedback_needed,
       closeReason: row.close_reason,
       latestConfidence: row.latest_confidence,

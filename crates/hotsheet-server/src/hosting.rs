@@ -366,7 +366,7 @@ impl AppState {
         let info = lifecycle::InstanceInfo {
             pid: std::process::id(),
             url: meta.url,
-            secret: meta.secret.into(),
+            secret: meta.secret,
             store_path: store_path.display().to_string(),
             index_path,
             started_at: meta.started_at,

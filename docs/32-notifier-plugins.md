@@ -788,6 +788,13 @@ re-reads from the server when it opens and after each change, and nothing polls.
 - A notification goes only where the user configured it. Ticket titles and blocked
   reasons are part of the message, so a channel to a shared destination shares them.
 - Email HTML neutralizes raw HTML from ticket text.
+- A request's `Debug` output never shows a credential (HS2-CQNE4E). Header names stay
+  visible, but the values of `Authorization`, cookie, and signature headers, and of any
+  header whose name contains a token, key, auth, or secret word, print `<redacted>`. The
+  URL keeps only its scheme and host, because Slack, Teams, and webhook URLs are
+  themselves secrets. The body prints as a byte count. A transport failure such as DNS,
+  TLS, or a refused connection is reported without the URL. The bytes sent are
+  unchanged.
 
 ## 32.12 Status and follow-ups
 
@@ -810,3 +817,4 @@ re-reads from the server when it opens and after each change, and nothing polls.
 | `project.stopped` producer (claims: finished and stalled)                  | Shipped | HS2-2MM07G |
 | Idle-while-claimed and halted-session signals; configurable windows        | Shipped | HS2-P57XHV |
 | Main CI status in the live state, reported locally                         | Shipped | HS2-M8HHEA |
+| Credentials redacted from request `Debug` and transport errors             | Shipped | HS2-CQNE4E |

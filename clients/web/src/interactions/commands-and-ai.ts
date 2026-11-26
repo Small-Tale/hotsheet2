@@ -820,7 +820,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     commandSettingsEditingId.value = id;
     commandIconSearch.value = '';
     void loadLucideCatalog();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).showPopover?.();
   }
   const projectId = () => project()?.id;
@@ -832,7 +832,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       },
       openEditor: openCommandEditor,
       closeEditor: () => {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();
         commandSettingsEditingId.value = undefined;
         commandIconSearch.value = '';
@@ -1482,7 +1482,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.resetShortcut.selector, (_event, target) => {
       const id = data(target).shortcutId;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       if (!id || !keyboardShortcutOverrides.value[id]) return;
       persistShortcutOverrides(
         Object.fromEntries(Object.entries(keyboardShortcutOverrides.value).filter(([entryId]) => entryId !== id)),

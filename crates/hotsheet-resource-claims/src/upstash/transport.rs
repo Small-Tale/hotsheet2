@@ -90,7 +90,7 @@ pub fn validate_url(url: &str) -> Result<(), String> {
 /// The real transport over `ureq`.
 pub struct UreqTransport {
     base: String,
-    token: String,
+    token: hotsheet_sync::secret::SecretString,
     agent: ureq::Agent,
 }
 
@@ -106,7 +106,7 @@ impl UreqTransport {
     pub fn new(url: &str, token: &str) -> Self {
         Self {
             base: url.trim_end_matches('/').to_owned(),
-            token: token.to_owned(),
+            token: token.into(),
             agent: ureq::AgentBuilder::new()
                 .timeout_connect(Duration::from_secs(10))
                 .timeout(Duration::from_secs(30))
@@ -117,7 +117,7 @@ impl UreqTransport {
     fn post(&self, path: &str) -> ureq::Request {
         self.agent
             .post(&format!("{}{path}", self.base))
-            .set("Authorization", &format!("Bearer {}", self.token))
+            .set("Authorization", &format!("Bearer {}", self.token.expose()))
     }
 
     fn map(error: ureq::Error) -> RestError {

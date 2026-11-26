@@ -4,6 +4,7 @@ import {
   captureTicketDraft,
   clearTicketDraft,
   loadTicketDraft,
+  planTicketDraftRestore,
   prepareCommittedDraftCleanup,
   reconcileStoredTicketDraft,
   saveTicketDraft,
@@ -151,5 +152,56 @@ describe('ticket draft store (HS2-RE1PS6)', () => {
     expect(() => {
       clearTicketDraft(failing, key);
     }).not.toThrow();
+  });
+});
+
+describe('planTicketDraftRestore (HS2-7D3MPP)', () => {
+  const stored = (base: string, draft: string, predecessor?: string) => ({
+    base,
+    draft,
+    at: 1,
+    ...(predecessor === undefined ? {} : { pendingIntent: { predecessor } }),
+  });
+
+  it('restores nothing without a copy, and clears a copy that is redundant', () => {
+    expect(planTicketDraftRestore(undefined, 'Intro')).toEqual({ kind: 'none', clear: false });
+    // The draft never left its base, or the server already holds it.
+    expect(planTicketDraftRestore(stored('Intro', 'Intro'), 'Intro changed')).toEqual({ kind: 'none', clear: true });
+    expect(planTicketDraftRestore(stored('Intro', 'Intro mine'), 'Intro mine')).toEqual({ kind: 'none', clear: true });
+  });
+
+  it('continues an unchanged base and merges a disjoint server change', () => {
+    expect(planTicketDraftRestore(stored('Intro', 'Intro mine'), 'Intro')).toEqual({
+      kind: 'restore',
+      base: 'Intro',
+      draft: 'Intro mine',
+    });
+    expect(planTicketDraftRestore(stored('A\n\nB', 'A mine\n\nB'), 'A\n\nB theirs')).toEqual({
+      kind: 'restore',
+      base: 'A\n\nB theirs',
+      draft: 'A mine\n\nB theirs',
+    });
+  });
+
+  it('offers both versions when the server changed the same text, instead of discarding the draft', () => {
+    expect(planTicketDraftRestore(stored('Intro', 'Intro rewritten here'), 'Intro replaced elsewhere')).toEqual({
+      kind: 'conflict',
+      base: 'Intro',
+      mine: 'Intro rewritten here',
+      theirs: 'Intro replaced elsewhere',
+    });
+    // Native revert intent over a value that moved on is a conflict too, on the copy's own base.
+    expect(planTicketDraftRestore(stored('old', 'old', 'submitted'), 'remote')).toEqual({
+      kind: 'conflict',
+      base: 'old',
+      mine: 'old',
+      theirs: 'remote',
+    });
+    // The same intent over its exact predecessor still restores.
+    expect(planTicketDraftRestore(stored('old', 'old', 'submitted'), 'submitted')).toEqual({
+      kind: 'restore',
+      base: 'submitted',
+      draft: 'old',
+    });
   });
 });

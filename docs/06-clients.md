@@ -1019,9 +1019,20 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   instead of one per pause, and nothing this client typed can come back as "their"
   version. Reopening an editor whose local copy differs from its base restores the copy on
   the same base (a toast says so); if the ticket changed meanwhile the copy is merged when
-  the edits are disjoint and otherwise discarded in favour of the current value. A
+  the edits are disjoint. When the same text changed, the copy is never discarded: the
+  editor opens on the current value and the field-conflict card shows both versions; the
+  copy survives reloads and selection changes until the card is resolved (Use Theirs, or
+  a successful Apply of the merged value) (HS2-7D3MPP). A
   successful save or an explicit cancel clears the copy; tag chips remain immediate
-  discrete saves (HS2-RE1PS6). Sometimes a list refresh would deselect the ticket being edited,
+  discrete saves (HS2-RE1PS6). A focus-loss save sends only what was typed before focus
+  left: text typed after the user returns to an editor whose save is still in flight is
+  kept for the next focus loss, and that save's answer does not close the editor while it
+  has focus or unsaved text. Page hide saves an open edit and leaves the editor open; the
+  next blur saves later typing on the committed token. A failed save shows the error,
+  keeps the text and its local copy, and reopening the editor restores the copy for retry.
+  A recently viewed ticket shown from cache and refreshed after an edit began is
+  reconciled like a live refresh, so the blur save uses the refreshed token and an editor
+  with nothing typed adopts the refreshed text (HS2-7D3MPP). Sometimes a list refresh would deselect the ticket being edited,
   for example when another worker completes it or it leaves the active filter. Its unsaved
   edit is then saved to that ticket first, while the ticket is still listed and selected.
   Only after that does the refresh remove it, so the edit is never dropped. A refresh that
@@ -2632,8 +2643,25 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   the state they need, or on the other requests settling with the `/ws/poll` and
   `/__hotsheet/change-mux/poll` long polls excluded (HS2-V94A8M). Origin-scoped Web Locks
   share those four slots across independent tabs and workers, including when SharedWorker
-  is unavailable. A closed tab releases its locks. Browsers without Web Locks use paced
-  zero-wait polls, keeping HTTP connections brief for ordinary API work (HS2-GDF4ZJ).
+  is unavailable. A closed tab releases its locks (HS2-GDF4ZJ). A context without Web
+  Locks (a plain-HTTP origin is not a secure context) or whose Web Locks implementation
+  refuses it keeps the same four-slot cap with leases over a `BroadcastChannel` and still
+  holds genuine long polls; it never sends fixed-interval requests (HS2-QS2P6B). A context
+  posts a tentative claim ranked by when it began waiting, confirms it after a short settle
+  window only if fewer than four confirmed or better-ranked claims are ahead of it (so the
+  oldest waiter wins), and releases it when the poll ends. A newly opened context queries
+  existing holds; leases expire 35 s after a hold starts, so a context that vanishes cannot
+  keep a slot. A page that hides (closes, navigates away, or enters the back/forward cache)
+  releases its leases on `pagehide`, as Web Locks do, so the other tabs reclaim them at once;
+  the listener is registered when the lease channel first opens, never at import. A page
+  restored from that cache forgets the claims it knew of, since it may have missed releases
+  while frozen, and queries again (HS2-S3RHFP). Contexts that use Web Locks and contexts that
+  use leases do not count each other's slots: both are per origin, and Web Locks availability
+  follows the origin's secure-context status and storage policy, so the contexts of one origin
+  agree. A sandboxed or opaque-origin context that is refused locks also has its own
+  `BroadcastChannel` scope, so it could not join the origin's leases anyway. A context that has to wait announces it, and holders yield after the one-second
+  minimum turn. Waiting sends no requests: it wakes on a release, an expiry, or an abort.
+  Without `BroadcastChannel` either, a context cannot see the others and holds one slot.
   **Multiplexed WebSocket (HS2-QJR1K6).** Projects sharing a bridge use one browser
   WebSocket. Versioned subscribe/unsubscribe frames add and remove projects without closing
   the others; every acknowledgement and live event carries its project id and subscription
@@ -4971,6 +4999,13 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
   (**HS2-KRQRWH**). Keystrokes typed while the socket is closed or still reopening are kept
   (bounded to the newest 64 KiB) and sent once it opens, so recovering never loses input
   (**HS2-A1R38J**).
+- A terminal that ended closes its socket once, after its last output, with WebSocket close
+  code 4000 (`terminal ended`): its child exited and its output drained, or it was killed.
+  Attaching to an exited terminal that is still tracked replays it and reports its size, then
+  closes the same way. The viewport keeps the output shown (`data-connection="ended"`), drops
+  typing, and never reattaches, from its backoff or any of the triggers above, parked or not.
+  Any other close stays reconnectable. The Vite bridge and peer gateway pass 4000-4999 close
+  codes through (**HS2-QWT94V**).
 - A socket that stays OPEN but stops carrying traffic is treated as dead too. After its attach
   preamble (replay, then size), the server sends `{"terminal_liveness":1}` and answers each
   `{"terminal_ping":n}` with `{"terminal_pong":n}`; both the direct and broker paths answer

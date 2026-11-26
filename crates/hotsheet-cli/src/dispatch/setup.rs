@@ -1326,6 +1326,15 @@ pub(crate) fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
                     src
                 );
             }
+            // HS2-YJCPD5: a plugin dir that failed to load (e.g. an id or write target
+            // refused by HS2-80JHZD) is named on stderr so stdout's table stays stable.
+            for skipped in hotsheet_plugins::skipped_plugins(&default_dirs()) {
+                eprintln!(
+                    "warning: skipped plugin {}: {}",
+                    skipped.path.display(),
+                    skipped.reason
+                );
+            }
         }
         PluginCmd::Info { id } => {
             let p =

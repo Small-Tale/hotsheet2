@@ -282,7 +282,11 @@ fn live_permission_hosts(state: &AppState) -> Result<Vec<PermissionHost>, ApiErr
     }
     hosts.sort();
     if let Some(own) = state.instance.lock_or_recover().as_ref() {
-        let identity = (std::process::id(), own.url.clone(), own.secret.clone());
+        let identity = (
+            std::process::id(),
+            own.url.clone(),
+            own.secret.expose().to_owned(),
+        );
         if !hosts.contains(&identity) {
             return Err(peer_discard_unavailable());
         }
@@ -298,11 +302,13 @@ fn invalidate_peer_legacy_permissions(
     source_id: &str,
 ) -> Result<(), ApiError> {
     let hosts = live_permission_hosts(state)?;
-    let own = state
-        .instance
-        .lock_or_recover()
-        .as_ref()
-        .map(|meta| (std::process::id(), meta.url.clone(), meta.secret.clone()));
+    let own = state.instance.lock_or_recover().as_ref().map(|meta| {
+        (
+            std::process::id(),
+            meta.url.clone(),
+            meta.secret.expose().to_owned(),
+        )
+    });
     let body = serde_json::json!({"source": source_id}).to_string();
     for (_, url, secret) in hosts.iter().filter(|host| Some(*host) != own.as_ref()) {
         let endpoint = format!(
@@ -889,6 +895,25 @@ pub(crate) async fn list_ai_tools(
     Json(discovered_ai_tools_off_runtime(&state, query.refresh).await)
 }
 
+/// `GET /plugins/status` (HS2-YJCPD5): plugin directories in the server's search path
+/// that discovery skipped, each with its load error (for example an id or write target
+/// refused by HS2-80JHZD), so a third-party plugin never drops out silently.
+#[derive(Serialize)]
+pub(crate) struct PluginStatus {
+    skipped: Vec<hotsheet_plugins::SkippedPlugin>,
+}
+
+pub(crate) async fn get_plugin_status(
+    State(state): State<AppState>,
+) -> Result<Json<PluginStatus>, ApiError> {
+    let plugin_dirs = state.plugin_dirs.clone();
+    let skipped =
+        tokio::task::spawn_blocking(move || hotsheet_plugins::skipped_plugins(&plugin_dirs))
+            .await
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(Json(PluginStatus { skipped }))
+}
+
 /// The settings key holding the default Drive tool, model, and effort.
 const AI_DEFAULTS_SETTING: &str = "ai.defaults";
 
@@ -1170,7 +1195,7 @@ pub(crate) async fn create_drive_connection(
     ];
     if let Some(url) = state.terminal_server_url.with_lock(|value| value.clone()) {
         env.push(format!("HOTSHEET_SERVER={url}"));
-        env.push(format!("HOTSHEET_SECRET={}", state.secret));
+        env.push(format!("HOTSHEET_SECRET={}", state.secret.expose()));
     }
     let info = state
         .client_drives

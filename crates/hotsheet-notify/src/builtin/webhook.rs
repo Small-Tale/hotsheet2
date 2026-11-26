@@ -209,6 +209,23 @@ mod tests {
             header("X-Hotsheet-Signature"),
             Some(signature("s3", 1_800_000_000, &request.body))
         );
+        // HS2-CQNE4E: Debug hides the signature and the secret URL path, keeps the names.
+        let printed = format!("{request:?}");
+        let signed = header("X-Hotsheet-Signature").unwrap();
+        assert!(
+            printed.contains(r#"("X-Hotsheet-Signature", <redacted>)"#),
+            "{printed}"
+        );
+        assert!(
+            printed.contains(r#"("X-Hotsheet-Timestamp", "1800000000")"#),
+            "{printed}"
+        );
+        assert!(!printed.contains(&signed), "{printed}");
+        assert!(
+            printed.contains(r#"url: "https://hooks.test/<redacted>""#),
+            "{printed}"
+        );
+        assert!(!printed.contains("/in"), "{printed}");
     }
 
     #[test]

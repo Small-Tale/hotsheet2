@@ -112,6 +112,8 @@ export interface InspectorAndEditorInteractionsDependencies {
     current: string,
     noteId?: string,
   ) => { draft: string; base: string } | undefined;
+  /** Drop a field's recovery copy once its conflict card is resolved (HS2-7D3MPP). */
+  readonly clearConflictRecoveryCopy: (conflict: TicketFieldConflict) => void;
   readonly beginDetailsFinish: (reader?: boolean) => DetailsFinishTask;
   readonly finishDetailsEdit: (reader?: boolean) => Promise<boolean>;
   readonly readerEditingNoteId: Signal<string | undefined>;
@@ -208,6 +210,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     linkedReaderSaves,
     readerDetailsAutosave,
     restoreTicketDraft,
+    clearConflictRecoveryCopy,
     detailsAutosave,
     beginDetailsFinish,
     finishDetailsEdit,
@@ -518,6 +521,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       updateConflictDraft(conflict.field, conflict.theirs);
       fieldConflict.value = undefined;
       fieldConflictResolution.value = '';
+      clearConflictRecoveryCopy(conflict);
     }),
   );
   lifetime.add(
@@ -533,7 +537,10 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       updateConflictDraft(conflict.field, value, conflict.theirs);
       fieldConflict.value = undefined;
       fieldConflictResolution.value = '';
-      void updateSelectedTracked(resolvedConflictPatch(conflict, value));
+      // The copy stays until the chosen text is saved, so a failed save can still be recovered.
+      void updateSelectedTracked(resolvedConflictPatch(conflict, value)).then((saved) => {
+        if (saved) clearConflictRecoveryCopy(conflict);
+      });
     }),
   );
   function beginTitleEdit(trigger: Element) {
@@ -1005,13 +1012,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       caretDocument = document as Document & {
         caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
       },
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       position = caretDocument.caretPositionFromPoint?.(event.clientX, event.clientY);
     if (!position || !target.contains(position.offsetNode)) return end;
     const range = document.createRange();
     range.selectNodeContents(target);
     range.setEnd(position.offsetNode, position.offset);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     return start + sourceOffsetForVisibleOffset(source, target.textContent ?? '', range.toString().length);
   }
   lifetime.add(

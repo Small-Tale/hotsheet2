@@ -28,6 +28,7 @@ export function WorkspaceHeader({
   selectedTicketCount = 0,
   selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
+  selectedTicketsUpNextDisabledReason,
   selectedTicketsMutable = true,
 }: WorkspaceHeaderProps) {
   return (
@@ -51,6 +52,7 @@ export function WorkspaceHeader({
             selectedTicketCount={selectedTicketCount}
             selectedTicketsUpNext={selectedTicketsUpNext}
             selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
+            selectedTicketsUpNextDisabledReason={selectedTicketsUpNextDisabledReason}
             selectedTicketsMutable={selectedTicketsMutable}
           />
         ) : undefined

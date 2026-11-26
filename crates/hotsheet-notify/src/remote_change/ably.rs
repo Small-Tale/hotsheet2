@@ -441,9 +441,13 @@ impl ChangeAdapter for AblyAdapter {
         emit: &mut dyn FnMut(Event),
         stop: &AtomicBool,
     ) -> Result<(), AdapterError> {
-        let key = context.credential.as_deref().ok_or_else(|| {
-            AdapterError::Config("no credential is stored for this connection".into())
-        })?;
+        let key = context
+            .credential
+            .as_ref()
+            .map(hotsheet_sync::secret::SecretString::expose)
+            .ok_or_else(|| {
+                AdapterError::Config("no credential is stored for this connection".into())
+            })?;
         let mut socket = self.open(context, key)?;
         self.await_connected(&mut socket, key, stop)?;
         for channel in channels {
@@ -506,9 +510,13 @@ impl ChangeAdapter for AblyAdapter {
     }
 
     fn test(&self, context: &ConnectionContext) -> Result<(), AdapterError> {
-        let key = context.credential.as_deref().ok_or_else(|| {
-            AdapterError::Config("no credential is stored for this connection".into())
-        })?;
+        let key = context
+            .credential
+            .as_ref()
+            .map(hotsheet_sync::secret::SecretString::expose)
+            .ok_or_else(|| {
+                AdapterError::Config("no credential is stored for this connection".into())
+            })?;
         let mut socket = self.open(context, key)?;
         let never = AtomicBool::new(false);
         self.await_connected(&mut socket, key, &never)?;

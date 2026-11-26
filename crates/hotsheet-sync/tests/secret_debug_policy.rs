@@ -1,9 +1,23 @@
-//! HS2-A8T481 lint: a struct that derives `Debug` may not hold a secret-named string field
-//! (`token`, `secret`, `password`, `api_key`, or a `_`-suffixed form such as `access_token`)
-//! as a plain `String`. Such a field uses `hotsheet_sync::secret::SecretString`, whose
-//! `Debug` prints `<redacted>`. Otherwise the next `dbg!`, `{:?}` in an error, or failing
-//! `assert_eq!` prints the credential. A hand-written `Debug` that redacts is also allowed,
-//! since this lint only inspects derived `Debug`.
+//! HS2-A8T481 lint: a struct may not hold a secret-named string field (one of
+//! `SECRET_WORDS`, such as `token`, `secret`, `csrf` or `authorization`, or a `_`-suffixed
+//! form such as `access_token`) as a plain `String`. Such a field uses
+//! `hotsheet_sync::secret::SecretString`, whose `Debug` prints `<redacted>`. Otherwise the
+//! next `dbg!`, `{:?}` in an error, or failing `assert_eq!` prints the credential.
+//!
+//! HS2-N1JXBZ widened it from `derive(Debug)` structs to every struct, whatever it derives.
+//! A hand-written redacting `Debug` is not enough: a later `derive(Debug)`, a `tracing`
+//! field, or `serde_json::to_string` into a log would still print the plain value. A
+//! `Serialize` wire or storage type that must carry its secret is not exempt either:
+//! `SecretString` is serde-transparent, so it holds the secret with byte-identical JSON and
+//! keeps it out of `Debug`. A clap flag holds `SecretString` too, through its `From<String>`.
+//! `NOT_SECRET` lists only fields that hold no credential, and test fakes that record a
+//! synthetic value they assert on.
+//!
+//! HS2-CQNE4E extends it to header collections: a `derive(Debug)` struct may not hold a
+//! `*header*` field typed as plain strings (`Vec<(String, String)>`, a `String` map, or
+//! `HeaderMap`), because `Authorization`, cookie and signature values print with it. Such a
+//! struct writes its `Debug` by hand with `hotsheet_sync::secret::RedactedHeaders`, or holds
+//! the values as `SecretString`.
 
 use std::path::{Path, PathBuf};
 
@@ -63,6 +77,120 @@ const NOT_SECRET: &[(&str, &str, &str, &str)] = &[
         "next_page_token",
         "Jira pagination cursor, not a credential",
     ),
+    (
+        "hotsheet-ticketing/src/connection_removal.rs",
+        "ConnectionRemoval",
+        "kept_credential",
+        "OS credential-store account name reported to the user, not the secret (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-ticketing/src/checkout_removal.rs",
+        "CheckoutRemoval",
+        "kept_credentials",
+        "OS credential-store account names reported to the user, not secrets (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-ticketing/src/claim_backends.rs",
+        "BackendConfiguration",
+        "credential",
+        "OS credential-store account name; the key itself stays in the store (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-notify/src/remote_change/registry.rs",
+        "Connection",
+        "credential",
+        "OS credential-store account name; the key itself stays in the store (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-server/tests/session_messages.rs",
+        "Seen",
+        "authorization",
+        "test fake recording a synthetic header it must assert on (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-server/tests/resource_remote_cli.rs",
+        "Seen",
+        "authorization",
+        "test fake recording a synthetic header it must assert on (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-cli/tests/job_ci_watch.rs",
+        "Seen",
+        "authorization",
+        "test fake recording a synthetic header it must assert on (HS2-DGMK06)",
+    ),
+    (
+        "hotsheet-ticketing/src/provider_outbox.rs",
+        "Payload",
+        "base_token",
+        "optimistic-concurrency version, not a credential (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-server/src/routes/providers/tickets.rs",
+        "NotWorkingJsonRequest",
+        "expected_token",
+        "optimistic-concurrency version, not a credential (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-cli/src/dispatch/providers.rs",
+        "ProviderEditInput",
+        "expected_token",
+        "optimistic-concurrency version, not a credential (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-cli/src/dispatch/providers.rs",
+        "GithubConnectArgs",
+        "credential",
+        "clap flag naming an OS credential-store reference, not the secret (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-cli/src/dispatch/providers.rs",
+        "ProviderConnectArgs",
+        "credential",
+        "clap flag naming an OS credential-store reference, not the secret (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-sync/src/secret.rs",
+        "Plain",
+        "token",
+        "plain-String twin that proves SecretString keeps the serde format (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-aitools/tests/opencode_session_push.rs",
+        "Seen",
+        "authorization",
+        "test fake recording a synthetic header it must assert on (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-notify/src/remote_change/tests.rs",
+        "FakeAdapter",
+        "credentials",
+        "test fake recording the synthetic keys it was opened with (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-server/tests/remote_session_lifetime.rs",
+        "Paired",
+        "cookie",
+        "test session holding a synthetic cookie it must replay (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-server/tests/remote_session_lifetime.rs",
+        "Paired",
+        "csrf",
+        "test session holding a synthetic CSRF proof it must replay (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-server/tests/http.rs",
+        "DiscardPeerRequest",
+        "secret",
+        "test fake recording a synthetic peer secret it must assert on (HS2-N1JXBZ)",
+    ),
+    (
+        "hotsheet-mcp/tests/serverless_sync_kick.rs",
+        "Received",
+        "secret",
+        "test fake recording a synthetic machine secret it must assert on (HS2-N1JXBZ)",
+    ),
 ];
 
 // HS2-9ZMC7N retyped the nine secrets this lint found when it landed, so there is no
@@ -71,7 +199,25 @@ const NOT_SECRET: &[(&str, &str, &str, &str)] = &[
 
 const SELF: &str = "hotsheet-sync/tests/secret_debug_policy.rs";
 
-const SECRET_WORDS: &[&str] = &["token", "secret", "password", "api_key"];
+/// HS2-DGMK06 added the CSRF proof, cookies, bearer and `Authorization` header values, and
+/// key material. A `credential` field usually names an OS credential-store account rather
+/// than holding the secret, so each such reference is listed in `NOT_SECRET` with its reason.
+const SECRET_WORDS: &[&str] = &[
+    "token",
+    "secret",
+    "password",
+    "api_key",
+    "csrf",
+    "cookie",
+    "bearer",
+    "authorization",
+    "credential",
+    "credentials",
+    "private_key",
+    "signing_key",
+    "passphrase",
+    "jwt",
+];
 
 #[derive(Debug, PartialEq, Eq)]
 struct Finding {
@@ -103,6 +249,16 @@ fn secret_named(field: &str) -> bool {
         .any(|word| field == *word || field.ends_with(&format!("_{word}")))
 }
 
+/// A header collection of plain strings: `Vec<(String, String)>`, `HashMap<String, String>`,
+/// `HeaderMap`, ... in a field named `*header*` (HS2-CQNE4E). `SecretString` values pass.
+fn plain_header_collection(field: &str, ty: &str) -> bool {
+    field.to_ascii_lowercase().contains("header")
+        && !ty.contains("SecretString")
+        && (ty.contains("HeaderMap")
+            || ((ty.contains("Vec<(") || ty.contains("Map<"))
+                && (ty.contains("String") || ty.contains("str"))))
+}
+
 /// A plain string type: `String`, `Option<String>`, `&str`, ... but not `SecretString`.
 fn plain_string(ty: &str) -> bool {
     !ty.contains("SecretString") && (ty.contains("String") || ty.contains("str"))
@@ -129,56 +285,75 @@ fn strip_visibility(text: &str) -> &str {
     }
 }
 
-/// Every secret-named plain-string field of a `derive(Debug)` struct in `source`.
+/// Every secret-named plain-string field of any struct in `source`, whatever it derives
+/// (HS2-N1JXBZ): a hand-written redacting `Debug` does not cover `Serialize`, a `tracing`
+/// field or a later `derive(Debug)`.
 fn scan(file: &str, source: &str) -> Vec<Finding> {
+    scan_fields(
+        file,
+        source,
+        |_| true,
+        |name, ty| secret_named(name) && plain_string(ty),
+    )
+}
+
+/// Every plain-string header-collection field of a `derive(Debug)` struct in `source`.
+fn scan_headers(file: &str, source: &str) -> Vec<Finding> {
+    scan_fields(file, source, derives_debug, plain_header_collection)
+}
+
+/// Whether the attribute text in front of a struct derives `Debug`.
+fn derives_debug(attributes: &str) -> bool {
+    attributes
+        .split("#[derive(")
+        .skip(1)
+        .any(|derive| derive.split([',', ')']).any(|name| name.trim() == "Debug"))
+}
+
+/// Every field that `flagged(name, type)` matches, in each struct of `source` whose joined
+/// attribute text (derives and other attributes) `selected` accepts.
+fn scan_fields(
+    file: &str,
+    source: &str,
+    selected: impl Fn(&str) -> bool,
+    flagged: impl Fn(&str, &str) -> bool,
+) -> Vec<Finding> {
     let lines: Vec<&str> = source.lines().collect();
     let mut findings = Vec::new();
+    let mut attributes = String::new();
     let mut i = 0;
     while i < lines.len() {
         let trimmed = lines[i].trim();
-        if !trimmed.starts_with("#[derive(") {
-            i += 1;
-            continue;
-        }
-        let mut derive = trimmed.to_owned();
-        while !derive.contains(")]") && i + 1 < lines.len() {
-            i += 1;
-            derive.push_str(lines[i].trim());
-        }
-        i += 1;
-        let derives_debug = derive
-            .trim_start_matches("#[derive(")
-            .split([',', ')'])
-            .any(|name| name.trim() == "Debug");
-        if !derives_debug {
-            continue;
-        }
-        // Skip further attributes and doc comments between the derive and the item.
-        while i < lines.len() {
-            let next = lines[i].trim();
-            if next.starts_with("#[") || next.starts_with("//") {
+        if trimmed.starts_with("#[") {
+            let mut attribute = trimmed.to_owned();
+            while !attribute.ends_with(']') && i + 1 < lines.len() {
                 i += 1;
-            } else {
-                break;
+                attribute.push_str(lines[i].trim());
             }
+            attributes.push_str(&attribute);
+            i += 1;
+            continue;
         }
-        let Some(item) = lines.get(i).map(|line| strip_visibility(line.trim())) else {
-            break;
-        };
+        if trimmed.starts_with("//") {
+            i += 1;
+            continue;
+        }
+        let item_attributes = std::mem::take(&mut attributes);
+        let item = strip_visibility(trimmed);
+        i += 1;
         let Some(rest) = item.strip_prefix("struct ") else {
             continue;
         };
-        if !item.ends_with('{') {
-            continue; // unit or tuple struct: no named fields
+        if !item.ends_with('{') || !selected(&item_attributes) {
+            continue; // unit or tuple struct (no named fields), or not selected
         }
         let strukt = identifier(rest).to_owned();
-        i += 1;
         while i < lines.len() && lines[i].trim() != "}" {
             let line = strip_visibility(lines[i].trim());
             if let Some((name, ty)) = line.split_once(':') {
                 let name = name.trim();
                 let ty = ty.trim().trim_end_matches(',');
-                if identifier(name) == name && secret_named(name) && plain_string(ty) {
+                if identifier(name) == name && flagged(name, ty) {
                     findings.push(Finding {
                         file: file.to_owned(),
                         line: i + 1,
@@ -194,8 +369,8 @@ fn scan(file: &str, source: &str) -> Vec<Finding> {
     findings
 }
 
-#[test]
-fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
+/// Run `scanner` over every crate source except this file (its fixtures are leaky).
+fn scan_workspace(scanner: fn(&str, &str) -> Vec<Finding>) -> Vec<Finding> {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let mut files = Vec::new();
     rust_sources(crates, &mut files);
@@ -209,11 +384,65 @@ fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
             .to_string_lossy()
             .replace('\\', "/");
         if rel == SELF {
-            continue; // its scanner fixture is deliberately leaky
+            continue;
         }
         let source = std::fs::read_to_string(&path).unwrap();
-        findings.extend(scan(&rel, &source));
+        findings.extend(scanner(&rel, &source));
     }
+    findings
+}
+
+#[test]
+fn hs2_cqne4e_no_derived_debug_over_plain_string_headers() {
+    let offenders: Vec<String> = scan_workspace(scan_headers)
+        .iter()
+        .map(|f| format!("{}:{} {}.{}: {}", f.file, f.line, f.strukt, f.field, f.ty))
+        .collect();
+    assert!(
+        offenders.is_empty(),
+        "derive(Debug) over a plain-string header collection; write Debug by hand with \
+         hotsheet_sync::secret::RedactedHeaders:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn hs2_cqne4e_header_scanner_flags_plain_collections_only() {
+    let source = r#"
+#[derive(Debug, Clone)]
+pub struct Leaky {
+    pub headers: Vec<(String, String)>,
+    pub(crate) response_headers: HashMap<String, String>,
+    extra_headers: BTreeMap<&'static str, String>,
+    raw_headers: HeaderMap,
+    pub safe_headers: Vec<(String, SecretString)>,
+    pub header_count: usize,
+    pub url: String,
+}
+
+#[derive(Clone)]
+struct HandWritten {
+    headers: Vec<(String, String)>,
+}
+"#;
+    let found: Vec<String> = scan_headers("x.rs", source)
+        .into_iter()
+        .map(|f| f.field)
+        .collect();
+    assert_eq!(
+        found,
+        [
+            "headers",
+            "response_headers",
+            "extra_headers",
+            "raw_headers"
+        ]
+    );
+}
+
+#[test]
+fn hs2_n1jxbz_no_struct_holds_a_plain_string_secret() {
+    let findings = scan_workspace(scan);
 
     let exempt = |f: &Finding| {
         NOT_SECRET
@@ -227,8 +456,8 @@ fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
         .collect();
     assert!(
         offenders.is_empty(),
-        "derive(Debug) over a plain-string secret; use hotsheet_sync::secret::SecretString \
-         (or a hand-written redacting Debug):\n{}",
+        "a struct holds a plain-string secret; use hotsheet_sync::secret::SecretString and \
+         .expose() it at the transport (serde and clap formats are unchanged):\n{}",
         offenders.join("\n")
     );
 
@@ -266,6 +495,16 @@ pub struct Leaky {
     pub fencing_token: u64,
 }
 
+#[derive(Debug)]
+struct Session {
+    csrf: String,
+    session_cookie: Option<String>,
+    authorization: Option<String>,
+    client_private_key: String,
+    csrf_hash: String,
+    session_csrf: Option<SecretString>,
+}
+
 #[derive(
     Clone,
     Debug,
@@ -290,8 +529,77 @@ struct Tuple(String);
         ("Leaky", "token"),
         ("Leaky", "refresh_token"),
         ("Leaky", "api_key"),
+        ("Session", "csrf"),
+        ("Session", "session_cookie"),
+        ("Session", "authorization"),
+        ("Session", "client_private_key"),
         ("MultiLine", "secret"),
+        ("NoDebug", "password"),
     ]
     .map(|(s, f)| (s.to_owned(), f.to_owned()));
     assert_eq!(found, expected);
+}
+
+#[test]
+fn hs2_n1jxbz_scanner_flags_secrets_whatever_the_struct_derives() {
+    let source = r#"
+pub struct AppState {
+    pub secret: String,
+    pub port: u16,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Credentials {
+    /// The bearer.
+    #[serde(default)]
+    pub bearer_secret: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_csrf: Option<String>,
+    pub safe_secret: SecretString,
+}
+
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Credentials(<redacted>)")
+    }
+}
+
+#[derive(Parser)]
+struct Cli {
+    /// Machine shared secret.
+    #[arg(long, env = "HOTSHEET_SECRET")]
+    secret: Option<String>,
+    #[arg(long)]
+    other_secret: Option<SecretString>,
+}
+
+fn helper() {
+    struct Local {
+        token: String,
+    }
+}
+
+#[derive(Debug)]
+struct Tuple(String);
+"#;
+    let found: Vec<(String, String)> = scan("x.rs", source)
+        .into_iter()
+        .map(|f| (f.strukt, f.field))
+        .collect();
+    let expected = [
+        ("AppState", "secret"),
+        ("Credentials", "bearer_secret"),
+        ("Credentials", "session_csrf"),
+        ("Cli", "secret"),
+        ("Local", "token"),
+    ]
+    .map(|(s, f)| (s.to_owned(), f.to_owned()));
+    assert_eq!(found, expected);
+
+    // The header rule stays scoped to a derived `Debug` (HS2-CQNE4E).
+    assert!(derives_debug("#[derive(Clone,Debug,)]#[serde(default)]"));
+    assert!(!derives_debug(
+        "#[derive(Clone, Serialize)]#[serde(rename = \"Debug\")]"
+    ));
 }

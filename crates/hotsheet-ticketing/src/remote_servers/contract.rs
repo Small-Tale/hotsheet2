@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::io::BufReader;
 use std::net::IpAddr;
 
+use hotsheet_sync::secret::SecretString;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -19,13 +20,13 @@ pub struct RemoteCredentials {
     /// for an mTLS device identity, where the certificate authorizes and the bearer would
     /// authorize nothing (HS2-FZXXTG).
     #[serde(default)]
-    pub bearer_secret: String,
+    pub bearer_secret: SecretString,
     /// The origin approved during pairing. Kept beside the token in the private secret store.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_origin: Option<String>,
     /// Write and WebSocket proof for that paired origin; never stored in the registry JSON.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_csrf: Option<String>,
+    pub session_csrf: Option<SecretString>,
     #[serde(default)]
     pub ca_pem: Option<String>,
     #[serde(default)]
@@ -44,7 +45,7 @@ impl RemoteCredentials {
     /// A paired session is carried in the existing secret slot to preserve stored credential
     /// records. Its prefix distinguishes it from the legacy machine-local bearer.
     pub fn session_token(&self) -> Option<&str> {
-        self.bearer_secret.strip_prefix("session:")
+        self.bearer_secret.expose().strip_prefix("session:")
     }
 
     /// HS2-FZXXTG: an HTTPS device identity (certificate and key, no paired session) needs
@@ -63,9 +64,10 @@ impl RemoteCredentials {
                 "bearer must be nonempty printable ASCII",
             ));
         }
-        if self.bearer_secret.len() > 8_192
+        if self.bearer_secret.expose().len() > 8_192
             || !self
                 .bearer_secret
+                .expose()
                 .bytes()
                 .all(|byte| byte.is_ascii_graphic())
         {
@@ -87,8 +89,8 @@ impl RemoteCredentials {
                 if self.session_token().is_some()
                     && normalize_remote_origin(bound_origin).ok().as_deref()
                         == Some(bound_origin.as_str())
-                    && csrf.len() == 43
-                    && csrf.bytes().all(|byte| {
+                    && csrf.expose().len() == 43
+                    && csrf.expose().bytes().all(|byte| {
                         byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')
                     }) => {}
             _ => return Err(RemoteError::Invalid("invalid paired session write proof")),

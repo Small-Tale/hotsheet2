@@ -329,7 +329,7 @@ import { wireTerminalSearchCountFit } from '../terminal-search-count-fit';
 import { parseTerminalVisibilityState, TERMINAL_VISIBILITY_STORAGE_KEY } from '../terminal-visibility';
 import { applyThemePreference, readThemePreference } from '../theme-preference';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
-import { BulkTicketMutationSequencer } from '../ticket-bulk-operations';
+import { BulkTicketMutationSequencer, ticketUpNextDisabledReason } from '../ticket-bulk-operations';
 import { loadLastTicketCategory } from '../ticket-category-preference';
 import { type DuplicateTarget } from '../ticket-close';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
@@ -2184,7 +2184,7 @@ export async function startHotSheetWebClient() {
   }
   const hideVerifiedColumn = () => hideVerifiedByProject.value[selectedProjectId.value] ?? false;
   const canUpdateSelected = () =>
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     selectedTicket.value ? (providerCapabilities.value[selectedTicket.value.connection_id]?.update ?? true) : false;
   // Started phases are git-provider workflow state; a ticket's own project decides (HS2-ANRXAE).
   const canEditStartedPhaseFor = (projectId: string, connectionId: string) =>
@@ -2207,7 +2207,7 @@ export async function startHotSheetWebClient() {
   const canDeleteNotes = () => noteCapabilities()?.note_delete ?? canUpdateSelected();
   const canUseAttachments = () =>
     selectedTicket.value
-      ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         (providerCapabilities.value[selectedTicket.value.connection_id]?.attachments ?? true)
       : false;
   // An append-only provider (GitHub's assets repository) adds and serves files but cannot edit
@@ -2245,6 +2245,12 @@ export async function startHotSheetWebClient() {
       defaultProvider(),
       composerSource.value ?? lastTicketSourceByProject.value[selectedProjectId.value],
     );
+  /** The open project's ticket source display name for a connection (HS2-Y32T8A). */
+  const ticketSourceName = (connectionId: string) =>
+    defaultProviders.value[project()?.id ?? '']?.sources.find((source) => source.connectionId === connectionId)?.name;
+  /** Why a workspace ticket's provider cannot change Up Next, or undefined (HS2-Y32T8A). */
+  const upNextDisabledReasonFor = (ticket: Pick<WireTicketRow, 'connection_id'>) =>
+    ticketUpNextDisabledReason([ticket], (connectionId) => providerCapabilities.value[connectionId], ticketSourceName);
   const canStageNewTicketAttachments = () => {
     const capabilities = newTicketSource()?.capabilities;
     return (capabilities?.create ?? true) && (capabilities?.attachments ?? true);
@@ -3465,12 +3471,12 @@ export async function startHotSheetWebClient() {
       resetProgressiveTicketRendering();
       resetBoardColumnPages();
       const rows = ticketRowsByProject.value[next],
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         cached = rows !== undefined,
         projection = projectProjectionById.value[next],
         stored = loadProjectWorkspaceSession(localStorage, next),
         generation = ++projectActivationGeneration,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         live = new Set(rows?.map((ticket) => ticket.slug) ?? []),
         selection = stored?.selectedTicketSlugs.filter((slug) => live.has(slug)) ?? [],
         drawerActivation = terminalDrawerActivation(localStorage, next);
@@ -3504,7 +3510,7 @@ export async function startHotSheetWebClient() {
           }
         }
         terminalDrawerSelected.value = drawerActivation.selectedId;
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         tickets.value = rows ?? [];
         const position = ticketCursorsByProject.value[next];
         ticketNextCursor.value = position?.cursor;
@@ -3513,19 +3519,19 @@ export async function startHotSheetWebClient() {
         ticketPageQuery.value = position?.query ?? {};
         boardColumnPages.value = boardPagesByProject.value[next] ?? {};
         ticketCollectionState.value = undefined;
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         corruptTickets.value = projection?.corruptTickets ?? [];
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         repository.value = projection?.repository ?? null;
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         repositoryError.value = projection?.repositoryError ?? '';
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         commandDefinitions.value = projection?.commandDefinitions ?? [];
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         commandRuns.value = projection?.commandRuns ?? [];
         commandSettingsEditingId.value = undefined;
         selectedView.value =
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
           stored?.selectedView === 'errors' && !projection?.corruptTickets.length
             ? 'all'
             : (stored?.selectedView ?? 'all');
@@ -3534,7 +3540,7 @@ export async function startHotSheetWebClient() {
         // The editor is shared across projects; restore it in the same frame as the project state.
         // Waiting for refreshActivatedProject leaves the previous project's text visible in the new one.
         replaceTicketSearch(workspaceSearchModel, stored?.searchQuery ?? '');
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         searchMatchKeys.value = projection?.searchMatchKeys;
         selectedCorruptKey.value = undefined;
         selectedTicket.value = null;
@@ -4048,6 +4054,7 @@ export async function startHotSheetWebClient() {
     groupName: featureOn('ticket-groups') ? rowGroupName(ticket) : undefined,
     upNext: ticket.up_next,
     upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
+    upNextDisabledReason: upNextDisabledReasonFor(ticket),
     feedbackNeeded: ticket.needs_review ?? ticket.feedback_needed,
     blocked: hasUnresolvedBlocker(ticket),
     selected: selectedTicketSlugs.value.includes(ticket.slug),
@@ -4124,12 +4131,12 @@ export async function startHotSheetWebClient() {
   }
   function projectTicketCounts(projectId: string) {
     const exact = ticketCountsByProject.value[projectId];
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     if (exact) return exact;
     const rows = projectTabTicketRows(projectId),
       work = projectTabTicketState(rows),
       carry = ticketTrendByProject.value[projectId],
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       completionTrend = carry ? [...carry.trend] : ticketCompletionTrend(rows);
     return {
       total: rows.length,
@@ -4141,7 +4148,7 @@ export async function startHotSheetWebClient() {
       up_next: work.upNextCount,
       active: work.activeTicketCount,
       started: rows.filter((ticket) => ticket.status === 'started').length,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       completed_today: carry ? carry.completedToday : (completionTrend.at(-1) ?? 0),
       completion_trend: completionTrend,
     };
@@ -4253,7 +4260,7 @@ export async function startHotSheetWebClient() {
     try {
       const ticket = (await new Api(target.apiPath).checkoutTicket(target.id, match.qualifiedId)).ticket,
         capabilities = capabilitiesFor(ticket.connection_id);
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       if (!capabilities) throw new Error(`Capabilities unavailable for ${ticket.connection_id}.`);
       const id = browserRandomId(),
         trigger = ticketLinkReturnFocus;
@@ -4814,7 +4821,7 @@ export async function startHotSheetWebClient() {
       const { definitions, revision } = commandResult,
         groups = groupResult?.groups,
         draft = commandSettingsDraftsByProject.value[current.id];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- A project may not have opened the command settings editor yet.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- A project may not have opened the command settings editor yet. (HS2-X2A3C1)
       if (draft === undefined || draft === previous)
         loadCommandRevisions(current.id, revision, groupResult?.revision ?? '*', writes);
       commandDefinitions.value = definitions;
@@ -4823,17 +4830,17 @@ export async function startHotSheetWebClient() {
       projectProjectionById.value = {
         ...projectProjectionById.value,
         [current.id]: {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
           corruptTickets: projection?.corruptTickets ?? corruptTickets.value,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
           repository: projection?.repository ?? repository.value,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
           repositoryError: projection?.repositoryError ?? repositoryError.value,
           commandDefinitions: definitions,
           commandRuns: runs,
         },
       };
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       if (viewMode.value !== 'settings' || draft === undefined || draft === previous)
         setCommandSettingsDraft(current.id, JSON.stringify(definitions, null, 2));
       setCommandSettingsMessage(current.id, '');
@@ -5185,6 +5192,7 @@ export async function startHotSheetWebClient() {
     dismissFeedbackDelivery,
     attachmentEpochs,
     restoreTicketDraft,
+    clearConflictRecoveryCopy,
     flushTicketDrafts,
     flushSelectedTicketEdits,
     captureTicketDraftRecovery,
@@ -6545,6 +6553,7 @@ export async function startHotSheetWebClient() {
   const { ticketViewTitle, ticketViewActionSpec, ticketContextMenuSurface } = createTicketViewSurface({
     canStageNewTicketAttachments,
     capabilitiesFor,
+    sourceNameFor: ticketSourceName,
     isGitSource: (connectionId) =>
       Boolean(
         defaultProviders.value[project()?.id ?? '']?.sources.some(
@@ -6628,6 +6637,7 @@ export async function startHotSheetWebClient() {
       titleEditingSurface,
     });
   const { gallerySourceFor, readerLayersSurfaceProps } = createReaderLayersSurface({
+    upNextDisabledReasonFor,
     ago,
     attachmentContext,
     attachmentItems,
@@ -6813,6 +6823,7 @@ export async function startHotSheetWebClient() {
     }),
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
+    sourceNameFor: ticketSourceName,
     ticketGroups,
     activeWorkspaceSort,
     allTicketsSearchAvailable,
@@ -6848,6 +6859,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
+    sourceNameFor: ticketSourceName,
     minimizedTickets: () => minimizedDialogs.items(),
     settingsInspector: (current) => orchestrationSurfaceRef.current?.inspector(current),
     desktopRemoteServers,
@@ -7340,8 +7352,16 @@ export async function startHotSheetWebClient() {
   async function settleDetailsFinish(task: DetailsFinishTask) {
     const saved = await task.saved,
       mode = task.reader ? readerDetailsMode : detailsMode;
+    // The user went back into the editor (or typed) while this save ran: keep it open (HS2-7D3MPP).
+    const focused = document.activeElement;
     if (
       saved &&
+      !(task.reader ? readerDetailsAutosave : detailsAutosave).pending() &&
+      !(
+        focused instanceof HTMLTextAreaElement &&
+        focused.name === 'markdown-source' &&
+        Boolean(focused.closest('[data-component="ticket-reader"]')) === task.reader
+      ) &&
       selectedTicket.value?.id === task.ticketId &&
       (task.reader ? readerDetailsEditGeneration : detailsEditGeneration) === task.generation
     )
@@ -7657,6 +7677,7 @@ export async function startHotSheetWebClient() {
     savedViewBusy,
     deleteSavedView,
     restoreTicketDraft,
+    clearConflictRecoveryCopy,
     savedViewHelpOpen,
     closeSavedViewDelete,
     savedViewDeleteBusy,

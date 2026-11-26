@@ -96,7 +96,7 @@ export const TIERS = {
   },
 };
 
-// eslint-disable-next-line no-control-regex
+// eslint-disable-next-line no-control-regex -- Strips ANSI colour escapes from captured test output (HS2-CP63FG).
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 
 export function stripAnsi(text) {

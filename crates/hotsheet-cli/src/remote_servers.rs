@@ -264,7 +264,7 @@ pub fn pairing_bundle(
         device: device.name.clone(),
         origin: origin.map(normalize_remote_origin).transpose()?,
         credentials: RemoteCredentials {
-            bearer_secret: String::new(),
+            bearer_secret: hotsheet_sync::secret::SecretString::default(),
             session_origin: None,
             session_csrf: None,
             ca_pem: Some(device.ca_pem.clone()),
@@ -460,7 +460,10 @@ pub fn peer_session_request(
     if renew {
         let (Some(paired_origin), Some(csrf)) = (
             credentials.session_origin.as_deref(),
-            credentials.session_csrf.as_deref(),
+            credentials
+                .session_csrf
+                .as_ref()
+                .map(hotsheet_sync::secret::SecretString::expose),
         ) else {
             return Err(RemoteFailure::MissingCredentials);
         };
@@ -661,7 +664,10 @@ fn remote_auth_request(
         if !matches!(request.method(), "GET" | "HEAD")
             && let (Some(paired_origin), Some(csrf)) = (
                 credentials.session_origin.as_deref(),
-                credentials.session_csrf.as_deref(),
+                credentials
+                    .session_csrf
+                    .as_ref()
+                    .map(hotsheet_sync::secret::SecretString::expose),
             )
         {
             request = request
@@ -669,7 +675,7 @@ fn remote_auth_request(
                 .set("X-Hotsheet-Csrf", csrf);
         }
     } else if origin.starts_with("http://127.0.0.1:") || origin.starts_with("http://[::1]:") {
-        request = request.set("X-Hotsheet-Secret", &credentials.bearer_secret);
+        request = request.set("X-Hotsheet-Secret", credentials.bearer_secret.expose());
     }
     request
 }

@@ -212,6 +212,13 @@ mod tests {
                 .headers
                 .contains(&("Authorization".into(), "Basic QUMxMjM6dG9r".into()))
         );
+        // HS2-CQNE4E: Debug keeps the header name but never the Basic credential.
+        let printed = format!("{:?}", requests[0]);
+        assert!(
+            printed.contains(r#"("Authorization", <redacted>)"#),
+            "{printed}"
+        );
+        assert!(!printed.contains("QUMxMjM6dG9r"), "{printed}");
         let body = String::from_utf8(requests[1].body.clone()).unwrap();
         assert!(
             body.starts_with("To=%2B15553334444&From=%2B15550000000&Body=Hot%20Sheet%20project"),

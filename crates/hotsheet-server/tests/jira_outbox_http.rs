@@ -1155,6 +1155,76 @@ async fn restart_with_pending_and_mid_send_entries_resumes_in_order_without_loss
     assert_eq!(put_count(&fake), 2);
 }
 
+#[tokio::test]
+async fn overlapping_server_start_leaves_a_live_dispatchers_send_alone_hs2_njqvqf() {
+    let dir = tempfile::tempdir().unwrap();
+    FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let path = dir.path().join("dispatch.sqlite");
+    {
+        let state = outbox_state(dir.path(), &fake);
+        assert_eq!(
+            queue(&app(state), json!([edit("p1", "Pending one")]))
+                .await
+                .0,
+            StatusCode::ACCEPTED
+        );
+    }
+    // The old server is still mid-send while the new one starts on the same outbox.
+    let mut stopping = ProviderOutbox::open(&path, 4).unwrap();
+    assert_eq!(stopping.claim_ready(100, 4).unwrap().len(), 1);
+    let state = outbox_state(dir.path(), &fake);
+    let server = app(state.clone());
+    assert_eq!(
+        outbox(&server).await,
+        [("p1".into(), "sending".into(), 1)],
+        "starting a second server must not requeue a live send"
+    );
+    assert_eq!(dispatch_jira_at(&state, 200).await.unwrap(), 0);
+    assert_eq!(put_count(&fake), 0);
+
+    // The old server stops without settling: its row returns once and is sent once.
+    drop(stopping);
+    assert_eq!(dispatch_jira_at(&state, 201).await.unwrap(), 1);
+    assert_eq!(dispatch_jira_at(&state, 202).await.unwrap(), 0);
+    assert_eq!(*fake.title.lock().unwrap(), "Pending one");
+    assert_eq!(put_count(&fake), 1);
+    assert_eq!(
+        outbox(&server).await,
+        [("p1".into(), "confirmed".into(), 2)]
+    );
+}
+
+#[tokio::test]
+async fn a_crashed_servers_send_is_retried_by_readback_after_its_lease_hs2_njqvqf() {
+    let dir = tempfile::tempdir().unwrap();
+    FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let path = dir.path().join("dispatch.sqlite");
+    let state = outbox_state(dir.path(), &fake);
+    let server = app(state.clone());
+    assert_eq!(
+        queue(&server, json!([edit("p1", "Pending one")])).await.0,
+        StatusCode::ACCEPTED
+    );
+    // Another server claims and crashes (no destructor runs).
+    let mut crashed = ProviderOutbox::open(&path, 4).unwrap();
+    assert_eq!(crashed.claim_ready(100, 4).unwrap().len(), 1);
+    std::mem::forget(crashed);
+    assert_eq!(dispatch_jira_at(&state, 200).await.unwrap(), 0);
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute(
+        "UPDATE provider_outbox SET lease_expires_at = 0 WHERE operation_id = 'p1'",
+        [],
+    )
+    .unwrap();
+    drop(db);
+    assert_eq!(dispatch_jira_at(&state, 201).await.unwrap(), 1);
+    assert_eq!(dispatch_jira_at(&state, 202).await.unwrap(), 0);
+    assert_eq!(*fake.title.lock().unwrap(), "Pending one");
+    assert_eq!(put_count(&fake), 1);
+}
+
 // ---- HS2-DEVEYE: typed write-behind-unavailable refusal ----
 
 #[tokio::test]

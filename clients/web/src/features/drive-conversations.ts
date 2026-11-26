@@ -162,7 +162,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
       if (startGeneration === conversationStartGeneration && projects.value.some((item) => item.id === current.id)) {
         for (const connection of connections)
           if (
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary. (HS2-AZVE3P)
             conversationStates.peek()[connection.id]?.activeAssistantId &&
             !pendingAtRequest.has(connection.id) &&
             !pendingConversationStarts.has(connection.id)
@@ -213,7 +213,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
   function conversationForActivity(current: Project, tool: string, session?: string) {
     const conversations = conversationStates.peek(),
       connections = (driveConnectionsByProject.value[current.id] ?? []).filter(
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         (item) => item.tool.toLowerCase() === tool.toLowerCase() && conversations[item.id],
       );
     return (
@@ -356,7 +356,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
     const connectionId = conversationConnectionId.value;
     if (!connectionId) return;
     const step = stepConversationHistory(
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary. (HS2-AZVE3P)
       conversationSentHistory(conversationStates.peek()[connectionId]?.messages ?? []),
       conversationHistoryCursors.get(connectionId),
       direction,
@@ -371,7 +371,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
   async function sendConversationTurn() {
     const current = project(),
       connectionId = conversationConnectionId.value,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       draft = connectionId ? conversationDrafts.value[connectionId]?.trim() : '';
     if (!current || !connectionId || !draft) return;
     const connection = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId),

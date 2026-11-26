@@ -409,9 +409,9 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
         if (isPopupMenuOpen(menu)) closePopupMenu(menu);
     manualModelDialog.value = {
       target,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       providerName: descriptor?.display_name ?? selection.tool ?? 'this provider',
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       value: custom ?? '',
       ...(commandId ? { commandId } : {}),
       ...(target === 'settings' && providerId ? { providerId } : {}),
@@ -431,7 +431,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     commandSettingsEditingId.value = state.commandId;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control)?.showPopover?.();
       }),
     );
@@ -561,13 +561,13 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
       override = conversationSelections.value[connectionId],
       tool = chat?.tool ?? connection?.tool ?? aiDefaults.value.tool,
       descriptor = aiTools.value.find((item) => item.id === tool),
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       model = override?.model ?? chat?.model ?? connection?.model ?? descriptor?.default_model,
       modelDescriptor = descriptor?.models.find((item) => item.id === model),
       efforts = modelDescriptor?.effort_levels ?? [],
       effort = compatibleAiEffort(
         efforts,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         override?.effort,
         chat?.effort,
         connection?.effort,
@@ -578,7 +578,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
       permissionModes = descriptor?.permission_modes ?? [],
       permissionMode = compatiblePermissionMode(
         descriptor,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         override?.permission_mode,
         chat?.permissionMode,
         connection?.permission_mode,

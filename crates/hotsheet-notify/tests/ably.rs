@@ -92,7 +92,7 @@ impl Fake {
         ConnectionContext {
             connection: "ably1".into(),
             settings,
-            credential: key.map(str::to_owned),
+            credential: key.map(hotsheet_sync::secret::SecretString::from),
         }
     }
 

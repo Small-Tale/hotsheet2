@@ -10,7 +10,8 @@ import {
   DIRECT_POLL_MAX_IN_FLIGHT,
   DIRECT_POLL_TIMEOUT_MS,
 } from './change-poll-mux';
-import type { SlotGrant } from './change-poll-slots';
+import type { SlotLeaseBus, SlotLeaseMessage } from './change-poll-slot-leases';
+import { DirectPollSlots, type SlotGrant } from './change-poll-slots';
 import { type ProjectChangeSink, runProjectChangePollTransport } from './project-change-poll';
 import { parsePollResponse } from './server-response-parsers';
 
@@ -735,6 +736,188 @@ describe('direct fallback request rate (HS2-EZN3NY)', () => {
     expect(server.calls).toHaveLength(2);
     expect(server.calls[1]).toMatchObject({ since: 0, timeout: DIRECT_POLL_TIMEOUT_MS });
     clients.stop();
+  });
+});
+
+/** An in-memory `BroadcastChannel` stand-in shared by the lease buses of several contexts. */
+function leaseHub() {
+  const members = new Set<{ owner: number; listener: (message: SlotLeaseMessage) => void }>();
+  let next = 0;
+  return (): SlotLeaseBus => {
+    const owner = (next += 1);
+    return {
+      post: (message) => {
+        const targets = [...members].filter((member) => member.owner !== owner);
+        queueMicrotask(() => {
+          for (const member of targets) member.listener(structuredClone(message));
+        });
+      },
+      listen: (listener) => {
+        const member = { owner, listener };
+        members.add(member);
+        return () => members.delete(member);
+      },
+    };
+  };
+}
+
+describe('direct fallback without Web Locks (HS2-QS2P6B)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const hosts = [
+    ['absent', {}],
+    ['refused', { locks: { request: () => Promise.reject(new DOMException('refused', 'SecurityError')) } }],
+  ] as const;
+
+  const leasedMux = (bus: SlotLeaseBus | null) =>
+    mux(neverFetch, {
+      directOnly: true,
+      now: () => Date.now(),
+      directSlots: new DirectPollSlots({ channel: null, leaseBus: bus }),
+    });
+
+  /** Wraps a held server so the test sees how many requests are open at once. */
+  const concurrency = (server: ReturnType<typeof heldServer>) => {
+    let open = 0;
+    let max = 0;
+    const directFor =
+      (project: string): ChangePollFn =>
+      (since, signal, timeout) => {
+        open += 1;
+        max = Math.max(max, open);
+        return server
+          .directFor(project)(since, signal, timeout)
+          .finally(() => {
+            open -= 1;
+          });
+      };
+    return { directFor, max: () => max };
+  };
+
+  it.each(hosts)('with Web Locks %s, idle projects hold one long poll each per 25 s window', async (_label, host) => {
+    vi.useFakeTimers();
+    vi.stubGlobal('navigator', host);
+    for (const [count, expected] of [
+      [1, 3],
+      [4, 12],
+    ] as const) {
+      const server = heldServer();
+      const clients = idleClients(
+        leasedMux(leaseHub()()),
+        server,
+        Array.from({ length: count }, (_, index) => `p${index}`),
+      );
+      await vi.advanceTimersByTimeAsync(59_999);
+      clients.stop();
+      // Windows start at about 0, 25 and 50 s: never the old 250 ms zero-wait loop.
+      expect(server.calls).toHaveLength(expected);
+      expect(server.calls.every((call) => call.timeout >= 24_900)).toBe(true);
+      await vi.advanceTimersByTimeAsync(30_000);
+    }
+  });
+
+  it('with no BroadcastChannel either, one idle project still long polls', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('navigator', {});
+    const server = heldServer();
+    const clients = idleClients(leasedMux(null), server, ['a']);
+    await vi.advanceTimersByTimeAsync(59_999);
+    clients.stop();
+    expect(server.calls).toHaveLength(3);
+    expect(server.calls.every((call) => call.timeout === 25_000)).toBe(true);
+  });
+
+  it('two contexts stay within the four-connection cap and every project gets turns', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('navigator', {});
+    const hub = leaseHub();
+    const server = heldServer();
+    const watched = concurrency(server);
+    const projects = [
+      ['a0', 'a1', 'a2', 'a3'],
+      ['b0', 'b1', 'b2', 'b3'],
+    ];
+    const contexts = projects.map((names) => {
+      const m = leasedMux(hub());
+      const stopped = { value: false };
+      for (const project of names)
+        void (async () => {
+          let since = 0;
+          while (!stopped.value) {
+            try {
+              since = (await m.poll(project, watched.directFor(project), since, undefined, 25_000)).cursor;
+            } catch {
+              return;
+            }
+          }
+        })();
+      return stopped;
+    });
+    await vi.advanceTimersByTimeAsync(59_999);
+    for (const stopped of contexts) stopped.value = true;
+    expect(watched.max()).toBe(DIRECT_POLL_MAX_IN_FLIGHT);
+    // Contention rotates on the 1 s cap, bounded by four requests a second in all,
+    expect(server.calls.length).toBeLessThanOrEqual(DIRECT_POLL_MAX_IN_FLIGHT * 60 + 8);
+    // and no project is starved.
+    for (const project of projects.flat())
+      expect(server.calls.filter((call) => call.project === project).length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('a preempted poll replays from its cursor, so an event mid-rotation still arrives', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('navigator', {});
+    const server = heldServer();
+    const clients = idleClients(leasedMux(null), server, ['a', 'b']);
+    await vi.advanceTimersByTimeAsync(5_000);
+    server.publish('b');
+    await vi.advanceTimersByTimeAsync(3 * DIRECT_POLL_TIMEOUT_MS);
+    expect(clients.received.get('b')).toEqual([1]);
+    // Every reissue before the event kept the unchanged cursor.
+    expect(server.calls.filter((call) => call.project === 'a').every((call) => call.since === 0)).toBe(true);
+    clients.stop();
+  });
+
+  it('a server outage backs off on the transport schedule, then resumes long polling', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('navigator', {});
+    const server = heldServer();
+    let down = true;
+    const calls: number[] = [];
+    const direct: ChangePollFn = (since, signal, timeout) => {
+      calls.push(Date.now());
+      return down ? Promise.reject(new Error('offline')) : server.directFor('a')(since, signal, timeout);
+    };
+    const m = leasedMux(leaseHub()());
+    const resyncs: string[] = [];
+    const controller = new AbortController();
+    runProjectChangePollTransport(
+      {
+        client: m.client('a', { pollEvents: direct }),
+        sink: {
+          resync: (reason) => {
+            resyncs.push(reason);
+            return Promise.resolve();
+          },
+          deliver: () => Promise.resolve(),
+        },
+        retryMs: 500,
+        maxRetryMs: 30_000,
+      },
+      controller.signal,
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    // 0.5 + 1 + 2 + 4 + 8 + 16 + 30 s: a bounded exponential schedule, not a tight loop.
+    expect(calls.length).toBeLessThanOrEqual(8);
+    down = false;
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(resyncs).toEqual(['reconnect']);
+    const before = server.calls.length;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(server.calls.length - before).toBeLessThanOrEqual(1);
+    controller.abort();
   });
 });
 

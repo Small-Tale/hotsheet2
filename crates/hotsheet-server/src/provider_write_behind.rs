@@ -350,14 +350,27 @@ fn dispatch_one(
                 conflict.insert(field.clone(), current);
             }
         }
-        if !conflict.is_empty() {
-            outbox
-                .lock_or_recover()
-                .record_conflict(&operation.operation_id, &Value::Object(conflict))
+        // HS2-NJQVQF: the write is the only side effect. A dispatcher whose lease lapsed
+        // and was taken over leaves the row to its new owner instead of writing twice.
+        {
+            let mut guard = outbox.lock_or_recover();
+            let still_held = guard
+                .renew_lease(&operation.operation_id)
                 .map_err(|error| ProviderError::Conflict {
                     ticket: operation.native_id.clone(),
                     message: error.to_string(),
                 })?;
+            if !still_held {
+                return Ok(());
+            }
+            if !conflict.is_empty() {
+                guard
+                    .record_conflict(&operation.operation_id, &Value::Object(conflict))
+                    .map_err(|error| ProviderError::Conflict {
+                        ticket: operation.native_id.clone(),
+                        message: error.to_string(),
+                    })?;
+            }
         }
         let mut patch = operation.patch.clone();
         patch.expected_token = remote.concurrency_token.clone();

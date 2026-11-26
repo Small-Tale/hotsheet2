@@ -43,7 +43,7 @@ export function copyWithSelection(text: string): boolean {
   try {
     // Compatibility boundary: the legacy copy command is the only synchronous copy path browsers
     // still honor when they refuse the asynchronous Clipboard API.
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- Legacy synchronous copy fallback when the Clipboard API is refused (HS2-1A2BQR).
     copied = document.execCommand('copy');
   } catch {
     copied = false;

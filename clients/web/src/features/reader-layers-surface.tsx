@@ -29,6 +29,7 @@ import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import type { FeedbackResponseDrafts } from '../feedback-response-drafts';
 import { type GallerySource, type Project } from '../interactions/types';
+import { ticketUpNextDisabledReason } from '../ticket-bulk-operations';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import type { FollowUpLinkAvailability } from '../ticket-follow-up-link';
 import { linkedReaderCanUpdate, type TicketReaderFrame } from '../ticket-reader-stack';
@@ -62,6 +63,8 @@ export interface ReaderLayersSurfaceDependencies {
   canEditNotes: () => boolean;
   canUpdateSelected: () => boolean;
   canUseAttachments: () => boolean;
+  /** Why the workspace ticket's provider cannot change Up Next, or undefined (HS2-Y32T8A). */
+  upNextDisabledReasonFor: (ticket: Pick<WireTicketRow, 'connection_id'>) => string | undefined;
   changeEvidenceSurfaceProps: (readerScope?: string) => Parameters<typeof ChangeEvidenceSurface>[0]['evidence'];
   codeReview: Signal<CodeReview | undefined>;
   codeReviewLoading: Signal<boolean>;
@@ -155,6 +158,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     canEditNotes,
     canUpdateSelected,
     canUseAttachments,
+    upNextDisabledReasonFor,
     changeEvidenceSurfaceProps,
     codeReview,
     codeReviewLoading,
@@ -307,6 +311,9 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         activeTab={activeTab}
         upNext={ticket.up_next}
         upNextEligible={canUpdate && (ticket.status === 'not_started' || ticket.status === 'started')}
+        upNextDisabledReason={
+          frame ? ticketUpNextDisabledReason([ticket], () => capabilities) : upNextDisabledReasonFor(ticket)
+        }
         feedbackNeeded={ticket.needs_review || fullTicketFeedbackNeeded(ticket)}
         closeReason={ticket.close_reason}
         latestConfidence={ticket.latest_confidence}

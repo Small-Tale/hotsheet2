@@ -1327,7 +1327,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     zoom: (direction) => {
       const model = attachmentGalleryZoomModel(attachmentGalleryGeometry.value, attachmentGalleryScale.value),
         next = model.stops[model.index + (direction === 'out' ? -1 : 1)];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       if (next !== undefined) attachmentGalleryScale.value = next;
     },
     beginPinch: () => {

@@ -24,7 +24,11 @@
 > (0.3.x _and_ 0.4.x). Only a datadir written by a PGLite _newer than the bundle_ —
 > e.g. **PGLite 0.5.x = PG18** (a future Hot Sheet) — can't be opened; those fall back
 > to `pglite-migrate`, which fetches a matching engine on demand. (Bundling the
-> absolute-latest 0.5.x would be wrong — it can't read 0.3.x/0.4.x datadirs.) Verified
+> absolute-latest 0.5.x would be wrong — it can't read 0.3.x/0.4.x datadirs.) The
+> bundled engine reports a damaged datadir with the same initialization error as a
+> newer one, so the fetch runs only when that failure meets a `PG_VERSION` major other
+> than the bundled PostgreSQL 17; a damaged, same-major, or unstamped datadir exits 1
+> with a "looks damaged" message and downloads nothing (HS2-D0V2NB). Verified
 > with real on-disk 0.3.x _and_ 0.4.x clusters, and the 0.5.x/PG18 fetch validated
 > end-to-end. See [`migrator/README.md`](../migrator/README.md).
 >
@@ -171,6 +175,16 @@ For each ticket:
   (each note gets a ULID id, §2.6); map HS1 `completed`/`verified` to a `completed`
   close outcome and `archive`/soft-delete to `obsolete`, carrying the best available
   close timestamp and clearing `up_next` for every inactive status ([02](02-ticket-storage.md) §2.6a).
+- Never write an empty or unparseable timestamp (HS2-K7JG39). A ticket whose
+  `created_at` is null, absent (a schema without the column), or not RFC 3339 is
+  still imported rather than refused: its creation time becomes the earliest valid
+  time recorded on it (`updated_at`, `completed_at`, `verified_at`, `deleted_at`, or
+  a note's `created_at`), since creation precedes every other event, or the import
+  time when it records none. A missing `updated_at` takes the resolved creation
+  time. Other malformed timestamps are dropped (a note then keeps its id-derived
+  time). Each substitution prints a warning naming the HS1 ticket number and field
+  and emits it as a `warning` progress event, so the migration job lists it. The
+  stable ULID still derives from the raw `created_at`, so retries stay idempotent.
 - Before writing a ticket with attachments, atomically record its expected attachment
   list in `hotsheet-hs1-import-pending/<ticket-ulid>.json` in the destination store.
   A checkout marked for compaction recovery rejects import before any checkpoint,
@@ -418,6 +432,9 @@ producer boundaries are database bytes after each successful file copy, exported
 imported ticket items, staged attachment bytes, and verified/copied attachment items
 within each ticket. Empty phases report 0 of 0; a phase reaching 100 percent does not
 mean the whole job succeeded. Unknown engine/download and Git denominators stay unknown.
+The CLI accepts only events whose `version` equals its `MIGRATOR_PROGRESS_VERSION`
+(the exporter's `PROGRESS_VERSION`, pinned by a test) and relays any other stdout line
+to stderr (HS2-Q77A53).
 
 A referenced HS1 attachment that is missing or not a readable file **fails export**
 before a portable manifest can discard its identity (HS2-FBVNJ6). It records no new
@@ -456,7 +473,11 @@ another flag, an empty or repeated `--out`, a value on `--progress-json`, or zer
 several paths exit 2 with a one-line reason and the usage line and write nothing. A
 path without a `db/` directory and every other export failure exit 1 with a non-empty
 `hotsheet-export:` message; `--progress-json` also emits the typed `failed` event
-(HS2-6JNDRY).
+(HS2-6JNDRY). HS1 rows are shape-checked before the export is written: a row without
+a non-empty `ticket_number`, a non-text `title` or text column, a note that is not an
+object, or a timestamp that is not a valid `Date`, RFC 3339 text (kept verbatim), or
+Postgres `timestamptz` text (normalized to RFC 3339) fails the export with exit 1,
+naming the ticket and field but not its content (HS2-D0V2NB).
 Re-running the standalone migrator is a clean success: deterministic tickets and the
 completed-import receipt remain unchanged, no extra Git commit is created, and a clean
 index does not emit a failure-shaped `git commit` warning. Staging, index inspection,

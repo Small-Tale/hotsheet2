@@ -641,7 +641,10 @@ pub(crate) fn terminal_permission_route_env(
     let project = terminal_permission_project(state, req);
     let permission_identity = terminal_permission_identity(state, req.cwd.as_deref());
     let mut env = vec![
-        ("HOTSHEET_SECRET".to_string(), state.secret.clone()),
+        (
+            "HOTSHEET_SECRET".to_string(),
+            state.secret.expose().to_owned(),
+        ),
         ("HOTSHEET_PROJECT".to_string(), project),
         (
             "HOTSHEET_PERMISSION_PROJECT".to_string(),

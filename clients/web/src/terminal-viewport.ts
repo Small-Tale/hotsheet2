@@ -163,6 +163,18 @@ export function terminalInputNeedsProbe(input: {
   return input.probing || input.now - input.lastInboundAt > TERMINAL_QUIET_INPUT_AFTER_MS;
 }
 
+/**
+ * The close code a server sends when the terminal itself ended: its child exited and its output drained,
+ * or it was killed (HS2-QWT94V). There is nothing to reattach to, so the viewer keeps what it shows and
+ * stops reconnecting. Any other close (a server restart, a dropped network) stays reconnectable.
+ */
+export const TERMINAL_ENDED_CLOSE_CODE = 4000;
+
+/** Whether a socket's close event says its terminal ended (HS2-QWT94V). */
+export function terminalSocketEnded(event: { code?: number }): boolean {
+  return event.code === TERMINAL_ENDED_CLOSE_CODE;
+}
+
 export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 * 2 ** Math.max(0, attempt));
 /** Most input a reconnecting terminal holds for its next socket; the oldest keystrokes give way. */
 export const TERMINAL_PENDING_INPUT_LIMIT = 64 * 1024;
@@ -262,7 +274,7 @@ export function terminalUsesMobile80xM(
   return mobile && !scaledPreview && (fixedDashboardGrid || dedicatedDrawer);
 }
 // ANSI ESC is the external terminal protocol byte intentionally recognized here.
-// eslint-disable-next-line no-control-regex
+// eslint-disable-next-line no-control-regex -- Matches the zsh reverse-video EOL mark by its ESC bytes (HS2-BPYP2X).
 const ZSH_PROMPT_EOL_MARK = /^(?:\u001b\[(?:0|1)m)*\u001b\[7m%\u001b\[27m(?:\u001b\[(?:0|1|27)m)*(?:\r?\n)?/;
 
 /** A late zsh attachment can begin at its reverse-video partial-line marker. The marker

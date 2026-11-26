@@ -17,6 +17,7 @@ pub mod external_launch;
 pub mod import;
 mod import_completion;
 pub mod import_recovery;
+mod import_timestamps;
 pub mod launched_env;
 pub mod merge_pending;
 pub mod migration_progress;
@@ -36,7 +37,10 @@ pub mod provisional_claims;
 pub mod remote_servers;
 pub mod setup;
 #[path = "../../hotsheet-server/src/source_revision.rs"]
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    reason = "HS2-N9267G: shared source_revision module; the CLI uses a subset"
+)]
 mod source_revision;
 pub mod sync_ai;
 pub mod sync_kick;
@@ -410,9 +414,9 @@ pub fn run_migrate_with_progress(
         .context("exporter stdout was not piped")?;
     for line in BufReader::new(output).lines() {
         let line = line?;
-        match serde_json::from_str::<MigrationProgress>(&line) {
-            Ok(event) if event.version == 1 => observe(event),
-            _ => eprintln!("{line}"),
+        match migration_progress::parse_migrator_progress(&line) {
+            Some(event) => observe(event),
+            None => eprintln!("{line}"),
         }
     }
     let status = child.wait()?;

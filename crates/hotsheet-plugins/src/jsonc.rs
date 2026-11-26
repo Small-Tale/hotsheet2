@@ -42,6 +42,26 @@ pub(crate) fn set_member(text: &str, path: &[&str], value: &Value) -> Result<Str
     Ok(out)
 }
 
+/// Whether the value of `root[path[0]]...[path[n-1]]` holds a comment (HS2-SYBMFV).
+/// `Ok(false)` when there is no such member.
+pub(crate) fn member_has_comments(text: &str, path: &[&str]) -> Result<bool, String> {
+    let (blanked, trailing) = blank_parts(text)?;
+    let bytes = blanked.as_bytes();
+    let mut pos = skip_ws(bytes, 0);
+    let mut node = parse_node(bytes, &mut pos)?;
+    for key in path {
+        let Kind::Object { members, .. } = node.kind else {
+            return Ok(false);
+        };
+        let Some(member) = members.into_iter().rev().find(|member| member.key == *key) else {
+            return Ok(false);
+        };
+        node = member.value;
+    }
+    // Blanking replaced only comments and trailing commas; any other difference is one.
+    Ok((node.start..node.end).any(|i| bytes[i] != text.as_bytes()[i] && !trailing.contains(&i)))
+}
+
 /// Remove `root[path[0]]...[path[n-1]]` by splicing out only that member: its key and
 /// value, its separator, and a comment trailing it on its own line (HS2-DWS3NS). Comments
 /// on other lines stay. `Ok(None)` when the member does not exist. Callers verify the
@@ -626,5 +646,27 @@ mod tests {
             out.contains("[\"other-mcp\"] }, // theirs\n    \"hotsheet\": {\n      \"command\"")
         );
         assert!(out.starts_with("// Project OpenCode config\n{") && out.ends_with("  },\n}\n"));
+    }
+
+    /// HS2-SYBMFV: only comments inside the member's value count; a trailing comma, a
+    /// comment outside it, or a comment marker inside a string does not.
+    #[test]
+    fn hs2_sybmfv_member_has_comments_looks_only_inside_the_value() {
+        let has = |text: &str, path: &[&str]| member_has_comments(text, path).unwrap();
+        assert!(has("{ \"mcp\": { // mine\n } }", &["mcp"]));
+        assert!(has("{ \"mcp\": { /* mine */ } }", &["mcp"]));
+        assert!(has(
+            "{ \"mcp\": { \"a\": { /* deep */ \"b\": 1 } } }",
+            &["mcp"]
+        ));
+        assert!(!has("{ \"mcp\": { \"a\": 1, }, }", &["mcp"]));
+        assert!(!has("// top\n{ \"mcp\": {} /* after */ }", &["mcp"]));
+        assert!(!has(
+            "{ \"mcp\": { \"a\": \"// not a comment\" } }",
+            &["mcp"]
+        ));
+        assert!(!has("{ \"theme\": \"dark\" }", &["mcp"]));
+        assert!(!has("{ \"mcp\": 3 }", &["mcp", "x"]));
+        assert!(member_has_comments("{ \"mcp\": ", &["mcp"]).is_err());
     }
 }
