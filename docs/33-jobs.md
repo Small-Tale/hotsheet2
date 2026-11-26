@@ -369,10 +369,34 @@ Job kind and external system are `gitlab-ci`.
 
 `buildkite` and `circleci` watch Jobs follow one commit's CI gate like §33.9 and §33.11,
 through the same machine monitor, CI gate API and REST port. Neither provider's API
-exposes repository ancestry, so these gates attest **exact coverage only**: a build or
-pipeline counts only when it was built from the watched commit itself on the target
-branch. A later commit's green never covers it, and the gate is never superseded; it
-stays pending until the commit's own build is judged.
+exposes repository ancestry. Without a repository host (below), these gates attest
+**exact coverage only**: a build or pipeline counts only when it was built from the
+watched commit itself on the target branch, a later commit's green never covers it,
+and the gate is never superseded.
+
+- **Ancestry through the repository host (HS2-56MTYN).** The provider names the
+  repository it builds: Buildkite's pipeline (`GET organizations/:org/pipelines/:pipeline`,
+  `repository`) and CircleCI's project (`GET project/:slug`, `vcs_info.vcs_url`), read
+  once per monitor. When that repository is on `github.com` or on the host of
+  `HOTSHEET_GITLAB_API_URL` (default `gitlab.com`), the monitor asks that host, with
+  this machine's GitHub or GitLab credentials (§33.9, §33.11), how a later build's
+  head relates to the commit: GitHub's compare status (`ahead`/`identical` contains
+  it, `behind` is older, `diverged` another line) or GitLab's merge base. The branch's
+  newest builds (Buildkite `builds?branch=` without `commit=`; CircleCI's branch
+  pipelines) are walked newest first like the GitHub Actions watch: a containing
+  head covers the commit as `Coverage::Ancestor` evidence (`run_head_sha` is that
+  head), another line is passed over, and an older or unknown head ends the walk. The
+  commit's own builds always cover it. A `passed` (Buildkite) or succeeded (CircleCI)
+  covering build is green; otherwise the newest covering one decides. A newest build
+  on another line with nothing covering supersedes the gate (`gate` `superseded`). At
+  most five lookups per poll; a walk left unfinished is neither green nor superseded
+  and is judged again next poll. Answers are kept, except an unknown commit (GitHub
+  404, GitLab 400/404), which is asked again. A repository elsewhere (Bitbucket,
+  GitHub Enterprise, another host) or a 403 on the pipeline or project read keeps
+  exact coverage; 404 ends the watch, and 429 or server errors on any of these reads
+  (and 401/403 from the repository host) are retried. Cancel reaches only the
+  commit's own build or pipeline, never a later one that covers it. Live providers
+  have not been checked (HS2-GCJPJ6).
 
 - **Buildkite** ([REST builds API](https://buildkite.com/docs/apis/rest-api/builds)).
   The target names the pipeline as `organization/pipeline` slugs, and the workflow is
@@ -393,7 +417,8 @@ stays pending until the commit's own build is judged.
   `POST workflow/:id/cancel` for the commit's unfinished counted workflows. The run
   floor is the pipeline number.
 - **Outcome.** Refs have GitHub's keys, with `run_attempt` 1 and `run_head_sha` the
-  commit itself. No artifact digest is recorded.
+  head that was built: the commit itself, or (HS2-56MTYN) a later head containing it.
+  No artifact digest is recorded.
 - **Credentials.** `BUILDKITE_API_TOKEN` is sent as `Authorization: Bearer`, and
   `CIRCLECI_TOKEN` as `Circle-Token`. Both are kept in memory only. `job watch status`
   reports `buildkite_token` and `circleci_token` as the variable name or `null`. The API
@@ -416,6 +441,17 @@ build-list-by-commit filter and exposes no repository ancestry.
   multibranch project, the branch job `…/job/<branch>` is read instead (a `/` in the
   branch becomes `%2F` in its name); the class is read once per watch. A branch job
   that is not indexed yet leaves the gate pending.
+- **Beyond the newest 30 (HS2-PJ64A4).** When that read is full (30 builds) and holds
+  none of the commit's builds, the poll reads deeper slices of `allBuilds` with the
+  remote access API's range syntax, `tree=allBuilds[…]{30,130}`, then `{130,230}` and
+  `{230,330}`: at most three slices of 100 per poll. A build arriving between reads
+  shifts every offset, so builds are de-duplicated by number. The search stops at a
+  short or empty slice, at the first slice holding the commit, or at a slice (or a
+  first read) reaching a rewatch floor, since nothing older can be judged. A commit
+  beyond the budget stays pending, never failed. A Jenkins whose answer leaves
+  `allBuilds` out is not asked again during the watch. 404 ends the watch; 401, 403,
+  429, server errors and an unreadable answer are retried like the first read. Live
+  Jenkins has not been checked against this read.
 - **Coverage.** A build counts when one of its `BuildData` actions recorded exactly the
   commit; a pipeline that also checks out a shared library has several. In a plain
   (not multibranch) job that action must also name the branch as `main`,

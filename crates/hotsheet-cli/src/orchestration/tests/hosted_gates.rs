@@ -581,3 +581,56 @@ fn hs2_2222qp_a_remote_targets_gitlab_gate_is_watched_on_its_host() {
         "the hosted read names the provider"
     );
 }
+
+#[test]
+fn hs2_56mtyn_a_remote_targets_circleci_gate_passes_the_check_through_the_repository_it_names() {
+    let mut rng = Rng(101);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let r = remote(&mut tx);
+    let a = sha('a');
+    let circleci = |slug: &str, tx: &mut Transaction<'_>| {
+        r.runtime.gate_link(
+            &r.owner,
+            &r.run,
+            serde_json::from_value(json!({"commit": a, "provider": "circleci",
+                "repository": slug}))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    };
+    git_remote(
+        Path::new(&r.peer.hosted.target.root),
+        "git@github.com:Acme/Widgets.git",
+    );
+    // Another repository, the same path on another host, and a slug that names no
+    // repository are refused on the host before anything starts.
+    for refused in [
+        "gh/acme/other",
+        "bb/acme/widgets",
+        "circleci/0b1c2d3e/4f5a6b7c",
+    ] {
+        assert!(
+            matches!(
+                circleci(refused, &mut tx),
+                Err(OrchestrationError::Gate(GateError::RepositoryMismatch))
+            ),
+            "{refused}"
+        );
+    }
+    assert!(r.host_jobs().is_empty());
+    // The slug naming the checkout's GitHub repository is watched on the host.
+    let linked = circleci("gh/acme/widgets", &mut tx).unwrap();
+    assert_eq!(linked.gate.provider, "circleci");
+    let jobs = r.host_jobs();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].kind.name, "circleci");
+    assert_eq!(r.own_jobs(), 0);
+    // The long form of the slug names the same repository; as another slug it is its
+    // own watch.
+    circleci("github/acme/widgets", &mut tx).unwrap();
+    assert_eq!(r.host_jobs().len(), 2);
+}

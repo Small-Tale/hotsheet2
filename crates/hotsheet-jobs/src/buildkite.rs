@@ -8,6 +8,15 @@
 //! repository ancestry, so a Buildkite gate attests exact coverage only: a build of a
 //! later commit never turns it green (see [`CiProvider::attests_ancestors`]).
 //!
+//! HS2-56MTYN: a pipeline names the repository it builds
+//! (`GET organizations/{org}/pipelines/{slug}`, `repository`). When that repository is
+//! on a host the source was given ([`RepositoryHosts`]: GitHub, or the configured
+//! GitLab), each poll also reads the branch's newest builds and asks the host whether
+//! a later build's head contains the commit, as the GitHub Actions watch does: a
+//! passed later build covers the commit as an ancestor, and a branch whose newest build
+//! is on another line, with nothing covering the commit, supersedes it. Without such a
+//! host the gate keeps exact coverage.
+//!
 //! All access goes through the shared REST port ([`GithubApi`]) rooted at Buildkite's
 //! `/v2`, so tests run offline with fixtures. A rebuild is a new build with a new
 //! number, so the run floor is the build number.
@@ -16,6 +25,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::ancestry::{HostRepository, MAX_RELATIONS_PER_POLL, RepositoryHosts, walk};
 use crate::github::{
     ApiMethod, ApiRequest, ApiResponse, BUILDKITE_KIND, CiProvider, CiTarget, GithubApi, RunFloor,
     clean, query_value, transient,
@@ -60,6 +70,20 @@ impl Build {
     fn running(&self) -> bool {
         matches!(self.state(), "running" | "failing" | "canceling")
     }
+
+    /// Whether the build built exactly the commit.
+    fn own(&self, sha: &str) -> bool {
+        self.commit
+            .as_deref()
+            .is_some_and(|commit| commit.eq_ignore_ascii_case(sha))
+    }
+}
+
+/// HS2-56MTYN: what the pipeline read needs: the repository it builds.
+#[derive(Clone, Debug, Default, Deserialize)]
+struct PipelineInfo {
+    #[serde(default)]
+    repository: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -78,15 +102,34 @@ struct BuildJob {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Decision {
-    Pending { build: Option<usize> },
-    Green { build: usize },
-    Red { build: usize },
-    Cancelled { build: usize },
+    Pending {
+        build: Option<usize>,
+    },
+    Green {
+        build: usize,
+    },
+    Red {
+        build: usize,
+    },
+    Cancelled {
+        build: usize,
+    },
+    /// HS2-56MTYN: the branch moved to another line and nothing covers the commit.
+    Superseded,
 }
 
-/// Judge the gate from the commit's branch builds, newest first.
-fn decide(floor: Option<RunFloor>, builds: &[Build]) -> Decision {
-    let judged: Vec<usize> = (0..builds.len())
+/// Judge the gate from branch builds listed newest first, of which `covering` (indexes,
+/// newest first) cover the commit. `diverged_first`: the newest build is on another
+/// line.
+fn decide(
+    floor: Option<RunFloor>,
+    builds: &[Build],
+    covering: &[usize],
+    diverged_first: bool,
+) -> Decision {
+    let judged: Vec<usize> = covering
+        .iter()
+        .copied()
         .filter(|index| {
             floor.is_none_or(|floor| {
                 RunFloor {
@@ -103,7 +146,11 @@ fn decide(floor: Option<RunFloor>, builds: &[Build]) -> Decision {
         return Decision::Green { build: green };
     }
     let Some(&newest) = judged.first() else {
-        return Decision::Pending { build: None };
+        return if diverged_first {
+            Decision::Superseded
+        } else {
+            Decision::Pending { build: None }
+        };
     };
     match builds[newest].state() {
         "failed" => Decision::Red { build: newest },
@@ -118,9 +165,9 @@ fn decide(floor: Option<RunFloor>, builds: &[Build]) -> Decision {
 
 #[derive(Default)]
 struct Cached {
-    builds: Vec<Build>,
-    reported: Option<Vec<Build>>,
-    /// The newest judged build, for cancel: (number, finished).
+    reported: Option<(Vec<Build>, Decision)>,
+    /// The newest judged build when it is the commit's own, for cancel:
+    /// (number, finished).
     current: Option<(u64, bool)>,
 }
 
@@ -128,6 +175,10 @@ struct Cached {
 pub struct BuildkiteSource<A: GithubApi> {
     api: A,
     jobs: BTreeMap<String, Cached>,
+    /// HS2-56MTYN: the hosts that answer ancestry for a pipeline's repository.
+    hosts: RepositoryHosts,
+    /// HS2-56MTYN: each pipeline's repository on one of those hosts, once read.
+    repositories: BTreeMap<String, Option<HostRepository>>,
 }
 
 /// `organizations/{organization}/pipelines/{pipeline}` of a target.
@@ -145,6 +196,80 @@ impl<A: GithubApi> BuildkiteSource<A> {
         Self {
             api,
             jobs: BTreeMap::new(),
+            hosts: RepositoryHosts::new(),
+            repositories: BTreeMap::new(),
+        }
+    }
+
+    /// HS2-56MTYN: ask these hosts whether a later build covers the commit.
+    #[must_use]
+    pub fn with_hosts(mut self, hosts: RepositoryHosts) -> Self {
+        self.hosts = hosts;
+        self
+    }
+
+    /// HS2-56MTYN: the repository the pipeline builds, when a host can answer for it.
+    /// A token that may not read pipelines (403) leaves exact coverage.
+    fn repository(&mut self, pipeline: &str) -> Result<Option<HostRepository>, WatchError> {
+        if !self.hosts.any() {
+            return Ok(None);
+        }
+        if let Some(known) = self.repositories.get(pipeline) {
+            return Ok(known.clone());
+        }
+        let response = self.get(pipeline.to_owned())?;
+        let found = match response.status {
+            200 => serde_json::from_str::<PipelineInfo>(&response.body)
+                .map_err(|_| transient(&response))?
+                .repository
+                .and_then(|url| self.hosts.repository(&url)),
+            403 => None,
+            404 => return Err(WatchError::Gone),
+            _ => return Err(transient(&response)),
+        };
+        self.repositories.insert(pipeline.to_owned(), found.clone());
+        Ok(found)
+    }
+
+    /// The branch's builds, newest first, of the commit only when `commit` is given.
+    /// Pull request builds and other branches' builds never count.
+    fn list(
+        &mut self,
+        pipeline: &str,
+        target: &CiTarget,
+        commit: Option<&str>,
+    ) -> Result<Vec<Build>, WatchError> {
+        let filter = commit.map_or_else(String::new, |commit| format!("&commit={commit}"));
+        let response = self.get(format!(
+            "{pipeline}/builds?branch={}{filter}&per_page={BUILDS_PER_PAGE}",
+            query_value(&target.branch),
+        ))?;
+        match response.status {
+            200 => {
+                let listed: Vec<Build> =
+                    serde_json::from_str(&response.body).map_err(|_| transient(&response))?;
+                let mut builds: Vec<Build> = listed
+                    .into_iter()
+                    .filter(|build| {
+                        build
+                            .pull_request
+                            .as_ref()
+                            .is_none_or(serde_json::Value::is_null)
+                            && build.branch.as_deref() == Some(target.branch.as_str())
+                            && commit.is_none_or(|commit| {
+                                build
+                                    .commit
+                                    .as_deref()
+                                    .is_some_and(|built| built.eq_ignore_ascii_case(commit))
+                            })
+                    })
+                    .collect();
+                builds.sort_by_key(|build| std::cmp::Reverse(build.number));
+                Ok(builds)
+            }
+            // The pipeline does not exist or cannot be read with this token.
+            404 => Err(WatchError::Gone),
+            _ => Err(transient(&response)),
         }
     }
 
@@ -176,54 +301,66 @@ impl<A: GithubApi> WatchSource for BuildkiteSource<A> {
             .filter(|(target, _)| target.provider == CiProvider::Buildkite)
             .ok_or(WatchError::Gone)?;
         let pipeline = pipeline_path(&target).ok_or(WatchError::Gone)?;
-        let response = self.get(format!(
-            "{pipeline}/builds?branch={}&commit={}&per_page={BUILDS_PER_PAGE}",
-            query_value(&target.branch),
-            target.sha
-        ))?;
-        let builds: Vec<Build> = match response.status {
-            200 => {
-                let listed: Vec<Build> =
-                    serde_json::from_str(&response.body).map_err(|_| transient(&response))?;
-                let mut builds: Vec<Build> = listed
-                    .into_iter()
-                    .filter(|build| {
-                        build
-                            .pull_request
-                            .as_ref()
-                            .is_none_or(serde_json::Value::is_null)
-                            && build.branch.as_deref() == Some(target.branch.as_str())
-                            && build
-                                .commit
-                                .as_deref()
-                                .is_some_and(|commit| commit.eq_ignore_ascii_case(&target.sha))
-                    })
-                    .collect();
-                builds.sort_by_key(|build| std::cmp::Reverse(build.number));
-                builds
+        let own = self.list(&pipeline, &target, Some(&target.sha))?;
+        let mut unfinished = false;
+        let (builds, covering, diverged_first) = match self.repository(&pipeline)? {
+            None => {
+                let covering: Vec<usize> = (0..own.len()).collect();
+                (own, covering, false)
             }
-            // The pipeline does not exist or cannot be read with this token.
-            404 => return Err(WatchError::Gone),
-            _ => return Err(transient(&response)),
+            Some(repository) => {
+                // HS2-56MTYN: the branch's newest builds, with the commit's own builds
+                // that fell out of that page.
+                let mut builds = self.list(&pipeline, &target, None)?;
+                for build in own {
+                    if !builds.iter().any(|listed| listed.number == build.number) {
+                        builds.push(build);
+                    }
+                }
+                builds.sort_by_key(|build| std::cmp::Reverse(build.number));
+                let heads: Vec<Option<&str>> =
+                    builds.iter().map(|build| build.commit.as_deref()).collect();
+                let mut budget = MAX_RELATIONS_PER_POLL;
+                let hosts = &mut self.hosts;
+                let found = walk(&target.sha, &heads, |head| {
+                    hosts.relation(&repository, &target.sha, head, &mut budget)
+                })?;
+                unfinished = found.unfinished;
+                // The commit's own builds always cover it.
+                let mut covering = found.covering;
+                covering.extend((0..builds.len()).filter(|index| builds[*index].own(&target.sha)));
+                covering.sort_unstable();
+                covering.dedup();
+                (builds, covering, found.diverged_first)
+            }
         };
-        let decision = decide(floor, &builds);
+        let decision = decide(floor, &builds, &covering, diverged_first);
         let current = match decision {
             Decision::Pending { build } => build,
             Decision::Green { build } | Decision::Red { build } | Decision::Cancelled { build } => {
                 Some(build)
             }
+            Decision::Superseded => None,
         }
         .map(|index| builds[index].clone());
+        let covered: Vec<Build> = covering
+            .iter()
+            .map(|index| builds[*index].clone())
+            .collect();
         let cached = self.jobs.entry(job.id.clone()).or_default();
+        // Only the commit's own build is ever cancelled.
         cached.current = current
             .as_ref()
+            .filter(|build| build.own(&target.sha))
             .map(|build| (build.number, build.finished()));
-        cached.builds.clone_from(&builds);
-        if cached.reported.as_ref() == Some(&builds) {
+        let seen = (covered, decision);
+        if cached.reported.as_ref() == Some(&seen) {
             return Ok(Poll::NotModified);
         }
-        cached.reported = Some(builds);
+        // A lookup left for the next poll means this verdict is not final.
+        cached.reported = (!unfinished).then_some(seen);
         let state = match (decision, &current) {
+            (Decision::Superseded, _) => Observed::Failed(superseded(&target)),
             (Decision::Green { .. }, Some(build)) => {
                 Observed::Succeeded(outcome(&target, "green", build))
             }
@@ -268,7 +405,7 @@ impl<A: GithubApi> WatchSource for BuildkiteSource<A> {
         let Some(pipeline) = pipeline_path(&target) else {
             return CancelReply::Unsupported;
         };
-        // Every build judged here built the commit itself; a finished one is left.
+        // Only the commit's own unfinished build is kept for cancel.
         let Some((number, finished)) = self.jobs.get(&job.id).and_then(|cached| cached.current)
         else {
             return CancelReply::Unsupported;
@@ -338,6 +475,25 @@ fn outcome(target: &CiTarget, gate: &str, build: &Build) -> Outcome {
         summary: Some(format!(
             "Buildkite build {} {verdict} for {}",
             build.number,
+            &target.sha[..7]
+        )),
+        refs,
+    }
+}
+
+/// HS2-56MTYN: the outcome of a gate the branch moved past, with no build of its own.
+fn superseded(target: &CiTarget) -> Outcome {
+    let refs = BTreeMap::from([
+        ("gate".to_owned(), "superseded".to_owned()),
+        ("commit".to_owned(), target.sha.clone()),
+        ("repo".to_owned(), target.repo.clone()),
+        ("branch".to_owned(), target.branch.clone()),
+        ("workflow".to_owned(), clean(&target.workflow, 200)),
+    ]);
+    Outcome {
+        summary: Some(format!(
+            "Buildkite: {} moved past {} to another line",
+            clean(&target.branch, 200),
             &target.sha[..7]
         )),
         refs,

@@ -93,7 +93,9 @@ impl CiProvider {
     }
 
     /// HS2-17HVNP: whether the provider's API can tell that a build of a later commit
-    /// contains the watched one. Without it a gate attests exact coverage only.
+    /// contains the watched one. Without it a gate attests exact coverage only, unless
+    /// (HS2-56MTYN, Buildkite and CircleCI) the repository the provider names is on a
+    /// host the source can ask ([`crate::RepositoryHosts`]).
     pub fn attests_ancestors(self) -> bool {
         matches!(self, Self::GithubActions | Self::GitlabCi)
     }

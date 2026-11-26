@@ -2223,11 +2223,17 @@ on that machine like a GitHub one (HS2-2222QP): the hosted `target-gates` route 
 the full project path with its checkout's remotes. HS2-17HVNP adds `buildkite`
 (`repository` is the `organization/pipeline` slugs, workflow `*`) and `circleci`
 (`repository` is the `vcs/organization/project` slug, workflow a name or `*`), both
-§33.11a. They are watched and read the same way, but their APIs expose no ancestry, so
-their evidence is always exact coverage. No declared identity names their slugs, so
-the link must give `repository`. Because a slug names no Git remote, the hosted
-repository check refuses a Buildkite or CircleCI watch of a target on another machine
-(`gate_repository_mismatch`); HS2-56MTYN covers that case and ancestor coverage.
+§33.11a. They are watched and read the same way. Their APIs expose no ancestry, so
+their evidence is exact coverage unless (HS2-56MTYN) the repository their pipeline or
+project names is on GitHub or the configured GitLab: that host's compare or merge
+base then lets a later green build cover the commit as ancestor evidence, and a
+branch moved to another line supersede it (§33.11a). No declared identity names their
+slugs, so the link must give `repository`. The hosted repository check compares a
+CircleCI `gh/` or `bb/` slug's repository, by host and path, with the hosted
+checkout's remotes (HS2-56MTYN). A Buildkite slug or a CircleCI
+`circleci/<org-id>/<project-id>` slug names no repository, so the hosted check still
+refuses such a watch of a target on another machine (`gate_repository_mismatch`;
+HS2-YA5S82).
 HS2-7H0S8R adds `jenkins` (`repository` is the job's full name, `folder/job`, workflow
 `*`; §33.11b), watched, read and refused on another machine the same way, with exact
 coverage. HS2-JZ1DD2 adds `azure-pipelines` (`repository` is

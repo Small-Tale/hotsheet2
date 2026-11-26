@@ -24,6 +24,7 @@
 //! Nothing in the Job core reads the wall clock or a random source except through [`Clock`] and
 //! [`IdSource`].
 
+mod ancestry;
 mod azure;
 mod bitbucket;
 mod buildkite;
@@ -47,6 +48,7 @@ mod steps;
 mod store;
 pub mod watch;
 
+pub use ancestry::{HostRepository, RepositoryHosts, remote_host_path};
 pub use azure::AzurePipelinesSource;
 pub use bitbucket::BitbucketPipelinesSource;
 pub use buildkite::BuildkiteSource;

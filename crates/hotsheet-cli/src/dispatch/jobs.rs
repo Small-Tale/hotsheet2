@@ -548,6 +548,17 @@ fn monitor(home: &Path, args: MonitorArgs) -> Result<()> {
     Ok(())
 }
 
+/// HS2-56MTYN: the repository hosts a Buildkite or CircleCI watch may ask about
+/// ancestry: GitHub, and the GitLab whose API root this machine is configured with.
+fn repository_hosts(home: &Path) -> hotsheet_jobs::RepositoryHosts {
+    let hosts = hotsheet_jobs::RepositoryHosts::new().with_github(UreqGithubApi::new(home));
+    let gitlab = super::job_gitlab::UreqGitlabApi::new(home);
+    match gitlab.repository_host() {
+        Some(host) => hosts.with_gitlab(&host, gitlab),
+        None => hosts,
+    }
+}
+
 fn register_sources(monitor: &mut Monitor, home: &Path) {
     monitor.register(Box::new(GithubActionsSource::new(UreqGithubApi::new(home))));
     // HS2-TPAHYA: GitLab CI pipelines, through the same REST port.
@@ -555,12 +566,20 @@ fn register_sources(monitor: &mut Monitor, home: &Path) {
         super::job_gitlab::UreqGitlabApi::new(home),
     )));
     // HS2-17HVNP: Buildkite builds and CircleCI pipelines, through the same REST port.
-    monitor.register(Box::new(hotsheet_jobs::BuildkiteSource::new(
-        super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::BUILDKITE),
-    )));
-    monitor.register(Box::new(hotsheet_jobs::CircleciSource::new(
-        super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::CIRCLECI),
-    )));
+    // HS2-56MTYN: each asks GitHub or the configured GitLab about the repository its
+    // pipeline or project builds, so a later build can cover the commit.
+    monitor.register(Box::new(
+        hotsheet_jobs::BuildkiteSource::new(super::job_ci_rest::UreqCiRestApi::new(
+            super::job_ci_rest::BUILDKITE,
+        ))
+        .with_hosts(repository_hosts(home)),
+    ));
+    monitor.register(Box::new(
+        hotsheet_jobs::CircleciSource::new(super::job_ci_rest::UreqCiRestApi::new(
+            super::job_ci_rest::CIRCLECI,
+        ))
+        .with_hosts(repository_hosts(home)),
+    ));
     // HS2-7H0S8R: Jenkins builds, through the same REST port.
     monitor.register(Box::new(hotsheet_jobs::JenkinsSource::new(
         super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::JENKINS),

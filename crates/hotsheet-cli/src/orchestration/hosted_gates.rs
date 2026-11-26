@@ -145,6 +145,46 @@ fn watch_provider(watch: &HostedGateWatch) -> Result<&'static str, Orchestration
 /// HS2-K2YE6A: the repositories a hosted checkout's own Git remotes name. A checkout
 /// that is not a Git repository, or has no remote, names none.
 pub(super) fn checkout_repositories(root: &Path) -> Vec<String> {
+    checkout_remote_urls(root)
+        .iter()
+        .filter_map(|url| repository_of(url))
+        .collect()
+}
+
+/// HS2-56MTYN: the repository a CircleCI project slug builds, by host and path, for
+/// the slugs that name it (`gh/<org>/<project>` on GitHub, `bb/<org>/<project>` on
+/// Bitbucket). A `circleci/<org-id>/<project-id>` slug names no repository.
+fn circleci_repository(slug: &str) -> Option<(String, String)> {
+    let mut parts = slug.splitn(3, '/');
+    let host = match parts.next()? {
+        "gh" | "github" => "github.com",
+        "bb" | "bitbucket" => "bitbucket.org",
+        _ => return None,
+    };
+    let (organization, project) = (parts.next()?, parts.next()?);
+    Some((
+        host.to_owned(),
+        format!("{organization}/{project}").to_ascii_lowercase(),
+    ))
+}
+
+/// HS2-K2YE6A: whether the hosted checkout's own Git remotes name the repository a
+/// watch reads. HS2-56MTYN: a CircleCI slug is not a repository path; the repository
+/// it names must be a remote on the same host.
+fn checkout_names(root: &Path, provider: &str, repository: &str) -> bool {
+    if provider == hotsheet_jobs::CIRCLECI_KIND
+        && let Some(wanted) = circleci_repository(repository)
+    {
+        return checkout_remote_urls(root).iter().any(|url| {
+            hotsheet_jobs::remote_host_path(url)
+                .is_some_and(|(host, path)| (host, path.to_ascii_lowercase()) == wanted)
+        });
+    }
+    checkout_repositories(root).contains(&repository.to_ascii_lowercase())
+}
+
+/// The URL of every Git remote of a checkout.
+fn checkout_remote_urls(root: &Path) -> Vec<String> {
     let Ok(output) = hotsheet_ticketing::git::command_in(root)
         .args(["config", "--get-regexp", r"^remote\..*\.url$"])
         .output()
@@ -156,8 +196,7 @@ pub(super) fn checkout_repositories(root: &Path) -> Vec<String> {
     }
     String::from_utf8_lossy(&output.stdout)
         .lines()
-        .filter_map(|line| line.split_once(' ').map(|(_, url)| url))
-        .filter_map(repository_of)
+        .filter_map(|line| line.split_once(' ').map(|(_, url)| url.to_owned()))
         .collect()
 }
 
@@ -247,8 +286,11 @@ impl OrchestrationRuntime {
         let checkout = self.owner(checkout_id)?;
         let provider = self.hosted_ci_provider(&watch)?;
         let gate = hosted_record(&checkout.id, &watch)?;
-        let wanted = watch.repository.to_ascii_lowercase();
-        if !checkout_repositories(Path::new(&checkout.root)).contains(&wanted) {
+        if !checkout_names(
+            Path::new(&checkout.root),
+            watch_provider(&watch)?,
+            &watch.repository,
+        ) {
             let refused = GateError::RepositoryMismatch;
             let _ = self.audit_record(
                 &checkout.id,
