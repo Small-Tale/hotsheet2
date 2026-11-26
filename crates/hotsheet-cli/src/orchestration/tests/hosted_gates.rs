@@ -9,7 +9,7 @@ use hotsheet_ticketing::orchestration::{GateError, GateState, TargetAction};
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::json;
 
-use super::gates::{judge, sha};
+use super::gates::{Tick, judge, sha};
 use super::tickets::{NOW, RemotePeer, machine, unsupported, worker};
 use super::*;
 
@@ -61,6 +61,7 @@ pub(super) fn remote(tx: &mut Transaction<'_>) -> Remote {
         hosted: machine(99, false, unsupported),
         calls: Mutex::new(Vec::new()),
         status_override: Mutex::new(None),
+        offline: Default::default(),
     });
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
@@ -435,6 +436,74 @@ fn hs2_wdqz37_a_remote_targets_ci_gate_is_watched_on_its_host_and_followed_by_cu
     assert_eq!(red.state, GateState::Failed);
     assert_eq!(red.evidence.unwrap().reference, "62");
     // Nothing is left to follow.
+    assert!(
+        !r.runtime
+            .gate_follow_step(&r.owner, &mut follow, 0, &mut tx)
+            .active
+    );
+}
+
+/// HS2-1P1HJT: a follower that first meets the hosting machine while it is offline
+/// leaves the gate pending, and asks again at its next step instead of keeping that
+/// denial for ten minutes: once the host is back, the verdict it reached meanwhile is
+/// recorded once.
+#[test]
+fn hs2_1p1hjt_a_follower_meeting_an_offline_host_asks_again_at_its_next_step() {
+    let tick = Tick(std::sync::atomic::AtomicU64::new(200));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &tick,
+        rng: &mut rng,
+    };
+    let r = remote(&mut tx);
+    git_remote(
+        Path::new(&r.peer.hosted.target.root),
+        "https://github.com/example/widgets.git",
+    );
+    let a = sha('a');
+    let linked = link(&r, &a, &mut tx);
+    assert_eq!(linked.gate.state, GateState::Pending);
+    let job = linked.gate.watch_ref.clone().unwrap();
+    // The host goes offline before any follower confirmed its authority.
+    r.peer.offline.store(true, Ordering::SeqCst);
+    let mut follow = GateFollowState::default();
+    for _ in 0..2 {
+        let step = r
+            .runtime
+            .gate_follow_step(&r.owner, &mut follow, 0, &mut tx);
+        assert!(step.active && step.changed.is_empty());
+        tick.0.fetch_add(1, Ordering::SeqCst);
+    }
+    let waiting = r.runtime.gate(&r.owner, &linked.gate.gate_id).unwrap();
+    assert_eq!(
+        (waiting.state, waiting.evidence.is_none()),
+        (GateState::Pending, true)
+    );
+    // Meanwhile the host's watch passes; the host is back a moment later.
+    judge(
+        &r.peer.hosted.home,
+        &r.peer.hosted.target.id,
+        &job,
+        "green",
+        &a,
+        81,
+    );
+    r.peer.offline.store(false, Ordering::SeqCst);
+    let step = r
+        .runtime
+        .gate_follow_step(&r.owner, &mut follow, 0, &mut tx);
+    assert_eq!(step.changed, vec![linked.gate.gate_id.clone()]);
+    let passed = r.runtime.gate(&r.owner, &linked.gate.gate_id).unwrap();
+    assert_eq!(passed.state, GateState::Passed);
+    assert_eq!(passed.evidence.unwrap().reference, "81");
+    assert_eq!(
+        passed
+            .history
+            .iter()
+            .filter(|entry| entry.to == GateState::Passed)
+            .count(),
+        1
+    );
     assert!(
         !r.runtime
             .gate_follow_step(&r.owner, &mut follow, 0, &mut tx)

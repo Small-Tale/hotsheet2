@@ -616,6 +616,7 @@ fn hs2_j8prtv_remote_target_answers_from_its_own_machine_over_the_reviewed_trans
         hosted,
         calls: Mutex::new(Vec::new()),
         status_override: Mutex::new(None),
+        offline: Default::default(),
     });
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

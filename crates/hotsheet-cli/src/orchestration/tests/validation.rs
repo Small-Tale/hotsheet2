@@ -1724,6 +1724,7 @@ fn hs2_wn0mxz_a_remote_target_runs_the_step_and_an_unconfirmed_one_stays_running
             hosted: machine(99, false, unsupported),
             calls: Mutex::new(Vec::new()),
             status_override: Mutex::new(None),
+            offline: Default::default(),
         },
         unreachable: AtomicBool::new(false),
     });

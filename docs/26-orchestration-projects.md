@@ -2281,7 +2281,10 @@ gates of an owning checkout that still wait on a provider: one follower holds a
 bounded wait open on the adapter's records and ends when no gate waits. It starts
 with a link, a deployment request, or a subscriber of the event stream, acts as
 the linking actor, which only observes and never asks, and confirms that every ten
-minutes. A
+minutes. A target that cannot be reached when the follower confirms it (its host is
+offline) is not kept as a refusal for those ten minutes: the follower leaves its gates
+as they stand and asks again at its next step, which a bounded wait already paces, so
+the verdict a host reached while offline is recorded once it is back (HS2-1P1HJT). A
 headless caller uses `gate sync --wait-seconds`, which waits the same way. Nothing
 polls on a timer. Reads answer from this machine's records and contact nothing.
 

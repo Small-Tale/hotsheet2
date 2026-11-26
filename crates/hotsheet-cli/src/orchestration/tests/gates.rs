@@ -717,7 +717,7 @@ fn hs2_5jbypv_a_sync_and_a_follower_wait_on_the_adapter_and_never_spin() {
 }
 
 /// HS2-507DGZ: a clock a test moves by hand.
-struct Tick(std::sync::atomic::AtomicU64);
+pub(super) struct Tick(pub(super) std::sync::atomic::AtomicU64);
 impl hotsheet_ticketing::Clock for Tick {
     fn now_ms(&self) -> u64 {
         self.0.load(Ordering::SeqCst)

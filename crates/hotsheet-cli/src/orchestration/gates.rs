@@ -385,8 +385,8 @@ pub struct RunGates {
     pub watching: Option<bool>,
 }
 
-/// What a follower remembers between steps: when each target's authority was last
-/// confirmed, and whether it held.
+/// What a follower remembers between steps: whether each target's authority held, and
+/// until when that answer stands.
 #[derive(Default)]
 pub struct GateFollowState {
     authorized: BTreeMap<String, (bool, u64)>,
@@ -1103,7 +1103,7 @@ impl OrchestrationRuntime {
                 let fresh = state
                     .authorized
                     .get(&gate.target_id)
-                    .filter(|(_, at)| now_ms.saturating_sub(*at) < REAUTHORIZE_MS)
+                    .filter(|(_, until)| now_ms < *until)
                     .map(|(allowed, _)| *allowed);
                 let allowed = fresh.unwrap_or_else(|| {
                     let authorized = gate
@@ -1111,15 +1111,24 @@ impl OrchestrationRuntime {
                         .clone()
                         .and_then(|id| MutationActor::parse("system", Some(id)).ok())
                         .zip(Self::target_ref(owner_id, &gate.target_id).ok())
-                        .and_then(|(actor, target)| {
+                        .map(|(actor, target)| {
                             self.authorize(
                                 &target,
                                 Some(&actor),
                                 ActionRequest::new(TargetAction::GatesObserve),
                                 tx,
                             )
-                            .ok()
                         });
+                    // HS2-1P1HJT: a target that could not be reached (its host offline)
+                    // is asked again at the next step, which a wait already bounds; an
+                    // answer from a reachable target stands for ten minutes.
+                    let unavailable = matches!(
+                        authorized,
+                        Some(Err(OrchestrationError::Denied(
+                            DenialReason::TargetUnavailable
+                        )))
+                    );
+                    let authorized = authorized.and_then(Result::ok);
                     match authorized
                         .as_ref()
                         .and_then(|authorized| Self::destination(authorized).ok())
@@ -1134,9 +1143,14 @@ impl OrchestrationRuntime {
                         }
                     }
                     let allowed = authorized.is_some();
+                    let until = if unavailable {
+                        now_ms.saturating_add(1)
+                    } else {
+                        now_ms.saturating_add(REAUTHORIZE_MS)
+                    };
                     state
                         .authorized
-                        .insert(gate.target_id.clone(), (allowed, now_ms));
+                        .insert(gate.target_id.clone(), (allowed, until));
                     allowed
                 });
                 if !allowed {

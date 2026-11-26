@@ -1060,6 +1060,8 @@ pub(super) struct RemotePeer {
     pub(super) hosted: Machine,
     pub(super) calls: Mutex<Vec<(String, String)>>,
     pub(super) status_override: Mutex<Option<u16>>,
+    /// HS2-1P1HJT: the peer cannot be reached at all, resolution included.
+    pub(super) offline: std::sync::atomic::AtomicBool,
 }
 impl RemoteTransport for RemotePeer {
     fn probe(&self, _: &str, _: &RemoteCredentials) -> Result<RemoteSnapshot, RemoteFailure> {
@@ -1087,6 +1089,9 @@ impl RemoteCheckoutTransport for RemotePeer {
         _: &RemoteCredentials,
         checkout_id: &str,
     ) -> Result<CheckoutProjection, TargetFailure> {
+        if self.offline.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(TargetFailure::Unreachable);
+        }
         self.hosted
             .runtime
             .checkout_projection(checkout_id)
@@ -1104,6 +1109,9 @@ impl RemoteCheckoutTransport for RemotePeer {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((method.into(), path.into()));
+        if self.offline.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(TargetFailure::Unreachable);
+        }
         if let Some(status) = *self
             .status_override
             .lock()
@@ -1140,6 +1148,7 @@ fn hs2_az15ga_remote_destination_uses_the_reviewed_transport_and_peer_codes() {
         hosted: machine(99, false, unsupported),
         calls: Mutex::new(Vec::new()),
         status_override: Mutex::new(None),
+        offline: Default::default(),
     });
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
