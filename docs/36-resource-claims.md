@@ -189,6 +189,15 @@ stopped wait therefore no longer counts against the namespace's 256 registration
 and the 60 s grace. A SIGKILL cannot be caught and still leaves its registration until then. Outside a
 guard signals keep their default action. Windows has no guard yet (HS2-995FNQ covers Windows evidence).
 
+**A wait another thread can end (HS2-2W2PTX).** `ClaimBackend::wait_free_cancellable` (and
+`ClaimService::wait_free_cancellable`) take a `WaitCancel`. Its `cancel` ends that wait, and only that
+wait, with `interrupted`: the local backend registers a waker that sends one datagram to its own waiter
+socket, reads the flag after registering it and after every wake-up, so a cancel is never lost, and
+removes its registration as it returns. A cancel made before the wait starts reads nothing and registers
+nothing. The orchestration runtime's claim follow passes one tied to its stop token, so a stopping server
+joins that thread at once (§26). The Upstash and external-plugin backends honour only a cancel made
+before their wait starts until HS2-P234BH.
+
 ## 36.7 Offline behavior
 
 What happens when a remote backend is unreachable is a per-configuration choice: fail

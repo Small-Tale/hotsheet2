@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use hotsheet_resource_claims::{
     AcquireRequest, ClaimBackend, ClaimKey, LocalBackend, ManualClock, ResourceRef,
-    StaticKeyProvider, SystemClock, WaitOutcome,
+    StaticKeyProvider, SystemClock, WaitCancel, WaitOutcome,
 };
 
 /// Long enough that a test which only passes by waiting for this lease has failed.
@@ -336,4 +336,90 @@ fn hs2_k3zxr5_a_wait_ends_on_monotonic_time_whatever_the_backend_clock_does() {
         "a stepped clock must not end the wait early"
     );
     assert_eq!(holder.get(&vm).unwrap(), Some(held.claim));
+}
+
+fn registrations(root: &Path) -> usize {
+    std::fs::read_dir(root.join("resource-claims/namespaces/vms/waiters"))
+        .map(Iterator::count)
+        .unwrap_or(0)
+}
+
+/// HS2-2W2PTX: a cancel ends a parked wait at once, removes its registration, leaves
+/// other waiters on the same resource waiting, and a cancel made before the wait (or
+/// repeated) never parks. A fresh signal waits again and a release still wakes it.
+#[test]
+fn hs2_2w2ptx_a_cancel_ends_a_parked_wait_and_only_that_wait() {
+    let dir = tempfile::tempdir().unwrap();
+    let holder = backend(dir.path());
+    let watcher = backend(dir.path());
+    let other = backend(dir.path());
+    let vm = target("vms/mac-1");
+    let held = holder.acquire(&vm, &AcquireRequest::new(LONG)).unwrap();
+
+    let spawn_wait = |backend: &Arc<LocalBackend>, cancel: &WaitCancel| {
+        let (done, result) = mpsc::channel();
+        let (backend, cancel, vm) = (backend.clone(), cancel.clone(), vm.clone());
+        thread::spawn(move || {
+            done.send(backend.wait_free_cancellable(&vm, LONG, &cancel))
+                .unwrap();
+        });
+        result
+    };
+    let cancel = WaitCancel::new();
+    let parked = spawn_wait(&watcher, &cancel);
+    let other_cancel = WaitCancel::new();
+    let other_parked = spawn_wait(&other, &other_cancel);
+    until_inspected(&watcher, 2);
+    until_inspected(&other, 2);
+    assert_eq!(cancel.registered(), 1);
+    assert_eq!(registrations(dir.path()), 2);
+
+    let began = Instant::now();
+    cancel.cancel();
+    let ended = parked.recv_timeout(PROMPT).unwrap().unwrap_err();
+    assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
+    assert_eq!(ended.code(), "interrupted");
+    // Woken by its own waker, re-read nothing: no inspection after the wake-up.
+    assert_eq!(watcher.inspections(), 2);
+    assert_eq!(cancel.registered(), 0);
+    assert_eq!(registrations(dir.path()), 1);
+    // The other waiter was not woken.
+    assert!(
+        other_parked
+            .recv_timeout(Duration::from_millis(200))
+            .is_err()
+    );
+    assert_eq!(other.inspections(), 2);
+
+    // Cancelled before it starts (and again): no read, no registration.
+    for _ in 0..2 {
+        let error = watcher
+            .wait_free_cancellable(&vm, LONG, &cancel)
+            .unwrap_err();
+        assert_eq!(error.code(), "interrupted");
+    }
+    assert_eq!(watcher.inspections(), 2);
+    assert_eq!(registrations(dir.path()), 1);
+
+    // A fresh signal waits again; the release frees both waits.
+    let again = spawn_wait(&watcher, &WaitCancel::new());
+    until_inspected(&watcher, 4);
+    holder.release(held.renewal_token.expose()).unwrap();
+    assert_eq!(
+        again.recv_timeout(PROMPT).unwrap().unwrap(),
+        WaitOutcome::Free
+    );
+    assert_eq!(
+        other_parked.recv_timeout(PROMPT).unwrap().unwrap(),
+        WaitOutcome::Free
+    );
+    assert_eq!(registrations(dir.path()), 0);
+    // A cancel after a wait ended changes nothing.
+    other_cancel.cancel();
+    assert_eq!(
+        other
+            .wait_free_cancellable(&vm, LONG, &WaitCancel::new())
+            .unwrap(),
+        WaitOutcome::Free
+    );
 }

@@ -10,6 +10,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::backend::ClaimBackend;
+use crate::cancel::WaitCancel;
 use crate::config::ResolvedBackend;
 use crate::error::ClaimError;
 use crate::local::LocalBackend;
@@ -215,6 +216,18 @@ impl ClaimService {
     ) -> Result<WaitOutcome, ClaimError> {
         self.backend(target.namespace())?
             .wait_free(target, self.bounded(wait))
+    }
+
+    /// HS2-2W2PTX: [`Self::wait_free`] that `cancel` ends early with
+    /// [`ClaimError::Interrupted`].
+    pub fn wait_free_cancellable(
+        &self,
+        target: &ResourceRef,
+        wait: Duration,
+        cancel: &WaitCancel,
+    ) -> Result<WaitOutcome, ClaimError> {
+        self.backend(target.namespace())?
+            .wait_free_cancellable(target, self.bounded(wait), cancel)
     }
 
     /// Every live claim in a namespace.

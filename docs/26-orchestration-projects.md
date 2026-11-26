@@ -4143,7 +4143,9 @@ over the same home runs its own loop and followers at once (HS2-KM9CTG). The ser
 every orchestration loop and thread it starts (HS2-H1CSSN). This covers its target, gate
 and scheduler loops, its start-up followers, settings watches, and the timers, capacity
 and claim follows that each runtime it builds starts. At shutdown it stops them and
-joins them within `ORCHESTRATION_SHUTDOWN_GRACE` (2 s). A request already in flight
+joins them within `ORCHESTRATION_SHUTDOWN_GRACE` (2 s). A claim follow waiting on this
+machine's local claim backend is cancelled by the stop token and joined at once
+(HS2-2W2PTX). A request already in flight
 ends within its own bounded wait and does nothing more. Every loop uses one backoff
 (`Backoff`: 1 s doubling to 60 s, reset by progress). A step that returns in under
 250 ms without learning anything counts as idle and backs off. A loop step that

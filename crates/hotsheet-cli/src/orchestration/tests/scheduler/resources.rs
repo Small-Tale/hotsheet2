@@ -392,6 +392,63 @@ fn hs2_2fg91x_a_release_wakes_the_follower_through_the_claim_service_wait() {
     release(&s.m.home, &held_again);
 }
 
+/// HS2-2W2PTX: a shutdown while the follower waits on a claim held on this machine's
+/// own backend ends that wait at once: the thread is joined within the grace, its
+/// waiter registration is gone, and it wakes no one. The claim itself is untouched.
+#[test]
+fn hs2_2w2ptx_a_shutdown_joins_the_wait_on_a_held_local_claim() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let owner = s.owner();
+    set_policy(&s.m, policy(true), &mut tx);
+    let grant = acquire(&s.m.home, VM);
+    s.ready_needing("Waits", &[VM], &mut tx);
+    let mut state = SchedulerFollowState::default();
+    let started =
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+    assert_eq!(started.trigger, Some("start"));
+    assert_eq!(s.m.runtime.claim_watches().len(), 1);
+    let registrations = || {
+        std::fs::read_dir(s.m.home.join("resource-claims/namespaces/vm/waiters"))
+            .map(Iterator::count)
+            .unwrap_or(0)
+    };
+    // The thread has parked on the backend's waiter.
+    let began = std::time::Instant::now();
+    while registrations() == 0 {
+        assert!(began.elapsed() < Duration::from_secs(20), "never parked");
+        std::thread::yield_now();
+    }
+    assert_eq!(s.m.runtime.tasks().running(), 1);
+
+    let grace = Duration::from_secs(10);
+    let began = std::time::Instant::now();
+    let report = s.m.runtime.shutdown(grace);
+    assert!(began.elapsed() < grace, "{:?}", began.elapsed());
+    assert_eq!(
+        report,
+        TasksShutdown {
+            joined: 1,
+            outstanding: 0
+        }
+    );
+    assert_eq!(registrations(), 0);
+    assert!(s.m.runtime.claim_watches().is_empty());
+    // Stopped, not freed: the claim still holds and no session started.
+    assert_eq!(live_claims(&s.m.home, "vm"), 1);
+    assert!(s.starts().is_empty());
+    // A second shutdown has nothing left to join.
+    assert_eq!(
+        s.m.runtime.shutdown(grace),
+        TasksShutdown {
+            joined: 0,
+            outstanding: 0
+        }
+    );
+    release(&s.m.home, &grant);
+}
+
 #[test]
 fn hs2_2fg91x_an_expiry_is_a_named_retry_time_and_a_renewal_moves_it() {
     tx!(tx);

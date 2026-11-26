@@ -48,6 +48,16 @@ impl Waiter {
         Ok(Some(Self { socket, path }))
     }
 
+    /// HS2-2W2PTX: a handle that wakes this waiter's park from another thread, as a
+    /// release would: one datagram to its own socket.
+    pub(crate) fn waker(&self) -> io::Result<impl Fn() + Send + Sync + 'static> {
+        let socket = self.socket.try_clone()?;
+        let address = self.socket.local_addr()?;
+        Ok(move || {
+            let _ = socket.send_to(&[1], address);
+        })
+    }
+
     /// Sleep until a wake-up arrives or `timeout` passes, whichever is first.
     pub(crate) fn park(&self, timeout: Duration) -> io::Result<()> {
         park_for(timeout, |left| self.wait_once(left))

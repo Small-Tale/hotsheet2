@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use crate::cancel::WaitCancel;
 use crate::codec::MetadataCodecs;
 use crate::error::ClaimError;
 use crate::model::{
@@ -50,6 +51,22 @@ pub trait ClaimBackend: Send + Sync {
     /// Block until the resource is free or `timeout` passes, without acquiring it.
     fn wait_free(&self, target: &ResourceRef, timeout: Duration)
     -> Result<WaitOutcome, ClaimError>;
+
+    /// HS2-2W2PTX: [`Self::wait_free`] that `cancel` can end early, with
+    /// [`ClaimError::Interrupted`]. The default only honours a cancel made before the
+    /// wait starts and otherwise waits like [`Self::wait_free`]; a backend that parks on
+    /// a signal of its own (the local backend) overrides it to wake at once.
+    fn wait_free_cancellable(
+        &self,
+        target: &ResourceRef,
+        timeout: Duration,
+        cancel: &WaitCancel,
+    ) -> Result<WaitOutcome, ClaimError> {
+        if cancel.is_cancelled() {
+            return Err(ClaimError::Interrupted);
+        }
+        self.wait_free(target, timeout)
+    }
 
     /// Check a fencing token a protected resource received. `Ok` only while it is the
     /// live claim's token; [`ClaimError::NotHolder`] once a later grant exists and

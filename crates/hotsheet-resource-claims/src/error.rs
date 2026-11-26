@@ -34,7 +34,8 @@ pub enum ClaimError {
     /// Stored state is unreadable or from an unknown schema; it is never overwritten.
     #[error("claim state is corrupt or from an unsupported schema")]
     Corrupt,
-    /// A stop signal ended a wait. The waiter's registration was removed.
+    /// A stop signal ended a wait: a process signal under an `InterruptGuard`, or a
+    /// `WaitCancel` (HS2-2W2PTX). The waiter's registration was removed.
     #[error("the wait was interrupted by a signal")]
     Interrupted,
     #[error("claim storage failed: {0}")]

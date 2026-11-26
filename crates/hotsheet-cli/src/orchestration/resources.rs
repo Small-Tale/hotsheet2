@@ -16,7 +16,9 @@ use std::collections::BTreeSet;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use hotsheet_resource_claims::{ClaimService, MAX_WAIT, Namespace, ResourceRef, WaitOutcome};
+use hotsheet_resource_claims::{
+    ClaimService, MAX_WAIT, Namespace, ResourceRef, WaitCancel, WaitOutcome,
+};
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     DeclarationState, HeldClaim, OfflinePolicy, ResourceNeed, ResourceState, Schedule,
@@ -82,6 +84,18 @@ pub trait ClaimSource: Send + Sync {
         timeout: Duration,
         project: Option<&Path>,
     ) -> bool;
+    /// HS2-2W2PTX: [`Self::wait_free`] that `cancel` ends early; false when it did.
+    /// The default honours only a cancel made before the wait starts.
+    fn wait_free_cancellable(
+        &self,
+        namespace: &str,
+        resource: &str,
+        timeout: Duration,
+        project: Option<&Path>,
+        cancel: &WaitCancel,
+    ) -> bool {
+        !cancel.is_cancelled() && self.wait_free(namespace, resource, timeout, project)
+    }
     /// HS2-AP8KPT: whether `project`'s own registry binds `namespace`, so its claims
     /// live in that project's backend rather than the machine's.
     fn project_binds(&self, _namespace: &str, _project: &Path) -> bool {
@@ -169,6 +183,22 @@ impl ClaimSource for MachineClaims {
     ) -> bool {
         ResourceRef::parse(&format!("{namespace}/{resource}"))
             .and_then(|target| self.service(project).wait_free(&target, timeout))
+            .is_ok_and(|outcome| outcome == WaitOutcome::Free)
+    }
+
+    fn wait_free_cancellable(
+        &self,
+        namespace: &str,
+        resource: &str,
+        timeout: Duration,
+        project: Option<&Path>,
+        cancel: &WaitCancel,
+    ) -> bool {
+        ResourceRef::parse(&format!("{namespace}/{resource}"))
+            .and_then(|target| {
+                self.service(project)
+                    .wait_free_cancellable(&target, timeout, cancel)
+            })
             .is_ok_and(|outcome| outcome == WaitOutcome::Free)
     }
 
@@ -418,14 +448,24 @@ impl OrchestrationRuntime {
                     // namespace was read in that project's backend; wait there too.
                     let project = self.local_claim_project(owner_id, &entry.namespace);
                     let tasks = self.tasks.clone();
-                    // HS2-H1CSSN: owned by the runtime's tasks. The backend's wait
-                    // cannot be interrupted (it may be a remote backend's own wait), so
-                    // a stopping owner lets it end on its own and wakes nothing then.
+                    // HS2-H1CSSN: owned by the runtime's tasks. HS2-2W2PTX: the stop
+                    // token cancels the backend's wait, so a shutdown joins this thread
+                    // (a backend that cannot be woken, HS2-P234BH, still ends on its own)
+                    // and a stopping owner wakes nothing.
                     self.tasks.spawn("orchestration-claim-wait", move || {
                         let (home, _, namespace, resource) = &thread_key;
+                        let cancel = WaitCancel::new();
+                        let fire = cancel.clone();
+                        let _hook = tasks.on_stop(move || fire.cancel());
                         // Free or not, the next pass reads the claim again and,
                         // when it is still held, waits again.
-                        claims.wait_free(namespace, resource, MAX_WAIT, project.as_deref());
+                        claims.wait_free_cancellable(
+                            namespace,
+                            resource,
+                            MAX_WAIT,
+                            project.as_deref(),
+                            &cancel,
+                        );
                         watches().remove(&thread_key);
                         if !tasks.is_stopping() {
                             Self::scheduler_wake_at(home);

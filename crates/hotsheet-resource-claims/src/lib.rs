@@ -9,6 +9,7 @@
 //! claim and nothing else.
 
 mod backend;
+mod cancel;
 mod clock;
 mod codec;
 mod config;
@@ -24,6 +25,7 @@ mod token;
 pub mod upstash;
 
 pub use backend::ClaimBackend;
+pub use cancel::{WaitCancel, WakerRegistration};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use codec::{
     ClaimKey, ENC_PREFIX, FileKeyProvider, HMAC_PREFIX, KeyProvider, MetadataCodec, MetadataCodecs,

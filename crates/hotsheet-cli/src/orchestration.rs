@@ -149,7 +149,7 @@ pub use sessions::{
     target_tool_setup, tool_ready,
 };
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
-pub use tasks::{RuntimeTasks, TasksShutdown};
+pub use tasks::{RuntimeTasks, StopHook, TasksShutdown};
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,
     TargetTicketRow, TargetTicketSearch,

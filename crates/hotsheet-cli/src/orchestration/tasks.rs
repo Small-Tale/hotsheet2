@@ -7,6 +7,7 @@
 //! and at shutdown stops them and joins them within a bound. The server owns one for its
 //! lifetime and hands it to every runtime it builds; a runtime built without one gets
 //! its own.
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -17,6 +18,27 @@ pub struct RuntimeTasks {
     state: Mutex<TaskState>,
     /// Woken when the owner starts stopping and whenever a thread ends.
     changed: Condvar,
+    /// HS2-2W2PTX: wakers of waits the condvar cannot reach (a claim backend's park),
+    /// run once when the owner starts stopping.
+    hooks: Mutex<Vec<(u64, StopHookFn)>>,
+    next_hook: AtomicU64,
+}
+
+type StopHookFn = Arc<dyn Fn() + Send + Sync>;
+
+/// A hook registered with [`RuntimeTasks::on_stop`]; dropping it removes the hook.
+#[must_use = "the hook is removed when this is dropped"]
+pub struct StopHook {
+    tasks: Arc<RuntimeTasks>,
+    id: u64,
+}
+
+impl Drop for StopHook {
+    fn drop(&mut self) {
+        self.tasks
+            .hooks()
+            .retain(|(registered, _)| *registered != self.id);
+    }
 }
 
 #[derive(Default)]
@@ -68,11 +90,37 @@ impl RuntimeTasks {
         self.lock().stopping
     }
 
-    /// Tell every thread to stop at its next check, and wake every [`Self::wait_stop`].
-    /// Idempotent; joins nothing.
+    fn hooks(&self) -> MutexGuard<'_, Vec<(u64, StopHookFn)>> {
+        self.hooks.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Tell every thread to stop at its next check, wake every [`Self::wait_stop`] and
+    /// run every [`Self::on_stop`] hook. Idempotent; joins nothing.
     pub fn stop(&self) {
         self.lock().stopping = true;
         self.changed.notify_all();
+        // Run outside the lock: a hook may take its own locks.
+        let hooks: Vec<StopHookFn> = self.hooks().iter().map(|(_, hook)| hook.clone()).collect();
+        for hook in hooks {
+            hook();
+        }
+    }
+
+    /// HS2-2W2PTX: run `hook` when the owner starts stopping, for a wait the stop token
+    /// cannot wake by itself (it fires that wait's own waker). Runs at once when the
+    /// owner is already stopping; removed when the returned [`StopHook`] drops.
+    pub fn on_stop(self: &Arc<Self>, hook: impl Fn() + Send + Sync + 'static) -> StopHook {
+        let id = self.next_hook.fetch_add(1, Ordering::SeqCst);
+        let hook: StopHookFn = Arc::new(hook);
+        self.hooks().push((id, hook.clone()));
+        // A stop that set the flag before the push did not see this hook.
+        if self.is_stopping() {
+            hook();
+        }
+        StopHook {
+            tasks: self.clone(),
+            id,
+        }
     }
 
     /// Wait up to `timeout`, ending early when the owner starts stopping. Returns
@@ -292,6 +340,32 @@ mod tests {
         assert_eq!(report.outstanding, 0);
         assert_eq!(report.joined, 1);
         assert_eq!(tasks.running(), 0);
+    }
+
+    #[test]
+    fn hs2_2w2ptx_stop_runs_each_live_hook_and_a_late_hook_runs_at_once() {
+        let tasks = Arc::new(RuntimeTasks::default());
+        let fired = Arc::new(AtomicUsize::new(0));
+        let counted = fired.clone();
+        let kept = tasks.on_stop(move || {
+            counted.fetch_add(1, Ordering::SeqCst);
+        });
+        let counted = fired.clone();
+        let removed = tasks.on_stop(move || {
+            counted.fetch_add(100, Ordering::SeqCst);
+        });
+        drop(removed);
+        assert_eq!(fired.load(Ordering::SeqCst), 0);
+        tasks.stop();
+        assert_eq!(fired.load(Ordering::SeqCst), 1);
+        // Registered once stopping: it runs at once.
+        let counted = fired.clone();
+        let late = tasks.on_stop(move || {
+            counted.fetch_add(10, Ordering::SeqCst);
+        });
+        assert_eq!(fired.load(Ordering::SeqCst), 11);
+        drop((kept, late));
+        assert!(tasks.hooks().is_empty());
     }
 
     #[test]

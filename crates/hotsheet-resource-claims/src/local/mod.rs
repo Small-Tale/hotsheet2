@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::backend::ClaimBackend;
+use crate::cancel::WaitCancel;
 use crate::clock::{Clock, SystemClock};
 use crate::codec::{FileKeyProvider, KeyProvider, MetadataCodecs};
 use crate::error::ClaimError;
@@ -156,6 +157,44 @@ impl LocalBackend {
             return Err(ClaimError::TokenInvalid);
         }
         Ok(record)
+    }
+
+    /// [`ClaimBackend::wait_free`], ended early by `cancel` (HS2-2W2PTX): its waker
+    /// wakes the park the way a release does, and the flag is read after the waker is
+    /// registered and after every wake-up, so no cancel is lost.
+    fn wait_free_until(
+        &self,
+        target: &ResourceRef,
+        timeout: Duration,
+        cancel: Option<&WaitCancel>,
+    ) -> Result<WaitOutcome, ClaimError> {
+        let cancelled = || cancel.is_some_and(WaitCancel::is_cancelled);
+        if cancelled() {
+            return Err(ClaimError::Interrupted);
+        }
+        let deadline = WaitDeadline::new(self.clock.as_ref(), timeout)?;
+        // Nothing to wait for: do not create a namespace or a waiter for a free resource.
+        if self.get(target)?.is_none() {
+            return Ok(WaitOutcome::Free);
+        }
+        let waiter = self.register_waiter(target.namespace(), deadline.backend_ms)?;
+        let _waker = match cancel {
+            Some(cancel) => Some(cancel.register(waiter.waker()?)),
+            None => None,
+        };
+        loop {
+            if cancelled() {
+                return Err(ClaimError::Interrupted);
+            }
+            let Some(holder) = self.get(target)? else {
+                return Ok(WaitOutcome::Free);
+            };
+            if !park_until(&waiter, self.clock.as_ref(), &holder, &deadline)? {
+                return Ok(WaitOutcome::TimedOut {
+                    holder: Box::new(holder),
+                });
+            }
+        }
     }
 
     fn register_waiter(
@@ -408,24 +447,17 @@ impl ClaimBackend for LocalBackend {
         target: &ResourceRef,
         timeout: Duration,
     ) -> Result<WaitOutcome, ClaimError> {
-        let deadline = WaitDeadline::new(self.clock.as_ref(), timeout)?;
-        // Nothing to wait for: do not create a namespace or a waiter for a free resource.
-        if self.get(target)?.is_none() {
-            return Ok(WaitOutcome::Free);
-        }
-        let waiter = self.register_waiter(target.namespace(), deadline.backend_ms)?;
-        loop {
-            let Some(holder) = self.get(target)? else {
-                return Ok(WaitOutcome::Free);
-            };
-            if !park_until(&waiter, self.clock.as_ref(), &holder, &deadline)? {
-                return Ok(WaitOutcome::TimedOut {
-                    holder: Box::new(holder),
-                });
-            }
-        }
+        self.wait_free_until(target, timeout, None)
     }
 
+    fn wait_free_cancellable(
+        &self,
+        target: &ResourceRef,
+        timeout: Duration,
+        cancel: &WaitCancel,
+    ) -> Result<WaitOutcome, ClaimError> {
+        self.wait_free_until(target, timeout, Some(cancel))
+    }
     fn verify_fencing(&self, target: &ResourceRef, fencing_token: u64) -> Result<(), ClaimError> {
         let state = self.read(target.namespace())?;
         let record = state.resources.get(target.resource());
