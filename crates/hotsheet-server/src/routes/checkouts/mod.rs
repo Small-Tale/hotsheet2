@@ -446,36 +446,45 @@ pub(crate) async fn add_checkout_source(
     host: HostTrust,
     Json(body): Json<CheckoutSourceBody>,
 ) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
-    let source = if body.provider == "git" {
+    let (source, newly_hosted) = if body.provider == "git" {
         // A Git source's locator is a store path on the host (HS2-S8R3PD).
         host.require()?;
         // Hosting a new store builds its index (a full ticket parse): keep it off the
-        // async request threads (HS2-2VBN8Y).
+        // async request threads (HS2-2VBN8Y). It is hosted as a project store, so the
+        // unhost sweep releases it once no open project references it (HS2-7AK1Q7); an
+        // already pinned store stays pinned.
         let hosting_state = state.clone();
         let locator = body.locator;
-        let store = tokio::task::spawn_blocking(move || {
+        let (store, added) = tokio::task::spawn_blocking(move || {
             let store = FsStore::open(&locator)
                 .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
-            hosting_state.host_store(store.clone())?;
-            Ok::<_, ApiError>(store)
+            let added = hosting_state.host_project_store(store.clone())?;
+            Ok::<_, ApiError>((store, added))
         })
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
         let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
         if source.connection_id != connection_id {
+            if added {
+                state.unhost_store(&source.connection_id);
+            }
             return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,
                 format!("git source id must be {}", source.connection_id),
             ));
         }
-        source
+        (source, added)
     } else {
-        hotsheet_ticketing::checkouts::TicketSource {
-            connection_id,
-            provider: body.provider,
-            locator: body.locator,
-        }
+        (
+            hotsheet_ticketing::checkouts::TicketSource {
+                connection_id,
+                provider: body.provider,
+                locator: body.locator,
+            },
+            false,
+        )
     };
+    let hosted_id = newly_hosted.then(|| source.connection_id.clone());
     let checkout = state
         .checkout_registry
         .add_registered_source(
@@ -484,7 +493,13 @@ pub(crate) async fn add_checkout_source(
             source,
             body.make_default,
         )
-        .map_err(checkout_source_error)?;
+        .map_err(|error| {
+            // A store this request hosted for a link that never happened is released now.
+            if let Some(id) = &hosted_id {
+                state.unhost_store(id);
+            }
+            checkout_source_error(error)
+        })?;
     retry_pending_guidance(&state, &checkout).await;
     Ok(Json(checkout))
 }

@@ -225,6 +225,8 @@ pub(crate) use watcher::RepositoryWatchHandle;
 pub use watcher::{WatchHandle, spawn_polling_watcher_for_test, spawn_watcher};
 
 #[cfg(test)]
+mod checkout_source_hosting_tests;
+#[cfg(test)]
 mod request_performance_tests;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

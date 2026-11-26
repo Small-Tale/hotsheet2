@@ -265,6 +265,9 @@ still pins all hosted stores for version skew.
 - **Pinning:** a change stream that names no checkout, from an older client, pins every store.
 - **Re-hosting:** a lease on a checkout, a checkout-scoped request, or a new `POST /projects/open`
   hosts the store again, so a tab that slept past the grace period keeps working.
+- **Linked sources:** a Git source added with `PUT /checkouts/{reference}/sources/{connection_id}`
+  is hosted as a project store, so the same sweep releases it (HS2-7AK1Q7). A store that is
+  already pinned stays pinned, and an add that is refused releases a store it newly hosted.
 
 ### Headless platform APIs
 
