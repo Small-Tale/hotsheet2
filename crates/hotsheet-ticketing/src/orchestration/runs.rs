@@ -44,9 +44,17 @@ impl RunState {
         Self::Intervened,
     ];
 
-    /// A run that still stands for work in progress on its target ticket.
+    /// A run whose worker still works its target ticket (or is about to).
     pub fn is_active(self) -> bool {
         matches!(self, Self::Requested | Self::Queued | Self::Dispatched)
+    }
+
+    /// HS2-0P90V8: a run that still owns its target ticket: every unfinished run,
+    /// including an `intervened` one whose worker let the ticket go (in review,
+    /// returned for corrections, or taken over). No second run may start on that
+    /// ticket until a person corrects or cancels the run or the ticket finishes it.
+    pub fn holds_target(self) -> bool {
+        !self.is_terminal()
     }
 
     pub fn is_terminal(self) -> bool {
@@ -436,7 +444,8 @@ impl RunRegistry {
             .runs
             .into_iter()
             .filter(|run| run.owner_checkout_id == owner_checkout_id)
-            .filter(|run| !active_only || run.state.is_active())
+            // `--active` leaves out finished runs only (HS2-0P90V8).
+            .filter(|run| !active_only || run.state.holds_target())
             .collect())
     }
 
@@ -545,15 +554,23 @@ impl RunRegistry {
                 Err(OrchestrationError::Conflict)
             };
         }
+        // HS2-0P90V8: an intervened run still owns its ticket, so it refuses a second
+        // run there; its worker let go, so it no longer keeps that worker busy.
+        if file
+            .runs
+            .iter()
+            .filter(owned)
+            .filter(|r| r.state.holds_target())
+            .any(|other| sites.same_ticket(&other.target, &run.target))
+        {
+            return Err(OrchestrationError::Run(RunError::TargetActive));
+        }
         let active = || {
             file.runs
                 .iter()
                 .filter(owned)
                 .filter(|r| r.state.is_active())
         };
-        if active().any(|other| sites.same_ticket(&other.target, &run.target)) {
-            return Err(OrchestrationError::Run(RunError::TargetActive));
-        }
         if run.mode == DispatchMode::Direct
             && active().any(|other| {
                 other.mode == DispatchMode::Direct

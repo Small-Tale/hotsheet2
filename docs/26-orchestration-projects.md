@@ -228,8 +228,8 @@ they name; comparisons go through the project key:
 - A ticket of the project has at most one plan step (§26.15). Planning it through
   another site changes that step and moves it to that site (a new revision), and
   `find_target` through either site finds it.
-- A ticket of the project has at most one active run, whichever site dispatched it
-  (`run_target_active`), and a worker at most one active direct run per project
+- A ticket of the project has at most one unfinished run, whichever site dispatched
+  it (`run_target_active`), and a worker at most one active direct run per project
   (`run_worker_busy`, §26.9).
 - Readiness joins a ticket by project: a prerequisite named through one site is an
   edge to the step planned through another, an active run or a confirmed read through
@@ -1115,9 +1115,15 @@ transition. A person's correction is the one exception to the edges (§26.14).
 - **Duplicates.** The same operation id returns the same run and never claims
   twice, including a run that already failed. The same id for a different ticket,
   mode or worker is a conflict.
-- **One active run per target ticket**, whatever the operation or worker
-  (`run_target_active`). A worker that already holds an active direct run on a target
-  takes no second ticket there (`run_worker_busy`). HS2-SHH7WW: for targets declared as
+- **One unfinished run per target ticket**, whatever the operation or worker
+  (`run_target_active`). HS2-0P90V8: an `intervened` run counts: its worker let the
+  ticket go (in review, returned for corrections, or taken over), but the run still
+  owns the ticket, so no second run starts there. Only a person's correction or
+  cancellation, the ticket's completion, or re-placing the same run (HS2-ESVYQH) moves
+  it on. `run list --active` leaves out finished runs only, so it lists an
+  `intervened` run too. A worker that already holds an active (`requested`, `queued`
+  or `dispatched`) direct run on a target takes no second ticket there
+  (`run_worker_busy`); a worker whose run is `intervened` has let go and is free. HS2-SHH7WW: for targets declared as
   sites of one project both hold per project, whichever site the ticket is reached
   through (§26.2).
 - **Authority.** Dispatch passes the gate as `work_start` with the operation id, so
