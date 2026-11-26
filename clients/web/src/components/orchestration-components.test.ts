@@ -730,6 +730,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       updatePlan: () => calls.push('update plan'),
       cancelPlanUpdate: () => calls.push('cancel update'),
       answerQuestion: () => calls.push('answer'),
+      showPlanner: () => calls.push('planner'),
       chooseProjects: () => calls.push('choose'),
       runControl: (control: string, state?: string) => calls.push(`run ${control} ${state ?? ''}`),
       showRequest: (id: string) => calls.push(`request ${id}`),
@@ -764,6 +765,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'update-orchestration-plan', target({}));
     run('click', 'cancel-orchestration-plan-update', target({}));
     run('click', 'answer-orchestration-question', target({}));
+    run('click', 'show-orchestration-planner', target({}));
     run('click', 'choose-orchestration-projects', target({}));
     run('click', 'orchestration-run-control', target({ control: 'correct', runState: 'failed' }));
     run('click', 'show-orchestration-request', target({ requestId: 'request-6' }));
@@ -791,6 +793,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'update plan',
       'cancel update',
       'answer',
+      'planner',
       'choose',
       'run correct failed',
       'request request-6',
@@ -860,6 +863,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       updatePlan: noop,
       cancelPlanUpdate: noop,
       answerQuestion: noop,
+      showPlanner: noop,
       chooseProjects: noop,
       runControl: noop,
       showRequest: noop,
@@ -941,5 +945,35 @@ describe('the overview’s progress for a project with no work, or an unread sum
     );
     expect(unread).toContain('Unknown (the summary could not be read)');
     expect(unread).toContain('cost unknown (could not be read)');
+  });
+});
+
+describe('Show Planner while the planner waits in its terminal (HS2-FA8G9J)', () => {
+  const header = (extra: Record<string, unknown>) =>
+    String(OrchestrationToolbar({ timeline: demoTimeline('no_plan'), clock: demoClock, ...extra }));
+  const empty = (extra: Record<string, unknown>) =>
+    String(OrchestrationTimelineView({ timeline: demoTimeline('no_plan'), clock: demoClock, ...extra }));
+
+  it('offers Show Planner beside the busy header button and as the empty state action', () => {
+    const waiting = header({ planning: 'waiting', showPlanner: true });
+    expect(waiting).toContain('data-action="show-orchestration-planner"');
+    expect(waiting).toContain('Show Planner');
+    expect(waiting).toContain('data-planner-state="Planner Waiting"');
+    const area = empty({ planning: 'waiting', showPlanner: true });
+    expect(area).toContain('data-action="show-orchestration-planner"');
+    expect(area).not.toContain('data-planner-state');
+  });
+
+  it('offers nothing while the planner works, or when its tab is unknown', () => {
+    for (const extra of [
+      { planning: 'planning', showPlanner: true },
+      { planning: 'waiting', showPlanner: false },
+      { planning: undefined, showPlanner: true },
+    ]) {
+      expect(header(extra)).not.toContain('show-orchestration-planner');
+      expect(empty(extra)).not.toContain('show-orchestration-planner');
+    }
+    // Waiting with the tab unknown keeps the busy button in the empty state.
+    expect(empty({ planning: 'waiting' })).toContain('data-planner-state="Planner Waiting"');
   });
 });

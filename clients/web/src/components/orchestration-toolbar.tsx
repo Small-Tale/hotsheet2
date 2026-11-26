@@ -5,7 +5,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Settings, Sparkles, X } from 'lucide';
+import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Settings, Sparkles, SquareTerminal, X } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
@@ -42,6 +42,8 @@ export interface OrchestrationToolbarProps {
    */
   planning?: string;
   clock?: ClockFormat;
+  /** HS2-FA8G9J: the planner waits in its terminal and its tab is known, so Show Planner opens it. */
+  showPlanner?: boolean;
 }
 
 /** What the header adds for a planning session. */
@@ -73,6 +75,7 @@ export function OrchestrationToolbar({
   busy = false,
   planning,
   clock = clockTime,
+  showPlanner = false,
 }: OrchestrationToolbarProps) {
   const goal = defaultGoal && timeline.phase !== 'no_projects' ? ' · Working through all open tickets' : '';
   const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
@@ -103,6 +106,7 @@ export function OrchestrationToolbar({
         Answer Question
       </Button>
     ) : undefined;
+  const planner = showPlanner && planning === 'waiting' ? <ShowPlannerButton emphasis="secondary" /> : undefined;
   const replan =
     timeline.phase === 'proposed' || timeline.phase === 'running' || timeline.phase === 'paused' ? (
       updating ? (
@@ -258,11 +262,30 @@ export function OrchestrationToolbar({
         trailing={
           <>
             {answer}
+            {planner}
             {replan}
             {action}
           </>
         }
       />
     </List>
+  );
+}
+
+/**
+ * HS2-FA8G9J: opens the drawer on the planning session's terminal tab, where it waits on its tool's first-run
+ * question, as Show Request opens a permission request.
+ */
+function ShowPlannerButton({ emphasis }: { emphasis: 'primary' | 'secondary' }) {
+  return (
+    <Button
+      emphasis={emphasis}
+      shape="pill"
+      action={ORCHESTRATION_ACTIONS.showOrchestrationPlanner.value}
+      title="Open the planning session’s terminal tab, where it waits for your answer"
+      icon={<LucideIcon size="s" icon={SquareTerminal} name="square-terminal" />}
+    >
+      Show Planner
+    </Button>
   );
 }

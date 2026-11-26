@@ -188,6 +188,7 @@ export function OrchestrationTimelineViewDemo() {
         collapsedGroups={orchestrationDemoSettings.collapsed.value}
         propose={propose()}
         planning={orchestrationDemoSettings.planning.value}
+        showPlanner={orchestrationDemoSettings.planning.value === 'waiting'}
         busy={orchestrationDemoSettings.busy.value}
         defaultGoal={orchestrationDemoSettings.defaultGoal.value}
         clock={demoClock}
@@ -263,6 +264,7 @@ export function OrchestrationToolbarDemo() {
             defaultGoal={orchestrationDemoSettings.defaultGoal.value}
             busy={orchestrationDemoSettings.busy.value}
             planning={orchestrationDemoSettings.planning.value || undefined}
+            showPlanner={orchestrationDemoSettings.planning.value === 'waiting'}
             clock={demoClock}
           />
         </CatalogExample>
@@ -474,6 +476,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
         settings.planning.value = '';
       },
       answerQuestion: () => undefined,
+      showPlanner: () => undefined,
       chooseProjects: () => undefined,
       runControl: () => undefined,
       showRequest: () => undefined,

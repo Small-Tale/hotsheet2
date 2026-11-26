@@ -109,6 +109,20 @@ export function planningPhase(view: Record<string, unknown> | undefined): string
   return view?.replannable === true ? 'replannable' : state;
 }
 
+/** HS2-FA8G9J: where the planning session's terminal runs: its checkout (the drawer's tab) and terminal id. */
+export interface PlannerTerminal {
+  checkout_id: string;
+  session_id: string;
+}
+
+/** HS2-FA8G9J: the planner's terminal from `plan show` (`session.session`), when it names one. */
+export function plannerTerminalOf(view: Record<string, unknown> | undefined): PlannerTerminal | undefined {
+  const hosted = (view?.session as Record<string, unknown> | undefined)?.session as Record<string, unknown> | undefined;
+  return typeof hosted?.checkout_id === 'string' && typeof hosted.session_id === 'string'
+    ? { checkout_id: hosted.checkout_id, session_id: hosted.session_id }
+    : undefined;
+}
+
 /**
  * HS2-YSRT6Y: whether `plan show` says no explicit goal ticket is open, so planning works through all open
  * tickets of the orchestrated projects.
@@ -259,6 +273,8 @@ export interface OrchestrationViewDependencies {
   /** This browser's person, named in run controls and policy changes (they are a person's acts). */
   readonly personId: () => string;
   readonly createClient?: (project: Project) => Api;
+  /** HS2-FA8G9J: show an open project's terminal in its drawer; false when no tab of this window holds it. */
+  readonly showTerminal?: (projectId: string, terminalId: string) => boolean;
   /**
    * HS2-W27N1D seam: whether a project's Project Type is Orchestration, when the settings surface
    * knows (`orchestrationProject(id)`, refreshed on `orchestration_changed`). `undefined` falls back
@@ -405,6 +421,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   /** HS2-YSRT6Y: no explicit goal is open, so planning works through all open tickets. */
   const defaultGoal = signal(false);
   const planning = signal<string | undefined>(undefined);
+  /** HS2-FA8G9J: the planning session's terminal, from `plan show`. */
+  const plannerTerminal = signal<PlannerTerminal | undefined>(undefined);
   const disposers: Array<() => void> = [];
   let streamKey = '',
     streamStop: (() => void) | undefined,
@@ -520,6 +538,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         planHealth.value = undefined;
         loading.value = Boolean(key);
         planning.value = undefined;
+        plannerTerminal.value = undefined;
       });
       if (!key || !current) return;
       const reader = createRemoteLabelReader({
@@ -658,11 +677,15 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       if (run === generation)
         batch(() => {
           planning.value = planningPhase(view);
+          plannerTerminal.value = plannerTerminalOf(view);
           question.value = planningQuestion(view);
           defaultGoal.value = planningDefaultGoal(view);
         });
     } catch {
-      if (run === generation) planning.value = undefined;
+      if (run === generation) {
+        planning.value = undefined;
+        plannerTerminal.value = undefined;
+      }
     }
   }
 
@@ -1176,6 +1199,17 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   }
 
   /** HS2-N5BDE4: open the goal ticket where the planner asked its question, to answer it there. */
+  /** HS2-FA8G9J: open the drawer on the planner's terminal tab, or say this window does not hold it. */
+  function showPlanner() {
+    const current = dependencies.project(),
+      terminal = plannerTerminal.value;
+    if (!current || !terminal) return;
+    const shown =
+      dependencies.showTerminal?.(terminal.checkout_id, terminal.session_id) === true ||
+      (terminal.checkout_id !== current.id && dependencies.showTerminal?.(current.id, terminal.session_id) === true);
+    if (!shown) dependencies.showToast('The planning session’s terminal is not open in this window.');
+  }
+
   async function answerQuestion() {
     const current = dependencies.project(),
       asked = question.value;
@@ -1235,6 +1269,9 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     question,
     defaultGoal,
     answerQuestion,
+    showPlanner,
+    /** HS2-FA8G9J: the planner waits in its terminal and its tab is known, so Show Planner applies. */
+    plannerShowable: () => planning.value === 'waiting' && plannerTerminal.value !== undefined,
     /** HS2-5RYXNN: a session an orchestrator started changed; the open project's planner is read again. */
     sessionsChanged: (projectId: string) => {
       const current = dependencies.project();

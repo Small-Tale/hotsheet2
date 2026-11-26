@@ -5543,7 +5543,10 @@ hosted session, and how its prompt was delivered. `show` adds the plan's step co
 and `placement_automatic`, so a view can say the plan is a dry run. The planner's
 hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestration
 view's header reads `Planner waiting in its terminal`, and Propose Plan
-says the planning session waits for an answer in its terminal tab (HS2-5RYXNN).
+says the planning session waits for an answer in its terminal tab (HS2-5RYXNN). Beside it,
+and as the No Plan Yet empty state's action, **Show Planner** opens the drawer on that tab
+(the hosted session's `checkout_id` and terminal `session_id`), as Show Request opens a
+permission request; a window that does not hold the tab says so in a toast (HS2-FA8G9J).
 
 **Propose Plan feedback (HS2-2Z4M6M, HS2-8Z9VHH).** The press never goes silent. While
 it is on its way the button becomes a busy `Starting Planner`; while the planner works

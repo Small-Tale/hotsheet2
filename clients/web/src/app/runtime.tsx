@@ -3876,6 +3876,13 @@ export async function startHotSheetWebClient() {
     },
     persistWorkspacePreferences,
     personId: () => orchestrationPersonId(localStorage),
+    // HS2-FA8G9J: Show Planner opens the planning session's tab as Settings › Orchestration's Show does.
+    showTerminal: (projectId, terminalId) => {
+      const key = `${projectId}:${terminalId}`;
+      if (!terminalSession(key)) return false;
+      openTerminalInProject(key);
+      return true;
+    },
     // HS2-HCW7MD: Propose Plan runs the planner in the tool the person chose to drive with here; with none
     // chosen, Auto (HS2-N3HWP9): the project's default tool, else the first installed one.
     planner: createServerPlanner({
@@ -6768,6 +6775,7 @@ export async function startHotSheetWebClient() {
       propose: orchestrationView.proposeAvailability(),
       planning: orchestrationView.planning.value,
       defaultGoal: orchestrationView.defaultGoal.value,
+      showPlanner: orchestrationView.plannerShowable(),
     }),
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
@@ -6856,6 +6864,7 @@ export async function startHotSheetWebClient() {
             defaultGoal={orchestrationView.defaultGoal.value}
             busy={orchestrationView.busy.value}
             planning={orchestrationView.planning.value}
+            showPlanner={orchestrationView.plannerShowable()}
           />
         ) : undefined;
       },
@@ -7345,6 +7354,9 @@ export async function startHotSheetWebClient() {
       updatePlan: () => void orchestrationView.updatePlan(),
       cancelPlanUpdate: () => void orchestrationView.cancelPlanUpdate(),
       answerQuestion: () => void orchestrationView.answerQuestion(),
+      showPlanner: () => {
+        orchestrationView.showPlanner();
+      },
       chooseProjects: () => {
         orchestrationView.chooseProjects();
       },

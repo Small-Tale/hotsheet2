@@ -27,6 +27,8 @@ export interface OrchestrationTimelineBindings {
   readonly cancelPlanUpdate: () => void;
   /** HS2-N5BDE4: Answer Question opens the goal ticket the planner asked on. */
   readonly answerQuestion: () => void;
+  /** HS2-FA8G9J: open the planning session's terminal tab. */
+  readonly showPlanner: () => void;
   readonly chooseProjects: () => void;
   /** `pause`, `resume`, `handoff`, `correct` (with the state to record) or `cancel`. */
   readonly runControl: (control: string, state?: string) => void;
@@ -171,6 +173,11 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
   lifetime.add(
     delegate(root, 'click', ORCHESTRATION_ACTIONS.answerOrchestrationQuestion.selector, () => {
       bindings.answerQuestion();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.showOrchestrationPlanner.selector, () => {
+      bindings.showPlanner();
     }),
   );
   lifetime.add(

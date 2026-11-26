@@ -13,6 +13,7 @@ import {
   createServerPlanner,
   orchestrationPersonId,
   parseOrchestrationDetails,
+  plannerTerminalOf,
   planningDefaultGoal,
   planningPhase,
   planningQuestion,
@@ -531,5 +532,102 @@ describe('Start Orchestration with and without a saved policy (HS2-D9KP86)', () 
     ]);
     expect(t.toasts).toEqual(['Orchestration started.']);
     t.controller.dispose();
+  });
+});
+
+describe('Show Planner opens the planning session’s tab (HS2-FA8G9J)', () => {
+  it('reads the planner’s terminal from plan show', () => {
+    expect(plannerTerminalOf({ session: { session: { checkout_id: 'orch', session_id: 't-1' } } })).toEqual({
+      checkout_id: 'orch',
+      session_id: 't-1',
+    });
+    expect(plannerTerminalOf({ session: { session: { checkout_id: 'orch' } } })).toBeUndefined();
+    expect(plannerTerminalOf({})).toBeUndefined();
+    expect(plannerTerminalOf(undefined)).toBeUndefined();
+  });
+
+  function setup(view: Record<string, unknown>, tabs: string[]) {
+    const project = { id: 'orch', name: 'orch', root: '/synthetic/orch', apiPath: '/api/orch' } as Project;
+    const toasts: string[] = [],
+      shown: string[] = [];
+    let planningView = view;
+    const known: Record<string, unknown> = {
+      orchestrationPlanning: () => Promise.resolve(planningView),
+      // The first read answers; the long poll after it waits, as an unchanged server does.
+      orchestrationTimeline: (_owner: string, after?: string) =>
+        after ? new Promise<never>(() => undefined) : Promise.resolve(demoTimeline('no_plan')),
+    };
+    const client = new Proxy(known, {
+      get: (target, key: string) => target[key] ?? (() => new Promise<never>(() => undefined)),
+    }) as unknown as Api;
+    const controller = createOrchestrationViewController({
+      project: () => project,
+      viewMode: signal<WorkspaceViewMode>('orchestration'),
+      fallbackViewMode: () => 'list',
+      orchestrationViewMode: signal<OrchestrationProjectViewMode>('orchestration'),
+      mobile: () => false,
+      confirm: () => Promise.resolve(false),
+      showToast: (message) => void toasts.push(message),
+      openTicket: () => Promise.resolve(),
+      showPermissionRequest: () => Promise.resolve(),
+      openOrchestrationSettings: () => undefined,
+      persistWorkspacePreferences: () => undefined,
+      planner: { propose: () => Promise.resolve({ ok: false, reason: 'synthetic' }) } as never,
+      personId: () => 'person-1',
+      createClient: () => client,
+      orchestrationProject: () => true,
+      showTerminal: (projectId, terminalId) => {
+        const key = `${projectId}:${terminalId}`;
+        if (!tabs.includes(key)) return false;
+        shown.push(key);
+        return true;
+      },
+    });
+    return {
+      controller,
+      toasts,
+      shown,
+      replan: (next: Record<string, unknown>) => {
+        planningView = next;
+        controller.sessionsChanged('orch');
+      },
+    };
+  }
+  const waiting = (checkout = 'orch') => ({
+    state: 'planning',
+    session: { tool_ready: false, session: { checkout_id: checkout, session_id: 'planner-1' } },
+  });
+
+  it('opens the drawer on the planner’s tab while it waits, and says when this window does not hold it', async () => {
+    const t = setup(waiting(), ['orch:planner-1']);
+    await vi.waitFor(() => {
+      expect(t.controller.plannerShowable()).toBe(true);
+    });
+    t.controller.showPlanner();
+    expect(t.shown).toEqual(['orch:planner-1']);
+    expect(t.toasts).toEqual([]);
+    // Ready again: nothing to show.
+    t.replan({ state: 'planning', session: { tool_ready: true, session: waiting().session.session } });
+    await vi.waitFor(() => {
+      expect(t.controller.plannerShowable()).toBe(false);
+    });
+    t.controller.dispose();
+  });
+
+  it('falls back to the open project’s tab, then says the terminal is not open here', async () => {
+    const t = setup(waiting('elsewhere'), ['orch:planner-1']);
+    await vi.waitFor(() => {
+      expect(t.controller.plannerShowable()).toBe(true);
+    });
+    t.controller.showPlanner();
+    expect(t.shown).toEqual(['orch:planner-1']);
+    const none = setup(waiting('elsewhere'), []);
+    await vi.waitFor(() => {
+      expect(none.controller.plannerShowable()).toBe(true);
+    });
+    none.controller.showPlanner();
+    expect(none.toasts).toEqual(['The planning session’s terminal is not open in this window.']);
+    t.controller.dispose();
+    none.controller.dispose();
   });
 });
