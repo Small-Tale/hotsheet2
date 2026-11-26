@@ -124,8 +124,34 @@ pub(crate) fn parse_actor(
         .transpose()
 }
 
+/// HS2-Z8X4XP: a ticket whose stored attachment filename is not one safe path
+/// component. The stored state, not the request, is wrong, so it is a 409 the client
+/// can explain, naming the headless repair.
+pub(crate) const UNSAFE_ATTACHMENT_FILENAME_CODE: &str = "unsafe_attachment_filename";
+
+fn unsafe_attachment_filename(e: &StoreError) -> bool {
+    matches!(
+        e,
+        StoreError::UnsafeAttachmentFilename { .. }
+            | StoreError::Parse {
+                source: hotsheet_model::ParseError::UnsafeAttachmentFilename { .. },
+                ..
+            }
+    )
+}
+
 impl From<StoreError> for ApiError {
     fn from(e: StoreError) -> Self {
+        if unsafe_attachment_filename(&e) {
+            return ApiError::new(
+                StatusCode::CONFLICT,
+                format!(
+                    "{e}. Run `hotsheet-cli doctor --repair-attachment-names` to rename it \
+                     to a safe name."
+                ),
+            )
+            .with_code(UNSAFE_ATTACHMENT_FILENAME_CODE);
+        }
         let status = match &e {
             StoreError::InvalidAnnotations(_)
             | StoreError::InvalidFeedbackResponse(_)
@@ -169,5 +195,45 @@ impl From<OpError> for ApiError {
                 ApiError::new(StatusCode::NOT_FOUND, other.to_string())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// HS2-Z8X4XP: an unsafe stored attachment filename is a typed 409 naming the
+    /// repair, whether the join refused it or the ticket parser did, never a 500.
+    #[test]
+    fn hs2_z8x4xp_unsafe_attachment_filename_is_a_typed_conflict() {
+        let id = hotsheet_model::Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        let reason = "attachment filename contains a path separator";
+        for error in [
+            StoreError::UnsafeAttachmentFilename {
+                attachment_id: id,
+                reason,
+            },
+            StoreError::Parse {
+                path: "tickets/AV/ticket.md".into(),
+                source: hotsheet_model::ParseError::UnsafeAttachmentFilename { id, reason },
+            },
+        ] {
+            let api = ApiError::from(error);
+            assert_eq!(api.status, StatusCode::CONFLICT);
+            assert_eq!(api.code, Some(UNSAFE_ATTACHMENT_FILENAME_CODE));
+            assert!(
+                api.message
+                    .contains("hotsheet-cli doctor --repair-attachment-names"),
+                "{}",
+                api.message
+            );
+        }
+        // Other parse failures keep their existing mapping.
+        let other = ApiError::from(StoreError::Parse {
+            path: "tickets/AV/ticket.md".into(),
+            source: hotsheet_model::ParseError::MissingFrontmatter,
+        });
+        assert_eq!(other.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(other.code, None);
     }
 }

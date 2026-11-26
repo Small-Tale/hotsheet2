@@ -3255,6 +3255,12 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `crates/hotsheet-model/src/ticket.rs # hs2_sy15vs_safe_attachment_component_accepts_only_one_normal_component`; `crates/hotsheet-model/src/format.rs # hs2_sy15vs_parse_rejects_ticket_with_unsafe_attachment_filename`; `crates/hotsheet-ticketing/src/store_attachment_containment_tests.rs` (read/remove/rename refusal with outside sentinels, corrupt listing, payload-path assertion, writer sanitizing, legacy discovery); `crates/hotsheet-ticketing/src/provider.rs # hs2_sy15vs_git_provider_refuses_unsafe_synced_attachment_filename`.
 - End to end: `crates/hotsheet-server/tests/http.rs # hs2_sy15vs_synced_unsafe_attachment_filename_cannot_escape_through_routes` rewrites a hosted ticket file and checks GET, original GET and DELETE leave the outside file unserved and intact.
 
+### Unsafe attachment-name repair (HS2-Z8X4XP)
+
+- Behavior: `hotsheet-cli doctor --repair-attachment-names` renames refused attachment entries and their nested or legacy payloads to the sanitized name. It refuses colliding names without writing, never touches a file for traversal, absolute or symlinked names, and leaves otherwise-corrupt tickets alone. A repeated run is a no-op. The corrupt listing names the fix, and the server answers `409 unsafe_attachment_filename`.
+- Unit: `crates/hotsheet-ticketing/src/store_attachment_name_repair_tests.rs` (nested and legacy repair with the payload kept, repeat no-op, interrupted repair, missing payload, entry, double-unsafe, target-file and legacy-twin collisions, traversal names with whole-tree snapshots, symlinked payload, other corruption); `crates/hotsheet-model/src/format.rs # hs2_sy15vs_parse_rejects_ticket_with_unsafe_attachment_filename` (the listing message and lenient parse); `crates/hotsheet-server/src/api_error.rs # hs2_z8x4xp_unsafe_attachment_filename_is_a_typed_conflict`.
+- End to end: `crates/hotsheet-cli/tests/cli.rs # hs2_z8x4xp_doctor_repairs_unsafe_attachment_names`; `crates/hotsheet-server/tests/http.rs # hs2_sy15vs_synced_unsafe_attachment_filename_cannot_escape_through_routes` asserts the typed 409 on GET, original GET and DELETE.
+
 ### Checkout identity for remembered permissions (HS2-G1SG1P)
 
 - Behavior: Registered checkout ids, independent of ticket sources, select separate encrypted rule vaults across terminal, CLI, and driven launches. Unregistered launches have no durable rule location. Legacy store rules remain in their original namespace.

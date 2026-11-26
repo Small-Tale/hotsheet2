@@ -11479,11 +11479,21 @@ async fn hs2_sy15vs_synced_unsafe_attachment_filename_cannot_escape_through_rout
             .oneshot(authed("GET", &path, None))
             .await
             .unwrap();
-        assert_ne!(response.status(), StatusCode::OK, "{path}");
+        // HS2-Z8X4XP: a typed 409 naming the repair, not the catch-all 500.
+        assert_eq!(response.status(), StatusCode::CONFLICT, "{path}");
         let body = response.into_body().collect().await.unwrap().to_bytes();
         assert!(
             !body.windows(14).any(|window| window == b"outside secret"),
             "{path} served the outside file"
+        );
+        let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(error["code"], "unsafe_attachment_filename", "{path}");
+        assert!(
+            error["error"]
+                .as_str()
+                .unwrap()
+                .contains("hotsheet-cli doctor --repair-attachment-names"),
+            "{error}"
         );
     }
     let deleted = app
@@ -11491,7 +11501,7 @@ async fn hs2_sy15vs_synced_unsafe_attachment_filename_cannot_escape_through_rout
         .oneshot(authed("DELETE", &url, None))
         .await
         .unwrap();
-    assert!(!deleted.status().is_success());
+    assert_eq!(deleted.status(), StatusCode::CONFLICT);
     assert_eq!(std::fs::read(&outside).unwrap(), b"outside secret");
 }
 

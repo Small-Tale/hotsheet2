@@ -8022,6 +8022,72 @@ fn doctor_lists_corrupt_tickets_without_aborting_on_the_first() {
         .stdout(predicate::str::contains("HS-BROKEN"));
 }
 
+/// HS2-Z8X4XP: a ticket whose stored attachment name HS2-SY15VS now refuses (an older
+/// Unix upload kept a backslash) is listed as corrupt with the fix named, and
+/// `doctor --repair-attachment-names` renames the entry and its payload, idempotently.
+/// Synthetic ticket content only.
+#[test]
+fn hs2_z8x4xp_doctor_repairs_unsafe_attachment_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    let attachment = "01ARZ3NDEKTSV4RRFFQ69G5FB0";
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let ticket_path = store.ticket_path(&hotsheet_model::Ulid::from_string(id).unwrap());
+    std::fs::create_dir_all(ticket_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &ticket_path,
+        format!(
+            "---\nid: {id}\nslug: HS-ATTACH\ntitle: attach\ncategory: bug\n\
+             priority: default\nstatus: not_started\ncreated_at: 2026-09-01T00:00:00Z\n\
+             updated_at: 2026-09-01T00:00:00Z\nschema: 1\nattachments:\n- id: {attachment}\n  \
+             filename: 'shots\\a.png'\n  created_at: 2026-09-01T00:00:00Z\n---\n"
+        ),
+    )
+    .unwrap();
+    let payload_dir = p.join("attachments").join(id).join(attachment);
+    std::fs::create_dir_all(&payload_dir).unwrap();
+    std::fs::write(payload_dir.join("shots\\a.png"), b"synthetic payload").unwrap();
+
+    hs(p)
+        .arg("doctor")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Corrupt: 1"))
+        .stdout(predicate::str::contains(
+            "hotsheet-cli doctor --repair-attachment-names",
+        ));
+
+    hs(p)
+        .args(["doctor", "--repair-attachment-names"])
+        .assert()
+        .stdout(predicate::str::contains(
+            "Repaired attachment names in HS-ATTACH",
+        ))
+        .stdout(predicate::str::contains("-> 'a.png' (payload moved)"))
+        .stdout(predicate::str::contains("Corrupt:").not());
+    assert_eq!(
+        std::fs::read(payload_dir.join("a.png")).unwrap(),
+        b"synthetic payload"
+    );
+    assert!(!payload_dir.join("shots\\a.png").exists());
+    hs(p)
+        .args(["show", "HS-ATTACH"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("filename: a.png"));
+
+    let before = std::fs::read(&ticket_path).unwrap();
+    hs(p)
+        .args(["doctor", "--repair-attachment-names"])
+        .assert()
+        .stdout(predicate::str::contains(
+            "Attachment names: nothing to repair",
+        ));
+    assert_eq!(std::fs::read(&ticket_path).unwrap(), before);
+}
+
 #[test]
 fn claim_next_release_and_renew() {
     let dir = tempfile::tempdir().unwrap();
