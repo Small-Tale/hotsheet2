@@ -2632,8 +2632,17 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   the state they need, or on the other requests settling with the `/ws/poll` and
   `/__hotsheet/change-mux/poll` long polls excluded (HS2-V94A8M). Origin-scoped Web Locks
   share those four slots across independent tabs and workers, including when SharedWorker
-  is unavailable. A closed tab releases its locks. Browsers without Web Locks use paced
-  zero-wait polls, keeping HTTP connections brief for ordinary API work (HS2-GDF4ZJ).
+  is unavailable. A closed tab releases its locks (HS2-GDF4ZJ). A context without Web
+  Locks (a plain-HTTP origin is not a secure context) or whose Web Locks implementation
+  refuses it keeps the same four-slot cap with leases over a `BroadcastChannel` and still
+  holds genuine long polls; it never sends fixed-interval requests (HS2-QS2P6B). A context
+  posts a tentative claim ranked by when it began waiting, confirms it after a short settle
+  window only if fewer than four confirmed or better-ranked claims are ahead of it (so the
+  oldest waiter wins), and releases it when the poll ends. A newly opened context queries
+  existing holds; leases expire 35 s after a hold starts, so a closed tab cannot keep a
+  slot. A context that has to wait announces it, and holders yield after the one-second
+  minimum turn. Waiting sends no requests: it wakes on a release, an expiry, or an abort.
+  Without `BroadcastChannel` either, a context cannot see the others and holds one slot.
   **Multiplexed WebSocket (HS2-QJR1K6).** Projects sharing a bridge use one browser
   WebSocket. Versioned subscribe/unsubscribe frames add and remove projects without closing
   the others; every acknowledgement and live event carries its project id and subscription

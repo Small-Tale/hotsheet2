@@ -6,11 +6,21 @@
  * learns whether any other poll is waiting for a slot, so it can hold the caller's whole
  * long-poll window when nobody waits and rotate on a short cap only under real contention.
  * A poll that has to wait announces it, so holders in other contexts yield their turn.
+ * HS2-QS2P6B: a context without Web Locks, or one whose Web Locks implementation refuses it,
+ * keeps the same cap with `BroadcastChannel` leases (`change-poll-slot-leases.ts`) and still
+ * long polls; it never falls back to fixed-interval requests.
  */
+import {
+  abortedError,
+  broadcastLeaseBus,
+  LEASE_HOLD_MAX_MS,
+  type SlotLeaseBus,
+  SlotLeases,
+} from './change-poll-slot-leases';
+
 const SLOT_COUNT = 4;
 const LOCK_PREFIX = 'hotsheet-direct-change-poll-';
 const CHANNEL_NAME = 'hotsheet-direct-change-poll';
-const FALLBACK_SPACING_MS = 250;
 
 /** What a slot holder may do with its connection. */
 export interface SlotGrant {
@@ -29,25 +39,12 @@ export interface SlotContentionChannel {
 export interface DirectPollSlotsOptions {
   /** `null` disables cross-context announcements; the default uses a `BroadcastChannel`. */
   channel?: SlotContentionChannel | null;
+  /** Lease bus for contexts without Web Locks; `null` means this context sees no other. */
+  leaseBus?: SlotLeaseBus | null;
+  now?: () => number;
 }
 
-const aborted = () => new DOMException('The change poll was aborted.', 'AbortError');
-
-function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.reject(aborted());
-  if (milliseconds <= 0) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, milliseconds);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(aborted());
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-}
+const aborted = abortedError;
 
 /** A lazily opened `BroadcastChannel`, or nothing where the context has none. */
 function broadcastContention(): SlotContentionChannel | undefined {
@@ -86,16 +83,26 @@ function broadcastContention(): SlotContentionChannel | undefined {
 
 export class DirectPollSlots {
   private nextSlot = 0;
-  private nextFallbackStart = 0;
   private readonly channel: SlotContentionChannel | undefined;
+  private readonly leases: SlotLeases;
 
   constructor(options: DirectPollSlotsOptions = {}) {
     this.channel = options.channel === null ? undefined : (options.channel ?? broadcastContention());
+    this.leases = new SlotLeases({
+      bus: options.leaseBus === undefined ? broadcastLeaseBus() : options.leaseBus,
+      capacity: SLOT_COUNT,
+      ...(options.now ? { now: options.now } : {}),
+    });
   }
 
-  /** Run `listener` whenever a poll in another context starts waiting for a slot. */
+  /** Run `listener` whenever a poll in another context (or a leased one here) waits for a slot. */
   onContention(listener: () => void): () => void {
-    return this.channel?.listen(listener) ?? (() => undefined);
+    const stopChannel = this.channel?.listen(listener);
+    const stopLeases = this.leases.onContention(listener);
+    return () => {
+      stopChannel?.();
+      stopLeases();
+    };
   }
 
   async run<T>(signal: AbortSignal, poll: (grant: SlotGrant) => Promise<T>): Promise<T> {
@@ -122,15 +129,12 @@ export class DirectPollSlots {
         return await locks.request(`${LOCK_PREFIX}${first}`, { mode: 'exclusive', signal }, hold);
       } catch (reason) {
         if (state.acquired || (reason instanceof Error && reason.name === 'AbortError')) throw reason;
-        // If a Web Locks implementation refuses this context, use short requests instead.
+        // If a Web Locks implementation refuses this context, coordinate with leases instead.
       }
     }
-    // With no cross-context lock, never hold a connection through a long poll.
-    // Pacing avoids a busy loop when an older bridge returns an empty page immediately.
-    const start = Math.max(Date.now(), this.nextFallbackStart);
-    this.nextFallbackStart = start + FALLBACK_SPACING_MS;
-    await wait(start - Date.now(), signal);
-    return poll({ contended: true, maxTimeoutMs: 0 });
+    // HS2-QS2P6B: without a cross-context lock, leases keep the origin-wide cap and the holder
+    // still long polls. The transport's own backoff paces an older bridge that answers early.
+    return this.leases.run(signal, (contended) => poll({ contended, maxTimeoutMs: LEASE_HOLD_MAX_MS }));
   }
 }
 

@@ -1436,8 +1436,7 @@ failure of the first setup run. Trusting the certificate in the user's store and
 repeated rebuild prompt count remain manual macOS checks.
 
 HS2-GDF4ZJ coordinates four direct-poll slots across independent tabs with Web
-Locks and paces zero-wait polls when locks are unavailable. `change-poll-slots.test.ts`
-covers two contexts, refill, fallback pacing, and abort; `change-poll-mux.spec.ts`
+Locks. `change-poll-slots.test.ts` covers two contexts, refill, and abort; `change-poll-mux.spec.ts`
 opens eight projects in two tabs, checks the shared limit and ordinary API
 responsiveness, then closes and reopens a tab to verify recovery and fairness.
 
@@ -1450,7 +1449,23 @@ mid-hold event delivered at once, failure rejection for transport backoff, and p
 on a cross-context announcement. `change-poll-slots.test.ts` covers free-slot-first grants,
 contention reporting and announcement, aborting a queued wait, and the lazy
 `BroadcastChannel`. `tests/change-poll-mux.spec.ts # idle projects on an older bridge hold
-one direct long poll each instead of polling every second` counts idle browser requests.
+one direct long poll each instead of polling every second` counts idle browser requests,
+with and without Web Locks.
+
+HS2-QS2P6B replaces the 250 ms zero-wait fallback for contexts without Web Locks with
+`BroadcastChannel` slot leases. `change-poll-slot-leases.test.ts` covers the shared
+four-slot cap across two contexts with refill, a lone uncontended holder, the oldest
+waiter winning a freed slot, a late context learning holds by query, reclaiming an
+expired lease and an unconfirmed claim, the wait announcement and contention, aborting
+a wait or a settling claim, one slot per context without any bus, and the lazy channel
+with malformed messages dropped. `change-poll-slots.test.ts` runs the leased path with
+Web Locks absent and refused. `change-poll-mux.test.ts # direct fallback without Web
+Locks (HS2-QS2P6B)` simulates a minute on fake timers: one long poll per project per
+25 s window (one and four projects, locks absent and refused, and without
+`BroadcastChannel`); two contexts with eight projects never exceed four open requests
+and every project gets turns; cursor replay after preemption; and bounded transport
+backoff through an outage, then a reconnect resync and a return to long polls. The browser test
+above removes `navigator.locks` with an init script.
 
 HS2-KB5PMF keeps mocked `/ws/poll` events cursor replayable for simultaneous
 readers. The dialog Stop browser test opens two independent polls alongside the

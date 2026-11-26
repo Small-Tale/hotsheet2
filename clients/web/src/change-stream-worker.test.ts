@@ -208,7 +208,7 @@ describe('change-stream worker protocol (HS2-SH9179)', () => {
 describe('change-stream worker runtime (HS2-SH9179)', () => {
   beforeEach(() => {
     // These tests exercise the worker transport with a supported Web Locks host.
-    // The no-lock, short-poll behavior is covered in change-poll-slots.test.ts.
+    // The no-lock leased path is covered in change-poll-slot-leases.test.ts (HS2-QS2P6B).
     vi.stubGlobal('navigator', { locks: { request: (_name: string, _options: unknown, run: () => unknown) => run() } });
   });
   afterEach(() => vi.unstubAllGlobals());
