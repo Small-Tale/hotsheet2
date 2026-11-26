@@ -26858,6 +26858,16 @@ components:
         finished_at_ms:
           type: integer
           minimum: 0
+        ci_gate:
+          description: HS2-89578K - the run's CI verdict (its standing CI gates rolled up); absent when no CI gate
+            stands for it.
+          enum:
+            - unknown
+            - awaiting_approval
+            - pending
+            - passed
+            - failed
+            - superseded
     OrchestrationPermissionWait:
       description: The request a step waits on. `permission` - an orchestrator permission request through the permission
         bridge, still pending (HS2-XHQ1EH); `action` is the one asked, such as `session_start` or `work_start`.

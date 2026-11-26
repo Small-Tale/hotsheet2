@@ -368,6 +368,24 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(gone).toContain('in review or back for corrections'); // HS2-ESVYQH
     expect(gone).toContain('not done until its ticket is completed');
     expect(gone).not.toContain('Intervened');
+    // HS2-89578K: done work whose CI failed: its badge and its Run section's Next say it needs repair.
+    const done = item('step-1');
+    const red = String(
+      OrchestrationInspector({
+        item: { ...done, run: { ...done.run!, ci_gate: 'failed' } },
+        timeline: demoTimeline('running'),
+      }),
+    );
+    expect(red).toContain('Done · CI failed');
+    expect(red).toContain('repair it as the Gates section says');
+    const green = String(
+      OrchestrationInspector({
+        item: { ...done, run: { ...done.run!, ci_gate: 'passed' } },
+        timeline: demoTimeline('running'),
+      }),
+    );
+    expect(green).not.toContain('CI failed');
+    expect(green).not.toContain('repair it');
   });
 
   it('offers Link Again on each unknown CI gate a link watches again, and nowhere else (HS2-A7YCB2)', () => {

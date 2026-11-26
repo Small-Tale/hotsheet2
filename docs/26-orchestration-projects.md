@@ -6176,6 +6176,13 @@ A read on the server also starts the target followers of §26.9.
   its Why It Is Not Running section says why. The inspector's Run section words the run
   state ("Dispatched to a worker", "No worker holds it") and adds a **Next** row with
   what a person can do, including when the scheduler starts a session again.
+  Finished work whose run's CI gate failed (its ticket was completed before the CI
+  went red, as an integrator that completes on push leaves it) stays in Done but reads
+  "CI failed" (warning) on its line, its inspector badge reads **Done · CI failed**
+  (warning) and the Run section's **Next** row says to repair it as the Gates section
+  says (HS2-89578K). The timeline item's `run.ci_gate` carries the run's CI verdict
+  (its standing CI gates rolled up as `gates` does; absent when no CI gate stands), so
+  a repair that is pending or passes reads plainly Done again.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and

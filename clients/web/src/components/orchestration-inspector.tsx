@@ -40,6 +40,7 @@ import {
 import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import {
   cardTime,
+  ciRepair,
   type ClockFormat,
   clockTime,
   itemSlug,
@@ -257,7 +258,8 @@ function RunSection({
   details?: OrchestrationInspectorDetails;
 }) {
   const run = item.run!,
-    attention = runNotice(item, clock);
+    // HS2-89578K: done work whose CI failed says what to do next, as unfinished work in trouble does.
+    attention = runNotice(item, clock) ?? ciRepair(item);
   return (
     <OrchestrationInspectorSection label="Run">
       <ValueTable label="Run" density="compact" stackBelow="narrow">

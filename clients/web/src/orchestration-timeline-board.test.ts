@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { TimelineItem } from './orchestration-timeline';
 import {
   cardTime,
+  ciRepair,
   dryRunPlan,
   findTimelineItem,
   machineLabel,
@@ -503,5 +504,50 @@ describe('HS2-2751D6 a card whose prerequisite’s CI failed says so', () => {
     const card = (reason: string) => timelineCard(withReason(reason), timeline, undefined, demoClock).orchestration;
     expect(card('gate_failed')?.state).toBe(`Waits on ${wait.slug} · CI failed`);
     expect(card('gate_pending')?.stateTone).toBe('neutral');
+  });
+});
+
+describe('HS2-89578K a Done card whose CI gate failed reads as needing repair', () => {
+  const done = item('step-1');
+  const withCi = (ci_gate?: string) => ({ ...done, run: { ...done.run!, ci_gate } });
+  const timeline = demoTimeline('running');
+  const card = (ci?: string) => timelineCard(withCi(ci), timeline, undefined, demoClock).orchestration;
+
+  it('says CI failed with a warning and a next step, and reads plainly done otherwise', () => {
+    expect(done.state).toBe('done');
+    expect(ciRepair(withCi('failed'))).toMatchObject({ label: 'CI failed', tone: 'warning' });
+    expect(ciRepair(withCi('failed'))?.next).toContain('repair it as the Gates section says');
+    expect(card('failed')).toMatchObject({ state: 'CI failed', stateTone: 'warning' });
+    expect(stateBadge(withCi('failed'))).toEqual({ label: 'Done · CI failed', tone: 'warning' });
+    expect(orchestrationLine(withCi('failed'), false).state).toBe('CI failed');
+    // Every other verdict, and no gate, keeps Done as it was.
+    for (const ci of [undefined, 'passed', 'pending', 'unknown', 'superseded']) {
+      expect(ciRepair(withCi(ci)), String(ci)).toBeUndefined();
+      expect(card(ci)?.state, String(ci)).toBeUndefined();
+      expect(stateBadge(withCi(ci)), String(ci)).toEqual({ label: 'Done', tone: 'neutral' });
+    }
+    // A finished run with no run record, and unfinished work with a failed gate, are not Done repairs.
+    expect(ciRepair({ ...done, run: undefined })).toBeUndefined();
+    const running = item('step-3');
+    expect(ciRepair({ ...running, run: { ...running.run!, ci_gate: 'failed' } })).toBeUndefined();
+  });
+
+  it('follows the verdict through red, repair and green, and red again', () => {
+    expect(['pending', 'failed', 'pending', 'passed', 'failed'].map((ci) => card(ci)?.state)).toEqual([
+      undefined,
+      'CI failed',
+      undefined,
+      undefined,
+      'CI failed',
+    ]);
+  });
+
+  it('is the same line in the target project’s own List', () => {
+    const line = targetLineOrchestration({
+      item: withCi('failed'),
+      proposed: false,
+      owner_label: 'Launch',
+    } as Parameters<typeof targetLineOrchestration>[0]);
+    expect(line).toMatchObject({ state: 'CI failed', stateTone: 'warning' });
   });
 });

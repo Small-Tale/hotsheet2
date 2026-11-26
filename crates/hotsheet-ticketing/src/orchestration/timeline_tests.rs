@@ -165,6 +165,8 @@ struct Fixture {
     steps: Vec<TimelineStep>,
     runs: Vec<Run>,
     step_runs: BTreeMap<String, BTreeSet<String>>,
+    /// HS2-89578K
+    run_ci: BTreeMap<String, GateState>,
     /// HS2-CQ0PNT
     sites: ProjectSites,
     sessions: Vec<OrchestratedSession>,
@@ -217,6 +219,7 @@ impl Fixture {
             steps: &self.steps,
             runs: &self.runs,
             step_runs: &self.step_runs,
+            run_ci: &self.run_ci,
             sites: &self.sites,
             sessions: &self.sessions,
             hints: &self.hints,
@@ -484,6 +487,58 @@ fn hs2_j89jc7_running_waves_put_done_oldest_and_later_newest() {
     let next = &view.waves[2].items[0];
     assert_eq!(next.waits_on.len(), 1);
     assert_eq!(next.waits_on[0].step_id.as_deref(), Some("step-2"));
+}
+
+#[test]
+fn hs2_89578k_an_item_carries_its_runs_ci_verdict_and_the_version_tracks_it() {
+    let mut fixture = Fixture::new(chain());
+    fixture.runs = vec![
+        run(1, 2, RunState::Dispatched, NOW - 30 * MINUTE, None),
+        run(
+            2,
+            12,
+            RunState::Completed,
+            NOW - 300 * MINUTE,
+            Some(NOW - 200 * MINUTE),
+        ),
+    ];
+    let done = |view: &Timeline| view.waves[0].items[0].run.as_ref().unwrap().ci_gate;
+    let working = |view: &Timeline| view.waves[1].items[0].run.as_ref().unwrap().ci_gate;
+    // No CI gate stands for either run: no verdict, and nothing serialized.
+    let none = fixture.view();
+    assert_eq!((done(&none), working(&none)), (None, None));
+    let json = serde_json::to_value(&none.waves[0].items[0]).unwrap();
+    assert!(json["run"].get("ci_gate").is_none());
+    // The done work's CI goes pending, fails, is repaired and passes; the item stays Done
+    // and its verdict and the version follow each change, back to the same version on reset.
+    let mut versions = vec![none.version.clone()];
+    for state in [
+        GateState::Pending,
+        GateState::Failed,
+        GateState::Pending,
+        GateState::Passed,
+    ] {
+        fixture.run_ci.insert(id(502), state);
+        let view = fixture.view();
+        assert_eq!(view.waves[0].kind, WaveKind::Done);
+        assert_eq!(view.waves[0].items[0].state, ItemState::Done);
+        assert_eq!((done(&view), working(&view)), (Some(state), None));
+        versions.push(view.version);
+    }
+    assert_ne!(versions[1], versions[2]);
+    assert_eq!(versions[1], versions[3]);
+    // Running work carries its own verdict; a verdict for an unknown run is ignored.
+    fixture.run_ci.insert(id(501), GateState::Failed);
+    fixture.run_ci.insert(id(599), GateState::Failed);
+    let both = fixture.view();
+    assert_eq!(
+        (done(&both), working(&both)),
+        (Some(GateState::Passed), Some(GateState::Failed))
+    );
+    let json = serde_json::to_value(&both.waves[1].items[0]).unwrap();
+    assert_eq!(json["run"]["ci_gate"], "failed");
+    fixture.run_ci.clear();
+    assert_eq!(fixture.view().version, versions[0]);
 }
 
 #[test]

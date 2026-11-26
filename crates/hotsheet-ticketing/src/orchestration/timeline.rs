@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::gates::GateState;
 use super::readiness::{Prerequisite, ReadinessLevel, StepReadiness, TicketKey, ticket_key};
 use super::{OrchestratedSession, ProjectSites, Run, RunState, RunTarget, RunTicket, SessionState};
 
@@ -264,6 +265,8 @@ pub struct TimelineInput<'a> {
     /// HS2-6GE7WM: the runs the scheduler dispatched for each step, by step id. Such a
     /// run may be on another site of the step's project than the one the step names.
     pub step_runs: &'a BTreeMap<String, BTreeSet<String>>,
+    /// HS2-89578K: each run's CI verdict, by run id, for the runs a CI gate stands for.
+    pub run_ci: &'a BTreeMap<String, GateState>,
     /// HS2-CQ0PNT: which targets are sites of one project, so a run, a label and a
     /// prerequisite are joined to a step through whichever site names the ticket, as
     /// readiness joins them. An empty grouping compares targets exactly.
@@ -312,6 +315,11 @@ pub struct TimelineRun {
     pub created_at_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finished_at_ms: Option<u64>,
+    /// HS2-89578K: the run's CI verdict (its standing CI gates rolled up); absent when
+    /// no CI gate stands for it. A completed ticket whose CI then failed is Done with
+    /// `failed` here, which its card shows as needing repair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ci_gate: Option<GateState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -732,6 +740,7 @@ fn item(
             last_confirmed_at_ms: run.observed.as_ref().map(|observed| observed.at_ms),
             created_at_ms: run.created_at_ms,
             finished_at_ms: finished_at(run),
+            ci_gate: input.run_ci.get(&run.run_id).copied(),
         }),
         permission: permission.cloned(),
         decision: (state == ItemState::WaitsForDecision)

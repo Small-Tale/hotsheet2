@@ -15,9 +15,10 @@ use hotsheet_model::{NoteKind, Ticket};
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
     BindingRegistry, DecisionJournal, DecisionKind, DecisionRecord, DecisionWait, DeclarationState,
-    MAX_AUDIT_PAGE, PermissionState, PermissionWait, PlacementHint, ReadinessLevel,
-    RunEventJournal, SessionRegistry, TargetDestination, TargetLocation, TicketKey, TicketLabel,
-    Timeline, TimelineInput, TimelinePolicy, TimelineStep, TimelineTarget, ticket_key, timeline,
+    Gate, GateFilter, GateState, MAX_AUDIT_PAGE, PermissionState, PermissionWait, PlacementHint,
+    ReadinessLevel, RunEventJournal, SessionRegistry, TargetDestination, TargetLocation, TicketKey,
+    TicketLabel, Timeline, TimelineInput, TimelinePolicy, TimelineStep, TimelineTarget, summarize,
+    ticket_key, timeline,
 };
 
 use super::scheduler::WAKE_DIRECTORY;
@@ -341,7 +342,25 @@ impl OrchestrationRuntime {
             .collect();
         // HS2-CQ0PNT: runs, labels and prerequisites join a step through any site.
         let sites = self.project_sites(owner_id)?;
+        // HS2-89578K: each run's CI verdict, so a Done card whose CI failed says so. An
+        // unreadable gate record shows no verdict rather than failing the timeline.
+        let mut by_run: BTreeMap<String, Vec<Gate>> = BTreeMap::new();
+        for gate in self
+            .gate_registry()
+            .list(owner_id, &GateFilter::default())
+            .unwrap_or_default()
+        {
+            by_run.entry(gate.run_id.clone()).or_default().push(gate);
+        }
+        let run_ci: BTreeMap<String, GateState> = by_run
+            .into_iter()
+            .filter_map(|(run_id, gates)| {
+                let summary = summarize(gates);
+                (summary.ci_reason.as_deref() != Some("no_gate")).then_some((run_id, summary.ci))
+            })
+            .collect();
         let input = TimelineInput {
+            run_ci: &run_ci,
             sites: &sites,
             owner_checkout_id: owner_id,
             now_ms,

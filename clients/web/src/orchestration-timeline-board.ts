@@ -158,6 +158,19 @@ export function schedulerHold(
   };
 }
 
+/**
+ * HS2-89578K: finished work whose run's CI gate failed (its ticket was completed before its CI went red): the
+ * card reads as needing repair, not as plainly done. Undefined for any other state or verdict.
+ */
+export function ciRepair(item: TimelineItem): { label: string; tone: SemanticTone; next: string } | undefined {
+  if (item.state !== 'done' || item.run?.ci_gate !== 'failed') return undefined;
+  return {
+    label: 'CI failed',
+    tone: 'warning',
+    next: 'Its ticket is completed, but its CI failed, so the work needs a fix: repair it as the Gates section says.',
+  };
+}
+
 /** HS2-9FS7YX: what keeps an unfinished run from plain work: its own condition first, then a scheduler hold. */
 export function runNotice(
   item: TimelineItem,
@@ -201,7 +214,8 @@ export function stateBadge(item: TimelineItem): { label: string; tone: SemanticT
     case 'waits_for_decision':
       return { label: 'Waits for your decision', tone: 'warning' };
     case 'done':
-      return { label: 'Done', tone: 'neutral' };
+      // HS2-89578K: done work whose CI failed needs repair.
+      return ciRepair(item) ? { label: 'Done · CI failed', tone: 'warning' } : { label: 'Done', tone: 'neutral' };
     default:
       return item.state satisfies never;
   }
@@ -262,7 +276,7 @@ export function orchestrationLine(
   proposed: boolean,
   clock: ClockFormat = clockTime,
 ): TicketRowOrchestration {
-  const words = runNotice(item, clock) ?? ledgerWords(item) ?? stateWords(item, proposed),
+  const words = runNotice(item, clock) ?? ciRepair(item) ?? ledgerWords(item) ?? stateWords(item, proposed),
     tool = toolLabel(item.tool);
   return {
     state: words?.label,

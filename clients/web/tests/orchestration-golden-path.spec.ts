@@ -417,8 +417,9 @@ async function orchestrateWeb(server: Awaited<ReturnType<typeof openTwoProjects>
  * hands its work off in Web's real coordination pool (HS2-6ES76F), so its card says no worker holds it and the
  * Integration section says a handoff waits and the integrator would start; the integrator pushes it and the
  * commit's CI gate goes red through the real gate follower and Job monitor against a loopback GitHub Actions
- * fake (HS2-8KV14Y), so the step that needs it says CI failed and the run's Gates say what to do; the fix's gate
- * passes and the ticket is completed, so the work is Done and the next step Ready. Only the planner's proposal,
+ * fake (HS2-8KV14Y), so the step that needs it says CI failed and the run's Gates say what to do; the ticket is
+ * completed before the repair, so the Done card says its CI failed (HS2-89578K); the fix's gate passes, so the work
+ * is plainly Done and the next step Ready. Only the planner's proposal,
  * the worker's and the integrator's actions and the CI provider are played by the test. Synthetic data only.
  */
 test('HS2-2751D6 a handoff waits on the integrator, its CI goes red and the fix goes green', async ({ page }) => {
@@ -512,6 +513,21 @@ test('HS2-2751D6 a handoff waits on the integrator, its CI goes red and the fix 
     await expect(secondLine).toHaveAttribute('data-tone', 'warning');
     await widths(page, 'ci-red', 'hs2-2751d6', gates);
 
+    // HS2-89578K: the integrator completes the ticket on push, before anyone repairs the red CI. The card is
+    // Done but says its CI failed, with a warning, and its Run section says what to do next.
+    const doneColumn = view.locator('[aria-label="Done Column"]');
+    await server.request(`/tickets/${first.id}`, 'PATCH', { status: 'completed' });
+    await sync();
+    await expect(doneColumn).toContainText(first.slug, { timeout: 30_000 });
+    await expect(firstLine).toHaveText('CI failed', { timeout: 30_000 });
+    await expect(firstLine).toHaveAttribute('data-tone', 'warning');
+    await expect(inspector).toContainText('Done · CI failed');
+    await expect(row(runSection, 'Next')).toHaveText(
+      'Its ticket is completed, but its CI failed, so the work needs a fix: repair it as the Gates section says.',
+    );
+    await expect(secondLine).toHaveText(`Waits on ${first.slug} · CI failed`);
+    await widths(page, 'done-ci-red', 'hs2-89578k', runSection);
+
     // 4. The fix is pushed and its gate linked: it replaces the failed one, passes, and the ticket is completed.
     const env = withoutGitRepositoryEnv(server.env);
     await execute('git', ['commit', '-q', '--allow-empty', '-m', 'Synthetic fix'], { cwd: server.webRoot, env });
@@ -525,12 +541,14 @@ test('HS2-2751D6 a handoff waits on the integrator, its CI goes red and the fix 
     await expect(row(gates, `CI · ${fix.slice(0, 7)}`)).toHaveText('Pending', { timeout: 30_000 });
     await expect(row(gates, `CI · ${handoff.commit.slice(0, 7)}`)).toHaveCount(0);
     await expect(secondLine).toHaveText(`Waits on ${first.slug}`, { timeout: 30_000 });
+    // The repair is on its way: the Done card no longer reads CI failed.
+    await expect(firstLine).toHaveCount(0);
+    await expect(inspector).not.toContainText('CI failed');
     provider.run(REPO, { id: 22, sha: fix, status: 'completed', conclusion: 'success' });
     await expect(row(gates, `CI · ${fix.slice(0, 7)}`)).toHaveText('Passed', { timeout: 60_000 });
     await expect(row(gates, 'What to do')).toHaveCount(0);
-    await server.request(`/tickets/${first.id}`, 'PATCH', { status: 'completed' });
-    await sync();
-    await expect(view.locator('[aria-label="Done Column"]')).toContainText(first.slug, { timeout: 30_000 });
+    await expect(doneColumn).toContainText(first.slug);
+    await expect(inspector).toContainText('Done');
     await expect(secondLine).toHaveText('Ready', { timeout: 30_000 });
     await widths(page, 'ci-green-done', 'hs2-2751d6', gates);
     // The test only read the provider.

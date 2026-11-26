@@ -42,6 +42,8 @@ export interface TimelineRun {
   last_confirmed_at_ms?: number;
   created_at_ms: number;
   finished_at_ms?: number;
+  /** HS2-89578K: the run's CI verdict (`passed`, `failed`, `pending`, …); absent when no CI gate stands for it. */
+  ci_gate?: string;
 }
 
 export interface TimelinePermission {

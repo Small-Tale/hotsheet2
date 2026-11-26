@@ -12,7 +12,7 @@ import { OrchestrationTimelineView } from '../components/orchestration-timeline-
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { TicketRow } from '../components/ticket-row';
 import { CI_WATCH_REASONS } from '../orchestration-run-checks';
-import type { TimelineItem, TimelinePhase } from '../orchestration-timeline';
+import type { OrchestrationTimeline, TimelineItem, TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
@@ -52,6 +52,8 @@ export const orchestrationDemoSettings = {
   docWait: signal('resource_held'),
   /** HS2-A7YCB2: API-12's CI gate: '' is pending; an unknown reason offers Link Again. */
   ciGate: signal(''),
+  /** HS2-89578K: the done API-11's CI verdict: '' is none linked; `failed` reads as needing repair. */
+  doneCi: signal(''),
   collapsed: signal<string[]>([]),
 };
 
@@ -120,9 +122,24 @@ function heldItem(item: TimelineItem, condition: string): TimelineItem {
   };
 }
 
+/** HS2-89578K: the done API-11's run with the chosen CI verdict. */
+function withDoneCi(timeline: OrchestrationTimeline): OrchestrationTimeline {
+  const ci = orchestrationDemoSettings.doneCi.value;
+  if (!ci) return timeline;
+  return {
+    ...timeline,
+    waves: timeline.waves.map((wave) => ({
+      ...wave,
+      items: wave.items.map((item) =>
+        item.step_id === 'step-1' && item.run ? { ...item, run: { ...item.run, ci_gate: ci } } : item,
+      ),
+    })),
+  };
+}
+
 /** HS2-FXY5QM: the running timeline with API-12's run in the chosen condition. */
 function runningTimeline(phase: TimelinePhase = 'running') {
-  const timeline = demoTimeline(phase),
+  const timeline = withDoneCi(demoTimeline(phase)),
     condition = orchestrationDemoSettings.runCondition.value;
   if (!condition) return timeline;
   if (condition === 'held' || condition === 'unjoined')
@@ -183,6 +200,12 @@ function demoCiGate() {
   };
 }
 
+const DONE_CI = [
+  { value: '', label: 'None Linked' },
+  { value: 'passed', label: 'Passed' },
+  { value: 'failed', label: 'Failed' },
+];
+
 const SELECTIONS = [
   { value: 'step-3', label: 'API-12 Running' },
   { value: 'step-5', label: 'DOC-7 Provisional' },
@@ -208,6 +231,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.integrator.value = 'keep';
   settings.docWait.value = 'resource_held';
   settings.ciGate.value = '';
+  settings.doneCi.value = '';
   settings.collapsed.value = [];
   if (root)
     syncSettingsControls(root, 'orchestration', {
@@ -218,6 +242,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
         integrator: settings.integrator.value,
         'doc-wait': settings.docWait.value,
         'ci-gate': settings.ciGate.value,
+        'done-ci': settings.doneCi.value,
         'run-condition': settings.runCondition.value,
       },
       checked: {
@@ -500,6 +525,7 @@ export function OrchestrationDemoSettings() {
       <Select name="doc-wait" label="DOC-9 Waits For" value={settings.docWait.value} choices={DOC_WAITS} />
       <Select name="ci-gate" label="API-12’s CI Gate" value={settings.ciGate.value} choices={CI_GATES} />
       <Select name="run-condition" label="API-12’s Run" value={settings.runCondition.value} choices={RUN_CONDITIONS} />
+      <Select name="done-ci" label="Done API-11’s CI" value={settings.doneCi.value} choices={DONE_CI} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />
@@ -527,6 +553,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'integrator') settings.integrator.value = control.value;
       if (name === 'doc-wait') settings.docWait.value = control.value;
       if (name === 'ci-gate') settings.ciGate.value = control.value;
+      if (name === 'done-ci') settings.doneCi.value = control.value;
       if (name === 'run-condition') settings.runCondition.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
