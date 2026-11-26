@@ -363,7 +363,10 @@ impl CommandManager {
                     Err(_) => {
                         await_readers(std::mem::take(&mut readers), OUTPUT_DRAIN_GRACE);
                         let changed = if let Some(r) = runs.lock_or_recover().get_mut(&run_id) {
-                            r.view.state = "failed".into();
+                            // HS2-PAG7HG: one terminal state; a cancel that won keeps it.
+                            if r.view.state == "running" {
+                                r.view.state = "failed".into();
+                            }
                             r.child = None;
                             Some(r.view.clone())
                         } else {
@@ -426,16 +429,28 @@ impl CommandManager {
         Ok(view)
     }
     /// Add a run to the newest end of the bounded history and announce it.
+    /// HS2-PAG7HG: the cap bounds finished history only. A running run is never evicted,
+    /// so it stays listed and cancellable however many runs start after it.
     fn remember(&self, run: LiveRun) {
         let view = run.view.clone();
-        self.runs.lock_or_recover().insert(view.id.clone(), run);
         {
+            // Lock order matches the list readers: `runs` before `order`.
+            let mut runs = self.runs.lock_or_recover();
             let mut order = self.order.lock_or_recover();
+            runs.insert(view.id.clone(), run);
             order.push_front(view.id.clone());
-            while order.len() > HISTORY_CAP {
-                if let Some(old) = order.pop_back() {
-                    self.runs.lock_or_recover().remove(&old);
+            let finished = |runs: &HashMap<String, LiveRun>, id: &String| {
+                runs.get(id).is_none_or(|run| run.view.state != "running")
+            };
+            let mut finished_count = order.iter().filter(|id| finished(&runs, id)).count();
+            while finished_count > HISTORY_CAP {
+                let Some(position) = order.iter().rposition(|id| finished(&runs, id)) else {
+                    break;
+                };
+                if let Some(old) = order.remove(position) {
+                    runs.remove(&old);
                 }
+                finished_count -= 1;
             }
         }
         if let Some(callback) = &self.on_change {
@@ -467,29 +482,85 @@ impl CommandManager {
             }
         })
     }
-    pub fn cancel(&self, id: &str) -> Result<CommandRun, String> {
+    pub fn cancel(&self, id: &str) -> Result<CommandRun, CancelError> {
         self.cancel_for("", id)
     }
-    pub fn cancel_for(&self, project: &str, id: &str) -> Result<CommandRun, String> {
+    /// Cancel a running run (HS2-PAG7HG). Only `running` moves to `cancelled`, exactly once:
+    /// a run that already settled (completed, failed or cancelled) returns that view without
+    /// a change event, a process that exited on its own is left for its waiter to settle,
+    /// and an unknown, evicted or other-project id is [`CancelError::NotFound`].
+    pub fn cancel_for(&self, project: &str, id: &str) -> Result<CommandRun, CancelError> {
         let child = {
             let runs = self.runs.lock_or_recover();
-            runs.get(id)
+            let run = runs
+                .get(id)
                 .filter(|run| run.view.project == project)
-                .and_then(|r| r.child.clone())
-                .ok_or_else(|| "run is not active".to_string())?
+                .ok_or(CancelError::NotFound)?;
+            match (&run.child, run.view.state == "running") {
+                (Some(child), true) => child.clone(),
+                // Settled, or exited and still draining output: nothing left to kill.
+                _ => return Ok(run.view.clone()),
+            }
         };
-        child.lock_or_recover().kill().map_err(|e| e.to_string())?;
-        let mut runs = self.runs.lock_or_recover();
-        let r = runs.get_mut(id).unwrap();
-        r.view.state = "cancelled".into();
-        let view = r.view.clone();
-        drop(runs);
+        {
+            // The waiter polls under this same lock, so an exit observed here wins the race
+            // and the waiter records it as `completed`.
+            let mut child = child.lock_or_recover();
+            match child.try_wait() {
+                Ok(Some(_)) => return self.view_for(project, id),
+                Ok(None) => child
+                    .kill()
+                    .map_err(|error| CancelError::Kill(error.to_string()))?,
+                Err(error) => return Err(CancelError::Kill(error.to_string())),
+            }
+        }
+        let view = {
+            let mut runs = self.runs.lock_or_recover();
+            let run = runs
+                .get_mut(id)
+                .filter(|run| run.view.project == project)
+                .ok_or(CancelError::NotFound)?;
+            if run.view.state != "running" {
+                // A concurrent cancel already settled it.
+                return Ok(run.view.clone());
+            }
+            run.view.state = "cancelled".into();
+            run.view.clone()
+        };
         if let Some(callback) = &self.on_change {
             callback(view.clone());
         }
         Ok(view)
     }
+    fn view_for(&self, project: &str, id: &str) -> Result<CommandRun, CancelError> {
+        self.runs
+            .lock_or_recover()
+            .get(id)
+            .filter(|run| run.view.project == project)
+            .map(|run| run.view.clone())
+            .ok_or(CancelError::NotFound)
+    }
 }
+
+/// Why a cancel request could not act (HS2-PAG7HG).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CancelError {
+    /// No run with this id in this project's history: unknown, evicted, or another project's.
+    NotFound,
+    /// The process could not be signalled.
+    Kill(String),
+}
+
+impl std::fmt::Display for CancelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound => f.write_str("unknown command run"),
+            Self::Kill(error) => write!(f, "could not cancel the run: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for CancelError {}
 
 fn execution(
     definition: &CommandDefinition,
@@ -830,8 +901,10 @@ mod tests {
         assert!(view.output.iter().any(|line| line.text == "early-line"));
         assert!(started.elapsed() >= OUTPUT_DRAIN_GRACE);
         assert!(started.elapsed() < std::time::Duration::from_secs(6));
-        // A drained run is no longer cancellable.
-        assert_eq!(manager.cancel(&run.id).unwrap_err(), "run is not active");
+        // HS2-PAG7HG: cancelling a drained run reports its settled state unchanged.
+        let settled = manager.cancel(&run.id).unwrap();
+        assert_eq!(settled.state, "completed");
+        assert_eq!(settled.exit_code, Some(0));
     }
 
     #[cfg(unix)]
@@ -868,11 +941,242 @@ mod tests {
         assert_eq!(manager.list_for("first").len(), 1);
         assert!(manager.list_for("second").is_empty());
         assert!(manager.get_for("second", &run.id, 0).is_none());
-        assert!(manager.cancel_for("second", &run.id).is_err());
+        assert_eq!(
+            manager.cancel_for("second", &run.id).unwrap_err(),
+            CancelError::NotFound
+        );
         assert_eq!(
             manager.cancel_for("first", &run.id).unwrap().state,
             "cancelled"
         );
+    }
+
+    /// Each published change, and whether the run's exit waiter published it. The waiter
+    /// is the only unnamed thread that publishes; tests and their helpers run on named ones.
+    #[cfg(unix)]
+    type Events = Arc<Mutex<Vec<(CommandRun, bool)>>>;
+
+    /// A manager over `/bin/sh` programs that records every change event it publishes.
+    #[cfg(unix)]
+    fn recording_manager(
+        root: &std::path::Path,
+        programs: &[(&str, &str)],
+    ) -> (CommandManager, Events) {
+        let mut definitions = defs();
+        definitions.extend(
+            programs
+                .iter()
+                .map(|(id, script)| shell_program(id, script)),
+        );
+        let events: Events = Default::default();
+        let sink = events.clone();
+        let manager = CommandManager::new(root.to_path_buf(), definitions).with_on_change(
+            Arc::new(move |run| {
+                let from_waiter = std::thread::current().name().is_none();
+                sink.lock_or_recover().push((run, from_waiter));
+            }),
+        );
+        (manager, events)
+    }
+
+    #[cfg(unix)]
+    fn named(name: &str) -> std::thread::Builder {
+        std::thread::Builder::new().name(name.into())
+    }
+
+    /// Wait for the exit waiter's final publication for `id` and return that view. A
+    /// killed process has no exit code, so this, not `exit_code`, marks a settled run.
+    #[cfg(unix)]
+    fn await_waiter(events: &Events, id: &str) -> CommandRun {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let published = events
+                .lock_or_recover()
+                .iter()
+                .find(|(run, from_waiter)| *from_waiter && run.id == id)
+                .map(|(run, _)| run.clone());
+            if let Some(run) = published {
+                return run;
+            }
+            assert!(std::time::Instant::now() < deadline, "run never settled");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+
+    /// Change events a cancel request published for `id` (one per `running -> cancelled`).
+    #[cfg(unix)]
+    fn cancel_transitions(events: &Events, id: &str) -> usize {
+        events
+            .lock_or_recover()
+            .iter()
+            .filter(|(run, from_waiter)| !from_waiter && run.id == id && run.state == "cancelled")
+            .count()
+    }
+
+    /// HS2-PAG7HG: a long-running run stays in history and cancellable however many runs
+    /// finish after it; the cap still bounds finished history, and an evicted or unknown id
+    /// is `NotFound` rather than a panic.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_pag7hg_running_runs_are_never_evicted_and_stay_cancellable() {
+        let store = tempfile::tempdir().unwrap();
+        let (manager, events) = recording_manager(store.path(), &[("wait", "sleep 30")]);
+        let live = manager.start("wait").unwrap();
+        let first_launch = manager
+            .record_launch_for("", "build", shell_launch())
+            .unwrap();
+        for _ in 0..HISTORY_CAP + 5 {
+            manager
+                .record_launch_for("", "build", shell_launch())
+                .unwrap();
+        }
+        let listed = manager.list_all();
+        assert_eq!(listed.len(), HISTORY_CAP + 1, "cap + the running run");
+        assert_eq!(listed.last().unwrap().id, live.id, "oldest, still listed");
+        assert!(listed.iter().all(|run| run.id != first_launch.id));
+        assert_eq!(
+            manager.cancel(&first_launch.id).unwrap_err(),
+            CancelError::NotFound
+        );
+        assert_eq!(
+            manager.cancel("no-such-run").unwrap_err(),
+            CancelError::NotFound
+        );
+
+        assert_eq!(manager.cancel(&live.id).unwrap().state, "cancelled");
+        assert_eq!(await_waiter(&events, &live.id).state, "cancelled");
+        // Settled now, it is the oldest finished run and the next run evicts it.
+        manager
+            .record_launch_for("", "build", shell_launch())
+            .unwrap();
+        assert_eq!(manager.list_all().len(), HISTORY_CAP);
+        assert!(manager.get(&live.id, 0).is_none());
+        assert_eq!(manager.cancel(&live.id).unwrap_err(), CancelError::NotFound);
+    }
+
+    /// HS2-PAG7HG: a cancel racing a burst of evicting launches neither panics nor loses
+    /// the run before it settles.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_pag7hg_cancel_racing_eviction_settles_the_run() {
+        let store = tempfile::tempdir().unwrap();
+        let (manager, events) = recording_manager(store.path(), &[("wait", "sleep 30")]);
+        let live = manager.start("wait").unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let launcher = {
+            let manager = manager.clone();
+            let barrier = barrier.clone();
+            named("launcher")
+                .spawn(move || {
+                    barrier.wait();
+                    for _ in 0..HISTORY_CAP * 4 {
+                        manager
+                            .record_launch_for("", "build", shell_launch())
+                            .unwrap();
+                    }
+                })
+                .unwrap()
+        };
+        barrier.wait();
+        assert_eq!(manager.cancel(&live.id).unwrap().state, "cancelled");
+        launcher.join().unwrap();
+        assert_eq!(cancel_transitions(&events, &live.id), 1);
+        // Once cancelled it is finished history, so the burst may evict it; either way a
+        // later cancel answers without panicking.
+        match manager.cancel(&live.id) {
+            Ok(view) => assert_eq!(view.state, "cancelled"),
+            Err(error) => assert_eq!(error, CancelError::NotFound),
+        }
+    }
+
+    /// HS2-PAG7HG: cancel is idempotent. The second and later cancels report the settled
+    /// `cancelled` view, the transition fires one change event, and the waiter's exit never
+    /// rewrites the terminal state.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_pag7hg_cancel_twice_transitions_once() {
+        let store = tempfile::tempdir().unwrap();
+        let (manager, events) = recording_manager(store.path(), &[("wait", "sleep 30")]);
+        let run = manager.start("wait").unwrap();
+        assert_eq!(manager.cancel(&run.id).unwrap().state, "cancelled");
+        assert_eq!(manager.cancel(&run.id).unwrap().state, "cancelled");
+        let settled = await_waiter(&events, &run.id);
+        assert_eq!(settled.state, "cancelled");
+        let after_exit = manager.cancel(&run.id).unwrap();
+        assert_eq!(after_exit.state, "cancelled");
+        assert_eq!(after_exit.exit_code, settled.exit_code);
+        assert_eq!(cancel_transitions(&events, &run.id), 1);
+    }
+
+    /// HS2-PAG7HG: a cancel after natural exit returns the finished state; it neither
+    /// relabels it `cancelled` nor publishes a change.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_pag7hg_cancel_after_exit_returns_the_finished_state() {
+        let store = tempfile::tempdir().unwrap();
+        let (manager, events) = recording_manager(store.path(), &[("fail", "exit 3")]);
+        let run = manager.start("fail").unwrap();
+        let finished = await_waiter(&events, &run.id);
+        assert_eq!(
+            (finished.state.as_str(), finished.exit_code),
+            ("completed", Some(3))
+        );
+        let published = events.lock_or_recover().len();
+        let cancelled = manager.cancel(&run.id).unwrap();
+        assert_eq!(
+            (cancelled.state.as_str(), cancelled.exit_code),
+            ("completed", Some(3))
+        );
+        assert_eq!(events.lock_or_recover().len(), published);
+    }
+
+    /// HS2-PAG7HG: concurrent cancels racing a process that exits at once settle to exactly
+    /// one terminal state. A cancel reports `cancelled` only when that is the terminal
+    /// state, and the transition is published at most once.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_pag7hg_cancels_racing_exit_settle_to_one_terminal_state() {
+        let store = tempfile::tempdir().unwrap();
+        let (manager, events) = recording_manager(store.path(), &[("quick", "exit 0")]);
+        for _ in 0..20 {
+            let run = manager.start("quick").unwrap();
+            let barrier = Arc::new(std::sync::Barrier::new(3));
+            let cancels: Vec<_> = (0..3)
+                .map(|_| {
+                    let manager = manager.clone();
+                    let barrier = barrier.clone();
+                    let id = run.id.clone();
+                    named("cancel")
+                        .spawn(move || {
+                            barrier.wait();
+                            manager.cancel(&id).unwrap()
+                        })
+                        .unwrap()
+                })
+                .collect();
+            let replies: Vec<CommandRun> = cancels.into_iter().map(|t| t.join().unwrap()).collect();
+            let settled = await_waiter(&events, &run.id);
+            assert!(
+                ["completed", "cancelled"].contains(&settled.state.as_str()),
+                "unexpected terminal state {}",
+                settled.state
+            );
+            for reply in &replies {
+                assert!(
+                    ["running", settled.state.as_str()].contains(&reply.state.as_str()),
+                    "a cancel reported {} for a run that settled {}",
+                    reply.state,
+                    settled.state
+                );
+            }
+            assert_eq!(
+                cancel_transitions(&events, &run.id),
+                usize::from(settled.state == "cancelled")
+            );
+            // Settled for good: a later cancel and a later read agree with it.
+            assert_eq!(manager.cancel(&run.id).unwrap().state, settled.state);
+            assert_eq!(manager.get(&run.id, 0).unwrap().state, settled.state);
+        }
     }
 
     /// HS2-PZRQC9: a configured command's journal record carries the hosting store's

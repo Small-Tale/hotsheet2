@@ -761,3 +761,134 @@ for (const keepTyping of [true, false])
       path: `target/visual-captures/hs2-re1ps6-no-merge-prompt-${keepTyping ? 'typing' : 'idle'}.png`,
     });
   });
+
+// HS2-QW3PGE: another worker completes the ticket being edited, so the change event's refresh drops it
+// from the open view. The open details edit must still reach that ticket on the server, exactly once,
+// instead of being lost when the refresh deselected it before the blur save ran.
+test('an open details edit survives a refresh that drops its ticket from the list (HS2-QW3PGE)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let token = 'T0',
+    tokenSeq = 0,
+    details = 'Intro',
+    completedElsewhere = false;
+  const patches: Array<{ id: string; details?: string }> = [];
+  const polls: import('@playwright/test').Route[] = [];
+  const otherRow = { ...listRow, native_id: '02', qualified_id: 'git-local:02', id: '02', slug: 'HS2-OTHER' };
+  const full = () => ({
+    store: 'git-local',
+    ...listRow,
+    status: completedElsewhere ? 'completed' : 'started',
+    details,
+    blocked_reason: null,
+    notes: [],
+    attachments: [],
+    concurrency_token: token,
+  });
+  const counts = (open: number) => ({
+    total: open,
+    queued: open,
+    backlog: 0,
+    archive: 0,
+    open,
+    up_next: 0,
+    active: open,
+    started: open,
+    completed_today: completedElsewhere ? 1 : 0,
+    completion_trend: [0, 0, 0, 0, 0, 0, 0],
+  });
+  await page.route(appRequests, async (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
+      method = request.method();
+    if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
+    if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'Hot Sheet Git',
+            locator: '/tickets',
+            default: true,
+            capabilities,
+          },
+        ],
+      });
+    const ticketId = /\/tickets\/(0[12])$/.exec(path)?.[1];
+    if (ticketId && method === 'PATCH') {
+      const body = request.postDataJSON() as { details?: string };
+      patches.push({ id: ticketId, details: body.details });
+      if (ticketId === '01' && body.details !== undefined) details = body.details;
+      tokenSeq += 1;
+      token = `T${tokenSeq}`;
+      return route.fulfill({ json: full() });
+    }
+    if (ticketId === '01' && method === 'GET') return route.fulfill({ json: full() });
+    if (ticketId === '02' && method === 'GET')
+      return route.fulfill({
+        json: { store: 'git-local', ...otherRow, details: '', blocked_reason: null, notes: [], attachments: [] },
+      });
+    if (path.endsWith('/tickets') && method === 'GET') {
+      const items = completedElsewhere ? [otherRow] : [listRow, otherRow];
+      return route.fulfill({ json: { items, counts: counts(items.length) } });
+    }
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    if (path.endsWith('/ws/poll')) {
+      if (url.searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+      polls.push(route);
+      return;
+    }
+    if (
+      path.endsWith('/terminals') ||
+      path.endsWith('/connections') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/command-runs') ||
+      path.endsWith('/views') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    return route.continue();
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  const editedRow = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]');
+  await editedRow.click();
+  const inspector = page.locator('#app-right-rail');
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
+  const edit = 'Intro\n- written before the ticket left the list';
+  await editor.fill(edit);
+  await page.waitForTimeout(300);
+  // Typing alone never writes (HS2-RE1PS6).
+  expect(patches).toEqual([]);
+
+  // Another worker completes HS2-EDIT; its change event refreshes the open view, which no longer lists it.
+  completedElsewhere = true;
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  await polls.shift()!.fulfill({
+    json: {
+      cursor: 2,
+      events: [{ store: 'git-local', kind: 'changed', id: '01', slug: 'HS2-EDIT' }],
+      overflow: false,
+    },
+  });
+  await expect(editedRow).toHaveCount(0);
+  // Focus leaves wherever the editor was; the server holds the edit, written once to the edited ticket.
+  if ((await editor.count()) > 0) await editor.blur();
+  await expect.poll(() => details).toBe(edit);
+  expect(patches).toEqual([{ id: '01', details: edit }]);
+  await expect(page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-OTHER"]')).toBeVisible();
+  // The committed save cleared the local recovery copy, so nothing stale restores later.
+  await expect
+    .poll(() =>
+      page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('hotsheet.ticket-draft:')).length),
+    )
+    .toBe(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-qw3pge-edit-survives-prune.png' });
+});

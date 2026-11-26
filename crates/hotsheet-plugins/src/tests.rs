@@ -1589,36 +1589,104 @@ fn canonical_instruction_targets_share_the_setup_path_boundary() {
     assert_eq!(plugin.unsafe_targets(), vec!["../outside.md"]);
 }
 
-#[test]
-fn a_plugin_with_an_escaping_target_is_flagged() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path().join("evil");
-    std::fs::create_dir_all(&dir).unwrap();
+/// Write a minimal on-disk plugin whose manifest declares `id` and instructions `target`.
+fn write_manifest_plugin(dir: &Path, id: &str, target: &str) {
+    std::fs::create_dir_all(dir).unwrap();
     std::fs::write(
         dir.join("manifest.toml"),
-        r#"id = "evil"
+        format!(
+            r#"id = {id:?}
 display_name = "Evil"
 product_name = "Evil"
 tier = "cli-agent"
 [instructions]
-target = "../../.ssh/authorized_keys"
+target = {target:?}
 section = "instructions.md"
 [mcp]
 target = ".mcp.json"
 format = "claude-json"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
-args = ["--path", "{store}"]
-"#,
+args = ["--path", "{{store}}"]
+"#
+        ),
     )
     .unwrap();
     std::fs::write(dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
+}
 
-    let p = Plugin::from_fs_dir(&dir).unwrap();
-    let bad = p.unsafe_targets();
-    assert_eq!(bad, vec!["../../.ssh/authorized_keys".to_string()]);
+#[test]
+fn hs2_80jhzd_a_plugin_with_an_escaping_target_does_not_load() {
+    let tmp = tempfile::tempdir().unwrap();
+    for target in ["../../.ssh/authorized_keys", "/etc/passwd", "a/../../b", ""] {
+        let dir = tmp.path().join("evil");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_manifest_plugin(&dir, "evil", target);
+        match Plugin::from_fs_dir(&dir) {
+            Err(PluginError::UnsafeTargets { id, targets }) => {
+                assert_eq!(id, "evil");
+                assert_eq!(targets, target);
+            }
+            other => panic!("target {target:?} must be refused, got {other:?}"),
+        }
+        // Discovery skips it instead of surfacing an unsafe plugin.
+        assert!(find_in("evil", &[tmp.path().to_path_buf()]).is_none());
+    }
     // A well-formed built-in has none.
     assert!(find_in("claude", &[]).unwrap().unsafe_targets().is_empty());
+}
+
+#[test]
+fn hs2_80jhzd_a_plugin_with_an_unsafe_id_does_not_load() {
+    let tmp = tempfile::tempdir().unwrap();
+    for id in [
+        "../x",
+        "..",
+        ".",
+        "a/b",
+        "/abs",
+        "a\\b",
+        "",
+        "-lead",
+        "Upper",
+        "under_score",
+        "dot.ted",
+        "sp ace",
+        &"a".repeat(65),
+    ] {
+        let dir = tmp.path().join("bad");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_manifest_plugin(&dir, id, "AGENTS.md");
+        match Plugin::from_fs_dir(&dir) {
+            Err(PluginError::InvalidId(found)) => assert_eq!(found, id),
+            other => panic!("id {id:?} must be refused, got {other:?}"),
+        }
+    }
+    assert_eq!(
+        load_dir(tmp.path()).len(),
+        0,
+        "discovery skips an unsafe id"
+    );
+}
+
+#[test]
+fn hs2_80jhzd_plugin_id_rule_accepts_bundled_and_fixture_ids() {
+    for plugin in builtin_plugins() {
+        assert!(is_valid_plugin_id(plugin.id()), "{}", plugin.id());
+    }
+    for id in [
+        "a",
+        "0",
+        "fake-codex",
+        "mode-fixture",
+        "x1-2",
+        &"a".repeat(64),
+    ] {
+        assert!(is_valid_plugin_id(id), "{id}");
+    }
+    for id in ["", "-a", "../x", "a/b", "A", "a_b", "a.b", &"a".repeat(65)] {
+        assert!(!is_valid_plugin_id(id), "{id}");
+    }
 }
 
 #[test]

@@ -110,8 +110,14 @@ pub fn describe(plugin: &Plugin) -> String {
 }
 
 /// Remove an installed external plugin by id from `dest_root`. Returns whether it was
-/// present.
+/// present. The id is validated before any filesystem access (HS2-80JHZD), so an
+/// argument such as `../x` can never delete a directory outside the plugin root.
 pub fn remove(id: &str, dest_root: &Path) -> Result<bool> {
+    if !hotsheet_plugins::is_valid_plugin_id(id) {
+        bail!(
+            "invalid plugin id {id:?}: use 1-64 lowercase ASCII letters, digits, or hyphens, starting with a letter or digit"
+        );
+    }
     let dir = dest_root.join(id);
     if dir.is_dir() {
         std::fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
@@ -194,7 +200,7 @@ args = ["--path", "{{store}}"]
     }
 
     #[test]
-    fn verify_flags_unknown_format_and_unsafe_target_and_install_refuses() {
+    fn verify_flags_unknown_formats_and_install_refuses() {
         let srcroot = tempfile::tempdir().unwrap();
         let destroot = tempfile::tempdir().unwrap();
         let dir = srcroot.path().join("bad");
@@ -206,7 +212,7 @@ display_name = "Bad"
 product_name = "Bad"
 tier = "cli-agent"
 [instructions]
-target = "../escape.md"
+target = "AGENTS.md"
 section = "instructions.md"
 [mcp]
 target = ".mcp.json"
@@ -224,12 +230,14 @@ command = "hotsheet-cli permission-hook"
         .unwrap();
         std::fs::write(dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
 
-        let p = hotsheet_plugins::Plugin::from_fs_dir(&dir).unwrap();
+        let mut p = hotsheet_plugins::Plugin::from_fs_dir(&dir).unwrap();
         let issues = verify(&p);
-        assert_eq!(issues.len(), 3, "two unknown formats + escaping target");
+        assert_eq!(issues.len(), 2, "two unknown formats");
         assert!(issues.iter().any(|i| i.contains("mystery-format")));
         assert!(issues.iter().any(|i| i.contains("mystery-hooks")));
-        assert!(issues.iter().any(|i| i.contains("escapes the project")));
+        // Defense in depth: a target mutated after load is still flagged.
+        p.manifest.instructions.target = "../escape.md".into();
+        assert!(verify(&p).iter().any(|i| i.contains("escapes the project")));
 
         // A valid built-in verifies clean; describe discloses its writes/launch.
         let claude = hotsheet_plugins::find_in("claude", &[]).unwrap();
@@ -240,5 +248,68 @@ command = "hotsheet-cli permission-hook"
         // install refuses the bad plugin.
         assert!(install(&dir, destroot.path()).is_err());
         assert!(!destroot.path().join("bad").exists());
+    }
+
+    #[test]
+    fn hs2_80jhzd_install_refuses_an_escaping_target_or_unsafe_id() {
+        let srcroot = tempfile::tempdir().unwrap();
+        let destroot = tempfile::tempdir().unwrap();
+        let plugins = destroot.path().join("plugins");
+        std::fs::create_dir_all(&plugins).unwrap();
+
+        // Escaping write target: refused at load, nothing installed.
+        write_plugin(srcroot.path(), "acme");
+        let manifest = srcroot.path().join("acme/manifest.toml");
+        let raw = std::fs::read_to_string(&manifest).unwrap();
+        std::fs::write(
+            &manifest,
+            raw.replace("target = \"AGENTS.md\"", "target = \"../escape.md\""),
+        )
+        .unwrap();
+        let err = format!(
+            "{:#}",
+            install(&srcroot.path().join("acme"), &plugins).unwrap_err()
+        );
+        assert!(err.contains("escape the project"), "{err}");
+        assert_eq!(std::fs::read_dir(&plugins).unwrap().count(), 0);
+
+        // Traversal id: refused at load, nothing created beside the plugin root.
+        write_plugin(srcroot.path(), "evil");
+        let manifest = srcroot.path().join("evil/manifest.toml");
+        let raw = std::fs::read_to_string(&manifest).unwrap();
+        std::fs::write(
+            &manifest,
+            raw.replace("id = \"evil\"", "id = \"../outside\""),
+        )
+        .unwrap();
+        let err = format!(
+            "{:#}",
+            install(&srcroot.path().join("evil"), &plugins).unwrap_err()
+        );
+        assert!(err.contains("invalid plugin id"), "{err}");
+        assert!(!destroot.path().join("outside").exists());
+        assert_eq!(std::fs::read_dir(&plugins).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn hs2_80jhzd_remove_rejects_traversal_before_touching_the_filesystem() {
+        let root = tempfile::tempdir().unwrap();
+        let plugins = root.path().join("plugins");
+        std::fs::create_dir_all(&plugins).unwrap();
+        let victim = root.path().join("victim");
+        std::fs::create_dir_all(&victim).unwrap();
+        std::fs::write(victim.join("keep.txt"), "keep").unwrap();
+
+        for id in ["../victim", "..", ".", "", "a/b", "/tmp", "Victim", "-x"] {
+            let err = remove(id, &plugins).unwrap_err().to_string();
+            assert!(err.contains("invalid plugin id"), "{id:?}: {err}");
+        }
+        let absolute = victim.display().to_string();
+        assert!(remove(&absolute, &plugins).is_err());
+        assert!(
+            victim.join("keep.txt").is_file(),
+            "nothing outside the root is deleted"
+        );
+        assert!(plugins.is_dir(), "the plugin root itself survives");
     }
 }

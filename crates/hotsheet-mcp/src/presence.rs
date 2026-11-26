@@ -17,6 +17,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use hotsheet_sync::secret::SecretString;
 use serde_json::{Value, json};
 
 /// How often the lease is renewed; the server's lease TTL is three heartbeats.
@@ -26,7 +27,7 @@ pub const HEARTBEAT: Duration = Duration::from_secs(15);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PresenceTarget {
     pub base: String,
-    pub secret: String,
+    pub secret: SecretString,
     pub lease_id: String,
     pub body: Value,
 }
@@ -57,7 +58,7 @@ impl PresenceTarget {
         };
         Some(Self {
             base: base.trim_end_matches('/').to_owned(),
-            secret,
+            secret: secret.into(),
             body: json!({
                 "lease_id": lease_id,
                 "pid": pid,
@@ -180,7 +181,7 @@ impl PresenceTransport for HttpPresence {
         request_succeeded(
             self.agent
                 .post(&format!("{}/mcp-presence", target.base))
-                .set("X-Hotsheet-Secret", &target.secret)
+                .set("X-Hotsheet-Secret", target.secret.expose())
                 .set("Content-Type", "application/json")
                 .send_string(&target.body.to_string()),
         )
@@ -190,7 +191,7 @@ impl PresenceTransport for HttpPresence {
         let _ = request_succeeded(
             self.agent
                 .delete(&format!("{}/mcp-presence/{}", target.base, target.lease_id))
-                .set("X-Hotsheet-Secret", &target.secret)
+                .set("X-Hotsheet-Secret", target.secret.expose())
                 .call(),
         );
     }
@@ -230,9 +231,9 @@ impl Presence {
                     && let Some((base, secret)) = relocate()
                 {
                     let base = base.trim_end_matches('/').to_owned();
-                    if base != target.base || secret != target.secret {
+                    if base != target.base || secret != target.secret.expose() {
                         target.base = base;
-                        target.secret = secret;
+                        target.secret = secret.into();
                         transport.upsert(&target);
                     }
                 }
@@ -343,7 +344,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            (proxy.base.as_str(), proxy.secret.as_str()),
+            (proxy.base.as_str(), proxy.secret.expose()),
             ("http://h", "x")
         );
 
@@ -381,7 +382,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            (lease.base.as_str(), lease.secret.as_str()),
+            (lease.base.as_str(), lease.secret.expose()),
             ("http://registry", "live")
         );
         assert!(lease.body["terminal_id"].is_null());
@@ -463,7 +464,7 @@ mod tests {
         let discovered =
             PresenceTarget::resolve(None, None, env(&[]), found, 1, None, "L".into()).unwrap();
         assert_eq!(
-            (discovered.base.as_str(), discovered.secret.as_str()),
+            (discovered.base.as_str(), discovered.secret.expose()),
             ("http://new", "s2")
         );
         assert!(discovered.body["terminal_id"].is_null());
@@ -540,10 +541,11 @@ mod tests {
 
     impl PresenceTransport for Endpoints {
         fn upsert(&self, target: &PresenceTarget) -> bool {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("upsert {} {}", target.base, target.secret));
+            self.calls.lock().unwrap().push(format!(
+                "upsert {} {}",
+                target.base,
+                target.secret.expose()
+            ));
             !self.dead.lock().unwrap().contains(&target.base)
         }
         fn release(&self, target: &PresenceTarget) {
@@ -681,6 +683,24 @@ mod tests {
             &json!({"method": "notifications/initialized"})
         ));
         assert!(!is_initialize(&json!({"id": 1})));
+    }
+
+    #[test]
+    fn hs2_a8t481_presence_target_redacts_its_bearer_secret() {
+        let target = PresenceTarget::resolve(
+            Some("http://127.0.0.1:1/"),
+            Some("synthetic-secret"),
+            |_| None,
+            || None,
+            7,
+            None,
+            "lease".into(),
+        )
+        .unwrap();
+        let printed = format!("{target:?}");
+        assert!(!printed.contains("synthetic-secret"), "{printed}");
+        assert!(printed.contains("secret: <redacted>"), "{printed}");
+        assert_eq!(target.secret.expose(), "synthetic-secret");
     }
 }
 

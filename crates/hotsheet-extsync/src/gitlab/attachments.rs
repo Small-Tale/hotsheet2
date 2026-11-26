@@ -159,7 +159,7 @@ impl GitLabProvider {
         body: Option<RawBody<'_>>,
     ) -> Result<Vec<u8>, ProviderError> {
         let headers = [
-            ("PRIVATE-TOKEN", self.config.token.clone()),
+            ("PRIVATE-TOKEN", self.config.token.expose().to_owned()),
             ("User-Agent", "hotsheet2".into()),
         ];
         let response = self
@@ -982,7 +982,9 @@ mod tests {
             project: std::env::var("HOTSHEET_GITLAB_LIVE_PROJECT").expect("live project"),
             api_base: std::env::var("HOTSHEET_GITLAB_LIVE_API_BASE")
                 .unwrap_or_else(|_| "https://gitlab.com/api/v4".into()),
-            token: std::env::var("HOTSHEET_GITLAB_LIVE_TOKEN").expect("live token"),
+            token: std::env::var("HOTSHEET_GITLAB_LIVE_TOKEN")
+                .expect("live token")
+                .into(),
             default: false,
         });
         let now = || Timestamp::new("2026-10-16T00:00:00Z");

@@ -694,7 +694,20 @@ fn create_occurrence_ticket(
         })?;
         do_create(state, &entry, req)
     } else {
-        do_provider_create(state, &source.connection_id, req)
+        // HS2-K9H38S: a provider without Up Next refuses it, so queue the command ticket only
+        // where the provider can hold that state.
+        let up_next = provider_for(state, &source.connection_id)?
+            .descriptor()
+            .capabilities
+            .up_next;
+        do_provider_create(
+            state,
+            &source.connection_id,
+            CreateReq {
+                up_next: Some(up_next),
+                ..req
+            },
+        )
     }
 }
 
@@ -3070,5 +3083,67 @@ mod tests {
         let (_, saved) = send_json(&router, "PUT", &path, Some(explicit)).await;
         assert_eq!(saved["schedule"]["action"], "new_ai_session");
         assert_eq!(saved["effective_action"], "new_ai_session");
+    }
+
+    /// A GitLab Issues fake that answers issue creation and records each request body.
+    #[derive(Default)]
+    struct CreatingGitLab {
+        bodies: Mutex<Vec<serde_json::Value>>,
+    }
+
+    impl hotsheet_extsync::GitHubTransport for CreatingGitLab {
+        fn request(
+            &self,
+            method: &str,
+            _: &str,
+            _: &[(&str, String)],
+            body: Option<&serde_json::Value>,
+        ) -> Result<hotsheet_extsync::HttpResponse, String> {
+            assert_eq!(method, "POST");
+            self.bodies.lock().unwrap().push(body.cloned().unwrap());
+            Ok(hotsheet_extsync::HttpResponse {
+                status: 201,
+                headers: std::collections::HashMap::new(),
+                body: json!({
+                    "id": 9005, "iid": 5, "project_id": 42,
+                    "title": "Daily summary", "description": "Summarize synthetic work",
+                    "state": "opened",
+                    "web_url": "https://gitlab.test/acme/repo/-/issues/5",
+                    "created_at": "2026-11-01T00:00:00.000Z",
+                    "updated_at": "2026-11-01T00:00:00.000Z",
+                    "closed_at": null, "labels": ["category:task"], "assignees": [],
+                    "type": "ISSUE"
+                })
+                .to_string(),
+            })
+        }
+    }
+
+    /// HS2-K9H38S: GitLab refuses Up Next, so a command ticket created in a GitLab source
+    /// is not queued there instead of failing the whole command run.
+    #[test]
+    fn hs2_k9h38s_command_ticket_skips_up_next_where_the_provider_has_none() {
+        let (_root, state, checkout, settings, _store) = fixture();
+        let gitlab = Arc::new(CreatingGitLab::default());
+        let state = state.with_ticket_provider(Arc::new(hotsheet_extsync::GitLabProvider::new(
+            hotsheet_extsync::GitLabConfig {
+                connection_id: "gitlab-main".into(),
+                project: "acme/repo".into(),
+                api_base: "https://gitlab.test/api/v4".into(),
+                token: "fixture-token".into(),
+                default: false,
+            },
+            gitlab.clone(),
+        )));
+        let command = commands::from_settings(&settings).unwrap().remove(0);
+        let source = hotsheet_ticketing::checkouts::TicketSource {
+            connection_id: "gitlab-main".into(),
+            provider: "gitlab".into(),
+            locator: "acme/repo".into(),
+        };
+        let ticket = create_occurrence_ticket(&state, &checkout, &source, &command, None).unwrap();
+        assert!(!ticket.up_next);
+        assert_eq!(ticket.native_id, "5");
+        assert_eq!(gitlab.bodies.lock().unwrap().len(), 1);
     }
 }

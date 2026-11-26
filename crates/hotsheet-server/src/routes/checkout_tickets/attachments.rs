@@ -175,7 +175,7 @@ pub(crate) async fn get_checkout_ticket_attachment(
         .iter()
         .find(|attachment| attachment.id == attachment_id)
         .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
-    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename)?;
     git_attachment_response(
         state.cache_dir(),
         &attachment.filename,
@@ -209,7 +209,7 @@ pub(crate) async fn get_checkout_ticket_attachment_original(
         .iter()
         .find(|attachment| attachment.id == attachment_id)
         .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
-    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename)?;
     git_attachment_response(
         state.cache_dir(),
         &attachment.filename,
@@ -293,7 +293,7 @@ pub(crate) async fn get_checkout_ticket_attachment_by_name(
         .iter()
         .find(|attachment| attachment.id == attachment_id)
         .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
-    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename)?;
     git_attachment_response(
         state.cache_dir(),
         &attachment.filename,
@@ -426,22 +426,16 @@ fn checkout_attachment_by_name(
     Ok((entry, ticket, attachment_id))
 }
 
+/// The payload path, resolved and containment-checked by the store (HS2-SY15VS).
 fn attachment_disk_path(
     entry: &StoreEntry,
     ticket_id: &Ulid,
     attachment_id: &Ulid,
     filename: &str,
-) -> std::path::PathBuf {
-    let nested = entry
+) -> Result<std::path::PathBuf, ApiError> {
+    Ok(entry
         .store
-        .attachment_dir(ticket_id)
-        .join(attachment_id.to_string())
-        .join(filename);
-    if nested.is_file() {
-        nested
-    } else {
-        entry.store.attachment_dir(ticket_id).join(filename)
-    }
+        .attachment_payload_path(ticket_id, attachment_id, filename)?)
 }
 
 pub(crate) async fn act_on_checkout_ticket_attachment(
@@ -454,7 +448,7 @@ pub(crate) async fn act_on_checkout_ticket_attachment(
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let (attachment, _) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
-    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename)?;
     if request.action != AttachmentHostAction::Path {
         repository_browser::act_on_host_path(
             &path,
@@ -480,7 +474,7 @@ pub(crate) async fn act_on_checkout_ticket_attachment_by_name(
     let (entry, ticket, attachment_id) =
         checkout_attachment_by_name(&state, &reference, &id, &filename)?;
     let (attachment, _) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
-    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename)?;
     if request.action != AttachmentHostAction::Path {
         repository_browser::act_on_host_path(
             &path,

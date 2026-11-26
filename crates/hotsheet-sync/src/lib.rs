@@ -10,10 +10,13 @@
 //! [`env_path`] holds the other cross-crate leaf rule: a blank path-valued environment
 //! override counts as unset (HS2-15ZN8E). [`files`] holds the one atomic file
 //! replacement that works on Windows while readers hold the target open (HS2-J5DCJH).
+//! [`secret::SecretString`] is the one credential type whose `Debug` prints `<redacted>`
+//! (HS2-A8T481).
 
 pub mod env_path;
 pub mod files;
 pub mod paths;
+pub mod secret;
 
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 

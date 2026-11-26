@@ -15,7 +15,6 @@ use std::process::Stdio;
 use time::OffsetDateTime;
 
 const MAX_CANDIDATES: usize = 20_000;
-const MAX_PATH_COMPONENT: usize = 255;
 const MAX_HISTORY_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_HISTORY_BLOBS: usize = 20_000;
 
@@ -247,12 +246,7 @@ fn historical_attachment_path(path: &str) -> bool {
     {
         return false;
     }
-    let filename = parts[parts.len() - 1];
-    !filename.is_empty()
-        && filename.len() <= MAX_PATH_COMPONENT
-        && filename != "."
-        && filename != ".."
-        && !filename.contains('\\')
+    hotsheet_model::safe_attachment_component(parts[parts.len() - 1]).is_ok()
 }
 
 fn deleted_attachment_commits(root: &Path) -> Result<BTreeMap<String, String>, CompactionError> {
@@ -442,13 +436,7 @@ fn payload_path(
     attachment_id: &str,
     filename: &str,
 ) -> Result<PathBuf, CompactionError> {
-    if filename.is_empty()
-        || filename.len() > MAX_PATH_COMPONENT
-        || filename == "."
-        || filename == ".."
-        || filename.contains('/')
-        || filename.contains('\\')
-    {
+    if hotsheet_model::safe_attachment_component(filename).is_err() {
         return Err(CompactionError::Invalid(
             "attachment has an unsafe filename".into(),
         ));

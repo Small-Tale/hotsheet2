@@ -80,6 +80,23 @@ export interface ProjectRefreshDependencies {
   recordAuthoritativeTicketTrend: (projectId: string, counts: CheckoutTicketCounts) => void;
   scheduleClaimLeaseExpiry: () => void;
   reconcileRefreshedSelected: (previous: FullTicket, refreshed: FullTicket) => void;
+  /**
+   * Start saving the selected ticket's unsaved text edits; `undefined` when none is queued or in flight.
+   * A refresh that would drop the selected ticket waits for this before pruning (HS2-QW3PGE).
+   */
+  flushSelectedTicketEdits: () => Promise<boolean> | undefined;
+}
+
+/**
+ * Whether applying `rows` would remove the selected ticket from the visible rows. A workspace search
+ * keeps its selection independently of the base page, so it never prunes here (HS2-6AXG6Z, HS2-QW3PGE).
+ */
+export function refreshPrunesSelectedTicket(
+  selected: Pick<FullTicket, 'id'> | null,
+  rows: readonly Pick<WireTicketRow, 'id'>[] | undefined,
+  searchActive: boolean,
+): boolean {
+  return Boolean(selected && rows && !searchActive && !rows.some((row) => row.id === selected.id));
 }
 
 /**
@@ -130,6 +147,7 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
     recordAuthoritativeTicketTrend,
     scheduleClaimLeaseExpiry,
     reconcileRefreshedSelected,
+    flushSelectedTicketEdits,
   } = dependencies;
   let projectRefreshGeneration = 0;
   let selectedDetailGeneration = 0;
@@ -223,6 +241,23 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
           ? mergeRetainedCreatedRows(index.tickets, pendingCreatedTickets.retain(current.id, index.tickets))
           : undefined,
         searchActive = workspaceSearchActive();
+      // An open edit of the ticket this refresh would deselect is saved against that ticket first, while
+      // it is still listed and selected, so the save resolves its own identity; the refresh then reruns
+      // and prunes. Deselecting first made the later blur save find no ticket and drop the edit
+      // (HS2-QW3PGE). Starting the save invalidates this refresh anyway (beginLocalTicketMutation).
+      if (refreshPrunesSelectedTicket(selectedTicket.value, mergedTickets, searchActive)) {
+        const saving = flushSelectedTicketEdits();
+        if (saving) {
+          if (showLoading) loading.value = false;
+          void saving
+            .catch(() => false)
+            .then(() => {
+              if (project()?.id === current.id)
+                void refreshProject({ showLoading: false, quiet: true, refreshRepository });
+            });
+          return;
+        }
+      }
       if (index.tickets && mergedTickets) {
         if (index.ticketCounts) {
           ticketCountsByProject.value = { ...ticketCountsByProject.value, [current.id]: index.ticketCounts };
@@ -247,10 +282,12 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
             selected = selectedTicketSlugs.value.filter((slug) => live.has(slug));
           if (selected.length !== selectedTicketSlugs.value.length) {
             selectedTicketSlugs.value = selected;
-            const anchor = dependencies.ticketSelectionAnchor.get();
-            if (anchor && !live.has(anchor)) dependencies.ticketSelectionAnchor.set(undefined);
             if (selected.length !== 1) selectedTicket.value = null;
           }
+          // An anchor that was toggled off is no longer selected but still anchors a shift-click range;
+          // it clears whenever its row leaves, not only when a selected row vanished (HS2-QW3PGE).
+          const anchor = dependencies.ticketSelectionAnchor.get();
+          if (anchor && !live.has(anchor)) dependencies.ticketSelectionAnchor.set(undefined);
         }
         scheduleClaimLeaseExpiry();
       }

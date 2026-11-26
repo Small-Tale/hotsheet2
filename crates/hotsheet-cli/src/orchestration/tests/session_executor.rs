@@ -2883,6 +2883,23 @@ fn hs2_vrc0cq_a_stopping_hosts_scheduler_runs_no_pass() {
             .entries
             .len()
     };
+    // HS2-XS8WAE: the start pass wrote run events after the step read the journal. Let the
+    // loop read them now, so the step below waits instead of finding them at once and
+    // racing the stop flag set on this thread.
+    let mut settled = false;
+    for _ in 0..5 {
+        let step =
+            f.m.runtime
+                .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+        if step.trigger.is_none() {
+            settled = true;
+            break;
+        }
+    }
+    assert!(
+        settled,
+        "the scheduler loop settles before the server stops"
+    );
     let logged = decided(&f);
     let sessions = f.records().len();
 

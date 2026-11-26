@@ -92,6 +92,12 @@ pub enum ParseError {
     /// current reader must likewise refuse markers it does not understand.
     #[error("unsupported ticket schema marker '{0}'")]
     UnsupportedSchema(String),
+    /// An attachment entry names a file outside its attachment directory (parent
+    /// segments, an absolute path, or a separator). The whole ticket is refused
+    /// rather than the entry dropped, so a later rewrite can never silently lose
+    /// it; the file stays untouched on disk for repair (HS2-SY15VS).
+    #[error("attachment {id} has an unsafe filename: {reason}")]
+    UnsafeAttachmentFilename { id: Ulid, reason: &'static str },
 }
 
 impl ParseError {
@@ -186,6 +192,14 @@ pub fn parse_file(text: &str) -> Result<Ticket, ParseError> {
     let value = Value::Mapping(mapping.clone());
 
     let mut ticket: Ticket = serde_yaml::from_value(value)?;
+    for attachment in &ticket.attachments {
+        crate::ticket::safe_attachment_component(&attachment.filename).map_err(|reason| {
+            ParseError::UnsafeAttachmentFilename {
+                id: attachment.id,
+                reason,
+            }
+        })?;
+    }
 
     // Retain keys the current schema doesn't know (forward-compat, docs/17 §17.4).
     // `legacy_number` is a known field (the retained HS1 ticket number, HS2-4H2ZR1), so it is
@@ -1859,5 +1873,43 @@ mod tests {
         t.copied_from = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC2"));
         t.legacy_number = Some("HS-1234".into());
         t
+    }
+
+    #[test]
+    fn hs2_sy15vs_parse_rejects_ticket_with_unsafe_attachment_filename() {
+        let mut ticket = sample();
+        ticket.attachments.push(crate::ticket::Attachment {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC4"),
+            filename: "proof.png".into(),
+            created_at: "2026-08-20T06:00:00Z".into(),
+            batch_id: None,
+            batch_label: None,
+            actor: None,
+            purpose: None,
+            annotations: Vec::new(),
+            crop: None,
+        });
+        let safe = to_file_string(&ticket);
+        assert!(parse_file(&safe).is_ok());
+        for bad in [
+            "../../../../outside.txt",
+            "/etc/hosts",
+            "sub/file.txt",
+            "dir\\file.txt",
+            "..",
+        ] {
+            ticket.attachments[0].filename = bad.into();
+            let text = to_file_string(&ticket);
+            let error = parse_file(&text).unwrap_err();
+            assert!(
+                matches!(
+                    error,
+                    ParseError::UnsafeAttachmentFilename { id, .. }
+                        if id == ticket.attachments[0].id
+                ),
+                "{bad:?}: {error}"
+            );
+            assert_eq!(error.code(), "invalid_ticket");
+        }
     }
 }

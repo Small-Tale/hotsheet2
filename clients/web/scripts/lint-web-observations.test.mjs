@@ -291,7 +291,9 @@ it('HS2-N3XBS3 every runner of lint:web also runs the full web typecheck the doc
   assert.match(read('scripts/gate-budget.mjs'), /typecheck\/\.test\(stage\.command\)/);
 });
 
-it('HS2-N3XBS3 reads the ESLint ignores from the real flat config', async () => {
+// HS2-Q71ESX: this cold-imports the real flat config and every ESLint plugin it loads (about 1 s
+// alone), which exceeded the 5 s default during the full suite on shared CI runners.
+it('HS2-N3XBS3 reads the ESLint ignores from the real flat config', { timeout: 30_000 }, async () => {
   const ignores = await loadEslintIgnores(new URL('.', packageRoot).pathname);
   for (const dir of ['dist/**', 'target/**', 'node_modules/**', 'src-tauri/**']) assert.ok(ignores.includes(dir), dir);
 });

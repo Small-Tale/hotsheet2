@@ -124,6 +124,14 @@ list filters are answered for them as for any ungrouped ticket. A queued write-b
 edit cannot carry `group`. A cross-provider copy drops the group when the destination
 lacks the capability, and carries only an id, never a legacy name.
 
+**Up Next on GitLab and Jira (HS2-K9H38S).** Only GitHub maps Up Next (its provider-owned
+`up-next` label, below). GitLab and Jira report `up_next: false`: a create or update that
+asks to queue a ticket fails with `provider connection '<id>' does not support 'up_next'`
+before any request reaches the tracker, instead of succeeding and reading back unqueued.
+Clearing Up Next (`up_next: false`) is accepted because it is the only state their tickets
+hold, so undo and full-field patches keep working. An AI command ticket created in such a
+source is created without Up Next rather than failing the run.
+
 The maintainer decision on HS2-9KZSD4 settles the mapping direction below: an external
 ticket will reference a group by an `hs-group:<id>` label whose id is the project
 registry's, so a rename touches no tracker. That label mapping is HS2-PQ4A2C; until it

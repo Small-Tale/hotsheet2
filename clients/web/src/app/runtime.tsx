@@ -4620,6 +4620,8 @@ export async function startHotSheetWebClient() {
       reconcileRefreshedSelected(previous, refreshed);
       void advisoryClaimResource.refresh();
     },
+    // Built later by the ticket workflows owner, so it is read through a callback (HS2-QW3PGE).
+    flushSelectedTicketEdits: () => flushSelectedTicketEdits(),
   });
   // A hoisted entry point: earlier-built owners and handlers call it before this line runs.
   function refreshProject(options?: ProjectRefreshOptions) {
@@ -5171,6 +5173,7 @@ export async function startHotSheetWebClient() {
     attachmentEpochs,
     restoreTicketDraft,
     flushTicketDrafts,
+    flushSelectedTicketEdits,
     captureTicketDraftRecovery,
     updateSelected,
     dismissFeedbackRequest,

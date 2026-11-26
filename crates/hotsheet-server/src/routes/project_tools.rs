@@ -793,11 +793,17 @@ pub(crate) async fn cancel_command_run(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<commands::CommandRun>, ApiError> {
-    state
-        .commands
-        .cancel(&id)
-        .map(Json)
-        .map_err(|e| ApiError::new(StatusCode::CONFLICT, e))
+    state.commands.cancel(&id).map(Json).map_err(cancel_error)
+}
+
+/// HS2-PAG7HG: an unknown or evicted run is 404; a run that already settled is not an
+/// error (the handler returns its settled view); only a failed kill is a conflict.
+fn cancel_error(error: commands::CancelError) -> ApiError {
+    let status = match error {
+        commands::CancelError::NotFound => StatusCode::NOT_FOUND,
+        commands::CancelError::Kill(_) => StatusCode::CONFLICT,
+    };
+    ApiError::new(status, error.to_string())
 }
 
 pub(crate) async fn cancel_checkout_command_run(
@@ -809,7 +815,7 @@ pub(crate) async fn cancel_checkout_command_run(
         .commands
         .cancel_for(&checkout.id, &id)
         .map(Json)
-        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error))
+        .map_err(cancel_error)
 }
 
 #[derive(Deserialize)]

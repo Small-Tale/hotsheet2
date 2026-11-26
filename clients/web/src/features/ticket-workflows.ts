@@ -2199,6 +2199,25 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       ...[...linkedReaderAutosaves.keys()].map((frameId) => flushLinkedReader(frameId)),
     ]).then((results) => results.every(Boolean));
   }
+  /**
+   * Save the selected ticket's unsaved edits now, before a refresh deselects it; `undefined` when no
+   * edit is queued or in flight, so the refresh can prune straight away (HS2-QW3PGE).
+   */
+  function flushSelectedTicketEdits(): Promise<boolean> | undefined {
+    flushDraftInputs();
+    const saves = [
+      detailsAutosave,
+      readerDetailsAutosave,
+      noteAutosave,
+      readerNoteAutosave,
+      blockedReasonAutosave,
+      readerBlockedReasonAutosave,
+      titleAutosave,
+      tagsAutosave,
+    ];
+    if (!saves.some((save) => save.pending())) return undefined;
+    return Promise.all(saves.map((save) => save.flush())).then((results) => results.every(Boolean));
+  }
   function captureTicketDraftRecovery() {
     flushDraftInputs();
     for (const save of [
@@ -2977,6 +2996,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     applyTicketPatch,
     restoreTicketDraft,
     flushTicketDrafts,
+    flushSelectedTicketEdits,
     captureTicketDraftRecovery,
     updateSelected,
     dismissFeedbackRequest,

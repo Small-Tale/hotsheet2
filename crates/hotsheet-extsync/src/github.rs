@@ -1,4 +1,5 @@
 use hotsheet_sync::LockExt;
+use hotsheet_sync::secret::SecretString;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -48,7 +49,7 @@ pub struct GitHubConfig {
     pub connection_id: String,
     pub repository: String,
     pub api_base: String,
-    pub token: String,
+    pub token: SecretString,
     pub default: bool,
     /// Assets repository for attachments (HS2-HSA64D); attachments are unsupported without one.
     pub attachments: Option<GitHubAttachmentRepository>,
@@ -82,7 +83,7 @@ impl GitHubConfig {
             connection_id: connection_id.into(),
             repository: repository.into(),
             api_base: "https://api.github.com".into(),
-            token: token.into(),
+            token: SecretString::new(token),
             default: false,
             attachments: None,
         }
@@ -113,7 +114,7 @@ impl GitHubConfig {
                 .and_then(Value::as_str)
                 .unwrap_or("https://api.github.com")
                 .into(),
-            token: token.into(),
+            token: SecretString::new(token),
             default: connection.default,
             attachments: GitHubAttachmentRepository::from_settings(&connection.settings).map_err(
                 |message| ProviderError::Conflict {
@@ -485,7 +486,10 @@ impl GitHubProvider {
         }
         let headers = [
             ("Accept", "application/vnd.github+json".into()),
-            ("Authorization", format!("Bearer {}", self.config.token)),
+            (
+                "Authorization",
+                format!("Bearer {}", self.config.token.expose()),
+            ),
             ("X-GitHub-Api-Version", API_VERSION.into()),
             ("User-Agent", "hotsheet2".into()),
         ];

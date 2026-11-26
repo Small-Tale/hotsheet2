@@ -17,7 +17,16 @@ import { tmpdir } from 'node:os';
 import { join, dirname, win32 } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { exportFromDb, exportDatadir, isDirectEntry, resolveCustomCommands, stageAttachments } from '../src/export.mjs';
+import {
+  exportFromDb,
+  exportDatadir,
+  isDirectEntry,
+  resolveAttachmentSource,
+  resolveCustomCommands,
+  stageAttachments,
+} from '../src/export.mjs';
+import * as nodeFs from 'node:fs';
+import * as nodePath from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..');
@@ -470,6 +479,46 @@ describe('attachments', () => {
 
     expect(copied).toEqual([[source, destination]]);
     expect(exportObj.tickets[0].attachments[0].stored_path).toBe('attachments/0/shot.png');
+  });
+
+  it('stages a recorded HS1 path only inside <hotsheetDir>/attachments (HS2-N250VD)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'hs1-contain-'));
+    try {
+      const hs = join(root, '.hotsheet');
+      const outside = join(root, 'outside');
+      mkdirSync(join(hs, 'attachments', 'nested'), { recursive: true });
+      mkdirSync(outside);
+      writeFileSync(join(outside, 'secret.txt'), 'SYNTHETIC-SECRET');
+      writeFileSync(join(hs, 'attachments', 'nested', 'inside.png'), 'INSIDE');
+      writeFileSync(join(hs, 'settings.json'), 'SYNTHETIC-SETTINGS');
+      symlinkSync(join(outside, 'secret.txt'), join(hs, 'attachments', 'link.png'));
+      const resolve = (stored) => resolveAttachmentSource(nodeFs, nodePath, hs, stored);
+
+      // Absolute and traversal paths that leave the attachment directory are refused.
+      expect(resolve(join(outside, 'secret.txt'))).toEqual({ outside: true });
+      expect(resolve('../settings.json')).toEqual({ outside: true });
+      expect(resolve(join(hs, 'settings.json'))).toEqual({ outside: true });
+      // A symlink inside attachments that points elsewhere is refused too.
+      expect(resolve('/elsewhere/link.png')).toEqual({ outside: true });
+      // Recorded paths under the attachment directory still resolve.
+      expect(resolve(join(hs, 'attachments', 'nested', 'inside.png')).src).toBe(
+        join(hs, 'attachments', 'nested', 'inside.png'),
+      );
+      expect(resolve('nested/inside.png').src).toBe(join(hs, 'attachments', 'nested', 'inside.png'));
+      expect(resolve('/old/machine/.hotsheet/attachments/inside.png')).toEqual({});
+
+      const exportObj = {
+        tickets: [{ attachments: [{ original_filename: 'leak.txt', stored_path: join(outside, 'secret.txt') }] }],
+      };
+      const original = JSON.parse(JSON.stringify(exportObj));
+      expect(() => stageAttachments(nodeFs, nodePath, hs, join(root, 'out', 'export.json'), exportObj)).toThrow(
+        /Referenced HS1 attachment is outside/,
+      );
+      expect(exportObj).toEqual(original);
+      expect(existsSync(join(root, 'out'))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('exports promoted attachments and filters out drafts', async () => {

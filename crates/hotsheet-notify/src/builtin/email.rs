@@ -1,6 +1,7 @@
 //! `email`: SMTP delivery to one or more recipients, as multipart plain text plus HTML
 //! with attachments. TLS uses rustls; the password is a key-registry reference.
 
+use hotsheet_sync::secret::SecretString;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,7 +29,7 @@ pub struct SmtpConfig {
     /// `starttls`, `tls` (implicit), or `none`.
     pub security: String,
     pub username: Option<String>,
-    pub password: Option<String>,
+    pub password: Option<SecretString>,
 }
 
 /// Sends a built message. Injectable so tests never open an SMTP connection.
@@ -55,7 +56,12 @@ impl EmailSender for LiveSmtp {
         if let Some(user) = &config.username {
             builder = builder.credentials(Credentials::new(
                 user.clone(),
-                config.password.clone().unwrap_or_default(),
+                config
+                    .password
+                    .as_ref()
+                    .map(SecretString::expose)
+                    .unwrap_or_default()
+                    .to_owned(),
             ));
         }
         builder.build().send(email).map(|_| ()).map_err(|e| {
@@ -196,7 +202,7 @@ impl Notifier for EmailNotifier {
             port: port as u16,
             security: settings.str("security").unwrap_or("starttls").to_string(),
             username: settings.str("username").map(str::to_owned),
-            password: settings.str("password").map(str::to_owned),
+            password: settings.str("password").map(SecretString::from),
         };
         self.sender.send(&config, &email)?;
         Ok(None)
@@ -316,5 +322,23 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.retryable);
+    }
+
+    #[test]
+    fn hs2_a8t481_smtp_config_redacts_the_password() {
+        let config = SmtpConfig {
+            host: "smtp.example.test".into(),
+            port: 465,
+            security: "tls".into(),
+            username: Some("hs".into()),
+            password: Some("pw".into()),
+        };
+        let printed = format!("{config:?}");
+        assert!(printed.contains("password: Some(<redacted>)"), "{printed}");
+        assert!(!printed.contains("\"pw\""), "{printed}");
+        assert_eq!(
+            config.password.as_ref().map(SecretString::expose),
+            Some("pw")
+        );
     }
 }

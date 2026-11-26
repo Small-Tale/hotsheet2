@@ -374,6 +374,27 @@ async fn hs2_dbkm89_the_retention_sweep_deletes_only_expired_gitlab_trash() {
 }
 
 /// Checkout responses carry the ticket flattened beside `store`, or nested as `ticket`.
+/// HS2-K9H38S: GitLab has no Up Next, so queueing a GitLab ticket through a checkout fails
+/// as unsupported and leaves the issue untouched; clearing stays a successful no-op.
+#[tokio::test]
+async fn hs2_k9h38s_queueing_a_gitlab_ticket_is_refused_not_dropped() {
+    let project = project();
+    project
+        .gitlab
+        .seed(6, "opened", &["category:task", "customer"]);
+    let router = &project.router;
+    let ticket = format!("{}/tickets/gitlab-main:6", project.base);
+    let before = project.gitlab.issue(6).unwrap();
+
+    let (status, body) = send(router, "PATCH", &ticket, Some(json!({ "up_next": true }))).await;
+    assert!(status.is_client_error(), "{status} {body}");
+    assert!(body.to_string().contains("up_next"), "{body}");
+    assert_eq!(project.gitlab.issue(6).unwrap(), before);
+
+    let cleared = ok(router, "PATCH", &ticket, Some(json!({ "up_next": false }))).await;
+    assert_eq!(t(&cleared)["up_next"], false, "{cleared}");
+}
+
 fn t(value: &Value) -> &Value {
     value.get("ticket").unwrap_or(value)
 }

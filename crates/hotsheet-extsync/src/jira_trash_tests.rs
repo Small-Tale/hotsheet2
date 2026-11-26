@@ -751,7 +751,7 @@ fn jira_live_trash_delete_restore_and_permission_checked_purge() {
         project_key: env("HOTSHEET_JIRA_LIVE_PROJECT"),
         base_url: env("HOTSHEET_JIRA_LIVE_BASE_URL"),
         email: env("HOTSHEET_JIRA_LIVE_EMAIL"),
-        token: env("HOTSHEET_JIRA_LIVE_TOKEN"),
+        token: env("HOTSHEET_JIRA_LIVE_TOKEN").into(),
         default: false,
     });
     let created = jira

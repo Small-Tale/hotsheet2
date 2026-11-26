@@ -45,11 +45,12 @@ fn fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let file = root.path().join("export.json");
     let value = serde_json::json!({"exportVersion":1,"project":{"name":"Legacy","ticketPrefix":"HS2"},"tickets":[{
         "ticket_number":"HS-1","title":"Original","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",
-        "attachments":[{"original_filename":"first.txt","stored_path":"first.txt"},{"original_filename":"second.txt","stored_path":"second.txt"}]
+        "attachments":[{"original_filename":"first.txt","stored_path":"attachments/first.txt"},{"original_filename":"second.txt","stored_path":"attachments/second.txt"}]
     }]});
     std::fs::write(&file, serde_json::to_vec(&value).unwrap()).unwrap();
-    std::fs::write(root.path().join("first.txt"), b"FIRST").unwrap();
-    std::fs::write(root.path().join("second.txt"), b"SECOND").unwrap();
+    std::fs::create_dir_all(root.path().join("attachments")).unwrap();
+    std::fs::write(root.path().join("attachments/first.txt"), b"FIRST").unwrap();
+    std::fs::write(root.path().join("attachments/second.txt"), b"SECOND").unwrap();
     (root, store, file)
 }
 
@@ -138,11 +139,12 @@ fn cli_explicit_omission_can_be_verified_and_backed_up_after_intentional_deletio
     std::fs::create_dir_all(&source).unwrap();
     let exporter = root.path().join("export.mjs");
     let bundle = serde_json::to_string(root.path().to_str().unwrap()).unwrap();
-    std::fs::write(&exporter, format!(r#"import {{copyFileSync}} from 'node:fs';
+    std::fs::write(&exporter, format!(r#"import {{copyFileSync,mkdirSync}} from 'node:fs';
 import {{dirname,join}} from 'node:path';
 const args=process.argv.slice(2),out=args[args.indexOf('--out')+1],bundle={bundle};
 copyFileSync(join(bundle,'export.json'),out);
-for(const file of ['first.txt','second.txt']) copyFileSync(join(bundle,file),join(dirname(out),file));
+mkdirSync(join(dirname(out),'attachments'),{{recursive:true}});
+for(const file of ['first.txt','second.txt']) copyFileSync(join(bundle,'attachments',file),join(dirname(out),'attachments',file));
 "#)).unwrap();
     let migrate = || {
         let mut command = Command::new(workspace_bin::path("hotsheet-migrate"));

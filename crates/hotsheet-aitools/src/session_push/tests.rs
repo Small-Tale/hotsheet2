@@ -516,3 +516,10 @@ fn a_command_runs_in_the_tui_unconfirmed_and_needs_no_session() {
         Err(PushError::Rejected { status: 400, .. })
     ));
 }
+
+#[test]
+fn hs2_a8t481_push_launch_redacts_its_password() {
+    let printed = format!("{:?}", launch(None));
+    assert!(!printed.contains("pw-1"), "{printed}");
+    assert!(printed.contains("password: <redacted>"), "{printed}");
+}

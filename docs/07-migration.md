@@ -41,7 +41,13 @@
 > (for example, `attachments/0/shot.png`); the physical staged copy uses the host
 > filesystem's path separators (HS2-2MEZPW). `hotsheet import` copies them into `attachments/<new-ulid>/`
 > (basename-sanitized). Source files resolve by basename under
-> `<.hotsheet>/attachments/` so a moved project still works.
+> `<.hotsheet>/attachments/` so a moved project still works; the exporter uses the
+> recorded HS1 path only when it resolves (after symbolic links) inside that same
+> directory and otherwise refuses before staging. The importer, including explicit
+> attachment recovery, requires every `stored_path` to be relative, free of `..`, and
+> canonically under `<export dir>/attachments/`; an absolute, traversing, or
+> symlink-escaping path fails with an error naming the HS1 ticket and attachment.
+> Shape errors are rejected before any checkpoint or ticket write (HS2-N250VD).
 >
 > **Built (HS2-PWYTS8):** selecting an HS1 project in the local client detects the
 > exact database marker and opens a destination-only import prompt that identifies
@@ -197,7 +203,10 @@ For each ticket:
   retired worker-target and group-collapse state do not.
 - `git init` the store if needed, install the merge driver (§2.7), make the initial
   commit ("Import N tickets from Hot Sheet 1"). The HS2 server (re)builds the index
-  from the files afterward.
+  from the files afterward. Import creates a store only when `hotsheet-store.json` is
+  absent; an existing store it cannot open (a dangling or unreadable metadata entry,
+  a permission error) fails with a non-zero exit and is never re-initialized, so its
+  prefix and settings survive (HS2-D0XKZS).
 
 **Idempotent & safe:** re-running derives the same HS2 ULIDs and command ids and skips
 equivalent existing values. Existing HS2 command definitions always win; a deterministic

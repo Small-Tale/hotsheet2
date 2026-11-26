@@ -115,11 +115,13 @@ fn legacy_partial_import_cannot_gain_completion_proof_from_an_existing_ticket_al
         .success();
     let content = std::fs::read_to_string(&exporter).unwrap().replace(
         "title:'Migrated once',",
-        "title:'Migrated once',attachments:[{original_filename:'shot.png',stored_path:'hotsheet-export.json.png'}],",
+        "title:'Migrated once',attachments:[{original_filename:'shot.png',stored_path:'attachments/shot.png'}],",
     );
     std::fs::write(
         &exporter,
-        format!("{content}\nwriteFileSync(out+'.png','payload');\n"),
+        format!(
+            "{content}\nconst {{mkdirSync}}=await import('node:fs');const {{dirname,join}}=await import('node:path');\nmkdirSync(join(dirname(out),'attachments'),{{recursive:true}});writeFileSync(join(dirname(out),'attachments','shot.png'),'payload');\n"
+        ),
     )
     .unwrap();
     migration_command(&source, &store, &exporter)

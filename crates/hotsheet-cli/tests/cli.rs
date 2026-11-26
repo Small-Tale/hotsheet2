@@ -4074,6 +4074,57 @@ fn setup_reports_changed_codex_hooks_for_review_and_omits_noop_notices() {
     );
 }
 
+/// HS2-RMQ5XX: headless setup merges into a commented `opencode.json` without losing the
+/// user's comments or keys, a second run is byte-identical, and an unparsable config is
+/// refused by name and left untouched.
+#[test]
+fn hs2_rmq5xx_headless_setup_keeps_jsonc_opencode_config_and_refuses_broken_ones() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let setup = || {
+        let mut cmd = hs(&store);
+        cmd.env("HOTSHEET_HOME", &home)
+            .args(["setup", "opencode", "--project"])
+            .arg(&project);
+        cmd
+    };
+    let config = project.join("opencode.json");
+    std::fs::write(
+        &config,
+        "{\n  // synthetic user config\n  \"model\": \"synthetic/model-b\", // keep\n}\n",
+    )
+    .unwrap();
+    setup().assert().success();
+    let first = std::fs::read_to_string(&config).unwrap();
+    assert!(first.contains("// synthetic user config") && first.contains("// keep"));
+    assert!(first.contains("\"model\": \"synthetic/model-b\""));
+    assert!(first.contains("\"hotsheet\""));
+    setup().assert().success();
+    assert_eq!(std::fs::read_to_string(&config).unwrap(), first);
+
+    let broken = "{ \"model\": \"synthetic/model-b\" \"mcp\": {} }\n";
+    std::fs::write(&config, broken).unwrap();
+    let output = setup().assert().failure().get_output().stderr.clone();
+    let stderr = String::from_utf8_lossy(&output);
+    assert!(stderr.contains("opencode.json"), "{stderr}");
+    assert!(
+        stderr.contains("Hot Sheet left the file unchanged"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("hotsheet-cli setup opencode"), "{stderr}");
+    assert_eq!(std::fs::read_to_string(&config).unwrap(), broken);
+}
+
 #[test]
 fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let root = tempfile::tempdir().unwrap();
@@ -5472,6 +5523,32 @@ fn import_normalizes_close_state_and_retains_the_hs1_number() {
     assert!(!removed.contains("up_next: true"));
 }
 
+/// HS2-D0XKZS: import never re-initializes an existing store it cannot open.
+#[cfg(unix)]
+#[test]
+fn hs2_d0xkzs_import_exits_nonzero_instead_of_re_initializing_an_unopenable_store() {
+    let root = tempfile::tempdir().unwrap();
+    let store_path = root.path().join("store");
+    hotsheet_ticketing::FsStore::init(&store_path, &hotsheet_ticketing::StoreMetadata::new("KEEP"))
+        .unwrap();
+    let metadata = store_path.join("hotsheet-store.json");
+    let target = root.path().join("unmounted/hotsheet-store.json");
+    std::fs::remove_file(&metadata).unwrap();
+    std::os::unix::fs::symlink(&target, &metadata).unwrap();
+    let export = root.path().join("hotsheet-export.json");
+    std::fs::write(
+        &export,
+        r#"{"exportVersion":1,"project":{"ticketPrefix":"EXP"},"tickets":[{"ticket_number":"HS-1","title":"Synthetic"}]}"#,
+    )
+    .unwrap();
+    hs(&store_path)
+        .args(["import", export.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("refusing to re-initialize"));
+    assert_eq!(std::fs::read_link(&metadata).unwrap(), target);
+}
+
 #[test]
 fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery() {
     let root = tempfile::tempdir().unwrap();
@@ -5494,13 +5571,14 @@ fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery
       "tickets": [{"ticket_number":"HS-1","title":"Original title",
         "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",
         "attachments":[
-          {"original_filename":"first.png","stored_path":"first.png"},
-          {"original_filename":"second.png","stored_path":"second.png"}
+          {"original_filename":"first.png","stored_path":"attachments/first.png"},
+          {"original_filename":"second.png","stored_path":"attachments/second.png"}
         ]}]
     }"#,
     )
     .unwrap();
-    std::fs::write(root.path().join("first.png"), b"FIRST").unwrap();
+    std::fs::create_dir_all(root.path().join("attachments")).unwrap();
+    std::fs::write(root.path().join("attachments/first.png"), b"FIRST").unwrap();
     run()
         .args(["import", export.to_str().unwrap()])
         .assert()
@@ -5526,13 +5604,13 @@ fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery
         .success();
     let edited = store.read_ticket(&ticket.id).unwrap();
     // Completed files no longer need the staging source on a retry.
-    std::fs::remove_file(root.path().join("first.png")).unwrap();
+    std::fs::remove_file(root.path().join("attachments/first.png")).unwrap();
     run()
         .args(["import", export.to_str().unwrap()])
         .assert()
         .failure();
     assert!(checkpoint.is_file());
-    std::fs::write(root.path().join("second.png"), b"SECOND").unwrap();
+    std::fs::write(root.path().join("attachments/second.png"), b"SECOND").unwrap();
     run()
         .args(["import", export.to_str().unwrap()])
         .assert()

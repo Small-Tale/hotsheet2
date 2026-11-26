@@ -185,7 +185,11 @@ impl JiraProvider {
         url: &str,
         body: Option<RawBody<'_>>,
     ) -> Result<Vec<u8>, ProviderError> {
-        let credentials = base64(&format!("{}:{}", self.config.email, self.config.token));
+        let credentials = base64(&format!(
+            "{}:{}",
+            self.config.email,
+            self.config.token.expose()
+        ));
         let headers = [
             ("Authorization", format!("Basic {credentials}")),
             ("Accept", "application/json".into()),
@@ -1224,7 +1228,7 @@ mod tests {
             project_key: env("HOTSHEET_JIRA_LIVE_PROJECT"),
             base_url: env("HOTSHEET_JIRA_LIVE_BASE_URL"),
             email: env("HOTSHEET_JIRA_LIVE_EMAIL"),
-            token: env("HOTSHEET_JIRA_LIVE_TOKEN"),
+            token: env("HOTSHEET_JIRA_LIVE_TOKEN").into(),
             default: false,
         });
         let issue = env("HOTSHEET_JIRA_LIVE_ATTACHMENT_ISSUE");

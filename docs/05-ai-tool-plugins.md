@@ -61,6 +61,19 @@ Identical output is a
 byte-level no-op, and managed instruction markers remain the boundary around content
 Hot Sheet may replace.
 
+**Existing configs are merged, never replaced (HS2-RMQ5XX).** The MCP and hook
+writers start from an empty config only when the file is missing. A config that
+exists but cannot be read or parsed (invalid JSON or TOML, a top level that is not
+an object or table, or bytes that are not UTF-8) stops setup, refresh, and
+diagnosis before the first write, so the whole checkout is left byte-identical. The
+error names the project-relative file and the parse error and ends with the exact
+next step: fix the file or move it aside, then rerun `hotsheet-cli setup <tool>`.
+OpenCode reads JSONC, so `opencode.json` may contain comments and trailing commas:
+setup edits only Hot Sheet's `mcp` member in place, keeps every other byte including
+the comments, verifies the edited text parses to the intended value, and leaves a
+current file untouched. Disabling OpenCode leaves its entry in a commented
+`opencode.json` in place rather than rewriting the file (lossless removal: HS2-DWS3NS).
+
 **Read-only diagnosis (HS2-9N8KVR).** `hotsheet-cli setup --diagnose
 [--tool <plugin-id>] [--project <directory>] [--json]` computes the same refresh
 plan without applying it or migrating settings. It reports each plugin's enabled,
@@ -3758,6 +3771,13 @@ provenance/trust label (§ trust gate), not a separate code path.
 a search path: **bundled built-ins → `${HOTSHEET_HOME:-~/.hotsheet2}/plugins/` (machine) → project
 `.hotsheet2/plugins/`**. Both binaries load the same registry, which is what lets a
 headless CLI set up a project for a plugin the user dropped in.
+
+**Path safety at load (HS2-80JHZD).** A manifest `id` names the plugin's install
+directory, so it must be 1-64 lowercase ASCII letters, digits, or hyphens, starting with
+a letter or digit (`[a-z0-9][a-z0-9-]{0,63}`). The loader also refuses any declared write
+target that is absolute or climbs out with `..`. A plugin that breaks either rule fails
+to load: `plugin install` reports the error, and discovery skips it. `plugin remove <id>`
+checks the same id rule before touching the filesystem and exits non-zero on a bad id.
 
 **Trust gate (mandatory, not optional).** A manifest is inert data, but what it
 _writes_ is a supply-chain surface: a plugin's instruction template steers an agent,

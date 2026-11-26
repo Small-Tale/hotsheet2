@@ -1021,7 +1021,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   the same base (a toast says so); if the ticket changed meanwhile the copy is merged when
   the edits are disjoint and otherwise discarded in favour of the current value. A
   successful save or an explicit cancel clears the copy; tag chips remain immediate
-  discrete saves (HS2-RE1PS6).
+  discrete saves (HS2-RE1PS6). Sometimes a list refresh would deselect the ticket being edited,
+  for example when another worker completes it or it leaves the active filter. Its unsaved
+  edit is then saved to that ticket first, while the ticket is still listed and selected.
+  Only after that does the refresh remove it, so the edit is never dropped. A refresh that
+  keeps the ticket listed does not write mid-typing (HS2-QW3PGE).
   The freeform blocked reason uses the same silent blur-flush path and is the single source
   of truth for blocked presentation: a non-empty reason persists and shows the badge/rail,
   an empty edit sends `null` to clear it, and the authoritative response exits
