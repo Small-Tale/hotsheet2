@@ -68,6 +68,7 @@ pub mod slash_path;
 pub mod standby;
 pub mod store;
 pub mod store_git;
+pub mod store_transactions;
 pub mod sync;
 pub mod sync_ai;
 pub mod sync_health;

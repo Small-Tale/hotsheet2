@@ -215,6 +215,7 @@ pub(crate) fn do_rate_ai_feedback(
     feedback: AiFeedbackReq,
     actor: Option<&ActorReq>,
     expected_token: Option<&str>,
+    publish: bool,
 ) -> Result<(ApiTicket, Ticket), ApiError> {
     let (feedback, note_actor) = parse_ai_feedback(feedback, actor)?;
     let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
@@ -246,7 +247,10 @@ pub(crate) fn do_rate_ai_feedback(
         }
         RateError::Store(error) => ApiError::from(error),
     })?;
-    state.changed_in(entry, "updated", &updated);
+    // A checkout batch publishes once every item has landed (HS2-A8TTD7).
+    if publish {
+        state.changed_in(entry, "updated", &updated);
+    }
     Ok((api_ticket(entry, &updated)?, updated))
 }
 

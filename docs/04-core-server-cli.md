@@ -1719,6 +1719,16 @@ deadline. The shared
   handling time. The path-scoped Git commit runs on the process-wide background committer and is
   flushed at shutdown; `git;dur` measures enqueue time, not commit completion. These timings describe local server work; clients can measure their
   subsequent page query separately.
+  `POST /checkouts/{reference}/batch` is all-or-nothing (HS2-A8TTD7), unlike the root
+  `POST /batch` and the CLI/MCP `batch`, which report per-id results. An empty batch and a
+  batch that lists one ticket twice (by any id spelling) are refused with 400 before any
+  write. The route then holds every involved store's ticket transaction for the whole batch,
+  in canonical path order, and snapshots each ticket file. When any item fails (a stale
+  `expected_token` checked under the lock, a validation or completion rule, or an I/O
+  error), the files already written, including the failing item's own partial write, are
+  restored under the same locks. Nothing is committed or published, and the item's error is
+  returned. Another writer therefore sees the selection before or after the whole batch,
+  never part-way. A restore that itself fails is named in the error message.
   Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
   semantic merge driver (§2.7) resolves concurrent edits. Bounded `ls`/full-text reads and
   slug resolution for `show` use the same file-backed SQLite index as the server. Opening
