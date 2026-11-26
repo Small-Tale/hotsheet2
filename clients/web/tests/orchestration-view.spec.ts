@@ -146,8 +146,11 @@ const visibleShare = (page: Page, label: string) =>
   page.locator(`[data-orchestration-view="true"] [aria-label="${label}"]`).evaluate((column) => {
     let track = column.parentElement;
     while (track && !/auto|scroll/.test(getComputedStyle(track).overflowX)) track = track.parentElement;
+    // HS2-3KHE7R: while the board re-renders after a width change there is briefly no scroller;
+    // answer "not in view yet" so the caller's poll waits instead of throwing.
+    if (!track) return 0;
     const box = column.getBoundingClientRect(),
-      view = track!.getBoundingClientRect();
+      view = track.getBoundingClientRect();
     return Math.max(0, Math.min(box.right, view.right) - Math.max(box.left, view.left)) / box.width;
   });
 
