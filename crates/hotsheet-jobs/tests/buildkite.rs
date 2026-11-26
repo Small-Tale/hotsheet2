@@ -3,8 +3,11 @@
 //! codes its documentation gives (<https://buildkite.com/docs/apis/rest-api/builds>:
 //! "List builds for a pipeline" filtered by `branch` and `commit`, each build with
 //! `number`, `state`, `commit`, `branch`, `pull_request`, `web_url` and `jobs`; "Cancel a
-//! build" is `PUT .../builds/{number}/cancel`). No test makes a network call. Synthetic
-//! data only.
+//! build" is `PUT .../builds/{number}/cancel`). HS2-56MTYN: "Get a pipeline" answers
+//! its `repository` URL, and a second scripted port stands in for GitHub's "Compare two
+//! commits" (`GET repos/{owner}/{repo}/compare/{base}...{head}`, `status` `ahead`,
+//! `behind`, `identical` or `diverged`, 404 for an unknown commit). No test makes a
+//! network call. Synthetic data only.
 
 mod common;
 
@@ -15,7 +18,7 @@ use common::{CHECKOUT, Fixture, fixture};
 use hotsheet_jobs::{
     ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, BUILDKITE_KIND, BuildkiteSource,
     CiProvider, CiRun, CiTarget, CiWatchOptions, GateState, GithubApi, Monitor, MonitorConfig,
-    Status, StepStatus, ci_outcome, ensure_ci_watch, gate_state, rewatch_ci,
+    RepositoryHosts, Status, StepStatus, ci_outcome, ensure_ci_watch, gate_state, rewatch_ci,
 };
 use serde_json::{Value, json};
 
@@ -348,4 +351,347 @@ fn hs2_17hvnp_a_rate_limit_keeps_the_last_observation() {
     assert_eq!(job.latest["run_id"], "41");
     assert!(job.outcome.is_none());
     assert_eq!(gate(&fx), GateState::Pending);
+}
+
+// ---- HS2-56MTYN: ancestry through the repository host ----
+
+const OLDER: &str = "3333333333333333333333333333333333333333";
+const OTHER: &str = "4444444444444444444444444444444444444444";
+
+/// The pipeline's own answer, naming the repository it builds.
+fn pipeline_repository(api: &FakeBuildkite, repository: &str) {
+    api.serve(
+        PIPELINE,
+        200,
+        json!({
+            "id": "synthetic", "slug": "widgets", "name": "Widgets",
+            "repository": repository, "default_branch": "main",
+            "provider": {"id": "github", "settings": {}}
+        }),
+    );
+}
+
+/// What `GET .../builds?branch=main` (every commit) answers.
+fn branch_builds(api: &FakeBuildkite, builds: Vec<Value>) {
+    api.serve(
+        &format!("{PIPELINE}/builds?branch=main&per_page=30"),
+        200,
+        Value::Array(builds),
+    );
+}
+
+/// GitHub's compare of the commit with `head`.
+fn compare(github: &FakeBuildkite, head: &str, status: &str) {
+    github.serve(
+        &format!("repos/acme/widgets/compare/{SHA}...{head}?per_page=1"),
+        200,
+        json!({"status": status, "ahead_by": 1, "behind_by": 0, "total_commits": 1}),
+    );
+}
+
+fn compares(github: &FakeBuildkite) -> usize {
+    github.0.lock().unwrap().log.len()
+}
+
+fn hosted_watcher(fx: &Fixture, api: &FakeBuildkite, github: &FakeBuildkite) -> Monitor {
+    let mut monitor = Monitor::new(
+        fx.store.clone(),
+        "monitor-a",
+        MonitorConfig {
+            poll_ms: 100,
+            max_poll_ms: 400,
+            max_error_ms: 1_600,
+            idle_exit_ms: 2_000,
+        },
+    );
+    monitor.register(Box::new(
+        BuildkiteSource::new(api.clone())
+            .with_hosts(RepositoryHosts::new().with_github(github.clone())),
+    ));
+    monitor
+}
+
+#[test]
+fn hs2_56mtyn_a_later_passed_build_covers_the_commit_as_an_ancestor() {
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let github = FakeBuildkite::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    pipeline_repository(&api, "git@github.com:acme/widgets.git");
+    // The commit's own build still runs; a later commit's build, containing it, passed.
+    api.builds(vec![build(41, SHA, "running", json!([]))]);
+    branch_builds(
+        &api,
+        vec![
+            build(42, NEWER, "passed", json!([])),
+            build(41, SHA, "running", json!([])),
+        ],
+    );
+    compare(&github, NEWER, "ahead");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    let run = CiRun {
+        id: 42,
+        attempt: 1,
+        head_sha: NEWER.into(),
+        url: Some("https://buildkite.com/acme/widgets/builds/42".into()),
+        artifact: None,
+    };
+    assert_eq!(gate(&fx), GateState::Green { run: run.clone() });
+    let done = fx.get(&job.id);
+    assert_eq!(done.status, Status::Succeeded);
+    assert_eq!(ci_outcome(&done).unwrap().gate, GateState::Green { run });
+    assert_eq!(compares(&github), 1);
+    // The pipeline was read once, besides the two build lists.
+    let reads: Vec<String> = api
+        .0
+        .lock()
+        .unwrap()
+        .log
+        .iter()
+        .map(|request| request.path.clone())
+        .collect();
+    assert_eq!(reads.iter().filter(|path| *path == PIPELINE).count(), 1);
+
+    // A later red build covering the commit is the newest verdict when nothing passed;
+    // a rewatch ignores it, and the commit's own later pass is green.
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let github = FakeBuildkite::default();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    pipeline_repository(&api, "https://github.com/acme/widgets");
+    api.builds(vec![]);
+    branch_builds(&api, vec![build(50, NEWER, "failed", json!([]))]);
+    compare(&github, NEWER, "ahead");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    assert!(matches!(gate(&fx), GateState::Red { run } if run.id == 50 && run.head_sha == NEWER));
+    rewatch_ci(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    step(&fx, &mut monitor);
+    assert_eq!(gate(&fx), GateState::Pending);
+    api.builds(vec![build(51, SHA, "passed", json!([]))]);
+    branch_builds(
+        &api,
+        vec![
+            build(51, SHA, "passed", json!([])),
+            build(50, NEWER, "failed", json!([])),
+        ],
+    );
+    step(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 51 && run.head_sha == SHA));
+    // The relation was asked once and kept.
+    assert_eq!(compares(&github), 1);
+}
+
+#[test]
+fn hs2_56mtyn_an_older_or_unknown_head_never_covers_and_another_line_supersedes() {
+    // A build of an older commit is not evidence for this one.
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let github = FakeBuildkite::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    pipeline_repository(&api, "https://github.com/acme/widgets.git");
+    api.builds(vec![]);
+    branch_builds(&api, vec![build(39, OLDER, "passed", json!([]))]);
+    compare(&github, OLDER, "behind");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).status, Status::Waiting);
+    assert_eq!(gate(&fx), GateState::Pending);
+
+    // A head GitHub does not know yet is asked again on the next poll, then covers.
+    branch_builds(&api, vec![build(43, NEWER, "passed", json!([]))]);
+    github.serve(
+        &format!("repos/acme/widgets/compare/{SHA}...{NEWER}?per_page=1"),
+        404,
+        json!({"message": "Not Found"}),
+    );
+    step(&fx, &mut monitor);
+    assert_eq!(gate(&fx), GateState::Pending);
+    let asked = compares(&github);
+    step(&fx, &mut monitor);
+    assert_eq!(compares(&github), asked + 1);
+    compare(&github, NEWER, "identical");
+    step(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 43));
+
+    // The branch moved to another line and nothing covers the commit: superseded.
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let github = FakeBuildkite::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    pipeline_repository(&api, "https://github.com/acme/widgets.git");
+    api.builds(vec![]);
+    branch_builds(&api, vec![build(60, OTHER, "passed", json!([]))]);
+    compare(&github, OTHER, "diverged");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    assert_eq!(gate(&fx), GateState::Superseded);
+    let done = fx.get(&job.id);
+    assert_eq!(done.status, Status::Failed);
+    assert_eq!(done.outcome.unwrap().refs["gate"], "superseded");
+
+    // Another line on top does not hide the commit's own pass.
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let github = FakeBuildkite::default();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    pipeline_repository(&api, "https://github.com/acme/widgets.git");
+    api.builds(vec![build(59, SHA, "passed", json!([]))]);
+    branch_builds(&api, vec![build(60, OTHER, "failed", json!([]))]);
+    compare(&github, OTHER, "diverged");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 59));
+}
+
+#[test]
+fn hs2_56mtyn_without_a_host_for_the_repository_the_gate_keeps_exact_coverage() {
+    // No hosts given: the pipeline is not read, and a later pass never covers.
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    pipeline_repository(&api, "https://github.com/acme/widgets.git");
+    api.builds(vec![]);
+    branch_builds(&api, vec![build(42, NEWER, "passed", json!([]))]);
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    step(&fx, &mut monitor);
+    assert_eq!(gate(&fx), GateState::Pending);
+    assert!(
+        api.0
+            .lock()
+            .unwrap()
+            .log
+            .iter()
+            .all(|request| request.path.contains("commit="))
+    );
+
+    // A repository on a host without a port (Bitbucket), or a token that may not read
+    // pipelines (403): exact coverage, and the pipeline is read once.
+    for (status, repository) in [
+        (200, "git@bitbucket.org:acme/widgets.git"),
+        (403, "https://github.com/acme/widgets.git"),
+    ] {
+        let fx = fixture();
+        let api = FakeBuildkite::default();
+        let github = FakeBuildkite::default();
+        ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+        api.serve(PIPELINE, status, json!({"repository": repository}));
+        api.builds(vec![]);
+        branch_builds(&api, vec![build(42, NEWER, "passed", json!([]))]);
+        compare(&github, NEWER, "ahead");
+        let mut monitor = hosted_watcher(&fx, &api, &github);
+        monitor.tick().unwrap();
+        step(&fx, &mut monitor);
+        assert_eq!(gate(&fx), GateState::Pending, "{status}");
+        assert_eq!(compares(&github), 0);
+        let log = api.0.lock().unwrap().log.clone();
+        assert_eq!(log.iter().filter(|r| r.path == PIPELINE).count(), 1);
+        // Exact coverage still judges the commit's own build.
+        api.builds(vec![build(43, SHA, "passed", json!([]))]);
+        step(&fx, &mut monitor);
+        assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 43));
+    }
+
+    // A spent limit or a server error on the pipeline or the compare is retried.
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let github = FakeBuildkite::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.builds(vec![]);
+    branch_builds(&api, vec![build(42, NEWER, "passed", json!([]))]);
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    for status in [429, 503] {
+        api.serve(PIPELINE, status, json!({"message": "synthetic"}));
+        fx.clock.advance(30_000);
+        monitor.tick().unwrap();
+        assert!(fx.get(&job.id).outcome.is_none(), "{status}");
+    }
+    pipeline_repository(&api, "https://github.com/acme/widgets.git");
+    for status in [401, 403, 429, 500] {
+        github.serve(
+            &format!("repos/acme/widgets/compare/{SHA}...{NEWER}?per_page=1"),
+            status,
+            json!({"message": "synthetic"}),
+        );
+        fx.clock.advance(30_000);
+        monitor.tick().unwrap();
+        assert_eq!(gate(&fx), GateState::Pending, "{status}");
+    }
+    compare(&github, NEWER, "ahead");
+    fx.clock.advance(30_000);
+    monitor.tick().unwrap();
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 42));
+}
+
+#[test]
+fn hs2_56mtyn_lookups_are_budgeted_per_poll_and_cancel_reaches_only_the_commits_build() {
+    // Five lookups per poll; a walk left unfinished is neither green nor superseded.
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let github = FakeBuildkite::default();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    pipeline_repository(&api, "https://github.com/acme/widgets.git");
+    api.builds(vec![]);
+    let heads: Vec<String> = (0..6).map(|n| format!("{:040x}", 0xa0 + n)).collect();
+    let mut listed = Vec::new();
+    for (index, head) in heads.iter().enumerate() {
+        let number = 80 - index as u64;
+        let covering = index == 5;
+        compare(&github, head, if covering { "ahead" } else { "diverged" });
+        listed.push(build(
+            number,
+            head,
+            if covering { "passed" } else { "failed" },
+            json!([]),
+        ));
+    }
+    branch_builds(&api, listed);
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    assert_eq!(compares(&github), 5);
+    assert_eq!(gate(&fx), GateState::Pending);
+    step(&fx, &mut monitor);
+    assert_eq!(compares(&github), 6);
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 75));
+
+    // Cancel: a later build covering the commit is never cancelled; the commit's own is.
+    let fx = fixture();
+    let api = FakeBuildkite::default();
+    let github = FakeBuildkite::default();
+    let job = ensure_ci_watch(
+        &fx.store,
+        CHECKOUT,
+        &target(),
+        &CiWatchOptions {
+            ticket: None,
+            can_cancel: true,
+        },
+    )
+    .unwrap();
+    pipeline_repository(&api, "https://github.com/acme/widgets.git");
+    api.builds(vec![build(70, SHA, "running", json!([]))]);
+    branch_builds(
+        &api,
+        vec![
+            build(71, NEWER, "running", json!([])),
+            build(70, SHA, "running", json!([])),
+        ],
+    );
+    compare(&github, NEWER, "ahead");
+    api.serve(
+        &format!("{PIPELINE}/builds/70/cancel"),
+        200,
+        build(70, SHA, "canceling", json!([])),
+    );
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).latest["run_id"], "71");
+    fx.store.request_cancel(CHECKOUT, &job.id).unwrap();
+    step(&fx, &mut monitor);
+    assert!(
+        api.puts().is_empty(),
+        "a later commit's build is not cancelled"
+    );
 }

@@ -119,6 +119,13 @@ impl UreqGitlabApi {
         }
     }
 
+    /// HS2-56MTYN: the host of the API root (without a port), whose repositories this
+    /// port can answer ancestry for. `None` when no API root may be used.
+    pub(super) fn repository_host(&self) -> Option<String> {
+        let host = api_host(self.base.as_deref()?)?;
+        host.split(':').next().map(str::to_owned)
+    }
+
     fn token(&mut self, base: &str) -> Option<String> {
         if let Some(token) = environment_token() {
             return Some(token);
@@ -213,6 +220,28 @@ impl GithubApi for UreqGitlabApi {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn hs2_56mtyn_the_repository_host_is_the_api_roots_host_without_a_port() {
+        let port = |base: Option<&str>| UreqGitlabApi {
+            home: PathBuf::from("unused"),
+            base: base.map(str::to_owned),
+            glab: None,
+            glab_not_before_ms: 0,
+            transport: UreqGitHubTransport,
+        };
+        for (base, host) in [
+            (Some(DEFAULT_API), Some("gitlab.com")),
+            (
+                Some("https://gitlab.example.test:8443/api/v4"),
+                Some("gitlab.example.test"),
+            ),
+            (Some("http://127.0.0.1:9/api/v4"), Some("127.0.0.1")),
+            (None, None),
+        ] {
+            assert_eq!(port(base).repository_host().as_deref(), host, "{base:?}");
+        }
+    }
 
     #[test]
     fn hs2_tpahya_a_token_is_only_ever_sent_over_https_or_to_this_machine() {

@@ -11,6 +11,13 @@
 //! ancestry, so a CircleCI gate attests exact coverage only (see
 //! [`CiProvider::attests_ancestors`]).
 //!
+//! HS2-56MTYN: a project names the repository it builds (`GET project/{slug}`,
+//! `vcs_info.vcs_url`). When that repository is on a host the source was given
+//! ([`RepositoryHosts`]: GitHub, or the configured GitLab), a later pipeline of the
+//! branch whose revision contains the commit covers it as an ancestor, and a branch
+//! whose newest pipeline is on another line, with nothing covering the commit,
+//! supersedes it. Without such a host the gate keeps exact coverage.
+//!
 //! All access goes through the shared REST port ([`GithubApi`]) rooted at `/api/v2`, so
 //! tests run offline with fixtures. A rerun is a new workflow of the same name in the
 //! same pipeline; the newest of each name counts, and the run floor is the pipeline
@@ -20,6 +27,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::ancestry::{HostRepository, MAX_RELATIONS_PER_POLL, RepositoryHosts, walk};
 use crate::github::{
     ApiMethod, ApiRequest, ApiResponse, CIRCLECI_KIND, CiProvider, CiTarget, GithubApi, RunFloor,
     clean, query_value, transient,
@@ -47,6 +55,31 @@ struct Pipeline {
     state: Option<String>,
     #[serde(default)]
     vcs: Option<Vcs>,
+}
+
+/// HS2-56MTYN: what the project read needs: the repository it builds.
+#[derive(Clone, Debug, Default, Deserialize)]
+struct Project {
+    #[serde(default)]
+    vcs_info: Option<VcsInfo>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+struct VcsInfo {
+    #[serde(default)]
+    vcs_url: Option<String>,
+}
+
+impl Pipeline {
+    fn revision(&self) -> Option<&str> {
+        self.vcs.as_ref().and_then(|vcs| vcs.revision.as_deref())
+    }
+
+    /// Whether the pipeline was built from exactly the commit.
+    fn own(&self, sha: &str) -> bool {
+        self.revision()
+            .is_some_and(|revision| revision.eq_ignore_ascii_case(sha))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -99,6 +132,8 @@ enum Verdict {
     Cancelled,
     Running,
     Waiting,
+    /// HS2-56MTYN: the branch moved to another line and nothing covers the commit.
+    Superseded,
 }
 
 /// The workflows a gate counts: the newest of each name, or of the one named.
@@ -152,6 +187,10 @@ struct Cached {
 pub struct CircleciSource<A: GithubApi> {
     api: A,
     jobs: BTreeMap<String, Cached>,
+    /// HS2-56MTYN: the hosts that answer ancestry for a project's repository.
+    hosts: RepositoryHosts,
+    /// HS2-56MTYN: each project's repository on one of those hosts, once read.
+    repositories: BTreeMap<String, Option<HostRepository>>,
 }
 
 impl<A: GithubApi> CircleciSource<A> {
@@ -159,7 +198,40 @@ impl<A: GithubApi> CircleciSource<A> {
         Self {
             api,
             jobs: BTreeMap::new(),
+            hosts: RepositoryHosts::new(),
+            repositories: BTreeMap::new(),
         }
+    }
+
+    /// HS2-56MTYN: ask these hosts whether a later pipeline covers the commit.
+    #[must_use]
+    pub fn with_hosts(mut self, hosts: RepositoryHosts) -> Self {
+        self.hosts = hosts;
+        self
+    }
+
+    /// HS2-56MTYN: the repository the project builds, when a host can answer for it.
+    /// A token that may not read the project (403) leaves exact coverage.
+    fn repository(&mut self, project: &str) -> Result<Option<HostRepository>, WatchError> {
+        if !self.hosts.any() {
+            return Ok(None);
+        }
+        if let Some(known) = self.repositories.get(project) {
+            return Ok(known.clone());
+        }
+        let response = self.get(format!("project/{project}"))?;
+        let found = match response.status {
+            200 => serde_json::from_str::<Project>(&response.body)
+                .map_err(|_| transient(&response))?
+                .vcs_info
+                .and_then(|info| info.vcs_url)
+                .and_then(|url| self.hosts.repository(&url)),
+            403 => None,
+            404 => return Err(WatchError::Gone),
+            _ => return Err(transient(&response)),
+        };
+        self.repositories.insert(project.to_owned(), found.clone());
+        Ok(found)
     }
 
     fn get(&mut self, path: String) -> Result<ApiResponse, WatchError> {
@@ -232,17 +304,43 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
             "project/{project}/pipeline?branch={}",
             query_value(&target.branch)
         ))?;
-        let mut pipelines: Vec<Pipeline> = listed
+        let mut listed: Vec<Pipeline> = listed
             .into_iter()
             .filter(|pipeline| {
-                pipeline.vcs.as_ref().is_some_and(|vcs| {
-                    vcs.branch.as_deref() == Some(target.branch.as_str())
-                        && vcs
-                            .revision
-                            .as_deref()
-                            .is_some_and(|revision| revision.eq_ignore_ascii_case(&target.sha))
-                })
+                pipeline
+                    .vcs
+                    .as_ref()
+                    .is_some_and(|vcs| vcs.branch.as_deref() == Some(target.branch.as_str()))
             })
+            .collect();
+        listed.sort_by_key(|pipeline| std::cmp::Reverse(pipeline.number));
+        let mut unfinished = false;
+        let mut diverged_first = false;
+        let covering: Vec<usize> = match self.repository(&project)? {
+            None => (0..listed.len())
+                .filter(|index| listed[*index].own(&target.sha))
+                .collect(),
+            Some(repository) => {
+                // HS2-56MTYN: a later pipeline whose revision contains the commit.
+                let heads: Vec<Option<&str>> = listed.iter().map(Pipeline::revision).collect();
+                let mut budget = MAX_RELATIONS_PER_POLL;
+                let hosts = &mut self.hosts;
+                let found = walk(&target.sha, &heads, |head| {
+                    hosts.relation(&repository, &target.sha, head, &mut budget)
+                })?;
+                unfinished = found.unfinished;
+                diverged_first = found.diverged_first;
+                let mut covering = found.covering;
+                // The commit's own pipelines always cover it.
+                covering.extend((0..listed.len()).filter(|index| listed[*index].own(&target.sha)));
+                covering.sort_unstable();
+                covering.dedup();
+                covering
+            }
+        };
+        let mut pipelines: Vec<Pipeline> = covering
+            .into_iter()
+            .map(|index| listed[index].clone())
             .filter(|pipeline| {
                 floor.is_none_or(|floor| {
                     RunFloor {
@@ -252,7 +350,6 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
                 })
             })
             .collect();
-        pipelines.sort_by_key(|pipeline| std::cmp::Reverse(pipeline.number));
         pipelines.truncate(MAX_PIPELINES_PER_POLL);
         // Each pipeline's workflows; a pipeline whose workflows all finished is kept.
         let mut judged = Vec::new();
@@ -291,6 +388,7 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
             .or((!judged.is_empty()).then_some(0));
         let (state_verdict, current) = match current {
             Some(index) => (verdicts[index], Some(&judged[index])),
+            None if diverged_first => (Verdict::Superseded, None),
             None => (Verdict::Waiting, None),
         };
         // The counted workflows' jobs are the Job's steps.
@@ -314,7 +412,9 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
         }
         steps.truncate(crate::steps::MAX_STEPS);
         let cached = self.jobs.entry(job.id.clone()).or_default();
+        // Only the commit's own pipeline's workflows are ever cancelled.
         cached.cancellable = current
+            .filter(|(pipeline, _)| pipeline.own(&target.sha))
             .map(|(_, workflows)| {
                 counted(&target, workflows)
                     .into_iter()
@@ -334,7 +434,8 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
         if cached.reported.as_deref() == Some(fingerprint.as_str()) {
             return Ok(Poll::NotModified);
         }
-        cached.reported = Some(fingerprint);
+        // A lookup left for the next poll means this verdict is not final.
+        cached.reported = (!unfinished).then_some(fingerprint);
         let outcome_of = |gate: &str| {
             current.map(|(pipeline, workflows)| outcome(&target, gate, pipeline, workflows))
         };
@@ -347,6 +448,7 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
             (Verdict::Success, Some(green), _, _) => Observed::Succeeded(green),
             (Verdict::Failed, _, Some(red), _) => Observed::Failed(red),
             (Verdict::Cancelled, _, _, Some(cancelled)) => Observed::Cancelled(cancelled),
+            (Verdict::Superseded, ..) => Observed::Failed(superseded(&target)),
             (Verdict::Running, ..) => Observed::Running,
             _ => Observed::Waiting,
         };
@@ -354,7 +456,10 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
         if let Some((pipeline, _)) = current {
             latest.insert("run_id".to_owned(), pipeline.number.to_string());
             latest.insert("run_attempt".to_owned(), "1".to_owned());
-            latest.insert("run_head_sha".to_owned(), target.sha.clone());
+            latest.insert(
+                "run_head_sha".to_owned(),
+                clean(pipeline.revision().unwrap_or(&target.sha), 64),
+            );
             latest.insert(
                 "run_status".to_owned(),
                 format!("{state_verdict:?}").to_ascii_lowercase(),
@@ -435,8 +540,11 @@ fn outcome(target: &CiTarget, gate: &str, pipeline: &Pipeline, workflows: &[Work
         ("workflow".to_owned(), clean(&target.workflow, 200)),
         ("run_id".to_owned(), pipeline.number.to_string()),
         ("run_attempt".to_owned(), "1".to_owned()),
-        // Exact coverage: the pipeline was built from the commit itself.
-        ("run_head_sha".to_owned(), target.sha.clone()),
+        // The commit itself, or (HS2-56MTYN) a later revision containing it.
+        (
+            "run_head_sha".to_owned(),
+            clean(pipeline.revision().unwrap_or(&target.sha), 64),
+        ),
         (
             "run_conclusion".to_owned(),
             clean(
@@ -465,6 +573,25 @@ fn outcome(target: &CiTarget, gate: &str, pipeline: &Pipeline, workflows: &[Work
         summary: Some(format!(
             "CircleCI pipeline {} {verdict} for {}",
             pipeline.number,
+            &target.sha[..7]
+        )),
+        refs,
+    }
+}
+
+/// HS2-56MTYN: the outcome of a gate the branch moved past, with no pipeline of its own.
+fn superseded(target: &CiTarget) -> Outcome {
+    let refs = BTreeMap::from([
+        ("gate".to_owned(), "superseded".to_owned()),
+        ("commit".to_owned(), target.sha.clone()),
+        ("repo".to_owned(), target.repo.clone()),
+        ("branch".to_owned(), target.branch.clone()),
+        ("workflow".to_owned(), clean(&target.workflow, 200)),
+    ]);
+    Outcome {
+        summary: Some(format!(
+            "CircleCI: {} moved past {} to another line",
+            clean(&target.branch, 200),
             &target.sha[..7]
         )),
         refs,

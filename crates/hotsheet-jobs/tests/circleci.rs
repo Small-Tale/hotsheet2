@@ -4,8 +4,10 @@
 //! `GET /project/{project-slug}/pipeline?branch=` with `items[]` of `id`, `number`,
 //! `state` and `vcs.revision`/`vcs.branch`; `GET /pipeline/{id}/workflow` with `name`,
 //! `status` and `created_at`; `GET /workflow/{id}/job` with `job_number`, `name` and
-//! `status`; `POST /workflow/{id}/cancel` answering 202). No test makes a network call.
-//! Synthetic data only.
+//! `status`; `POST /workflow/{id}/cancel` answering 202). HS2-56MTYN: `GET
+//! /project/{project-slug}` answers `vcs_info.vcs_url`, and a second scripted port
+//! stands in for GitHub's "Compare two commits" (`status` `ahead`, `behind`,
+//! `identical` or `diverged`). No test makes a network call. Synthetic data only.
 
 mod common;
 
@@ -15,8 +17,8 @@ use std::sync::{Arc, Mutex};
 use common::{CHECKOUT, Fixture, fixture};
 use hotsheet_jobs::{
     ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CIRCLECI_KIND, CiProvider, CiTarget,
-    CiWatchOptions, CircleciSource, GateState, GithubApi, Monitor, MonitorConfig, Status,
-    StepStatus, ci_outcome, ensure_ci_watch, gate_state, rewatch_ci,
+    CiWatchOptions, CircleciSource, GateState, GithubApi, Monitor, MonitorConfig, RepositoryHosts,
+    Status, StepStatus, ci_outcome, ensure_ci_watch, gate_state, rewatch_ci,
 };
 use serde_json::{Value, json};
 
@@ -438,4 +440,190 @@ fn hs2_17hvnp_cancel_reaches_only_the_commits_unfinished_workflows() {
     );
     step(&fx, &mut monitor);
     assert_eq!(gate(&fx, "*"), GateState::Cancelled);
+}
+
+// ---- HS2-56MTYN: ancestry through the repository host ----
+
+const OTHER: &str = "4444444444444444444444444444444444444444";
+
+/// The project's own answer, naming the repository it builds.
+fn project_repository(api: &FakeCircleci, url: &str) {
+    api.serve(
+        &format!("project/{PROJECT}"),
+        200,
+        json!({
+            "slug": PROJECT, "name": "widgets", "id": "synthetic",
+            "organization_name": "acme", "organization_slug": "gh/acme",
+            "organization_id": "synthetic",
+            "vcs_info": {"vcs_url": url, "provider": "GitHub", "default_branch": "main"}
+        }),
+    );
+}
+
+fn compare(github: &FakeCircleci, head: &str, status: &str) {
+    github.serve(
+        &format!("repos/acme/widgets/compare/{SHA}...{head}?per_page=1"),
+        200,
+        json!({"status": status}),
+    );
+}
+
+fn hosted_watcher(fx: &Fixture, api: &FakeCircleci, github: &FakeCircleci) -> Monitor {
+    let mut monitor = Monitor::new(
+        fx.store.clone(),
+        "monitor-a",
+        MonitorConfig {
+            poll_ms: 100,
+            max_poll_ms: 400,
+            max_error_ms: 1_600,
+            idle_exit_ms: 2_000,
+        },
+    );
+    monitor.register(Box::new(
+        CircleciSource::new(api.clone())
+            .with_hosts(RepositoryHosts::new().with_github(github.clone())),
+    ));
+    monitor
+}
+
+#[test]
+fn hs2_56mtyn_a_later_pipeline_covers_the_commit_and_another_line_supersedes_it() {
+    let fx = fixture();
+    let api = FakeCircleci::default();
+    let github = FakeCircleci::default();
+    let job = ensure_ci_watch(
+        &fx.store,
+        CHECKOUT,
+        &target("*"),
+        &CiWatchOptions::default(),
+    )
+    .unwrap();
+    project_repository(&api, "https://github.com/acme/widgets");
+    api.pipelines(vec![
+        pipeline(92, NEWER, "created"),
+        pipeline(91, SHA, "created"),
+    ]);
+    api.workflows(&pipeline_id(92), vec![workflow(92, "build", "success", T1)]);
+    api.workflows(&pipeline_id(91), vec![workflow(91, "build", "running", T1)]);
+    api.jobs(
+        &workflow_id(92, "build"),
+        vec![workflow_job(401, "test", "success")],
+    );
+    compare(&github, NEWER, "ahead");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    let green = gate(&fx, "*");
+    assert!(matches!(&green, GateState::Green { run } if run.id == 92 && run.head_sha == NEWER));
+    let done = fx.get(&job.id);
+    assert_eq!(done.outcome.unwrap().refs["run_head_sha"], NEWER);
+
+    // An older revision, and a project on a host without a port, never cover.
+    for (url, status) in [
+        ("https://github.com/acme/widgets", "behind"),
+        ("https://bitbucket.org/acme/widgets", "ahead"),
+    ] {
+        let fx = fixture();
+        let api = FakeCircleci::default();
+        let github = FakeCircleci::default();
+        ensure_ci_watch(
+            &fx.store,
+            CHECKOUT,
+            &target("*"),
+            &CiWatchOptions::default(),
+        )
+        .unwrap();
+        project_repository(&api, url);
+        api.pipelines(vec![pipeline(92, NEWER, "created")]);
+        api.workflows(&pipeline_id(92), vec![workflow(92, "build", "success", T1)]);
+        compare(&github, NEWER, status);
+        let mut monitor = hosted_watcher(&fx, &api, &github);
+        monitor.tick().unwrap();
+        step(&fx, &mut monitor);
+        assert_eq!(gate(&fx, "*"), GateState::Pending, "{url}");
+    }
+
+    // The branch moved to another line: superseded, and nothing is cancelled.
+    let fx = fixture();
+    let api = FakeCircleci::default();
+    let github = FakeCircleci::default();
+    let job = ensure_ci_watch(
+        &fx.store,
+        CHECKOUT,
+        &target("*"),
+        &CiWatchOptions::default(),
+    )
+    .unwrap();
+    project_repository(&api, "git@github.com:acme/widgets.git");
+    api.pipelines(vec![pipeline(95, OTHER, "created")]);
+    compare(&github, OTHER, "diverged");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    assert_eq!(gate(&fx, "*"), GateState::Superseded);
+    assert_eq!(fx.get(&job.id).status, Status::Failed);
+}
+
+#[test]
+fn hs2_56mtyn_a_project_read_refused_keeps_exact_coverage_and_cancel_skips_later_pipelines() {
+    // 403 on the project: exact coverage, read once.
+    let fx = fixture();
+    let api = FakeCircleci::default();
+    let github = FakeCircleci::default();
+    ensure_ci_watch(
+        &fx.store,
+        CHECKOUT,
+        &target("*"),
+        &CiWatchOptions::default(),
+    )
+    .unwrap();
+    api.serve(
+        &format!("project/{PROJECT}"),
+        403,
+        json!({"message": "Permission denied"}),
+    );
+    api.pipelines(vec![pipeline(92, NEWER, "created")]);
+    api.workflows(&pipeline_id(92), vec![workflow(92, "build", "success", T1)]);
+    compare(&github, NEWER, "ahead");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    step(&fx, &mut monitor);
+    assert_eq!(gate(&fx, "*"), GateState::Pending);
+    let log = api.0.lock().unwrap().log.clone();
+    assert_eq!(
+        log.iter()
+            .filter(|request| request.path == format!("project/{PROJECT}"))
+            .count(),
+        1
+    );
+    assert!(github.0.lock().unwrap().log.is_empty());
+
+    // The newest covering pipeline is a later commit's: its workflows are not
+    // cancelled.
+    let fx = fixture();
+    let api = FakeCircleci::default();
+    let github = FakeCircleci::default();
+    let job = ensure_ci_watch(
+        &fx.store,
+        CHECKOUT,
+        &target("*"),
+        &CiWatchOptions {
+            ticket: None,
+            can_cancel: true,
+        },
+    )
+    .unwrap();
+    project_repository(&api, "https://github.com/acme/widgets");
+    api.pipelines(vec![
+        pipeline(92, NEWER, "created"),
+        pipeline(91, SHA, "created"),
+    ]);
+    api.workflows(&pipeline_id(92), vec![workflow(92, "build", "running", T1)]);
+    api.workflows(&pipeline_id(91), vec![workflow(91, "build", "running", T1)]);
+    api.jobs(&workflow_id(92, "build"), vec![]);
+    compare(&github, NEWER, "ahead");
+    let mut monitor = hosted_watcher(&fx, &api, &github);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).latest["run_head_sha"], NEWER);
+    fx.store.request_cancel(CHECKOUT, &job.id).unwrap();
+    step(&fx, &mut monitor);
+    assert!(api.posts().is_empty());
 }
