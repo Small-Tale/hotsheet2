@@ -6,14 +6,14 @@ description: 'Hot Sheet 2 project-specific guidance'
 
 # Hot Sheet 2 project guidance
 
-Read this generated root before changing code. For ticket claims, phases, notes,
-handoffs, completion, and queue planning, read `.agents/skills/hotsheet/SKILL.md`
-and the relevant role skill in `.agents/skills/`; Claude mirrors live in
-`.claude/skills/`. Their sources are `plugins/{codex,claude}/SKILL.md` and
-`plugins/shared/role-skills/`, not the installed copies. Use an equivalent
-available tool when a skill names a provider-specific capability. Area-specific
-documents are linked below; `guidance/README.md` identifies the pinned shared
-rule source.
+Read this generated root before changing code. The shared Hot Sheet workflow
+section below is binding; for queue planning and command recipes read
+`.agents/skills/hotsheet/SKILL.md` and the relevant role skill in
+`.agents/skills/` (Claude mirrors in `.claude/skills/`). Their sources are
+`plugins/{codex,claude}/SKILL.md` and `plugins/shared/role-skills/`, not the
+installed copies. Use an equivalent available tool when a skill names a
+provider-specific capability. `guidance/README.md` identifies the pinned shared
+rule source; HS2-JQAWX6 records the rule selection and instruction budget.
 
 ## Product and architecture
 
@@ -31,17 +31,11 @@ and AI-tool setup. If remote creation cannot be automated safely, print exact
 provider-neutral next steps.
 
 The Tauri client uses Kerf for state, routing, lists, API resources, rendering,
-and event delegation. Before client work, read the installed
-`clients/web/node_modules/kerfjs/ai/skill.md`,
-`clients/web/node_modules/@kerfjs/ui/llms.txt`, and
-the linked component, interaction, layout, accessibility, and writing guidance
-relevant to the change. Use public components and `--kui-*` tokens, not private
-classes, parts, tokens, or external sizing. The consumer catalog is
+and event delegation. The Kerf and UI rules below apply with `clients/web` as
+the installing package. The consumer catalog is
 `clients/web/ai/component-catalog-extension.json`; project decisions and
 deviations are in `docs/ui-design-philosophy.md` and
-`docs/design-guidelines.md`. See `guidance/README.md` for source ownership.
-Do not introduce a Kerf workaround for a missing public API: file a KF ticket
-and keep the app ticket blocked. Kerf upgrades bump all four pinned packages
+`docs/design-guidelines.md`. Kerf upgrades bump all four pinned packages
 together, regenerate the catalog, and run the full root check.
 
 Web Awesome Pro needs a separate license decision; see
@@ -57,28 +51,19 @@ polling; test idle request rate and reconnection. Ticket editors never write
 while typing (HS2-RE1PS6); follow `docs/ui-design-philosophy.md` and cover
 rapid coalescing, focus moves, edits after save, and reload recovery.
 
-For visible changes, apply the real-app browser review in
-`plugins/shared/visual-qa.md` at wide, medium, narrow, and wide again. Inspect
-rendered states, both color schemes, and WebKit for sizing/focus risk. Attach
-an after capture for a ticket's problem/design image. If visual capture or
-attachment is blocked, leave the ticket open and record the exact blocker.
-The installed Kerf docs and `docs/manual-test-plan.md` own further UI detail.
-
-Use production components in `/ux-demo`, and extend each changed component's
-demo for new states. Exercise child actions through the shipped parent in E2E
-tests. Before composing a screen, name each region's owning public component
-and read the installed Kerf interaction conventions. Keep application logic in
-pure modules with sibling tests; no import-time listeners, timers, or polling.
-See `docs/12-code-organization-and-testing.md` and
-`docs/ui-design-philosophy.md`.
+Visible changes follow the Visual QA and UI Evaluation rules below;
+`docs/manual-test-plan.md` owns manual UI checks. Use production components in
+`/ux-demo`, and extend each changed component's demo for new states. Exercise
+child actions through the shipped parent in E2E tests. Keep application logic
+in pure modules with sibling tests; no import-time listeners, timers, or
+polling. See `docs/12-code-organization-and-testing.md`.
 
 ## Ticket verification and push policy
 
 Push policy: `push-per-ticket`. The maintainer has authorized routine
 fast-forward pushes of verified ticket commits to `origin/main`; do not ask
-again. Preserve local edits in a clean worktree. Stage named paths, review the
-staged diff, commit once per ticket with a slug-first subject, and never rewrite
-shared history. Use `scripts/check.sh --plan` to inspect affected checks and
+again. Preserve local edits in a clean worktree; the Git Commit and Push rule
+below owns commit shape and history safety. Use `scripts/check.sh --plan` to inspect affected checks and
 `scripts/check.sh` at the ticket/integration boundary. `scripts/push.sh`
 requires an exact-tree receipt outside the explicit deviations below. After a
 push, confirm the remote SHA and covering `main` CI with

@@ -6,7 +6,13 @@
     "hotsheet-testing-philosophy",
     "hotsheet-requirements-documentation",
     "hotsheet-visual-qa",
+    "hotsheet-workflow",
     "conventions-as-code",
-    "customer-data-hygiene"
+    "ui-composition",
+    "ui-evaluation",
+    "customer-data-hygiene",
+    "kerf-ui-usage",
+    "git-commit-and-push",
+    "kerf-ui-interaction-defaults"
   ]
 }

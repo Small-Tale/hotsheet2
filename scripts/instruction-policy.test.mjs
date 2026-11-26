@@ -18,22 +18,39 @@ test('HS2-A47SCQ keeps one generated instruction owner and the local rule', () =
   for (const [, name] of sections) {
     assert.equal(agents.split(`<!-- hotsheet:end section=${name} -->`).length - 1, 1);
   }
-  assert.equal((agents.match(/<!-- hotsheet-instructions-version: \d+ -->/g) ?? []).length, 0);
+  // HS2-JQAWX6: the selected shared workflow rule carries exactly one instructions-version marker.
+  assert.equal((agents.match(/<!-- hotsheet-instructions-version: \d+ -->/g) ?? []).length, 1);
   assert.match(agents, /Push policy: `push-per-ticket`/);
   assert.match(agents, /\.agents\/skills\/hotsheet\/SKILL\.md/);
 });
 
-test('HS2-S2FZFM keeps all root guidance inside a measured instruction budget', () => {
+// HS2-JQAWX6 restored the workflow and UI judgment rules HS2-S2FZFM had dropped. Codex reads them only
+// when the project raises `project_doc_max_bytes` above this ceiling; HS2-S2FZFM's 28,000-byte target
+// is retired. Raise the ceiling only with a measured, reviewed reason.
+const ROOT_INSTRUCTION_CEILING = 40_000;
+
+test('HS2-JQAWX6 selects the essential shared rules inside a measured instruction budget', () => {
   const agents = read('AGENTS.md');
   const selection = JSON.parse(read('guidance/rulesync/project-selection.json'));
   const bytes = Buffer.byteLength(agents, 'utf8');
-  assert.ok(bytes < 28_000, `root AGENTS.md is ${bytes} bytes; target is below 28,000`);
-  assert.ok(32_768 - bytes > 4_768, 'leave room for global and nested project instructions');
-  assert.ok(!selection.rules.includes('hotsheet-workflow'), 'the installed skill owns ticket workflow detail');
+  assert.ok(
+    bytes < ROOT_INSTRUCTION_CEILING,
+    `root AGENTS.md is ${bytes} bytes; ceiling is ${ROOT_INSTRUCTION_CEILING}`,
+  );
+  for (const rule of [
+    'hotsheet-workflow',
+    'git-commit-and-push',
+    'ui-composition',
+    'ui-evaluation',
+    'kerf-ui-usage',
+    'kerf-ui-interaction-defaults',
+  ])
+    assert.ok(selection.rules.includes(rule), `${rule} must stay selected`);
+  assert.match(agents, /Create a ticket before features, bugs, refactors/);
   assert.match(agents, /docs\/29-affected-local-verification\.md/);
   assert.match(agents, /docs\/ui-design-philosophy\.md/);
   assert.match(agents, /docs\/34-development-strategies\.md/);
-  assert.match(agents, /<!-- hotsheet:end section=visual-qa -->\s*$/);
+  assert.match(agents, /Push policy: `push-per-ticket`/);
 });
 
 test('HS2-XJRJ9Z keeps the reviewed local guidance once in generated instructions', () => {
@@ -172,7 +189,10 @@ test('HS2-M0ANR4 role skills keep completed side-branch work on merge-pending/<S
   const worker = read('plugins/shared/role-skills/hotsheet-worker.md');
   const integrator = read('plugins/shared/role-skills/hotsheet-integrator.md');
   const dispatcher = read('plugins/shared/role-skills/hotsheet-dispatcher.md');
-  assert.match(worker, /secrets, customer data and machine-local paths, then push the worker\s+branch to `merge-pending\/<SLUG>`/);
+  assert.match(
+    worker,
+    /secrets, customer data and machine-local paths, then push the worker\s+branch to `merge-pending\/<SLUG>`/,
+  );
   assert.match(worker, /Never rebase or force-push a pushed `merge-pending\/`\s+branch/);
   assert.match(integrator, /fast-forward, merge or\s+cherry-pick/);
   assert.match(integrator, /never rebase\s+or force-push it/);

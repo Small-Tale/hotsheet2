@@ -44,15 +44,31 @@ target out of this configuration so the reusable bodies have one output owner.
 In a fresh project create `CLAUDE.md` containing that import. Preserve existing
 Claude-local text beside its import in an existing project.
 
-Hot Sheet 2's committed `project-selection.json` selects six rules that apply
-across the whole repository: four general Hot Sheet rules, conventions as code,
-and customer data hygiene (HS2-S2FZFM). The installed Hot Sheet skill owns the
-full ticket workflow. The local Rulesync rule keeps binding project deviations
-and points to task-specific skills, installed Kerf guidance, and project docs.
-This keeps generated `AGENTS.md` below 28,000 bytes, leaving room under Codex's
-default 32,768-byte project instruction budget. The structural
-`scripts/instruction-policy.test.mjs` checks that budget and the essential
-pointers; `scripts/check-rulesync-generation.mjs` checks exact output bytes.
+Hot Sheet 2's committed `project-selection.json` selects twelve rules
+(HS2-JQAWX6): the four general Hot Sheet rules, the Hot Sheet workflow,
+conventions as code, customer data hygiene, Git commit and push, and the four
+UI judgment rules (`ui-composition`, `ui-evaluation`, `kerf-ui-usage`,
+`kerf-ui-interaction-defaults`). HS2-S2FZFM had cut the selection to six to
+fit Codex's default 32,768-byte project instruction budget, which dropped
+binding workflow and UI contracts. The installed Hot Sheet skill keeps queue
+orchestration and command recipes. The local Rulesync rule keeps binding
+project deviations and points to task skills, installed Kerf guidance, and
+project docs.
+
+The other rules stay unselected on purpose. Lint configs and the root check
+enforce `typescript-lint-and-format` and `rust-lint-and-format`. The local rule
+condenses `test-operations`, `playwright-operations`,
+`web-client-organization`, `kerf-ui-upgrades` and `kerf-ui-catalog-demos`, and
+policy tests pin them. `deployment-scripts`, `release-scripts`,
+`gitgist-release-notes` and `project-bootstrap` do not apply until HS2-BYXA4V
+sets up distribution.
+
+Generated `AGENTS.md` now exceeds Codex's default budget, so each Codex
+checkout must set `project_doc_max_bytes` above the ceiling in
+`scripts/instruction-policy.test.mjs` (40,000 bytes) in its git-excluded
+`.codex/config.toml`; HS2-TJQFNS has Hot Sheet setup write it. Claude Code
+has no such cap. `scripts/check-rulesync-generation.mjs` checks exact output
+bytes.
 The public example still selects every available rule to exercise the frozen
 source lock; its selection is not this repository's runtime selection.
 
