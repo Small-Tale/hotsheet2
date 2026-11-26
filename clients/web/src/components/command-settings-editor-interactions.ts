@@ -229,6 +229,12 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
     }),
   );
   lifetime.add(
+    delegate(root, 'change', COMMANDS_AND_AI_ACTIONS.toggleCommandShowWhenScheduled.selector, (_event, target) => {
+      const id = commandIdOf(target);
+      if (id) bindings.updateField(id, 'show_when_scheduled', String((target as HTMLInputElement).checked));
+    }),
+  );
+  lifetime.add(
     delegate(root, 'change', COMMANDS_AND_AI_ACTIONS.selectCommandIcon.selector, (_event, target) => {
       const id = commandIdOf(target),
         name = (target as HTMLInputElement).value;

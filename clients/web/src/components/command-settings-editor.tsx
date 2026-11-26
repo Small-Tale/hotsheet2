@@ -15,12 +15,13 @@ import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { PopoverDialogSurface } from '@kerfjs/ui/surface-scaffold';
+import { Switch } from '@kerfjs/ui/switch';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { Bot, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
+import { Bot, CalendarClock, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
 
 import type { AiToolDefaults, AiToolDescriptor, CommandDefinition } from '../api';
 import { commandGroupSections } from '../command-order';
@@ -83,6 +84,12 @@ const kind = (command: CommandDefinition) => command.kind ?? 'program';
 /** The Action choice that stores no action and keeps the legacy click (HS2-17Y2EC). */
 const COMMAND_DEFAULT_CLICK = 'default';
 const TYPE_LABELS: Record<'program' | 'shell' | 'ai', string> = { program: 'Program', shell: 'Shell', ai: 'AI' };
+/** Auto-Cleanup choices for an AI command's tickets (HS2-27C161); None stores no field. */
+const COMMAND_CLEANUP_CHOICES = [
+  { value: 'none', label: 'None' },
+  { value: 'archive', label: 'Archive' },
+  { value: 'delete', label: 'Delete' },
+];
 
 /** The inline style setting a command row/dialog icon tile to its color; undefined when transparent. */
 function commandIconStyle(command: CommandDefinition) {
@@ -145,6 +152,8 @@ function CommandRow({
                 {
                   label: schedule ? 'Manage Schedule…' : 'Schedule…',
                   action: COMMANDS_AND_AI_ACTIONS.openCommandSchedule.value,
+                  // A time on a calendar: the schedule runs at a local time on chosen dates (HS2-W3ZXHK).
+                  icon: <LucideIcon icon={CalendarClock} name="calendar-clock" />,
                 },
               ]
             : []),
@@ -343,6 +352,22 @@ function CommandDetailFields({
               ...SCHEDULE_ACTIONS.map((value) => ({ value, label: SCHEDULE_ACTION_LABELS[value] })),
             ]}
             hint="What clicking the command does. Schedules use it unless they override it."
+          />
+          {/* What happens to this command's tickets once done (HS2-27C161); Delete is the restorable Trash. */}
+          <Select
+            name="cleanup"
+            label="Auto-Cleanup"
+            value={command.cleanup ?? 'none'}
+            choices={COMMAND_CLEANUP_CHOICES}
+            hint="When a ticket from this command is completed or verified, archive it or move it to Trash. A ticket you restore stays."
+          />
+          {/* Scheduled commands leave the sidebar unless kept (HS2-MA31ZN); a click still runs once now. */}
+          <Switch
+            label="Show in sidebar while scheduled"
+            name="show_when_scheduled"
+            checked={command.show_when_scheduled === true}
+            action={COMMANDS_AND_AI_ACTIONS.toggleCommandShowWhenScheduled.value}
+            hint="A scheduled command is hidden from the sidebar unless this is on. Clicking it runs it once now, like an unscheduled command; the schedule is unchanged."
           />
         </>
       )}

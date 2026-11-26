@@ -367,9 +367,10 @@ impl Settings {
 
     /// Set a key in a scope (read-modify-write). Writing a local key also ensures the
     /// local file is gitignored.
-    pub fn set(&self, key: &str, value: Value, scope: Scope) -> Result<(), SettingsError> {
+    pub fn set(&self, key: &str, mut value: Value, scope: Scope) -> Result<(), SettingsError> {
         Self::validate_set_value(key, &value, scope)?;
         let _lock = self.lock_scope(scope)?;
+        self.stamp_written_value(key, &mut value)?;
         let mut map = self.map(scope)?;
         map.insert(key.to_string(), value);
         self.write(scope, &map)
@@ -381,7 +382,7 @@ impl Settings {
     pub fn set_if(
         &self,
         key: &str,
-        value: Value,
+        mut value: Value,
         scope: Scope,
         matches: impl FnOnce(Option<&Value>) -> bool,
     ) -> Result<bool, SettingsError> {
@@ -393,10 +394,32 @@ impl Settings {
         if !matches(current.as_ref()) {
             return Ok(false);
         }
+        if key == "commands" {
+            crate::command_cleanup::stamp_cleanup_since(
+                current.as_ref(),
+                &mut value,
+                &crate::command_cleanup::now_rfc3339(),
+            );
+        }
         let mut map = self.map(scope)?;
         map.insert(key.to_string(), value);
         self.write(scope, &map)?;
         Ok(true)
+    }
+
+    /// Writer-owned fields on a value about to be written: a command's `cleanup_since`
+    /// records when its cleanup was turned on (HS2-27C161), so every save path, including
+    /// `hotsheet-cli settings set commands`, stamps it the same way.
+    fn stamp_written_value(&self, key: &str, value: &mut Value) -> Result<(), SettingsError> {
+        if key == "commands" {
+            let prior = self.get_effective(key)?;
+            crate::command_cleanup::stamp_cleanup_since(
+                prior.as_ref(),
+                value,
+                &crate::command_cleanup::now_rfc3339(),
+            );
+        }
+        Ok(())
     }
 
     fn validate_set_value(key: &str, value: &Value, scope: Scope) -> Result<(), SettingsError> {

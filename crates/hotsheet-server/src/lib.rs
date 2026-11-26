@@ -15,6 +15,7 @@ pub mod claim_conflict_push;
 pub mod client_drive;
 mod code_ref_watch;
 pub mod code_review;
+pub mod command_cleanup;
 pub mod commands;
 mod credential_cache;
 mod custom_views;

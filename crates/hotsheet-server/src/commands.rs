@@ -721,6 +721,9 @@ mod tests {
                 action: None,
                 icon: None,
                 color: None,
+                show_when_scheduled: false,
+                cleanup: Default::default(),
+                cleanup_since: None,
             }],
         );
         let run = manager.start("pwd").unwrap();
@@ -760,6 +763,9 @@ mod tests {
             action: None,
             icon: None,
             color: None,
+            show_when_scheduled: false,
+            cleanup: Default::default(),
+            cleanup_since: None,
         }
     }
 
@@ -851,6 +857,9 @@ mod tests {
             action: None,
             icon: None,
             color: None,
+            show_when_scheduled: false,
+            cleanup: Default::default(),
+            cleanup_since: None,
         };
         manager.replace_project("first", first.path().to_path_buf(), vec![command]);
         manager.replace_project("second", second.path().to_path_buf(), Vec::new());

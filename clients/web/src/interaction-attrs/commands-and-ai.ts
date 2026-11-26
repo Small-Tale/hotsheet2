@@ -59,6 +59,8 @@ export const COMMANDS_AND_AI_ACTIONS = {
   selectCommandAiEffort: action('select-command-ai-effort'),
   openCommandManualModel: action('open-command-manual-model'),
   openCommandSchedule: action('open-command-schedule'),
+  /** The Edit Command dialog's "Show in sidebar while scheduled" switch (HS2-MA31ZN). */
+  toggleCommandShowWhenScheduled: action('toggle-command-show-when-scheduled'),
   saveCommandSchedule: action('save-command-schedule'),
   cancelCommandSchedule: action('cancel-command-schedule'),
   deleteCommandSchedule: action('delete-command-schedule'),
@@ -152,4 +154,4 @@ export const COMMANDS_AND_AI_TARGETS = {
  * ChoiceChips color radios by their action (HS2-EBY4E3).
  */
 export const COMMAND_FIELD_SELECTOR =
-  '[data-command-field] input, [data-command-field] textarea, [data-command-editor-dialog] kui-select[name="kind"], [data-command-editor-dialog] kui-select[name="action"], [data-action="select-command-color"]';
+  '[data-command-field] input, [data-command-field] textarea, [data-command-editor-dialog] kui-select[name="kind"], [data-command-editor-dialog] kui-select[name="action"], [data-command-editor-dialog] kui-select[name="cleanup"], [data-action="select-command-color"]';

@@ -15474,6 +15474,9 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             action: None,
             icon: None,
             color: None,
+            show_when_scheduled: false,
+            cleanup: Default::default(),
+            cleanup_since: None,
         },
         CommandDefinition {
             id: "sleep".into(),
@@ -15492,6 +15495,9 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             action: None,
             icon: None,
             color: None,
+            show_when_scheduled: false,
+            cleanup: Default::default(),
+            cleanup_since: None,
         },
     ];
     let app = app(st.with_commands(defs));

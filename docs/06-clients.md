@@ -1214,6 +1214,54 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   `delivery_uncertain` on the same qualified occurrence ticket; the scheduler does not
   send it again. A person or agent inspects that ticket and the provider session before
   resuming work (HS2-NR0VRF). The schedule editor is tracked by HS2-17663F.
+  **Scheduled commands in the sidebar (HS2-MA31ZN).** An AI command with an active
+  schedule (saved and not paused) is hidden from the project sidebar by default, since
+  its schedule runs it. Its **Edit Command** dialog has a **Show in sidebar while
+  scheduled** switch, stored per command as `show_when_scheduled: true` (absent when
+  off, and settable headlessly with `hotsheet-cli settings set commands`). The option
+  lives on the command rather than in project settings so each scheduled command can
+  choose. A paused schedule never runs, so its command shows like any other. Clicking a
+  kept scheduled command behaves once, now, exactly like an unscheduled click: it runs
+  the command's own action (or the legacy click when it has none), creates the ticket
+  immediately with only the `hs2-command` tag, and leaves the schedule, its next runs,
+  and its history unchanged. The schedule's action override and open-ticket skip apply
+  only to scheduled occurrences.
+  **Auto-cleanup of command tickets (HS2-27C161).** Each AI command has an
+  **Auto-Cleanup** choice in its editor, stored as `cleanup`: **None** (the default,
+  stored as an absent field), **Archive**, or **Delete**. It applies to every ticket
+  carrying the command's `hs2-command:<command-id>` tag, whether a click or a schedule
+  created it, but only once cleanup is on: the settings writer stamps the command's
+  `cleanup_since` (RFC 3339) when **Auto-Cleanup** changes from None to Archive or
+  Delete, on every save path (the Edit Command dialog, `hotsheet-cli settings set
+commands`, and the server's command saves). Switching between Archive and Delete keeps
+  the stamp; switching back to None removes it, so turning cleanup on again restamps. A
+  stamp sent by a client is ignored, and the command revision used for editor conflicts
+  leaves it out. A command stored with cleanup on but no stamp is stamped with the time
+  of its first read and the stamp is persisted. A ticket is cleaned up as soon as it
+  reaches **Completed** or **Verified**, whichever comes first, provided that its
+  completion time (or, without one, its verification time) is at or after
+  `cleanup_since`; a ticket completed earlier, or with a missing or unparseable time,
+  is never cleaned up. Cleanup does not wait for verification because
+  AI command tickets are rarely verified by a person, and an agent's completion note
+  stays readable in Archive or Trash. **Archive** sets the status to Archive.
+  **Delete** moves the ticket to Trash through the existing restorable delete (status
+  Deleted; GitHub, GitLab, and Jira Trash use their provider markers), so the normal
+  Trash retention purges it later and **Restore** brings it back before then; it is
+  never a permanent delete. Cleanup appends a system note (actor
+  `hotsheet-command-cleanup`, headline "Command auto-cleanup") naming what it did. A
+  ticket carrying that note is never cleaned up again, so a ticket restored from Trash
+  or moved out of Archive stays where the person put it. The host applies cleanup
+  without polling, on three event paths: a hosted Markdown store's change bus (server,
+  MCP, and headless CLI writes that the store watcher reports); a status write to an
+  external provider through the server, whose response is then the cleaned-up ticket;
+  and, each time the host runs the command (an explicit action or a scheduled
+  occurrence), a sweep of up to 25 of the command's completed tickets that no event
+  reached, such as an issue closed in GitHub itself. All three paths apply the same
+  `cleanup_since` rule, so the sweep never touches tickets the command completed before
+  cleanup was turned on. A provider that refuses the status
+  change keeps the ticket and logs a warning; the next run tries again. Headless callers
+  set the field with `hotsheet-cli settings set commands`; the settings writer rejects
+  any other value.
   Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling. Press-and-hold
   remains reserved for output/history. A context or overflow menu will provide “Run in

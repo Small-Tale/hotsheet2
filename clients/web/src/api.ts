@@ -1747,6 +1747,12 @@ export interface CommandDefinition {
   action?: 'create_ticket' | 'new_ai_session' | 'reuse_or_new_ai_session';
   icon?: string;
   color?: string;
+  /** Keep an AI command's sidebar button while it has an active schedule; absent hides it (HS2-MA31ZN). */
+  show_when_scheduled?: boolean;
+  /** Archive or trash the command's tickets once completed or verified; absent keeps them (HS2-27C161). */
+  cleanup?: 'none' | 'archive' | 'delete';
+  /** When cleanup was turned on (RFC 3339); the settings writer stamps it (HS2-27C161). */
+  cleanup_since?: string;
 }
 export interface CustomView {
   id: string;

@@ -185,6 +185,7 @@ pub mod accounts;
 pub mod auto_context;
 pub mod checkout_removal;
 pub mod checkouts;
+pub mod command_cleanup;
 pub mod command_schedules;
 pub mod commands;
 pub mod connection_removal;

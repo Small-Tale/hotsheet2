@@ -14,7 +14,8 @@ import type {
 } from '../api';
 import { createCommandGroupDialog } from '../command-group-dialog';
 import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } from '../command-order';
-import { addCommandGroupName } from '../command-settings-workflow';
+import type { ScheduleView } from '../command-schedules';
+import { addCommandGroupName, editCommandDefinition } from '../command-settings-workflow';
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandGroupDialog } from '../components/command-group-dialog';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
@@ -251,18 +252,9 @@ export function closeCommandEditorDemo() {
   commandEditorEditingId.value = undefined;
   commandEditorIconSearch.value = '';
 }
+/** The demo edits through the production workflow, so new command fields (HS2-MA31ZN) work here too. */
 export function updateCommandEditorField(id: string, field: string, value: string) {
-  commandEditorCommands.value = commandEditorCommands.value.map((command) => {
-    if (command.id !== id) return command;
-    const updated: CommandDefinition = { ...command };
-    if (field === 'args') updated.args = value.split('\n').filter((argument) => argument.length > 0);
-    else if (field === 'id' || field === 'title') updated[field] = value;
-    else if (
-      ['program', 'group', 'cwd', 'confirmation', 'command', 'prompt', 'tool', 'color', 'icon', 'kind'].includes(field)
-    )
-      (updated as unknown as Record<string, unknown>)[field] = value || undefined;
-    return updated;
-  });
+  commandEditorCommands.value = editCommandDefinition(commandEditorCommands.value, id, field, value);
   if (field === 'id' && commandEditorEditingId.value === id) commandEditorEditingId.value = value;
 }
 export function reorderCommandEditorSetting(sourceId: string, target: CommandDropTarget) {
@@ -327,6 +319,28 @@ export function addCommandEditorSetting() {
   ];
   openCommandEditorDemo(id);
 }
+/** A synthetic scheduled AI command and its daily schedule (HS2-W3ZXHK). */
+const SCHEDULED_DEMO_COMMAND: CommandDefinition = {
+  id: 'nightly-review',
+  title: 'Nightly review',
+  kind: 'ai',
+  prompt: 'Review the day',
+  color: '#3b82f6',
+  icon: 'file-text',
+  // Its tickets move to Trash once completed (HS2-27C161).
+  cleanup: 'delete',
+};
+const SCHEDULED_DEMO_VIEW: ScheduleView = {
+  schedule: {
+    command_id: 'nightly-review',
+    time_zone: 'UTC',
+    local_time: '21:00',
+    paused: false,
+    recurrence: { kind: 'daily', every: 1, start_date: '2027-02-15' },
+  },
+  next_runs: ['2027-02-15T21:00:00Z', '2027-02-16T21:00:00Z', '2027-02-17T21:00:00Z'],
+  history: [],
+};
 export function CommandSettingsEditorDemo() {
   return (
     <>
@@ -343,6 +357,15 @@ export function CommandSettingsEditorDemo() {
       </CatalogExample>
       {/* Before the project's first command settings read answers, and after it fails (HS2-BZKTDC). Each
           extra editor names its own dialog so the page keeps unique ids (HS2-CP5F46). */}
+      {/* A scheduled AI command: its … menu offers Manage Schedule… with the calendar-clock icon (HS2-W3ZXHK). */}
+      <CatalogExample label="Scheduled AI Command" viewport={{ width: 'full' }}>
+        <CommandSettingsEditor
+          commands={[SCHEDULED_DEMO_COMMAND]}
+          schedules={[SCHEDULED_DEMO_VIEW]}
+          scheduleDialog={{ commandTitle: SCHEDULED_DEMO_COMMAND.title }}
+          dialogId="command-editor-dialog-scheduled"
+        />
+      </CatalogExample>
       <CatalogExample label="Loading" viewport={{ width: 'full' }}>
         <CommandSettingsEditor commands={[]} loadState="loading" dialogId="command-editor-dialog-loading" />
       </CatalogExample>

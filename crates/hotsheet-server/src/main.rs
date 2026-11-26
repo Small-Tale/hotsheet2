@@ -450,6 +450,8 @@ async fn main() -> Result<()> {
     // Group each new ungrouped ticket with the project's default AI tool when the project's
     // `auto_group_new_tickets` setting is on (HS2-FN018Q). Held for the run.
     let _auto_group = hotsheet_server::auto_group::spawn_auto_grouper(state.clone());
+    // Archive or trash completed AI command tickets whose command asks for it (HS2-27C161).
+    let _command_cleanup = hotsheet_server::command_cleanup::spawn_command_cleanup(state.clone());
 
     // Commit group registry writes in the background, one commit per burst (HS2-9EGWC4).
     hotsheet_ticketing::groups::git_sync::enable_background();

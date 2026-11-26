@@ -179,6 +179,39 @@ describe('command settings workflow (HS2-1M05KF)', () => {
     expect(editCommandDefinition([session], 'one', 'kind', 'ai')[0].action).toBe('new_ai_session');
   });
 
+  it('toggles the show-while-scheduled option, storing nothing when off (HS2-MA31ZN)', () => {
+    const ai: CommandDefinition = { id: 'one', title: 'Review', kind: 'ai', prompt: 'Review' };
+    const shown = editCommandDefinition([ai], 'one', 'show_when_scheduled', 'true')[0];
+    expect(shown.show_when_scheduled).toBe(true);
+    const hidden = editCommandDefinition([shown], 'one', 'show_when_scheduled', 'false')[0];
+    expect(hidden).not.toHaveProperty('show_when_scheduled');
+    // On again after off, then a type change away from AI drops it.
+    const again = editCommandDefinition([hidden], 'one', 'show_when_scheduled', 'true')[0];
+    expect(again.show_when_scheduled).toBe(true);
+    expect(editCommandDefinition([again], 'one', 'kind', 'shell')[0]).not.toHaveProperty('show_when_scheduled');
+    expect(editCommandDefinition([again], 'one', 'kind', 'program')[0]).not.toHaveProperty('show_when_scheduled');
+    expect(editCommandDefinition([again], 'one', 'kind', 'ai')[0].show_when_scheduled).toBe(true);
+  });
+
+  it('edits auto-cleanup, storing nothing for None, and drops it off AI (HS2-27C161)', () => {
+    const ai: CommandDefinition = { id: 'one', title: 'Review', kind: 'ai', prompt: 'Review' };
+    const archive = editCommandDefinition([ai], 'one', 'cleanup', 'archive')[0];
+    expect(archive.cleanup).toBe('archive');
+    const remove = editCommandDefinition([archive], 'one', 'cleanup', 'delete')[0];
+    expect(remove.cleanup).toBe('delete');
+    const stamped = { ...remove, cleanup_since: '2026-11-26T08:00:00Z' };
+    expect(editCommandDefinition([stamped], 'one', 'cleanup', 'archive')[0].cleanup_since).toBe('2026-11-26T08:00:00Z');
+    const none = editCommandDefinition([stamped], 'one', 'cleanup', 'none')[0];
+    expect(none).not.toHaveProperty('cleanup');
+    expect(none).not.toHaveProperty('cleanup_since');
+    expect(editCommandDefinition([none], 'one', 'cleanup', 'purge')[0]).not.toHaveProperty('cleanup');
+    const again = editCommandDefinition([none], 'one', 'cleanup', 'archive')[0];
+    expect(again.cleanup).toBe('archive');
+    expect(editCommandDefinition([again], 'one', 'kind', 'shell')[0]).not.toHaveProperty('cleanup');
+    expect(editCommandDefinition([again], 'one', 'kind', 'program')[0]).not.toHaveProperty('cleanup');
+    expect(editCommandDefinition([again], 'one', 'kind', 'ai')[0].cleanup).toBe('archive');
+  });
+
   it('retains emptied groups through reorder, deletion, and later reuse', () => {
     const before = [shell('a', 'Keep'), shell('b', 'Other')],
       moved = reorderCommandSettings(before, [], ['a'], { kind: 'group', group: 'Other' });
