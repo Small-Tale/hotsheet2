@@ -56,6 +56,8 @@ export const PEER_GATEWAY_PREFIXES = [
   'notifiers',
   'permissions',
   'phase-report',
+  // HS2-YJCPD5: plugin-load status rides the same paired-session auth as `ai-tools`.
+  'plugins',
   'projects',
   'provider-attachments',
   'provider-connections',
