@@ -20896,7 +20896,7 @@ components:
             role_sessions:
               description:
                 Targets whose dispatcher or integrator the scheduler starts by itself (HS2-TK9ADC), when the target needs
-                one and its pool shows none live. Empty or absent leaves role sessions to a person.
+                one and its pool shows none live. A target the list does not name is Auto (HS2-R2N33M).
               type: array
               maxItems: 256
               items:
@@ -20909,8 +20909,8 @@ components:
                     type: string
                     pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
                   roles:
+                    description: The roles started here; empty is the choice of none (HS2-R2N33M, HS2-GRRX32).
                     type: array
-                    minItems: 1
                     maxItems: 2
                     uniqueItems: true
                     items:

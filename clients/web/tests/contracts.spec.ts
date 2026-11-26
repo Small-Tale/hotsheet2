@@ -1945,6 +1945,35 @@ test('HS2-ECWG50 real scheduler responses match the OpenAPI contract', async () 
       matches(route, 'post', 'default', refused.body);
       expect(refused.body.code).toBe('invalid_request');
     }
+
+    // HS2-GRRX32: a target's role sessions set to none (HS2-R2N33M) is an empty list that the
+    // contract accepts in the request, the role-sessions answer and the stored policy read back.
+    const none = { target_id: target, roles: [], actor: person };
+    shaped('SetOrchestrationRoleSessions', none);
+    const chosen = await send('PUT', `${base}/policy/role-sessions`, none);
+    expect(chosen.status, JSON.stringify(chosen.body)).toBe(200);
+    matches('/checkouts/{owner}/orchestration/policy/role-sessions', 'put', '200', chosen.body);
+    const stored = await send('GET', `${base}/policy`);
+    matches('/checkouts/{owner}/orchestration/policy', 'get', '200', stored.body);
+    const placement = (stored.body.policy as { placement: { role_sessions: unknown } }).placement;
+    expect(placement.role_sessions).toEqual([{ target_id: target, roles: [] }]);
+    shaped('OrchestrationPolicy', stored.body.policy);
+    // The stored policy with its empty choice is accepted back as a whole-policy write.
+    const again = await send('PUT', `${base}/policy`, {
+      expected_revision: stored.body.revision,
+      policy: stored.body.policy,
+      actor: person,
+    });
+    expect(again.status, JSON.stringify(again.body)).toBe(200);
+    expect(again.body.revision).toBe(stored.body.revision);
+    // HS2-TZJYKH: Pause through the runtime route keeps the choice and matches its schema.
+    const paused = await send('PUT', `${base}/policy/automatic`, { automatic: false, actor: person });
+    expect(paused.status, JSON.stringify(paused.body)).toBe(200);
+    matches('/checkouts/{owner}/orchestration/policy/automatic', 'put', '200', paused.body);
+    expect(paused.body.saved_default).toBe(false);
+    expect((paused.body.policy as { placement: { role_sessions: unknown } }).placement.role_sessions).toEqual([
+      { target_id: target, roles: [] },
+    ]);
   } finally {
     await server.stop();
   }
