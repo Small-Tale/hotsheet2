@@ -74,16 +74,20 @@ fn wave(view: &Timeline, kind: WaveKind) -> Vec<&str> {
 }
 
 fn set_policy(m: &Machine, automatic: bool, actor: Option<&str>) {
+    let mut placement = json!({"automatic": automatic});
+    if let Some(actor) = actor {
+        placement["actor"] = json!(actor);
+    }
+    set_placement(m, placement);
+}
+
+fn set_placement(m: &Machine, placement: serde_json::Value) {
     let mut rng = Rng(500);
     let mut tx = Transaction {
         clock: &Clock,
         rng: &mut rng,
     };
     let current = m.runtime.policy(&m.owner.id).unwrap();
-    let mut placement = json!({"automatic": automatic});
-    if let Some(actor) = actor {
-        placement["actor"] = json!(actor);
-    }
     let request = serde_json::from_value(json!({
         "expected_revision": current.revision,
         "policy": {
@@ -141,10 +145,10 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
     let b = define(&m, &goal, &second, Some(&first));
     let proposed = read(&m);
     assert_eq!(proposed.phase, TimelinePhase::Proposed);
-    assert_eq!(
-        proposed.kick_off.start_blocked.as_deref(),
-        Some("policy_absent")
-    );
+    // HS2-D9KP86: no saved policy does not block Start; it saves the defaults.
+    assert_eq!(proposed.kick_off.start_blocked, None);
+    assert!(proposed.kick_off.can_start);
+    assert!(proposed.kick_off.default_policy);
     assert_eq!(
         proposed
             .waves
@@ -174,6 +178,7 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
     let ready = read(&m).kick_off;
     assert!(ready.can_start && !ready.can_pause);
     assert!(ready.policy_revision.is_some());
+    assert!(!ready.default_policy);
     set_policy(&m, false, Some("worker-1"));
     assert!(read(&m).kick_off.can_start);
 
@@ -189,6 +194,9 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
         .unwrap();
     let paused = read(&m);
     assert_eq!(paused.phase, TimelinePhase::Paused);
+    // HS2-38R8J2: work started by hand under a plan nobody started reads Not Started.
+    assert!(paused.never_started);
+    assert!(proposed.never_started);
     assert_eq!(wave(&paused, WaveKind::WorkingNow), vec![a.as_str()]);
     assert_eq!(wave(&paused, WaveKind::Next), vec![b.as_str()]);
     let running = &paused.waves[1].items[0];
@@ -203,6 +211,16 @@ fn hs2_j89jc7_timeline_reads_the_plan_runs_labels_and_kick_off() {
     assert_eq!(started.phase, TimelinePhase::Running);
     assert!(started.kick_off.can_pause && !started.kick_off.can_start);
     assert_eq!(started.kick_off.start_blocked.as_deref(), Some("running"));
+    assert!(!started.never_started);
+    // Paused after it ran: Paused for good, also with placement set off again and
+    // again (repeated changes keep the first start).
+    set_policy(&m, false, None);
+    let after = read(&m);
+    assert_eq!(after.phase, TimelinePhase::Paused);
+    assert!(!after.never_started);
+    set_policy(&m, false, Some("worker-1"));
+    assert!(!read(&m).never_started);
+    set_policy(&m, true, None);
 
     // HS2-J3ZF27: back to Software, the kept automatic policy does not read as running
     // and Start says why; forward again, it runs.
@@ -822,4 +840,30 @@ fn hs2_anqxq4_a_persons_answer_wakes_a_waiting_timeline() {
     assert_ne!(item.state, ItemState::WaitsForDecision);
     assert!(item.decision.is_none());
     assert!(took < WOKEN_WITHIN, "{took:?}");
+}
+
+/// HS2-38R8J2: a policy that leaves placement Auto runs the plan without Start being
+/// pressed; pausing it then reads Paused, since placement was on. Saving Auto before a
+/// plan exists does not count as started.
+#[test]
+fn hs2_38r8j2_pausing_an_auto_plan_reads_paused() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    set_placement(&m, json!({}));
+    assert!(read(&m).never_started);
+    let goal = m.orchestration_ticket("Coordinate");
+    let work = target_ticket(&m, "Work");
+    define(&m, &goal, &work, None);
+    let running = read(&m);
+    assert_eq!(running.phase, TimelinePhase::Running);
+    assert!(running.automatic_by_default && !running.never_started);
+    set_placement(&m, json!({"automatic": false}));
+    let paused = read(&m);
+    assert_eq!(paused.phase, TimelinePhase::Proposed);
+    assert!(!paused.never_started);
 }

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { TimelineItem } from './orchestration-timeline';
 import {
   cardTime,
+  dryRunPlan,
   findTimelineItem,
   machineLabel,
   orchestrationLine,
@@ -179,6 +180,19 @@ describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
     expect(startColumnId(demoTimeline('no_plan'))).toBeUndefined();
     expect(timelineStatus(demoTimeline('running'), demoClock)).toBe('Running Since 12:02 · 3 Sessions');
     expect(timelineStatus(demoTimeline('paused'))).toBe('Paused · 2 Sessions');
+    // HS2-38R8J2: until placement was ever on, a plan with work started by hand is Not Started, then Paused.
+    const neverStarted = { ...demoTimeline('paused'), never_started: true };
+    const working = neverStarted.waves.find((wave) => wave.kind === 'working_now')?.items.length ?? 0;
+    expect(timelineStatus(neverStarted)).toBe(`Not Started · ${working} Working`);
+    expect(timelineStatus({ ...neverStarted, never_started: false })).toBe('Paused · 2 Sessions');
+    expect(timelineStatus({ ...neverStarted, waves: [] })).toBe('Not Started · 0 Working');
+    expect([
+      dryRunPlan(neverStarted),
+      dryRunPlan(demoTimeline('paused')),
+      dryRunPlan(demoTimeline('proposed')),
+    ]).toEqual([true, false, true]);
+    // A running plan is never a dry run, whatever the field says.
+    expect(dryRunPlan({ ...demoTimeline('running'), never_started: true })).toBe(false);
     expect(timelineStatus(demoTimeline('proposed'))).toBe('Proposed Plan · Not Started');
     expect(timelineStatus(demoTimeline('no_plan'))).toBe('No Plan Yet');
     expect(timelineStatus(demoTimeline('no_projects'))).toBe('No Projects Yet');
@@ -190,23 +204,18 @@ describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
         ...demoTimeline('proposed'),
         kick_off: { can_start: false, can_pause: false, start_blocked },
       });
-    expect(blocked('policy_absent')).toMatch(/Orchestration settings first/);
     expect(blocked('project_software')).toMatch(/Project Type to Orchestration/);
     expect(blocked('no_plan')).toMatch(/no plan/);
     expect(blocked('no_projects')).toMatch(/Add projects/);
     expect(blocked('running')).toBeUndefined();
-    // HS2-1DC8X1: named after the Policy section, and fixed in Orchestration settings.
-    expect(blocked('policy_absent')).toBe('No policy is saved yet. Apply one in Orchestration settings first');
     const inSettings = (start_blocked?: Parameters<typeof blocked>[0]) =>
       startBlockedInSettings({
         ...demoTimeline('proposed'),
         kick_off: { can_start: false, can_pause: false, start_blocked },
       });
     expect(
-      ['policy_absent', 'no_projects', 'project_software', 'no_plan', 'running', undefined].map((code) =>
-        inSettings(code as never),
-      ),
-    ).toEqual([true, true, false, false, false, false]);
+      ['no_projects', 'project_software', 'no_plan', 'running', undefined].map((code) => inSettings(code as never)),
+    ).toEqual([true, false, false, false, false]);
     expect(startBlockedReason(demoTimeline('proposed'))).toBeUndefined();
     expect(findTimelineItem(undefined, 'step-1')).toBeUndefined();
     expect(findTimelineItem(demoTimeline('running'), 'step-404')).toBeUndefined();

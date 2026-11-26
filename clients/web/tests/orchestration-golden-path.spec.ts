@@ -10,8 +10,8 @@ import { proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-t
  * HS2-1DDXNS: the orchestration workflow as a new person meets it, in one flow through the shipped
  * shell against a real isolated server. Launch starts as a Software project beside an open Web
  * project; the person makes Launch an orchestration project, adds Web, sees the dry-run plan, follows
- * a dispatched run through a worker letting go and finishing, saves a policy and starts
- * orchestration. Only the planner's proposal and the worker's own claim actions are made through the
+ * a dispatched run through a worker letting go and finishing, starts orchestration with no policy saved
+ * (which saves the default one, HS2-D9KP86), pauses it and applies a policy that places sessions again. Only the planner's proposal and the worker's own claim actions are made through the
  * server's routes, as the planning AI session and the worker would make them. Synthetic tickets only.
  */
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
@@ -93,10 +93,29 @@ async function proposePlan(server: Server, base: string, target: string) {
   return { goal, steps };
 }
 
-const settle = (page: Page, ticket: string, name: string) => capture(page, ticket, name);
+/**
+ * HS2-QCKVVY: the board is placed at its right end in the frame after a width change, so a capture waits two
+ * animation frames; a screenshot taken at once can show the frame before (seen in WebKit).
+ */
+async function settle(page: Page, ticket: string, name: string) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))),
+  );
+  await capture(page, ticket, name);
+}
+
+/** How much of a column shows inside the board's horizontal scroller, from 0 to 1. */
+const visibleShare = (page: Page, label: string) =>
+  page.locator(`[data-orchestration-view="true"] [aria-label="${label}"]`).evaluate((column) => {
+    let track = column.parentElement;
+    while (track && !/auto|scroll/.test(getComputedStyle(track).overflowX)) track = track.parentElement;
+    const box = column.getBoundingClientRect(),
+      view = track!.getBoundingClientRect();
+    return Math.max(0, Math.min(box.right, view.right) - Math.max(box.left, view.left)) / box.width;
+  });
 
 /** Wide, medium, narrow, wide again, then dark at wide and narrow (Visual QA). */
-async function widths(page: Page, name: string) {
+async function widths(page: Page, name: string, ticket = 'hs2-1ddxns') {
   for (const [width, height] of [
     [1440, 900],
     [1100, 820],
@@ -104,12 +123,12 @@ async function widths(page: Page, name: string) {
     [1440, 900],
   ] as const) {
     await page.setViewportSize({ width, height });
-    await settle(page, 'hs2-1ddxns', `${name}-${width}`);
+    await settle(page, ticket, `${name}-${width}`);
   }
   await page.emulateMedia({ colorScheme: 'dark' });
-  await settle(page, 'hs2-1ddxns', `${name}-1440-dark`);
+  await settle(page, ticket, `${name}-1440-dark`);
   await page.setViewportSize({ width: 390, height: 844 });
-  await settle(page, 'hs2-1ddxns', `${name}-390-dark`);
+  await settle(page, ticket, `${name}-390-dark`);
   await page.emulateMedia({ colorScheme: 'light' });
   await page.setViewportSize({ width: 1440, height: 900 });
 }
@@ -165,15 +184,25 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     await expect(noPlan).toContainText('Propose a plan to work through all open tickets of the chosen projects');
     await expect(toolbar).toContainText('No Plan Yet · Working through all open tickets');
     await settle(page, 'hs2-gsrfg0', 'no-plan-1440');
+    // A project with no work yet says so in the overview, never "not read" (HS2-70MHXJ).
+    const overview = page.locator('[data-orchestration-overview]');
+    await expect(overview).toContainText('0 done · 0 working · no work yet');
+    await expect(overview).not.toContainText('not read');
+    await widths(page, 'no-work-yet', 'hs2-70mhxj');
 
-    // 4. The planner proposes; the plan is a dry run that cannot start without a policy (HS2-1DC8X1).
+    // 4. The planner proposes; the plan is a dry run. No policy is saved, and Start Orchestration says it
+    // saves the default one, with the way to review it (HS2-D9KP86).
     const plan = await proposePlan(server, base, web);
     const [first, second] = plan.steps;
     await expect(view).toHaveAttribute('data-phase', 'proposed', { timeout: 30_000 });
     const dryRun = toolbar.filter({ hasText: 'This Plan Is a Dry Run' });
-    await expect(dryRun).toContainText('No policy is saved yet. Apply one in Orchestration settings first.');
+    await expect(dryRun).toContainText(
+      'Start Orchestration saves the default policy shown in Orchestration settings and starts sessions within it.',
+    );
     await expect(dryRun.getByRole('button', { name: 'Open Orchestration Settings' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Start Orchestration' })).toBeDisabled();
+    const start = page.getByRole('button', { name: 'Start Orchestration' });
+    await expect(start).toBeEnabled();
+    await expect(start).toHaveAttribute('title', 'Save the default policy and place sessions automatically within it');
     const firstCard = view.locator(`[data-ticket-slug="${first.slug}"]`);
     await expect(firstCard.locator('[data-orchestration-part="state"]')).toHaveText('Ready');
     await expect(view.locator(`[data-ticket-slug="${second.slug}"] [data-orchestration-part="state"]`)).toHaveText(
@@ -184,11 +213,17 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     await firstCard.click();
     const inspector = page.locator('[data-orchestration-inspector]');
     const why = inspector.locator('[data-orchestration-section="Why It Is Not Running"]');
-    await expect(why).toContainText('Waits: no policy is saved yet; apply one in Settings › Orchestration');
+    await expect(why).toContainText('Waits: no policy is saved yet; Start Orchestration saves the default one');
     await expect(why).not.toContainText('policy absent');
+    // HS2-QCKVVY: after a width change the board returns to its right end, the selected First in view,
+    // in WebKit as in Chromium (it lands within two frames of the resize).
+    for (const width of [1100, 1440, 1100]) {
+      await page.setViewportSize({ width, height: 820 });
+      await expect.poll(() => visibleShare(page, 'First · On Start Column')).toBeGreaterThan(0.95);
+    }
     await widths(page, 'proposed');
 
-    // 5. A worker takes the first step: it works now, and the plan reads paused, unable to start.
+    // 5. A worker takes the first step: it works now; orchestration still places nothing and can start.
     await server.request(`${base}/permission-rules`, 'POST', {
       target_id: web,
       action: 'work_start',
@@ -204,9 +239,13 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
       actor: scheduler,
     });
     await expect(view).toHaveAttribute('data-phase', 'paused', { timeout: 30_000 });
-    const blocked = page.locator('[data-orchestration-start-blocked="policy_absent"]');
-    await expect(blocked).toContainText('Start Orchestration Is Unavailable');
-    await expect(blocked).toContainText('Work already running continues.');
+    await expect(page.locator('[data-orchestration-start-blocked]')).toHaveCount(0);
+    await expect(start).toBeEnabled();
+    // Nobody started orchestration, so it is Not Started with the work counted, not Paused (HS2-38R8J2).
+    await expect(toolbar).toContainText('Not Started · 1 Working');
+    await expect(toolbar).not.toContainText('Paused');
+    await expect(dryRun).toBeVisible();
+    await widths(page, 'not-started', 'hs2-38r8j2');
     await expect(view.locator('[aria-label="Working Now Column"]')).toContainText(first.slug);
     await firstCard.click();
     const runSection = inspector.locator('[data-orchestration-section="Run"]');
@@ -231,25 +270,54 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
       'Ready',
     );
 
-    // 7. The blocked banner leads to the policy; saving it with placement off enables Start.
-    await blocked.getByRole('button', { name: 'Open Orchestration Settings' }).click();
-    const policy = page.locator('[data-component="orchestration-policy-settings"]');
-    await expect(policy).toBeVisible();
-    const automatic = policy.getByRole('switch', { name: 'Place sessions automatically' });
-    await automatic.click();
-    await expect(automatic).not.toBeChecked();
-    await policy.getByRole('button', { name: 'Apply Policy' }).click();
-    await expect(page.locator('.app-toast').filter({ hasText: 'Policy saved.' })).toBeVisible();
-    await viewModes.getByRole('button', { name: 'Orchestration View' }).click();
-    await expect(blocked).toHaveCount(0);
-    const start = page.getByRole('button', { name: 'Start Orchestration' });
-    await expect(start).toBeEnabled({ timeout: 30_000 });
-
-    // 8. Start: running, with Pause in its place.
+    // 7. Start with no policy saved: one press saves the default policy with placement on (HS2-D9KP86).
     await start.click();
-    await expect(page.locator('.app-toast').filter({ hasText: 'Orchestration started.' })).toBeVisible();
+    await expect(
+      page.locator('.app-toast').filter({ hasText: 'Saved the default policy and started orchestration.' }),
+    ).toBeVisible();
     await expect(view).toHaveAttribute('data-phase', 'running', { timeout: 30_000 });
-    await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
+    const pause = page.getByRole('button', { name: 'Pause', exact: true });
+    await expect(pause).toBeEnabled();
+    const stored = await server.request<{
+      policy: { placement: { automatic: boolean }; machine: Record<string, number> };
+    }>(`${base}/policy`);
+    expect(stored.policy.placement.automatic).toBe(true);
+    expect(stored.policy.machine).toEqual({
+      max_sessions: 2,
+      min_free_ram_mb: 2048,
+      max_cpu_percent: 90,
+      min_free_disk_mb: 5120,
+    });
+    // Running asks a person before the first session starts; the request shows over the header.
+    const ignore = page.getByRole('button', { name: 'Ignore', exact: true });
+    await expect(ignore).toBeVisible({ timeout: 30_000 });
+    await widths(page, 'started-default', 'hs2-d9kp86');
+    await ignore.click();
+    await expect(ignore).toHaveCount(0);
+
+    // 8. Pause, then Apply Policy with placement on: the save starts placing sessions and says so.
+    await pause.click();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Orchestration paused.' })).toBeVisible();
+    await expect(view).toHaveAttribute('data-phase', 'paused', { timeout: 30_000 });
+    // Started once, so a pause is Paused (HS2-38R8J2).
+    await expect(toolbar).toContainText('Paused · ');
+    await expect(toolbar).not.toContainText('Not Started');
+    await expect(dryRun).toHaveCount(0);
+    await widths(page, 'paused-after-start', 'hs2-38r8j2');
+    await page.getByLabel('Settings View').click();
+    await settingsNav.getByRole('button', { name: 'Orchestration', exact: true }).click();
+    const policy = page.locator('[data-component="orchestration-policy-settings"]');
+    const automatic = policy.getByRole('switch', { name: 'Place sessions automatically' });
+    await expect(automatic).not.toBeChecked();
+    await automatic.click();
+    await expect(automatic).toBeChecked();
+    await policy.getByRole('button', { name: 'Apply Policy' }).click();
+    await expect(
+      page.locator('.app-toast').filter({ hasText: 'Policy saved. Orchestration is placing sessions.' }),
+    ).toBeVisible();
+    await widths(page, 'policy-applied', 'hs2-d9kp86');
+    await viewModes.getByRole('button', { name: 'Orchestration View' }).click();
+    await expect(view).toHaveAttribute('data-phase', 'running', { timeout: 30_000 });
     expect(
       (await server.request<{ policy: { placement: { automatic: boolean } } }>(`${base}/policy`)).policy.placement
         .automatic,

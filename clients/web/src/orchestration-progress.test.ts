@@ -23,7 +23,7 @@ const cost = (rest: Partial<CostTotals>): CostTotals => ({
 
 describe('orchestration progress and cost (HS2-XJEH08)', () => {
   it('never reads an unknown cost as zero, and labels a total partial unless complete', () => {
-    expect(costText(undefined)).toBe('Unknown (not read)');
+    expect(costText(undefined)).toBe('Unknown (not reported)');
     expect(costText(cost({}))).toBe('Unknown (no work yet)');
     expect(costText(cost({ items_unknown: 2, unknown_reasons: { no_usage_recorded: 2 } }))).toBe(
       'Unknown (no usage recorded)',
@@ -56,7 +56,7 @@ describe('orchestration progress and cost (HS2-XJEH08)', () => {
   });
 
   it('averages lead time over the known runs and counts the unknown ones with their reason', () => {
-    expect(leadTimeText(undefined)).toBe('Unknown (not read)');
+    expect(leadTimeText(undefined)).toBe('Unknown (not reported)');
     expect(leadTimeText({ known: 0, unknown: 0, total_ms: 0, unknown_reasons: {} })).toBe('Unknown (no run yet)');
     expect(leadTimeText({ known: 0, unknown: 2, total_ms: 0, unknown_reasons: { run_unfinished: 2 } })).toBe(
       'Unknown (run unfinished)',
@@ -104,7 +104,8 @@ describe('orchestration progress and cost (HS2-XJEH08)', () => {
     ]);
     expect(projectRows(timeline, summary)).toEqual([
       { label: 'API', value: '2 done · 1 working · $8.10' },
-      { label: 'Web', value: '0 done · 1 working · cost unknown (not read)' },
+      // HS2-70MHXJ: a project the summary leaves out has no cost recorded, never "not read".
+      { label: 'Web', value: '0 done · 1 working · no cost recorded yet' },
       { label: 'Docs', value: '0 done · 1 working · cost unknown (no usage recorded)' },
     ]);
     // Before the summary is read nothing is claimed.
@@ -113,6 +114,20 @@ describe('orchestration progress and cost (HS2-XJEH08)', () => {
       { label: 'Cost', value: 'Reading…' },
     ]);
     expect(projectRows(timeline, undefined)[0].value).toBe('2 done · 1 working · reading…');
+    // HS2-70MHXJ: a failed read says so in plain words, and a project with nothing yet says no work yet.
+    expect(progressRows(timeline, undefined, true).slice(3)).toEqual([
+      { label: 'Lead time', value: 'Unknown (the summary could not be read)' },
+      { label: 'Cost', value: 'Unknown (the summary could not be read)' },
+    ]);
+    expect(projectRows(timeline, undefined, true)[0].value).toBe(
+      '2 done · 1 working · cost unknown (could not be read)',
+    );
+    const fresh = { ...timeline, waves: [] };
+    expect(projectRows(fresh, parseProgressSummary({ totals: {}, targets: [] })).map((row) => row.value)).toEqual(
+      timeline.targets.map(() => '0 done · 0 working · no work yet'),
+    );
+    for (const rows of [projectRows(fresh, parseProgressSummary({})), progressRows(fresh, summary)])
+      for (const row of rows) expect(row.value).not.toMatch(/not read/);
     expect(parseProgressSummary({})).toEqual({ totals: { lead_time: undefined, cost: undefined }, targets: {} });
   });
 });

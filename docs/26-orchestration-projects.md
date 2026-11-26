@@ -1036,11 +1036,19 @@ hotsheet-cli -C <configured-host-source> orchestration policy show --project <ow
 hotsheet-cli -C <configured-host-source> orchestration policy validate --project <owner-checkout-id> --file policy.json
 hotsheet-cli -C <configured-host-source> orchestration policy dry-run --project <owner-checkout-id> --file policy.json
 hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy set --project <owner-checkout-id> --file policy.json
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy start --project <owner-checkout-id>
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy pause --project <owner-checkout-id>
 ```
 
 `--file` takes a policy body or the output of `policy show`, and `-` reads stdin.
 `policy set` without `--expected-revision` reads the current revision first, so a
 repeated setup run changes nothing while a concurrent edit still conflicts.
+`policy start` and `policy pause` are Start Orchestration and Pause of §26.26 (HS2-D9KP86):
+each reads the stored policy, sets `placement.automatic` on or off and stores it at the
+revision read, so every other member stays as it is. With no policy saved they save the
+default policy (every member at its default, as Settings › Orchestration › Policy shows
+it) with that placement and answer `saved_default: true`. Repeating either changes
+nothing; an AI actor is refused.
 
 | Route                                              | Methods and purpose                                                      |
 | -------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -5630,7 +5638,10 @@ hosted session, and how its prompt was delivered. `show` adds the plan's step co
 and `placement_automatic`, so a view can say the plan is a dry run. The planner's
 hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestration
 view's header reads `Planner waiting in its terminal`, and Propose Plan
-says the planning session waits for an answer in its terminal tab (HS2-5RYXNN).
+says the planning session waits for an answer in its terminal tab (HS2-5RYXNN). Beside it,
+and as the No Plan Yet empty state's action, **Show Planner** opens the drawer on that tab
+(the hosted session's `checkout_id` and terminal `session_id`), as Show Request opens a
+permission request; a window that does not hold the tab says so in a toast (HS2-FA8G9J).
 
 **Propose Plan feedback (HS2-2Z4M6M, HS2-8Z9VHH).** The press never goes silent. While
 it is on its way the button becomes a busy `Starting Planner`; while the planner works
@@ -5947,14 +5958,15 @@ readiness (§26.15), the runs (§26.9), the sessions this owner's orchestrator s
 (§26.16), the latest logged scheduler decision per step (§26.17), pending permission
 requests (§26.7), the bindings and the policy. It contacts no target, passes no gate and writes nothing.
 
-| Field          | Meaning                                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------------------------------- |
-| `declared`     | The owner has a target declaration: it is an orchestration project, even with no target yet                |
-| `phase`        | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`    |
-| `kick_off`     | `can_start`, `can_pause`, the policy revision, and why Start is refused (`start_blocked`)                  |
-| `waves`        | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on |
-| `version`      | Changes exactly when what the timeline shows changes; time alone does not change it                        |
-| `wave_minutes` | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes     |
+| Field           | Meaning                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `declared`      | The owner has a target declaration: it is an orchestration project, even with no target yet                      |
+| `phase`         | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`          |
+| `kick_off`      | `can_start`, `can_pause`, the policy revision, why Start is refused (`start_blocked`), and `default_policy`      |
+| `never_started` | HS2-38R8J2: placement was never turned on for the owner on this machine; absent while running and once it was on |
+| `waves`         | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on       |
+| `version`       | Changes exactly when what the timeline shows changes; time alone does not change it                              |
+| `wave_minutes`  | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes           |
 
 **Waves.** Finished steps are **Done**. Once orchestration was kicked off, a step with an
 unfinished run is **Working Now**; every other step's wave is its depth over the
@@ -6083,15 +6095,30 @@ A read on the server also starts the target followers of §26.9.
   card shows the focus ring while it has focus and is never a Tab stop. A request this
   browser has not read yet is read first; one already answered leaves Pending showing and
   says so. On a phone the inspector sheet closes so the card is in view.
+- **Not Started or Paused (HS2-38R8J2, the maintainer's choice A).** A plan whose work was
+  started by hand (or by a worker taking the Up Next mark) while placement was never on is
+  phase `paused` with `never_started: true`: the header reads _Not Started · N Working_ (N
+  the Working Now items) and keeps the dry-run banner. Once placement was ever on, a plan
+  with placement off reads _Paused · N Sessions_. The record is this machine's
+  `orchestration-placement-started.json` (`PlacementStartedStore`), kept for good with the
+  first time placement was on; the policy route writes it when a change turns placement
+  on (Start Orchestration, `policy start`, Apply Policy with placement on or Auto while a
+  plan exists) or changes a policy under which placement was on (Pause of an Auto plan).
 - **Kick-off.** With no plan, **Propose Plan** starts the planning session of §26.25 in
   the tool the person drives with in this project. A proposed or paused plan has
   **Start Orchestration**, which turns `placement.automatic` on through the policy route
-  of §26.8; it is disabled, with the reason, while there is no policy or the project's
-  type is Software (`project_software`, HS2-J3ZF27). The reason is never only the disabled
+  of §26.8; it is disabled, with the reason, while the project's type is Software
+  (`project_software`, HS2-J3ZF27). With no policy saved it is enabled (HS2-D9KP86, the
+  maintainer's choice B): one press saves the default policy, the values Settings ›
+  Orchestration › Policy shows, with placement on, and the toast reads _Saved the default
+  policy and started orchestration._ The timeline says so with `kick_off.default_policy`;
+  the dry-run banner ends "Start Orchestration saves the default policy shown in
+  Orchestration settings and starts sessions within it" and offers **Open Orchestration
+  Settings** to review them first. The reason Start is refused is never only the disabled
   button's title (HS2-1DC8X1): a proposed plan's dry-run banner ends with it, and a paused
   plan that cannot start shows a **Start Orchestration Is Unavailable** banner with it.
-  When the fix is in Settings › Orchestration (no policy saved, no project added) the banner
-  offers **Open Orchestration Settings**. No placement actor is needed: the
+  When the fix is in Settings › Orchestration (no project added) the banner offers **Open
+  Orchestration Settings**. The headless equivalent is `orchestration policy start` (§26.8). No placement actor is needed: the
   orchestrator acts as the orchestration project (HS2-XYAHB4). A Software project's kept
   automatic policy does not read as running. While running, **Pause** turns it off; running work
   continues. A policy that leaves placement Auto runs once the plan has a step, and the header
@@ -6276,7 +6303,10 @@ the type changes to Software while it shows.
   **accounts** with their sessions and daily budget (HS2-7WF6JD: + Add Account and a
   remove button per row; a row without a name is dropped; the budget is typed in dollars
   and stored as whole cents, and more than two decimals is refused, never rounded),
-  wind-down and build-ahead, saved with **Apply Policy** at the stored revision. The form
+  wind-down and build-ahead, saved with **Apply Policy** at the stored revision. A save
+  that leaves placement on or Auto while a plan exists starts placing sessions, so its
+  toast then reads _Policy saved. Orchestration is placing sessions._ (HS2-D9KP86; the
+  timeline is read once after the save, and reads `running`). The form
   never shows the policy's retired `targets[].actions` or `approval.required_for`
   (HS2-XHQ1EH: the server ignores and drops them); every member it does not show is
   written back unchanged.
@@ -7231,7 +7261,11 @@ unknown measure is never shown as zero: with nothing known the row reads
 "Unknown (<reason>)". A cost total is labelled partial unless `cost.complete` is
 true ("$12.40 so far · partial: 1 work item has no cost (no usage recorded)"), reads
 "At least" when events have no price, and keeps its cents and up to four sub-cent
-digits rather than rounding (`clients/web/src/orchestration-progress.ts`). Per-run
+digits rather than rounding (`clients/web/src/orchestration-progress.ts`). A project the
+summary does not list has no recorded work, so its row says "no work yet" (or "no cost
+recorded yet" while the timeline shows work for it), never "not read"; a measure the summary
+leaves out reads "Unknown (not reported)", and only a summary read that failed, with none
+read before, reads "Unknown (the summary could not be read)" (HS2-70MHXJ). Per-run
 measures, utilization and external waits stay headless.
 
 ### Provisional assignments in the Workers view (HS2-N8H97X)

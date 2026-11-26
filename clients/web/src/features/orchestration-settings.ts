@@ -7,6 +7,7 @@ import type {
   OrchestrationBinding,
   OrchestrationCapacity,
   OrchestrationManifest,
+  OrchestrationPolicyBody,
   OrchestrationPolicyView,
   OrchestrationResolution,
   OrchestrationSession,
@@ -64,7 +65,9 @@ export type OrchestrationApi = Pick<
   | 'takeOverOrchestrationSession'
   | 'orchestrationPolicy'
   | 'setOrchestrationPolicy'
->;
+> &
+  /** HS2-D9KP86: read once after Apply Policy, to say when the save started placement. */
+  Partial<Pick<Api, 'orchestrationTimeline'>>;
 
 /** An open project tab as these settings need it. */
 export interface OrchestrationOpenProject {
@@ -201,6 +204,20 @@ const SITE_REFUSALS: Readonly<Record<string, string>> = {
 };
 const siteFailure = (reason: unknown) =>
   (reason instanceof ApiHttpError ? SITE_REFUSALS[reason.code ?? ''] : undefined) ?? messageOf(reason);
+/**
+ * HS2-D9KP86: the toast after Apply Policy. A policy that leaves placement on (or Auto) places sessions as
+ * soon as a plan exists, so when the timeline then reads running the toast says sessions start. A failed
+ * read keeps the plain words: the save itself succeeded.
+ */
+async function savedPolicyStatus(api: OrchestrationApi, projectId: string, policy: OrchestrationPolicyBody) {
+  if (policy.placement?.automatic === false || !api.orchestrationTimeline) return 'Policy saved.';
+  try {
+    const timeline = await api.orchestrationTimeline(projectId);
+    return timeline.phase === 'running' ? 'Policy saved. Orchestration is placing sessions.' : 'Policy saved.';
+  } catch {
+    return 'Policy saved.';
+  }
+}
 const EMPTY: OrchestrationSettingsState = { bindings: {}, loading: false, message: '', status: '', busy: [] };
 
 /**
@@ -963,7 +980,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
         policy,
         draft: policyDraftFrom(policy, dependencies.knownTools()),
         draftDirty: false,
-        status: 'Policy saved.',
+        status: await savedPolicyStatus(api, projectId, built.policy),
       });
       const target = selected.value[projectId];
       if (target) syncLimits(projectId, target);

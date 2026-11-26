@@ -39,8 +39,10 @@ export const orchestrationDemoSettings = {
   defaultGoal: signal(false),
   /** HS2-R2N33M: placement runs because the policy leaves it Auto and a plan exists. */
   autoPlacement: signal(false),
-  /** HS2-1DC8X1: no policy is saved, so Start Orchestration says why and offers the settings. */
+  /** HS2-D9KP86: no policy is saved, so Start Orchestration saves the defaults and the banner leads to them. */
   policyAbsent: signal(false),
+  /** HS2-38R8J2: placement was never on, so a paused plan reads Not Started under its dry-run banner. */
+  neverStarted: signal(false),
   /** HS2-FXY5QM: the condition of API-12's run: '' is a worker at work. */
   runCondition: signal(''),
   /** HS2-65AD6J: how the project's integrator stands for a card with a run; '' shows no Integration section. */
@@ -139,6 +141,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.defaultGoal.value = false;
   settings.autoPlacement.value = false;
   settings.policyAbsent.value = false;
+  settings.neverStarted.value = false;
   settings.runCondition.value = '';
   settings.integrator.value = 'keep';
   settings.docWait.value = 'resource_held';
@@ -159,6 +162,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
         'default-goal': settings.defaultGoal.value,
         'auto-placement': settings.autoPlacement.value,
         'policy-absent': settings.policyAbsent.value,
+        'never-started': settings.neverStarted.value,
       },
     });
 }
@@ -184,6 +188,7 @@ export function OrchestrationTimelineViewDemo() {
         collapsedGroups={orchestrationDemoSettings.collapsed.value}
         propose={propose()}
         planning={orchestrationDemoSettings.planning.value}
+        showPlanner={orchestrationDemoSettings.planning.value === 'waiting'}
         busy={orchestrationDemoSettings.busy.value}
         defaultGoal={orchestrationDemoSettings.defaultGoal.value}
         clock={demoClock}
@@ -248,14 +253,9 @@ export function OrchestrationToolbarDemo() {
             timeline={{
               ...demoTimeline(value),
               automatic_by_default: value === 'running' && orchestrationDemoSettings.autoPlacement.value,
+              never_started: value === 'paused' && orchestrationDemoSettings.neverStarted.value,
               ...((value === 'proposed' || value === 'paused') && orchestrationDemoSettings.policyAbsent.value
-                ? {
-                    kick_off: {
-                      ...demoTimeline(value).kick_off,
-                      can_start: false,
-                      start_blocked: 'policy_absent' as const,
-                    },
-                  }
+                ? { kick_off: { ...demoTimeline(value).kick_off, default_policy: true } }
                 : {}),
             }}
             propose={propose()}
@@ -264,6 +264,7 @@ export function OrchestrationToolbarDemo() {
             defaultGoal={orchestrationDemoSettings.defaultGoal.value}
             busy={orchestrationDemoSettings.busy.value}
             planning={orchestrationDemoSettings.planning.value || undefined}
+            showPlanner={orchestrationDemoSettings.planning.value === 'waiting'}
             clock={demoClock}
           />
         </CatalogExample>
@@ -418,6 +419,7 @@ export function OrchestrationDemoSettings() {
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />
       <Checkbox name="policy-absent" checked={settings.policyAbsent.value} label="No Policy Saved" />
+      <Checkbox name="never-started" checked={settings.neverStarted.value} label="Never Started" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
@@ -444,6 +446,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
       if (name === 'auto-placement') settings.autoPlacement.value = control.checked;
       if (name === 'policy-absent') settings.policyAbsent.value = control.checked;
+      if (name === 'never-started') settings.neverStarted.value = control.checked;
     }),
   );
   scope.add(
@@ -473,6 +476,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
         settings.planning.value = '';
       },
       answerQuestion: () => undefined,
+      showPlanner: () => undefined,
       chooseProjects: () => undefined,
       runControl: () => undefined,
       showRequest: () => undefined,

@@ -35,6 +35,17 @@ describe('orchestration timeline response contract (HS2-J89JC7)', () => {
     expect(drifted((value) => (value.automatic_by_default = 'yes'))).toThrow();
     const byDefault = { ...demoTimeline('running'), automatic_by_default: true };
     expect(parseOrchestrationTimeline(JSON.parse(JSON.stringify(byDefault)))).toEqual(byDefault);
+    // HS2-38R8J2: `never_started` is optional and boolean.
+    expect(drifted((value) => (value.never_started = 1))).toThrow();
+    const never = { ...demoTimeline('paused'), never_started: true };
+    expect(parseOrchestrationTimeline(JSON.parse(JSON.stringify(never)))).toEqual(never);
+    // HS2-D9KP86: `kick_off.default_policy` is optional and boolean.
+    expect(drifted((value) => ((value.kick_off as Record<string, unknown>).default_policy = 'yes'))).toThrow();
+    const defaults = {
+      ...demoTimeline('proposed'),
+      kick_off: { ...demoTimeline('proposed').kick_off, default_policy: true },
+    };
+    expect(parseOrchestrationTimeline(JSON.parse(JSON.stringify(defaults)))).toEqual(defaults);
   });
 });
 

@@ -213,11 +213,16 @@ pub struct TimelineProvisionalGate {
 pub struct KickOff {
     /// Turning automatic placement on would be accepted by the policy route.
     pub can_start: bool,
-    /// `no_projects`, `no_plan`, `project_software` (HS2-J3ZF27), `policy_absent` or
-    /// `running`; absent when it can start. No placement actor is needed: the
-    /// orchestrator acts as the orchestration project (HS2-XYAHB4).
+    /// `no_projects`, `no_plan`, `project_software` (HS2-J3ZF27) or `running`; absent
+    /// when it can start. No placement actor is needed: the orchestrator acts as the
+    /// orchestration project (HS2-XYAHB4). HS2-D9KP86: no saved policy does not block
+    /// it; see `default_policy`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_blocked: Option<String>,
+    /// HS2-D9KP86: no policy is saved yet, so Start Orchestration first saves the
+    /// default policy (every member at the server's default) with placement on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub default_policy: bool,
     /// Placement is automatic, so it can be paused.
     pub can_pause: bool,
     /// The policy revision a change is made against.
@@ -237,6 +242,8 @@ pub struct TimelinePolicy {
     /// HS2-J3ZF27: the project's type is Software, so nothing is placed and Start
     /// would do nothing.
     pub software: bool,
+    /// HS2-38R8J2: placement was on for this owner at some time on this machine.
+    pub ever_started: bool,
 }
 
 pub struct TimelineInput<'a> {
@@ -385,6 +392,12 @@ pub struct Timeline {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub automatic_by_default: bool,
     pub kick_off: KickOff,
+    /// HS2-38R8J2: placement was never turned on for this owner and the orchestrator
+    /// has started no session for it, so a plan whose work was started by hand reads
+    /// Not Started rather than Paused. Absent while running and once placement was ever
+    /// on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub never_started: bool,
     /// When the earliest unfinished run started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub running_since_ms: Option<u64>,
@@ -578,12 +591,12 @@ fn kick_off(input: &TimelineInput<'_>, phase: TimelinePhase) -> KickOff {
         TimelinePhase::NoPlan => Some("no_plan"),
         TimelinePhase::Running => Some("running"),
         _ if input.policy.software => Some("project_software"),
-        _ if !input.policy.present => Some("policy_absent"),
         _ => None,
     };
     KickOff {
         can_start: blocked.is_none(),
         start_blocked: blocked.map(Into::into),
+        default_policy: !input.policy.present,
         can_pause: input.policy.automatic,
         policy_revision: input.policy.revision.clone(),
     }
@@ -895,6 +908,10 @@ pub fn timeline(input: &TimelineInput<'_>) -> Timeline {
         phase,
         automatic: input.policy.automatic,
         automatic_by_default: input.policy.automatic && input.policy.auto,
+        // A session the orchestrator started (such as an integrator) means it did start.
+        never_started: phase != TimelinePhase::Running
+            && !input.policy.ever_started
+            && input.sessions.is_empty(),
         kick_off: kick_off(input, phase),
         running_since_ms: input
             .runs

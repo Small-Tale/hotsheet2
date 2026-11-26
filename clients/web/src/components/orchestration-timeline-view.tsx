@@ -6,7 +6,7 @@ import { List } from '@kerfjs/ui/list';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
-import { Sparkles, Workflow } from 'lucide';
+import { Sparkles, SquareTerminal, Workflow } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS, ORCHESTRATION_TARGETS } from '../interaction-attrs/orchestration';
 import type { PlanHealth, StepName } from '../orchestration-plan-health';
@@ -43,6 +43,8 @@ export interface OrchestrationTimelineViewProps {
    */
   defaultGoal?: boolean;
   clock?: ClockFormat;
+  /** HS2-FA8G9J: the planner waits in its terminal and its tab is known, so Show Planner opens it. */
+  showPlanner?: boolean;
 }
 
 /**
@@ -65,6 +67,7 @@ export function OrchestrationTimelineView({
   planning,
   defaultGoal = false,
   clock = clockTime,
+  showPlanner = false,
 }: OrchestrationTimelineViewProps) {
   const working = plannerWorkingLabel(planning, busy);
   const failure =
@@ -120,7 +123,18 @@ export function OrchestrationTimelineView({
                 : 'Propose a plan from the open goal tickets in this project. The plan stays a dry run until you start orchestration.'
             }
             action={
-              working ? (
+              // HS2-FA8G9J: the one action of a planner waiting in its terminal opens that tab; the
+              // header still says it waits.
+              showPlanner && planning === 'waiting' ? (
+                <Button
+                  emphasis="primary"
+                  action={ORCHESTRATION_ACTIONS.showOrchestrationPlanner.value}
+                  title="Open the planning session’s terminal tab, where it waits for your answer"
+                  icon={<LucideIcon size="s" icon={SquareTerminal} name="square-terminal" />}
+                >
+                  Show Planner
+                </Button>
+              ) : working ? (
                 <Button
                   emphasis="primary"
                   disabled

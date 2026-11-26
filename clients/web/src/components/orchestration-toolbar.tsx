@@ -5,16 +5,18 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Settings, Sparkles, X } from 'lucide';
+import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Settings, Sparkles, SquareTerminal, X } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import {
   type ClockFormat,
   clockTime,
+  dryRunPlan,
   plannerWorkingLabel,
   startBlockedInSettings,
   startBlockedReason,
+  startExplanation,
   timelineStatus,
 } from '../orchestration-timeline-board';
 import type { OrchestrationProposeAvailability } from './orchestration-timeline-view';
@@ -40,6 +42,8 @@ export interface OrchestrationToolbarProps {
    */
   planning?: string;
   clock?: ClockFormat;
+  /** HS2-FA8G9J: the planner waits in its terminal and its tab is known, so Show Planner opens it. */
+  showPlanner?: boolean;
 }
 
 /** What the header adds for a planning session. */
@@ -71,20 +75,24 @@ export function OrchestrationToolbar({
   busy = false,
   planning,
   clock = clockTime,
+  showPlanner = false,
 }: OrchestrationToolbarProps) {
   const goal = defaultGoal && timeline.phase !== 'no_projects' ? ' · Working through all open tickets' : '';
   const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
   const blocked = startBlockedReason(timeline);
   // HS2-1DC8X1: the reason a person can act on is a banner with the way there, never only a disabled title.
-  const openSettings = startBlockedInSettings(timeline) ? (
-    <Button
-      size="compact"
-      action={ORCHESTRATION_ACTIONS.openOrchestrationSettings.value}
-      icon={<LucideIcon size="s" icon={Settings} name="settings" />}
-    >
-      Open Orchestration Settings
-    </Button>
-  ) : undefined;
+  // HS2-D9KP86: with no saved policy the same way leads to the defaults Start Orchestration saves.
+  const openSettings =
+    startBlockedInSettings(timeline) || timeline.kick_off.default_policy === true ? (
+      <Button
+        size="compact"
+        action={ORCHESTRATION_ACTIONS.openOrchestrationSettings.value}
+        icon={<LucideIcon size="s" icon={Settings} name="settings" />}
+      >
+        Open Orchestration Settings
+      </Button>
+    ) : undefined;
+  const dryRun = dryRunPlan(timeline);
   const updating = planning === 'updating';
   const answer =
     planning === 'asked' && question ? (
@@ -98,6 +106,7 @@ export function OrchestrationToolbar({
         Answer Question
       </Button>
     ) : undefined;
+  const planner = showPlanner && planning === 'waiting' ? <ShowPlannerButton emphasis="secondary" /> : undefined;
   const replan =
     timeline.phase === 'proposed' || timeline.phase === 'running' || timeline.phase === 'paused' ? (
       updating ? (
@@ -191,7 +200,12 @@ export function OrchestrationToolbar({
             shape="pill"
             action={ORCHESTRATION_ACTIONS.startOrchestration.value}
             disabled={busy || !timeline.kick_off.can_start}
-            title={blocked ?? 'Place sessions automatically within the Orchestration settings'}
+            title={
+              blocked ??
+              (timeline.kick_off.default_policy
+                ? 'Save the default policy and place sessions automatically within it'
+                : 'Place sessions automatically within the Orchestration settings')
+            }
             icon={<LucideIcon size="s" icon={Play} name="play" />}
           >
             Start Orchestration
@@ -213,21 +227,21 @@ export function OrchestrationToolbar({
           />
         </List>
       )}
-      {timeline.phase === 'proposed' && (
+      {dryRun && (
         <List controlInsets="trl">
           <StateBanner
             copyLayout="stacked"
             tone="info"
             title="This Plan Is a Dry Run"
-            detail={`Columns run from the newest work on the left to the first work on the right. Start Orchestration starts sessions within the Orchestration settings.${
-              blocked ? ` ${blocked}.` : ''
-            }`}
+            detail={`Columns run from the newest work on the left to the first work on the right. ${startExplanation(
+              timeline,
+            )}.${blocked ? ` ${blocked}.` : ''}`}
             action={openSettings}
             actionPlacement="below"
           />
         </List>
       )}
-      {timeline.phase === 'paused' && blocked !== undefined && (
+      {timeline.phase === 'paused' && !dryRun && blocked !== undefined && (
         <List controlInsets="trl">
           <StateBanner
             copyLayout="stacked"
@@ -248,11 +262,30 @@ export function OrchestrationToolbar({
         trailing={
           <>
             {answer}
+            {planner}
             {replan}
             {action}
           </>
         }
       />
     </List>
+  );
+}
+
+/**
+ * HS2-FA8G9J: opens the drawer on the planning session's terminal tab, where it waits on its tool's first-run
+ * question, as Show Request opens a permission request.
+ */
+function ShowPlannerButton({ emphasis }: { emphasis: 'primary' | 'secondary' }) {
+  return (
+    <Button
+      emphasis={emphasis}
+      shape="pill"
+      action={ORCHESTRATION_ACTIONS.showOrchestrationPlanner.value}
+      title="Open the planning session’s terminal tab, where it waits for your answer"
+      icon={<LucideIcon size="s" icon={SquareTerminal} name="square-terminal" />}
+    >
+      Show Planner
+    </Button>
   );
 }

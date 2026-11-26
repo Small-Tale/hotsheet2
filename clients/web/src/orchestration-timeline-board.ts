@@ -335,6 +335,21 @@ export function findTimelineItem(timeline: OrchestrationTimeline | undefined, st
   return undefined;
 }
 
+/** HS2-38R8J2: how many items work now. */
+function workingNow(timeline: OrchestrationTimeline): number {
+  return timeline.waves
+    .filter((wave) => wave.kind === 'working_now')
+    .reduce((total, wave) => total + wave.items.length, 0);
+}
+
+/**
+ * HS2-38R8J2: orchestration places nothing and never did: a proposed plan, or one whose work was started by
+ * hand. The header labels it a dry run.
+ */
+export function dryRunPlan(timeline: OrchestrationTimeline): boolean {
+  return timeline.phase === 'proposed' || (timeline.phase === 'paused' && timeline.never_started === true);
+}
+
 /** The toolbar's account of where orchestration stands. */
 export function timelineStatus(timeline: OrchestrationTimeline, clock: ClockFormat = clockTime): string {
   const sessions = `${timeline.sessions} ${timeline.sessions === 1 ? 'Session' : 'Sessions'}`;
@@ -350,7 +365,8 @@ export function timelineStatus(timeline: OrchestrationTimeline, clock: ClockForm
         ? `Running · ${sessions}`
         : `Running Since ${clock(timeline.running_since_ms)} · ${sessions}`;
     case 'paused':
-      return `Paused · ${sessions}`;
+      // HS2-38R8J2: work started by hand under a plan nobody ever started is not a pause.
+      return timeline.never_started ? `Not Started · ${workingNow(timeline)} Working` : `Paused · ${sessions}`;
     default:
       return timeline.phase satisfies never;
   }
@@ -366,9 +382,6 @@ export function startBlockedReason(timeline: OrchestrationTimeline): string | un
       return 'Add projects in Orchestration settings first';
     case 'no_plan':
       return 'There is no plan to start yet';
-    case 'policy_absent':
-      // HS2-1DC8X1: named after the Policy section and its Apply Policy, not the per-project Limits.
-      return 'No policy is saved yet. Apply one in Orchestration settings first';
     case 'project_software':
       return 'Change the Project Type to Orchestration in General settings first';
     default:
@@ -378,7 +391,17 @@ export function startBlockedReason(timeline: OrchestrationTimeline): string | un
 
 /** HS2-1DC8X1: whether what blocks Start Orchestration is changed in Settings › Orchestration. */
 export function startBlockedInSettings(timeline: OrchestrationTimeline): boolean {
-  return timeline.kick_off.start_blocked === 'policy_absent' || timeline.kick_off.start_blocked === 'no_projects';
+  return timeline.kick_off.start_blocked === 'no_projects';
+}
+
+/**
+ * HS2-D9KP86: what pressing Start Orchestration does, for its title and the dry-run banner. With no saved
+ * policy it first saves the default one (the values Settings › Orchestration › Policy shows).
+ */
+export function startExplanation(timeline: OrchestrationTimeline): string {
+  return timeline.kick_off.default_policy
+    ? 'Start Orchestration saves the default policy shown in Orchestration settings and starts sessions within it'
+    : 'Start Orchestration starts sessions within the Orchestration settings';
 }
 
 /**

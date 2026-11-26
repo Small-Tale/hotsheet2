@@ -4,6 +4,7 @@ import { findTimelineItem } from '../orchestration-timeline-board';
 import { demoClock, demoDecisions, demoSummary, demoTimeline } from '../ux-demo/orchestration-fixtures';
 import { OrchestrationDecisionsDialog } from './orchestration-decisions-dialog';
 import { OrchestrationInspector, orchestrationInspectorPanel } from './orchestration-inspector';
+import { OrchestrationOverview } from './orchestration-overview';
 import { OrchestrationTimelineView } from './orchestration-timeline-view';
 import { OrchestrationToolbar } from './orchestration-toolbar';
 
@@ -151,25 +152,33 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
     );
     expect(working).toContain('data-planner-state="Planning"');
     expect(working).not.toContain('data-action="propose-orchestration-plan"');
-    const blocked = String(
+    // HS2-D9KP86: no saved policy does not block Start; the banner and title say Start saves the defaults,
+    // and the banner leads to them.
+    const defaults = String(
       OrchestrationToolbar({
         timeline: {
           ...demoTimeline('proposed'),
-          kick_off: { can_start: false, can_pause: false, start_blocked: 'policy_absent' },
+          kick_off: { can_start: true, can_pause: false, default_policy: true },
         },
       }),
     );
-    expect(blocked).toContain('No policy is saved yet. Apply one in Orchestration settings first');
-    expect(blocked).toMatch(
+    expect(defaults).toContain(
+      'Start Orchestration saves the default policy shown in Orchestration settings and starts sessions within it.',
+    );
+    expect(defaults).toContain('title="Save the default policy and place sessions automatically within it"');
+    expect(defaults).not.toMatch(
       /data-action="start-orchestration"[^>]*disabled|disabled[^>]*data-action="start-orchestration"/,
     );
-    // HS2-1DC8X1: the dry-run banner offers the way to the setting.
-    expect(blocked).toContain('data-action="open-orchestration-settings"');
-    expect(blocked).toContain('Open Orchestration Settings');
+    expect(defaults).toContain('data-action="open-orchestration-settings"');
+    expect(defaults).toContain('Open Orchestration Settings');
+    // With a saved policy it starts within it, and no settings action.
+    const saved = String(OrchestrationToolbar({ timeline: demoTimeline('proposed') }));
+    expect(saved).toContain('Start Orchestration starts sessions within the Orchestration settings.');
+    expect(saved).not.toContain('open-orchestration-settings');
   });
 
   it('HS2-1DC8X1 says why a paused plan cannot start, with the way to the setting', () => {
-    const paused = (start_blocked?: 'policy_absent' | 'project_software') =>
+    const paused = (start_blocked?: 'project_software') =>
       String(
         OrchestrationToolbar({
           timeline: {
@@ -178,13 +187,23 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
           },
         }),
       );
-    const absent = paused('policy_absent');
-    expect(absent).toContain('Start Orchestration Is Unavailable');
-    expect(absent).toContain(
-      'No policy is saved yet. Apply one in Orchestration settings first. Work already running continues.',
+    // HS2-38R8J2: a plan nobody ever started keeps its dry-run banner, with the reason, and its header
+    // says Not Started instead of Paused; once started a pause reads Paused, with no dry-run banner.
+    const never = String(
+      OrchestrationToolbar({
+        timeline: {
+          ...demoTimeline('paused'),
+          never_started: true,
+          kick_off: { can_start: false, can_pause: false, start_blocked: 'project_software' },
+        },
+      }),
     );
-    expect(absent).toContain('data-orchestration-start-blocked="policy_absent"');
-    expect(absent).toContain('data-action="open-orchestration-settings"');
+    expect(never).toContain('This Plan Is a Dry Run');
+    expect(never).toMatch(/Not Started · \d+ Working/);
+    expect(never).toContain('Change the Project Type to Orchestration in General settings first.');
+    expect(never).not.toContain('Start Orchestration Is Unavailable');
+    expect(paused()).not.toContain('This Plan Is a Dry Run');
+    expect(paused()).toContain('Paused · ');
     // A reason changed elsewhere names it, with no Settings action.
     const software = paused('project_software');
     expect(software).toContain('Start Orchestration Is Unavailable');
@@ -734,6 +753,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       updatePlan: () => calls.push('update plan'),
       cancelPlanUpdate: () => calls.push('cancel update'),
       answerQuestion: () => calls.push('answer'),
+      showPlanner: () => calls.push('planner'),
       chooseProjects: () => calls.push('choose'),
       runControl: (control: string, state?: string) => calls.push(`run ${control} ${state ?? ''}`),
       showRequest: (id: string) => calls.push(`request ${id}`),
@@ -768,6 +788,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'update-orchestration-plan', target({}));
     run('click', 'cancel-orchestration-plan-update', target({}));
     run('click', 'answer-orchestration-question', target({}));
+    run('click', 'show-orchestration-planner', target({}));
     run('click', 'choose-orchestration-projects', target({}));
     run('click', 'orchestration-run-control', target({ control: 'correct', runState: 'failed' }));
     run('click', 'show-orchestration-request', target({ requestId: 'request-6' }));
@@ -795,6 +816,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'update plan',
       'cancel update',
       'answer',
+      'planner',
       'choose',
       'run correct failed',
       'request request-6',
@@ -864,6 +886,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       updatePlan: noop,
       cancelPlanUpdate: noop,
       answerQuestion: noop,
+      showPlanner: noop,
       chooseProjects: noop,
       runControl: noop,
       showRequest: noop,
@@ -914,5 +937,66 @@ describe('the Orchestration view fills its area (HS2-3JH0QV)', () => {
     const css = readFileSync(new URL('./orchestration-timeline-view.css', import.meta.url), 'utf8');
     expect(css).toContain('grid-template-rows: auto minmax(0, 1fr);');
     expect(css).toMatch(/\.orchestration-timeline-view__body \{[^}]*grid-row: 2;/);
+  });
+});
+
+describe('the overview’s placement for a plan nobody started (HS2-38R8J2)', () => {
+  it('says Not started while work started by hand continues, and Paused once it was started', () => {
+    const overview = (never: boolean) =>
+      String(
+        OrchestrationOverview({ timeline: { ...demoTimeline('paused'), never_started: never }, clock: demoClock }),
+      );
+    expect(overview(true)).toContain('Not started; work started by hand continues');
+    expect(overview(false)).toContain('Paused; running work continues');
+  });
+});
+
+describe('the overview’s progress for a project with no work, or an unread summary (HS2-70MHXJ)', () => {
+  it('says no work yet, and says when the summary could not be read, never "not read"', () => {
+    const fresh = { ...demoTimeline('proposed'), waves: [] };
+    const empty = String(
+      OrchestrationOverview({
+        timeline: fresh,
+        overview: { summary: { totals: {}, targets: {} } },
+        clock: demoClock,
+      }),
+    );
+    expect(empty).toContain('0 done · 0 working · no work yet');
+    expect(empty).not.toContain('not read');
+    const unread = String(
+      OrchestrationOverview({ timeline: fresh, overview: { summaryUnreadable: true }, clock: demoClock }),
+    );
+    expect(unread).toContain('Unknown (the summary could not be read)');
+    expect(unread).toContain('cost unknown (could not be read)');
+  });
+});
+
+describe('Show Planner while the planner waits in its terminal (HS2-FA8G9J)', () => {
+  const header = (extra: Record<string, unknown>) =>
+    String(OrchestrationToolbar({ timeline: demoTimeline('no_plan'), clock: demoClock, ...extra }));
+  const empty = (extra: Record<string, unknown>) =>
+    String(OrchestrationTimelineView({ timeline: demoTimeline('no_plan'), clock: demoClock, ...extra }));
+
+  it('offers Show Planner beside the busy header button and as the empty state action', () => {
+    const waiting = header({ planning: 'waiting', showPlanner: true });
+    expect(waiting).toContain('data-action="show-orchestration-planner"');
+    expect(waiting).toContain('Show Planner');
+    expect(waiting).toContain('data-planner-state="Planner Waiting"');
+    const area = empty({ planning: 'waiting', showPlanner: true });
+    expect(area).toContain('data-action="show-orchestration-planner"');
+    expect(area).not.toContain('data-planner-state');
+  });
+
+  it('offers nothing while the planner works, or when its tab is unknown', () => {
+    for (const extra of [
+      { planning: 'planning', showPlanner: true },
+      { planning: 'waiting', showPlanner: false },
+      { planning: undefined, showPlanner: true },
+    ]) {
+      expect(header(extra)).not.toContain('show-orchestration-planner');
+      expect(empty(extra)).not.toContain('show-orchestration-planner');
+    }
+    // Waiting with the tab unknown keeps the busy button in the empty state.
+    expect(empty({ planning: 'waiting' })).toContain('data-planner-state="Planner Waiting"');
   });
 });

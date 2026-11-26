@@ -298,8 +298,9 @@ test('HS2-J89JC7 the timeline reads newest to oldest, opens on current work, and
     expect(await columnTitles(page)).toEqual(['Second · About +1 h Column', 'First · On Start Column']);
     await expect(view.locator('[data-orchestration-part="state"]').first()).toBeVisible();
     const start = page.getByRole('button', { name: 'Start Orchestration' });
-    await expect(start).toBeDisabled();
-    await expect(start).toHaveAttribute('title', /Orchestration settings first/);
+    // HS2-D9KP86: with no policy saved, Start saves the default one.
+    await expect(start).toBeEnabled();
+    await expect(start).toHaveAttribute('title', 'Save the default policy and place sessions automatically within it');
     await capture(page, 'plan-1440');
 
     // A dispatch reaches the open view through the long poll: Working Now and Next.
@@ -940,6 +941,12 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
     await declareSelf(server, false);
     await asOrchestrationProject(server);
     await server.request('/tickets', 'POST', { title: 'Ship the synthetic sign-on' });
+    // HS2-FA8G9J: the planner's terminal is a real terminal of the project, so Show Planner can open its tab.
+    const plannerTerminal = await server.request<{ id: string }>('/terminals', 'POST', {
+      command: 'sh',
+      args: ['-c', 'echo SYNTHETIC-PLANNER; sleep 600'],
+      cwd: server.root,
+    });
     await page.setViewportSize({ width: 1440, height: 900 });
     // `plan show` as the server answers it while the planner's terminal runs and its tool has not reported
     // its session start yet (it stopped on a trust question). Every other request reaches the real server.
@@ -954,7 +961,12 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
             state: 'planning',
             proposal_id: 'press-1',
             session: {
-              session: { session_id: '01M7P8BSGHY0SJ91R2ZG39V8JC', operation_id: 'press-1', role: 'planner' },
+              session: {
+                checkout_id: server.checkoutId,
+                session_id: plannerTerminal.id,
+                operation_id: 'press-1',
+                role: 'planner',
+              },
               server_id: '01M7P876C534DEY3F1YTD2QR8Y',
               worker_id: 'claude-01M7P8BSGHY0SJ91R2ZG39V8JC',
               label: 'Launch: planner',
@@ -991,6 +1003,30 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
     await capture(page, 'waiting-390', 'hs2-5ryxnn');
     await page.setViewportSize({ width: 1440, height: 900 });
     await capture(page, 'waiting-1440-after-narrow', 'hs2-5ryxnn');
+
+    // HS2-FA8G9J: Show Planner, beside the busy button and as the empty state's action, opens the drawer on
+    // the planner's terminal tab.
+    const show = toolbar.getByRole('button', { name: 'Show Planner' });
+    await expect(show).toBeEnabled();
+    const empty = page.locator('[data-orchestration-empty="no-plan"]');
+    await expect(empty.getByRole('button', { name: 'Show Planner' })).toBeVisible();
+    for (const [width, height] of [
+      [1440, 900],
+      [1100, 820],
+      [390, 844],
+      [1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await capture(page, `show-planner-${width}`, 'hs2-fa8g9j');
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture(page, 'show-planner-1440-dark', 'hs2-fa8g9j');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await show.click();
+    const plannerTab = page.locator(`[data-tab-kind="terminal"][data-terminal-id="${plannerTerminal.id}"]`);
+    await expect(plannerTab.getByRole('tab')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.app-toast').filter({ hasText: 'not open in this window' })).toHaveCount(0);
+    await capture(page, 'planner-tab-1440', 'hs2-fa8g9j');
 
     // The person answered it; reopening the view reads the planner working.
     toolReady = true;
