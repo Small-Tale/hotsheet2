@@ -12,9 +12,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hotsheet_ticketing::orchestration::{
-    HOME_OUTAGE_NOTIFY_AFTER_MS, HomeNotice, HomeNoticeKind, HomeOutage, HomeOutageReason,
-    HomeOutageStore, OrchestrationError, ProjectSites, ScheduleInput, advance_outages,
-    next_notice_at, observe_homes,
+    HOME_OUTAGE_NOTIFY_AFTER_MS, HOME_RECHECK_BASE_MS, HOME_RECHECK_CAP_MS, HomeNotice,
+    HomeNoticeKind, HomeOutage, HomeOutageReason, HomeOutageStore, OrchestrationError,
+    ProjectSites, ScheduleInput, advance_outages, next_notice_at, next_recheck_at, observe_homes,
 };
 use serde::Serialize;
 
@@ -106,6 +106,17 @@ pub fn notification(
             ),
             "home-returned",
         ),
+        // HS2-1CC1TQ: the announced outage ends because the grouping changed.
+        HomeNoticeKind::Regrouped => (
+            "info",
+            format!("Home site {home} no longer coordinates other sites"),
+            format!(
+                "The project was regrouped, so the earlier warning that {home} is \
+                 unavailable no longer applies. Each project's work is coordinated by its \
+                 own home site."
+            ),
+            "home-regrouped",
+        ),
     };
     HomeNotification {
         owner_id: owner_id.to_owned(),
@@ -137,6 +148,23 @@ impl OrchestrationRuntime {
         self
     }
 
+    /// HS2-1CC1TQ: the first wait before a home on record as out is read again when
+    /// nothing else wakes the loop (tests shorten it; [`HOME_RECHECK_BASE_MS`]
+    /// otherwise). The cap scales with it: thirty times the base.
+    #[must_use]
+    pub fn with_home_recheck_after(mut self, base: Duration) -> Self {
+        self.home_recheck_base_ms = u64::try_from(base.as_millis()).unwrap_or(u64::MAX);
+        self
+    }
+
+    /// The owner's whole ledger: current outages and announced ones whose end is not
+    /// sent yet. Each is followed until seen back (HS2-1CC1TQ).
+    pub(super) fn home_outages_followed(&self, owner_id: &str) -> Vec<HomeOutage> {
+        HomeOutageStore::new(&self.home)
+            .outages(owner_id)
+            .unwrap_or_default()
+    }
+
     /// The owner's current home outages, from this machine's ledger.
     pub fn home_outages(&self, owner_id: &str) -> Result<Vec<HomeOutage>, OrchestrationError> {
         Ok(HomeOutageStore::new(&self.home)
@@ -163,8 +191,9 @@ impl OrchestrationRuntime {
                 .and_then(|binding| binding.destination)
                 .is_some()
         };
-        let observed = observe_homes(input, &bound);
         let store = HomeOutageStore::new(&self.home);
+        let followed = store.outages(owner_id).unwrap_or_default();
+        let observed = observe_homes(input, &followed, &bound);
         let sites: &ProjectSites = input.sites;
         let now_ms = input.now_ms;
         let ledger = if applied {
@@ -196,12 +225,28 @@ impl OrchestrationRuntime {
                 Err(_) => Vec::new(),
             }
         } else {
-            let before = store.outages(owner_id).unwrap_or_default();
-            advance_outages(&before, &observed, sites, now_ms)
+            advance_outages(&followed, &observed, sites, now_ms)
         };
-        let wake = (applied && self.home_notices.is_some())
+        let notice_at = (applied && self.home_notices.is_some())
             .then(|| next_notice_at(&ledger, self.home_notify_after_ms))
             .flatten();
+        // HS2-1CC1TQ: an applied pass reads a home on record as out again on a bounded
+        // backoff, so its return is seen (and announced) though the project may have no
+        // work left to wake the loop.
+        let recheck_at = applied
+            .then(|| {
+                next_recheck_at(
+                    &ledger,
+                    now_ms,
+                    self.home_recheck_base_ms,
+                    self.home_recheck_cap_ms(),
+                )
+            })
+            .flatten();
+        let wake = match (notice_at, recheck_at) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         (
             ledger.into_iter().filter(HomeOutage::current).collect(),
             wake,
@@ -211,3 +256,14 @@ impl OrchestrationRuntime {
 
 /// The default notify delay, for the runtime's constructor.
 pub(super) const DEFAULT_NOTIFY_AFTER_MS: u64 = HOME_OUTAGE_NOTIFY_AFTER_MS;
+/// The default first re-read wait, for the runtime's constructor.
+pub(super) const DEFAULT_RECHECK_BASE_MS: u64 = HOME_RECHECK_BASE_MS;
+
+impl OrchestrationRuntime {
+    /// The longest wait between re-reads: [`HOME_RECHECK_CAP_MS`] at the default base,
+    /// the same thirty-fold bound under a shortened one.
+    fn home_recheck_cap_ms(&self) -> u64 {
+        let factor = HOME_RECHECK_CAP_MS / HOME_RECHECK_BASE_MS;
+        self.home_recheck_base_ms.saturating_mul(factor)
+    }
+}

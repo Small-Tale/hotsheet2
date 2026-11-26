@@ -8,8 +8,10 @@
 //! shown and announced:
 //!
 //! - [`observe_homes`] reads each multi-site home out of one scheduling pass's inputs.
-//!   A home the pass did not read (a project with no work and no session) is not
-//!   observed, and what was known of it stays.
+//!   A home the pass did not read is not observed, and what was known of it stays.
+//!   HS2-1CC1TQ: a home on record as out is followed until it is seen back, even
+//!   while its project has no work: the pass reads it, and [`next_recheck_at`] says
+//!   when to read it again, on a bounded backoff.
 //! - [`advance_outages`] folds the observations into this machine's ledger: when the
 //!   outage began, why, and whether a person was told.
 //! - [`due_notices`] says which notifications are due, debounced: "unavailable" only
@@ -33,6 +35,13 @@ use super::*;
 /// Two minutes rides out a restart or a short network drop; an outage longer than that
 /// leaves the project without a dispatcher for long enough to matter.
 pub const HOME_OUTAGE_NOTIFY_AFTER_MS: u64 = 2 * 60 * 1000;
+
+/// HS2-1CC1TQ: the first wait before a home on record as out is read again when
+/// nothing else wakes the loop. It doubles with the outage's age up to
+/// [`HOME_RECHECK_CAP_MS`], the bounds of the scheduler's refusal backoff.
+pub const HOME_RECHECK_BASE_MS: u64 = super::scheduler::REFUSAL_BACKOFF_BASE_MS;
+/// HS2-1CC1TQ: the longest wait between two reads of a home on record as out.
+pub const HOME_RECHECK_CAP_MS: u64 = super::scheduler::REFUSAL_BACKOFF_CAP_MS;
 
 /// The directory under the machine home holding one ledger file per owning checkout.
 pub const HOME_OUTAGE_DIRECTORY: &str = "orchestration-home-outages";
@@ -100,6 +109,10 @@ pub struct HomeOutage {
     /// When the home was seen available again after it was announced.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub returned_at_ms: Option<u64>,
+    /// HS2-1CC1TQ: the target is no longer the home of a multi-site project; its
+    /// announced outage ends with a "regrouped" notice rather than "returned".
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub regrouped: bool,
 }
 
 impl HomeOutage {
@@ -115,6 +128,8 @@ impl HomeOutage {
 pub enum HomeNoticeKind {
     Unavailable,
     Returned,
+    /// HS2-1CC1TQ: the announced home no longer coordinates other sites.
+    Regrouped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,13 +145,16 @@ pub struct HomeNotice {
     pub at_ms: u64,
 }
 
-/// Each multi-site home of the pass, observed. A home counts only while its project
-/// has work or a session, as the pass reads it then; otherwise it is not observed.
+/// Each multi-site home of the pass, observed. A home counts while its project has
+/// work or a session, or while `followed` (this machine's ledger before the pass)
+/// holds it (HS2-1CC1TQ: an outage is followed to its end, idle project or not); the
+/// pass reads it then. Otherwise it is not observed.
 /// `bound` says whether this machine holds a binding for a target: a home whose read
 /// failed without one is `unbound`, otherwise `unreachable` (a failed read's code does
 /// not tell the two apart: both answer `target_unavailable`).
 pub fn observe_homes(
     input: &ScheduleInput<'_>,
+    followed: &[HomeOutage],
     bound: &dyn Fn(&str) -> bool,
 ) -> Vec<HomeObservation> {
     let sites = input.sites;
@@ -149,7 +167,8 @@ pub fn observe_homes(
         }) || input
             .sessions
             .iter()
-            .any(|session| in_project(&session.target_id));
+            .any(|session| in_project(&session.target_id))
+            || followed.iter().any(|entry| entry.home_target_id == home);
         let read = input.targets.iter().find(|state| state.target_id == home);
         let outage = if !input.policy.target(home).enabled {
             if !busy {
@@ -181,8 +200,9 @@ pub fn observe_homes(
 }
 
 /// Fold one pass's observations into the ledger. `sites` is the active grouping: a
-/// ledger entry of a target that is no longer a multi-site home is dropped. A home
-/// not observed keeps what was known of it.
+/// ledger entry of a target that is no longer a multi-site home is dropped, unless a
+/// person was told it is unavailable (HS2-1CC1TQ): that one stays until its
+/// "regrouped" notice is sent. A home not observed keeps what was known of it.
 pub fn advance_outages(
     before: &[HomeOutage],
     observed: &[HomeObservation],
@@ -227,6 +247,7 @@ pub fn advance_outages(
                     detail: None,
                     announced: false,
                     returned_at_ms: None,
+                    regrouped: false,
                 });
                 let backoff = detail.as_deref() == Some(REFUSAL_BACKOFF);
                 // A home left alone after a refusal is still unavailable for the
@@ -244,8 +265,24 @@ pub fn advance_outages(
         };
         if let Some(mut entry) = next {
             entry.sites = others;
+            entry.regrouped = false;
             after.push(entry);
         }
+    }
+    // HS2-1CC1TQ: an announced outage of a target that no longer coordinates other
+    // sites ends with a notice instead of vanishing. Its last known sites are kept.
+    for known in before
+        .iter()
+        .filter(|entry| entry.announced && !homes.iter().any(|home| home == &entry.home_target_id))
+    {
+        after.push(HomeOutage {
+            since_ms: None,
+            reason: None,
+            detail: None,
+            returned_at_ms: known.returned_at_ms.or(Some(now_ms)),
+            regrouped: true,
+            ..known.clone()
+        });
     }
     after
 }
@@ -274,7 +311,11 @@ pub fn due_notices(
             None if entry.announced => {
                 entry.announced = false;
                 notices.push(HomeNotice {
-                    kind: HomeNoticeKind::Returned,
+                    kind: if entry.regrouped {
+                        HomeNoticeKind::Regrouped
+                    } else {
+                        HomeNoticeKind::Returned
+                    },
                     home_target_id: entry.home_target_id.clone(),
                     sites: entry.sites.clone(),
                     reason: None,
@@ -288,6 +329,31 @@ pub fn due_notices(
     }
     ledger.retain(|entry| entry.current() || entry.announced);
     notices
+}
+
+/// HS2-1CC1TQ: when to read again a home on record as out, so a pass sees it come back
+/// though nothing else wakes the loop (its project may have no work left). The wait is
+/// the outage's age, clamped to `[base_ms, cap_ms]`, so successive reads are about
+/// `base_ms`, then twice as far apart each time up to `cap_ms`: a bounded backoff, not
+/// a fixed interval. A disabled home is not read again on a timer: only a policy
+/// change can end that, and it wakes the loop itself.
+pub fn next_recheck_at(
+    ledger: &[HomeOutage],
+    now_ms: u64,
+    base_ms: u64,
+    cap_ms: u64,
+) -> Option<u64> {
+    ledger
+        .iter()
+        .filter(|entry| entry.reason != Some(HomeOutageReason::Disabled))
+        .filter_map(|entry| entry.since_ms)
+        .map(|since| {
+            let wait = now_ms
+                .saturating_sub(since)
+                .clamp(base_ms, cap_ms.max(base_ms));
+            now_ms.saturating_add(wait)
+        })
+        .min()
 }
 
 /// When the next "unavailable" notification falls due, so the loop passes again then.

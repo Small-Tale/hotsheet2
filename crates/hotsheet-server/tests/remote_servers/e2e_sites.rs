@@ -102,7 +102,7 @@ fn sync_pass(store: &Path) -> hotsheet_ticketing::sync::SyncReport {
 /// peer's release only in the peer's clone. A real sync loop pushes it on its next
 /// pass; the test has no next pass, so the home waited on `claim_held` until the
 /// deadline.
-fn sync_published(store: &Path) {
+pub(super) fn sync_published(store: &Path) {
     let report = sync_pass(store);
     assert!(
         matches!(
@@ -121,7 +121,7 @@ fn sync_published(store: &Path) {
 
 /// One pass of each machine's sync loop, the home's last, so both clones hold every
 /// commit either published.
-fn converge(fleet: &Fleet) {
+pub(super) fn converge(fleet: &Fleet) {
     for store in [&fleet.a_store, &fleet.b_store, &fleet.a_store] {
         sync_published(store);
     }
@@ -145,14 +145,14 @@ fn pool_until(fleet: &Fleet, what: &str, wanted: impl Fn(&State) -> bool) -> Sta
 }
 
 /// A session the loop started, with its run (none for a role session).
-struct Placed {
-    session_id: String,
-    run_id: Option<String>,
-    terminal: String,
-    worker: String,
+pub(super) struct Placed {
+    pub(super) session_id: String,
+    pub(super) run_id: Option<String>,
+    pub(super) terminal: String,
+    pub(super) worker: String,
 }
 
-async fn placed_from(fleet: &Fleet, start: &Value, site: &str) -> Placed {
+pub(super) async fn placed_from(fleet: &Fleet, start: &Value, site: &str) -> Placed {
     assert_eq!(start["mode"], "applied", "{start}");
     assert_eq!(start["target_id"], site, "{start}");
     let (session, terminal, worker) = fleet.started_session(start).await;
@@ -252,7 +252,12 @@ fn assignment(
     .unwrap()
 }
 
-async fn claim(fleet: &Fleet, side: Side, ticket: &hotsheet_model::Ticket, worker: &str) -> u16 {
+pub(super) async fn claim(
+    fleet: &Fleet,
+    side: Side,
+    ticket: &hotsheet_model::Ticket,
+    worker: &str,
+) -> u16 {
     let (status, _) = api(
         fleet.side_router(side),
         "POST",
@@ -385,7 +390,7 @@ async fn work_on_home(
     commit
 }
 
-fn ticket_in(store: &Path, ticket: &hotsheet_model::Ticket) -> hotsheet_model::Ticket {
+pub(super) fn ticket_in(store: &Path, ticket: &hotsheet_model::Ticket) -> hotsheet_model::Ticket {
     FsStore::open(store)
         .unwrap()
         .read_ticket(&ticket.id)
@@ -1619,7 +1624,7 @@ async fn site_workers_returned_handoff(variant: SiteWorker) {
 
 /// HS2-EX594V: the home-outage notifications the controller's inbox holds, oldest first,
 /// as `(severity, title)`.
-async fn home_notifications(fleet: &Fleet) -> Vec<(String, String)> {
+pub(super) async fn home_notifications(fleet: &Fleet) -> Vec<(String, String)> {
     let (status, listed) = api(
         fleet.router.clone(),
         "GET",

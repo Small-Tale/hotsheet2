@@ -5398,3 +5398,111 @@ fn hs2_ex594v_a_disabled_home_is_shown_and_announced_once_each_way() {
     f.tick(&mut tx);
     assert_eq!(notices.kinds().len(), 2);
 }
+
+/// HS2-1CC1TQ: target 2 is another site of target 1's project, which has no work and no
+/// session. Its home is on record as out and announced (as a pass with work recorded
+/// it). Every applied pass still reads the home, keeps the outage while it is out and
+/// asks to pass again on a bounded backoff, so its return is seen and announced once
+/// though nothing else would wake the loop.
+#[test]
+fn hs2_1cc1tq_an_idle_projects_home_is_read_until_it_is_back() {
+    use hotsheet_ticketing::orchestration::{
+        HOME_OUTAGE_NOTIFY_AFTER_MS as AFTER, HomeNoticeKind, HomeObservation, HomeOutageReason,
+        HomeOutageStore,
+    };
+    clocked!(clock, tx);
+    let mut f = Placed::new(&BOTH, &mut tx);
+    bind_and_allow(&f.m, 2, &[], &mut tx);
+    allow_on(
+        &f.m.runtime,
+        &f.m.owner.id,
+        &id(2),
+        &BOTH,
+        &["codex"],
+        &mut tx,
+    );
+    let revision = f.m.runtime.declarations(&f.owner()).unwrap().revision;
+    f.m.runtime
+        .request(
+            "PATCH",
+            &format!("/checkouts/{}/orchestration/targets/{}", f.owner(), id(2)),
+            &json!({"expected_revision": revision, "label": "Site Two", "site_of": id(1)}),
+            &mut tx,
+        )
+        .unwrap();
+    let notices = Arc::new(Notices::default());
+    f.m.runtime = f.m.runtime.clone().with_home_notices(notices.clone());
+    let mut body = policy();
+    let site = TargetPolicy {
+        target_id: id(2),
+        ..body.targets[0].clone()
+    };
+    body.targets.push(site);
+    body.placement.role_sessions = Vec::new();
+    f.set_policy(body, &mut tx);
+
+    // The ledger as a pass with work left it: out since START, announced.
+    let sites = f.m.runtime.active_project_sites(&f.owner());
+    let store = HomeOutageStore::new(&f.m.home);
+    let down = [HomeObservation {
+        home_target_id: id(1),
+        outage: Some((
+            HomeOutageReason::Unreachable,
+            Some("target_unavailable".into()),
+        )),
+    }];
+    store
+        .advance(&f.owner(), &down, &sites, START, None)
+        .unwrap();
+    let (_, told) = store
+        .advance(&f.owner(), &down, &sites, START + AFTER, Some(AFTER))
+        .unwrap();
+    assert_eq!(told.len(), 1);
+
+    // Still out (its binding is gone), and nothing to place: the pass reads the home
+    // anyway, keeps the outage and its start, tells nobody again, and asks to pass
+    // again after a wait as long as the outage's age so far.
+    super::tickets::unbind(&f.m, 1, &mut tx);
+    f.at(&clock, START + 10 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert!(tick.view.schedule.placements.is_empty(), "{tick:?}");
+    assert_eq!(tick.view.inputs.targets, 1, "only the home is read");
+    assert_eq!(tick.view.home_outages.len(), 1, "{tick:?}");
+    assert_eq!(tick.view.home_outages[0].since_ms, Some(START));
+    assert_eq!(
+        tick.view.home_outages[0].reason,
+        Some(HomeOutageReason::Unbound)
+    );
+    assert_eq!(
+        tick.view.schedule.retry_at_ms,
+        Some(START + 20 * MINUTE),
+        "{:?}",
+        tick.view.schedule
+    );
+    assert!(notices.kinds().is_empty());
+    // The wait is bounded: an hour into the outage the next read is 30 minutes away.
+    f.at(&clock, START + 60 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(tick.view.schedule.retry_at_ms, Some(START + 90 * MINUTE));
+    assert!(notices.kinds().is_empty());
+
+    // Back: the next pass, still with nothing to place, says so once and clears every
+    // surface; nothing more is asked of the loop for the home.
+    super::tickets::rebind(&f.m, 1, &mut tx);
+    f.at(&clock, START + 90 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(notices.kinds(), [HomeNoticeKind::Returned]);
+    assert!(tick.view.home_outages.is_empty());
+    assert_eq!(tick.view.schedule.retry_at_ms, None, "{:?}", tick.view);
+    assert!(store.outages(&f.owner()).unwrap().is_empty());
+    let timeline =
+        f.m.runtime
+            .orchestration_timeline(&f.owner(), None, 0, &mut tx)
+            .unwrap();
+    assert!(timeline.home_outages.is_empty());
+    // And an idle project's home is not read again once nothing is on record.
+    f.at(&clock, START + 100 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(notices.kinds(), [HomeNoticeKind::Returned]);
+    assert_eq!(tick.view.inputs.targets, 0, "{:?}", tick.view.inputs);
+}

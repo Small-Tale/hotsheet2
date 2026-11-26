@@ -513,6 +513,10 @@ mod e2e_loop;
 #[cfg(unix)]
 #[path = "remote_servers/e2e_sites.rs"]
 mod e2e_sites;
+// HS2-1CC1TQ, HS2-5DF941: a multi-site project's home out of reach, on two servers.
+#[cfg(unix)]
+#[path = "remote_servers/e2e_home_outage.rs"]
+mod e2e_home_outage;
 // HS2-1NJ04Q: the scheduler's role sessions on a remote target, end to end.
 #[cfg(unix)]
 #[path = "remote_servers/e2e_roles.rs"]

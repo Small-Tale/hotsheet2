@@ -7058,7 +7058,7 @@ entry naming a site is reported as having no effect (HS2-SYZB33, "Surfaces" abov
 
 **A home that is unavailable is shown and announced (HS2-EX594V).** Each scheduling
 pass observes every home of a project with several sites while that project has work
-or a session: `disabled` (the policy disables the home's target), `unbound` (its
+or a session, or while this machine's ledger holds it (below): `disabled` (the policy disables the home's target), `unbound` (its
 capacity read failed and this machine holds no binding for it), `unreachable` (any
 other failed read, with the code as `detail`, such as `target_unavailable` for a
 machine off the network; a pass that left the home alone after a refusal,
@@ -7071,7 +7071,23 @@ read, or read without an actor, is not observed, and what was known of it stays.
   project's other sites, when the outage began (`since_ms`), the reason and detail,
   and whether a person was told. A dry run computes the same view and writes nothing.
   An entry whose target is no longer the home of a multi-site project is dropped
-  without a notification.
+  without a notification, unless "unavailable" was sent for it (HS2-1CC1TQ): that one
+  ends with one "Home site _X_ no longer coordinates other sites" notice (severity
+  `info`), so every "unavailable" a person received is closed.
+- **An outage is followed to its end (HS2-1CC1TQ).** A home on record as out, or
+  announced and not yet seen back, is read by every pass even when its project has no
+  work and no session left, so the ledger, the banner and the "back" notice follow
+  what is true. While its project is idle and the home is still out, the banner stays:
+  the home is still unavailable, and hiding it would leave the "unavailable" notice
+  without its end and announce the same outage again when work returns. Nothing else
+  may wake the loop in an idle project, so an applied pass asks to pass again on a
+  bounded backoff: the wait is the outage's age clamped to between one minute and
+  thirty minutes (the refusal backoff's bounds, `HOME_RECHECK_BASE_MS` and
+  `HOME_RECHECK_CAP_MS`), so reads are 1, 1, 2, 4 … 30 minutes apart, never a fixed
+  interval. A disabled home is not re-read on a timer (only a policy change ends
+  that, and it wakes the loop). Once the home is seen back, "back" is sent once (only
+  if "unavailable" was), the entry is removed, and an idle project's home is not read
+  again. An outage that ends before the notify delay is never announced, idle or not.
 - **Site runs.** A run on another site waits on the home's pool (§26.24). While this
   machine's ledger records the home's outage and the pass cannot read that pool, the
   run reads `no_live_dispatcher` instead of `pool_unknown`: nobody can assign it, so it

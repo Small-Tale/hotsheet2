@@ -42,6 +42,11 @@ fn observe(world: &World) -> Vec<HomeObservation> {
 }
 
 fn observe_bound(world: &World, bound: bool) -> Vec<HomeObservation> {
+    observe_following(world, &[], bound)
+}
+
+/// HS2-1CC1TQ: observed with `followed` as this machine's ledger before the pass.
+fn observe_following(world: &World, followed: &[HomeOutage], bound: bool) -> Vec<HomeObservation> {
     observe_homes(
         &ScheduleInput {
             now_ms: T0,
@@ -57,6 +62,7 @@ fn observe_bound(world: &World, bound: bool) -> Vec<HomeObservation> {
             capacity_streams: &[],
             sites: &world.sites,
         },
+        followed,
         &|_| bound,
     )
 }
@@ -74,7 +80,8 @@ fn pass(
     ledger: &[HomeOutage],
     now_ms: u64,
 ) -> (Vec<HomeOutage>, Vec<HomeNoticeKind>) {
-    let mut after = advance_outages(ledger, &observe(world), &world.sites, now_ms);
+    let observed = observe_following(world, ledger, true);
+    let mut after = advance_outages(ledger, &observed, &world.sites, now_ms);
     let notices = due_notices(&mut after, now_ms, AFTER);
     (
         after,
@@ -384,4 +391,268 @@ fn hs2_ex594v_a_damaged_ledger_is_refused() {
     ));
     std::fs::write(&path, b"not json").unwrap();
     assert!(store.outages("owner").is_err());
+}
+
+/// HS2-1CC1TQ: the project with no work and no session left; its home read as `read`
+/// (`None`: read fine), as a pass reads a followed home.
+fn idle(read: Option<&str>) -> World {
+    let mut world = project();
+    world.work.clear();
+    if let Some(code) = read {
+        home_unread(&mut world, code);
+    }
+    world
+}
+
+/// An outage announced at `T0 + AFTER`, seen while the project had work.
+fn announced() -> Vec<HomeOutage> {
+    let mut down = project();
+    home_unread(&mut down, "target_unavailable");
+    let (ledger, _) = pass(&down, &[], T0);
+    let (ledger, sent) = pass(&down, &ledger, T0 + AFTER);
+    assert_eq!(sent, vec![HomeNoticeKind::Unavailable]);
+    ledger
+}
+
+#[test]
+fn hs2_1cc1tq_an_idle_project_still_follows_its_home_until_it_is_back() {
+    // Without a ledger entry an idle project's home is not read, so not observed.
+    let idle_up = idle(None);
+    let mut unread = idle(None);
+    unread.targets.retain(|state| state.target_id != target(1));
+    assert!(observe(&unread).is_empty());
+    // Out, announced, then the project goes idle with the home still out: a pass
+    // reads it (the scheduler reads every followed home) and keeps the outage as it
+    // was, its start and its announcement, and sends nothing more.
+    let ledger = announced();
+    let idle_down = idle(Some("target_unavailable"));
+    let observed = observe_following(&idle_down, &ledger, true);
+    assert_eq!(
+        observed[0].outage,
+        Some((
+            HomeOutageReason::Unreachable,
+            Some("target_unavailable".into())
+        ))
+    );
+    let (still, sent) = pass(&idle_down, &ledger, T0 + 10 * MIN);
+    assert!(sent.is_empty(), "{sent:?}");
+    assert_eq!(still, ledger, "nothing changed while it stays out");
+    let (still, sent) = pass(&idle_down, &still, T0 + 40 * MIN);
+    assert!(sent.is_empty());
+    assert_eq!(still[0].since_ms, Some(T0));
+    // Back while idle: "back" once, and the ledger is empty.
+    let (after, sent) = pass(&idle_up, &still, T0 + 41 * MIN);
+    assert_eq!(sent, vec![HomeNoticeKind::Returned]);
+    assert!(after.is_empty());
+    // With nothing left on record the idle home is not read or observed again.
+    let (after, sent) = pass(&idle_up, &after, T0 + 42 * MIN);
+    assert!(after.is_empty() && sent.is_empty());
+    assert!(observe_following(&unread, &after, true).is_empty());
+}
+
+#[test]
+fn hs2_1cc1tq_an_idle_projects_unannounced_outage_ends_silently() {
+    // Out (not announced yet), idle, back before the delay: nothing sent either way.
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    let (ledger, _) = pass(&down, &[], T0);
+    let (ledger, sent) = pass(&idle(Some("unreachable")), &ledger, T0 + AFTER / 2);
+    assert!(sent.is_empty());
+    assert_eq!(ledger[0].since_ms, Some(T0));
+    let (ledger, sent) = pass(&idle(None), &ledger, T0 + AFTER - 1);
+    assert!(ledger.is_empty() && sent.is_empty());
+    // Out and idle long enough: the delay counts from the start, idle or not.
+    let (ledger, _) = pass(&down, &[], T0);
+    let (ledger, sent) = pass(&idle(Some("unreachable")), &ledger, T0 + AFTER);
+    assert_eq!(sent, vec![HomeNoticeKind::Unavailable]);
+    let (ledger, sent) = pass(&idle(None), &ledger, T0 + AFTER + MIN);
+    assert_eq!(sent, vec![HomeNoticeKind::Returned]);
+    assert!(ledger.is_empty());
+}
+
+#[test]
+fn hs2_1cc1tq_a_home_flapping_while_its_project_is_idle_is_told_once_each_way() {
+    let ledger = announced();
+    let mut sent = Vec::new();
+    let mut ledger = ledger;
+    // Out and back repeatedly with no work: each end is told once, and an idle
+    // project starts no new outage of its own (nothing reads its home any more).
+    for round in 0..4 {
+        let at = T0 + 10 * MIN + round * 10 * MIN;
+        let (next, notices) = pass(&idle(Some("unreachable")), &ledger, at);
+        sent.extend(notices);
+        let (next, notices) = pass(&idle(None), &next, at + MIN);
+        sent.extend(notices);
+        ledger = next;
+    }
+    assert_eq!(sent, vec![HomeNoticeKind::Returned], "{sent:?}");
+    assert!(ledger.is_empty());
+    // Work comes back with the home out: a new outage, announced after its own delay,
+    // then the project goes idle and the home comes back: "back" once.
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    let start = T0 + 60 * MIN;
+    let (ledger, sent) = pass(&down, &ledger, start);
+    assert!(sent.is_empty());
+    let (ledger, sent) = pass(&idle(Some("unreachable")), &ledger, start + AFTER);
+    assert_eq!(sent, vec![HomeNoticeKind::Unavailable]);
+    // Down again before "back" went out (seen back by a headless pass) continues it.
+    let back = advance_outages(
+        &ledger,
+        &observe_following(&idle(None), &ledger, true),
+        &idle(None).sites,
+        start + AFTER + MIN,
+    );
+    assert!(!back[0].current() && back[0].announced);
+    let (ledger, sent) = pass(&idle(Some("unreachable")), &back, start + AFTER + 2 * MIN);
+    assert!(sent.is_empty(), "{sent:?}");
+    assert!(ledger[0].current());
+    let (ledger, sent) = pass(&idle(None), &ledger, start + AFTER + 3 * MIN);
+    assert_eq!(sent, vec![HomeNoticeKind::Returned]);
+    assert!(ledger.is_empty());
+}
+
+#[test]
+fn hs2_1cc1tq_a_disabled_home_of_an_idle_project_is_followed_until_enabled() {
+    let off = || {
+        let mut world = project();
+        world.targets.retain(|state| state.target_id != target(1));
+        world.policy.targets[0].enabled = false;
+        world
+    };
+    let disabled = off();
+    let (ledger, _) = pass(&disabled, &[], T0);
+    let (ledger, sent) = pass(&disabled, &ledger, T0 + AFTER);
+    assert_eq!(sent, vec![HomeNoticeKind::Unavailable]);
+    // Idle and still disabled: still observed, so still current.
+    let mut idle_disabled = off();
+    idle_disabled.work.clear();
+    let (ledger, sent) = pass(&idle_disabled, &ledger, T0 + 10 * MIN);
+    assert!(sent.is_empty());
+    assert_eq!(ledger[0].reason, Some(HomeOutageReason::Disabled));
+    // A disabled home is not re-read on a timer: a policy change wakes the loop.
+    assert_eq!(next_recheck_at(&ledger, T0 + 10 * MIN, MIN, 30 * MIN), None);
+    // Enabled again and read fine while idle: back.
+    let (ledger, sent) = pass(&idle(None), &ledger, T0 + 11 * MIN);
+    assert_eq!(sent, vec![HomeNoticeKind::Returned]);
+    assert!(ledger.is_empty());
+}
+
+#[test]
+fn hs2_1cc1tq_a_home_out_is_read_again_on_a_bounded_backoff() {
+    let (base, cap) = (HOME_RECHECK_BASE_MS, HOME_RECHECK_CAP_MS);
+    assert_eq!((base, cap), (MIN, 30 * MIN));
+    assert_eq!(next_recheck_at(&[], T0, base, cap), None);
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    let (ledger, _) = pass(&down, &[], T0);
+    // Read again after the base, then twice as far apart each time, up to the cap.
+    let mut at = T0;
+    let mut waits = Vec::new();
+    for _ in 0..8 {
+        let next = next_recheck_at(&ledger, at, base, cap).unwrap();
+        waits.push((next - at) / MIN);
+        at = next;
+    }
+    assert_eq!(waits, vec![1, 1, 2, 4, 8, 16, 30, 30]);
+    // A pass between two wakes (another event) does not bring the next one closer
+    // than the base.
+    assert_eq!(
+        next_recheck_at(&ledger, T0 + 1, base, cap),
+        Some(T0 + 1 + base)
+    );
+    // A clock behind the start waits the base.
+    assert_eq!(next_recheck_at(&ledger, T0 - MIN, base, cap), Some(T0));
+    // The earliest of several homes wins; an entry waiting only for "back" is not read
+    // again on a timer (the pass that saw it back sends it).
+    let older = HomeOutage {
+        home_target_id: target(4),
+        since_ms: Some(T0 - 60 * MIN),
+        ..ledger[0].clone()
+    };
+    let returning = HomeOutage {
+        home_target_id: target(5),
+        since_ms: None,
+        announced: true,
+        returned_at_ms: Some(T0),
+        ..ledger[0].clone()
+    };
+    let several = vec![older, ledger[0].clone(), returning.clone()];
+    assert_eq!(next_recheck_at(&several, T0, base, cap), Some(T0 + base));
+    assert_eq!(next_recheck_at(&[returning], T0, base, cap), None);
+    // A shortened base (tests) never waits less than it, even with a smaller cap.
+    assert_eq!(next_recheck_at(&ledger, T0, 500, 100), Some(T0 + 500));
+}
+
+#[test]
+fn hs2_1cc1tq_an_announced_outage_of_a_regrouped_home_ends_with_one_notice() {
+    let ledger = announced();
+    let mut split = project();
+    split.sites = ProjectSites::default();
+    // The site is separated into its own project: one "regrouped" notice, then nothing.
+    let (after, sent) = pass(&split, &ledger, T0 + 10 * MIN);
+    assert_eq!(sent, vec![HomeNoticeKind::Regrouped]);
+    assert!(after.is_empty());
+    let (after, sent) = pass(&split, &after, T0 + 11 * MIN);
+    assert!(after.is_empty() && sent.is_empty());
+    // Seen by a pass that cannot notify: kept, not current, until one can.
+    let kept = advance_outages(&ledger, &[], &split.sites, T0 + 10 * MIN);
+    assert_eq!(kept.len(), 1);
+    assert!(kept[0].regrouped && kept[0].announced && !kept[0].current());
+    assert_eq!(kept[0].sites, vec![target(2)], "the last known sites stay");
+    assert_eq!(next_recheck_at(&kept, T0 + 10 * MIN, MIN, 30 * MIN), None);
+    let again = advance_outages(&kept, &[], &split.sites, T0 + 12 * MIN);
+    assert_eq!(again, kept, "repeated passes change nothing");
+    let mut later = again.clone();
+    let notices = due_notices(&mut later, T0 + 13 * MIN, AFTER);
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].kind, HomeNoticeKind::Regrouped);
+    assert_eq!(notices[0].at_ms, T0 + 10 * MIN);
+    assert!(later.is_empty());
+    // Grouped again before the notice went out, and still out: the told outage
+    // goes on and nothing is sent.
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    let (regrouped_back, sent) = pass(&down, &kept, T0 + 14 * MIN);
+    assert!(sent.is_empty(), "{sent:?}");
+    assert!(regrouped_back[0].current() && !regrouped_back[0].regrouped);
+    // A regrouped home whose outage was never announced is dropped silently.
+    let mut fresh = project();
+    home_unread(&mut fresh, "unreachable");
+    let (unannounced, _) = pass(&fresh, &[], T0);
+    let (after, sent) = pass(&split, &unannounced, T0 + MIN);
+    assert!(after.is_empty() && sent.is_empty());
+}
+
+#[test]
+fn hs2_1cc1tq_a_regrouped_entry_is_stored_and_read_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = HomeOutageStore::new(dir.path());
+    let mut down = project();
+    home_unread(&mut down, "unreachable");
+    store
+        .advance("owner", &observe(&down), &down.sites, T0, None)
+        .unwrap();
+    store
+        .advance(
+            "owner",
+            &observe(&down),
+            &down.sites,
+            T0 + AFTER,
+            Some(AFTER),
+        )
+        .unwrap();
+    let split = ProjectSites::default();
+    let (ledger, sent) = store
+        .advance("owner", &[], &split, T0 + 5 * MIN, None)
+        .unwrap();
+    assert!(sent.is_empty());
+    assert!(ledger[0].regrouped);
+    assert_eq!(store.outages("owner").unwrap(), ledger);
+    let (ledger, sent) = store
+        .advance("owner", &[], &split, T0 + 6 * MIN, Some(AFTER))
+        .unwrap();
+    assert!(ledger.is_empty());
+    assert_eq!(sent[0].kind, HomeNoticeKind::Regrouped);
+    assert!(store.outages("owner").unwrap().is_empty());
 }

@@ -229,6 +229,8 @@ pub struct OrchestrationRuntime {
     home_notices: Option<Arc<dyn HomeNotices>>,
     /// HS2-EX594V: how long a home must be unavailable before it is announced.
     home_notify_after_ms: u64,
+    /// HS2-1CC1TQ: the first wait before a home on record as out is read again.
+    home_recheck_base_ms: u64,
 }
 
 impl OrchestrationRuntime {
@@ -283,6 +285,7 @@ impl OrchestrationRuntime {
             requester: None,
             home_notices: None,
             home_notify_after_ms: home_outages::DEFAULT_NOTIFY_AFTER_MS,
+            home_recheck_base_ms: home_outages::DEFAULT_RECHECK_BASE_MS,
             home,
             checkouts,
             providers,
