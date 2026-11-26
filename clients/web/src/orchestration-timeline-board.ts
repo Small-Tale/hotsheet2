@@ -126,6 +126,24 @@ export function runAttention(
 }
 
 /**
+ * The inspector's Tool row: the step's tool; not known here when another worker took the ticket and the step
+ * names none (HS2-JGNCAR), else chosen at placement.
+ */
+export function toolText(item: TimelineItem): string {
+  return toolLabel(item.tool) ?? (item.worked_elsewhere ? 'Not known here' : 'Chosen when the work is placed');
+}
+
+/**
+ * The inspector's Session row: the step's session and its state; none here when another worker took the
+ * ticket (HS2-JGNCAR), ended for finished work, or still to be placed.
+ */
+export function sessionText(item: TimelineItem): string {
+  if (item.worked_elsewhere) return 'None here: another worker took the ticket';
+  if (item.session_id) return `${toolLabel(item.tool) ?? 'AI'} session, ${item.session_state ?? 'state unknown'}`;
+  return item.state === 'done' ? 'Ended' : 'Starts when the work is placed';
+}
+
+/**
  * HS2-9FS7YX: a running card's work that the scheduler holds back, so nobody is at work on it although its run is
  * unfinished. The step's latest logged decision, made after its run was created, either leaves it unplaced while no
  * session runs for it (its sessions ended before they took up the work until the replacements ran out, or a
@@ -138,7 +156,8 @@ export function schedulerHold(
 ): { label: string; tone: SemanticTone; next: string } | undefined {
   const run = item.run,
     hint = item.placement;
-  if (item.state !== 'running' && item.state !== 'provisional') return undefined;
+  // HS2-JGNCAR: another worker took the ticket, so no session of this machine is held back for it.
+  if ((item.state !== 'running' && item.state !== 'provisional') || item.worked_elsewhere) return undefined;
   if (!run || !hint || ['completed', 'failed', 'cancelled'].includes(run.state) || hint.at_ms < run.created_at_ms)
     return undefined;
   if (hint.decision === 'keep' && hint.reason === 'never_joined' && hint.detail === 'replacements_exhausted')

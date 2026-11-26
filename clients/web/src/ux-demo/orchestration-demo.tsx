@@ -103,6 +103,8 @@ const RUN_CONDITIONS = [
   // one is kept for a person.
   { value: 'held', label: 'Held: Sessions Never Joined' },
   { value: 'unjoined', label: 'Session Kept Without Joining' },
+  // HS2-JGNCAR: the project's home gave the ticket to its own worker; the session placed here is free.
+  { value: 'elsewhere', label: 'Another Worker Took It' },
 ];
 
 /** HS2-9FS7YX: API-12 as the scheduler holds it back, its latest decision logged after its run started. */
@@ -146,6 +148,26 @@ function runningTimeline(phase: TimelinePhase = 'running') {
   const timeline = withDoneCi(demoTimeline(phase)),
     condition = orchestrationDemoSettings.runCondition.value;
   if (!condition) return timeline;
+  if (condition === 'elsewhere')
+    return {
+      ...timeline,
+      waves: timeline.waves.map((wave) => ({
+        ...wave,
+        items: wave.items.map((item) =>
+          item.step_id === 'step-3' && item.run
+            ? {
+                ...item,
+                tool: undefined,
+                model: undefined,
+                session_id: undefined,
+                session_state: undefined,
+                worked_elsewhere: true,
+                run: { ...item.run, worker_id: 'home-worker-1' },
+              }
+            : item,
+        ),
+      })),
+    };
   if (condition === 'held' || condition === 'unjoined')
     return {
       ...timeline,

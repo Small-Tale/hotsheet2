@@ -6246,7 +6246,9 @@ A read on the server also starts the target followers of §26.9.
   (HS2-PR984R): once the scheduler has placed or would place the step on another site of
   its project (`scheduler explain`'s `site`), Where It Runs names that chosen site and its
   machine, with a **Step's site** row naming the site the step itself names, so it agrees
-  with Why It Is Not Running.
+  with Why It Is Not Running. Its **Session** row names the run's session and its state;
+  once another worker took the ticket (a run `worked_elsewhere`, HS2-JGNCAR) it reads
+  "None here: another worker took the ticket" and the card is never held back for it.
 - **Show Request** (HS2-DBQSWB) opens the request the step waits on where every
   permission request is answered: the project's Notifications, Pending, with keyboard
   focus on that exact card (found by the orchestrator request id the card carries). The
@@ -7122,6 +7124,11 @@ read, or read without an actor, is not observed, and what was known of it stays.
   session ends `stopped`, `wound_down`, not `lost`). No session is started again for
   the home worker's run. Refilling first keeps a warm session in use; winding down
   rather than keeping it avoids holding a site slot for work another machine does.
+  From the moment the home's worker holds the run, the timeline item names no session
+  of this machine as the run's (`worked_elsewhere: true`, no `session_id`, and no tool
+  from that session or the decision that placed it; HS2-JGNCAR), both while the session
+  idles before its wind-down and after it stops. The session itself still appears in
+  the project's Sessions list as a running session, which names no run.
 - **Notifications, debounced.** "Home site _X_ is unavailable" (severity `warning`) is
   sent once the home has been unavailable **without a break for two minutes**
   (`HOME_OUTAGE_NOTIFY_AFTER_MS`): long enough to ride out a restart or a short drop,

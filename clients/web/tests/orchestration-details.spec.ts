@@ -517,6 +517,35 @@ test('HS2-A7YCB2 the inspector demo shows each CI gate state, with Link Again on
   await expect(gates).not.toContainText('Fix the work');
 });
 
+test('HS2-JGNCAR the inspector names no session here once another worker took the ticket, and its own after reset', async ({
+  page,
+}) => {
+  await page.goto('/ux-demo?component=orchestration-inspector');
+  const where = page.locator('[data-orchestration-section="Where It Runs"]').first();
+  const run = page.locator('[data-orchestration-section="Run"]').first();
+  const choose = (value: string) =>
+    page
+      .locator('[data-settings="orchestration"] [name="run-condition"]')
+      .evaluate((node: HTMLElement & { value: string }, next) => {
+        node.value = next;
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+  await expect(where).toContainText('session, running');
+  await choose('elsewhere');
+  await expect(where).toContainText('None here: another worker took the ticket');
+  await expect(where).not.toContainText('session, running');
+  await expect(where).toContainText('Not known here');
+  await expect(run).toContainText('home-worker-1');
+  // Back to a worker of this machine at work, then the condition again: each change re-reads the row.
+  await choose('');
+  await expect(where).toContainText('session, running');
+  await choose('elsewhere');
+  await expect(where).toContainText('None here: another worker took the ticket');
+  await page.locator('[data-settings="orchestration"] [data-action="reset-settings"]').dispatchEvent('click');
+  await expect(where).toContainText('session, running');
+  await expect(where).not.toContainText('another worker took');
+});
+
 test('HS2-77SRHC a ready card says why it is not running and the overview lists the scheduler’s decisions', async ({
   page,
 }) => {

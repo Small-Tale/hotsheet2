@@ -19,7 +19,7 @@ use super::gates::GateState;
 use super::readiness::{Prerequisite, ReadinessLevel, StepReadiness, TicketKey, ticket_key};
 use super::{
     HomeOutage, OrchestratedSession, ProjectSites, Run, RunState, RunTarget, RunTicket,
-    SessionState,
+    SessionState, run_worked_elsewhere,
 };
 
 /// The wave length assumed until a run of this owner has finished (minutes).
@@ -375,6 +375,11 @@ pub struct TimelineItem {
     pub session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_state: Option<SessionState>,
+    /// HS2-JGNCAR: the step's run is worked by a worker none of this machine's sessions
+    /// ran as (a project's home took the ticket, HS2-S5RH57), so the session placed for
+    /// it here is free and not named as the step's session.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub worked_elsewhere: bool,
     pub state: ItemState,
     pub level: ReadinessLevel,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -684,14 +689,21 @@ fn item(
         .targets
         .iter()
         .find(|target| target.target_id == *site);
-    let session = run.and_then(|run| {
+    let linked = run.and_then(|run| {
         input
             .sessions
             .iter()
             .filter(|session| session.run_id.as_deref() == Some(run.run_id.as_str()))
             .max_by_key(|session| (!session.state.is_terminal(), session.created_at_ms))
     });
+    // HS2-JGNCAR: a session placed for the run while another worker took its ticket (a
+    // project's home assigned it to its own worker, HS2-S5RH57) is free, not the run's:
+    // the step names no session, nor the tool of the decision that placed it.
+    let worked_elsewhere =
+        linked.is_some() && run.is_some_and(|run| run_worked_elsewhere(input.sessions, run));
+    let session = linked.filter(|_| !worked_elsewhere);
     let hint = input.hints.get(&plan.step_id);
+    let placed = hint.filter(|_| !worked_elsewhere);
     let mut waits_on: Vec<WaitsOn> = Vec::new();
     if !matches!(
         state,
@@ -738,14 +750,15 @@ fn item(
         machine_label: target.and_then(|target| target.machine_label.clone()),
         tool: session
             .map(|session| session.tool.clone())
-            .or_else(|| hint.and_then(|hint| hint.tool.clone()))
+            .or_else(|| placed.and_then(|hint| hint.tool.clone()))
             // HS2-HCW7MD: the tool the plan step prefers.
             .or_else(|| plan.tool.clone()),
         model: session
             .and_then(|session| session.model.clone())
-            .or_else(|| hint.and_then(|hint| hint.model.clone())),
+            .or_else(|| placed.and_then(|hint| hint.model.clone())),
         session_id: session.map(|session| session.session_id.clone()),
         session_state: session.map(|session| session.state),
+        worked_elsewhere,
         state,
         level: step.readiness.level,
         reasons: step

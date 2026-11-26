@@ -12,6 +12,7 @@ import {
   runNotice,
   runStateText,
   schedulerHold,
+  sessionText,
   startBlockedInSettings,
   startBlockedReason,
   startColumnId,
@@ -25,6 +26,7 @@ import {
   timelineColumns,
   timelineStatus,
   toolLabel,
+  toolText,
   waveTitle,
 } from './orchestration-timeline-board';
 import { DEMO_NOW, demoClock, demoTimeline } from './ux-demo/orchestration-fixtures';
@@ -605,5 +607,42 @@ describe('HS2-GPABYY a Done card whose deployment failed or whose review asks fo
       owner_label: 'Launch',
     } as Parameters<typeof targetLineOrchestration>[0]);
     expect(line).toMatchObject({ state: 'Deploy failed', stateTone: 'warning' });
+  });
+});
+
+describe('HS2-JGNCAR a running card whose ticket another worker took names no session of this machine', () => {
+  const running = item('step-3');
+  const elsewhere = { ...running, session_id: undefined, session_state: undefined, worked_elsewhere: true };
+
+  it('reads the Session row plainly in every state', () => {
+    expect(sessionText(elsewhere)).toBe('None here: another worker took the ticket');
+    // Before HS2-JGNCAR's flag, or once a session of this machine carries the run, its own session reads.
+    expect(sessionText(running)).toBe('Claude session, running');
+    expect(sessionText({ ...running, tool: 'codex', session_state: undefined })).toBe('Codex session, state unknown');
+    expect(sessionText({ ...running, session_id: undefined, state: 'done' })).toBe('Ended');
+    expect(sessionText({ ...running, session_id: undefined, state: 'ready', run: undefined })).toBe(
+      'Starts when the work is placed',
+    );
+    // The flag wins over a stale session id a fixture or an older server might still carry.
+    expect(sessionText({ ...running, worked_elsewhere: true })).toBe('None here: another worker took the ticket');
+  });
+
+  it('reads the Tool row as not known here unless the step names one', () => {
+    expect(toolText({ ...elsewhere, tool: undefined })).toBe('Not known here');
+    expect(toolText({ ...elsewhere, tool: 'gemini' })).toBe('Gemini');
+    expect(toolText({ ...running, tool: undefined, worked_elsewhere: undefined })).toBe(
+      'Chosen when the work is placed',
+    );
+  });
+
+  it('is never held back, whatever the decision that placed the freed session says', () => {
+    const unplaced = {
+      ...elsewhere,
+      placement: { at_ms: DEMO_NOW, decision: 'unplaced', reason: 'resource_held' },
+    } as TimelineItem;
+    expect(schedulerHold(unplaced, demoClock)).toBeUndefined();
+    expect(stateBadge(unplaced).label).not.toBe('Held');
+    // The same card without the flag is held, so the flag is what clears it.
+    expect(schedulerHold({ ...unplaced, worked_elsewhere: false }, demoClock)?.label).toBe('Held');
   });
 });
