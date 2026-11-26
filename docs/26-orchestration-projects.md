@@ -5857,7 +5857,15 @@ The decision recorded on HS2-YSRT6Y: new target tickets are picked up automatica
   first follower step then, handshake or not) only seeds the baseline and starts
   nothing: the default-goal planner already works through every open ticket. That
   step reads its own events before it seeds, so a ticket an event of that step shows
-  is still judged as new or not. A
+  is still judged as new or not. Propose Plan seeds the baseline earlier
+  (HS2-A0853J), with what its planner reads. For the default goal, while the re-plan
+  applies, the press lists every project target through the gate as the scheduler's
+  actor before the planner starts. Once the planner started or was given the
+  proposal, the press seeds each listed target with that snapshot, and the snapshot's
+  tickets no longer wait for an update. A press answered by a planner as it is seeds
+  nothing. A ticket created after the planner's read and before the follower's first
+  step is then pending at that step, not taken as seen. Without a snapshot (the re-plan
+  did not apply yet, or a listing failed) the first listing seeds as above. A
   complete listing forgets remembered tickets that closed meanwhile, so a pending
   ticket closed while the server was down starts nothing, and one reopened later
   counts again. A listing that fails changes nothing and is tried again at the next

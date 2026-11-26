@@ -2250,6 +2250,92 @@ fn hs2_2azqd2_editing_a_seen_ticket_starts_no_replan() {
     assert_eq!(auto_replans(&m).len(), 2);
 }
 
+/// HS2-A0853J: Propose Plan for the default goal seeds the baseline with what its
+/// planner reads. A ticket created after that read and before the follower's first step
+/// starts one update at that step; the tickets the planner read start none, edited or
+/// not. A planner that only answers as it is (the same press again) reads nothing new,
+/// so it seeds nothing.
+#[test]
+fn hs2_a0853j_a_ticket_created_before_the_first_step_replans() {
+    use super::sessions::{Probe, ScriptedHost, roomy};
+    let feed = Arc::new(Feed::default());
+    let mut m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let host = Arc::new(ScriptedHost::default());
+    let probe = Arc::new(Probe::default());
+    probe.set(|observation| *observation = roomy());
+    m.runtime = m
+        .runtime
+        .clone()
+        .with_capacity_probe(probe)
+        .with_session_host(host.clone());
+    let mut rng = Rng(9_700);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    placement(&m, true);
+    let owner = m.owner.id.clone();
+    let remembered = || {
+        hotsheet_ticketing::orchestration::ReplanMemoryStore::new(&m.home, &owner)
+            .unwrap()
+            .read()
+            .unwrap()
+    };
+    let step = |state: &mut WatchState, tx: &mut Transaction<'_>| {
+        m.runtime.watch_step(&owner, &id(1), state, 8_000, tx)
+    };
+    let propose = |operation: &str, tx: &mut Transaction<'_>| {
+        m.runtime
+            .plan_propose(
+                &owner,
+                serde_json::from_value(json!({"tool": "claude", "operation_id": operation}))
+                    .unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap()
+    };
+    let read = target_ticket(&m, "Read by the planner");
+    let proposal = propose("press-1", &mut tx);
+    assert_eq!(proposal.outcome, ProposeOutcome::Started);
+    // Seeded at the press, with what the planner reads.
+    assert!(remembered().seeded(&id(1)));
+    assert_eq!((remembered().seen(), remembered().pending()), (1, 0));
+
+    // Inside the window: after the planner's read, before the follower's first step.
+    let missed = target_ticket(&m, "Created inside the window");
+    // The same press again answers with the same planner: it read nothing new.
+    assert_eq!(
+        propose("press-1", &mut tx).outcome,
+        ProposeOutcome::Existing
+    );
+    assert_eq!(remembered().seen(), 1);
+
+    // The follower's first step (a handshake) catches up and hands it, once.
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 1);
+    assert_eq!(remembered().handed(), 1);
+    m.runtime
+        .plan_update_cancel(&owner, &PlanUpdateRef::default(), Some(&worker()), &mut tx)
+        .unwrap();
+    // Its event arriving later, and edits of the ticket the planner read, start nothing.
+    feed.push(&m.target_connection(), &missed);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    feed.push(&m.target_connection(), &read);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    // A restarted follower catches up and starts nothing more.
+    let mut state = WatchState::default();
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Idle);
+    assert_eq!(auto_replans(&m).len(), 1);
+    // A ticket created afterwards is new, as before.
+    let later = target_ticket(&m, "Created later");
+    feed.push(&m.target_connection(), &later);
+    assert_eq!(step(&mut state, &mut tx).replan, AutoReplan::Started);
+    assert_eq!(auto_replans(&m).len(), 2);
+}
+
 /// HS2-04WW8B: a catch-up reads a listing longer than one page to its end, so a
 /// ticket on the second page is neither missed at the seed nor counted as new later.
 #[test]

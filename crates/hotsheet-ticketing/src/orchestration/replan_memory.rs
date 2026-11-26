@@ -15,6 +15,13 @@
 //! step was created while no follower saw it, and becomes pending. The first catch-up
 //! of a target only seeds its baseline: the default-goal planner already works
 //! through every open ticket then.
+//!
+//! HS2-A0853J: the planner read the target when Propose Plan started it, which can be
+//! well before the follower's first catch-up. So Propose Plan lists each target first
+//! and seeds the baseline with what the planner is about to read
+//! ([`ReplanMemory::planner_read`]). The follower's first catch-up then finds the target
+//! seeded, and a ticket created in between becomes pending instead of being taken as
+//! seen.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -110,6 +117,38 @@ impl ReplanMemory {
         self.seeded.contains(target_id)
     }
 
+    /// HS2-A0853J: a planner about to read the whole target (Propose Plan) sees `listed`,
+    /// the target's open tickets now. The target is seeded with them as seen, and none
+    /// of them waits for an update any more: that planner reads every one. Tickets
+    /// handed before stay handed. A complete listing forgets remembered tickets of its
+    /// sources that closed, as a catch-up does. A later first catch-up of the target
+    /// hands what was created since.
+    pub fn planner_read(&mut self, listing: CatchUp<'_>, listed: &[ReplanKey]) {
+        if !self.seeded.contains(listing.target_id) {
+            if self.seeded.len() >= MAX_REPLAN_TARGETS {
+                self.seeded.pop_first();
+            }
+            self.seeded.insert(listing.target_id.to_owned());
+        }
+        self.forget_closed(listing, listed);
+        for key in listed {
+            self.pending.remove(key);
+            self.saw(key.clone());
+        }
+    }
+
+    /// A complete listing's sources hold only the listed open tickets: forget the
+    /// remembered ones it did not list, so reopening one counts again.
+    fn forget_closed(&mut self, listing: CatchUp<'_>, listed: &[ReplanKey]) {
+        if listing.complete {
+            let gone =
+                |key: &ReplanKey| listing.connections.contains(&key.0) && !listed.contains(key);
+            self.seen.retain(|key| !gone(key));
+            self.handed.retain(|key| !gone(key));
+            self.pending.retain(|key, _| !gone(key));
+        }
+    }
+
     /// HS2-04WW8B: a catch-up listed `listed`, the target's open tickets. The first one
     /// of a target seeds its baseline and hands nothing. Later, an open ticket neither
     /// seen, handed nor `planned` becomes pending with `latest`, the latest plan update
@@ -136,13 +175,7 @@ impl ReplanMemory {
             }
             self.seeded.insert(listing.target_id.to_owned());
         }
-        if listing.complete {
-            let gone =
-                |key: &ReplanKey| listing.connections.contains(&key.0) && !listed.contains(key);
-            self.seen.retain(|key| !gone(key));
-            self.handed.retain(|key| !gone(key));
-            self.pending.retain(|key, _| !gone(key));
-        }
+        self.forget_closed(listing, listed);
         for key in listed {
             self.saw(key.clone());
         }

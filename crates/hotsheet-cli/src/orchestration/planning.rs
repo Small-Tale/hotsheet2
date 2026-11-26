@@ -373,9 +373,27 @@ impl OrchestrationRuntime {
             identifier(operation_id, "bounded operation id required")?;
         }
         let owner = self.owner(owner_id)?;
+        // HS2-A0853J: what the planner reads of each target, listed before it starts,
+        // for the default goal only (a named goal is not re-planned automatically).
+        let snapshot = if request.goal.is_none() {
+            self.replan_snapshot(owner_id, tx)
+        } else {
+            Vec::new()
+        };
         let mut operation_id = request.operation_id.clone();
         let outcome = self.plan_propose_inner(&owner, &request, &mut operation_id, actor, tx);
         self.plan_audit(owner_id, actor, operation_id.as_deref(), &outcome, tx)?;
+        // Only a planner that starts now, or is given this proposal, reads the target:
+        // one that answers as it is read it earlier.
+        if let Ok(proposal) = &outcome
+            && matches!(
+                proposal.outcome,
+                ProposeOutcome::Started | ProposeOutcome::Replanned
+            )
+            && proposal.goals.iter().all(|goal| goal.default_goal)
+        {
+            self.replan_planner_read(owner_id, &snapshot);
+        }
         outcome
     }
 
