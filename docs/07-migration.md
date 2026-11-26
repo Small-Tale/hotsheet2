@@ -449,6 +449,14 @@ commands should not carry. (Under the hood it is the two-step `node
 migrator/src/export.mjs …` + `hotsheet import …`, which remain available separately.
 The exporter recognizes its direct run by canonical native path, so a Windows drive
 path, a path with spaces, or an npm bin symlink still runs it (HS2-WE1AW4).)
+The exporter takes `<path-to-.hotsheet> [--out <file>] [--progress-json]` with the
+options before or after the path (`--` ends options; `--out=<file>` accepts a file
+name that starts with `-`). An unknown flag, `--out` without a value or followed by
+another flag, an empty or repeated `--out`, a value on `--progress-json`, or zero or
+several paths exit 2 with a one-line reason and the usage line and write nothing. A
+path without a `db/` directory and every other export failure exit 1 with a non-empty
+`hotsheet-export:` message; `--progress-json` also emits the typed `failed` event
+(HS2-6JNDRY).
 Re-running the standalone migrator is a clean success: deterministic tickets and the
 completed-import receipt remain unchanged, no extra Git commit is created, and a clean
 index does not emit a failure-shaped `git commit` warning. Staging, index inspection,

@@ -15,6 +15,11 @@ node src/export.mjs <path-to-a-project/.hotsheet> --out hotsheet-export.json
 target/debug/hotsheet-cli -C ./my-store import hotsheet-export.json
 ```
 
+Options may come before or after the path; `--out` defaults to
+`hotsheet-export.json` in the working directory and `--progress-json` emits NDJSON
+progress on stdout. Unknown flags, a missing `--out` value, or a missing path exit 2
+with a usage error; export failures exit 1 with a message (HS2-6JNDRY).
+
 ## Supported Hot Sheet versions
 
 Targets the **5 most recent production releases + the current beta**. These use two

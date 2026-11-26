@@ -18,18 +18,26 @@
 // contrast, cannot read 0.3.x/0.4.x datadirs, which is why we bundle 0.4.x, not the
 // absolute latest.)
 //
-// Usage: node src/export.mjs <path-to-.hotsheet> [--out hotsheet-export.json]
+// Usage: node src/export.mjs <path-to-.hotsheet> [--out hotsheet-export.json] [--progress-json]
 
 import nodeFs from 'node:fs';
+import nodeOs from 'node:os';
 import nodePath from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 
 /** The export-file version the Rust importer understands (`docs/07`). */
 export const EXPORT_VERSION = 1;
 
+/** The `--progress-json` event schema version `hotsheet-migrate` reads (`docs/07`). */
+export const PROGRESS_VERSION = 1;
+
+/** Command-line usage, printed on every usage error and for `--help` (HS2-6JNDRY). */
+export const USAGE = 'usage: node src/export.mjs <path-to-.hotsheet> [--out hotsheet-export.json] [--progress-json]';
+
 function reportWarning(observe, warning) {
   console.warn(warning);
-  observe({ version: 1, phase: 'warning', warning });
+  observe({ version: PROGRESS_VERSION, phase: 'warning', warning });
 }
 
 /** Ticket columns we read, in output order. Absent columns are skipped (older
@@ -59,7 +67,7 @@ const TICKET_COLUMNS = [
  * @param {{name?: string|null, ticketPrefix?: string|null}} project
  */
 export async function exportFromDb(db, project = {}, settings = {}, observe = () => {}) {
-  observe({ version: 1, phase: 'read_database' });
+  observe({ version: PROGRESS_VERSION, phase: 'read_database' });
   const present = new Set(
     (
       await db.query(
@@ -125,7 +133,13 @@ export async function exportFromDb(db, project = {}, settings = {}, observe = ()
     reportWarning(observe, `warning: could not read attachments (${err.message}); attachments not exported`);
   }
 
-  observe({ version: 1, phase: 'export_tickets', completed: 0, total: ticketRows.length, unit: 'tickets' });
+  observe({
+    version: PROGRESS_VERSION,
+    phase: 'export_tickets',
+    completed: 0,
+    total: ticketRows.length,
+    unit: 'tickets',
+  });
   const tickets = ticketRows.map((r, index) => {
     const ticket = {
       ticket_number: r.ticket_number ?? null,
@@ -150,7 +164,13 @@ export async function exportFromDb(db, project = {}, settings = {}, observe = ()
       verified_at: iso(r.verified_at),
       deleted_at: iso(r.deleted_at),
     };
-    observe({ version: 1, phase: 'export_tickets', completed: index + 1, total: ticketRows.length, unit: 'tickets' });
+    observe({
+      version: PROGRESS_VERSION,
+      phase: 'export_tickets',
+      completed: index + 1,
+      total: ticketRows.length,
+      unit: 'tickets',
+    });
     return ticket;
   });
 
@@ -173,10 +193,14 @@ export async function exportFromDb(db, project = {}, settings = {}, observe = ()
  * source. Returns the export object.
  */
 export async function exportDatadir(hotsheetDir, outPath, observe = () => {}) {
-  const fs = await import('node:fs');
-  const os = await import('node:os');
-  const path = await import('node:path');
+  const fs = nodeFs;
+  const path = nodePath;
   const { join } = path;
+  const datadir = join(hotsheetDir, 'db');
+  if (!fs.existsSync(datadir) || !fs.statSync(datadir).isDirectory()) {
+    // HS2-6JNDRY: name the expected layout instead of a bare ENOENT from the copy.
+    throw new Error(`no HS1 database directory at ${datadir}; pass the project's .hotsheet directory`);
+  }
 
   let project = { sourceRoot: path.resolve(hotsheetDir, '..') };
   let settings = {};
@@ -210,10 +234,10 @@ export async function exportDatadir(hotsheetDir, outPath, observe = () => {}) {
     }
   }
 
-  const work = fs.mkdtempSync(join(os.tmpdir(), 'hs1-export-'));
+  const work = fs.mkdtempSync(join(nodeOs.tmpdir(), 'hs1-export-'));
   try {
-    copyDatabase(fs, path, join(hotsheetDir, 'db'), work, observe);
-    observe({ version: 1, phase: 'open_database' });
+    copyDatabase(fs, path, datadir, work, observe);
+    observe({ version: PROGRESS_VERSION, phase: 'open_database' });
     const { db, database } = await openCluster(work);
     if (database !== 'postgres') {
       console.error(`(reading from the '${database}' database — cluster predates PGLite 0.4.0)`);
@@ -222,7 +246,7 @@ export async function exportDatadir(hotsheetDir, outPath, observe = () => {}) {
       const exportObj = await exportFromDb(db, project, settings, observe);
       if (outPath) {
         stageAttachments(fs, path, hotsheetDir, outPath, exportObj, observe);
-        observe({ version: 1, phase: 'write_export' });
+        observe({ version: PROGRESS_VERSION, phase: 'write_export' });
         fs.writeFileSync(outPath, `${JSON.stringify(exportObj, null, 2)}\n`);
       }
       return exportObj;
@@ -359,7 +383,7 @@ export function stageAttachments(fs, path, hotsheetDir, outPath, exportObj, obse
   }
   let completed = 0;
   let total = plan.reduce((sum, entry) => sum + entry.size, 0);
-  observe({ version: 1, phase: 'stage_attachments', completed, total, unit: 'bytes' });
+  observe({ version: PROGRESS_VERSION, phase: 'stage_attachments', completed, total, unit: 'bytes' });
   for (const [index, { attachment, src, size }] of plan.entries()) {
     const name = path.basename(attachment.original_filename || attachment.stored_path);
     const rel = ['attachments', String(index), name].join('/');
@@ -371,7 +395,7 @@ export function stageAttachments(fs, path, hotsheetDir, outPath, exportObj, obse
     completed += copied;
     attachment.original_filename ??= name;
     attachment.stored_path = rel;
-    observe({ version: 1, phase: 'stage_attachments', completed, total, unit: 'bytes' });
+    observe({ version: PROGRESS_VERSION, phase: 'stage_attachments', completed, total, unit: 'bytes' });
   }
   if (plan.length) console.error(`Staged ${plan.length} attachment file(s) beside ${path.basename(outPath)}`);
 }
@@ -379,7 +403,7 @@ export function stageAttachments(fs, path, hotsheetDir, outPath, exportObj, obse
 /** Inventory then copy the database without opening or modifying its source. Byte
  * counters advance at successful file boundaries; symlinks retain cpSync semantics. */
 export function copyDatabase(fs, path, source, destination, observe = () => {}) {
-  observe({ version: 1, phase: 'discover_database' });
+  observe({ version: PROGRESS_VERSION, phase: 'discover_database' });
   const entries = [];
   const visit = (relative) => {
     const from = path.join(source, relative);
@@ -390,7 +414,7 @@ export function copyDatabase(fs, path, source, destination, observe = () => {}) 
   visit('');
   let completed = 0;
   let total = entries.reduce((sum, entry) => sum + (entry.info.isFile() ? entry.info.size : 0), 0);
-  observe({ version: 1, phase: 'copy_database', completed, total, unit: 'bytes' });
+  observe({ version: PROGRESS_VERSION, phase: 'copy_database', completed, total, unit: 'bytes' });
   for (const { relative, info } of entries) {
     const from = path.join(source, relative),
       to = path.join(destination, relative);
@@ -401,7 +425,7 @@ export function copyDatabase(fs, path, source, destination, observe = () => {}) 
         const copied = fs.statSync(to).size;
         total += copied - info.size;
         completed += copied;
-        observe({ version: 1, phase: 'copy_database', completed, total, unit: 'bytes' });
+        observe({ version: PROGRESS_VERSION, phase: 'copy_database', completed, total, unit: 'bytes' });
       }
     }
   }
@@ -486,6 +510,7 @@ async function tryBundled(work) {
  */
 async function openViaPgliteMigrate(work) {
   const { openDataDir } = await import('pglite-migrate');
+  const failures = [];
   for (const database of ['postgres', 'template1']) {
     let cluster = null;
     try {
@@ -495,14 +520,17 @@ async function openViaPgliteMigrate(work) {
         pgliteOptions: { database },
       });
       if (await hasTicketsTable(cluster)) return { db: cluster, database };
-    } catch {
-      // try the next database, then fail with guidance below
+    } catch (err) {
+      // Try the next database; keep the cause for the guidance below (HS2-6JNDRY).
+      failures.push(`${database}: ${errorText(err)}`);
     }
     if (cluster) await cluster.close().catch(() => {});
   }
+  const causes = failures.length ? ` Causes: ${failures.join('; ')}.` : '';
   throw new Error(
     'could not open this datadir: the bundled engine is a different Postgres major and ' +
-      "pglite-migrate's fetch-missing-engine did not yield a working engine. See docs/07 / HS2-82.",
+      "pglite-migrate's fetch-missing-engine did not yield a working engine. See docs/07 / HS2-82." +
+      causes,
   );
 }
 
@@ -544,18 +572,68 @@ function iso(value) {
 
 // ---- CLI -------------------------------------------------------------------------
 
-async function main(argv) {
-  const args = argv.slice(2);
-  const hotsheetDir = args.find((a) => !a.startsWith('--'));
-  const outIdx = args.indexOf('--out');
-  const outPath = outIdx >= 0 ? args[outIdx + 1] : 'hotsheet-export.json';
+/** A non-empty, human-readable message for any thrown value (HS2-6JNDRY). */
+export function errorText(err) {
+  const message = err && typeof err.message === 'string' ? err.message.trim() : '';
+  if (message) return message;
+  const text = String(err ?? '').trim();
+  return text && text !== '[object Object]' ? text : 'export failed with an unknown error';
+}
 
-  if (!hotsheetDir) {
-    console.error('usage: node src/export.mjs <path-to-.hotsheet> [--out hotsheet-export.json]');
+/**
+ * Parse the exporter's arguments strictly (HS2-6JNDRY). Returns
+ * `{ hotsheetDir, outPath, progressJson }`, `{ help: true }`, or `{ error }` for a usage
+ * error: an unknown flag, `--out` without a value (or followed by another flag), an
+ * empty or repeated `--out`, a value on `--progress-json`, or zero or several datadirs.
+ * Options may appear before or after the datadir; `--` ends option parsing.
+ * @param {string[]} args the arguments after the script path
+ */
+export function parseCliArgs(args) {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args,
+      options: {
+        out: { type: 'string' },
+        'progress-json': { type: 'boolean' },
+        help: { type: 'boolean', short: 'h' },
+      },
+      allowPositionals: true,
+      strict: true,
+      tokens: true,
+    });
+  } catch (err) {
+    return { error: errorText(err).split('\n')[0] };
+  }
+  const { values, positionals, tokens } = parsed;
+  if (values.help) return { help: true };
+  const outs = tokens.filter((token) => token.kind === 'option' && token.name === 'out');
+  if (outs.length > 1) return { error: "Option '--out' was given more than once" };
+  if (values.out === '') return { error: "Option '--out' needs a non-empty file path" };
+  if (positionals.length === 0) return { error: 'Missing the path to an HS1 .hotsheet directory' };
+  if (positionals.length > 1) {
+    return { error: `Expected one .hotsheet directory, got ${positionals.length}: ${positionals.join(', ')}` };
+  }
+  return {
+    hotsheetDir: positionals[0],
+    outPath: values.out ?? 'hotsheet-export.json',
+    progressJson: values['progress-json'] === true,
+  };
+}
+
+async function main(argv) {
+  const cli = parseCliArgs(argv.slice(2));
+  if (cli.help) {
+    console.log(USAGE);
+    return;
+  }
+  if (cli.error) {
+    console.error(`hotsheet-export: ${cli.error}`);
+    console.error(USAGE);
     process.exitCode = 2;
     return;
   }
-  const machine = args.includes('--progress-json');
+  const { hotsheetDir, outPath, progressJson: machine } = cli;
   let previousPhase = '',
     previousTime = 0;
   const observe = (event) => {
@@ -576,7 +654,11 @@ async function main(argv) {
     const exportObj = await exportDatadir(hotsheetDir, outPath, observe);
     console.error(`Wrote ${exportObj.tickets.length} ticket(s) to ${outPath}`);
   } catch (error) {
-    if (machine) process.stdout.write(`${JSON.stringify({ version: 1, phase: 'failed', error: error.message })}\n`);
+    if (machine) {
+      process.stdout.write(
+        `${JSON.stringify({ version: PROGRESS_VERSION, phase: 'failed', error: errorText(error) })}\n`,
+      );
+    }
     throw error;
   }
 }
@@ -604,7 +686,7 @@ export function isDirectEntry(
 
 if (isDirectEntry(import.meta.url, process.argv[1])) {
   main(process.argv).catch((err) => {
-    console.error(err.message);
+    console.error(`hotsheet-export: ${errorText(err)}`);
     process.exitCode = 1;
   });
 }
