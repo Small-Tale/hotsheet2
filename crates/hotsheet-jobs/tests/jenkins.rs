@@ -11,6 +11,10 @@
 //! (<https://github.com/jenkinsci/pipeline-stage-view-plugin/blob/master/rest-api/README.md>:
 //! the run's `id`, `name`, `status`, times and `stages[]` with `id`, `name`, `status`,
 //! `startTimeMillis` and `durationMillis`); a Jenkins without the plugin answers 404.
+//! HS2-PJ64A4: past the 30 newest builds, a deeper read asks `allBuilds` with the remote
+//! access API's documented range syntax (`tree=allBuilds[...]{M,N}`, from the M-th
+//! element inclusive to the N-th exclusive; a property the job does not export is
+//! absent from the answer).
 //! No test makes a network call. Synthetic data only.
 
 mod common;
@@ -696,4 +700,277 @@ fn hs2_sskbrb_describe_errors_retry_or_drop_the_steps_and_empty_stages_are_an_em
     let done = fx.get(&job.id);
     assert_eq!(done.status, Status::Succeeded);
     assert_eq!(done.steps.len(), 2);
+}
+
+/// HS2-PJ64A4: the percent-encoded `tree` of a deeper read of `allBuilds{from, from+100}`.
+fn deep_tree(from: usize) -> String {
+    format!(
+        "allBuilds[number,result,building,url,actions[lastBuiltRevision[SHA1,branch[name]]]]{{{from},{}}}",
+        from + 100
+    )
+    .replace(',', "%2C")
+    .replace('[', "%5B")
+    .replace(']', "%5D")
+    .replace('{', "%7B")
+    .replace('}', "%7D")
+}
+
+/// HS2-PJ64A4: what a deeper read of `job` from `from` answers.
+fn deep(api: &FakeJenkins, job: &str, from: usize, builds: Vec<Value>) {
+    api.serve(
+        &format!("{job}/api/json?tree={}", deep_tree(from)),
+        200,
+        json!({"_class": FREESTYLE, "allBuilds": builds}),
+    );
+}
+
+/// HS2-PJ64A4: successful builds of a later commit, numbered `newest` down to `oldest`.
+fn others(newest: u64, oldest: u64) -> Vec<Value> {
+    (oldest..=newest)
+        .rev()
+        .map(|number| build(number, NEWER, "origin/main", Some("SUCCESS"), false))
+        .collect()
+}
+
+/// HS2-PJ64A4: the deeper reads asked so far, by their first element.
+fn deep_reads(api: &FakeJenkins) -> Vec<usize> {
+    api.requests(ApiMethod::Get)
+        .iter()
+        .filter_map(|path| {
+            let range = path.split("allBuilds").nth(1)?;
+            let from = range.rsplit("%7B").next()?.split("%2C").next()?;
+            from.parse().ok()
+        })
+        .collect()
+}
+
+#[test]
+fn hs2_pj64a4_a_commits_build_beyond_the_newest_30_is_found_in_a_deeper_slice() {
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    // Thirty newer builds of a later commit fill the first read.
+    api.job("job/widgets", FREESTYLE, others(200, 171));
+    let mut slice = others(170, 71);
+    slice[20] = build(150, SHA, "origin/main", Some("SUCCESS"), false);
+    deep(&api, "job/widgets", 30, slice);
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 150));
+    assert_eq!(fx.get(&job.id).status, Status::Succeeded);
+    // One deeper read found it; nothing beyond it was asked.
+    assert_eq!(deep_reads(&api), [30]);
+
+    // No deeper read when the first read is short (the job has no more builds) or
+    // holds the commit's build.
+    for first in [
+        others(200, 180),
+        vec![build(201, SHA, "origin/main", None, true)]
+            .into_iter()
+            .chain(others(200, 171))
+            .collect(),
+    ] {
+        let fx = fixture();
+        let api = FakeJenkins::default();
+        ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+        api.job("job/widgets", FREESTYLE, first);
+        let mut monitor = watcher(&fx, &api);
+        monitor.tick().unwrap();
+        step(&fx, &mut monitor);
+        assert!(deep_reads(&api).is_empty());
+        assert_eq!(gate(&fx), GateState::Pending);
+    }
+}
+
+#[test]
+fn hs2_pj64a4_a_spent_budget_stays_pending_and_a_later_slice_is_found_in_budget() {
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job("job/widgets", FREESTYLE, others(400, 371));
+    deep(&api, "job/widgets", 30, others(370, 271));
+    deep(&api, "job/widgets", 130, others(270, 171));
+    deep(&api, "job/widgets", 230, others(170, 71));
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    // Three slices per poll, then the gate waits: pending, never failed.
+    assert_eq!(deep_reads(&api), [30, 130, 230]);
+    let waiting = fx.get(&job.id);
+    assert_eq!(waiting.status, Status::Waiting);
+    assert!(waiting.outcome.is_none());
+    assert_eq!(gate(&fx), GateState::Pending);
+    // The same answers again: the budget is spent again and nothing is rewritten.
+    let revision = waiting.revision;
+    fx.clock.advance(100);
+    monitor.tick().unwrap();
+    assert_eq!(deep_reads(&api).len(), 6);
+    assert_eq!(fx.get(&job.id).revision, revision);
+
+    // The commit's failed build in the third slice is judged, read once per poll.
+    let mut third = others(170, 71);
+    third[99] = build(71, SHA, "origin/main", Some("FAILURE"), false);
+    deep(&api, "job/widgets", 230, third);
+    step(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Red { run } if run.id == 71));
+    assert_eq!(deep_reads(&api).len(), 9);
+}
+
+#[test]
+fn hs2_pj64a4_shifted_slices_short_or_empty_slices_and_the_floor_end_the_search() {
+    // A build arriving between reads shifts every offset by one: the slice repeats its
+    // neighbour's last build. The commit's build listed twice is judged once.
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job("job/widgets", FREESTYLE, others(200, 171));
+    deep(&api, "job/widgets", 30, others(171, 72));
+    let shifted: Vec<Value> = [
+        build(72, NEWER, "origin/main", Some("SUCCESS"), false),
+        build(71, SHA, "origin/main", None, true),
+        build(71, SHA, "origin/main", None, true),
+    ]
+    .into_iter()
+    .chain(others(70, 0))
+    .collect();
+    deep(&api, "job/widgets", 130, shifted);
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    let running = fx.get(&job.id);
+    assert_eq!(running.status, Status::Running);
+    assert_eq!(running.latest["run_id"], "71");
+    assert_eq!(deep_reads(&api), [30, 130]);
+
+    // A short slice and an empty slice each end the search.
+    for slice in [others(170, 121), Vec::new()] {
+        let fx = fixture();
+        let api = FakeJenkins::default();
+        ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+        api.job("job/widgets", FREESTYLE, others(200, 171));
+        deep(&api, "job/widgets", 30, slice);
+        let mut monitor = watcher(&fx, &api);
+        monitor.tick().unwrap();
+        assert_eq!(deep_reads(&api), [30]);
+        assert_eq!(gate(&fx), GateState::Pending);
+    }
+
+    // After a rewatch, a slice reaching the judged build ends the search: nothing older
+    // can be judged, and the judged build is not judged again.
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job("job/widgets", FREESTYLE, others(200, 171));
+    let mut slice = others(170, 71);
+    slice[20] = build(150, SHA, "origin/main", Some("FAILURE"), false);
+    deep(&api, "job/widgets", 30, slice.clone());
+    deep(&api, "job/widgets", 130, others(70, 0));
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert!(matches!(gate(&fx), GateState::Red { run } if run.id == 150));
+    rewatch_ci(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    step(&fx, &mut monitor);
+    assert_eq!(gate(&fx), GateState::Pending);
+    assert_eq!(deep_reads(&api), [30, 30]);
+    // A first read that already reaches the floor asks nothing deeper.
+    api.job("job/widgets", FREESTYLE, others(179, 150));
+    step(&fx, &mut monitor);
+    assert_eq!(deep_reads(&api), [30, 30]);
+    assert_eq!(gate(&fx), GateState::Pending);
+}
+
+#[test]
+fn hs2_pj64a4_without_all_builds_the_job_is_not_asked_again_and_errors_retry_or_end() {
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job("job/widgets", FREESTYLE, others(200, 171));
+    // A Jenkins that does not export the property leaves it out of the answer.
+    api.serve(
+        &format!("job/widgets/api/json?tree={}", deep_tree(30)),
+        200,
+        json!({"_class": FREESTYLE}),
+    );
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    step(&fx, &mut monitor);
+    assert_eq!(deep_reads(&api), [30]);
+    assert_eq!(gate(&fx), GateState::Pending);
+
+    // 401, 403, 429 and server errors on a deeper read are retried; the gate waits.
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job("job/widgets", FREESTYLE, others(200, 171));
+    let mut monitor = watcher(&fx, &api);
+    for status in [401, 403, 429, 500, 503] {
+        api.serve(
+            &format!("job/widgets/api/json?tree={}", deep_tree(30)),
+            status,
+            json!({"message": "synthetic"}),
+        );
+        after_backoff(&fx, &mut monitor);
+        assert!(fx.get(&job.id).outcome.is_none(), "{status}");
+        assert_eq!(gate(&fx), GateState::Pending, "{status}");
+    }
+    // An unreadable body is retried too, and the build is found once Jenkins answers.
+    api.serve(
+        &format!("job/widgets/api/json?tree={}", deep_tree(30)),
+        200,
+        json!("not a job"),
+    );
+    after_backoff(&fx, &mut monitor);
+    assert_eq!(gate(&fx), GateState::Pending);
+    let mut slice = others(170, 71);
+    slice[0] = build(170, SHA, "origin/main", Some("SUCCESS"), false);
+    deep(&api, "job/widgets", 30, slice);
+    after_backoff(&fx, &mut monitor);
+    assert!(matches!(gate(&fx), GateState::Green { run } if run.id == 170));
+
+    // A job gone between the reads ends the watch without a verdict.
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.job("job/widgets", FREESTYLE, others(200, 171));
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert_eq!(deep_reads(&api), [30]);
+    assert_eq!(gate(&fx), GateState::Unknown);
+}
+
+#[test]
+fn hs2_pj64a4_a_multibranch_projects_deeper_read_goes_to_its_branch_job() {
+    let fx = fixture();
+    let api = FakeJenkins::default();
+    let target = CiTarget::jenkins("team/widgets", SHA, "*", "release/1.0").unwrap();
+    ensure_ci_watch(&fx.store, CHECKOUT, &target, &CiWatchOptions::default()).unwrap();
+    let project = "job/team/job/widgets";
+    let branch_job = format!("{project}/job/release%252F1.0");
+    api.serve(
+        &format!("{project}/api/json?tree={TREE}"),
+        200,
+        json!({"_class": MULTIBRANCH}),
+    );
+    let branch_builds = |numbers: std::ops::RangeInclusive<u64>| -> Vec<Value> {
+        numbers
+            .rev()
+            .map(|number| build(number, NEWER, "release/1.0", Some("SUCCESS"), false))
+            .collect()
+    };
+    api.job(
+        &branch_job,
+        "org.jenkinsci.plugins.workflow.job.WorkflowJob",
+        branch_builds(171..=200),
+    );
+    let mut slice = branch_builds(71..=170);
+    slice[5] = build(165, SHA, "release/1.0", Some("SUCCESS"), false);
+    deep(&api, &branch_job, 30, slice);
+    let mut monitor = watcher(&fx, &api);
+    monitor.tick().unwrap();
+    assert!(matches!(gate_of(&fx, &target), GateState::Green { run } if run.id == 165));
+    assert!(
+        api.requests(ApiMethod::Get)
+            .iter()
+            .filter(|path| path.contains("allBuilds"))
+            .all(|path| path.starts_with(&format!("{branch_job}/api/json")))
+    );
+    assert_eq!(deep_reads(&api), [30]);
 }

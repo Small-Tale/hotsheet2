@@ -416,6 +416,17 @@ build-list-by-commit filter and exposes no repository ancestry.
   multibranch project, the branch job `…/job/<branch>` is read instead (a `/` in the
   branch becomes `%2F` in its name); the class is read once per watch. A branch job
   that is not indexed yet leaves the gate pending.
+- **Beyond the newest 30 (HS2-PJ64A4).** When that read is full (30 builds) and holds
+  none of the commit's builds, the poll reads deeper slices of `allBuilds` with the
+  remote access API's range syntax, `tree=allBuilds[…]{30,130}`, then `{130,230}` and
+  `{230,330}`: at most three slices of 100 per poll. A build arriving between reads
+  shifts every offset, so builds are de-duplicated by number. The search stops at a
+  short or empty slice, at the first slice holding the commit, or at a slice (or a
+  first read) reaching a rewatch floor, since nothing older can be judged. A commit
+  beyond the budget stays pending, never failed. A Jenkins whose answer leaves
+  `allBuilds` out is not asked again during the watch. 404 ends the watch; 401, 403,
+  429, server errors and an unreadable answer are retried like the first read. Live
+  Jenkins has not been checked against this read.
 - **Coverage.** A build counts when one of its `BuildData` actions recorded exactly the
   commit; a pipeline that also checks out a shared library has several. In a plain
   (not multibranch) job that action must also name the branch as `main`,

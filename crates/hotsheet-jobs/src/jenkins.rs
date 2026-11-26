@@ -14,6 +14,15 @@
 //! commit. It exposes no repository ancestry, so a Jenkins gate attests exact coverage
 //! only (see [`CiProvider::attests_ancestors`]).
 //!
+//! HS2-PJ64A4: on a busy job the commit's build can fall out of the newest
+//! [`BUILDS_PER_POLL`]. When that first read is full and holds none of the commit's
+//! builds, the poll reads deeper slices of `allBuilds` with the remote access API's
+//! documented range syntax (`{M,N}`: from the M-th element, inclusive, to the N-th,
+//! exclusive), [`DEEP_SLICE`] builds at a time and at most [`MAX_DEEP_SLICES`] per poll.
+//! A new build shifts every offset, so slices are de-duplicated by build number. The
+//! search stops at a short or empty slice, at the first slice holding the commit, or at
+//! a slice reaching the rewatch floor. A spent budget leaves the gate pending.
+//!
 //! A multibranch project (`_class` ending in `MultiBranchProject`) holds one job per
 //! branch, `job/<project>/job/<branch>`, whose name encodes `/` as `%2F`
 //! (<https://www.jenkins.io/doc/book/pipeline/multibranch/>). Its builds are the
@@ -44,12 +53,31 @@ use crate::steps::{Step, StepStatus};
 
 /// How many of the job's newest builds one poll scans for the commit.
 const BUILDS_PER_POLL: usize = 30;
+/// HS2-PJ64A4: how many builds one deeper read of `allBuilds` asks for.
+const DEEP_SLICE: usize = 100;
+/// HS2-PJ64A4: how many deeper reads one poll may make when the commit's build is not
+/// among the newest.
+const MAX_DEEP_SLICES: usize = 3;
+
+/// What the gate needs of each build.
+const BUILD_FIELDS: &str =
+    "number,result,building,url,actions[lastBuiltRevision[SHA1,branch[name]]]";
 
 /// The `tree` filter of every job read: the class, and per build what the gate needs.
 fn tree() -> String {
-    format!(
-        "_class,builds[number,result,building,url,actions[lastBuiltRevision[SHA1,branch[name]]]]{{0,{BUILDS_PER_POLL}}}"
-    )
+    format!("_class,builds[{BUILD_FIELDS}]{{0,{BUILDS_PER_POLL}}}")
+}
+
+/// HS2-PJ64A4: the `tree` filter of a deeper read, the builds `from..from + DEEP_SLICE`.
+fn deep_tree(from: usize) -> String {
+    format!("allBuilds[{BUILD_FIELDS}]{{{from},{}}}", from + DEEP_SLICE)
+}
+
+/// HS2-PJ64A4: a deeper read. `allBuilds` is absent when the job does not export it.
+#[derive(Clone, Debug, Default, Deserialize)]
+struct DeepPage {
+    #[serde(default, rename = "allBuilds")]
+    all_builds: Option<Vec<Build>>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -295,6 +323,8 @@ struct Cached {
     /// The stages last read: (build number, whether the build had finished, stages).
     /// A finished build's stages do not change, so they are not read again.
     stages: Option<(u64, bool, Option<Vec<Stage>>)>,
+    /// HS2-PJ64A4: the job answered a deeper read without `allBuilds`.
+    no_all_builds: bool,
 }
 
 /// Observes Jenkins CI gates through a [`GithubApi`] REST port rooted at the Jenkins URL.
@@ -332,9 +362,13 @@ impl<A: GithubApi> JenkinsSource<A> {
     }
 
     fn read(&mut self, path: &str) -> Result<ApiResponse, WatchError> {
+        self.read_tree(path, &tree())
+    }
+
+    fn read_tree(&mut self, path: &str, tree: &str) -> Result<ApiResponse, WatchError> {
         let request = ApiRequest {
             method: ApiMethod::Get,
-            path: format!("{path}/api/json?tree={}", query_value(&tree())),
+            path: format!("{path}/api/json?tree={}", query_value(tree)),
             if_none_match: None,
             body: None,
         };
@@ -370,6 +404,54 @@ impl<A: GithubApi> JenkinsSource<A> {
             return Ok(None);
         }
         Ok(Some((path, parse(&response)?, true)))
+    }
+
+    /// HS2-PJ64A4: the commit's builds beyond the newest [`BUILDS_PER_POLL`], as listed.
+    /// Empty when they are not found within this poll's budget.
+    fn deeper(
+        &mut self,
+        job_id: &str,
+        path: &str,
+        target: &CiTarget,
+        branch_job: bool,
+        floor: Option<RunFloor>,
+    ) -> Result<Vec<Build>, WatchError> {
+        if self
+            .jobs
+            .get(job_id)
+            .is_some_and(|cached| cached.no_all_builds)
+        {
+            return Ok(Vec::new());
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let mut found = Vec::new();
+        for slice in 0..MAX_DEEP_SLICES {
+            let from = BUILDS_PER_POLL + slice * DEEP_SLICE;
+            let response = self.read_tree(path, &deep_tree(from))?;
+            let page: DeepPage = match response.status {
+                200 => serde_json::from_str(&response.body).map_err(|_| transient(&response))?,
+                404 => return Err(WatchError::Gone),
+                _ => return Err(transient(&response)),
+            };
+            let Some(builds) = page.all_builds else {
+                self.jobs
+                    .entry(job_id.to_owned())
+                    .or_default()
+                    .no_all_builds = true;
+                break;
+            };
+            let short = builds.len() < DEEP_SLICE;
+            let floored = reaches_floor(floor, &builds);
+            for build in builds {
+                if seen.insert(build.number) && build.built(target, branch_job) {
+                    found.push(build);
+                }
+            }
+            if short || floored || !found.is_empty() {
+                break;
+            }
+        }
+        Ok(found)
     }
 }
 
@@ -422,6 +504,12 @@ impl<A: GithubApi> JenkinsSource<A> {
     }
 }
 
+/// HS2-PJ64A4: whether a read reached the rewatch floor: every build at or below it was
+/// judged already, and so is every older one.
+fn reaches_floor(floor: Option<RunFloor>, builds: &[Build]) -> bool {
+    floor.is_some_and(|floor| builds.iter().any(|build| build.number <= floor.run_id))
+}
+
 fn parse(response: &ApiResponse) -> Result<JobPage, WatchError> {
     match response.status {
         200 => serde_json::from_str(&response.body).map_err(|_| transient(response)),
@@ -446,11 +534,18 @@ impl<A: GithubApi> WatchSource for JenkinsSource<A> {
             .ok_or(WatchError::Gone)?;
         let (path, builds) = match self.page(&job.id, &target)? {
             Some((path, page, branch_job)) => {
+                // A full first read may have more beyond it; one reaching the floor has
+                // nothing older the gate could judge.
+                let full =
+                    page.builds.len() >= BUILDS_PER_POLL && !reaches_floor(floor, &page.builds);
                 let mut builds: Vec<Build> = page
                     .builds
                     .into_iter()
                     .filter(|build| build.built(&target, branch_job))
                     .collect();
+                if builds.is_empty() && full {
+                    builds = self.deeper(&job.id, &path, &target, branch_job, floor)?;
+                }
                 builds.sort_by_key(|build| std::cmp::Reverse(build.number));
                 (path, builds)
             }
@@ -750,5 +845,30 @@ mod tests {
             .map(|index| stage(Some(&index.to_string()), Some("s"), Some("SUCCESS")))
             .collect();
         assert_eq!(steps_of(&many).len(), crate::steps::MAX_STEPS);
+    }
+
+    #[test]
+    fn hs2_pj64a4_deeper_reads_ask_documented_allbuilds_ranges_and_stop_at_the_floor() {
+        assert_eq!(
+            deep_tree(30),
+            "allBuilds[number,result,building,url,actions[lastBuiltRevision[SHA1,branch[name]]]]{30,130}"
+        );
+        assert!(tree().ends_with("{0,30}"));
+        let builds = [build(40, None, true), build(31, Some("SUCCESS"), false)];
+        assert!(!reaches_floor(None, &builds));
+        for (run_id, reached) in [(30, false), (31, true), (35, true), (40, true), (41, true)] {
+            assert_eq!(
+                reaches_floor(Some(RunFloor { run_id, attempt: 1 }), &builds),
+                reached,
+                "{run_id}"
+            );
+        }
+        assert!(!reaches_floor(
+            Some(RunFloor {
+                run_id: 9,
+                attempt: 1
+            }),
+            &[]
+        ));
     }
 }
