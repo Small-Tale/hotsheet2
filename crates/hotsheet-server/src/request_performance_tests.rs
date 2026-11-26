@@ -165,9 +165,12 @@ args = []
     );
 }
 
-#[tokio::test]
-async fn concurrent_cold_backlink_sources_initialize_once_and_keep_updates() {
-    let (root, state, project, target) = project_fixture();
+/// A linked Git source with one ticket closed as a duplicate of `target`.
+fn linked_duplicate_source(
+    root: &tempfile::TempDir,
+    state: &AppState,
+    target: &Ticket,
+) -> (FsStore, Ticket) {
     let source_root = root.path().join("other");
     std::fs::create_dir(&source_root).unwrap();
     let source = FsStore::init_git(
@@ -195,7 +198,7 @@ async fn concurrent_cold_backlink_sources_initialize_once_and_keep_updates() {
         },
     )
     .unwrap();
-    ops::close(
+    let duplicate = ops::close(
         &source,
         &duplicate.id,
         now(),
@@ -203,6 +206,43 @@ async fn concurrent_cold_backlink_sources_initialize_once_and_keep_updates() {
         Some(target.id.to_string()),
     )
     .unwrap();
+    (source, duplicate)
+}
+
+async fn backlink_titles(state: &AppState, project: &str, target: &Ticket) -> Vec<String> {
+    get_checkout_ticket_duplicate_backlinks(
+        State(state.clone()),
+        Path((project.to_owned(), target.id.to_string())),
+    )
+    .await
+    .unwrap()
+    .0
+    .backlinks
+    .into_iter()
+    .map(|row| row.title)
+    .collect()
+}
+
+fn hosted_ids(state: &AppState) -> Vec<String> {
+    let mut ids: Vec<String> = state
+        .host
+        .locations()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    ids.sort();
+    ids
+}
+
+/// HS2-V7NK9T: the backlink GET reads unhosted linked stores without hosting them, so
+/// it starts no watcher or sync loop that the unhost sweep could never release.
+/// Concurrent and repeated reads stay correct and leave the hosted set unchanged.
+#[tokio::test]
+async fn backlink_reads_never_host_unhosted_linked_stores() {
+    let (root, state, project, target) = project_fixture();
+    let (source, duplicate) = linked_duplicate_source(&root, &state, &target);
+    let hosted_before = hosted_ids(&state);
+    let watchers_before = state.watchers.lock_or_recover().len();
     let mut requests = Vec::new();
     for _ in 0..4 {
         let (state, project, id) = (state.clone(), project.clone(), target.id.to_string());
@@ -211,39 +251,86 @@ async fn concurrent_cold_backlink_sources_initialize_once_and_keep_updates() {
         }));
     }
     for request in requests {
-        assert_eq!(request.await.unwrap().unwrap().0.backlinks.len(), 1);
+        let rows = request.await.unwrap().unwrap().0.backlinks;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].native_id, duplicate.id.to_string());
+        assert_eq!(rows[0].slug, duplicate.slug);
     }
-    assert_eq!(state.host.count(), 2);
-    assert_eq!(state.watchers.lock_or_recover().len(), 1);
-    let healthy = source.read_ticket(&duplicate.id).unwrap();
+    assert_eq!(
+        backlink_titles(&state, &project, &target).await,
+        ["Duplicate"]
+    );
+    assert_eq!(
+        hosted_ids(&state),
+        hosted_before,
+        "a GET must not host a store"
+    );
+    assert!(!state.host.contains(&multistore::store_url_id(&source)));
+    assert!(state.project_hosted.lock_or_recover().is_empty());
+    assert_eq!(state.watchers.lock_or_recover().len(), watchers_before);
+
+    // Files are authoritative: a corrupt file is omitted, a repair restores the link,
+    // and a reopened ticket stops being a backlink, with no hosting on any read.
+    std::fs::write(source.ticket_path(&duplicate.id), "corrupt ticket bytes").unwrap();
+    assert!(backlink_titles(&state, &project, &target).await.is_empty());
+    std::fs::write(
+        source.ticket_path(&duplicate.id),
+        to_file_string(&duplicate),
+    )
+    .unwrap();
+    assert_eq!(
+        backlink_titles(&state, &project, &target).await,
+        ["Duplicate"]
+    );
+    ops::update(
+        &source,
+        &duplicate.id,
+        now(),
+        TicketPatch {
+            status: Some(Status::Started),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(backlink_titles(&state, &project, &target).await.is_empty());
+    assert_eq!(hosted_ids(&state), hosted_before);
+    assert_eq!(state.watchers.lock_or_recover().len(), watchers_before);
+}
+
+/// An already-hosted linked store stays hosted after the GET and keeps answering from its
+/// maintained index, including corrupt-file omission and watcher-delivered updates.
+#[tokio::test]
+async fn backlink_reads_leave_hosted_stores_hosted_and_use_their_index() {
+    let (root, state, project, target) = project_fixture();
+    let (source, duplicate) = linked_duplicate_source(&root, &state, &target);
+    assert!(state.host_store(source.clone()).unwrap());
+    let source_id = multistore::store_url_id(&source);
+    let hosted_before = hosted_ids(&state);
+    let watchers_before = state.watchers.lock_or_recover().len();
+    for _ in 0..2 {
+        assert_eq!(
+            backlink_titles(&state, &project, &target).await,
+            ["Duplicate"]
+        );
+    }
+    assert_eq!(hosted_ids(&state), hosted_before);
+    assert!(state.host.contains(&source_id));
+    assert_eq!(state.watchers.lock_or_recover().len(), watchers_before);
     std::fs::write(source.ticket_path(&duplicate.id), "corrupt ticket bytes").unwrap();
     assert!(
-        get_checkout_ticket_duplicate_backlinks(
-            State(state.clone()),
-            Path((project.clone(), target.id.to_string()))
-        )
-        .await
-        .unwrap()
-        .0
-        .backlinks
-        .is_empty(),
+        backlink_titles(&state, &project, &target).await.is_empty(),
         "a retained healthy index row must not expose a corrupt source"
     );
-    std::fs::write(source.ticket_path(&duplicate.id), to_file_string(&healthy)).unwrap();
+    std::fs::write(
+        source.ticket_path(&duplicate.id),
+        to_file_string(&duplicate),
+    )
+    .unwrap();
     assert_eq!(
-        get_checkout_ticket_duplicate_backlinks(
-            State(state.clone()),
-            Path((project.clone(), target.id.to_string()))
-        )
-        .await
-        .unwrap()
-        .0
-        .backlinks
-        .len(),
-        1,
-        "repair must restore the link without reinitializing its source"
+        backlink_titles(&state, &project, &target).await,
+        ["Duplicate"]
     );
-    let entry = state.host.get(&multistore::store_url_id(&source)).unwrap();
+    let entry = state.host.get(&source_id).unwrap();
     let reopened = ops::update(
         &source,
         &duplicate.id,
@@ -255,17 +342,8 @@ async fn concurrent_cold_backlink_sources_initialize_once_and_keep_updates() {
     )
     .unwrap();
     state.changed_in(&entry, "updated", &reopened);
-    assert!(
-        get_checkout_ticket_duplicate_backlinks(
-            State(state),
-            Path((project, target.id.to_string()))
-        )
-        .await
-        .unwrap()
-        .0
-        .backlinks
-        .is_empty()
-    );
+    assert!(backlink_titles(&state, &project, &target).await.is_empty());
+    assert!(state.host.contains(&source_id));
 }
 
 fn routed(uri: &str) -> axum::http::Request<axum::body::Body> {

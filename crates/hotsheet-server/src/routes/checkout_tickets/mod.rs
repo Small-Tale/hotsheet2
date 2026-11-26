@@ -595,10 +595,10 @@ pub(crate) struct DuplicateBacklink {
     project_id: String,
     project_name: String,
     connection_id: String,
-    native_id: String,
+    pub(crate) native_id: String,
     qualified_id: String,
-    slug: String,
-    title: String,
+    pub(crate) slug: String,
+    pub(crate) title: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -620,6 +620,73 @@ fn duplicate_reference_matches(reference: &str, target: &ProjectTicketRef) -> bo
     reference == target.native_id
 }
 
+/// Whether a store ticket is a duplicate close of `target`, the authoritative check for
+/// both an indexed candidate row and an unindexed scan.
+fn is_duplicate_of(ticket: &Ticket, target: &ProjectTicketRef) -> bool {
+    ticket.close_reason == Some(CloseReason::Duplicate)
+        && ticket
+            .duplicate_of
+            .as_deref()
+            .is_some_and(|reference| duplicate_reference_matches(reference, target))
+}
+
+/// The duplicate backlinks in one linked Git store. A read never hosts the store
+/// (HS2-V7NK9T): hosting starts a watcher and sync loop that only explicit open and host
+/// actions own, and a store hosted here would sit outside `project_hosted`, where the
+/// unhost sweep never releases it. A store that is already hosted answers from its
+/// maintained reverse index; any other store is scanned once from its files and dropped.
+fn git_duplicate_backlink_rows(
+    state: &AppState,
+    locator: &str,
+    target: &ProjectTicketRef,
+) -> Result<Vec<hotsheet_index::DuplicateBacklinkRow>, ApiError> {
+    let store = FsStore::open_without_maintenance(locator)?;
+    if let Some(entry) = state.host.get(&multistore::store_url_id(&store)) {
+        let rows = entry
+            .index
+            .lock_or_recover()
+            .duplicate_backlinks(&target.qualified(), &target.native_id)?;
+        // A watcher retains the last healthy index row for corrupt files. Validate only
+        // indexed matches, outside the index lock, to retain the old resilient scan's
+        // omission of corrupt or removed sources.
+        return Ok(rows
+            .into_iter()
+            .filter_map(|mut row| {
+                let id = Ulid::from_string(&row.id).ok()?;
+                let ticket = entry.store.read_ticket(&id).ok()?;
+                if !is_duplicate_of(&ticket, target) {
+                    return None;
+                }
+                row.slug = ticket.slug;
+                row.title = ticket.title;
+                Some(row)
+            })
+            .collect());
+    }
+    // Keep the boundary checks hosting would have applied, so an unreadable or
+    // unsupported store still reports its project as inaccessible.
+    store
+        .metadata()
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    hotsheet_ticketing::store_git::admit_store(
+        store.root(),
+        hotsheet_ticketing::store_git::StoreRole::TicketSource,
+    )
+    .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    // Corrupt files are omitted, matching the indexed path above.
+    Ok(store
+        .list_tickets_resilient()?
+        .tickets
+        .into_iter()
+        .filter(|ticket| is_duplicate_of(ticket, target))
+        .map(|ticket| hotsheet_index::DuplicateBacklinkRow {
+            id: ticket.id.to_string(),
+            slug: ticket.slug,
+            title: ticket.title,
+        })
+        .collect())
+}
+
 pub(crate) async fn get_checkout_ticket_duplicate_backlinks(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
@@ -635,8 +702,9 @@ pub(crate) async fn get_checkout_ticket_duplicate_backlinks(
             .checkout_registry
             .list()
             .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-        // Cold sources build an index once on this blocking worker; warm sources query
-        // maintained reverse indexes. No host-registry lock spans indexing or file I/O.
+        // Hosted sources query maintained reverse indexes; unhosted sources are scanned on
+        // this blocking worker without being hosted (HS2-V7NK9T). No host-registry lock
+        // spans indexing or file I/O.
         let mut backlinks = Vec::new();
         let mut inaccessible_projects = Vec::new();
         for checkout in checkouts {
@@ -659,41 +727,7 @@ pub(crate) async fn get_checkout_ticket_duplicate_backlinks(
                     {
                         continue;
                     }
-                    let indexed =
-                        (|| -> Result<Vec<hotsheet_index::DuplicateBacklinkRow>, ApiError> {
-                            let store = FsStore::open(&source.locator)?;
-                            state.host_store(store.clone())?;
-                            let entry = state
-                                .host
-                                .get(&multistore::store_url_id(&store))
-                                .ok_or_else(|| ApiError::not_found(&source.connection_id))?;
-                            let rows = entry
-                                .index
-                                .lock_or_recover()
-                                .duplicate_backlinks(&target.qualified(), &target.native_id)?;
-                            // A watcher retains the last healthy index row for corrupt files.
-                            // Validate only indexed matches, outside the index lock, to retain
-                            // the old resilient scan's omission of corrupt or removed sources.
-                            Ok(rows
-                                .into_iter()
-                                .filter_map(|mut row| {
-                                    let id = Ulid::from_string(&row.id).ok()?;
-                                    let ticket = entry.store.read_ticket(&id).ok()?;
-                                    if ticket.close_reason != Some(CloseReason::Duplicate)
-                                        || !ticket.duplicate_of.as_deref().is_some_and(
-                                            |reference| {
-                                                duplicate_reference_matches(reference, &target)
-                                            },
-                                        )
-                                    {
-                                        return None;
-                                    }
-                                    row.slug = ticket.slug;
-                                    row.title = ticket.title;
-                                    Some(row)
-                                })
-                                .collect())
-                        })();
+                    let indexed = git_duplicate_backlink_rows(&state, &source.locator, &target);
                     match indexed {
                         Ok(rows) => {
                             for row in rows {
