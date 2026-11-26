@@ -872,7 +872,7 @@ test('HS2-65AD6J HS2-91AF8K role sessions that never take up their role leave th
       .toEqual({ reported: ['dispatcher_unavailable', 'integrator_unavailable'], running: 0 });
     await policy(false);
     // Three sessions of each role, each stopped by a wind-down because its role prompt failed; the last had used up
-    // its replacements. (The decision log's start entries are not read: HS2-2YCHRC.)
+    // its replacements.
     const sessions = await roleSessions();
     const log = await decisions();
     for (const role of ['integrator', 'dispatcher']) {
@@ -881,6 +881,17 @@ test('HS2-65AD6J HS2-91AF8K role sessions that never take up their role leave th
         ofRole.map((session) => [session.owner, session.state]),
         role,
       ).toEqual(Array.from({ length: 3 }, () => ['orchestrator', 'stopped']));
+      // HS2-2YCHRC: each start the log records carries its own role's operation and the session it began, also when
+      // one pass started both roles.
+      const started = log.filter(
+        (entry) =>
+          entry.kind === 'start' &&
+          entry.outcome === 'started' &&
+          entry.operation_id === `sched-role-${role}-${TARGET}`,
+      );
+      expect(started.map((entry) => entry.session_id).sort(), role).toEqual(
+        ofRole.map((session) => session.session_id).sort(),
+      );
       // The decision of each session's wind-down; a pass that decides the same again is not logged again, so the one
       // logged may be an earlier try that found the session not yet at its safe point.
       const windDown = (session: Session) =>

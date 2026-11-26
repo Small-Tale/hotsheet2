@@ -6698,6 +6698,11 @@ detail, retry_at_ms}` with reason `integrator_not_started` and detail `target_ca
   coordination sessions", HS2-65AD6J): a card with a run has an **Integration**
   section, and the overview lists **Coordination Sessions**; the decision log's
   `role_unplaced` records read as "Did not start the integrator of Web: …".
+  A role session's start, keep and wind-down records name its role and project, not a
+  step: "Started the integrator of Web on Claude: a handoff waits to be integrated",
+  "Kept the dispatcher of Web" (HS2-2YCHRC). Each start record carries the operation
+  (`sched-role-<role>-<target>`) and session of its own role, also when one pass
+  starts both.
 
 The states and events are pinned in `integrator_session_tests.rs` (none, starting,
 live, idle, winding down and failed against a handoff arriving, the queue emptying, a

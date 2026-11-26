@@ -1447,8 +1447,10 @@ impl OrchestrationRuntime {
                 outcome.action == placement.action
                     && outcome.target_id == placement.target_id
                     && match placement.action {
+                        // HS2-2YCHRC: role starts have no step, so match the operation.
                         PlacementAction::Start => {
-                            outcome.step_id.as_ref() == placement.steps.first()
+                            outcome.operation_id
+                                == super::scheduler_apply::start_operation_id(placement)
                         }
                         _ => outcome.session_id == placement.session_id,
                     }
