@@ -240,6 +240,15 @@ pub(super) enum Layout {
     Sites,
 }
 
+/// The controller runtime's shortened waits; `None` keeps each default.
+#[derive(Clone, Copy)]
+struct Timing {
+    /// HS2-F7ZG0F: the first delay before an ended CI watch is linked again.
+    relink_retry: Option<Duration>,
+    /// HS2-EX594V: the delay before a home outage is announced.
+    home_notify_after: Option<Duration>,
+}
+
 /// Which server hosts a target's checkout and its sessions.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Side {
@@ -287,21 +296,38 @@ pub(super) struct Fleet {
     /// HS2-F7ZG0F: the controller's first delay before it links an ended CI watch
     /// again; `None` keeps the server's default.
     relink_retry: Option<Duration>,
+    /// HS2-EQ7K35: the peer's target B is the project's home and the controller's
+    /// target A a site of it, so the orchestrator runs away from the home.
+    peer_is_home: bool,
+    /// HS2-EX594V: the controller's delay before a home outage is announced; `None`
+    /// keeps the runtime's default.
+    home_notify_after: Option<Duration>,
 }
 
 impl Fleet {
     /// Two servers, both targets declared, bound, with remembered rules and allowed by a policy
     /// whose placement is not automatic yet.
     pub(super) async fn new() -> Self {
-        Self::build(Layout::Separate).await
+        Self::build(Layout::Separate, false, None).await
     }
 
     /// HS2-RCR4A6: the same two servers holding one project as two sites ([`Layout::Sites`]).
     pub(super) async fn sites() -> Self {
-        Self::build(Layout::Sites).await
+        Self::build(Layout::Sites, false, None).await
     }
 
-    async fn build(layout: Layout) -> Self {
+    /// HS2-EQ7K35: the same two sites with the peer's target B as the project's home and
+    /// the controller's target A a site of it. The controller announces a home outage
+    /// after `notify_after`.
+    pub(super) async fn sites_peer_home(notify_after: Duration) -> Self {
+        Self::build(Layout::Sites, true, Some(notify_after)).await
+    }
+
+    async fn build(
+        layout: Layout,
+        peer_is_home: bool,
+        home_notify_after: Option<Duration>,
+    ) -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
         hotsheet_aitools::enable_test_permission_vault();
         let root = tempfile::tempdir().unwrap();
@@ -390,7 +416,10 @@ impl Fleet {
             &memory,
             &provider_url,
             Roomy(controller_tools, controller_os),
-            None,
+            Timing {
+                relink_retry: None,
+                home_notify_after,
+            },
         );
         let a_checkout = registry
             .register(&a_project, None, None, vec![a_store.clone()])
@@ -434,6 +463,8 @@ impl Fleet {
             rules: HashMap::new(),
             revision: Value::Null,
             relink_retry: None,
+            peer_is_home,
+            home_notify_after,
         };
         fleet.declare().await;
         fleet.policy(json!({})).await;
@@ -451,8 +482,12 @@ impl Fleet {
         memory: &Arc<Memory>,
         provider_url: &str,
         capacity: Roomy,
-        relink_retry: Option<Duration>,
+        timing: Timing,
     ) -> AppState {
+        let Timing {
+            relink_retry,
+            home_notify_after,
+        } = timing;
         // The runtime a server composes with `OrchestrationRuntime::live`, over the
         // in-memory credentials of the synthetic remote registration.
         let runtime = shared_runtime(a_store, home, memory)
@@ -477,6 +512,10 @@ impl Fleet {
             ));
         let runtime = match relink_retry {
             Some(first) => runtime.with_gate_relink_retry(first),
+            None => runtime,
+        };
+        let runtime = match home_notify_after {
+            Some(after) => runtime.with_home_notify_after(after),
             None => runtime,
         };
         state(a_store, home)
@@ -515,7 +554,7 @@ impl Fleet {
 
     async fn declare(&mut self) {
         let mut revision = Value::Null;
-        for (target, destination) in [
+        let mut targets = [
             (
                 TARGET_A,
                 json!({"kind":"local","checkout_id":self.a_checkout.id}),
@@ -524,12 +563,23 @@ impl Fleet {
                 TARGET_B,
                 json!({"kind":"remote","registration_id":ID,"checkout_id":self.b_checkout.id}),
             ),
-        ] {
+        ];
+        // HS2-EQ7K35: the home is declared first, so its site can name it.
+        if self.peer_is_home {
+            targets.reverse();
+        }
+        for (target, destination) in targets {
             let mut body = json!({"target_id":target,"label":format!("Target {target}"),
                 "expected_revision":revision});
-            // HS2-RCR4A6: target B is another site of target A's project.
-            if self.layout == Layout::Sites && target == TARGET_B {
-                body["site_of"] = json!(TARGET_A);
+            // HS2-RCR4A6: target B is another site of target A's project; HS2-EQ7K35:
+            // or target A is another site of target B's.
+            let (site, home) = if self.peer_is_home {
+                (TARGET_A, TARGET_B)
+            } else {
+                (TARGET_B, TARGET_A)
+            };
+            if self.layout == Layout::Sites && target == site {
+                body["site_of"] = json!(home);
             }
             let added = self.ok("POST", "/targets", body).await;
             revision = added["revision"].clone();
@@ -989,7 +1039,10 @@ impl Fleet {
             &self.memory,
             &self.provider_url,
             Roomy(tools, os),
-            self.relink_retry,
+            Timing {
+                relink_retry: self.relink_retry,
+                home_notify_after: self.home_notify_after,
+            },
         );
         next.spawn_run_recovery();
         self.router = app(next.clone());

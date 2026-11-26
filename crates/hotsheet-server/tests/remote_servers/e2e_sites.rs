@@ -1616,3 +1616,229 @@ async fn site_workers_returned_handoff(variant: SiteWorker) {
     assert_eq!(claims, 1);
     fleet.shut_down().await;
 }
+
+/// HS2-EX594V: the home-outage notifications the controller's inbox holds, oldest first,
+/// as `(severity, title)`.
+async fn home_notifications(fleet: &Fleet) -> Vec<(String, String)> {
+    let (status, listed) = api(
+        fleet.router.clone(),
+        "GET",
+        "/notifications",
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{listed}");
+    let mut found: Vec<&Value> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| {
+            entry["dedupe_key"]
+                .as_str()
+                .is_some_and(|key| key.starts_with("home-"))
+        })
+        .collect();
+    found.sort_by_key(|entry| entry["created_at_ms"].as_u64());
+    found
+        .into_iter()
+        .map(|entry| {
+            assert_eq!(entry["checkout"], fleet.owner.id.as_str(), "{entry}");
+            (
+                entry["severity"].as_str().unwrap().to_owned(),
+                entry["message"]
+                    .as_str()
+                    .unwrap()
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .to_owned(),
+            )
+        })
+        .collect()
+}
+
+/// HS2-EQ7K35, the home-outage variant: the peer's target B is the project's home and
+/// the controller, which runs the orchestrator, holds its other site A. With the home's
+/// machine off the network no dispatcher or integrator starts anywhere (there is no
+/// failover, HS2-EX594V), yet the work is placed on the site, whose run claims its ticket
+/// for its own session after the bounded wait. The outage is reported on every surface
+/// and announced once; when the home is back it clears and its return is announced once.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_eq7k35_a_home_outage_starts_no_role_session_and_is_announced_once_each_way() {
+    // The delay before an announcement is the unit tests' (HS2-EX594V); here it is none.
+    let mut fleet = Fleet::sites_peer_home(Duration::ZERO).await;
+    let orchestration = fleet.orchestration_ticket("Coordinate the synthetic project");
+    let change = fleet.target_ticket(Side::Controller, "Change the site can make");
+    converge(&fleet);
+
+    // The home's machine drops off the network before any work is planned.
+    fleet.peer_offline().await;
+    // Both roles are Auto on the home; a run nobody assigns claims at once.
+    fleet
+        .policy(json!({
+            "targets":[
+                {"target_id":TARGET_A,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1},
+                {"target_id":TARGET_B,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1}],
+            "placement":{"automatic":true,"actor":ACTOR,"cooldown_minutes":0,
+                "dispatcher_wait_minutes":0}
+        }))
+        .await;
+    let defined = fleet
+        .ok(
+            "POST",
+            "/readiness/define",
+            json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration.slug},
+                "target_id":TARGET_A,"connection_id":fleet.connection(Side::Controller),
+                "native_id":change.slug,"prerequisites":[]}),
+        )
+        .await;
+    let step = defined["step"]["step_id"].as_str().unwrap().to_owned();
+
+    // The work is still placed, on the site the orchestrator can reach.
+    let start = fleet.started_for(&step, 2 * MINUTE).await;
+    let worker = placed_from(&fleet, &start, TARGET_A).await;
+    let run_id = worker.run_id.clone().unwrap();
+    let run = fleet
+        .ok("GET", &format!("/runs/{run_id}"), Value::Null)
+        .await;
+    assert_eq!(run["mode"], "dispatcher", "{run}");
+    // Its worker takes up its role in its own site's pool (it can join no other).
+    received_prompt(&fleet.reports, &worker.terminal, "`hotsheet-worker`");
+    fleet.join_pool(Side::Controller, &worker.worker);
+    let synced = fleet
+        .ok(
+            "POST",
+            &format!("/sessions/{}/sync", worker.session_id),
+            json!({"actor":Fleet::ai()}),
+        )
+        .await;
+    assert!(synced["joined_at_ms"].as_u64().is_some(), "{synced}");
+
+    // Nobody can assign it, so after the bounded wait its session claims the ticket.
+    let tick = fleet
+        .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+        .await;
+    assert_eq!(tick["mode"], "applied", "{tick}");
+    let claimed = fleet
+        .decided(
+            "the site's run claimed for its own session",
+            |entry| {
+                entry["kind"] == "assignment"
+                    && entry["outcome"] == "claimed"
+                    && entry["run_id"] == run_id.as_str()
+            },
+            2 * MINUTE,
+        )
+        .await;
+    assert_eq!(
+        claimed["session_id"],
+        worker.session_id.as_str(),
+        "{claimed}"
+    );
+    let run = fleet
+        .run_until(&run_id, "claimed for its session", |status| {
+            status["state"] == "dispatched"
+        })
+        .await;
+    assert_eq!(run["worker_id"], worker.worker.as_str(), "{run}");
+    let read = ticket_in(&fleet.a_store, &change);
+    assert_eq!(
+        read.claimed_by.as_deref(),
+        Some(worker.worker.as_str()),
+        "{read:?}"
+    );
+
+    // No dispatcher or integrator was started anywhere, and only the worker runs.
+    let log = fleet.decisions().await;
+    let roles: Vec<_> = log
+        .iter()
+        .filter(|entry| {
+            entry["kind"] == "start"
+                && entry["operation_id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("sched-role-"))
+        })
+        .collect();
+    assert!(roles.is_empty(), "{roles:#?}");
+    let sessions = fleet.sessions().await;
+    assert_eq!(sessions.len(), 1, "{sessions:#?}");
+    assert_eq!(sessions[0]["role"], "worker", "{sessions:#?}");
+
+    // Every surface names the outage: the plan, the explanation and the timeline.
+    let plan = fleet
+        .ok("POST", "/scheduler/plan", json!({"actor":Fleet::ai()}))
+        .await;
+    let outage = &plan["home_outages"][0];
+    assert_eq!(outage["home_target_id"], TARGET_B, "{plan:#}");
+    assert_eq!(outage["sites"], json!([TARGET_A]), "{plan:#}");
+    assert_eq!(outage["reason"], "unreachable", "{plan:#}");
+    assert_eq!(outage["announced"], true, "{plan:#}");
+    let since = outage["since_ms"].as_u64().unwrap();
+    let explained = fleet
+        .ok(
+            "POST",
+            "/scheduler/explain",
+            json!({"step_id":step,"actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(
+        explained["home_outage"]["home_target_id"], TARGET_B,
+        "{explained:#}"
+    );
+    let timeline = fleet.ok("GET", "/timeline", Value::Null).await;
+    assert_eq!(
+        timeline["home_outages"][0]["since_ms"].as_u64(),
+        Some(since),
+        "{timeline:#}"
+    );
+    // Announced once, however many passes saw it.
+    fleet
+        .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+        .await;
+    let told = home_notifications(&fleet).await;
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert_eq!(told[0].0, "warning");
+    assert_eq!(
+        told[0].1,
+        format!("Home site Target {TARGET_B} is unavailable")
+    );
+
+    // The home is back: the next pass that reads it clears the outage and says so, once.
+    fleet.peer_online().await;
+    let mut cleared = false;
+    for _ in 0..3 {
+        let tick = fleet
+            .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+            .await;
+        if tick.get("home_outages").is_none() {
+            cleared = true;
+            break;
+        }
+    }
+    assert!(cleared, "the home never read as back");
+    let told = home_notifications(&fleet).await;
+    assert_eq!(told.len(), 2, "{told:?}");
+    assert_eq!(
+        told[1],
+        (
+            "success".to_owned(),
+            format!("Home site Target {TARGET_B} is back")
+        )
+    );
+    let timeline = fleet.ok("GET", "/timeline", Value::Null).await;
+    assert!(timeline.get("home_outages").is_none(), "{timeline:#}");
+    let explained = fleet
+        .ok(
+            "POST",
+            "/scheduler/explain",
+            json!({"step_id":step,"actor":Fleet::ai()}),
+        )
+        .await;
+    assert!(explained.get("home_outage").is_none(), "{explained:#}");
+    fleet
+        .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+        .await;
+    assert_eq!(home_notifications(&fleet).await.len(), 2);
+    fleet.shut_down().await;
+}
