@@ -191,10 +191,17 @@ export const SYNTHETIC_TOOL = 'hs-synthetic-agent';
  * HS2-91AF8K: `refusesRolePrompt` makes it a tool whose session can take messages from its host and refuses
  * every one, so each role prompt a scheduler-started session is sent fails (`role_prompt_failed`). See
  * `refusingAgent`.
+ *
+ * HS2-D1W59D: `crashesAtLaunch` makes it a tool that exits with a failure as soon as it starts, before it can join
+ * any pool, so each session of it the host starts is lost.
  */
 export async function syntheticTool(
   home: string,
-  { reportsStart = false, refusesRolePrompt = false }: { reportsStart?: boolean; refusesRolePrompt?: boolean } = {},
+  {
+    reportsStart = false,
+    refusesRolePrompt = false,
+    crashesAtLaunch = false,
+  }: { reportsStart?: boolean; refusesRolePrompt?: boolean; crashesAtLaunch?: boolean } = {},
 ) {
   const plugin = join(home, 'plugins', SYNTHETIC_TOOL);
   await mkdir(plugin, { recursive: true });
@@ -235,10 +242,12 @@ export async function syntheticTool(
             'port_args = ["{port}"]',
             'password_env = "SYNTHETIC_AGENT_PASSWORD"',
           ]
-        : [
-            `program = ${JSON.stringify(process.execPath)}`,
-            `args = ["-e", "process.stdout.write('ready\\\\n'); setInterval(() => {}, 1000000)"]`,
-          ]),
+        : crashesAtLaunch
+          ? [`program = ${JSON.stringify(process.execPath)}`, `args = ["-e", "process.exit(1)"]`]
+          : [
+              `program = ${JSON.stringify(process.execPath)}`,
+              `args = ["-e", "process.stdout.write('ready\\\\n'); setInterval(() => {}, 1000000)"]`,
+            ]),
       ...(reportsStart
         ? [
             '[hooks]',

@@ -982,6 +982,102 @@ test('HS2-65AD6J HS2-91AF8K role sessions that never take up their role leave th
 });
 
 /**
+ * HS2-D1W59D: an integrator whose AI tool crashes at launch, before it ever joins the pool, is a failed attempt like
+ * one that never takes up its role. The synthetic tool exits as soon as it starts (`crashesAtLaunch`), so each
+ * integrator the real scheduler starts for a handoff in the project's pool is lost; after three in a row the project
+ * reports `integrator_unavailable` and no fourth starts (docs/26 §26.30, "Failure handling"). Before the fix the
+ * scheduler started a new one on every pass.
+ */
+test('HS2-D1W59D an integrator that crashes at launch is not restarted without bound', async ({ page }) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({
+    canonicalRoot: true,
+    seed: async (fixture) => {
+      await gitCheckout(fixture);
+      await syntheticTool(fixture.env.HOTSHEET_HOME!, { crashesAtLaunch: true });
+    },
+  });
+  try {
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const person = { role: 'human', id: 'maintainer' };
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: SYNTHETIC_TOOL,
+      actor: person,
+    });
+    const plan = await planTwoSteps(server);
+    await plan.dispatch();
+    const handed = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic export' });
+    await handOffInPool(server, handed);
+    const policy = async (automatic: boolean) => {
+      const current = (await send(server, 'GET', `${base}/policy`)) as { revision?: string | null };
+      await send(server, 'PUT', `${base}/policy`, {
+        expected_revision: current.revision ?? null,
+        policy: {
+          machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+          tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 8 }],
+          targets: [{ target_id: TARGET, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 8 }],
+          placement: {
+            automatic,
+            actor: 'scheduler-1',
+            cooldown_minutes: 0,
+            role_sessions: [{ target_id: TARGET, roles: ['integrator'] }],
+          },
+        },
+        actor: person,
+      });
+    };
+    type Session = { role: string; state: string; owner: string; joined_at_ms?: number | null };
+    const integrators = async () =>
+      ((await send(server, 'GET', `${base}/sessions`)) as unknown as Session[]).filter(
+        (session) => session.role === 'integrator',
+      );
+    const unavailable = async () =>
+      (
+        (
+          (await send(server, 'POST', `${base}/scheduler/plan`, { actor: person })) as {
+            roles_unplaced?: { role: string; reason: string; detail?: string }[];
+          }
+        ).roles_unplaced ?? []
+      ).filter((entry) => entry.reason === 'integrator_unavailable');
+
+    await policy(true);
+    await expect
+      .poll(
+        async () => ({
+          reported: (await unavailable()).map((entry) => entry.detail),
+          live: (await integrators()).filter((session) => ['requested', 'running'].includes(session.state)).length,
+        }),
+        { timeout: 90_000 },
+      )
+      .toEqual({ reported: ['replacements_exhausted'], live: 0 });
+    // Further passes start no fourth: the next one runs on the policy change that stops automatic placement.
+    await send(server, 'POST', `${base}/scheduler/tick`, { actor: scheduler });
+    await policy(false);
+    const sessions = await integrators();
+    expect(sessions.map((session) => [session.owner, session.state, session.joined_at_ms ?? null])).toEqual(
+      Array.from({ length: 3 }, () => ['orchestrator', 'lost', null]),
+    );
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const roles = page.locator('[data-orchestration-overview] [data-orchestration-section="Coordination Sessions"]');
+    await expect(
+      roles
+        .locator('dl > div')
+        .filter({ has: page.locator('dt', { hasText: 'Self Integrator' }) })
+        .locator('dd'),
+    ).toHaveText(/^Unavailable: the integrators the scheduler started did not take up their role/, {
+      timeout: 30_000,
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
  * HS2-6ES76F: the integrator's standing from a real handoff. The project is a git checkout whose coordination pool
  * has work handed off through the headless coordination CLI (`handOffInPool`), and every state is the real
  * scheduler's pass over it: none before the handoff, not started while the policy's Coordination Sessions leave the

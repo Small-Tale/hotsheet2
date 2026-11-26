@@ -3931,6 +3931,279 @@ fn hs2_4jq41v_an_integrator_that_never_takes_its_role_is_replaced_then_reported(
     assert!(unavailable(&tick).is_none());
 }
 
+/// HS2-D1W59D: a placed target whose integrator is wanted (a handoff waits in its pool)
+/// and the operation base of its scheduler-started integrators.
+fn integrator_wanted(tx: &mut Transaction<'_>) -> (Placed, String) {
+    use hotsheet_ticketing::orchestration::RoleSessionKind;
+    let f = Placed::new(&BOTH, tx);
+    let mut body = policy();
+    body.placement.role_sessions[0].roles = vec![RoleSessionKind::Integrator];
+    f.set_policy(body, tx);
+    f.handoff_pool(None);
+    (f, format!("sched-role-integrator-{}", id(1)))
+}
+
+impl Placed {
+    /// HS2-D1W59D: the target's pool with a handoff waiting, and `integrator` (a worker
+    /// id) registered as its live integrator when given.
+    fn handoff_pool(&self, integrator: Option<&str>) {
+        self.pool(|state| {
+            let handed =
+                super::sessions::assignment("someone", crate::coordination::Phase::Handoff);
+            state.assignments.insert(handed.id.clone(), handed);
+            state.integrator = integrator.map(|worker_id| role(worker_id, 1_000_000));
+        });
+    }
+}
+
+/// The operation id of generation `n` of a role session.
+fn generation_of(base: &str, n: u32) -> String {
+    if n == 1 {
+        base.to_owned()
+    } else {
+        format!("{base}.{n}")
+    }
+}
+
+/// How many sessions of `base` the pass started.
+fn role_starts(tick: &TickView, base: &str) -> usize {
+    tick.outcomes
+        .iter()
+        .filter(|outcome| outcome.outcome == "started" && outcome.operation_id.starts_with(base))
+        .count()
+}
+
+/// `(detail, retry_at_ms)` of the pass's `blocker` entry, if it reports one.
+fn role_blocked(
+    tick: &TickView,
+    blocker: hotsheet_ticketing::orchestration::RoleBlocker,
+) -> Option<(Option<String>, Option<u64>)> {
+    tick.view
+        .schedule
+        .roles_unplaced
+        .iter()
+        .find(|item| item.reason == blocker)
+        .map(|item| (item.detail.clone(), item.retry_at_ms))
+}
+
+/// HS2-D1W59D: the pass that starts generation `n` of a role session. A generation
+/// lost before the previous pass ended may be replaced in the pass that learns of the
+/// loss, so this ticks at most twice, and fails if no start follows.
+fn starts_generation(f: &Placed, base: &str, n: u32, tx: &mut Transaction<'_>) -> TickView {
+    for _ in 0..2 {
+        let tick = f.tick(tx);
+        if role_starts(&tick, base) > 0 {
+            assert_eq!(role_starts(&tick, base), 1, "{:?}", tick.outcomes);
+            assert_eq!(
+                f.record(&generation_of(base, n)).state,
+                SessionState::Running
+            );
+            return tick;
+        }
+    }
+    panic!("generation {n} of {base} was not started");
+}
+
+/// HS2-D1W59D: a scheduler-started integrator whose AI tool crashes at launch, before it
+/// ever joins, is a failed attempt like one wound down for not joining. After three
+/// generations in a row are lost that way the project reports `integrator_unavailable`
+/// and no fourth integrator starts until the hour is up; the start after it is the
+/// fourth generation, once.
+#[test]
+fn hs2_d1w59d_an_integrator_that_crashes_before_joining_is_bounded_then_reported() {
+    use hotsheet_ticketing::orchestration::{DecisionKind, RoleBlocker};
+    clocked!(clock, tx);
+    let (f, base) = integrator_wanted(&mut tx);
+    let mut lost_at = START;
+    for generation in 1..=3 {
+        f.at(&clock, START + u64::from(generation) * MINUTE);
+        starts_generation(&f, &base, generation, &mut tx);
+        let started = f.record(&generation_of(&base, generation));
+        assert_eq!(started.role, SessionRole::Integrator);
+        // The tool crashes at launch: the host no longer has the terminal.
+        f.host.crash(&f.terminal(&started));
+        lost_at = START + u64::from(generation) * MINUTE;
+    }
+    // The pass that learns of the third loss starts nothing and says why.
+    let tick = f.tick(&mut tx);
+    for generation in 1..=3 {
+        let record = f.record(&generation_of(&base, generation));
+        assert_eq!(record.state, SessionState::Lost, "generation {generation}");
+        assert_eq!(record.joined_at_ms, None);
+    }
+    for _ in 0..3 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(role_starts(&tick, &base), 0, "{:?}", tick.outcomes);
+        let (detail, retry) =
+            role_blocked(&tick, RoleBlocker::IntegratorUnavailable).expect("unavailable");
+        assert_eq!(detail.as_deref(), Some("replacements_exhausted"));
+        assert_eq!(retry, Some(lost_at + 60 * MINUTE));
+    }
+    assert_eq!(role_starts(&tick, &base), 0, "{:?}", tick.outcomes);
+    assert_eq!(f.host.launches().len(), 3, "no fourth launch");
+    let log =
+        f.m.runtime
+            .scheduler_decisions(&f.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries;
+    assert!(log.iter().any(|entry| {
+        entry.record.kind == DecisionKind::RoleUnplaced
+            && entry.record.reason.as_deref() == Some("integrator_unavailable")
+    }));
+    // Just before the hour: still held back. At the hour: the fourth generation, once.
+    f.at(&clock, lost_at + 60 * MINUTE - 1);
+    assert_eq!(role_starts(&f.tick(&mut tx), &base), 0);
+    f.at(&clock, lost_at + 60 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(role_starts(&tick, &base), 1, "{:?}", tick.outcomes);
+    assert!(role_blocked(&tick, RoleBlocker::IntegratorUnavailable).is_none());
+    assert_eq!(
+        f.record(&generation_of(&base, 4)).state,
+        SessionState::Running
+    );
+    assert_eq!(role_starts(&f.tick(&mut tx), &base), 0);
+}
+
+/// HS2-D1W59D: wound down for a refused role prompt (`Stopped`) and lost before joining
+/// (`Lost`) count together, in either order: a dispatcher that alternates between them
+/// is exhausted on its third generation and the project reports
+/// `dispatcher_unavailable`.
+#[test]
+fn hs2_d1w59d_stopped_and_lost_dispatchers_that_never_joined_count_together() {
+    use hotsheet_ticketing::orchestration::{RoleBlocker, RoleSessionKind};
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let mut body = policy();
+    body.placement.role_sessions[0].roles = vec![RoleSessionKind::Dispatcher];
+    f.set_policy(body, &mut tx);
+    for n in 0..8 {
+        f.ready(&format!("Work {n}"), &mut tx);
+    }
+    let base = format!("sched-role-dispatcher-{}", id(1));
+    // Generation 1 is lost before joining.
+    starts_generation(&f, &base, 1, &mut tx);
+    f.host.crash(&f.terminal(&f.record(&base)));
+    // Generation 2's role prompt is refused: wound down, with one replacement left.
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .extend([PushAttempt::Rejected]);
+    let tick = starts_generation(&f, &base, 2, &mut tx);
+    assert!(role_blocked(&tick, RoleBlocker::DispatcherUnavailable).is_none());
+    let second = f.record(&generation_of(&base, 2));
+    let tick = f.tick(&mut tx);
+    assert_eq!(
+        placed(&tick, &second.session_id),
+        (
+            PlacementAction::WindDown,
+            "role_prompt_failed",
+            Some("dispatcher".into())
+        )
+    );
+    assert_eq!(f.record(&second.operation_id).state, SessionState::Stopped);
+    // Generation 3 is lost before joining: the third failure in a row.
+    let tick = if role_starts(&tick, &base) == 1 {
+        tick
+    } else {
+        starts_generation(&f, &base, 3, &mut tx)
+    };
+    assert!(role_blocked(&tick, RoleBlocker::DispatcherUnavailable).is_none());
+    let third = f.record(&generation_of(&base, 3));
+    f.at(&clock, START + MINUTE);
+    f.host.crash(&f.terminal(&third));
+    for _ in 0..3 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(role_starts(&tick, &base), 0, "{:?}", tick.outcomes);
+        let (detail, retry) =
+            role_blocked(&tick, RoleBlocker::DispatcherUnavailable).expect("unavailable");
+        assert_eq!(detail.as_deref(), Some("replacements_exhausted"));
+        assert_eq!(retry, Some(START + 61 * MINUTE));
+    }
+    assert_eq!(f.record(&third.operation_id).state, SessionState::Lost);
+}
+
+/// HS2-D1W59D: an integrator that joined its pool and was lost later did take up its
+/// role: it is replaced as before, however many lost-before-joining generations came
+/// first, and the failures in a row start over from it.
+#[test]
+fn hs2_d1w59d_an_integrator_lost_after_joining_is_replaced_and_resets_the_count() {
+    use hotsheet_ticketing::orchestration::RoleBlocker;
+    clocked!(clock, tx);
+    let (f, base) = integrator_wanted(&mut tx);
+    // Two generations crash at launch: one replacement left.
+    for generation in 1..=2 {
+        starts_generation(&f, &base, generation, &mut tx);
+        f.host
+            .crash(&f.terminal(&f.record(&generation_of(&base, generation))));
+    }
+    // The third joins, then its terminal dies (its pool lease lapses with it).
+    starts_generation(&f, &base, 3, &mut tx);
+    let third = f.record(&generation_of(&base, 3));
+    f.handoff_pool(Some(&third.hosted.as_ref().unwrap().worker_id));
+    let tick = f.tick(&mut tx);
+    assert_eq!(placed(&tick, &third.session_id).0, PlacementAction::Keep);
+    assert!(f.record(&third.operation_id).joined_at_ms.is_some());
+    f.at(&clock, START + MINUTE);
+    f.host.crash(&f.terminal(&third));
+    f.handoff_pool(None);
+    // Replaced, though two failures came before it.
+    let tick = starts_generation(&f, &base, 4, &mut tx);
+    assert!(role_blocked(&tick, RoleBlocker::IntegratorUnavailable).is_none());
+    assert_eq!(f.record(&third.operation_id).state, SessionState::Lost);
+    // The count starts over: two more crashes are replaced, the third is reported.
+    for generation in 4..=5 {
+        f.host
+            .crash(&f.terminal(&f.record(&generation_of(&base, generation))));
+        let tick = starts_generation(&f, &base, generation + 1, &mut tx);
+        assert!(role_blocked(&tick, RoleBlocker::IntegratorUnavailable).is_none());
+    }
+    f.host
+        .crash(&f.terminal(&f.record(&generation_of(&base, 6))));
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert_eq!(role_starts(&tick, &base), 0, "{:?}", tick.outcomes);
+        assert!(role_blocked(&tick, RoleBlocker::IntegratorUnavailable).is_some());
+    }
+    assert_eq!(f.host.launches().len(), 6);
+}
+
+/// HS2-D1W59D: an integrator that joined and later stopped is not a failure either: a
+/// generation lost before joining after it is replaced, not reported.
+#[test]
+fn hs2_d1w59d_a_joined_integrator_that_stopped_does_not_count_as_failed() {
+    use hotsheet_ticketing::orchestration::RoleBlocker;
+    clocked!(clock, tx);
+    let (f, base) = integrator_wanted(&mut tx);
+    starts_generation(&f, &base, 1, &mut tx);
+    let first = f.record(&base);
+    f.handoff_pool(Some(&first.hosted.as_ref().unwrap().worker_id));
+    f.tick(&mut tx);
+    assert!(f.record(&base).joined_at_ms.is_some());
+    // A person stops it; its lease lapses.
+    f.at(&clock, START + MINUTE);
+    f.m.runtime
+        .session_stop(
+            &f.owner(),
+            &first.session_id,
+            StopSession { force: true },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    f.handoff_pool(None);
+    assert_eq!(f.record(&base).state, SessionState::Stopped);
+    for generation in 2..=3 {
+        let tick = starts_generation(&f, &base, generation, &mut tx);
+        assert!(role_blocked(&tick, RoleBlocker::IntegratorUnavailable).is_none());
+        f.host
+            .crash(&f.terminal(&f.record(&generation_of(&base, generation))));
+    }
+    // Two lost in a row after a joined one: one more replacement is due.
+    let tick = starts_generation(&f, &base, 4, &mut tx);
+    assert!(role_blocked(&tick, RoleBlocker::IntegratorUnavailable).is_none());
+}
+
 /// HS2-0VTQFF: under a pattern-only Models list the real executor launches the tool
 /// on the newest model the machine reports that matches, and the session record
 /// names that model.

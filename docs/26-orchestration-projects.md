@@ -6822,6 +6822,11 @@ its integrator when work waits to be integrated, without configuration.
   It owns no work in the main checkout either: uncommitted changes there (a person's
   edit, the AI tool's setup files, a changed policy file) count against an integrator
   only once the pool names it (HS2-KH41E3).
+  A role session that ends lost before it ever joined (its AI tool crashed at launch,
+  or its terminal died) is a failed attempt too, counted with those wound down for not
+  joining; one that joined and was lost or stopped later took up its role, is
+  replaced as before, and starts the count over (HS2-D1W59D). A start the host
+  refused is the refusal backoff's, not counted here.
   After `MAX_JOIN_REPLACEMENTS` (2) replacements failed in a row the last is wound
   down too, with detail `replacements_exhausted`, never kept in its slot, and the
   project reports `integrator_unavailable` (detail `replacements_exhausted`, with
