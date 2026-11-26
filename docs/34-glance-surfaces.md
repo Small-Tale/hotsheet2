@@ -112,7 +112,8 @@ duration goes in the hover title and the accessible name, never on the face. For
 34 minutes" is the title of a May be stuck glyph, not visible text. Chips and rows appear only when they
 have something to say. The full-width callout for likely-critical conditions (§34.1) is one exception. The
 `main` CI chip is the other (HS2-505PHC): a bare spinner glyph read as an unexplained countdown, so its face
-names it in a word or two plus a clock while it runs (`CI · 1:05`, `CI · queued`, `CI failed`; §34.6). A
+names it in a word or two plus a clock while it runs (`CI · 1:05`, `CI · queued`, `CI failed`,
+`CI · unknown` for a stale report; §34.6). A
 Jobs sidebar chip that shows progress follows the same labelled-chip rule when it is built.
 
 ## 34.5 Standby (HS2-EQVZTZ, shipped)
@@ -216,6 +217,13 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   sidebar show, the section is compact, and the selected project's newest run is running with a known
   start; it writes the same render clock and never issues a request. Queued and failed chips carry no
   clock.
+- **Stale CI report (HS2-CC7TCB, shipped).** A run reported running or queued more than 2 hours ago,
+  and never since, is not shown as running: the chip reads `CI · unknown` in the neutral tone with the
+  official Lucide `circle-help` glyph and no clock, titled
+  `main CI status unknown · last seen running 2h 05m ago · 8f6c8d8`; the expanded row reads
+  `main CI unknown` with `seen 2h 05m ago`, without the sha so it fits the sidebar; the Stats tile word is a
+  quiet `Unknown`, like `No CI reported`. The display clock stops at the bound. A GitHub Actions run is
+  normally followed to its end by the server first ([32](32-notifier-plugins.md) §32.8.5).
 - **Remote project tabs (HS2-4R99XY).** A cross-server tab shows the same gauges and chips, from the remote
   server's own live state. The browser's `remote:<binding>:<checkout>` id never equals the remote server's
   checkout id, and the remote server may host a store whose id the local server also uses, so each remote

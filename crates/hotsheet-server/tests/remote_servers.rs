@@ -521,6 +521,9 @@ mod e2e_home_outage;
 #[cfg(unix)]
 #[path = "remote_servers/e2e_roles.rs"]
 mod e2e_roles;
+// HS2-CC7TCB: a reported GitHub Actions run followed to its end by the Job monitor.
+#[path = "remote_servers/ci_follow.rs"]
+mod ci_follow;
 #[path = "remote_servers/gates.rs"]
 mod gates;
 // HS2-92FJXM: a client on another machine adds the serving machine's open checkouts.

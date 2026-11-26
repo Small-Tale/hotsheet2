@@ -612,6 +612,9 @@ async fn main() -> Result<()> {
     // Follow and reconcile orchestration runs left unfinished by the last run of this
     // server (HS2-WBREDM). Idle when there are none.
     state.spawn_run_recovery();
+    // Follow the reported GitHub Actions runs the last run of this server left in flight
+    // (HS2-CC7TCB). Idle when there are none.
+    state.spawn_ci_follow_recovery();
     // Show orchestrator permission requests filed by a headless CLI without waiting
     // for a client read (HS2-E16FWJ). Idle when nothing is filed.
     state.spawn_permission_follower();

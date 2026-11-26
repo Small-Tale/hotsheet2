@@ -290,8 +290,11 @@ successful runs of the same workflow in the listing; the history estimate of
 carries the qualified ticket that waits on the gate, when the caller names one,
 and the commit. The outcome holds identifiers only: the gate, the commit,
 repository, branch, and workflow, and the run's id, attempt, head commit,
-conclusion, and URL. `ci_outcome` returns that record for the ticket result
-summary (HS2-BDH12X), the notification (HS2-FCBYC8), and orchestration.
+conclusion, and URL, and the run's `created_at` and, once it completed, `updated_at` as
+`run_created_ms` and `run_updated_ms` (HS2-CC7TCB). `ci_outcome` returns that record for the ticket result
+summary (HS2-BDH12X), the notification (HS2-FCBYC8), and orchestration. The server
+also starts this watch for a reported main CI run still in flight and records its
+verdict as the finished run ([32](32-notifier-plugins.md) §32.8.5, HS2-CC7TCB).
 
 **Provider access.** The monitor lists the branch's push runs and the jobs of the
 run it follows, both with conditional requests, so an unchanged answer costs no

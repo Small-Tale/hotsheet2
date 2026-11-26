@@ -1,4 +1,5 @@
 import type { LiveCi, LiveCiStatus, LiveStoreState, LiveWord } from './api';
+import { type CiLastSeen, ciStaleness } from './ci-staleness';
 import { aggregateLiveStates, etaOverrunMs, progressAgeMs, tokenHours, tokensPerMinute } from './live-state';
 
 /**
@@ -55,14 +56,25 @@ export interface RightNowTiles {
   ci: RightNowCi;
 }
 
+/**
+ * A reported run's status as glance surfaces show it: the reported one, or `unknown` once a report of a
+ * run still queued or running is too old to believe (HS2-CC7TCB, `ci-staleness.ts`).
+ */
+export type CiDisplayStatus = LiveCiStatus | 'unknown';
+
 /** The `main` CI tile (HS2-E16ZEK): the newest run any store in scope reported, or none reported. */
 export interface RightNowCi {
-  status: LiveCiStatus;
+  status: CiDisplayStatus;
+  /** For `unknown`: what the stale report last said (HS2-CC7TCB). */
+  lastSeen?: CiLastSeen;
   /** The branch the run was for; the tile names `main` when the report leaves it out. */
   branch: string;
   /** The first seven characters of the run's commit. */
   shortSha?: string;
-  /** Since the run finished, or, while it runs or waits, since it started; from the display clock. */
+  /**
+   * Since the run finished, or, while it runs or waits, since it started; for `unknown`, since it was last
+   * reported. From the display clock.
+   */
   ageMs?: number;
   runUrl?: string;
 }
@@ -79,9 +91,11 @@ export function newestCi(states: readonly LiveStoreState[], nowMs: number): Righ
     .sort((a, b) => at(b) - at(a));
   const ci = reported.at(0);
   if (!ci) return { status: 'unavailable', branch: 'main' };
-  const since = ci.finished_at_ms ?? ci.started_at_ms ?? undefined;
+  // HS2-CC7TCB: a run reported running or queued long ago is not shown as still running.
+  const lastSeen = ciStaleness(ci, nowMs);
+  const since = lastSeen ? (ci.reported_at_ms ?? undefined) : (ci.finished_at_ms ?? ci.started_at_ms ?? undefined);
   return {
-    status: ci.status,
+    ...(lastSeen ? { status: 'unknown' as const, lastSeen } : { status: ci.status }),
     branch: ci.branch ?? 'main',
     ...(ci.sha ? { shortSha: ci.sha.slice(0, 7) } : {}),
     ...(since === undefined ? {} : { ageMs: Math.max(0, nowMs - since) }),

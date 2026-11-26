@@ -79,8 +79,11 @@ export function demoLiveState(scenario: DemoLiveScenario): LiveStoreState {
   };
 }
 
-/** The `main` CI run a demo shows (HS2-505PHC): none reported, running, running before a start, queued, failed. */
-export type DemoCiScenario = 'none' | 'running' | 'running-no-start' | 'queued' | 'failed' | 'passed';
+/**
+ * The `main` CI run a demo shows (HS2-505PHC): none reported, running, running before a start, queued, failed,
+ * and a running report too old to believe (HS2-CC7TCB).
+ */
+export type DemoCiScenario = 'none' | 'running' | 'running-no-start' | 'queued' | 'failed' | 'passed' | 'stale';
 
 /** A synthetic reported `main` run for a scenario at {@link DEMO_LIVE_NOW_MS}; `undefined` for none. */
 export function demoLiveCi(scenario: DemoCiScenario): LiveStoreState['ci'] {
@@ -92,9 +95,23 @@ export function demoLiveCi(scenario: DemoCiScenario): LiveStoreState['ci'] {
       queued: 'queued',
       failed: 'failure',
       passed: 'success',
+      stale: 'in_progress',
     } as const
   )[scenario];
   const finished = status === 'failure' || status === 'success';
+  // HS2-CC7TCB: reported running 2 h 39 m ago, then never again.
+  if (scenario === 'stale')
+    return {
+      status,
+      checkout: 'hotsheet',
+      branch: 'main',
+      sha: '8f6c8d81f0a1',
+      run_url: null,
+      workflow: 'CI',
+      started_at_ms: DEMO_LIVE_NOW_MS - 2 * 60 * MINUTE - 45 * MINUTE,
+      finished_at_ms: null,
+      reported_at_ms: DEMO_LIVE_NOW_MS - 2 * 60 * MINUTE - 39 * MINUTE,
+    };
   return {
     status,
     checkout: 'hotsheet',

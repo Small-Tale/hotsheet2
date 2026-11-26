@@ -149,11 +149,12 @@ export function StatsRightNow({ scope, stores, tiles, rows, completed, asOfMs }:
                       icon={CI_PRESENTATION[tiles.ci.status].icon}
                       name={CI_PRESENTATION[tiles.ci.status].name}
                     />
+                    {/* No report, or a stale one (HS2-CC7TCB), is a quiet word, not a headline. */}
                     <Text
                       variant="span"
-                      size={tiles.ci.status === 'unavailable' ? 'medium' : 'xlarge'}
+                      size={tiles.ci.status === 'unavailable' || tiles.ci.status === 'unknown' ? 'medium' : 'xlarge'}
                       weight="strong"
-                      tone={tiles.ci.status === 'unavailable' ? 'quiet' : 'default'}
+                      tone={tiles.ci.status === 'unavailable' || tiles.ci.status === 'unknown' ? 'quiet' : 'default'}
                       flush
                     >
                       {CI_PRESENTATION[tiles.ci.status].word}

@@ -1321,6 +1321,8 @@ async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
     assert_eq!(started["applied"], true);
     assert_eq!(started["checkout"], main_id.as_str());
     assert_eq!(started["stores"], json!([h.store_id]));
+    // HS2-CC7TCB: no GitHub Actions run page, so nothing follows the run.
+    assert_eq!(started["follow"], "none");
     let live = next_live(&mut events, &h.store_id, |live| {
         live["ci"]["status"] == "in_progress"
     })
@@ -1361,6 +1363,7 @@ async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(stale["applied"], false);
+    assert_eq!(stale["follow"], "none");
     assert_eq!(stale["ci"]["status"], "success");
 
     // A newer run reported by the other linked checkout wins.

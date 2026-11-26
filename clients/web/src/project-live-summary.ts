@@ -1,5 +1,5 @@
 import type { LiveStoreState, LiveWord } from './api';
-import { ciChipText, ciChipTicks, formatCiElapsed } from './ci-presentation';
+import { ciAge, ciChipText, ciChipTicks, formatCiElapsed } from './ci-presentation';
 import type { HostHealthSignalId, HostHealthSnapshot } from './host-health';
 import { hostHealthCallouts } from './host-health';
 import {
@@ -104,7 +104,12 @@ export function projectLiveSummary(states: readonly LiveStoreState[], nowMs: num
   };
 }
 
-const CI_STATUS_TITLES = { failure: 'failed', in_progress: 'running', queued: 'queued' } as const;
+const CI_STATUS_TITLES = {
+  failure: 'failed',
+  in_progress: 'running',
+  queued: 'queued',
+  unknown: 'status unknown',
+} as const;
 
 /** The work-state sentence for titles and the expanded row, e.g. `Active · 2 workers live`. */
 export function liveStateDescription(summary: ProjectLiveSummary): string {
@@ -163,14 +168,19 @@ export function liveChips(summary: ProjectLiveSummary): LiveChip[] {
     });
   // `main` CI only when it is non-trivial (§34.6): failing, running, or waiting to run (HS2-57BYEA). Its
   // face names it and, while it runs, the elapsed time (HS2-505PHC): `CI · 1:05`, `CI · queued`, `CI failed`.
-  if (summary.ci.status === 'failure' || summary.ci.status === 'in_progress' || summary.ci.status === 'queued')
+  // A stale running or queued report reads `CI · unknown` with when it was last seen, never a clock
+  // (HS2-CC7TCB).
+  const ci = summary.ci;
+  if (ci.status === 'failure' || ci.status === 'in_progress' || ci.status === 'queued' || ci.status === 'unknown')
     chips.push({
       kind: 'ci',
-      text: ciChipText(summary.ci) ?? '',
-      title: `${summary.ci.branch} CI ${CI_STATUS_TITLES[summary.ci.status]}${
-        ciChipTicks(summary.ci) ? ` for ${formatCiElapsed(summary.ci.ageMs ?? 0)}` : ''
-      }${summary.ci.shortSha ? ` · ${summary.ci.shortSha}` : ''}`,
-      tone: summary.ci.status === 'failure' ? 'danger' : 'neutral',
+      text: ciChipText(ci) ?? '',
+      title: `${ci.branch} CI ${CI_STATUS_TITLES[ci.status]}${
+        ciChipTicks(ci) ? ` for ${formatCiElapsed(ci.ageMs ?? 0)}` : ''
+      }${ci.status === 'unknown' && ci.ageMs !== undefined ? ` · ${ciAge(ci) ?? ''}` : ''}${
+        ci.shortSha ? ` · ${ci.shortSha}` : ''
+      }`,
+      tone: ci.status === 'failure' ? 'danger' : 'neutral',
     });
   return chips;
 }
@@ -178,13 +188,15 @@ export function liveChips(summary: ProjectLiveSummary): LiveChip[] {
 /**
  * Whether the Live section needs its one-second display clock (HS2-505PHC): only while the page shows,
  * the section is compact, and the project's newest `main` run is running with a known start, so the
- * chip's `CI · 1:05` face moves. The clock only re-renders; it never issues a request.
+ * chip's `CI · 1:05` face moves. A stale report at `nowMs` reads `CI · unknown` and needs no clock
+ * (HS2-CC7TCB). The clock only re-renders; it never issues a request.
  */
 export function liveCiClockRunning(
   states: readonly LiveStoreState[],
   view: { visible: boolean; expanded: boolean },
+  nowMs: number,
 ): boolean {
-  return view.visible && !view.expanded && ciChipTicks(newestCi(states, 0));
+  return view.visible && !view.expanded && ciChipTicks(newestCi(states, nowMs));
 }
 
 /** One host condition past its threshold: always a full-width callout, even in compact mode (§34.1). */

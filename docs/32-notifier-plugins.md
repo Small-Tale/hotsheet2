@@ -601,7 +601,50 @@ public URL is needed, and the source is independent of the ticket provider.
   queued, running, passed, failed, or cancelled; GitHub conclusions such as `timed_out` count
   as failed) through `hotsheet-cli ci report` before it reads coverage. It is best effort: with
   no local server or no `gh`, nothing is reported and the gate's output and exit status are
-  unchanged. Nothing polls; a report happens only when the tool runs.
+  unchanged. The script itself reports only when it runs; a run it reports while queued or running
+  is followed to its end as below.
+- **Following a reported run (HS2-CC7TCB).** Every reporter reports a run when it learns of it, so
+  a run reported queued or running stayed that way when nobody reported its end, and the chip
+  counted "running" for hours after the run failed. The server now hands such a run to the GitHub
+  Actions watch Job (HS2-3R9V0R, [33](33-jobs.md) §33.9), which the machine's Job monitor follows to
+  its end; the server still never polls.
+  - **Where.** The hand-off is in the route, not in `ci-gate.mjs`: every reporter, including
+    `hotsheet-cli ci report` (the headless path) and a user's hook, reaches the route, and only the
+    server holds the result.
+  - **When.** An applied `queued` or `in_progress` report whose `run_url` is a GitHub Actions run
+    page (`https://github.com/<owner>/<repo>/actions/runs/<id>`, or the same on the host of
+    `HOTSHEET_GITHUB_API_URL`), with a full 40-character `sha`, a `branch`, and a `workflow`. The
+    watch's target is that commit, workflow, and branch, in the page's repository. A retained watch
+    with a verdict other than green is watched again (`rewatch_ci`, a re-run); a green commit is not
+    followed again.
+  - **How.** The server makes sure the Job monitor runs (HS2-VVHVF0), then a server thread waits on
+    the Job store's file changes. On a verdict it records the finished run through the same
+    record-and-push path as a report: green as `success`, red as `failure`, a cancelled covering run
+    as `cancelled`. The report carries the run's head commit, its page, and its `created_at` and
+    `updated_at` as start and finish (the same start `ci-gate.mjs` reports, so the finished run
+    replaces the in-flight report of the same run; for the reported commit's own run, a later start
+    the reporter gave is kept so the verdict is never refused as older). A superseded commit, an unknown commit, a lost
+    observer, or a stopped watch reports nothing; the stale display below covers it.
+  - **Bounds.** A run is followed for 6 hours after its report, GitHub Actions' default job timeout;
+    then the follower asks the watch to stop watching. A restarted server follows again the stored
+    runs still in flight that were reported within that time.
+  - **Not followed.** Another CI's URL, a run without the fields above, a run this server already
+    follows (`follow: following`; `ensure_ci_watch` also keeps one Job per target across processes),
+    no GitHub token (`GH_TOKEN`, `GITHUB_TOKEN`, or a successful `gh auth token`, checked at most
+    every 15 minutes and never read; `follow: no_token`), or a server that starts no Job monitor
+    (`follow: off`, every test build). The run is still stored and shown; the stale display is then
+    the only safeguard.
+  - The answer's `follow` says which applied: `started`, `following`, `none`, `no_token`, or `off`.
+- **Stale reports (HS2-CC7TCB).** A `queued` or `in_progress` report more than **2 hours** after
+  its `reported_at_ms` is shown as unknown on every glance surface, with no counting clock: the chip
+  reads `CI · unknown`, titled `main CI status unknown · last seen running 2h 05m ago · 8f6c8d8`; the
+  Stats tile reads `Unknown` with `main CI · 8f6c8d8 · last seen running 2h 05m ago`; the expanded
+  sidebar row reads `main CI unknown`, `seen 2h 05m ago`. The age counts from the report, the last
+  evidence, so a newer report of the same run renews it, and a finished run never goes stale. The
+  bound is fixed because the server keeps no run history to scale it by: it is several times this
+  project's main CI (about 35 minutes), and a followed GitHub run gets its verdict well before then.
+  The client computes it (`clients/web/src/ci-staleness.ts`) from the pushed timestamps and its
+  render-only display clock, so the server pushes nothing for it.
 - **Other CI systems.** Any CI that can run a command on the developer's machine, or a local
   watcher that learns of a run, reports it the same way, for example:
   `hotsheet-cli ci report --status success --branch main --sha <commit> --workflow <name>

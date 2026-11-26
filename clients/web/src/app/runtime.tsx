@@ -5002,11 +5002,16 @@ export async function startHotSheetWebClient() {
   // The compact CI chip's `CI · 1:05` face moves each second (HS2-505PHC): a second render-only clock,
   // running only while the page and sidebar show, the section is compact, and the selected project's
   // newest `main` run is running with a known start. It writes the same clock and never issues a request.
+  // A run reported running so long ago that it is stale stops the clock (HS2-CC7TCB).
   const ciChipClockRunning = () =>
-    liveCiClockRunning(sidebarLiveStates.forProject(selectedProjectId.value), {
-      visible: pageVisible.value && sidebarVisible.value,
-      expanded: liveSectionExpanded.value,
-    });
+    liveCiClockRunning(
+      sidebarLiveStates.forProject(selectedProjectId.value),
+      {
+        visible: pageVisible.value && sidebarVisible.value,
+        expanded: liveSectionExpanded.value,
+      },
+      liveClock.value,
+    );
   const ciChipClockTimer = createTurnClock(
     ciChipClockRunning,
     () => {

@@ -360,6 +360,86 @@ test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without
   }
 });
 
+// HS2-CC7TCB: a run reported running and then never reported again (no reporter followed it to its end) stops
+// counting once the report is over 2 h old: the chip reads `CI · unknown` with when it was last seen, the
+// display clock stops, and the expanded row says the status is unknown. The browser clock is moved past the
+// bound instead of waiting; the server stamps the report time itself. Captured wide, medium, narrow and wide
+// again, in light and dark.
+test('HS2-CC7TCB shows a stale running CI report as unknown, without a clock', async ({ page }) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server);
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
+    const chip = live.locator('[data-live-chip="ci"]');
+
+    // Reported running, 5 minutes in, by a reporter that never reports again.
+    await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+      status: 'in_progress',
+      branch: 'main',
+      sha: '8f6c8d81f0a1',
+      workflow: 'CI',
+      started_at_ms: Date.now() - 5 * 60_000,
+    });
+    await expect(chip).toHaveText(/^CI · 5:\d\d$/u, { timeout: 30_000 });
+
+    // Two hours and ten minutes later, on this machine's clock: the next display tick shows it as unknown.
+    await page.clock.setFixedTime(Date.now() + (2 * 60 + 10) * 60_000);
+    await expect(chip).toHaveText('CI · unknown', { timeout: 30_000 });
+    await expect(chip).toHaveAttribute('data-tone', 'neutral');
+    await expect(chip).toHaveAttribute('title', /^main CI status unknown · last seen running 2h 1\dm ago · 8f6c8d8$/u);
+    await expect(chip.locator('[data-lucide="circle-help"]')).toBeVisible();
+
+    await page.mouse.move(640, 880);
+    const capture = async (name: string) => {
+      await live.screenshot({ path: `target/visual-captures/hs2-cc7tcb-${name}.png` });
+    };
+    for (const width of [1280, 1024, 390, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await expect(chip).toBeVisible();
+      const box = await chip.boundingBox();
+      expect(box?.height ?? 0).toBeLessThan(32);
+      await capture(`unknown-chip-${width}`);
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('unknown-chip-dark-1280');
+
+    // The expanded row names the unknown status and when the run was last seen, fitting the narrow row.
+    await live.getByRole('button', { name: /^Show live details\. / }).click();
+    await expect(live).toHaveAttribute('data-mode', 'expanded');
+    const row = live.locator('[data-live-row="ci"]');
+    await expect(row).toContainText('main CI unknown');
+    await expect(row).toContainText(/seen 2h 1\dm ago/u);
+    await expect(row.locator('[data-lucide="circle-help"]')).toBeVisible();
+    await page.mouse.move(640, 880);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await capture('unknown-row-dark-1280');
+    await page.emulateMedia({ colorScheme: 'light' });
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await expect(row).toBeVisible();
+      // Neither the row nor its truncating label overflows: the whole label shows.
+      const fits = await row.evaluate((node) =>
+        [node, ...node.querySelectorAll('span')].every((part) => part.scrollWidth <= part.clientWidth + 1),
+      );
+      expect(fits).toBe(true);
+      await capture(`unknown-row-${width}`);
+    }
+  } finally {
+    await server.stop(page);
+  }
+});
+
 // HS2-4R99XY: a cross-server (remote) project tab shows the same Live gauges and badges as a local one. The
 // browser's `remote:<binding>:<checkout>` id never equals the remote server's checkout id, so the section reads
 // the tab's own live store by the remote checkout id; a reported failing run still reaches its chip.

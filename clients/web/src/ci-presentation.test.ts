@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LiveCiStatus } from './api';
-import { ciAge, ciChipText, ciChipTicks, ciDetail, formatCiElapsed } from './ci-presentation';
+import { CI_PRESENTATION, ciAge, ciChipText, ciChipTicks, ciDetail, ciRow, formatCiElapsed } from './ci-presentation';
 import type { RightNowCi } from './stats-right-now';
 
 const SECOND = 1_000,
@@ -65,6 +65,46 @@ describe('CI chip face (HS2-505PHC)', () => {
     expect(ciChipTicks(ci('in_progress'))).toBe(false);
     for (const status of ['queued', 'failure', 'success', 'cancelled', 'unavailable'] as const)
       expect(ciChipTicks(ci(status, MINUTE))).toBe(false);
+  });
+});
+
+describe('stale CI report words (HS2-CC7TCB)', () => {
+  const stale = (lastSeen: 'running' | 'queued', ageMs?: number): RightNowCi => ({
+    status: 'unknown',
+    lastSeen,
+    branch: 'main',
+    shortSha: '8f6c8d8',
+    ...(ageMs === undefined ? {} : { ageMs }),
+  });
+
+  it('names the chip without a clock and never ticks', () => {
+    expect(ciChipText(stale('running', 2 * HOUR + 39 * MINUTE))).toBe('CI · unknown');
+    expect(ciChipText(stale('queued'))).toBe('CI · unknown');
+    expect(ciChipTicks(stale('running', 2 * HOUR))).toBe(false);
+  });
+
+  it('says when the run was last seen and what it was doing', () => {
+    expect(ciAge(stale('running', 2 * HOUR + 39 * MINUTE))).toBe('last seen running 2h 39m ago');
+    expect(ciAge(stale('queued', 3 * HOUR))).toBe('last seen queued 3h 00m ago');
+    expect(ciAge(stale('running'))).toBeUndefined();
+    expect(ciDetail(stale('running', 2 * HOUR + 39 * MINUTE))).toBe('main CI · 8f6c8d8 · last seen running 2h 39m ago');
+    expect(CI_PRESENTATION.unknown).toMatchObject({ word: 'Unknown', name: 'circle-help' });
+  });
+
+  it('fits the expanded sidebar row', () => {
+    expect(ciRow(stale('running', 2 * HOUR + 10 * MINUTE))).toEqual({
+      label: 'main CI unknown',
+      trailing: 'seen 2h 10m ago',
+    });
+    expect(ciRow({ status: 'unknown', lastSeen: 'queued', branch: 'main' })).toEqual({
+      label: 'main CI unknown',
+      trailing: '',
+    });
+    expect(ciRow(ci('success', 12 * MINUTE))).toEqual({ label: 'main CI passed · 9f8e7d6', trailing: '12m ago' });
+    expect(ciRow(ci('in_progress', 4 * MINUTE))).toEqual({
+      label: 'main CI running · 9f8e7d6',
+      trailing: 'running 4m',
+    });
   });
 });
 
