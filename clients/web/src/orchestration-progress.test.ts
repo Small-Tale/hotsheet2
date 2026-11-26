@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -8,6 +11,8 @@ import {
   parseProgressSummary,
   progressRows,
   projectRows,
+  UNKNOWN_REASONS,
+  unknownReasonText,
 } from './orchestration-progress';
 import { demoTimeline } from './ux-demo/orchestration-fixtures';
 
@@ -38,10 +43,12 @@ describe('orchestration progress and cost (HS2-XJEH08)', () => {
           unknown_reasons: { no_usage_recorded: 1, target_remote: 1 },
         }),
       ),
-    ).toBe('$12.40 so far · partial: 2 work items have no cost (no usage recorded, target remote)');
+    ).toBe(
+      '$12.40 so far · partial: 2 work items have no cost (no usage recorded, project on another machine that does not share its cost)',
+    );
     expect(
       costText(cost({ known_usd: 3, items_known: 1, items_unknown: 1, unknown_reasons: { cost_not_read: 1 } })),
-    ).toBe('$3.00 so far · partial: 1 work item has no cost (cost not read)');
+    ).toBe('$3.00 so far · partial: 1 work item has no cost (cost could not be read)');
     expect(costText(cost({ known_usd: 3, items_known: 1, unpriced_events: 1 }))).toBe(
       'At least $3.00 so far · partial: 1 event has no price',
     );
@@ -59,13 +66,13 @@ describe('orchestration progress and cost (HS2-XJEH08)', () => {
     expect(leadTimeText(undefined)).toBe('Unknown (not reported)');
     expect(leadTimeText({ known: 0, unknown: 0, total_ms: 0, unknown_reasons: {} })).toBe('Unknown (no run yet)');
     expect(leadTimeText({ known: 0, unknown: 2, total_ms: 0, unknown_reasons: { run_unfinished: 2 } })).toBe(
-      'Unknown (run unfinished)',
+      'Unknown (run not finished yet)',
     );
     expect(leadTimeText({ known: 3, unknown: 0, total_ms: 3 * 52 * 60_000, unknown_reasons: {} })).toBe(
       'About 52 min on average over 3 runs',
     );
     expect(leadTimeText({ known: 1, unknown: 1, total_ms: 150 * 60_000, unknown_reasons: { run_unfinished: 1 } })).toBe(
-      'About 2 h 30 min on average over 1 run · 1 unknown (run unfinished)',
+      'About 2 h 30 min on average over 1 run · 1 unknown (run not finished yet)',
     );
     expect(leadTimeText({ known: 1, unknown: 0, total_ms: 120 * 60_000, unknown_reasons: {} })).toBe(
       'About 2 h on average over 1 run',
@@ -99,7 +106,7 @@ describe('orchestration progress and cost (HS2-XJEH08)', () => {
       { label: 'Done', value: '2 of 10' },
       { label: 'Working now', value: '3' },
       { label: 'Waiting', value: '5 (2 for you)' },
-      { label: 'Lead time', value: 'About 1 h on average over 2 runs · 3 unknown (run unfinished)' },
+      { label: 'Lead time', value: 'About 1 h on average over 2 runs · 3 unknown (run not finished yet)' },
       { label: 'Cost', value: '$8.10 so far · partial: 1 work item has no cost (no usage recorded)' },
     ]);
     expect(projectRows(timeline, summary)).toEqual([
@@ -129,5 +136,54 @@ describe('orchestration progress and cost (HS2-XJEH08)', () => {
     for (const rows of [projectRows(fresh, parseProgressSummary({})), progressRows(fresh, summary)])
       for (const row of rows) expect(row.value).not.toMatch(/not read/);
     expect(parseProgressSummary({})).toEqual({ totals: { lead_time: undefined, cost: undefined }, targets: {} });
+  });
+});
+
+/** HS2-RNFEYR: the reason codes `UnknownReason::code` answers, read from the Rust source. */
+function rustUnknownReasonCodes(): string[] {
+  const source = readFileSync(
+    resolve(__dirname, '../../../crates/hotsheet-ticketing/src/orchestration/summary.rs'),
+    'utf8',
+  );
+  const body = /pub fn code\(self\) -> &'static str \{\s*match self \{([\s\S]*?)\n\s*\}\n\s*\}/.exec(source)?.[1];
+  if (!body) throw new Error('UnknownReason::code not found in summary.rs');
+  const codes = [...body.matchAll(/Self::\w+\s*=>\s*"([a-z_]+)"/g)].map((match) => match[1]);
+  const all = /pub const ALL: \[Self; (\d+)\]/.exec(source)?.[1];
+  expect(codes.length, 'every UnknownReason variant has a code').toBe(Number(all));
+  return codes;
+}
+
+describe('the summary’s unknown reasons in plain words (HS2-RNFEYR)', () => {
+  it('words every reason code of UnknownReason, and no code it does not have', () => {
+    const codes = rustUnknownReasonCodes();
+    expect(codes.length).toBeGreaterThan(0);
+    expect(Object.keys(UNKNOWN_REASONS).sort()).toEqual([...codes].sort());
+  });
+
+  it('reads each reason as words, never a code, and a newer code as words', () => {
+    for (const [code, text] of Object.entries(UNKNOWN_REASONS)) {
+      expect(text, code).not.toMatch(/_/);
+      expect(text, code).toBe(text.trim());
+      expect(text.charAt(0), code).toBe(text.charAt(0).toLowerCase());
+      expect(unknownReasonText(code)).toBe(text);
+    }
+    expect(unknownReasonText('a_newer_reason')).toBe('a newer reason');
+  });
+
+  it('lists several reasons in their own words, leaving out a zero count', () => {
+    expect(
+      leadTimeText({
+        known: 0,
+        unknown: 3,
+        total_ms: 0,
+        unknown_reasons: { never_dispatched: 1, clock_inconsistent: 2, events_trimmed: 0 },
+      }),
+    ).toBe('Unknown (never claimed in its project, recorded times run backwards)');
+    expect(costText(cost({ items_unknown: 1, unknown_reasons: { target_unreachable: 1 } }))).toBe(
+      'Unknown (project’s machine did not answer)',
+    );
+    expect(costText(cost({ items_unknown: 1, unknown_reasons: { usage_store_unavailable: 0 } }))).toBe(
+      'Unknown (not reported)',
+    );
   });
 });

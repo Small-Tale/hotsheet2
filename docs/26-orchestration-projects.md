@@ -7299,7 +7299,11 @@ its done and working steps and its cost. Counts come from the timeline. Lead tim
 cost come from the summary of §26.21 (`GET .../orchestration/summary`), read with the
 overview on each change of the timeline's version. Lead time is the average over the
 runs whose lead time is known, with the unknown ones counted beside it and their
-reason ("About 52 min on average over 3 runs · 2 unknown (run unfinished)"). An
+reason ("About 52 min on average over 3 runs · 2 unknown (run not finished yet)"). Each
+reason code of the summary reads in plain words, never as its code: for example
+`cost_not_read` reads "cost could not be read" and `target_remote` "project on another
+machine that does not share its cost"; a policy test keeps the words in step with every
+`UnknownReason` code (HS2-RNFEYR). An
 unknown measure is never shown as zero: with nothing known the row reads
 "Unknown (<reason>)". A cost total is labelled partial unless `cost.complete` is
 true ("$12.40 so far · partial: 1 work item has no cost (no usage recorded)"), reads

@@ -1269,12 +1269,20 @@ test('HS2-XJEH08 the overview shows progress and cost, with an unknown cost neve
     const plan = await planTwoSteps(server);
     const base = `/checkouts/${server.checkoutId}/orchestration`;
     const run = (await plan.dispatch()) as { run_id: string };
-    // The first step finishes: its run completes, so its lead time is known; no usage was recorded.
-    await server.request(`/tickets/${plan.first.id}`, 'PATCH', { status: 'completed' });
-    await send(server, 'POST', `${base}/runs/${run.run_id}/sync`, { actor: scheduler });
     await page.setViewportSize({ width: 1440, height: 900 });
     await openOrchestration(page, server);
     const progress = page.locator('[data-orchestration-overview] [data-orchestration-section="Progress"]');
+    // HS2-RNFEYR: while the only run works, its lead time is unknown, and the reason reads in plain words.
+    await expect(progress).toContainText('Unknown (run not finished yet)', { timeout: 30_000 });
+    await expect(progress).not.toContainText('run unfinished');
+    await visualPass(page, 'hs2-rnfeyr', 'overview-run-unfinished', {
+      show: progress,
+      check: () => expect(progress).toContainText('Unknown (run not finished yet)'),
+      atPhone: () => openInspector(page),
+    });
+    // The first step finishes: its run completes, so its lead time is known; no usage was recorded.
+    await server.request(`/tickets/${plan.first.id}`, 'PATCH', { status: 'completed' });
+    await send(server, 'POST', `${base}/runs/${run.run_id}/sync`, { actor: scheduler });
     await expect(progress).toContainText('1 of 2', { timeout: 30_000 });
     await expect(progress).toContainText(/on average over 1 run/);
     await expect(progress).not.toContainText('About under');
