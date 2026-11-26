@@ -13,6 +13,8 @@ export interface TerminalVisibilityGroup {
   name: string;
   hiddenKeys: string[];
   hiddenTypes?: TerminalVisibilityType[];
+  /** List and show minimized projects' items in this workspace; absent means off (HS2-W1XEH7). */
+  showMinimized?: boolean;
 }
 export interface TerminalVisibilityState {
   groups: TerminalVisibilityGroup[];
@@ -54,7 +56,13 @@ export function parseTerminalVisibilityState(raw: string | null): TerminalVisibi
       const hiddenTypes = Array.isArray(candidate.hiddenTypes)
         ? terminalVisibilityTypes(candidate.hiddenTypes.filter((type): type is string => typeof type === 'string'))
         : [];
-      groups.push({ id: candidate.id, name: candidate.name.trim(), hiddenKeys, hiddenTypes });
+      groups.push({
+        id: candidate.id,
+        name: candidate.name.trim(),
+        hiddenKeys,
+        hiddenTypes,
+        ...(candidate.showMinimized === true ? { showMinimized: true } : {}),
+      });
     }
     if (!groups.some((group) => group.id === DEFAULT_TERMINAL_VISIBILITY_GROUP_ID))
       groups.unshift({
@@ -153,6 +161,59 @@ export function setAllTerminalsVisibleInGroup(
   return keys.reduce((next, key) => setTerminalVisibleInGroup(next, groupId, key, visible), state);
 }
 
+/** Turn a workspace's Show minimized choice on or off (HS2-W1XEH7). */
+export function setShowMinimizedInGroup(
+  state: TerminalVisibilityState,
+  groupId: string,
+  show: boolean,
+): TerminalVisibilityState {
+  return {
+    ...state,
+    groups: state.groups.map((group) => {
+      if (group.id !== groupId || Boolean(group.showMinimized) === show) return group;
+      if (show) return { ...group, showMinimized: true };
+      const rest = { ...group };
+      delete rest.showMinimized;
+      return rest;
+    }),
+  };
+}
+
+/**
+ * The projects a workspace lists and shows (HS2-W1XEH7): minimized projects are left out unless the
+ * workspace shows them, so their items are neither listed in the dialog nor shown in the grid.
+ */
+export function includedTerminalProjectGroups<G extends { projectId: string }>(
+  groups: readonly G[],
+  group: Pick<TerminalVisibilityGroup, 'showMinimized'>,
+  minimizedProjectIds: readonly string[],
+): G[] {
+  if (group.showMinimized || minimizedProjectIds.length === 0) return [...groups];
+  const minimized = new Set(minimizedProjectIds);
+  return groups.filter((candidate) => !minimized.has(candidate.projectId));
+}
+
+/**
+ * A project heading's toggle (HS2-HC67SP): show every listed item when any is hidden, otherwise
+ * hide them all. Returns the visibility the action applies.
+ */
+export function projectVisibilityToggleTarget(keys: readonly string[], hiddenKeys: readonly string[]): boolean {
+  const hidden = new Set(hiddenKeys);
+  return keys.some((key) => hidden.has(key));
+}
+
+const TYPE_NOUNS: Readonly<Record<TerminalVisibilityType, string>> = {
+  shell: 'Terminals',
+  ai: 'AI Shells',
+  chat: 'AI Chats',
+};
+
+/** The title-style noun for the listed item types: one type's name, or Items for several (HS2-HC67SP). */
+export function terminalVisibilityItemsNoun(kinds: readonly TerminalVisibilityType[]): string {
+  const distinct = [...new Set(kinds)];
+  return distinct.length === 1 ? TYPE_NOUNS[distinct[0]] : 'Items';
+}
+
 export function hideNewTerminalInNamedGroups(state: TerminalVisibilityState, key: string): TerminalVisibilityState {
   return {
     ...state,
@@ -170,6 +231,55 @@ export function terminalVisibilityTypes(value: readonly string[]): TerminalVisib
 
 export function visibleTerminalTypes(group: TerminalVisibilityGroup): TerminalVisibilityType[] {
   return TERMINAL_VISIBILITY_TYPES.filter((kind) => !group.hiddenTypes?.includes(kind));
+}
+
+/**
+ * The item types a workspace's dialog offers (HS2-4TKASN). AI Chats follows the `ai-chat` feature
+ * area's convention (HS2-3GJZGG): off, it offers no entry point, but chats that are already open
+ * stay, so the segment remains while the listed scope still has a chat to control.
+ */
+export function availableTerminalVisibilityTypes(chatFeatureOn: boolean, hasChats: boolean): TerminalVisibilityType[] {
+  return TERMINAL_VISIBILITY_TYPES.filter((kind) => kind !== 'chat' || chatFeatureOn || hasChats);
+}
+
+/**
+ * The types a workspace applies: its shown types among the available ones. An unavailable type is
+ * never applied; when the stored choice held only unavailable types, the first available one stands
+ * in, so a hidden segment never leaves the workspace showing nothing (HS2-4TKASN).
+ */
+export function effectiveTerminalVisibleTypes(
+  group: TerminalVisibilityGroup,
+  available: readonly TerminalVisibilityType[] = TERMINAL_VISIBILITY_TYPES,
+): TerminalVisibilityType[] {
+  const shown = visibleTerminalTypes(group),
+    effective = shown.filter((kind) => available.includes(kind));
+  return effective.length === 0 && shown.length > 0 && available.length > 0 ? [available[0]] : effective;
+}
+
+/**
+ * Press or release one available type from what the workspace currently applies (HS2-4TKASN). The
+ * available types are stored as applied; an unavailable type keeps its stored choice unless the
+ * person releases the last applied type, which stores an explicit "nothing shown".
+ */
+export function toggleEffectiveTerminalTypeInGroup(
+  state: TerminalVisibilityState,
+  groupId: string,
+  type: TerminalVisibilityType,
+  available: readonly TerminalVisibilityType[],
+): TerminalVisibilityState {
+  const group = state.groups.find((candidate) => candidate.id === groupId);
+  if (!group || !available.includes(type)) return state;
+  const effective = effectiveTerminalVisibleTypes(group, available),
+    next = effective.includes(type) ? effective.filter((kind) => kind !== type) : [...effective, type],
+    hiddenTypes = TERMINAL_VISIBILITY_TYPES.filter((kind) =>
+      available.includes(kind) || next.length === 0
+        ? !next.includes(kind)
+        : (group.hiddenTypes?.includes(kind) ?? false),
+    );
+  return {
+    ...state,
+    groups: state.groups.map((candidate) => (candidate.id === groupId ? { ...candidate, hiddenTypes } : candidate)),
+  };
 }
 
 export function setTerminalTypeVisibleInGroup(
@@ -217,4 +327,14 @@ export function terminalVisibilityItems(
       ].filter((item) => types.includes(item.kind)),
     }))
     .filter((group) => group.items.length > 0);
+}
+
+/** The types a scope's dialog offers: AI Chats when the feature is on or the scope lists a chat (HS2-4TKASN). */
+export function scopeTerminalVisibilityTypes(
+  groups: readonly TerminalDashboardGroup[],
+  scope: string,
+  chatFeatureOn: boolean,
+): TerminalVisibilityType[] {
+  const hasChats = terminalVisibilityItems(groups, scope, ['chat']).length > 0;
+  return availableTerminalVisibilityTypes(chatFeatureOn, hasChats);
 }

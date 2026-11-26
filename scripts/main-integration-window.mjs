@@ -59,13 +59,31 @@ function commonDir(repo) {
   return realpathSync(resolve(repo, git(repo, ['rev-parse', '--git-common-dir'])));
 }
 
-export function selectedSourceStore(repo, explicit) {
-  if (explicit) return resolve(explicit);
-  const link = join(repo, '.hotsheet2', 'store');
-  if (!existsSync(link)) return repo;
+function linkedStore(checkout) {
+  const link = join(checkout, '.hotsheet2', 'store');
+  if (!existsSync(link)) return null;
   const store = readFileSync(link, 'utf8').trim();
   if (!isAbsolute(store)) throw new Error('The .hotsheet2/store link must contain an absolute store path');
   return store;
+}
+
+// HS2-67N8SJ: a linked worktree has no `.hotsheet2/store` link of its own, so it uses the
+// shipping checkout's (the Git common directory's parent) before falling back to the repo.
+export function selectedSourceStore(repo, explicit, shipping = () => dirname(commonDir(repo))) {
+  if (explicit) return resolve(explicit);
+  const own = linkedStore(repo);
+  if (own) return own;
+  const root = shipping();
+  if (root && realpathSync(root) !== realpathSync(repo)) return linkedStore(root) ?? repo;
+  return repo;
+}
+
+/** HS2-67N8SJ: the headless recovery named whenever the pool's ids do not match. */
+export function identityRepairHint(shipping = '<repo>', sourceStore = '<store>') {
+  return (
+    `if the checkout or its ticket store moved, run \`hotsheet-cli -C '${sourceStore}' coordination ` +
+    `--project '${shipping}' repair-identity --dry-run\`, then without --dry-run to migrate a proven pool`
+  );
 }
 
 // HS2-GT57BQ: a promotion pushes a recorded SHA, not the checkout, so it needs no clean HEAD.
@@ -290,7 +308,7 @@ function authorizeStaged(state, value, ledger) {
     );
 }
 
-export function authorizeMainState(state, value, projectId, sourceId, now, ledger = null) {
+export function authorizeMainState(state, value, projectId, sourceId, now, ledger = null, shipping = '<repo>') {
   if (!state) {
     if (value.identity) throw new Error('No coordinator pool for integrator push');
     if (value.gateArgs?.includes('--smoke')) throw new Error('The --smoke gate is only for a batch integrator push');
@@ -301,11 +319,13 @@ export function authorizeMainState(state, value, projectId, sourceId, now, ledge
     state.version < 3 ||
     // HS2-9G0M3V: schema seven adds next plans and eight integrator strategies; HS2-JBAD2Z:
     // nine adds worker preferences (HS2-6WFCZR). None changes the fields read here.
-    state.version > 9 ||
-    state.project_id !== projectId ||
-    state.source_id !== sourceId
+    state.version > 9
   )
-    throw new Error('Incompatible coordination pool or ticket source');
+    throw new Error(`Incompatible coordination pool schema ${state.version}`);
+  if (state.project_id !== projectId || state.source_id !== sourceId)
+    throw new Error(
+      `Incompatible coordination pool or ticket source; ${identityRepairHint(shipping, value.sourceStore ?? '<store>')}`,
+    );
   const live = state.integrator && state.integrator.expires_at > now;
   const fence = Object.values(state.assignments ?? {}).filter((item) =>
     ['verifying', 'integrating', 'suspended_integration'].includes(item.phase),
@@ -376,7 +396,7 @@ function authority(repo, value) {
     .replace(/^-+|-+$/g, '');
   const projectId = `${slug}-${createHash('sha256').update(shipping).digest('hex').slice(0, 12)}`;
   const sourceId = createHash('sha256').update(realpathSync(value.sourceStore)).digest('hex');
-  return authorizeMainState(state, value, projectId, sourceId, Math.floor(Date.now() / 1000), ledger);
+  return authorizeMainState(state, value, projectId, sourceId, Math.floor(Date.now() / 1000), ledger, shipping);
 }
 
 async function child(

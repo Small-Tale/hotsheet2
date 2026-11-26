@@ -386,6 +386,44 @@ describe('web ESLint policy', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('HS2-GXJTSE insets every shell banner like ShellBanner: 8px around and between', () => {
+    // The shell's banner slot (hot-sheet-shell.tsx `banner={…}`) stacks banners 8px from its sides,
+    // top, and bottom and 8px apart: each banner takes only the Kerf List's top control inset, and the
+    // slot's bottom padding ends the stack. Side insets on some banners and top+bottom insets on
+    // another left the stack with two side insets and a doubled gap (HS2-GXJTSE).
+    const shell = readFileSync(join(import.meta.dirname, 'features/hot-sheet-shell.tsx'), 'utf8'),
+      slot = /\n\s+banner=\{([\s\S]*?)\n\s+pageHeader=/.exec(shell)?.[1] ?? '',
+      names = [
+        ...new Set(
+          [...slot.matchAll(/<([A-Z]\w*Banner\w*)\b|\{([A-Z]\w*Banner)\(/g)].map((m) => m.slice(1).find(Boolean) ?? ''),
+        ),
+      ];
+    expect(names.length).toBeGreaterThan(10);
+    const components = join(import.meta.dirname, 'components'),
+      sources = readdirSync(components)
+        .filter((name) => name.endsWith('.tsx'))
+        .map((name) => readFileSync(join(components, name), 'utf8')),
+      offenders: string[] = [];
+    for (const name of names) {
+      const source = sources.find((text) => new RegExp(`export function ${name}\\b`).test(text));
+      if (!source) {
+        offenders.push(`${name}: not found`);
+        continue;
+      }
+      const body = source.slice(source.search(new RegExp(`export function ${name}\\b`)));
+      const end = body.indexOf('\nexport function ', 1);
+      const own = end > 0 ? body.slice(0, end) : body;
+      // Composes ShellBanner, delegates to another banner component, or insets only the top.
+      const insets = [...own.matchAll(/controlInsets="(\w+)"/g)].map((m) => m[1]);
+      const ok =
+        /<ShellBanner\b/.test(own) ||
+        (insets.length > 0 && insets.every((value) => value === 't')) ||
+        (!/<StateBanner\b/.test(own) && /<[A-Z]\w*Banner\b/.test(own));
+      if (!ok) offenders.push(name);
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('HS2-N2HB7G reads the machine homes only through the shared blank-as-unset helper', () => {
     // `??` resolved `HOTSHEET_HOME=""` against the working directory and `||` kept whitespace-only
     // values; `machine-home.ts` applies the Rust `machine_home` rule (HS2-1D4DQF) for every bridge.
@@ -467,6 +505,98 @@ describe('web ESLint policy', () => {
     for (const entry of readdirSync(scripts))
       if (/\.mjs$/.test(entry) && !/\.test\.mjs$/.test(entry)) check(join(scripts, entry));
     expect(offenders).toEqual([]);
+  });
+
+  it('HS2-1K6122 gives an action outcome through the toast, never an inline status line', () => {
+    // The maintainer's rule (docs/ui-design-philosophy.md): a pressed action's success or failure is
+    // announced through the app's toast. A component keeps a live region only for loading, a read
+    // failure, or the persistent record of a failed change. This bug recurred several times, so each
+    // inline message region is listed here with why it may stay; the list only shrinks.
+    const allowed: Record<string, number> = {
+      // Read failures, progress and persistent failure records; their action failures move to the
+      // toast in HS2-M4P3QM.
+      'ai-tool-settings.tsx': 1,
+      'command-settings-editor.tsx': 1,
+      'host-disk-settings.tsx': 1,
+      'guidance-settings.tsx': 1,
+      'settings-workspace.tsx': 1,
+      'standby-settings.tsx': 1,
+      'terminal-memory-settings.tsx': 1,
+      'ticket-attachments.tsx': 1,
+      'ticket-code-review.tsx': 2,
+      'trash-settings.tsx': 1,
+      // The server's busy bars name the request in flight (state, not an outcome).
+      'server-busy-bars.tsx': 1,
+    };
+    const components = new URL('./components/', import.meta.url);
+    const found: Record<string, number> = {};
+    for (const name of readdirSync(components).filter((file) => file.endsWith('.tsx'))) {
+      const source = readFileSync(new URL(name, components), 'utf8');
+      // A status line that renders a success as its text: `>{status}` or `>{message || status}`.
+      expect(source, name).not.toMatch(/>\s*\{\s*(?:[\w.]+\s*\|\|\s*)?(?:[\w.]+\.)?status\s*\}/);
+      const regions = [...source.matchAll(/role="status"[^>]*>\s*\{\s*([\w.]*(?:message|Message)[\w.]*)\s*\}/g)];
+      if (regions.length) found[name] = regions.length;
+    }
+    expect(found).toEqual(allowed);
+  });
+
+  it('HS2-8Z9VHH words every orchestration, session and remote refusal code the server can return', async () => {
+    // Each error enum's `code()` in the server's orchestration model is an answer a person can see.
+    const { ORCHESTRATION_REFUSALS } = await import('./orchestration-refusals');
+    const model = new URL('../../../crates/hotsheet-ticketing/src/orchestration/', import.meta.url);
+    const enums: Record<string, string> = {
+      OrchestrationError: 'mod.rs',
+      TargetOpError: 'mod.rs',
+      DenialReason: 'actions.rs',
+      AdmissionReason: 'capacity.rs',
+      TargetFailure: 'contract.rs',
+      SiteError: 'contract/sites.rs',
+      GateError: 'gates.rs',
+      PolicyDenial: 'policy.rs',
+      ReadinessError: 'readiness.rs',
+      RunError: 'runs.rs',
+      SessionError: 'sessions.rs',
+      ValidationError: 'validation.rs',
+    };
+    const codes = new Set<string>();
+    for (const [name, file] of Object.entries(enums)) {
+      const source = readFileSync(new URL(file, model), 'utf8');
+      const start = source.indexOf(`pub fn code(`, source.indexOf(`impl ${name} {`));
+      const body = source.slice(start, source.indexOf('\n    }\n', start));
+      const found = [...body.matchAll(/"([a-z0-9_]+)"/g)].map((match) => match[1]);
+      expect(found.length, name).toBeGreaterThan(0);
+      for (const code of found) codes.add(code);
+    }
+    // The host's own setup failure (`TOOL_SETUP_FAILED`) is reported as a reason too.
+    const cli = readFileSync(
+      new URL('../../../crates/hotsheet-cli/src/orchestration/sessions.rs', import.meta.url),
+      'utf8',
+    );
+    codes.add(/TOOL_SETUP_FAILED: &str = "([a-z_]+)"/.exec(cli)![1]);
+    expect([...codes].filter((code) => !(code in ORCHESTRATION_REFUSALS))).toEqual([]);
+  });
+
+  it('HS2-2Y535C words every reason the scheduler gives for a step it does not place', async () => {
+    // `Blocker::code()` and the explain answer's own codes reach Why It Is Not Running as `reason`.
+    const { schedulerReasonText } = await import('./orchestration-scheduler');
+    const blocker = readFileSync(
+      new URL('../../../crates/hotsheet-ticketing/src/orchestration/scheduler.rs', import.meta.url),
+      'utf8',
+    );
+    const start = blocker.indexOf('pub fn code(', blocker.indexOf('impl Blocker {'));
+    const codes = [...blocker.slice(start, blocker.indexOf('\n    }\n', start)).matchAll(/"([a-z0-9_]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(codes.length).toBeGreaterThan(0);
+    const explain = readFileSync(
+      new URL('../../../crates/hotsheet-cli/src/orchestration/scheduler.rs', import.meta.url),
+      'utf8',
+    );
+    const own = /answer\.reason = if view\.enabled \{\s*"([a-z_]+)"\s*\} else \{\s*"([a-z_]+)"/.exec(explain);
+    expect(own).not.toBeNull();
+    codes.push(own![1], own![2]);
+    // An unworded code falls back to the code with spaces, which is what this case forbids.
+    expect(codes.filter((code) => schedulerReasonText(code) === code.replaceAll('_', ' '))).toEqual([]);
   });
 
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {

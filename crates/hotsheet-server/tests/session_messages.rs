@@ -1301,6 +1301,148 @@ async fn hs2_db2fq2_two_terminals_mark_one_primary_and_promote_on_close_and_reop
     }
 }
 
+/// Each live terminal's `(id, feedback_primary, feedback_primary_chosen, feedback_eligible)`.
+async fn feedback_roles(router: &axum::Router) -> Vec<(String, bool, bool, bool)> {
+    let (status, list) = send(router, "GET", "/terminals", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let flag = |terminal: &serde_json::Value, name: &str| terminal[name] == true;
+    let mut roles: Vec<_> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|terminal| {
+            (
+                terminal["id"].as_str().unwrap().to_string(),
+                flag(terminal, "feedback_primary"),
+                flag(terminal, "feedback_primary_chosen"),
+                flag(terminal, "feedback_eligible"),
+            )
+        })
+        .collect();
+    roles.sort();
+    roles
+}
+
+/// Whether the change stream after `since` announced a feedback-primary change of `id`.
+async fn feedback_primary_announced(router: &axum::Router, since: u64, id: &str) -> bool {
+    let (_, poll) = send(
+        router,
+        "GET",
+        &format!("/ws/poll?since={since}&timeout_ms=0"),
+        None,
+    )
+    .await;
+    poll["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|event| event["kind"] == "terminal_feedback_primary" && event["id"] == id)
+}
+
+async fn cursor(router: &axum::Router) -> u64 {
+    let (_, start) = send(router, "GET", "/ws/poll?timeout_ms=0", None).await;
+    start["cursor"].as_u64().unwrap()
+}
+
+#[tokio::test]
+async fn hs2_h3s7yq_a_chosen_terminal_holds_the_primary_until_it_closes_or_is_cleared() {
+    // Synthetic fake tools only. A person chooses a project's feedback-primary session; the
+    // choice is per project, announced on the change stream, and ends with its terminal.
+    let (_store, _plugins, router) = fixture();
+    let project = tempfile::tempdir().unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    launch_in(&router, "fake-push", "fp-old", Some(project.path())).await;
+    launch_in(&router, "fake-push", "fp-new", Some(project.path())).await;
+    launch_in(&router, "fake-nopush", "fp-plain", Some(project.path())).await;
+    launch_in(&router, "fake-push", "fp-other", Some(elsewhere.path())).await;
+    let role = |id: &str, primary: bool, chosen: bool, eligible: bool| {
+        (id.to_string(), primary, chosen, eligible)
+    };
+    assert_eq!(
+        feedback_roles(&router).await,
+        [
+            role("fp-new", false, false, true),
+            role("fp-old", true, false, true),
+            role("fp-other", true, false, true),
+            role("fp-plain", false, false, false),
+        ]
+    );
+
+    // Choose the newer terminal: it takes the role in its own project only, with an event.
+    let since = cursor(&router).await;
+    let (status, body) = send(&router, "PUT", "/terminals/fp-new/feedback-primary", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["id"], "fp-new");
+    assert_eq!(body["feedback_primary"], true);
+    assert!(feedback_primary_announced(&router, since, "fp-new").await);
+    assert_eq!(primaries(&router).await, ["fp-new", "fp-other"]);
+    assert!(
+        feedback_roles(&router)
+            .await
+            .contains(&role("fp-new", true, true, true))
+    );
+    // Choosing it again changes nothing and announces nothing.
+    let since = cursor(&router).await;
+    let (status, _) = send(&router, "PUT", "/terminals/fp-new/feedback-primary", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!feedback_primary_announced(&router, since, "fp-new").await);
+
+    // A session that cannot receive pushed messages, or no terminal at all, is refused.
+    let (status, body) = send(&router, "PUT", "/terminals/fp-plain/feedback-primary", None).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], "feedback_primary_ineligible");
+    let (status, _) = send(&router, "PUT", "/terminals/missing/feedback-primary", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(primaries(&router).await, ["fp-new", "fp-other"]);
+
+    // Clear: the oldest session takes the role back; clearing again is a quiet no-op.
+    let since = cursor(&router).await;
+    let (status, _) = send(
+        &router,
+        "DELETE",
+        "/terminals/fp-new/feedback-primary",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(feedback_primary_announced(&router, since, "fp-new").await);
+    assert_eq!(primaries(&router).await, ["fp-old", "fp-other"]);
+    let since = cursor(&router).await;
+    let (status, _) = send(
+        &router,
+        "DELETE",
+        "/terminals/fp-new/feedback-primary",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(!feedback_primary_announced(&router, since, "fp-new").await);
+
+    // Choose again, then close the chosen terminal: the derived rule takes over, and a later
+    // terminal reusing its id does not inherit the choice.
+    send(&router, "PUT", "/terminals/fp-new/feedback-primary", None).await;
+    let since = cursor(&router).await;
+    let (status, _) = send(&router, "DELETE", "/terminals/fp-new", None).await;
+    assert!(status.is_success());
+    assert!(feedback_primary_announced(&router, since, "fp-new").await);
+    assert_eq!(primaries(&router).await, ["fp-old", "fp-other"]);
+    launch_in(&router, "fake-push", "fp-new", Some(project.path())).await;
+    assert_eq!(primaries(&router).await, ["fp-old", "fp-other"]);
+
+    // Two projects keep separate choices.
+    send(&router, "PUT", "/terminals/fp-new/feedback-primary", None).await;
+    send(&router, "PUT", "/terminals/fp-other/feedback-primary", None).await;
+    assert_eq!(primaries(&router).await, ["fp-new", "fp-other"]);
+    assert!(
+        feedback_roles(&router)
+            .await
+            .contains(&role("fp-other", true, true, true))
+    );
+    for id in ["fp-old", "fp-new", "fp-plain", "fp-other"] {
+        let _ = send(&router, "DELETE", &format!("/terminals/{id}"), None).await;
+    }
+}
+
 #[tokio::test]
 async fn hs2_db2fq2_feedback_follows_the_primary_across_close_and_reopen() {
     // Synthetic fake tools and tickets only. Two push-capable terminals in one checkout: a
@@ -1392,6 +1534,25 @@ password_env = "OPENCODE_SERVER_PASSWORD"
     let delivery = human_note("Synthetic answer three").await;
     assert_eq!(delivery["connection_id"], "route-2", "{delivery}");
     assert_eq!((prompts(&second), prompts(&reopened)), (2, 0));
+
+    // HS2-H3S7YQ: a person chooses the newer terminal, so the next note goes there instead.
+    let (status, chosen) = send(&router, "PUT", "/terminals/route-3/feedback-primary", None).await;
+    assert_eq!(status, StatusCode::OK, "{chosen}");
+    let delivery = human_note("Synthetic answer four").await;
+    assert_eq!(delivery["connection_id"], "route-3", "{delivery}");
+    assert_eq!((prompts(&second), prompts(&reopened)), (2, 1));
+    // Clearing the choice returns delivery to the oldest session.
+    let (status, _) = send(
+        &router,
+        "DELETE",
+        "/terminals/route-3/feedback-primary",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let delivery = human_note("Synthetic answer five").await;
+    assert_eq!(delivery["connection_id"], "route-2", "{delivery}");
+    assert_eq!((prompts(&second), prompts(&reopened)), (3, 1));
     for id in ["route-2", "route-3"] {
         let _ = send(&router, "DELETE", &format!("/terminals/{id}"), None).await;
     }

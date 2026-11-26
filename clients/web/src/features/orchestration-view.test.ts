@@ -117,6 +117,21 @@ describe('Propose Plan through the planning session (HS2-HCW7MD seam, HS2-J89JC7
     propose.mockRejectedValueOnce(new ApiHttpError('boom', 500, 'internal'));
     await expect(planner.propose(project)).rejects.toThrow('boom');
     await expect(planner.propose({ ...project, id: 'other' })).rejects.toThrow(/Choose an AI tool/);
+    // HS2-2Z4M6M, HS2-8Z9VHH: a refused admission names the machine's count and limit, and where to change it.
+    propose.mockRejectedValueOnce(
+      new ApiHttpError('raw', 409, 'session_admission_refused', undefined, {
+        reason: 'session_cap_reached',
+        setting: 'max_sessions',
+        limit: 2,
+        observed: 2,
+      }),
+    );
+    await expect(planner.propose(project)).rejects.toThrow(
+      'The machine already runs 2 AI sessions; its limit is 2. Close a session, or raise Sessions per Machine in Settings › Orchestration › Machine Defaults. (session_cap_reached)',
+    );
+    // An older host sends the code alone: still words, never the bare code.
+    propose.mockRejectedValueOnce(new ApiHttpError('raw', 409, 'session_admission_refused'));
+    await expect(planner.propose(project)).rejects.toThrow(/^The machine refused to start another AI session\./);
   });
 
   it('updates the plan beside the running one, cancels it, and explains refusals (HS2-190RDX)', async () => {

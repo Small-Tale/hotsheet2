@@ -145,7 +145,11 @@ the checkout has a git-backed ticket source. Its confirmation states the number 
 that will be permanently removed from the active store and that git history retains the
 files. Confirming closes the dialog immediately, projects an empty Trash, and returns to a
 loading Queue while the request runs; success reconciles that Queue and removes the now-empty
-Trash destination, while failure restores Trash and presents a persistent server error. The
+Trash destination, while failure restores Trash and presents a persistent server error. When
+an external provider keeps some tickets (its connection may not permanently delete them, or
+it could not be reached), the workspace returns to Trash and the toast names up to three
+kept tickets and counts the rest, with each distinct reason. Like every toast, it stays up
+for its reading time and can be dismissed sooner (GH-5, HS2-DBKM89, HS2-PC7VRA). The
 header action keeps its icon and label on one line at every supported size.
 The server
 purges Trash tickets after the project's shared retention period (30 days by default);
@@ -266,6 +270,16 @@ membership, even when two tabs share that store. A different descendant director
 is not a connection owner. Peer tabs from an older binding revision or a changed
 server identity do not participate in ownership. Write operations still require
 the remote host's read-write approval.
+**Remote AI prompts (HS2-HSFVHC).** A remote tab answers its AI prompts exactly as a
+local tab does: a Claude `AskUserQuestion` card (and **Answer in terminal**) posts
+`POST /terminals/{id}/question/answer` through the tab's project API to the hosting
+server, whose hook poll receives the answer; a permission answer posts
+`POST /permissions/{id}` the same way. A host lists every pending permission request
+it holds, named by its own checkout identity (`checkout:<host checkout id>`), which the
+browser cannot match to a composite tab id. The bridge therefore relabels each request
+whose checkout, root, or linked store belongs to an open remote tab on the same reviewed
+binding with that tab's id, so only that tab shows it. A request no open tab owns passes
+through unchanged, as a local request does.
 On a remote-mode host the `/__hotsheet/remotes` routes are host-only: a session
 with the **local** grant manages the registry like the host's own browser, and
 any other session gets 404 and is never offered Remote Project (HS2-HBM3JN). The
@@ -538,6 +552,9 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   side inspector on mobile, a plain tap on a ticket in the list auto-opens the right inspector
   overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tapping
   away returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
+  A hidden inspector (side rail or overlay) opens on its own only to show one ticket's
+  details: selecting a whole column or group selects its tickets and leaves it hidden
+  (HS2-85TR7P).
   Creating a ticket likewise opens the overlay on the new ticket with its details editor focused,
   as on desktop, instead of leaving the editor inert in a closed overlay (HS2-QFW2A7). The editor
   takes focus only after the closing composer has returned focus to its launcher, so a busy main
@@ -606,6 +623,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   Minimized Projects appears immediately before Add Project while any project is hidden.
   Its restore menu lists projects in their original tab order, adds a host or path when
   names collide, and restores a chosen project to its original slot and activates it.
+  Each restore row shows its project tab's own presentation (HS2-R64JXA): the tab name, the
+  cloud for a remote project (a folder for a local one), and the tab's trailing status (Up
+  Next badge with its active-ticket ring, attention, disconnected, notification, and
+  migration indicators), drawn by the same shared helpers as the tab. The menu keeps Kerf's
+  default popup inset (HS2-7DWS3S).
   Hiding the selected tab activates the next visible tab, then the previous one; hiding a
   background tab leaves the workspace alone. When all tabs are hidden, Workspace Grid or
   a neutral workspace still exposes restore and add controls. Bulk close commands act on
@@ -709,8 +731,8 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   `/__hotsheet` project open, API proxy, folder picking, migration, and the terminal and
   change-stream WebSocket bridge. It never loads Vite. Hashed assets are immutable, the document
   revalidates (`Cache-Control: no-cache` on `/`, `/index.html`, and every client route; HS2-XXENE2),
-  and client routes fall back to `index.html`. Development-only surfaces (`/ux-demo`)
-  return 404. Maintainer shortcuts: `server:rebuild`
+  and client routes fall back to `index.html`. `/ux-demo` returns the host's ordinary 404 unless
+  the host was started with the `ux-demo` feature (below). Maintainer shortcuts: `server:rebuild`
   rebuilds the server and CLI, installs `hotsheet-cli` and `hotsheet-mcp` into Cargo's bin
   directory (`cargo install --path`), and stops the running machine server (found via the bridge's
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
@@ -775,6 +797,35 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   (HS2-4G2EA2), and stops the running machine server (refused while the production host owns it), and
   `prod:rebuild` runs it with `--force` before serving the production client on `127.0.0.1`.
 
+- **UX catalog in production (HS2-ZF70Y9).** A production host serves the `/ux-demo`
+  component catalog only when it is started with the `ux-demo` feature. Use
+  `node dist-host/local-host.js --feature ux-demo`, or `npm run prod -- --feature ux-demo`,
+  which npm passes to the host. The `--feature=ux-demo` and `--feature:ux-demo` spellings also
+  work, and the flag can be repeated. `HOTSHEET_FEATURES=ux-demo` is the environment
+  equivalent; it takes a comma- or space-separated list. The desktop app passes its own
+  `--feature` arguments to its bundled host (on macOS,
+  `open -a "Hot Sheet 2" --args --feature ux-demo`). The host also inherits the app's
+  environment when the app executable is started from a shell. An unknown feature
+  name stops the host at startup. The host prints the catalog URL next to its ready line.
+  Development servers (`npm run dev`, `dev:hot`, Playwright) always serve the catalog. The
+  Rust server and `hotsheet-cli` do not serve the web client, so they take no such flag.
+  - The decision belongs to the serving host, not to the built bundle, as with the browser
+    auth mode (HS2-7DBJMS). One `dist/` serves both cases. With the feature, `/ux-demo` (any
+    query string or subpath) returns the application document with
+    `<meta name="hotsheet-features" content="ux-demo">`. The entry (`src/main.tsx`) checks
+    the route and that meta tag (`src/host-features.ts`). It then replaces the app root with
+    the catalog root (`src/ux-demo-entry.ts`) and dynamically imports `src/ux-demo/main.tsx`
+    instead of starting the app. Without the feature, `/ux-demo` is a 404 for every method.
+    The development bridge's catalog shell, which loads source modules, is never served.
+  - The catalog is a separate chunk that loads on demand. `npm run build` fails if a
+    startup script contains a `src/ux-demo/` module, or if no chunk contains the catalog
+    entry (`scripts/production-bundle-policy.mjs`, using the build's source maps). The app
+    page never requests the chunk, even on a host with the feature on.
+  - Remote clients: the feature applies to every browser the host serves, including remote
+    browsers in `HOTSHEET_BROWSER_AUTH_MODE=remote`. The catalog renders deterministic
+    fixtures only. It reads no project, ticket or machine data, and it calls no
+    authenticated API, so it does not require the remote browser session. A host without
+    the feature serves the catalog to nobody.
 - **Project and ticket deep links (HS2-RVSPQ9, HS2-BQ0ECV, HS2-R4209F).** The local client accepts
   `/?project=<registered-checkout-id|alias|absolute-project-path|ticket-store-path>` with an optional
   `&ticket=<slug|qualified-id>`.
@@ -1092,10 +1143,23 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   client also sends `$hotsheet` so that connection re-reads and works the prioritized
   queue. Ticket creation remains the authoritative action and succeeds when no connection
   is available or the optional signal fails. Optional icon/color metadata controls the sidebar presentation.
+  Each AI command also has an optional **Action** in its editor (HS2-17Y2EC), with the
+  same options and semantics as a schedule's action: **Create Ticket Only**,
+  **Auto-Start in a New AI Session**, or **Reuse or Start an AI Session**. Unset (the
+  editor's **Create Ticket and Notify an Idle AI Session** default, which every existing
+  command keeps) is the click described above. With an explicit action, a click asks the
+  host to run it through `POST /checkouts/{reference}/commands/{id}/ai-run`: the host
+  creates the same command ticket and, for a session action, claims that exact ticket
+  under the selected session worker and hands it off exactly as a scheduled occurrence
+  does, using the command's provider/model/effort selection. A failed handoff leaves the
+  ticket queued and unclaimed with a note, and the response names the reason. The run
+  joins the command's run history. The sidebar button's tooltip begins with the effective
+  click action. Headless callers set the field with `hotsheet-cli settings set commands`
+  and run it through the same HTTP route.
   Manual and scheduled AI command tickets carry the stable `hs2-command:<command-id>`
   provenance tag (HS2-G5J2E7). Scheduling is checkout-local and supports one-time,
-  daily, weekly, monthly, yearly, and selected-date recurrences with bounds and
-  date exceptions. Every eligible occurrence creates the same highest-priority
+  every-N-minutes, hourly, daily, weekly, monthly, yearly, and selected-date
+  recurrences with bounds and date exceptions. Every eligible occurrence creates the same highest-priority
   Up Next task before any AI session is asked to work it; an incomplete ticket
   from the same command skips that occurrence. A one-time occurrence missed while
   the host is offline creates its ticket on return. A missing daylight-saving
@@ -1103,12 +1167,43 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   its first occurrence. An occurrence's local date is its durable identity, so
   a restart or delivery retry cannot create a second ticket for it. The local
   schedule API lists the next three instants and recent outcomes; a draft can
-  request the same preview without saving. For **Create Ticket Only**, the host leaves
+  request the same preview without saving.
+  **Sub-day repeats (HS2-29V4ZG).** `minutely` repeats every 5 to 1440 minutes and
+  `hourly` every 1 to 24 hours. Occurrences lie on the local wall-clock grid that
+  starts at the start date and time (`local_time`, shown as **First Run**) and
+  continues across midnight. The end date is inclusive. `count` counts grid
+  occurrences from the first one. An include date adds that date's grid slots,
+  even before the start; an exclude date drops every slot on its date. The
+  five-minute floor bounds a runaway schedule to 288 evaluations a day, matches
+  common cron-service floors, and leaves time for an AI session to work; the
+  dialog states it under **Every**. A sub-day occurrence's identity is its local
+  date and time: history entries add `occurrence_time`, the record adds
+  `last_processed_time`, and its ticket tag is
+  `hs2-occurrence:<command-id>:<YYYY-MM-DD>t<HHmm>`. Date-only kinds keep their
+  original fields, tags, and stored shape. A repeated daylight-saving slot runs
+  once, at its first instant. A slot in a skipped hour runs at the first valid
+  minute after the gap, unless the next slot falls at or before that instant
+  and covers it. The overlap policy is the existing one: an open ticket from the
+  same command, including a ticket an AI session is still working, records
+  `skipped_open_ticket`. Consecutive skips against the same open ticket record
+  one history entry. Slots missed while the host was offline coalesce into the
+  latest due slot, so the host runs once on return. Saving a sub-day schedule
+  starts after the current local minute and never backfills earlier slots. A
+  record written through `hotsheet-cli settings set command_schedules` without a
+  cursor starts the same way. The scheduler wakes at the next slot's instant.
+  The HTTP API and `settings set` share one validator. For **Create Ticket Only**, the host leaves
   that ticket queued. For **Auto-Start in a New AI Session**, it creates a distinct
   client-owned session for the occurrence. For **Reuse or Start an AI Session**, it
   uses an idle session in the same checkout and ticket source when its provider,
   model, and effort are compatible; otherwise it starts a new one (HS2-MB3BQE).
   The configured command AI selection takes precedence over the project default.
+  A schedule's action is an optional override (HS2-17Y2EC). **Use Command Default**,
+  the default for a new schedule, stores no action and follows the command's current
+  action; a command without one runs as **Create Ticket Only**, since schedules never
+  sent the idle-session signal. A schedule saved before HS2-17Y2EC always stored an
+  action, so it loads as that explicit override and behaves exactly as before. The host
+  resolves the action per occurrence and before each delivery retry; the schedule view
+  reports it as `effective_action`.
   Before either auto-start handoff, the host claims the exact recorded ticket under
   the selected session worker identity. A claim held by another worker leaves the
   ticket pending for retry. A failed handoff or failed provider turn is recorded in the
@@ -1289,9 +1384,12 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   so component selectors cannot drift back into the global sheet (HS2-JH0112).
   Root loading follows the active operation through a neutral Kerf `StateBanner` and
   labeled `LoadingSpinner`; application failures use a dismissible danger `StateBanner`.
-  Short confirmations use Web Awesome Toast/ToastItem, with Hot Sheet owning the 2.5-second
-  lifetime and replacement/dismissal state so an older hide cannot clear a newer message
-  (HS2-KEHG7H). The root uses the public asynchronous `Toast.create()` factory so a
+  Short confirmations use Web Awesome Toast/ToastItem, with Hot Sheet owning the lifetime
+  and replacement/dismissal state so an older hide cannot clear a newer message
+  (HS2-KEHG7H). Every toast stays up for its message's reading time: 300 ms a word, never
+  less than 2.5 seconds or more than 20 seconds. The rule is central, so no call opts in; a
+  caller may still pass an explicit lifetime, or a persistent one that stays until dismissed
+  or replaced (HS2-PC7VRA). The root uses the public asynchronous `Toast.create()` factory so a
   first bottom-end toast enters at its placement rather than crossing the workspace;
   pending factory results are guarded against replacement, expiration and disposal (HS2-QHH1ZP).
   While a toast shows over the media gallery, the stack's bottom edge follows the measured top of
@@ -1387,8 +1485,9 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   adds rebindable chords to toggle the left sidebar (⌘/Ctrl+B), right sidebar/inspector
   (⌘/Ctrl+⌥+⇧+B), and bottom terminal drawer (⌘/Ctrl+J); switch the workspace to the list
   (⌘/Ctrl+⇧+L), column (⌘/Ctrl+⇧+B), notifications (⌘/Ctrl+⇧+M), and settings (⌘/Ctrl+⌥+S)
-  views; minimize the open ticket reader or restore the minimized one (⌘/Ctrl+⌥+⇧+M, since ⌘M is
-  the OS window's minimize and ⌘⇧M is the notifications view; HS2-Q8WF64); and toggle the
+  views; minimize the open ticket reader or new-ticket composer, or restore the minimized one
+  (⌘/Ctrl+⌥+⇧+M, since ⌘M is the OS window's minimize and ⌘⇧M is the notifications view;
+  HS2-Q8WF64, HS2-3JR0ZH); and toggle the
   all-project terminal grid (⌘/Ctrl+⇧+G) or stats dashboard (⌘/Ctrl+⇧+D) against the last
   selected project. A **New ticket** chord (a bare `c`, in the
   spirit of GitHub/Linear "create") opens the composer, and **Navigation & tabs** adds
@@ -1528,8 +1627,15 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   reopening the saved composer while retaining its draft.
   Remembered **remote** projects (the checkouts this machine's registry lists under
   `hotsheet-cli remote selected-projects`) get their tabs at once, before any remote open and
-  alongside the local restore, named `<binding label> · <last confirmed checkout name>` from the
-  registry alone and ranked after the local tabs in the registry's saved order. Every host opens
+  alongside the local restore, named exactly as the opened tab will be: `<host> · <last confirmed
+checkout name>`, where the host is the machine name the peer last reported on this device (a
+  per-device `hotsheet.remote-host-names.v1` cache by binding, written whenever a remote tab is
+  open), else the reviewed origin's host, never the pairing label (HS2-GN0WKS; the cache stays in
+  browser storage because the registry's strict schema would refuse a new field in older builds),
+  and ranked after the local tabs in the registry's saved order, unless the user
+  dragged the strip into a mixed order: a drag also saves the combined local-and-remote order
+  (`hotsheet.project-tab-order.v1`, local roots and remote project ids), and startup ranks both
+  kinds of tab by it, with tabs it does not name after it in the old order (HS2-NRBWGF). Every host opens
   in parallel; each tab becomes the real project in the same position as soon as its own open
   succeeds, so a slow or unreachable host only keeps its own tab loading (HS2-EJ5K09). A tab whose
   first open is still running is Kerf's named `pending` tab and shows "Opening <name>…". A tab
@@ -1547,13 +1653,36 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   its tab and loaded tickets stay; once its change stream has been down for 3 s the tab shows
   the disconnected indicator and the workspace a "Reconnecting to <host>" banner, both cleared
   when the stream (which retries on its own bounded backoff) is live again (HS2-WNK73S).
+  Selecting a project tab, and the window's `online` event for every project, wake a stream
+  that is backing off: it retries at once and its backoff starts over, through the main-thread
+  stream and the change-stream worker alike (a `wake` worker message). A live stream ignores a
+  wake, so a wake never adds a request or timer of its own (HS2-ZTAJ1R).
   A project that remains unavailable stays in the tab bar with a red title and error icon;
-  selecting it presents the exact failure, known stale-server context, its remembered root,
-  likely recovery steps, and an in-place retry action. Failed tabs are not draggable. They are
+  selecting it explains the cause in plain language and offers Retry and Close Tab (HS2-ZKAVZZ).
+  Known causes each get their own title, explanation, and primary action: the folder was moved or
+  deleted (Project Folder Not Found; Close Tab primary), the path is now a file (Project Path Is Not
+  a Folder; Close Tab primary), the folder cannot be read (No Permission to Open Project), the local
+  server or bridge is unreachable or a registered server process is not responding (Server
+  Unavailable), and the project's ticket repository link names a repository that is gone (Ticket
+  Repository Not Found); any other error reads Project Unavailable with Retry primary. The exact
+  error, known stale-server process, and remembered root stay available behind a collapsed Technical
+  Details disclosure for diagnosis. The shell never drops a region for a
+  selected tab that is not ready (unavailable, a remote project loading or reconnecting, or a
+  project still opening): the project sidebar, inspector, workspace toolbar, New Ticket action, and
+  terminal drawer keep the user's visibility and sizes, the rails and drawer show an empty state,
+  and every project control (view switcher, sort, selection actions, search, More, New Ticket,
+  Show Terminal Drawer) stays in place, disabled with the reason as its tooltip; rail toggles and
+  an open drawer's Hide action stay live (HS2-H0QGK7). Failed tabs are not draggable. They are
   closable through the tab's close control or context menu. The unavailable tab's menu offers only
   Close Tab because it has no live project to minimize (HS2-TGYKHQ); closing confirms the choice and
   forgets its remembered root without requiring the project to open (HS2-TGYKHQ). Until then,
-  every tab-persistence path retains failed roots for the next launch. Restore failures must never
+  every tab-persistence path retains failed roots for the next launch. A remembered root that an
+  explicit `hotsheet-cli checkout relocate` moved reopens the checkout at its current root: the
+  bridge asks the server's registry (`POST /projects/follow-relocation`) when the remembered folder
+  is gone, and the client then remembers the new root, after a startup restore and after Retry
+  (HS2-86ES0B). Nothing searches the disk, so a folder moved without telling the registry stays
+  unavailable with Retry and Close; run `hotsheet-cli checkout relocate <id> <new root>` (or open
+  the new folder and close the stale tab) to recover. Restore failures must never
   leave stale compatibility or connection diagnostics over a different project that reopened successfully.
   A checkout with existing sources opens directly regardless of its default source;
   project setup refresh runs for source-free checkouts too (HS2-TSXSH6). Source-less project setup uses a
@@ -1707,8 +1836,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   allowed because connection identity is independent from provider kind. Clicking an
   existing connection row opens that same dialog with its editable non-secret values.
   After creating a standalone git ticket store, the dialog asks for a clone URL and can
-  add `origin` plus perform the first push without exposing shell commands. A failed first
-  push rolls back that newly added origin so the same form remains retryable. Inline help
+  add `origin` plus perform the first push without exposing shell commands. The entered
+  URL is saved as `origin` before the push, and a failed push keeps it: the error says it
+  was saved, retrying reuses it, and a corrected URL replaces an origin Hot Sheet saved
+  (recorded as `hotsheet.backupOrigin` in the store's Git config). A different origin the
+  user configured is never replaced (HS2-8SEWHJ). Inline help
   links to [host-specific remote setup guidance](ticket-repository-remotes.md), including
   the distinction between Git hosts and issue-only providers such as Jira.
   Remote failures keep Git's diagnostic text and add specific recovery guidance for an
@@ -2069,7 +2201,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   project cancels its pending refresh; switching tabs still performs an authoritative
   activation refresh. The project's parked session is restored after that refresh, but a
   ticket the user selects during the refresh keeps its selection (HS2-VDJJEY), as an opened
-  composer stays open (HS2-T1F2VT). This bounds full ticket and corrupt-ticket reads while keeping the
+  composer stays open (HS2-T1F2VT), a chosen section tab stays chosen (HS2-KBM5QK), and a ticket
+  view chosen meanwhile is not switched back to the parked view (HS2-123CV9). Each of these
+  holds across every restore of one activation: a project the startup reveals while its own
+  open is still wiring it is activated twice and restores twice, and a ticket selected between
+  the two restores stays selected (HS2-CN0CS7). This bounds full ticket and corrupt-ticket reads while keeping the
   latest state current (HS2-B5SJMJ). Startup stays active-only (see the remembered-project startup rules
   above): a project becomes warm on its first visit, or when a live-refreshed background
   snapshot fits spare warm capacity; that first visit is an ordinary cold load. Activating a
@@ -2217,6 +2353,43 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   dismissal and preserve the visible reader and its drafts. A title edit belongs to the
   surface that started it: while the reader edits the selected ticket's title, the sidebar
   inspector behind it keeps its static heading, and the reverse (HS2-2M5BBN).
+
+  **Minimized new-ticket composer (HS2-3JR0ZH).** The composer's dialog header has the same
+  Minimize control (Lucide `minus`, a Kerf `Button` in the `wa-dialog` `header-actions` slot) beside
+  Close, and the minimize chord minimizes it as it does a reader. Minimizing only hides the
+  composer: its title, details, category, Up Next, priority, Add to Backlog, and staged attachments
+  stay in the composer draft and the project session, so nothing is discarded and nothing is
+  created. It joins the same Minimized Tickets control as one item per project tab, labeled
+  _New ticket: <title>_ (or _New ticket: Untitled_) with the launcher's Lucide `plus` icon and an
+  _Unsaved ticket_ draft `Badge` when it holds a title, details, or staged files. Restoring it, or
+  opening the composer any other way (New ticket…, a dropped file, a follow-up), reopens it with
+  the draft intact and takes it off the list; Restore All restores it with the readers, the most
+  recently minimized on top; Close All discards its draft and staged files and asks first under
+  the same rule as readers. The record (`hotsheet.minimized-composers.v1`) is only a marker with its
+  title; the draft returns from the project session after a reload. Closing the project tab drops
+  it. The model is `minimized-composer.ts` and the workflow `features/minimized-composer.ts`.
+
+  **Minimized dialog kinds (HS2-3JR0ZH).** Readers and the composer each implement
+  `MinimizedDialogKind` (`minimized-dialogs.ts`): a kind id; its items for one project tab (id,
+  label, short label, Lucide icon, draft indicator, and minimize time); `restore(ids)`;
+  `discard(ids)`, which closes them after the caller confirmed; and `dispose(projectIds)` for
+  closed tabs. Each kind owns its records and persistence (`loadMinimizedRecords` /
+  `saveMinimizedRecords` with its own versioned key). `features/minimized-dialogs.ts` merges the
+  kinds' items per tab oldest first, routes Restore by item id, restores all kinds so the newest
+  item ends on top, and asks one Close All question across kinds. To nominate another dialog:
+  1. Keep its draft somewhere that survives hiding (signals plus the project session, or its own
+     record) and make sure hiding it is not treated as a dismissal that resets the draft.
+  2. Add a pure model module with its record, draft check, label, and versioned storage key, using
+     `loadMinimizedRecords` / `saveMinimizedRecords`, with sibling tests.
+  3. Add a `features/minimized-<dialog>.ts` controller exposing `minimize()` and a
+     `MinimizedDialogKind` (ids unique across kinds, such as `<kind>:<id>`); reuse
+     `reader-minimize-motion.ts`, `focusMinimizedControl`, and `nextFrames` for motion and focus.
+  4. Render a Minimize `Button` with Lucide `minus` beside the dialog's Close, wired through the
+     dialog's interaction module, and accept the minimize chord in `interactions/shell-and-global.ts`.
+  5. Add the kind to `createMinimizedDialogs({ kinds })` in `app/runtime.tsx`, and remove the item
+     whenever the dialog opens by another path.
+  6. Cover it with unit tests, an E2E through the real app (minimize, restore, reload, Close All),
+     and a `minimized-tickets-control` UX demo state.
 
   The MessageSquare action is available before Drive and opens the production
   `AIConversation` resizable bottom sheet after preparing the default tool without sending a workflow turn.
@@ -2686,7 +2859,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   unlinked (HS2-5T33YV). Activating one searches exact slugs across every open project:
   one match opens an exact reader layer above the current inspector or reader,
   no match reports a transient toast, and multiple matches open a compact source chooser
-  rather than the advanced-search surface. The chooser separates its major regions by 16 px,
+  rather than the advanced-search surface. Copies of one ticket open in several tabs (for
+  example a local and a remote clone of one project) are one match, not a choice: matches
+  with the same slug and the same Hot Sheet ticket ULID (`native_id`, minted once and
+  carried by sync, while each clone's store hash differs) open the best copy directly. The
+  best copy is the most recently updated; among equally recent copies, a local tab's;
+  otherwise the first. Provider ids that are not ULIDs, such as issue numbers, never merge,
+  and different tickets that share a slug still get the chooser (HS2-MBFGRV). The chooser separates its major regions by 16 px,
   keeps adjacent result rows connected at zero gap, uses 8 px row insets with a 72 px minimum
   row height, and gives connected ticket/source metadata 4 px of air (HS2-4Y6SM9). The explicit `@<project-id>/<ticket-slug>`
   form, for example `@product-docs/HS2-BD09B6`, limits resolution to one open project and
@@ -2991,6 +3170,15 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   standard new-ticket form with identical layout; only its title ("Create follow-up to
   <slug>") and the recorded association differ, with no repeated source line in the body
   (HS2-Y4Y7V6).
+  Clicking a follow-up or duplicate-target reference opens the target ticket. The
+  reference's project id is read on the source ticket's own server: in a remote project
+  tab it names that host's checkout and opens in that host's tab, never a tab of another
+  server with the same checkout id (HS2-4SPTA4). When that checkout is not open, the shared
+  confirmation asks "Open <project> from <host>?", naming the project as the host lists it.
+  Open Project opens it as a new tab of the same paired host, with no Remote Project dialog,
+  and then opens the ticket there; Cancel opens nothing. A checkout the host does not list
+  toasts that the project is not available on that host, and a refused open toasts the
+  host's reason (HS2-4JTETR).
   If creation returns a target with `follow_up_link_error`, the client retries
   only the idempotent source-link request and retains the created ticket even
   if repair remains unavailable (HS2-2Z11A5).
@@ -3168,7 +3356,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   keeps its reference for the next reopen. The existing attachment warning reports both.
   Its expanded first row keeps the title beside the
   category and an immediately trailing star toggle; the star creates directly in Up Next
-  (and therefore overrides a Backlog-view default to active Not Started). A full-width
+  (and therefore active Not Started). A second row holds a **Priority** select (Default
+  unless changed) and an **Add to Backlog** checkbox, unchecked by default and checked when a
+  fresh draft opens from the Backlog view; checked, the ticket is created in Backlog instead of
+  Not Started. Up Next and Add to Backlog are exclusive, so choosing one clears the other. Both
+  choices persist with the draft and reset after creation (HS2-V72HCC). A full-width
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
   On touch screens (a coarse primary pointer), which draw no resize grip, it and every other
   app textarea (details editor, notes, note replies, blocked reason, conflict merges, command
@@ -3705,7 +3897,26 @@ from the active workspace's list and dashboard, without closing the sessions. Ea
 visibility group persists its own type choices; older saved groups begin with all three
 visible. Hide Listed / Show Listed apply only to rows of the enabled types in the active
 group. No enabled types yields an explicit empty result and disabled bulk actions. Web
-Browsers has no control until browser tiles ship under HS2-7VS6SF. Terminal kind comes from the creation request:
+Browsers has no control until browser tiles ship under HS2-7VS6SF. AI Chats follows the
+`ai-chat` feature area (HS2-4TKASN): while the feature is off the dialog offers only
+Terminals and AI Shells, and the two share the row. Under the feature-area convention
+(HS2-3GJZGG: no entry points, data kept, open chats stay), the segment remains while the
+listed scope still has an open chat, so that chat stays controllable. An unavailable type is
+never pressed or applied to the grid; when a workspace's stored choice held only AI Chats,
+Terminals stands in until the person changes the selection, and the stored chat choice
+returns with the segment. Each project heading carries a show-all or hide-all action
+(HS2-HC67SP) that acts on that project's listed rows only. If any listed row is hidden, it
+shows them all; if all are visible, it hides them all. It is Kerf `ListHeader`'s trailing
+action: one keyboard stop named "Show All <project> <types>" or "Hide All …" (the noun is the
+single listed type, else Items). Like each row, its eye or eye-off icon reports state.
+Hide Listed and Show Listed stay in the footer. Making the project name itself the control
+waits on Kerf KF-J289N4 (HS2-DZH5GH). A **Show minimized** checkbox in the dialog footer
+(HS2-W1XEH7) is off by default and remembered per workspace. Off, items of minimized
+project tabs are left out: they are not listed, not shown in that workspace's grid, and not
+counted by the eye badge. On, they are listed and follow their own visibility. Hide Listed,
+Show Listed and the heading toggles act only on listed items. The choice is stored as
+`showMinimized` on the workspace's group in `localStorage hotsheet.terminals.visibility-groups`
+(absent means off, so older saved groups read as off), and survives reload. Terminal kind comes from the creation request:
 `connect` marks AI, ordinary/default-shell launches remain shell, and the kind persists
 through PTY reattachment and broker-backed server restart. Legacy sessions without kind
 remain shell; titles, command output, and OSC8 hyperlinks never determine kind (HS2-SE3RVM).
@@ -3744,7 +3955,12 @@ the leading edge of the dashboard toolbar.
 The dashboard keeps a resizable right ticket rail open by default and allows it to be hidden
 and restored from the dashboard toolbar. That rail reuses the selected project's list and
 notification views, compact workspace actions, content-sized project selector, and quick-ticket
-launcher; board and settings modes are deliberately absent. Its view heading ends with the same
+launcher; board and settings modes are deliberately absent. The project selector is a Kerf
+`PopupMenu` whose rows are checked choices (HS2-2609BW): it lists the open, non-minimized projects
+directly and, only while any project is minimized, ends with a **Minimized Projects** item whose
+submenu lists them with the Restore Project row presentation (tab name, folder or cloud icon, and
+trailing status). Choosing a minimized project there switches the rail to it without restoring its
+tab, as the selector always did; the Restore Project menu remains the way to restore a tab. Its view heading ends with the same
 quiet separator used at the top of ticket collections, clearly dividing the white header from the
 lowered scrolling ticket surface. The ticket collection keeps its intrinsic height inside that
 surface so the rail remains the vertical scroll owner and every row stays reachable even when the
@@ -3924,6 +4140,8 @@ the magnified variant receives the remaining stage width; the preview demonstrat
 80×24 grid while the magnified terminal scales the same grid into that available stage. Its initial terminal focus is one-shot: later
 xterm paints, including cursor blinking, never steal focus from catalog controls or close an
 open Web Awesome popup.
+If a render moves or re-presents the same live magnified viewport, it keeps a focused xterm
+input focused afterward. A deliberate move to another control still wins (HS2-PSV7BG).
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.
@@ -4184,12 +4402,24 @@ explain that MCP connectivity is separate, and point to the read-only
   Sheet: its permission prompts come to the app"). This applies to any terminal, including a
   plain shell where someone ran `codex` or `claude` by hand.
 - **Primary session (HS2-YHQM67):** the project's primary AI session for proactive feedback
-  delivery (`feedback_primary` from the server, HS2-DB2FQ2) shows Lucide `plug-zap` instead of
-  `plug`, and its label adds "Primary session: feedback notifications for this project are sent
-  here." Every other connected session keeps the plain `plug`, so a secondary session is never
-  drawn as disconnected. Closing the primary moves the icon to the promoted session.
+  delivery (`feedback_primary` from the server, HS2-DB2FQ2) shows two icons: its connection plug
+  and a Lucide `heart` beside it (HS2-1WFGX1), on the drawer tab and the workspace tile alike, and
+  its label adds "Primary session: feedback notifications for this project are sent here." Every
+  other connected session shows only the plug, so a secondary session is never drawn as
+  disconnected, and a session whose hooks never reported shows no heart. Closing the primary moves
+  the heart to the promoted session.
+- **Choosing the primary (HS2-H3S7YQ):** right-clicking an AI terminal's drawer tab offers
+  **Receive Feedback Notifications** (Lucide `heart`, "Instead of the oldest AI session.") after
+  Rename; the drawer grid's and workspace tile's More actions menus offer the same command. Choosing
+  it moves the heart to that session on every connected client (the server's
+  `terminal_feedback_primary` event triggers a terminal refetch; no polling). The chosen session's
+  menus offer **Stop Receiving Feedback Notifications** (Lucide `heart-off`), which returns the role
+  to the oldest session. The command is disabled, with its reason as the tooltip, for a shell
+  terminal, an ended session, a session that cannot receive pushed messages, and the current
+  derived primary. The choice lasts while the chosen terminal lives and is not kept across a server
+  restart; see [05](05-ai-tool-plugins.md) "Human ticket feedback delivery".
 - **Hooks without MCP:** a session whose hooks route permission prompts but whose `hotsheet-mcp`
-  is not connected keeps the connected plug (or `plug-zap` when primary) in the warning tone, with
+  is not connected keeps the connected plug (and the heart when primary) in the warning tone, with
   the "MCP not connected" label (HS2-YHQM67 replaces the earlier `unplug` for this state).
 - **Not connected:** an `ai` terminal that is still running without a report after a 15-second
   grace period shows a warning `unplug` icon. Its label explains that the session's permission
@@ -5842,6 +6072,7 @@ until it can be delivered. See
   - REST: `GET`/`PUT /feature-settings`. A PUT merges, and `null` clears a choice to its default. `POST /feature-settings/changed` announces a headless write.
   - CLI: `hotsheet-cli settings set features.<id> on|off|default` sets or clears a choice. Repeating it changes nothing. `settings get features.<id>` prints the effective `on` or `off`.
   - Every change pushes a cursored `feature_settings` change event. Clients re-read on that event and on each stream resync, never on a timer.
+  - The desktop reads and saves this computer's choices (and Standby's) through an open local project's server, even while a remote tab is selected; a remote tab answers only when no local project is open. Remote tabs share the bridge's origin, so the client re-reads when that source changes, not when the URL origin does. Before this, opening on a remote tab showed the other machine's choices until a switch saved this computer's (HS2-N3QBVG).
 - **New defaults reach everyone.** A choice that was never set takes the registered default. On upgrade, every install gets the new defaults with no migration and no notice.
 - **Turning an area off hides it.** Its buttons, view-switcher choices, menu items, shortcuts and settings controls go away.
   - A shortcut, a dashboard request or a restored view, tab or category for an area that is off is ignored. The client falls back to the project, the List view, the Info tab, the Ticket sources category or the Queue.

@@ -4,6 +4,7 @@
  * network or the DOM.
  */
 import type {
+  HostedOrchestrationProjectChoice,
   OrchestrationBinding,
   OrchestrationDestination,
   OrchestrationManifest,
@@ -34,8 +35,17 @@ export function destinationOf(projectId: string): AddDestination {
     : { kind: 'local', checkout_id: projectId };
 }
 
-/** The open tab that shows a bound project, so its row can show that tab or its sessions. */
-export function tabProjectIdOf(destination: OrchestrationDestination): string {
+/**
+ * The open tab that shows a bound project, so its row can show that tab or its sessions. Bindings are
+ * the serving server's: when that is another server (the settings tab `servingProjectId` is a remote
+ * tab), a checkout local to it opens here as a remote tab of the same registration, and a destination
+ * remote to it names a registration of that server, not of this client, so no tab here is known
+ * (HS2-7SHGQH).
+ */
+export function tabProjectIdOf(destination: OrchestrationDestination, servingProjectId?: string): string | undefined {
+  const serving = servingProjectId ? parseRemoteProjectId(servingProjectId) : undefined;
+  if (serving)
+    return destination.kind === 'local' ? remoteProjectId(serving.bindingId, destination.checkout_id) : undefined;
   return destination.kind === 'local'
     ? destination.checkout_id
     : remoteProjectId(destination.registration_id, destination.checkout_id);
@@ -98,7 +108,10 @@ export interface OrchestrationProjectRow {
   targetId: string;
   label: string;
   location: 'local' | 'remote' | 'unbound';
-  /** "Local on This Computer", "Remote on Build host", or "Not bound on this computer". */
+  /**
+   * "Local on This Computer", "Remote on Build host", or "Not bound on this computer"; for a project served by
+   * another server "On build.example" or "Not bound on build.example" (HS2-DXAB4K).
+   */
   where: string;
   /** HS2-D4G81Q: the machine part of `where` alone: "Remote on Build host", or empty when unknown. */
   place: string;
@@ -114,12 +127,17 @@ export interface OrchestrationProjectRow {
 /**
  * The orchestrated projects: active declarations with this machine's binding, by label. HS2-SHH7WW: a
  * project with several sites lists its own row first and then each other site, labelled with its project.
+ * HS2-DXAB4K: `servedBy` names the server an orchestration project open from another server is served by
+ * (the tab's remote host). Its bindings are that server's, so a checkout local to it is "On <server>",
+ * never "Local on This Computer".
  */
 export function projectRows(
   manifest: OrchestrationManifest | undefined,
   bindings: Readonly<Record<string, OrchestrationBinding | undefined>>,
   remoteLabels: Readonly<Record<string, string>>,
   sites?: OrchestrationSitesView,
+  servedBy?: string,
+  servingProjectId?: string,
 ): OrchestrationProjectRow[] {
   // HS2-D4G81Q: a site's OS shows on the rows of a project with several sites.
   const capabilities = new Map(
@@ -139,18 +157,29 @@ export function projectRows(
       machine = capabilities.get(target.target_id),
       destination = binding?.destination ?? undefined,
       place = destination
-        ? `${destination.kind === 'local' ? 'Local' : 'Remote'} on ${machineOf(destination, remoteLabels)}`
+        ? servedBy !== undefined && destination.kind === 'local'
+          ? `On ${servedBy}`
+          : `${destination.kind === 'local' ? 'Local' : 'Remote'} on ${machineOf(destination, remoteLabels)}`
         : binding
-          ? 'Not bound on this computer'
+          ? `Not bound on ${servedBy ?? 'this computer'}`
           : '';
     return {
       targetId: target.target_id,
       label: target.label,
-      location: destination ? destination.kind : binding ? 'unbound' : 'local',
+      // HS2-DXAB4K: a checkout of the serving server is remote from here, as its + Add Project choice shows.
+      location: destination
+        ? servedBy !== undefined
+          ? 'remote'
+          : destination.kind
+        : binding
+          ? 'unbound'
+          : servedBy !== undefined
+            ? 'remote'
+            : 'local',
       where: [prefix, place].filter(Boolean).join(' · '),
       place,
       connection: connectionStatus(binding),
-      tabProjectId: destination ? tabProjectIdOf(destination) : undefined,
+      tabProjectId: destination ? tabProjectIdOf(destination, servingProjectId) : undefined,
       siteOf: projectOf(target),
       system: machine ? systemLabel(machine) : undefined,
     };
@@ -282,6 +311,27 @@ export function siteChoices(
       };
     })
     .filter((choice) => showAll || choice.sameStore === true);
+}
+
+/**
+ * HS2-89YNGN: a project open from another server adds that server's open checkouts. As Add a Site and the duplicate
+ * check read them: each checkout as an add choice on that server, and the store each reaches (`null` when unread).
+ */
+export function hostedSiteSources(
+  hosted: readonly HostedOrchestrationProjectChoice[],
+  server: string,
+): { choices: AddChoice[]; stores: Record<string, string | null> } {
+  return {
+    choices: hosted.map((choice) => ({
+      projectId: choice.checkout_id,
+      name: choice.name,
+      location: 'remote' as const,
+      machine: server,
+      destination: { kind: 'local' as const, checkout_id: choice.checkout_id },
+      added: choice.added,
+    })),
+    stores: Object.fromEntries(hosted.map((choice) => [choice.checkout_id, choice.checkout_authority ?? null])),
+  };
 }
 
 /** HS2-E9VVQF: every project row's Add a Site choices, by the project's target id. */

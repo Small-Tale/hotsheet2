@@ -218,9 +218,11 @@ pub struct StepRequirements {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub arch: Vec<String>,
     /// AI tools that must be installed and enabled for the checkout, by plugin id.
+    /// HS2-ZH9C6W: `codex>=0.40` also needs at least that version.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<String>,
-    /// Toolchains the machine must report installed.
+    /// Toolchains the machine must report installed. HS2-ZH9C6W: `node>=20` also needs
+    /// at least that version.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub toolchains: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -265,10 +267,11 @@ impl StepRequirements {
                 ))
             })
             .collect::<Result<_, _>>()?;
-        for tool in &self.tools {
-            super::contract::valid_identifier(tool)?;
-        }
-        validate_toolchains(&self.toolchains)?;
+        // HS2-ZH9C6W: each entry is a name, or a name and a minimum version.
+        self.tools = canonical_minimums(&self.tools, |tool| {
+            super::contract::valid_identifier(tool).map(|_| ())
+        })?;
+        self.toolchains = canonical_minimums(&self.toolchains, valid_toolchain)?;
         if self
             .min_memory_gb
             .is_some_and(|gb| gb == 0 || gb > MAX_MIN_MEMORY_GB)
@@ -283,10 +286,8 @@ impl StepRequirements {
                 ));
             }
         }
-        for list in [&mut self.arch, &mut self.tools, &mut self.toolchains] {
-            list.sort();
-            list.dedup();
-        }
+        self.arch.sort();
+        self.arch.dedup();
         self.os.sort();
         self.os.dedup();
         Ok(self)
@@ -417,33 +418,174 @@ pub fn requirement_misses(
             }
         }
     }
-    for tool in &requirements.tools {
-        let name = format!("tool:{tool}");
+    for entry in &requirements.tools {
+        let name = format!("tool:{entry}");
+        let (tool, minimum) = split_minimum(entry);
         match &snapshot.tools {
             None => miss(&mut misses, name, Unknown),
             Some(tools) => {
                 let usable = tools
                     .iter()
-                    .any(|known| &known.tool == tool && known.installed && known.configured);
+                    .any(|known| known.tool == tool && known.installed && known.configured);
                 if !usable {
                     miss(&mut misses, name, Unmet);
+                } else if let Some(minimum) = minimum {
+                    // HS2-ZH9C6W: the version the machine reported for that tool.
+                    let reported = capabilities
+                        .and_then(|caps| caps.ai_tools.as_ref())
+                        .and_then(|all| all.iter().find(|known| known.tool == tool))
+                        .and_then(|known| known.version.as_deref());
+                    if let Some(state) = version_miss(reported, minimum) {
+                        miss(&mut misses, name, state);
+                    }
                 }
             }
         }
     }
-    for toolchain in &requirements.toolchains {
-        let name = format!("toolchain:{toolchain}");
+    for entry in &requirements.toolchains {
+        let name = format!("toolchain:{entry}");
+        let (toolchain, minimum) = split_minimum(entry);
         let reported = capabilities
             .and_then(|caps| caps.toolchains.as_ref())
-            .and_then(|all| all.iter().find(|known| &known.name == toolchain));
+            .and_then(|all| all.iter().find(|known| known.name == toolchain));
         match reported {
             // Not declared on that machine: its owner did not say whether it is there.
             None => miss(&mut misses, name, Unknown),
             Some(known) if !known.installed => miss(&mut misses, name, Unmet),
-            Some(_) => {}
+            Some(known) => {
+                if let Some(state) =
+                    minimum.and_then(|minimum| version_miss(known.version.as_deref(), minimum))
+                {
+                    miss(&mut misses, name, state);
+                }
+            }
         }
     }
     misses
+}
+
+/// HS2-ZH9C6W: the separator of a requirement's minimum version, as in `node>=20`.
+pub const MINIMUM_VERSION_SEPARATOR: &str = ">=";
+/// HS2-ZH9C6W: a minimum version has at most this many dotted parts.
+pub const MAX_VERSION_PARTS: usize = 4;
+
+/// HS2-ZH9C6W: a tool or toolchain requirement's name and, when it names one, its
+/// minimum version.
+pub fn split_minimum(entry: &str) -> (&str, Option<&str>) {
+    match entry.split_once(MINIMUM_VERSION_SEPARATOR) {
+        Some((name, minimum)) => (name, Some(minimum)),
+        None => (entry, None),
+    }
+}
+
+/// HS2-ZH9C6W: a version's dotted numeric parts: the first run of digits and dots in
+/// `text`, so `v20.11.1`, `codex-cli 0.41.0` and `1.79.0 (stable)` read as numbers.
+/// `None` when it holds no number.
+pub fn version_parts(text: &str) -> Option<Vec<u64>> {
+    let start = text.find(|c: char| c.is_ascii_digit())?;
+    let run: &str = text[start..]
+        .split(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .next()
+        .unwrap_or_default();
+    let parts: Vec<u64> = run
+        .split('.')
+        .take_while(|part| !part.is_empty())
+        .map(str::parse)
+        .collect::<Result<_, _>>()
+        .ok()?;
+    (!parts.is_empty()).then_some(parts)
+}
+
+/// HS2-ZH9C6W: whether `found` is at least `minimum`, part by part; a missing part is 0.
+pub fn version_at_least(found: &[u64], minimum: &[u64]) -> bool {
+    let parts = found.len().max(minimum.len());
+    let at = |list: &[u64], index: usize| list.get(index).copied().unwrap_or(0);
+    for index in 0..parts {
+        match at(found, index).cmp(&at(minimum, index)) {
+            std::cmp::Ordering::Greater => return true,
+            std::cmp::Ordering::Less => return false,
+            std::cmp::Ordering::Equal => {}
+        }
+    }
+    true
+}
+
+/// HS2-ZH9C6W: how a reported version stands against a minimum: `None` when it meets
+/// it, `unmet` when it is lower, `unknown` when the machine did not report one or it
+/// holds no number.
+fn version_miss(reported: Option<&str>, minimum: &str) -> Option<RequirementState> {
+    let Some(found) = reported.and_then(version_parts) else {
+        return Some(RequirementState::Unknown);
+    };
+    let minimum = version_parts(minimum).unwrap_or_default();
+    (!version_at_least(&found, &minimum)).then_some(RequirementState::Unmet)
+}
+
+/// HS2-ZH9C6W: a minimum version in canonical form: 1 to [`MAX_VERSION_PARTS`] dotted
+/// whole numbers, without leading zeros or trailing `.0` parts (`20.0` is `20`).
+fn canonical_version(text: &str) -> Result<String, OrchestrationError> {
+    let invalid = || {
+        OrchestrationError::Invalid(
+            "a minimum version is 1 to 4 dotted whole numbers, as in node>=20 or codex>=0.40",
+        )
+    };
+    let parts = text.trim().split('.').collect::<Vec<_>>();
+    if parts.is_empty()
+        || parts.len() > MAX_VERSION_PARTS
+        || parts.iter().any(|part| {
+            part.is_empty() || part.len() > 9 || !part.bytes().all(|b| b.is_ascii_digit())
+        })
+    {
+        return Err(invalid());
+    }
+    let mut numbers: Vec<u64> = parts
+        .iter()
+        .map(|part| part.parse().map_err(|_| invalid()))
+        .collect::<Result<_, _>>()?;
+    while numbers.len() > 1 && numbers.last() == Some(&0) {
+        numbers.pop();
+    }
+    Ok(numbers
+        .iter()
+        .map(u64::to_string)
+        .collect::<Vec<_>>()
+        .join("."))
+}
+
+/// HS2-ZH9C6W: a list of `name` or `name>=version` entries in canonical form: each
+/// name checked, each version canonical, one entry per name keeping the highest
+/// minimum (a bare name is the lowest), sorted by name.
+fn canonical_minimums(
+    entries: &[String],
+    valid: impl Fn(&str) -> Result<(), OrchestrationError>,
+) -> Result<Vec<String>, OrchestrationError> {
+    let mut by_name: std::collections::BTreeMap<String, Option<String>> =
+        std::collections::BTreeMap::new();
+    for entry in entries {
+        let (name, minimum) = split_minimum(entry.trim());
+        let name = name.trim();
+        valid(name)?;
+        let minimum = minimum.map(canonical_version).transpose()?;
+        let kept = by_name.entry(name.to_owned()).or_default();
+        let higher = match (&*kept, &minimum) {
+            (_, None) => false,
+            (None, Some(_)) => true,
+            (Some(known), Some(new)) => !version_at_least(
+                &version_parts(known).unwrap_or_default(),
+                &version_parts(new).unwrap_or_default(),
+            ),
+        };
+        if higher {
+            *kept = minimum;
+        }
+    }
+    Ok(by_name
+        .into_iter()
+        .map(|(name, minimum)| match minimum {
+            Some(minimum) => format!("{name}{MINIMUM_VERSION_SEPARATOR}{minimum}"),
+            None => name,
+        })
+        .collect())
 }
 
 #[cfg(test)]

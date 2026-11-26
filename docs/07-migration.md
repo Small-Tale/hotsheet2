@@ -295,7 +295,17 @@ may not have open at once):
    source project in Git-local `hotsheet-hs1-import-completed.json`. A new migration
    attempt invalidates earlier import and backup proof before exporting. Older receipts
    without this proof require a repeat import before cleanup can become available.
-4. The first remote connection/push is another project-owned background job. Git
+4. The first remote connection/push is another project-owned background job. Before
+   its readiness check it runs `hotsheet-migrate -C <store> --prepare-backup`, which
+   commits Hot Sheet's own store `.gitignore` when it differs from `HEAD`. A store an
+   older build left with an uncommitted ignore line therefore backs up without manual
+   Git work. Hosting a new import adds no such line, because the store's managed ignore
+   rules already list its machine-local runtime directories (§2, HS2-HSHT2G). AI-tool
+   probes never run in the store, so an HS1 channel server that a tool such as `agy`
+   starts from its user-scope MCP configuration writes nothing there (HS2-BNDRYP,
+   [05](05-ai-tool-plugins.md)). Any other
+   uncommitted file still blocks backup, and the error names up to five of them. A
+   stat-only rewrite with identical bytes is not uncommitted work. Git
    reports object counts and, when available, bytes sent and transfer rate. These are
    phase-local measurements, without an invented overall or byte-total percentage. Only a successful
    push followed by verification that the remote branch contains the intended import
@@ -305,8 +315,11 @@ may not have open at once):
    network; origin existence alone never enables cleanup. The destructive DELETE
    endpoint independently rechecks the proof, clean state, origin URL, and current
    remote ancestry before removing any source data. An unavailable, stale, or replaced
-   backup refuses deletion. A matching existing origin can be retried; failed setup
-   removes only the origin added by that attempt, provided its URL has not changed.
+   backup refuses deletion. The entered URL is saved as `origin` before the readiness
+   check and push, and a failure keeps it, with an error that says so (HS2-8SEWHJ).
+   Retry reuses it. Change backup replaces only an origin Hot Sheet saved, recorded as
+   `hotsheet.backupOrigin` in the store's Git config; a different origin the user
+   configured is refused.
    Cleanup requires confirmation and refuses to start while a registered HS1 channel,
    project lock, or saved-list app instance is still live, because that process can
    recreate its database after removal. Project-tagged channel entries owned by another
@@ -379,8 +392,10 @@ the checkpointed child is alive. Retry resumes the existing idempotent import an
 attachment checkpoints. Terminal success is persisted before watchers see it. A
 persistence error becomes a failure, never a premature success announcement.
 Source registration, checkout linking, tool setup, and backup validation belong to
-the captured server job, so closing a tab cannot skip finalization. Tool-setup warnings
-remain available in Details and expose Retry; completed import stays separate from
+the captured server job, so closing a tab cannot skip finalization. The job banner's
+Details button opens a modal dialog (the destination, the current phase, the error, and any
+warnings) instead of expanding text below the banner; its close button and Escape close it
+(HS2-EEBM4W). Tool-setup warnings remain available in Details and expose Retry; completed import stays separate from
 verified backup and source cleanup. A failed backup offers Retry for its captured remote
 or Change backup to correct a URL before a new attempt. A successful historical backup
 whose proof no longer matches the current repository offers the same recovery actions
@@ -437,6 +452,17 @@ For headless backup, push the imported ticket store normally, then run
 revision against the current origin branch and writes the same backup proof consumed
 by the client and cleanup endpoint, without opening HS1 or rerunning export. A changed
 origin, old remote revision, dirty store, or unfinished import fails verification.
+Like the background job, verification first commits Hot Sheet's own store `.gitignore`
+(HS2-HSHT2G). `hotsheet-migrate -C <ticket-store> --prepare-backup` runs only that step
+and the readiness check, naming any other uncommitted file, so it is safe to run before
+a manual push.
+
+The headless path also does the whole backup step: `hotsheet-migrate -C <ticket-store>
+--backup-remote <url>` saves the URL as `origin` under the same rules as the app, commits
+Hot Sheet's ignore rules, checks readiness, pushes with `-u origin HEAD`, and records the
+verified backup proof (HS2-8SEWHJ). Given with the `.hotsheet` directory, it runs after
+the import. A failed push keeps the saved origin and says so, and rerunning the command
+is idempotent.
 
 ## 7.4 What is and isn't migrated
 

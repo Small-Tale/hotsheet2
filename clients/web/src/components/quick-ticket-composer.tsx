@@ -3,6 +3,7 @@ import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './quick-ticket-composer.css';
 
 import { Button } from '@kerfjs/ui/button';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -11,13 +12,15 @@ import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
-import { Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
+import { Minus, Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
 
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { NEW_TICKET_COMPOSER_DROP_KEY, NEW_TICKET_LAUNCHER_DROP_KEY } from '../ticket-drop-target';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
+import { type TicketPriority } from './priority-presentation';
 import { TicketCategorySelect } from './ticket-category-select';
+import { TicketPrioritySelect } from './ticket-priority-select';
 
 /** The warning foreground of the composer's attachment notices. */
 const WARNING_TEXT = foregroundColorVar('--wa-color-warning-on-quiet');
@@ -28,6 +31,10 @@ export interface QuickTicketComposerProps {
   details?: string;
   category?: string;
   upNext?: boolean;
+  /** The new ticket's priority (HS2-V72HCC). */
+  priority?: TicketPriority;
+  /** Create the ticket in Backlog instead of Not Started (HS2-V72HCC); Up Next clears it. */
+  backlog?: boolean;
   providerName?: string;
   /** The project default, which may differ from the selected or only writable source. */
   defaultSourceName?: string;
@@ -86,6 +93,31 @@ export function showQuickTicketComposer(root: ParentNode): boolean {
   return true;
 }
 
+/** The open composer's visible panel, which minimize and restore motion fly from and to (HS2-3JR0ZH). */
+export function quickTicketComposerPanel(root: ParentNode): Element | null {
+  const dialog = root.querySelector('[data-component="quick-ticket-composer"]');
+  return dialog?.shadowRoot?.querySelector('dialog') ?? null;
+}
+
+/**
+ * Settles once the composer has finished closing, so a restore right after a minimize does not ask
+ * Web Awesome to show a dialog that is still running its hide (HS2-3JR0ZH).
+ */
+export function quickTicketComposerHidden(root: ParentNode): Promise<void> {
+  const host = root.querySelector('[data-component="quick-ticket-composer"]'),
+    closing = host?.shadowRoot?.querySelector('dialog')?.open === true && !(host as { open?: boolean }).open;
+  if (!host || !closing) return Promise.resolve();
+  return new Promise((resolve) => {
+    host.addEventListener(
+      'wa-after-hide',
+      () => {
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
 export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
   const input = root.querySelector<HTMLElement>('[name="new-ticket-title"]');
   if (!input) return false;
@@ -107,28 +139,43 @@ export function QuickTicketLauncher({
   label = 'New ticket…',
   size = 'default',
   dropTarget = false,
-}: { attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact'; dropTarget?: boolean } = {}) {
-  // The app-owned drop shell carries drag feedback without styling Kerf's Button root.
+  disabledReason,
+}: {
+  attachmentsEnabled?: boolean;
+  label?: string;
+  size?: 'default' | 'compact';
+  dropTarget?: boolean;
+  /** Disable the launcher and its drop target while the selected project is not ready (HS2-H0QGK7). */
+  disabledReason?: string;
+} = {}) {
+  // The app-owned drop shell carries drag feedback without styling Kerf's Button root. A disabled
+  // launcher keeps its place and size but carries neither the action nor the drop targets.
   return (
     <span
       class="quick-ticket-composer__launcher"
       data-size={size}
       data-component="quick-ticket-composer-launcher"
-      {...SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.attrs}
-      {...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs}
-      {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
-      data-ticket-drop-key={NEW_TICKET_LAUNCHER_DROP_KEY}
-      data-dragging-ticket={dropTarget ? 'true' : undefined}
+      {...(disabledReason
+        ? {}
+        : {
+            ...SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.attrs,
+            ...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs,
+            ...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs,
+            'data-ticket-drop-key': NEW_TICKET_LAUNCHER_DROP_KEY,
+          })}
+      data-dragging-ticket={dropTarget && !disabledReason ? 'true' : undefined}
     >
       <Button
         tone="brand"
         shape="pill"
         size={size}
+        disabled={Boolean(disabledReason)}
         icon={<LucideIcon size="s" icon={Plus} name="plus" />}
         title={
-          attachmentsEnabled
+          disabledReason ??
+          (attachmentsEnabled
             ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here'
-            : 'Create a new ticket or drop tickets to duplicate'
+            : 'Create a new ticket or drop tickets to duplicate')
         }
       >
         {label}
@@ -144,6 +191,8 @@ export function QuickTicketComposer({
   details = '',
   category = 'task',
   upNext = false,
+  priority = 'default',
+  backlog = false,
   providerName = 'Hot Sheet',
   defaultSourceName = providerName,
   sourceIsDefault = true,
@@ -178,6 +227,19 @@ export function QuickTicketComposer({
       open={expanded || undefined}
       data-controlled-open={String(expanded)}
     >
+      {/* Minimize keeps the draft and lists it in the Minimized Tickets control, with the reader's
+          Minimize icon beside the dialog's Close (HS2-3JR0ZH). */}
+      {expanded && (
+        <Button
+          slot="header-actions"
+          emphasis="plain"
+          action={SEARCH_AND_COMPOSER_ACTIONS.minimizeTicketComposer.value}
+          disabled={submitting}
+          ariaLabel="Minimize New Ticket"
+          title="Minimize"
+          icon={<LucideIcon icon={Minus} name="minus" />}
+        />
+      )}
       {expanded && (
         <form
           class="quick-ticket-composer"
@@ -220,6 +282,14 @@ export function QuickTicketComposer({
             >
               <LucideIcon size="s" icon={Star} name="star" appearance={upNext ? 'solid' : 'outline'} />
             </button>
+          </div>
+          <div class="quick-ticket-composer__placement">
+            <div class="quick-ticket-composer__priority">
+              <TicketPrioritySelect name="new-ticket-priority" label="Priority" value={priority} />
+            </div>
+            <div class="quick-ticket-composer__backlog">
+              <Checkbox name="new-ticket-backlog" label="Add to Backlog" checked={backlog} />
+            </div>
           </div>
           <label class="quick-ticket-composer__details">
             <span>Details</span>

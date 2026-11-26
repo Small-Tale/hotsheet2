@@ -4,9 +4,11 @@ import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 import { Button } from '@kerfjs/ui/button';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
+import { ListInsetText } from '@kerfjs/ui/list-inset-text';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
@@ -200,12 +202,10 @@ export function Hs1RegistrationRepairBanner() {
 
 export function Hs1JobBanner({
   job,
-  details = false,
   connectionError,
   backupVerified = true,
 }: {
   job: MigrationJob;
-  details?: boolean;
   connectionError?: string;
   backupVerified?: boolean;
 }) {
@@ -223,7 +223,8 @@ export function Hs1JobBanner({
           : 'Hot Sheet 1 import complete';
   return (
     <div data-component="hs1-job-banner" data-status={job.status} data-attempt={job.attempt}>
-      <List gap="2xs" controlInsets="tb">
+      {/* Inset like every application banner (ShellBanner): 8px around and between (HS2-GXJTSE). */}
+      <List gap="2xs" controlInsets="t">
         <StateBanner
           title={title}
           detail={
@@ -243,11 +244,7 @@ export function Hs1JobBanner({
           icon={<LucideIcon icon={ArchiveRestore} name="archive-restore" />}
           action={
             <>
-              <button
-                type="button"
-                {...PROJECT_LIFECYCLE_ACTIONS.migrationJobDetails.attrs}
-                aria-expanded={String(details)}
-              >
+              <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.migrationJobDetails.attrs} aria-haspopup="dialog">
                 Details
               </button>
               {(failed || (!running && job.warnings.length > 0)) && (
@@ -282,30 +279,64 @@ export function Hs1JobBanner({
           ) : (
             <></>
           )}
-          {details && (
+        </List>
+      </List>
+    </div>
+  );
+}
+
+/**
+ * A Hot Sheet 1 import or backup job's details, shown from its banner's Details button in a modal
+ * dialog rather than expanded below the banner (HS2-EEBM4W): the destination, what progress means,
+ * the error, and any warnings. Closing it (its close button or Escape) clears the app state.
+ */
+export function Hs1JobDetailsDialog({ job }: { job?: MigrationJob }) {
+  if (!job) return null;
+  const subject = job.kind === 'import' ? 'Import' : 'Backup';
+  return (
+    <DialogSurface
+      label={`${subject} Details`}
+      describedBy="hs1-job-details-summary"
+      rootAttributes={{
+        'data-key': 'hs1-job-details-dialog',
+        ...PROJECT_LIFECYCLE_TARGETS.hs1JobDetailsDialog.attrs,
+        'data-controlled-open': 'true',
+      }}
+    >
+      <List gap="m">
+        <ListInsetText sides="rl">
+          <Text variant="p" tone="quiet" flush id="hs1-job-details-summary">
+            Progress describes the current phase. Completion includes verification and project setup.
+          </Text>
+        </ListInsetText>
+        <ValueTable label={`${subject} details`}>
+          <ValueTableRow
+            label={job.kind === 'import' ? 'Import destination' : 'Backup repository'}
+            value={<SourcePath path={job.store} />}
+          />
+          <ValueTableRow label="Phase" value={migrationPhaseLabel(job.progress)} />
+        </ValueTable>
+        {job.error || job.warnings.length > 0 ? (
+          <ListInsetText sides="rl">
             <List gap="xs">
-              <Text size="compact" wrap="anywhere" flush>
-                {job.kind === 'import' ? 'Import destination' : 'Backup repository'}: <code>{job.store}</code>
-              </Text>
-              <Text size="compact" flush>
-                Progress describes the current phase. Completion includes verification and project setup.
-              </Text>
               {job.error ? (
-                <Text size="compact" wrap="anywhere" flush>
+                <Text variant="p" wrap="anywhere" flush>
                   {job.error}
                 </Text>
               ) : (
                 <></>
               )}
               {job.warnings.map((warning) => (
-                <Text size="compact" wrap="anywhere" flush>
+                <Text variant="p" wrap="anywhere" flush>
                   {warning}
                 </Text>
               ))}
             </List>
-          )}
-        </List>
+          </ListInsetText>
+        ) : (
+          <></>
+        )}
       </List>
-    </div>
+    </DialogSurface>
   );
 }

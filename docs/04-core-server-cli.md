@@ -777,7 +777,7 @@ local server resolves its host through one helper, `external_launch::discover_lo
 - Host-wide commands (`remote sessions status|approve|reject|update|revoke|revoke-all`,
   `lifecycle status|restart`) use the machine host first, then a host started on the
   selected store with `hotsheet-cli serve`.
-- Project commands (`live-state`, `commands`, `terminal message`, `ci report`,
+- Project commands (`live-state`, `commands`, `terminal message`, `terminal feedback-primary`, `ci report`,
   `notifications`, `ticket-flow`, `activity`, and the sync kick after a write) use a host anchored on the selected store
   first, then the machine host. `ticket-flow` and `activity` name the selected store in a
   store-scoped route, so the machine host reads the project rather than its bootstrap store
@@ -1120,7 +1120,7 @@ hotsheet provider-new github-main "Bug title"
 hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-delete-note github-main 42 <note-id> # requires note_delete capability
 hotsheet provider-assign github-main 42 --to octocat # replace assignees where supported
-hotsheet provider-restore <git-connection> <ticket-id> # git-backed Trash only
+hotsheet provider-restore <connection> <ticket-id> # git-backed, GitHub Issues, GitLab, or Jira Trash
 hotsheet provider-report-not-working <git-connection> <ticket-id> --note-file report.md --evidence proof.png --expected-token <token>
 hotsheet provider-close github-main 42 --reason completed
 hotsheet provider-disable github-main           # temporary: no reads/writes, tickets hidden
@@ -1263,7 +1263,13 @@ unreviewed Git descriptors carry `identity_review_required`, and project opening
 does not host or project tickets from those links.
 The CLI's `checkout resolve`, `checkout register`, and `checkout source-color`
 inspect configuration without opening ticket data, so they remain usable for
-recovery. Project launch retains an unverified registered source for review and
+recovery. `checkout relocate <reference> <new root>` moves a checkout and keeps its
+id and its former root; afterwards `checkout resolve <old root>`, `POST /projects/open`
+with the old root, and `POST /projects/follow-relocation` (`{root}` to `{checkout}` or
+`{checkout: null}`, host-only) all reach the checkout at its new root while the old
+folder is gone (HS2-86ES0B). An existing folder, a root registered again, ambiguous
+evidence, or a checkout whose current root is missing is never followed, and nothing
+searches the disk for a folder moved without `checkout relocate`. Project launch retains an unverified registered source for review and
 does not silently host a same-path replacement (HS2-TSXSH6).
 For this case, `PATCH /checkouts/{reference}/sources/{connection_id}/relink`
 accepts `review_unverified_recovery: true` only after the caller explicitly reviews the
@@ -1372,8 +1378,8 @@ note. `provider-delete-note` checks the connection's `note_delete` capability an
 fails explicitly when unsupported. Neither deletion command changes other notes.
 `provider-assign` accepts repeated `--to` values, `--clear`, and repeated
 `--review email:kind` requests. It checks assignment and review capabilities before a
-provider write. `provider-restore` restores only a git-backed provider's Trash ticket;
-external trackers do not have Hot Sheet Trash. `provider-report-not-working` requires a
+provider write. `provider-restore` restores a Trash ticket from a git-backed provider, from
+GitHub Issues (GH-5), from GitLab (HS2-DBKM89), or from Jira (HS2-73Z1R8); other trackers refuse by capability. `provider-report-not-working` requires a
 note (`--note` or `--note-file`) or one or more `--evidence` files, checks the atomic
 report capability, reads all evidence before mutation, and accepts an optional opaque
 `--expected-token` to reject a stale report. These commands print the resulting native
@@ -2123,6 +2129,7 @@ The checked routes either start a host program or name an arbitrary host path:
 | `POST /checkouts/{ref}/repository/files/action`                                                      | open or reveal a repository file                     |
 | `POST /checkouts/{ref}/tickets/{id}/attachments/{aid}/action`, `…/attachments/by-name/{name}/action` | open, reveal, or report the attachment's host path   |
 | `POST /projects/open`, `POST /checkouts`                                                             | open or register a project at any host path          |
+| `POST /projects/follow-relocation`                                                                   | report where a relocated checkout's host path moved  |
 | `POST /stores`                                                                                       | host a ticket store at any host path                 |
 | `PUT /checkouts/{ref}/sources/{id}` with `provider: "git"`                                           | host a Git source at its locator path                |
 | `PATCH /checkouts/{ref}/sources/{id}/relink`                                                         | re-point a Git source to another host path           |
@@ -2290,12 +2297,25 @@ file the same way. It owns one delimited block:
 /.hotsheet2/*
 !/.hotsheet2/settings.json
 !/.hotsheet2/groups/
+!/.hotsheet2/orchestration.json
+!/.hotsheet2/orchestration-plan.json
+!/.hotsheet2/orchestration-policy.json
+!/.hotsheet2/validation-profiles.json
+!/.hotsheet2/resource-claims.json
 # <<< Hot Sheet 2 <<<
 ```
 
-- Everything under `.hotsheet2/` is machine-local except the shared settings file and the
-  group registry ([02](02-ticket-storage.md) §2.7.1). A new machine-local file
-  needs no new ignore line.
+- Everything under `.hotsheet2/` is machine-local except the paths in
+  `project_gitignore::SHARED_PROJECT_PATHS`: the shared settings file, the group registry
+  ([02](02-ticket-storage.md) §2.7.1), and the shared orchestration files: the target
+  manifest, the shared plan, the policy, the validation profiles, and the project
+  resource-claim registry (HS2-GY8C2D). A new machine-local file needs no new ignore line.
+  A new shared file must be added to that list. A policy test fails when an orchestration
+  `Storage::shared_named` writer or a shared-path constant names a file the list misses,
+  and checks with `git check-ignore` that every listed path is committable.
+- A project whose block, or equivalent hand-written rules, predates a newly listed path
+  gets the current block from the next writer (setup, settings, link, or init). Until then
+  the probes report each hidden shared file as a conflict.
 - Lines outside the block are never changed. The only exception is the exact
   single-file lines earlier releases appended (`.hotsheet2/settings.local.json`,
   `.hotsheet2/store`); the block replaces them.

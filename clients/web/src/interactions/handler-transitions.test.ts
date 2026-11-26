@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FullTicket, MediaAnnotation } from '../api';
 import { wireHotSheetInteractions } from '../app/wire-interactions';
+import { type ProjectRestoreFailure, projectRestoreTabId } from '../components/project-restore-error';
+import type { AppTabMenuState } from '../components/project-tab-context-menu';
 import type { TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
@@ -441,6 +443,71 @@ it('closes a project from Project Settings through the same entry point as its t
   current = undefined;
   fromSettings(new Event('click'), target({}));
   expect(requested).toEqual([['b'], ['b'], ['a'], ['a']]);
+});
+
+it('right-click Close Tab closes an unavailable project among opened ones (HS2-125F0X)', () => {
+  vi.stubGlobal(
+    'MutationObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal('customElements', { whenDefined: () => Promise.resolve() });
+  vi.stubGlobal('window', { innerWidth: 1280, innerHeight: 844 });
+  Object.assign(document.body, { querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} });
+  const requested: string[][] = [],
+    menu = signal<AppTabMenuState | undefined>(undefined),
+    failures = signal<ProjectRestoreFailure[]>([
+      { root: '/work/missing', name: 'missing', error: 'ENOENT' },
+      { root: '/work/denied', name: 'denied', error: 'EACCES' },
+    ]),
+    missing = projectRestoreTabId('/work/missing'),
+    denied = projectRestoreTabId('/work/denied');
+  wireTerminalInteractions({
+    terminalSearchModel: createSearchFieldModel(),
+    terminalSearchOpen: signal(false),
+    terminalSearchResults: signal(undefined),
+    terminalDrawerSelected: signal('grid'),
+    terminalGroups: signal([]),
+    appTabContextMenu: menu,
+    projects: signal([{ id: 'opened' }]),
+    minimizedProjectIds: signal([]),
+    projectRestoreFailures: failures,
+    requestProjectClose: (ids: readonly string[]) => {
+      requested.push([...ids]);
+    },
+    project: () => ({ id: 'opened' }) as Project,
+  } as unknown as TerminalInteractionsDependencies);
+  const open = handler('contextmenu', '[data-tab-kind]'),
+    act = handler('click', '[data-action="project-tab-context-action"], [data-action="terminal-tab-context-action"]'),
+    rightClick = (projectId: string, restoreFailure: boolean) => {
+      const event = { type: 'contextmenu', clientX: 40, clientY: 20, altKey: false, preventDefault: vi.fn() };
+      open(
+        event as unknown as Event,
+        target({ tabKind: 'project', projectId, restoreFailure: String(restoreFailure) }),
+      );
+      expect(event.preventDefault).toHaveBeenCalled();
+    };
+  // An unavailable tab after an opened one: the menu opens for it, flagged as a failed restore.
+  rightClick(denied, true);
+  expect(menu.value).toMatchObject({ kind: 'project', id: denied, restoreFailure: true });
+  act(new Event('click'), target({ tabAction: 'close' }));
+  expect(requested).toEqual([[denied]]);
+  expect(menu.value).toBeUndefined();
+  // Repeated on the other unavailable tab, then on an opened tab, which keeps its full menu.
+  rightClick(missing, true);
+  act(new Event('click'), target({ tabAction: 'close' }));
+  rightClick('opened', false);
+  expect(menu.value).toMatchObject({ id: 'opened', restoreFailure: false });
+  act(new Event('click'), target({ tabAction: 'close-all' }));
+  expect(requested).toEqual([[denied], [missing], ['opened', missing, denied]]);
+  // Once every failure is gone, a stale failure id resolves to nothing but the menu still closes.
+  failures.value = [];
+  rightClick(denied, true);
+  act(new Event('click'), target({ tabAction: 'close' }));
+  expect(requested.at(-1)).toEqual([]);
+  expect(menu.value).toBeUndefined();
 });
 
 it('keeps LAN visibility identities stable on rename and distinct after delete/refill (HS2-76ZR5P)', () => {

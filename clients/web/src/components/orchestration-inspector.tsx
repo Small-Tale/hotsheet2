@@ -23,7 +23,12 @@ import {
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { BuiltAheadView } from '../orchestration-built-ahead';
 import { reconciliationRows, type RunReconciliation } from '../orchestration-run-checks';
-import type { SchedulerExplanation } from '../orchestration-scheduler';
+import {
+  chosenSite,
+  integratorRows,
+  type RoleStandingView,
+  type SchedulerExplanation,
+} from '../orchestration-scheduler';
 import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import {
   cardTime,
@@ -31,6 +36,8 @@ import {
   clockTime,
   itemSlug,
   machineLabel,
+  runAttention,
+  runStateText,
   stateBadge,
   toolLabel,
 } from '../orchestration-timeline-board';
@@ -54,6 +61,8 @@ export interface OrchestrationInspectorDetails {
   builtAhead?: BuiltAheadView;
   /** HS2-77SRHC: `scheduler explain` for a ready card. */
   explanation?: SchedulerExplanation;
+  /** HS2-65AD6J: for a card with a run, its project's integrator in a fresh pass (`scheduler explain`). */
+  integrator?: RoleStandingView;
   /** HS2-9XJEZC: the card's validation steps with their latest evidence. */
   validations?: readonly ValidationStepView[];
   /** HS2-9XJEZC: Run Validation requests that wait on a person's answer. */
@@ -166,24 +175,29 @@ function RunControls({ item, busy }: { item: TimelineItem; busy: boolean }) {
   );
 }
 
+const placeText = (site: { label: string; location: TimelineItem['location'] }) =>
+  `${site.label} (${site.location === 'unbound' ? 'not bound here' : site.location})`;
+
 function WhereItRuns({
   item,
   timeline,
   clock,
+  explanation,
 }: {
   item: TimelineItem;
   timeline: OrchestrationTimeline;
   clock: ClockFormat;
+  explanation?: SchedulerExplanation;
 }) {
   const working = item.state === 'running' || item.state === 'provisional';
+  // HS2-PR984R: once the scheduler chose another site of the project, the chosen site and its machine lead.
+  const site = chosenSite(item, timeline, explanation);
   return (
     <OrchestrationInspectorSection label="Where It Runs">
       <ValueTable label="Where it runs" density="compact" stackBelow="narrow">
-        <ValueTableRow
-          label="Project"
-          value={`${item.project_label} (${item.location === 'unbound' ? 'not bound here' : item.location})`}
-        />
-        <ValueTableRow label="Machine" value={machineLabel(item)} />
+        <ValueTableRow label="Project" value={placeText(site)} />
+        {site.own ? <ValueTableRow label="Step's site" value={placeText(site.own)} /> : undefined}
+        <ValueTableRow label="Machine" value={machineLabel(site)} />
         <ValueTableRow label="Tool" value={toolLabel(item.tool) ?? 'Chosen when the work is placed'} />
         <ValueTableRow
           label="Session"
@@ -221,11 +235,13 @@ function RunSection({
   clock: ClockFormat;
   details?: OrchestrationInspectorDetails;
 }) {
-  const run = item.run!;
+  const run = item.run!,
+    attention = item.state === 'running' || item.state === 'provisional' ? runAttention(run) : undefined;
   return (
     <OrchestrationInspectorSection label="Run">
       <ValueTable label="Run" density="compact" stackBelow="narrow">
-        <ValueTableRow label="State" value={`${sentence(run.state)}${run.paused ? ', paused' : ''}`} />
+        <ValueTableRow label="State" value={runStateText(run)} />
+        {attention?.next ? <ValueTableRow label="Next" value={attention.next} /> : undefined}
         <ValueTableRow
           label="Ticket"
           value={`${itemSlug(item)}: ${item.status ? words(item.status) : 'not read yet'}`}
@@ -255,6 +271,29 @@ function RunSection({
           : undefined}
       </ValueTable>
       {(item.state === 'running' || item.state === 'provisional') && <RunControls item={item} busy={busy} />}
+    </OrchestrationInspectorSection>
+  );
+}
+
+/** HS2-65AD6J: whether the project's integrator runs for the card's work once it is handed off, and why. */
+function IntegrationSection({
+  item,
+  timeline,
+  standing,
+  clock,
+}: {
+  item: TimelineItem;
+  timeline: OrchestrationTimeline;
+  standing: RoleStandingView;
+  clock: ClockFormat;
+}) {
+  return (
+    <OrchestrationInspectorSection label="Integration">
+      <ValueTable label="Integration" density="compact" stackBelow="narrow">
+        {integratorRows(standing, clock, timeline, item.site_id ?? item.target.target_id).map((row) => (
+          <ValueTableRow label={row.label} value={row.value} />
+        ))}
+      </ValueTable>
     </OrchestrationInspectorSection>
   );
 }
@@ -400,7 +439,8 @@ function Evidence({
 /**
  * HS2-J89JC7: the inspector of one Orchestration view card: its goal, where it runs, its run with the
  * person's controls, what it waits on with a link to the request or the goal ticket's decision, and
- * the run's gates, validation, and events.
+ * the run's gates, validation, and events. HS2-65AD6J: a card with a run says whether its project's
+ * integrator runs for it, and why.
  */
 export function OrchestrationInspector({
   item,
@@ -437,13 +477,16 @@ export function OrchestrationInspector({
           ) : undefined}
         </Row>
       </List>
-      <WhereItRuns item={item} timeline={timeline} clock={clock} />
+      <WhereItRuns item={item} timeline={timeline} clock={clock} explanation={details?.explanation} />
       {stateDetail(item, timeline, clock, details)}
       <OrchestrationPlanSection item={item} timeline={timeline} />
       {item.state === 'provisional' || details?.builtAhead ? (
         <OrchestrationBuiltAheadSection work={details?.builtAhead} timeline={timeline} busy={busy} />
       ) : undefined}
       {item.run && <RunSection item={item} busy={busy} clock={clock} details={details} />}
+      {item.run && details?.integrator ? (
+        <IntegrationSection item={item} timeline={timeline} standing={details.integrator} clock={clock} />
+      ) : undefined}
       {item.run && details && <Evidence details={details} clock={clock} busy={busy} />}
     </List>
   );

@@ -130,12 +130,13 @@ use routes::checkouts::{
     add_checkout_source, checkout_repository_commits, checkout_repository_compaction,
     checkout_repository_file_action, checkout_repository_files, checkout_repository_size,
     checkout_repository_status, checkout_repository_sync, configure_checkout_repository_remote,
-    create_corrupt_ticket_repair, execute_checkout_repository_compaction, get_checkout_code_review,
-    get_checkout_ticket_usage, initialize_checkout_repository, list_checkout_corrupt_tickets,
-    list_checkout_tickets, list_checkouts, open_checkout_code_review,
-    open_checkout_repository_review, open_project, prewarm_corrupt_tickets, register_checkout,
-    relink_checkout_git_source, remove_checkout_route, remove_checkout_source, resolve_checkout,
-    set_checkout_default_source, set_checkout_source_color, set_checkout_source_ticket_prefix,
+    create_corrupt_ticket_repair, execute_checkout_repository_compaction,
+    follow_project_relocation, get_checkout_code_review, get_checkout_ticket_usage,
+    initialize_checkout_repository, list_checkout_corrupt_tickets, list_checkout_tickets,
+    list_checkouts, open_checkout_code_review, open_checkout_repository_review, open_project,
+    prewarm_corrupt_tickets, register_checkout, relink_checkout_git_source, remove_checkout_route,
+    remove_checkout_source, resolve_checkout, set_checkout_default_source,
+    set_checkout_source_color, set_checkout_source_ticket_prefix,
 };
 use routes::claims::{
     claim_checkout_next_ticket, claim_checkout_ticket, claim_next_ticket, claim_ticket,
@@ -199,15 +200,16 @@ pub use routes::terminals::{
     stop_claude_usage_follows,
 };
 pub(crate) use routes::terminals::{
-    answer_terminal_question, ask_terminal_question, attach_terminal, clear_terminal,
-    clear_terminal_halt, connect_terminal_ai, disconnect_terminal_ai,
-    get_checkout_terminal_settings, get_checkout_trash_settings, get_terminal_limits,
-    get_terminal_settings, halt_terminal, kill_terminal, list_permission_rules, list_terminals,
-    open_terminal, poll_terminal_question_answer, put_checkout_terminal_settings,
-    put_checkout_trash_settings, put_terminal_limits, put_terminal_settings, read_terminal,
-    reconcile_terminal_limits, remember_permission_after_allow, rename_terminal,
-    report_claude_activity, report_claude_turn, resolve_permission, resolve_terminal_question,
-    revoke_permission_rule, update_permission_rule, write_terminal,
+    answer_terminal_question, ask_terminal_question, attach_terminal, choose_feedback_primary,
+    clear_feedback_primary, clear_terminal, clear_terminal_halt, connect_terminal_ai,
+    disconnect_terminal_ai, get_checkout_terminal_settings, get_checkout_trash_settings,
+    get_terminal_limits, get_terminal_settings, halt_terminal, kill_terminal,
+    list_permission_rules, list_terminals, open_terminal, poll_terminal_question_answer,
+    put_checkout_terminal_settings, put_checkout_trash_settings, put_terminal_limits,
+    put_terminal_settings, read_terminal, reconcile_terminal_limits,
+    remember_permission_after_allow, rename_terminal, report_claude_activity, report_claude_turn,
+    resolve_permission, resolve_terminal_question, revoke_permission_rule, update_permission_rule,
+    write_terminal,
 };
 use routes::ticket_writes::{
     add_store, add_ticket_attachment, assign_ticket, batch_update, close_ticket, create_ticket,
@@ -433,8 +435,13 @@ pub struct AppState {
             std::collections::HashMap<String, routes::terminals::claude_usage::ClaudeUsageFollow>,
         >,
     >,
+    /// HS2-H3S7YQ: each project's person-chosen feedback-primary terminal, in memory only.
+    pub(crate) feedback_primary_choices: routes::feedback_session::PrimaryChoices,
     /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
     terminal_ai_last_reports: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
+    /// HS2-2AN9C8: Claude and Codex turn state their hooks and rollouts report, which
+    /// overrides the OSC 133 busy inference neither tool feeds.
+    terminal_hook_turns: Arc<Mutex<routes::terminals::hook_turns::HookTurns>>,
     /// Per-terminal follows of a Codex session's own rollout, for halt detection and usage
     /// (HS2-CYHAWB). Dropping an entry stops its watcher.
     codex_session_watches: Arc<
@@ -703,7 +710,9 @@ impl AppState {
             terminal_questions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
             claude_usage_follows: Arc::default(),
+            feedback_primary_choices: Arc::default(),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_hook_turns: Arc::default(),
             codex_session_watches: Arc::default(),
             target_store_watches: Arc::default(),
             code_ref_watches: Arc::default(),
@@ -1303,6 +1312,12 @@ impl AppState {
         self.permissions.clone()
     }
 
+    /// Record every journaled human-feedback delivery of the hosted stores (HS2-5TE2TG); run
+    /// once after startup hosting. Returns how many stores had journaled deliveries.
+    pub fn reconcile_feedback_deliveries(&self) -> usize {
+        crate::routes::feedback_session::reconcile_hosted_deliveries(self)
+    }
+
     /// The `(url-id, root-path)` of every hosted store — the set the background sync loop
     /// iterates (sync, Trash purge, distributed work), sorted by id. Read from the store
     /// registry alone: the loops open each store themselves, so parsing every ticket just
@@ -1377,6 +1392,30 @@ impl AppState {
             }
         }
         configured.unwrap_or(hotsheet_ticketing::DEFAULT_TRASH_CLEANUP_DAYS)
+    }
+
+    /// Every external provider connection a registered checkout links, with the longest
+    /// `trash_cleanup_days` among those checkouts, so a sweep never purges a provider's
+    /// Trash early on behalf of another project (GH-5).
+    fn provider_trash_retention(&self) -> std::collections::BTreeMap<String, u32> {
+        let mut retention = std::collections::BTreeMap::new();
+        for checkout in self.checkout_registry.list().unwrap_or_default() {
+            let days = checkout
+                .settings()
+                .trash_cleanup_days()
+                .unwrap_or(hotsheet_ticketing::DEFAULT_TRASH_CLEANUP_DAYS);
+            for source in checkout
+                .sources
+                .iter()
+                .filter(|source| source.provider != "git")
+            {
+                retention
+                    .entry(source.connection_id.clone())
+                    .and_modify(|current: &mut u32| *current = (*current).max(days))
+                    .or_insert(days);
+            }
+        }
+        retention
     }
 
     /// The canonical root of every Git ticket store linked to a registered checkout,
@@ -1533,14 +1572,13 @@ impl AppState {
     }
 
     /// Replace AI-tool discovery's memo lifetime and scan (hermetic tests; HS2-BK350W).
-    /// The scan receives the plugin search dirs, project root, model catalogs, and the
-    /// refresh flag, exactly like the production
-    /// [`hotsheet_aitools::discover_ai_tool_descriptors`]. Resets the memo.
+    /// The scan receives the plugin search dirs, model catalogs, and the refresh flag,
+    /// exactly like the production [`hotsheet_aitools::discover_ai_tool_descriptors`].
+    /// Resets the memo.
     pub fn with_ai_tool_discovery<F>(mut self, ttl: std::time::Duration, scanner: F) -> Self
     where
         F: Fn(
                 &[std::path::PathBuf],
-                &FsPath,
                 &mut hotsheet_aitools::ModelCatalogCache,
                 bool,
             ) -> Vec<hotsheet_plugins::AiToolDescriptor>
@@ -1738,6 +1776,10 @@ pub fn app(state: AppState) -> Router {
         .route("/provider-transfers/move", post(provider_move_route))
         .route("/checkouts", get(list_checkouts).post(register_checkout))
         .route("/projects/open", post(open_project))
+        .route(
+            "/projects/follow-relocation",
+            post(follow_project_relocation),
+        )
         .route("/checkouts/{reference}/close", post(close_checkout_session))
         .route(
             "/checkouts/{reference}",
@@ -1808,6 +1850,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/commands/{id}/launches",
             post(record_checkout_command_launch),
+        )
+        .route(
+            "/checkouts/{reference}/commands/{id}/ai-run",
+            post(routes::command_schedules::run_ai),
         )
         .route(
             "/checkouts/{reference}/command-runs",
@@ -2281,6 +2327,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/targets/{target}",
             axum::routing::patch(routes::orchestration::write).delete(routes::orchestration::write),
         )
+        // HS2-NAA3HV: make a site the home of its project.
+        .route(
+            "/checkouts/{owner}/orchestration/targets/{target}/make-home",
+            post(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{owner}/orchestration/targets/{target}/binding",
             get(routes::orchestration::read)
@@ -2750,6 +2801,11 @@ pub fn app(state: AppState) -> Router {
         // Shared clear (HS2-HA0Z3A): the replay restarts at the cursor's line for every viewer.
         .route("/terminals/{id}/clear", post(clear_terminal))
         .route("/terminals/{id}/name", put(rename_terminal))
+        // HS2-H3S7YQ: choose or clear the project's feedback-primary AI session.
+        .route(
+            "/terminals/{id}/feedback-primary",
+            put(choose_feedback_primary).delete(clear_feedback_primary),
+        )
         .route(
             "/terminals/{id}/halt",
             post(halt_terminal).delete(clear_terminal_halt),
@@ -2961,6 +3017,7 @@ mod terminal_permission_route_tests {
             effort: None,
             session_role: None,
             initial_prompt: None,
+            launch_within_ms: None,
         }
     }
 

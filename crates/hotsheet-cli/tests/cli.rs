@@ -615,10 +615,25 @@ fn hs2_38saet_reprice_cli_previews_and_applies_without_rewriting_raw() {
     assert!(run(&["metrics"]).contains("$10.2500 total"));
 }
 
+/// The bundled workflow version a project renders with its declared push policy
+/// (source version + 1, crates/hotsheet-plugins `with_push_policy`).
+fn rendered_instruction_version() -> u64 {
+    include_str!("../../../plugins/codex/instructions.md")
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix("<!-- hotsheet-instructions-version: "))
+        .and_then(|line| line.strip_suffix(" -->"))
+        .and_then(|version| version.parse::<u64>().ok())
+        .expect("bundled workflow version marker")
+        + 1
+}
+
 fn rendered_instruction(raw: &str) -> String {
-    raw.replace(
-        "<!-- hotsheet-instructions-version: 65 -->",
-        "<!-- hotsheet-instructions-version: 66 -->",
+    let rendered = rendered_instruction_version();
+    raw.replacen(
+        &format!("<!-- hotsheet-instructions-version: {} -->", rendered - 1),
+        &format!("<!-- hotsheet-instructions-version: {rendered} -->"),
+        1,
     )
     .replace(
         "**Pushing is up to this repository.** Follow whatever push/PR/review conventions this project\nalready uses; this default guidance does not require or forbid pushing on its own.",
@@ -4105,14 +4120,20 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let skill = std::fs::read(&stale_skill).unwrap();
     let mcp = std::fs::read(project.join(".codex/config.toml")).unwrap();
     assert!(String::from_utf8_lossy(&instructions).contains("User text."));
-    assert!(String::from_utf8_lossy(&instructions).contains("hotsheet-cli ls --up-next"));
+    assert!(
+        String::from_utf8_lossy(&instructions).contains("hotsheet-cli claim <slug> --worker <id>")
+    );
     // The installed workflow asks for preliminary thoughts on non-trivial tickets (HS2-C4X2MD).
     assert!(String::from_utf8_lossy(&instructions).contains("## Preliminary thoughts"));
-    assert!(String::from_utf8_lossy(&instructions).contains("**Estimate non-trivial work.**"));
+    assert!(
+        String::from_utf8_lossy(&instructions)
+            .contains("Add `--eta <duration>` for non-trivial work")
+    );
     // Worktree and background-agent work must be integrated before completion (HS2-YVV6A0).
-    assert!(String::from_utf8_lossy(&instructions).contains(
-        "**Integrate worktree and background-agent work before you complete its ticket.**"
-    ));
+    assert!(
+        String::from_utf8_lossy(&instructions)
+            .contains("Side-branch, worktree and delegated work must reach the shipping branch")
+    );
     assert_eq!(
         skill,
         rendered_skill(include_str!("../../../plugins/codex/SKILL.md")).as_bytes()
@@ -4262,7 +4283,7 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
         expected("antigravity, codex, opencode")
     );
     let migrated_text = String::from_utf8_lossy(&migrated);
-    assert!(migrated_text.contains("meaningful subtask starts and finishes"));
+    assert!(migrated_text.contains("Record `activity` at meaningful subtask start/finish"));
     assert!(migrated_text.contains("`note_summary`"));
     assert!(migrated_text.contains("`--note-file <path>`"));
     assert!(migrated_text.contains("repository-relative locations"));
@@ -4506,7 +4527,7 @@ fn setup_refresh_with_an_empty_enabled_list_disables_every_tool() {
         unset[0]
             .as_deref()
             .unwrap()
-            .contains("Release your claim the moment you stop working a ticket")
+            .contains("**Release whenever work stops.**")
     );
     assert!(
         unset[1]
@@ -4621,7 +4642,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 67 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = format!(
+        "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: {} -->\nnewer instructions\n<!-- END hotsheet:codex -->\n",
+        rendered_instruction_version() + 1
+    );
+    let instructions = instructions.as_str();
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
@@ -4665,7 +4690,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 66 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = format!(
+        "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: {} -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n",
+        rendered_instruction_version()
+    );
+    let instructions = instructions.as_str();
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
@@ -8710,8 +8739,18 @@ fn provider_lifecycle_assign_restore_and_atomic_not_working_report() {
         r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/repo","settings":{"api_base":"http://127.0.0.1:9","credential":{"secret":"cli-provider-lifecycle-fixture"}}}]}"#,
     )
     .unwrap();
+    // GH-5: GitHub Issues has its own Trash, so restore reaches the provider (here an
+    // unreachable endpoint) instead of being refused by capability.
+    hs(path)
+        .env(
+            "HOTSHEET_API_KEY_CLI_PROVIDER_LIFECYCLE_FIXTURE",
+            "fixture-token",
+        )
+        .args(["provider-restore", "github-main", "42"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("does not support").not());
     for args in [
-        vec!["provider-restore", "github-main", "42"],
         vec![
             "provider-report-not-working",
             "github-main",
@@ -15912,4 +15951,252 @@ fn machine_providers(home: &std::path::Path, store: &std::path::Path) -> std::pa
         .unwrap()
         .path()
         .to_path_buf()
+}
+
+/// HS2-ZTG8FD: the headless prune reads ticket status from the selected store and only
+/// deletes an integrated branch whose ticket is closed; a rerun changes nothing.
+#[test]
+fn hs2_ztg8fd_merge_pending_prune_cli_uses_store_ticket_status() {
+    fn git(dir: &Path, args: &[&str]) {
+        let status = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(dir)
+            .args([
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    }
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let remote = root.path().join("remote.git");
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(&remote).unwrap();
+    hs(&store)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let done = new_ticket(&store, "Integrated and completed");
+    let open = new_ticket(&store, "Integrated but open");
+    hs(&store)
+        .args(["edit", &done, "--status", "completed"])
+        .assert()
+        .success();
+    git(
+        &remote,
+        &["init", "--quiet", "--bare", "--initial-branch=main"],
+    );
+    git(
+        root.path(),
+        &["clone", "--quiet", remote.to_str().unwrap(), "project"],
+    );
+    std::fs::write(project.join("base.txt"), "base").unwrap();
+    git(&project, &["add", "base.txt"]);
+    git(&project, &["commit", "--quiet", "-m", "base"]);
+    git(&project, &["push", "--quiet", "origin", "HEAD:main"]);
+    for slug in [&done, &open] {
+        std::fs::write(project.join(format!("{slug}.txt")), slug).unwrap();
+        git(&project, &["add", "."]);
+        git(&project, &["commit", "--quiet", "-m", slug]);
+        git(
+            &project,
+            &[
+                "push",
+                "--quiet",
+                "origin",
+                &format!("HEAD:refs/heads/merge-pending/{slug}"),
+            ],
+        );
+    }
+    git(&project, &["push", "--quiet", "origin", "HEAD:main"]);
+    let prune = |apply: bool| -> serde_json::Value {
+        let mut cmd = hs(&store);
+        cmd.args(["coordination", "--project"])
+            .arg(&project)
+            .arg("merge-pending-prune");
+        if apply {
+            cmd.arg("--apply");
+        }
+        let output = cmd.assert().success().get_output().stdout.clone();
+        serde_json::from_slice(&output).unwrap()
+    };
+    let action = |report: &serde_json::Value, slug: &str| -> String {
+        report["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|branch| branch["slug"] == *slug)
+            .map(|branch| branch["action"].as_str().unwrap().to_owned())
+            .unwrap_or_else(|| "absent".into())
+    };
+    let dry = prune(false);
+    assert_eq!(dry["shipping"], "origin/main");
+    assert_eq!(action(&dry, &done), "would_delete");
+    assert_eq!(action(&dry, &open), "kept");
+    let applied = prune(true);
+    assert_eq!(action(&applied, &done), "deleted");
+    assert_eq!(action(&applied, &open), "kept");
+    let rerun = prune(true);
+    assert_eq!(action(&rerun, &done), "absent");
+    assert_eq!(
+        rerun["branches"][0]["reason"], "ticket_open",
+        "the open ticket's integrated branch stays"
+    );
+}
+
+/// HS2-R8ZH4K: the CLI refuses an AI completion whose slug-first commit is only local,
+/// names the push to run, and completes once the commit is on `merge-pending/<SLUG>`;
+/// `--no-commit` records the opt-out, and a human completion is never checked.
+#[test]
+fn hs2_r8zh4k_cli_ai_completion_requires_commits_on_the_remote() {
+    fn git(dir: &Path, args: &[&str]) {
+        let ok = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(dir)
+            .args(["-c", "user.name=T", "-c", "user.email=t@example.invalid"])
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "init.defaultBranch=main",
+            ])
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    }
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("store");
+    let remote = root.path().join("remote.git");
+    let code = root.path().join("code");
+    for dir in [&home, &store, &remote] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    let cli = || {
+        let mut cmd = hs(&store);
+        cmd.env("HOTSHEET_HOME", &home);
+        cmd
+    };
+    cli().args(["init", "--prefix", "HS"]).assert().success();
+    git(&remote, &["init", "--quiet", "--bare"]);
+    git(
+        root.path(),
+        &["clone", "--quiet", remote.to_str().unwrap(), "code"],
+    );
+    std::fs::write(code.join("base.txt"), "base").unwrap();
+    git(&code, &["add", "."]);
+    git(&code, &["commit", "--quiet", "-m", "base"]);
+    git(&code, &["push", "--quiet", "origin", "HEAD:main"]);
+    cli()
+        .args(["checkout", "register"])
+        .arg(&code)
+        .arg("--store")
+        .arg(&store)
+        .assert()
+        .success();
+    let slug = {
+        let out = cli().args(["new", "--title", "Coded"]).assert().success();
+        String::from_utf8(out.get_output().stdout.clone())
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_owned()
+    };
+    let complete = |extra: &[&str]| {
+        let mut cmd = cli();
+        cmd.args(["--actor-role", "ai", "--actor-id", "worker"])
+            .args(["edit", &slug, "--status", "completed"])
+            .args(["--note", "## Confidence\n80", "--note-confidence", "80"])
+            .args(extra);
+        cmd.assert()
+    };
+    complete(&[])
+        .failure()
+        .stderr(predicates::str::contains("commits_not_found"));
+    std::fs::write(code.join("work.txt"), "work").unwrap();
+    git(&code, &["add", "."]);
+    git(&code, &["checkout", "--quiet", "-b", "worker-branch"]);
+    git(
+        &code,
+        &["commit", "--quiet", "-m", &format!("{slug} the work")],
+    );
+    complete(&[])
+        .failure()
+        .stderr(predicates::str::contains("commit_not_on_remote"))
+        .stderr(predicates::str::contains(format!(
+            "git push origin worker-branch:merge-pending/{slug}"
+        )));
+    let shown = cli().args(["show", &slug]).assert().success();
+    assert!(
+        String::from_utf8_lossy(&shown.get_output().stdout).contains("not_started")
+            || String::from_utf8_lossy(&shown.get_output().stdout).contains("Not Started"),
+        "a refused completion changes nothing"
+    );
+    git(
+        &code,
+        &[
+            "push",
+            "--quiet",
+            "origin",
+            &format!("worker-branch:merge-pending/{slug}"),
+        ],
+    );
+    complete(&[]).success();
+
+    let docs = {
+        let out = cli()
+            .args(["new", "--title", "Decision"])
+            .assert()
+            .success();
+        String::from_utf8(out.get_output().stdout.clone())
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_owned()
+    };
+    cli()
+        .args(["--actor-role", "ai", "edit", &docs, "--status", "completed"])
+        .args([
+            "--note",
+            "## Confidence\n90",
+            "--note-confidence",
+            "90",
+            "--no-commit",
+        ])
+        .assert()
+        .success();
+    let shown = cli().args(["show", &docs]).assert().success();
+    assert!(
+        String::from_utf8_lossy(&shown.get_output().stdout).contains("no-commit opt-out"),
+        "the opt-out is recorded in history"
+    );
+    let human = {
+        let out = cli().args(["new", "--title", "Human"]).assert().success();
+        String::from_utf8(out.get_output().stdout.clone())
+            .unwrap()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_owned()
+    };
+    cli()
+        .args(["edit", &human, "--status", "completed"])
+        .assert()
+        .success();
 }

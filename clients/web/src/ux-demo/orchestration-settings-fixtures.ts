@@ -38,6 +38,8 @@ export const DEMO_HOSTED_CHECKOUTS = [
   { checkout_id: 'web-0000000000ab', name: 'Web' },
   { checkout_id: 'billing-0000000000ab', name: 'Billing' },
   { checkout_id: 'docs-0000000000ab', name: 'Docs' },
+  // HS2-89YNGN: another clone of API's ticket store open on that server.
+  { checkout_id: 'mobile-0000000000ab', name: 'Mobile' },
 ] as const;
 
 export const DEMO_REMOTE_LABELS = { [DEMO_REMOTE]: 'Build Host' };
@@ -295,6 +297,26 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
       };
       return Promise.resolve(structuredClone(manifest));
     },
+    // HS2-NAA3HV: the site becomes the home; the old home and the other sites name it, as the server does.
+    makeOrchestrationHomeSite: (_owner, target, expectedRevision) => {
+      if (expectedRevision !== manifest.revision)
+        return Promise.reject(new ApiHttpError('orchestration declaration changed', 409, 'conflict'));
+      const home = manifest.targets.find((item) => item.target_id === target)?.site_of;
+      if (!home) return Promise.reject(new ApiHttpError('already the home', 400, 'invalid'));
+      counter += 1;
+      manifest = {
+        ...manifest,
+        revision: `01JSYNTHREVISION00000000${String(counter)}`,
+        targets: manifest.targets.map((item) =>
+          item.target_id === target
+            ? { ...item, site_of: undefined }
+            : item.target_id === home || item.site_of === home
+              ? { ...item, site_of: target }
+              : item,
+        ),
+      };
+      return Promise.resolve(structuredClone(manifest));
+    },
     addOrchestrationProject: (_owner, request) => {
       const existing = Object.entries(bindings).find(
         ([, binding]) => binding.destination?.checkout_id === request.destination.checkout_id,
@@ -362,7 +384,13 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
           const bound = Object.entries(bindings).find(
             ([, binding]) => binding.destination?.kind === 'local' && binding.destination.checkout_id === checkout_id,
           );
-          return { checkout_id, name, added: Boolean(bound), ...(bound ? { target_id: bound[0] } : {}) };
+          return {
+            checkout_id,
+            name,
+            added: Boolean(bound),
+            ...(bound ? { target_id: bound[0] } : {}),
+            checkout_authority: demoStore(checkout_id),
+          };
         }),
       ),
     addHostedOrchestrationProject: (owner, request) =>
@@ -370,6 +398,7 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
         destination: { kind: 'local', checkout_id: request.checkout_id },
         label: request.label,
         target_id: request.target_id,
+        ...(request.site_of ? { site_of: request.site_of } : {}),
       }),
     removeHostedOrchestrationProject: (owner, target) => api.removeOrchestrationProject(owner, target),
     removeOrchestrationProject: (_owner, target) => {

@@ -27,6 +27,7 @@ import {
   containsRepositorySizeChange,
   containsTicketChange,
   containsTicketStoreSyncChange,
+  createProjectChangeWake,
   type ProjectChangeStreamOptions,
   startProjectChangeStream,
 } from '../project-change-poll';
@@ -326,6 +327,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     onStreamHealth,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
+  /** Each open project's wake: a tab click or the network coming back retries a stream that is down (HS2-ZTAJ1R). */
+  const streamWakes = new Map<string, ReturnType<typeof createProjectChangeWake>>();
   const ticketRefresh = createProjectChangeRefresh<Project>(
     (target) => {
       return projectTabRefresh.request(target);
@@ -447,7 +450,10 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
         const projectHostHealth = isRemoteProjectId(current.id)
           ? remoteHostHealth?.resourceFor(current.id, () => new Api(current.apiPath))
           : hostHealth;
+        const wake = createProjectChangeWake();
+        streamWakes.set(current.id, wake);
         const stopStream = startStream(current, {
+          wake,
           client: new Api(current.apiPath),
           beforeRefresh: () => localTicketMutationBarrier.wait(),
           shouldRefresh,
@@ -571,6 +577,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
                   event.kind === 'terminal_exited' ||
                   event.kind === 'terminal_question' ||
                   event.kind === 'terminal_ai_connection' ||
+                  // HS2-H3S7YQ: a person chose or cleared the project's feedback-primary session.
+                  event.kind === 'terminal_feedback_primary' ||
                   event.kind === 'terminal_hook_report' ||
                   // HS2-6MNMVB: an orchestrator session here was taken over, paused or stopped.
                   event.kind === 'terminal_orchestrator' ||
@@ -597,6 +605,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
           }),
         });
         projectChangeStreams.set(current.id, () => {
+          streamWakes.delete(current.id);
           stopStream();
           handshakeGap.stop();
           unfollowTicketReads();
@@ -617,5 +626,14 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     for (const timer of repositoryRefreshTimers.values()) window.clearTimeout(timer);
     repositoryRefreshTimers.clear();
   }
-  return { syncProjectChangeStreams, dispose };
+  /**
+   * Retry one project's change stream now, or every open project's when no id is given, if it is
+   * backing off after an outage (HS2-ZTAJ1R). A live stream ignores it; it never adds a request.
+   */
+  function wakeProjectChangeStream(projectId?: string) {
+    if (disposed) return;
+    if (projectId === undefined) for (const wake of streamWakes.values()) wake.wake();
+    else streamWakes.get(projectId)?.wake();
+  }
+  return { syncProjectChangeStreams, wakeProjectChangeStream, dispose };
 }

@@ -120,7 +120,12 @@ once more when loaded tickets name an id it has no name for; it never polls.
   id; it is never sent to the server. In the column view a collapsed group is collapsed in every column.
 - **Selection and keyboard.** Arrow keys, range selection, copy, and the reader's
   previous and next follow the rows as drawn, across group boundaries. Tickets
-  hidden in a collapsed group are skipped, and Select All does not select them. The
+  hidden in a collapsed group are skipped by arrow keys and range selection. A
+  column header's Select All and ⌘A select them along with every other ticket in
+  the column, board, or list (HS2-3SJ5G8): a collapsed group carries its members'
+  slugs for that, the selection count and batch actions include them, and the range
+  anchor stays on the first drawn row. Collapsing or expanding a group, or opening
+  its menu, keeps the selection, so an expanded group shows its selected members. The
   group toggle is a button with `aria-expanded`.
 - **Pagination.** A group shows the members that are loaded. When a later page
   loads another member, it joins the group where the group already sits. A column's
@@ -206,7 +211,7 @@ menu. The menu offers **Select All in Group**, **Rename Group…**, and **Ungrou
 **Select All in Group** (HS2-EYEGDQ, Lucide `check-check`) selects the tickets that
 this one container shows, in drawn order: the whole group in the list view, or only the
 column's share of it in the column view, like a column header's Select All. A collapsed
-group is expanded first, because a selection never holds hidden tickets. A single
+group is expanded first, so the tickets it selects are in view. A single
 ticket becomes an ordinary single selection. Selecting changes no ticket, so the item
 stays enabled for a source without group support. Rename uses the same dialog as
 New Group and enforces unique names; it is a registry edit by id, and it also names a

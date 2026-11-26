@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 
+import type { PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { describe, expect, it } from 'vitest';
 
-import { TerminalTicketRail, terminalTicketRailPanel } from './terminal-ticket-rail';
+import { terminalRailProjectMenuItems, TerminalTicketRail, terminalTicketRailPanel } from './terminal-ticket-rail';
 import { ticketInspectorPanel } from './ticket-inspector';
 
 describe('TerminalTicketRail', () => {
@@ -35,17 +36,18 @@ describe('TerminalTicketRail', () => {
   it('starts on a compact project ticket surface whose project menu can grow to fit longer names', () => {
     const markup = String(TerminalTicketRail({ ...props, collapseControl: true }));
     expect(markup).toContain('data-component="nav-stack"');
-    expect(markup).toContain('name="terminal-rail-project"');
-    expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*><kui-select[^>]*name="terminal-rail-project"/);
+    // The project switcher is a PopupMenu in a single nested-dropdown group (HS2-2609BW).
+    expect(markup).toContain('data-terminal-rail-project="one"');
+    expect(markup).toMatch(
+      /data-component="toolbar-control-group"[^>]*data-content="text"[^>]*data-nested-dropdown="true"[^>]*><span data-terminal-rail-project="one"[^>]*data-component="popup-menu"/,
+    );
+    expect(markup).toContain('<span class="kui-popup-menu__text">Project One</span>');
     expect(markup).toContain('Project One');
     expect(markup).toContain('name="terminal-rail-view"');
     expect(markup).toContain('Queue');
     expect(markup).toContain('aria-label="Hide ticket rail"');
     expect(markup).toContain('data-action="toggle-ticket-inspector"');
     expect(markup).toContain('data-component="terminal-ticket-rail-list"');
-    expect(markup.match(/<kui-select[^>]*name="terminal-rail-project"[^>]*>/)?.[0]).not.toContain(
-      'kui-select--fit-menu',
-    );
     const viewSelect = markup.match(/<kui-select[^>]*name="terminal-rail-view"[^>]*>/)?.[0];
     expect(viewSelect).not.toContain('kui-select--fit-menu');
     // The view title is Kerf's title Select with an inset ring, not an app className hook (HS2-DAMHD1).
@@ -55,6 +57,70 @@ describe('TerminalTicketRail', () => {
     expect(viewSelect).toContain('data-trigger-max=""');
     expect(viewSelect).not.toContain('terminal-ticket-rail__view-select');
   });
+  it('lists open projects directly and has no Minimized Projects item while none is minimized (HS2-2609BW)', () => {
+    const items = terminalRailProjectMenuItems(props.projects, 'two');
+    expect(items).toEqual([
+      {
+        label: 'Project One',
+        checked: false,
+        action: 'select-terminal-rail-project',
+        attributes: { 'data-project-id': 'one' },
+      },
+      {
+        label: 'Project Two',
+        checked: true,
+        action: 'select-terminal-rail-project',
+        attributes: { 'data-project-id': 'two' },
+      },
+    ]);
+    expect(terminalRailProjectMenuItems([], '')).toEqual([]);
+    expect(String(TerminalTicketRail(props))).not.toContain('Minimized Projects');
+  });
+  it('moves minimized projects into a final Minimized Projects submenu drawn like Restore Project rows (HS2-2609BW)', () => {
+    const projects = [...props.projects, { id: 'three', name: 'Project Three' }, { id: 'four', name: 'Project Four' }],
+      minimized = [
+        { id: 'three', name: 'Project Three', location: 'local' as const, upNextCount: 2 },
+        { id: 'four', name: 'Project Four', location: 'remote' as const, description: 'Host B' },
+      ];
+    const items = terminalRailProjectMenuItems(projects, 'one', minimized);
+    expect(items.map((item) => ('label' in item ? item.label : item.kind))).toEqual([
+      'Project One',
+      'Project Two',
+      'divider',
+      'Minimized Projects',
+    ]);
+    const group = items.at(-1)!;
+    if (!('submenu' in group) || !group.submenu) throw new Error('missing submenu');
+    expect(group.checked).toBe(false);
+    expect(group.action).toBeUndefined();
+    expect(group.submenu.map((item) => ('label' in item ? item.label : item.kind))).toEqual([
+      'Project Three',
+      'Project Four',
+    ]);
+    const [three, four] = group.submenu as PopupMenuItem[];
+    // Each row switches the rail; it keeps the shared row's project id, location icon and status.
+    expect(three).toMatchObject({
+      action: 'select-terminal-rail-project',
+      checked: false,
+      attributes: { 'data-project-id': 'three', 'data-location': 'local' },
+    });
+    expect(String(three.details)).toContain('data-up-next-count="2"');
+    expect(String(four.icon)).toContain('data-lucide="cloud"');
+    expect(four.description).toBe('Host B');
+    // A minimized project the rail already shows is the checked row, and its group is checked too.
+    const showing = terminalRailProjectMenuItems(projects, 'four', minimized),
+      showingGroup = showing.at(-1)!;
+    if (!('submenu' in showingGroup) || !showingGroup.submenu) throw new Error('missing submenu');
+    expect(showingGroup.checked).toBe(true);
+    expect(showingGroup.submenu.map((item) => 'checked' in item && item.checked)).toEqual([false, true]);
+    // With every project minimized there is no leading divider.
+    expect(
+      terminalRailProjectMenuItems(projects.slice(2), 'three', minimized).map((item) => item.kind ?? 'item'),
+    ).toEqual(['item']);
+    const markup = String(TerminalTicketRail({ ...props, projects, minimizedProjects: minimized }));
+    expect(markup).toContain('Minimized Projects');
+    expect(markup).toContain('data-rail-minimized-projects="true"');
+  });
   it('is a Workbench navigation panel whose root view lists tickets under its pinned controls (HS2-FY06N4)', () => {
     const parts = terminalTicketRailPanel(props);
     expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'ticket rail' });
@@ -63,7 +129,7 @@ describe('TerminalTicketRail', () => {
     expect(parts.navStack.views.map((view) => view.key)).toEqual(['root']);
     const [root] = parts.navStack.views;
     // The project selector is the root view's toolbar group, ahead of the panel's standard toggle.
-    expect(String(root.toolbar?.leading)).toContain('name="terminal-rail-project"');
+    expect(String(root.toolbar?.leading)).toContain('data-terminal-rail-project="one"');
     expect(String(root.header)).toContain('class="kui-toolbar terminal-ticket-rail__controls"');
     expect(String(root.header)).toContain('name="terminal-rail-view"');
     expect(root.pane?.appearance).toBe('sunken');
@@ -71,7 +137,7 @@ describe('TerminalTicketRail', () => {
     // separator under the project toolbar doubled it (HS2-VYJQZV).
     expect(parts.navStack.separator).toBe('hidden');
     expect(String(root.content)).toContain('Tickets');
-    expect(String(root.content)).not.toContain('name="terminal-rail-project"');
+    expect(String(root.content)).not.toContain('data-terminal-rail-project');
   });
   it('shows the search scope control in the rail and names All Tickets while expanded (HS2-5WXA6W)', () => {
     const view = terminalTicketRailPanel({ ...props, searchScope: { allTickets: false, viewLabel: 'Queue' } });
@@ -134,8 +200,8 @@ describe('TerminalTicketRail', () => {
   it('uses the canonical compact-rail spacing while retaining control and transition geometry', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    // The project Select sits in Kerf's panel toolbar; the app only sets public Select tokens on it.
-    expect(css).toMatchSource(/__project \{ --kui-select-selected-color:/);
+    // The project switcher is a PopupMenu at Kerf's own toolbar styling; the app styles none of it (HS2-2609BW).
+    expect(css).not.toContain('__project');
     expect(css).not.toContain('--kui-toolbar-trailing-justify-self');
     expect(css).not.toMatch(/__project \{[^}]*\b(padding|min-height|height):/);
     expect(css).not.toContain('.kui-select__custom-selected');

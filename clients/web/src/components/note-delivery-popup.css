@@ -1,0 +1,29 @@
+/* HS2-6RXBS9: the app-level note delivery prompt takes the permission and halted-session popup's
+   native top-layer placement; the shared NotificationCard owns the visible frame. */
+.note-delivery-popup {
+  position: fixed;
+  inset: auto remify(16px) auto auto;
+  top: calc(env(safe-area-inset-top) + remify(56px));
+  width: min(remify(560px), calc(100vw - remify(32px)));
+  max-width: none;
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - remify(72px));
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  transition: none;
+}
+.note-delivery-popup[open] {
+  display: block;
+}
+.note-delivery-popup:focus {
+  outline: none;
+}
+.note-delivery-popup::backdrop {
+  background: transparent;
+}

@@ -131,6 +131,31 @@ describe('HS2-EJ5K09 remote tab placeholders', () => {
     expect(remotePlaceholderProjectId(items[0].id)).toBeUndefined();
   });
 
+  it('names a placeholder like its opened tab: cached host, else the origin host (HS2-GN0WKS)', () => {
+    const bindings = [
+      {
+        id: HOST_A,
+        label: 'My label',
+        origin: 'https://studio.example:8787',
+        last_confirmed_checkouts: [{ id: 'alpha', name: 'Alpha' }],
+      },
+      { id: HOST_B, label: 'Laptop', origin: 'https://laptop.example', last_confirmed_checkouts: [] },
+    ];
+    const selection = [
+      { binding_id: HOST_A, checkout_id: 'alpha' },
+      { binding_id: HOST_B, checkout_id: 'beta' },
+    ];
+    // Never the label this device gave itself; the origin's host until the peer has reported a name.
+    expect(remoteTabPlaceholders(selection, bindings).map((item) => item.name)).toEqual([
+      'studio.example · Alpha',
+      'laptop.example · beta',
+    ]);
+    expect(remoteTabPlaceholders(selection, bindings, { [HOST_A]: 'Studio Mac' }).map((item) => item.name)).toEqual([
+      'Studio Mac · Alpha',
+      'laptop.example · beta',
+    ]);
+  });
+
   it('shows every placeholder before any open resolves and opens hosts in parallel', async () => {
     const gates = new Map<string, ReturnType<typeof deferred<Project>>>();
     const opened: string[] = [];

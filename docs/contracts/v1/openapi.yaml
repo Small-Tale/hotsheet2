@@ -874,6 +874,53 @@ paths:
         schema:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+  /checkouts/{owner}/orchestration/targets/{target}/make-home:
+    post:
+      operationId: makeTargetHomeSite
+      description:
+        HS2-NAA3HV. Make a site the home of its project at one manifest revision; the old home and every other active
+        site become its sites. The policy's per-target entries keyed by the old and the new home swap in one policy
+        write (an AI actor is refused when the policy names either). Refused with the site codes of any grouping
+        change (site_chain, site_plan_conflict, site_run_conflict, site_store_mismatch, site_repository_mismatch).
+      responses:
+        '200':
+          description: The manifest after the re-home, the previous home and the policy revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetMadeHome'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MakeTargetHome'
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /checkouts/{owner}/orchestration/targets/{target}/binding:
     description: Serving-machine literal-loopback administration. GET/DELETE support orphan cleanup before
       runtime/identity/provider construction.
@@ -3315,6 +3362,11 @@ paths:
                     $ref: '#/components/schemas/OrchestrationSessionRolePrompt'
                   tool_setup:
                     $ref: '#/components/schemas/OrchestrationSessionToolSetup'
+                  admission:
+                    description:
+                      A refused admission's reason, limit and observed value, so the person learns what to change
+                      (HS2-8Z9VHH); present only on an admission refusal.
+                    $ref: '#/components/schemas/AdmissionRefusal'
                 additionalProperties: false
         default:
           description:
@@ -14795,6 +14847,57 @@ paths:
         required: true
         schema:
           type: string
+  /terminals/{id}/feedback-primary:
+    description:
+      HS2-H3S7YQ. A person's choice of the project's feedback-primary AI session, which receives human ticket feedback
+      that no live claim routes elsewhere. Kept in memory on this server while the chosen terminal lives; never
+      persisted. Every change emits a terminal_feedback_primary change event.
+    put:
+      operationId: choose_feedback_primary
+      summary: Choose this live terminal as its project's feedback-primary session
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackPrimaryResponse'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: clear_feedback_primary
+      summary: Forget the choice so the oldest push-capable session is primary again; a no-op when not chosen
+      responses:
+        '204':
+          description: Completed with no response body.
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
   /terminals/{id}/halt:
     post:
       operationId: halt_terminal
@@ -16928,6 +17031,51 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '422':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/commands/{id}/ai-run:
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: run_checkout_ai_command
+      description: >-
+        HS2-17Y2EC: run an AI command's configured action headlessly. Creates the command's
+        Up Next ticket (tagged hs2-command:<id>); for new_ai_session or
+        reuse_or_new_ai_session, claims that exact ticket under the selected session worker
+        and hands it off, as a scheduled occurrence does. A command without an action runs as
+        create_ticket. The launch joins the command's run history.
+      responses:
+        '200':
+          description: The ticket exists; delivery reports whether a session took it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiCommandRun'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The command is missing or not an AI command.
           content:
             application/json:
               schema:
@@ -19163,6 +19311,49 @@ paths:
         '410': *a4
         '501': *a4
         default: *a4
+  /projects/follow-relocation:
+    post:
+      operationId: follow_project_relocation
+      summary: Find the checkout an explicit relocate moved away from a vanished root
+      description:
+        HS2-86ES0B. Host-only. Returns the registered checkout that `checkout relocate` moved away from `root`, so a
+        restored tab that remembered the old path reopens at the checkout's current root. `checkout` is null when the
+        root still exists, is registered again, is relative, matches more than one checkout, or the checkout's current
+        root is also missing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - root
+              properties:
+                root:
+                  type: string
+                  description: The absolute project root a client remembered.
+              additionalProperties: false
+      responses:
+        '200':
+          description: The followed checkout, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - checkout
+                properties:
+                  checkout:
+                    oneOf:
+                      - $ref: '#/components/schemas/Checkout'
+                      - type: 'null'
+                additionalProperties: false
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     HotsheetSecret:
@@ -19511,6 +19702,46 @@ components:
             - type: 'null'
         actor:
           $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    MakeTargetHome:
+      type: object
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    TargetMadeHome:
+      type: object
+      required:
+        - enabled
+        - revision
+        - targets
+        - previous_home
+        - policy_revision
+      properties:
+        enabled:
+          type: boolean
+        revision:
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetDeclaration'
+          maxItems: 256
+        previous_home:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        policy_revision:
+          anyOf:
+            - type: string
+            - type: 'null'
       additionalProperties: false
     RenameTarget:
       type: object
@@ -20115,6 +20346,11 @@ components:
                 account_sessions:
                   type: integer
                   minimum: 0
+                integrator:
+                  description:
+                    The start is a project's integrator, which may run one over the target's cap (HS2-4JQ41V). Omitted
+                    when false.
+                  type: boolean
               additionalProperties: false
             - type: 'null'
         provisional:
@@ -21349,6 +21585,13 @@ components:
             ahead; an AI or system override answers 403 `decision_required` with the `note_id` of a decision note on the
             orchestration ticket until a person answers it (HS2-XHQ1EH).
           type: boolean
+        override_requirements:
+          description:
+            HS2-061YTB. Start this exact operation although the target's machine does not meet, or did not report, a
+            requirement of its plan step; without it the dispatch answers 409 `requirement_unmet` or
+            `requirement_unknown` with the `requirement` named. A person's own override goes ahead; an AI or system
+            override answers 403 `decision_required` with the `note_id` of a decision note until a person answers it.
+          type: boolean
       additionalProperties: false
     OrchestrationRun:
       type: object
@@ -22127,7 +22370,10 @@ components:
     StepRequirements:
       description:
         What a plan step's target machine must be (HS2-ZY4Z4G, docs/26 §26.15). `os` and `arch` are alternatives;
-        every tool and toolchain is needed. The scheduler places the work only where all are met.
+        every tool and toolchain is needed. The scheduler places the work only where all are met. Since HS2-ZH9C6W a tool or
+        toolchain entry may name a minimum version, `name>=version` (1 to 4 dotted whole numbers, such as `node>=20` or
+        `codex>=0.40`), compared part by part with the version the machine reports; no reported version is
+        `requirement_unknown`.
       type: object
       properties:
         os:
@@ -22155,7 +22401,7 @@ components:
           maxItems: 8
           items:
             type: string
-            maxLength: 32
+            maxLength: 72
         min_memory_gb:
           type: integer
           minimum: 1
@@ -22274,6 +22520,15 @@ components:
               configured:
                 description: The checkout has not opted out of the tool.
                 type: boolean
+              models:
+                description:
+                  HS2-0VTQFF. The model ids the host's catalog reports for the tool (as `/ai-tools` `models[]`), the
+                  catalog default first, then the catalog's own order, newest first. A start resolves a pattern-only
+                  Models list to the first id it matches. Absent when not reported (an older peer, or a tool the host did
+                  not detect).
+                type: array
+                items:
+                  type: string
         sessions:
           description:
             Running AI sessions on the host, by id, tool and metrics only; null when the terminal host could not be
@@ -22385,6 +22640,10 @@ components:
               type: boolean
             handoffs_pending:
               description: Assignments handed off and not yet done.
+              type: integer
+              minimum: 0
+            ci_pending:
+              description: Of those, the ones integrated and waiting on their CI gate (HS2-4JQ41V). Omitted when zero.
               type: integer
               minimum: 0
           additionalProperties: false
@@ -22567,6 +22826,9 @@ components:
             - integer
             - 'null'
           minimum: 0
+        refusal:
+          description: The limit behind `reason` with its observed value; absent when accepted (HS2-8Z9VHH).
+          $ref: '#/components/schemas/AdmissionRefusal'
     ValidationCheck:
       description: What a step runs. A profile is defined by the target project; a command is chosen by the caller.
       oneOf:
@@ -23957,6 +24219,12 @@ components:
           $ref: '#/components/schemas/OrchestrationSessionToolSetup'
         safe_point:
           $ref: '#/components/schemas/OrchestrationSessionSafePoint'
+        tool_ready:
+          description:
+            HS2-G2X7RT. The host's answer on a sync, safe-point read or start, never stored in the record. false while the
+            session's terminal runs and its tool, which reports its session start, has not, so it may wait on a first-run
+            question a person answers in that terminal. Absent when not known.
+          type: boolean
         unverified:
           description: Names of external state this answer could not verify, such as target_session.
           type: array
@@ -24469,6 +24737,9 @@ components:
             - role_prompt_failed
             - run_cancelled
             - role_needed
+            - integrator_started
+            - integrator_kept
+            - integrator_wound_down
         detail:
           description: A stable code behind the reason, such as the policy rule a session breaks.
           type: string
@@ -24552,7 +24823,9 @@ components:
             - requirement_unknown
         detail:
           description: The limit, policy rule, tool exclusion or resource behind the reason; for `requirement_unmet` and
-            `requirement_unknown` the requirement, such as `os:windows` (HS2-ZY4Z4G).
+            `requirement_unknown` the requirement, such as `os:windows` (HS2-ZY4Z4G). For `no_tool_available`,
+            `model_unresolved` or `no_matching_model` when a pattern-only Models list resolves to no reported model
+            (HS2-0VTQFF).
           type: string
         retry_at_ms:
           description: When the reason is known to end.
@@ -24705,6 +24978,38 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SchedulerResourceContention'
+        roles_unplaced:
+          description:
+            Each project home whose pending handoffs get no integrator in this pass, and why (HS2-4JQ41V). Left out
+            when there is none.
+          type: array
+          items:
+            type: object
+            required:
+              - target_id
+              - role
+              - reason
+            properties:
+              target_id:
+                type: string
+              role:
+                enum:
+                  - integrator
+                  - dispatcher
+              reason:
+                enum:
+                  - integrator_not_started
+                  - integrator_unavailable
+                  - dispatcher_unavailable
+              detail:
+                description: '`target_cap`, `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
+                  `machine_refused`, `model_unresolved`, `no_matching_model` (HS2-0VTQFF), `target_disabled`, `policy_opt_out`
+                  or `replacements_exhausted`.'
+                type: string
+              retry_at_ms:
+                type: integer
+                minimum: 0
+            additionalProperties: false
         outcomes:
           type: array
           items:
@@ -24845,6 +25150,32 @@ components:
             type: string
         assignment:
           $ref: '#/components/schemas/SchedulerAssignment'
+        integrator:
+          description: For a running step, how its project's integrator stands in a fresh pass, on the project's home (HS2-4JQ41V).
+          type: object
+          required:
+            - target_id
+            - standing
+          properties:
+            target_id:
+              type: string
+            standing:
+              enum:
+                - start
+                - keep
+                - wind_down
+                - not_started
+                - none
+            reason:
+              type: string
+            detail:
+              type: string
+            session_id:
+              type: string
+            retry_at_ms:
+              type: integer
+              minimum: 0
+          additionalProperties: false
         mode:
           enum:
             - dry_run
@@ -24891,6 +25222,8 @@ components:
             - wind_down
             - unplaced
             - assignment
+            - reconcile
+            - role_unplaced
         actor_id:
           type: string
         target_id:
@@ -27276,6 +27609,11 @@ components:
           type: boolean
         target_id:
           type: string
+        checkout_authority:
+          description:
+            HS2-89YNGN. The ticket store the checkout reaches, as the non-secret digest a binding records; absent when
+            this server could not read the checkout's sources.
+          type: string
       additionalProperties: false
     AddHostedOrchestrationProject:
       type: object
@@ -27290,6 +27628,13 @@ components:
             - string
             - 'null'
         target_id:
+          type:
+            - string
+            - 'null'
+        site_of:
+          description:
+            HS2-89YNGN. Add it as another site of this active project target; a checkout of another ticket store is
+            refused with site_store_mismatch before anything is declared.
           type:
             - string
             - 'null'
@@ -27716,6 +28061,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -27923,6 +28270,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -28039,6 +28388,40 @@ components:
         note_id:
           description: With `decision_required`, the decision note on the orchestration ticket (HS2-XHQ1EH).
           type: string
+        admission:
+          description:
+            With `session_admission_refused`, why the session's machine refused it, with the limit and the observed
+            value (HS2-8Z9VHH).
+          $ref: '#/components/schemas/AdmissionRefusal'
+      additionalProperties: false
+    AdmissionRefusal:
+      description: Why a machine refused or reduced a session (HS2-8Z9VHH). `setting` names the machine limit (a policy
+        `machine` field) behind `reason`, `limit` its enforced value and `observed` what the machine measured. A reason
+        with no limit carries the `tool` or nothing.
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          description: The admission reason code, such as `session_cap_reached`.
+          type: string
+          maxLength: 64
+        setting:
+          type: string
+          enum:
+            - max_sessions
+            - max_cpu_percent
+            - min_free_disk_mb
+            - min_free_ram_mb
+        limit:
+          type: integer
+          minimum: 0
+        observed:
+          type: integer
+          minimum: 0
+        tool:
+          type: string
+          maxLength: 64
       additionalProperties: false
     CreateTicket:
       type: object
@@ -28182,6 +28565,14 @@ components:
             - type: 'null'
         actor:
           $ref: '#/components/schemas/Actor'
+        commits:
+          description: Commits holding the ticket's work; an AI completion verifies they are on the remote (HS2-R8ZH4K).
+          type: array
+          items:
+            type: string
+        no_commit:
+          description: The ticket has no code commits; an AI completion skips the remote-commit check and records the opt-out (HS2-R8ZH4K).
+          type: boolean
       additionalProperties: false
     ClaimTicket:
       type: object
@@ -28213,6 +28604,36 @@ components:
         eta:
           type: string
       additionalProperties: false
+    ClaimStanding:
+      description:
+        HS2-ZR8B4N. How this server's ticket store sees the claim beside its frontmatter, from its bound claim backend
+        (docs/36 §36.14). `provisional` while the live claim was taken offline and is not confirmed (advisory, never
+        exclusive); `lost` while a claim this host's `worker` held was given to another machine and the losing session
+        has not been told yet; `holder` is the readable holder label or the unreadable-holder marker. Absent otherwise.
+      oneOf:
+        - type: object
+          required:
+            - kind
+          additionalProperties: false
+          properties:
+            kind:
+              const: provisional
+        - type: object
+          required:
+            - kind
+            - worker
+            - holder
+            - detected_at
+          additionalProperties: false
+          properties:
+            kind:
+              const: lost
+            worker:
+              type: string
+            holder:
+              type: string
+            detected_at:
+              type: string
     ClaimEvent:
       type: object
       required:
@@ -28363,6 +28784,14 @@ components:
               additionalProperties: false
         actor:
           $ref: '#/components/schemas/Actor'
+        commits:
+          description: Commits holding the ticket's work; an AI completion verifies they are on the remote (HS2-R8ZH4K).
+          type: array
+          items:
+            type: string
+        no_commit:
+          description: The ticket has no code commits; an AI completion skips the remote-commit check and records the opt-out (HS2-R8ZH4K).
+          type: boolean
       additionalProperties: false
     AssignTicket:
       type: object
@@ -28565,6 +28994,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -28768,6 +29199,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -28897,6 +29330,14 @@ components:
             - type: 'null'
         actor:
           $ref: '#/components/schemas/Actor'
+        commits:
+          description: Commits holding the ticket's work; an AI completion verifies they are on the remote (HS2-R8ZH4K).
+          type: array
+          items:
+            type: string
+        no_commit:
+          description: The ticket has no code commits; an AI completion skips the remote-commit check and records the opt-out (HS2-R8ZH4K).
+          type: boolean
       additionalProperties: false
     BatchResult:
       type: object
@@ -29080,6 +29521,8 @@ components:
           enum:
             - local
             - remote
+        claim_standing:
+          $ref: '#/components/schemas/ClaimStanding'
         legacy_number:
           type: string
         created_by:
@@ -29208,6 +29651,14 @@ components:
                   - type: 'null'
               actor:
                 $ref: '#/components/schemas/Actor'
+              commits:
+                description: Commits holding the ticket's work; an AI completion verifies they are on the remote (HS2-R8ZH4K).
+                type: array
+                items:
+                  type: string
+              no_commit:
+                description: The ticket has no code commits; an AI completion skips the remote-commit check and records the opt-out (HS2-R8ZH4K).
+                type: boolean
             additionalProperties: false
         actor:
           $ref: '#/components/schemas/Actor'
@@ -29275,6 +29726,37 @@ components:
           type: array
           items:
             type: string
+        retained:
+          description: External provider Trash tickets the provider kept, for example because the connection may not permanently delete issues (GH-5). Never counted in purged.
+          type: array
+          items:
+            type: object
+            required:
+              - qualified_id
+              - slug
+              - message
+            properties:
+              qualified_id:
+                type: string
+              slug:
+                type: string
+              message:
+                type: string
+            additionalProperties: false
+        unavailable:
+          description: External provider connections whose Trash could not be read or emptied (GH-5).
+          type: array
+          items:
+            type: object
+            required:
+              - connection_id
+              - message
+            properties:
+              connection_id:
+                type: string
+              message:
+                type: string
+            additionalProperties: false
       additionalProperties: false
     TrashPurgePreview:
       type: object
@@ -29328,10 +29810,36 @@ components:
           type: string
         effort:
           type: string
+        action:
+          description: >-
+            HS2-17Y2EC: an AI command's run action, which a sidebar click performs and a
+            schedule inherits. Absent keeps the legacy click (queue the ticket and signal an
+            idle compatible session); schedules and ai-run treat absent as create_ticket.
+          $ref: '#/components/schemas/CommandScheduleAction'
         icon:
           type: string
         color:
           type: string
+      additionalProperties: false
+    CommandScheduleAction:
+      type: string
+      enum: [create_ticket, new_ai_session, reuse_or_new_ai_session]
+    AiCommandRun:
+      type: object
+      required: [action, delivery, ticket, run]
+      properties:
+        action:
+          $ref: '#/components/schemas/CommandScheduleAction'
+        delivery:
+          type: string
+          enum: [queued, started, failed]
+        reason:
+          type: string
+          description: Why no session took the ticket when delivery is failed.
+        ticket:
+          $ref: '#/components/schemas/Ticket'
+        run:
+          $ref: '#/components/schemas/CommandRun'
       additionalProperties: false
     CommandDefinitions:
       type: array
@@ -29374,7 +29882,11 @@ components:
       properties:
         kind:
           type: string
-          enum: [once, daily, weekly, monthly, yearly, selected_dates]
+          enum: [once, minutely, hourly, daily, weekly, monthly, yearly, selected_dates]
+          description: >-
+            `minutely` and `hourly` repeat every `every` minutes (5 to 1440) or hours (1 to 24)
+            on the local wall clock from `start_date` at the schedule's `local_time`
+            (HS2-29V4ZG). Their occurrences are identified by local date and time.
         date:
           type: string
           pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
@@ -29384,7 +29896,10 @@ components:
         every:
           type: integer
           minimum: 1
-          maximum: 365
+          maximum: 1440
+          description: >-
+            Interval in the kind's unit: days, weeks, months, or years up to 365; hours up to
+            24; minutes from 5 to 1440.
         weekdays:
           type: array
           items:
@@ -29422,7 +29937,7 @@ components:
       additionalProperties: false
     CommandScheduleInput:
       type: object
-      required: [time_zone, local_time, action, recurrence]
+      required: [time_zone, local_time, recurrence]
       properties:
         time_zone:
           type: string
@@ -29430,8 +29945,10 @@ components:
           type: string
           pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
         action:
-          type: string
-          enum: [create_ticket, new_ai_session, reuse_or_new_ai_session]
+          description: HS2-17Y2EC explicit override; omit or null to use the command default.
+          anyOf:
+            - $ref: '#/components/schemas/CommandScheduleAction'
+            - type: 'null'
         paused:
           type: boolean
         recurrence:
@@ -29439,7 +29956,7 @@ components:
       additionalProperties: false
     CommandSchedule:
       type: object
-      required: [command_id, time_zone, local_time, action, paused, recurrence]
+      required: [command_id, time_zone, local_time, paused, recurrence]
       properties:
         command_id:
           type: string
@@ -29449,8 +29966,10 @@ components:
           type: string
           pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
         action:
-          type: string
-          enum: [create_ticket, new_ai_session, reuse_or_new_ai_session]
+          description: >-
+            HS2-17Y2EC explicit override. Absent uses the command default; a schedule saved
+            before HS2-17Y2EC always carries one and keeps it.
+          $ref: '#/components/schemas/CommandScheduleAction'
         paused:
           type: boolean
         recurrence:
@@ -29463,6 +29982,10 @@ components:
         occurrence_date:
           type: string
           pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        occurrence_time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Local time of a minutely or hourly occurrence; absent for date kinds (HS2-29V4ZG).
         outcome:
           type: string
           enum:
@@ -29490,6 +30013,11 @@ components:
       properties:
         schedule:
           $ref: '#/components/schemas/CommandSchedule'
+        effective_action:
+          description: >-
+            HS2-17Y2EC: the action the next occurrence performs (override, else the command
+            action, else create_ticket). Absent while the command is unavailable.
+          $ref: '#/components/schemas/CommandScheduleAction'
         next_runs:
           type: array
           items:
@@ -33534,6 +34062,12 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        launch_within_ms:
+          description: How long the caller waits for this launch's answer, from the request's arrival. Once it has passed before the terminal spawns, the launch is refused with 409 and nothing starts (HS2-62099G).
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
       additionalProperties: false
     TerminalHalt:
       type: object
@@ -33636,6 +34170,14 @@ components:
           description: This live terminal's AI session is its project's primary session for proactive feedback delivery
             (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
           type: boolean
+        feedback_primary_chosen:
+          description: HS2-H3S7YQ. The primary role is held because a person chose this terminal; absent otherwise.
+          type: boolean
+        feedback_eligible:
+          description:
+            HS2-H3S7YQ. This live terminal's AI session accepts pushed messages, so it may be chosen as the project's
+            feedback-primary session; absent otherwise.
+          type: boolean
         orchestrator:
           description:
             HS2-6MNMVB. An orchestrator started this terminal's session on this machine; names the hosted operation a
@@ -33661,6 +34203,11 @@ components:
             paused:
               type: boolean
           additionalProperties: false
+        tool_ready:
+          description:
+            HS2-G2X7RT. For an orchestrator's live session whose tool reports its session start, whether it has; false while
+            it may wait on a first-run question a person answers in this terminal. Absent otherwise.
+          type: boolean
       additionalProperties: false
     TerminalRead:
       type: object
@@ -33706,6 +34253,14 @@ components:
           description: This live terminal's AI session is its project's primary session for proactive feedback delivery
             (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
           type: boolean
+        feedback_primary_chosen:
+          description: HS2-H3S7YQ. The primary role is held because a person chose this terminal; absent otherwise.
+          type: boolean
+        feedback_eligible:
+          description:
+            HS2-H3S7YQ. This live terminal's AI session accepts pushed messages, so it may be chosen as the project's
+            feedback-primary session; absent otherwise.
+          type: boolean
         scrollback:
           type: string
       additionalProperties: false
@@ -33724,6 +34279,21 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+      additionalProperties: false
+    FeedbackPrimaryResponse:
+      description: HS2-H3S7YQ. The chosen terminal and the checkout root whose feedback-primary session it now is.
+      type: object
+      required:
+        - id
+        - project
+        - feedback_primary
+      properties:
+        id:
+          type: string
+        project:
+          type: string
+        feedback_primary:
+          type: boolean
       additionalProperties: false
     TerminalNameResponse:
       type: object

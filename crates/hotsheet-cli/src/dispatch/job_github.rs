@@ -135,11 +135,12 @@ impl GithubApi for UreqGithubApi {
             ApiMethod::Get => "GET",
             ApiMethod::Post => "POST",
             ApiMethod::Put => "PUT",
+            ApiMethod::Patch => "PATCH",
         };
         let url = format!("{base}/{}", request.path);
         let response = self
             .transport
-            .request(method, &url, &headers, None)
+            .request(method, &url, &headers, request.body.as_ref())
             .map_err(|_| ApiUnavailable {
                 retry_after_ms: None,
             })?;

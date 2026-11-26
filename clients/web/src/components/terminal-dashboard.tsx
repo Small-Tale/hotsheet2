@@ -7,7 +7,7 @@ import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
@@ -21,6 +21,8 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Heart,
+  HeartOff,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -34,7 +36,8 @@ import type { TerminalAiConnection, TerminalHalt, TerminalOrchestrator } from '.
 import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import { aiConnectionIcon, aiConnectionLabel, type AiConnectionState } from '../terminal-ai-connection';
+import { aiConnectionIcon, aiConnectionLabel, type AiConnectionState, aiPrimaryIcon } from '../terminal-ai-connection';
+import { feedbackPrimaryMenuItem } from '../terminal-feedback-primary';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
   TERMINAL_TILE_VERTICAL_CHROME,
@@ -42,6 +45,7 @@ import {
   terminalGridLayout,
   terminalPreviewText,
 } from '../terminal-grid-layout';
+import { orchestratorTabNameKeep } from '../terminal-names';
 import { terminalPhysicalScale } from '../terminal-viewport';
 import {
   TERMINAL_VISIBILITY_TYPES,
@@ -49,6 +53,26 @@ import {
   type TerminalVisibilityType,
 } from '../terminal-visibility';
 import { TerminalKeyBar, type TerminalKeyBarProps } from './terminal-key-bar';
+
+/** The grid tile's `project › terminal` caption, cut in the middle to keep a kept suffix (HS2-3RBYJK). */
+function TileCaption({ caption, keep }: { caption: string; keep: number | undefined }) {
+  return keep === undefined ? (
+    <Text variant="span" weight="strong" wrap="truncate" color={uiColor('neutral-on-normal')}>
+      {caption}
+    </Text>
+  ) : (
+    <Text
+      variant="span"
+      weight="strong"
+      wrap="truncate"
+      truncate="middle"
+      truncateKeep={keep}
+      color={uiColor('neutral-on-normal')}
+    >
+      {caption}
+    </Text>
+  );
+}
 
 export interface TerminalDashboardSession {
   id: string;
@@ -77,12 +101,18 @@ export interface TerminalDashboardSession {
   mcp_connected?: boolean;
   /** The project's primary session for proactive feedback delivery (HS2-YHQM67). */
   feedback_primary?: boolean;
+  /** HS2-H3S7YQ: a person chose this session as the primary. */
+  feedback_primary_chosen?: boolean;
+  /** HS2-H3S7YQ: the session accepts pushed messages, so it may be chosen as the primary. */
+  feedback_eligible?: boolean;
   /** Whether the terminal's AI session reaches Hot Sheet, derived by `deriveAiConnectionStates`. */
   aiConnection?: AiConnectionState;
   /** The server advertises session push for this live terminal connection. */
   canMessage?: boolean;
   /** HS2-6MNMVB: an orchestrator started this session here; a person may take it over. */
   orchestrator?: TerminalOrchestrator;
+  /** HS2-G2X7RT: `false` while the session's tool may wait on a first-run question in this terminal. */
+  tool_ready?: boolean;
   scrollback: string;
 }
 
@@ -147,10 +177,35 @@ export interface TerminalDashboardProps {
    */
   contextMenuActions?: readonly TerminalContextMenuAction[];
 }
-export type TerminalContextMenuAction = 'open' | 'hide' | 'clear-halt';
-const ALL_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'hide', 'clear-halt'];
+export type TerminalContextMenuAction = 'open' | 'hide' | 'clear-halt' | 'feedback-primary';
+const ALL_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = [
+  'open',
+  'hide',
+  'clear-halt',
+  'feedback-primary',
+];
 
 const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${session.id}`;
+/** The tile menu's feedback-primary command (HS2-H3S7YQ), shared with the drawer tab menu's rule. */
+function feedbackPrimaryEntry(session: TerminalDashboardSession, key: string): PopupMenuEntry {
+  const item = feedbackPrimaryMenuItem(session);
+  return {
+    label: item.label,
+    action: TERMINALS_ACTIONS.setFeedbackPrimary.value,
+    icon:
+      item.command === 'clear' ? (
+        <LucideIcon icon={HeartOff} name="heart-off" />
+      ) : (
+        <LucideIcon icon={Heart} name="heart" />
+      ),
+    ...(item.disabledReason
+      ? { disabled: true, disabledReason: item.disabledReason }
+      : item.description
+        ? { description: item.description }
+        : {}),
+    attributes: { 'data-item-id': key, 'data-feedback-command': item.command },
+  };
+}
 const chatKeyFor = (chat: WorkspaceGridChat) => `${chat.projectId}:${chat.id}`;
 export const WORKSPACE_CHAT_PREVIEW_NATURAL_WIDTH = 300;
 export const WORKSPACE_CHAT_PREVIEW_NATURAL_HEIGHT = 180;
@@ -383,10 +438,17 @@ function TerminalCard({
                     >
                       <LucideIcon
                         size="s"
-                        icon={aiConnectionIcon(session.aiConnection, session.feedback_primary).icon}
-                        name={aiConnectionIcon(session.aiConnection, session.feedback_primary).name}
-                        color={uiColor(aiConnectionIcon(session.aiConnection, session.feedback_primary).tone)}
+                        icon={aiConnectionIcon(session.aiConnection).icon}
+                        name={aiConnectionIcon(session.aiConnection).name}
+                        color={uiColor(aiConnectionIcon(session.aiConnection).tone)}
                       />
+                      {(() => {
+                        // The primary role beside the plug, as on the drawer tab (HS2-1WFGX1).
+                        const primary = aiPrimaryIcon(session.aiConnection, session.feedback_primary);
+                        return primary ? (
+                          <LucideIcon size="s" icon={primary.icon} name={primary.name} color={uiColor(primary.tone)} />
+                        ) : undefined;
+                      })()}
                     </span>
                   )}
                 </>
@@ -406,11 +468,12 @@ function TerminalCard({
                     <span class="terminal-tile__identity-project">{session.projectName}</span>
                   </>
                 ) : (
-                  <strong>
-                    {session.projectName}
-                    <span aria-hidden="true"> › </span>
-                    {session.title ?? session.id}
-                  </strong>
+                  // An orchestrator's sessions of one project differ only in their run suffix, so the caption
+                  // keeps it and ellipsizes the middle, as the drawer tab does (HS2-3RBYJK, HS2-8KZF59).
+                  <TileCaption
+                    caption={`${session.projectName} › ${session.title ?? session.id}`}
+                    keep={session.orchestrator ? orchestratorTabNameKeep(session.title ?? session.id) : undefined}
+                  />
                 )}
               </button>
               {/* Progress follows the identity in the shrinking leading zone, so the trailing zone holds
@@ -939,6 +1002,10 @@ export function TerminalDashboard({
                     attributes: { 'data-item-id': contextMenu.key },
                   },
                 ]
+              : []),
+            // HS2-H3S7YQ: choose this AI session for the project's feedback notifications, or clear it.
+            ...(contextMenuActions.includes('feedback-primary') && menuSession
+              ? [feedbackPrimaryEntry(menuSession, contextMenu.key)]
               : []),
             ...(contextMenuActions.includes('open')
               ? [

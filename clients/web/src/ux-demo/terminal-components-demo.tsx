@@ -78,6 +78,8 @@ export const editMenuDemo = signal<TerminalEditMenuState | undefined>(undefined)
   editMenuDemoOutput = signal('');
 export const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 export const terminalDashboardHaltCleared = signal(false);
+/** HS2-H3S7YQ: the demo session a person chose for feedback notifications, if any. */
+export const terminalDashboardFeedbackChosen = signal<string | undefined>(undefined);
 export const drawerCreateFailureDemo = signal<'failed' | 'retried' | 'closed'>('failed');
 
 // HS2-174S6X: the rail's terminal search (HS2-TWZSZF) and match count (HS2-M5QPED) over a real Kerf
@@ -440,6 +442,24 @@ export function TerminalDrawerDemo() {
                 at: '2026-10-05T08:00:00Z',
               },
             },
+            {
+              // HS2-G2X7RT: an orchestrator's session whose tool may be on a first-run question.
+              ...shell,
+              id: 'tool-waiting',
+              projectId: 'demo-states',
+              title: 'Release train: run 69G5FB0',
+              kind: 'ai',
+              tool: 'claude',
+              busy: false,
+              tool_ready: false,
+              orchestrator: {
+                checkout_id: 'demo-checkout',
+                operation_id: 'demo-op',
+                project: 'Release train',
+                owner: 'orchestrator',
+                paused: false,
+              },
+            },
           ]}
           width={900}
           height={96}
@@ -574,7 +594,7 @@ export function TerminalDashboardDemo() {
                     source: 'session_start',
                   },
                   mcp_connected: true,
-                  feedback_primary: true,
+                  feedback_primary: terminalDashboardFeedbackChosen.value === undefined,
                   aiConnection: 'connected',
                   alive: true,
                   busy: true,
@@ -604,6 +624,10 @@ export function TerminalDashboardDemo() {
                   tool: 'claude',
                   ai_connection: { agent: 'claude', at: '2026-10-05T08:00:00Z' },
                   mcp_connected: false,
+                  // HS2-H3S7YQ: an eligible session the tile menu can choose for feedback notifications.
+                  feedback_eligible: true,
+                  feedback_primary: terminalDashboardFeedbackChosen.value === 'mcp-missing',
+                  feedback_primary_chosen: terminalDashboardFeedbackChosen.value === 'mcp-missing',
                   aiConnection: 'mcp_missing',
                   alive: true,
                   busy: false,
@@ -859,6 +883,10 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
       },
       clearHalt: () => {
         terminalDashboardHaltCleared.value = true;
+        terminalDashboardContextMenu.value = undefined;
+      },
+      feedbackPrimary: (key, command) => {
+        terminalDashboardFeedbackChosen.value = command === 'choose' ? key?.split(':')[1] : undefined;
         terminalDashboardContextMenu.value = undefined;
       },
     }),

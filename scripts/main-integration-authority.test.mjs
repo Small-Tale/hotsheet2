@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { authorizeMainState } from './main-integration-window.mjs';
+import { authorizeMainState, identityRepairHint } from './main-integration-window.mjs';
 
 const project = 'checkout-123456789abc';
 const source = 'a'.repeat(64);
@@ -53,6 +53,29 @@ test('HS2-BND42N expired review fence and incompatible source fail closed', () =
   pool.source_id = source;
   pool.version = 2;
   assert.throws(() => authorize(pool, { ...value, standalone: true }), /Incompatible/);
+});
+
+test('HS2-67N8SJ an id mismatch names the exact repair-identity command; a schema mismatch does not', () => {
+  const request = { ...value, standalone: true, sourceStore: '/stores/tickets' };
+  const stale = (pool) => () => authorizeMainState(pool, request, project, source, now, null, '/checkouts/hotsheet2');
+  const repair =
+    /Incompatible coordination pool or ticket source; .*`hotsheet-cli -C '\/stores\/tickets' coordination --project '\/checkouts\/hotsheet2' repair-identity --dry-run`/;
+  assert.throws(stale({ ...state(), project_id: 'hotsheet2-56cb7cbc08b0' }), repair);
+  assert.throws(stale({ ...state(), source_id: 'b'.repeat(64) }), repair);
+  assert.throws(stale({ ...state(), version: 10 }), (error) => {
+    assert.match(error.message, /Incompatible coordination pool schema 10/);
+    assert.doesNotMatch(error.message, /repair-identity/);
+    return true;
+  });
+  // Without a shipping path the hint still names the command with placeholders.
+  assert.throws(
+    () => authorize({ ...state(), source_id: 'b'.repeat(64) }, { ...value, standalone: true }),
+    /--project '<repo>' repair-identity --dry-run/,
+  );
+  assert.match(
+    identityRepairHint('/r', '/s'),
+    /^if the checkout or its ticket store moved, run `hotsheet-cli -C '\/s'/,
+  );
 });
 
 test('HS2-9G0M3V a batch push needs a batch integrator and exactly the integrating members', () => {
@@ -144,7 +167,14 @@ test('HS2-GT57BQ a ci-staged integrator stages, promotes only a green staged SHA
   pool.integrator.expires_at = now - 1;
   assert.throws(() => auth(promote, ledger('green')), /expired/);
   assert.throws(
-    () => authorizeMainState({ ...state(), version: 8 }, { ...value, standalone: true, mode: 'staged' }, project, source, now),
+    () =>
+      authorizeMainState(
+        { ...state(), version: 8 },
+        { ...value, standalone: true, mode: 'staged' },
+        project,
+        source,
+        now,
+      ),
     /needs a live ci-staged integrator/,
   );
 });

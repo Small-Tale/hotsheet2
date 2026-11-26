@@ -591,6 +591,7 @@ fn hs1_command_definition(
         tool: (kind == CommandKind::Ai).then(|| tool.to_string()),
         model: None,
         effort: None,
+        action: None,
         icon: command.icon.clone(),
         color: command.color.clone(),
     }))

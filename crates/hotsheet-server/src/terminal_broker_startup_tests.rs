@@ -1,10 +1,12 @@
 //! HS2-C8J6WS: deterministic evidence retention, not a historical startup-cause reproduction.
 //! HS2-KCM23W: a live broker that binds after the original 2 s window is still adopted, and
 //! one that exited fails without waiting out the window.
+#![cfg(unix)] // HS2-8GVYHQ: this out-of-line test module uses Unix sockets and shell fixtures.
 
 use super::startup::{ContenderState, StartupContender, StartupWindow};
 use super::{
-    BrokerResponse, TerminalBroker, tracked_child_state, wait_for_broker_startup, wait_for_startup,
+    BrokerResponse, SpawnedBroker, TerminalBroker, child_state_with_stderr, tracked_child_state,
+    wait_for_broker_startup, wait_for_startup,
 };
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -119,6 +121,89 @@ fn hs2_c8j6ws_exited_child_failure_retains_pid_status_and_absent_probe() {
     assert!(error.contains(&format!("spawned pid {pid}")), "{error}");
     assert!(error.contains("child exited: exit status: 17"), "{error}");
     assert!(error.contains("last probe: absent"), "{error}");
+}
+
+#[test]
+fn hs2_8gvyhq_detached_broker_failure_includes_child_stderr() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let stderr = tempfile::NamedTempFile::new_in(home.path()).unwrap();
+    let stderr_path = stderr.path().to_path_buf();
+    let mut command = hotsheet_ticketing::git::launch("/bin/sh");
+    command.args(["-c", "printf 'synthetic bind failure\\n' >&2; exit 17"]);
+    let child = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(home.path()),
+        supervisor: "startup-diagnostic-test",
+        purpose: hotsheet_process_journal::Purpose::BrokerSupervisor,
+        project_id: Some("synthetic".into()),
+        session_id: None,
+        binary_revision: None,
+    }
+    .spawn_detached_with_stderr_file(&mut command, stderr.path())
+    .unwrap();
+    let pid = child.id();
+    let mut spawned = SpawnedBroker::Direct { child, stderr };
+    let error = wait_for_startup(
+        &home.path().join("missing.sock"),
+        pid,
+        "spawned",
+        super::BROKER_STARTUP,
+        || spawned.state(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("child exited: exit status: 17"), "{error}");
+    assert!(
+        error.contains("broker stderr: synthetic bind failure"),
+        "{error}"
+    );
+    assert!(error.contains("last probe: absent"), "{error}");
+    assert!(stderr_path.exists());
+    drop(spawned);
+    assert!(!stderr_path.exists(), "failed startup kept its capture");
+}
+
+#[test]
+fn hs2_8gvyhq_successful_startup_removes_its_capture() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let stderr = tempfile::NamedTempFile::new_in(home.path()).unwrap();
+    let stderr_path = stderr.path().to_path_buf();
+    let mut command = hotsheet_ticketing::git::launch("/bin/sh");
+    command.args(["-c", "exit 0"]);
+    let child = hotsheet_process_journal::LaunchContext {
+        journal: hotsheet_process_journal::ProcessJournal::at(home.path()),
+        supervisor: "startup-diagnostic-test",
+        purpose: hotsheet_process_journal::Purpose::BrokerSupervisor,
+        project_id: Some("synthetic".into()),
+        session_id: None,
+        binary_revision: None,
+    }
+    .spawn_detached_with_stderr_file(&mut command, stderr.path())
+    .unwrap();
+    let pid = child.id();
+    let mut spawned = SpawnedBroker::Direct { child, stderr };
+    let peer = Peer::bind(home.path().join("winner.sock"), true);
+    wait_for_startup(&peer.path, pid, "spawned", super::BROKER_STARTUP, || {
+        spawned.state()
+    })
+    .unwrap();
+    if let SpawnedBroker::Direct { child, .. } = &mut spawned {
+        child.wait().unwrap();
+    }
+    assert!(stderr_path.exists());
+    drop(spawned);
+    assert!(!stderr_path.exists(), "healthy startup kept its capture");
+}
+
+#[test]
+fn hs2_8gvyhq_failure_includes_at_most_four_kib_of_stderr() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let stderr = tempfile::NamedTempFile::new_in(home.path()).unwrap();
+    std::fs::write(stderr.path(), format!("{}TAIL", "x".repeat(4_096))).unwrap();
+    let mut child = exited_child(home.path());
+    let state = child_state_with_stderr(&mut child, stderr.path());
+    let captured = state.describe().split("broker stderr: ").nth(1).unwrap();
+    assert_eq!(captured.len(), 4_096);
+    assert!(!captured.contains("TAIL"));
 }
 
 #[test]

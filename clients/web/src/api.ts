@@ -30,6 +30,7 @@ import {
   ignoreBody,
   parseAccountIdentity,
   parseAdvisoryClaimStatus,
+  parseAiCommandRun,
   parseAiToolDefaults,
   parseAiToolDescriptor,
   parseCalibrationReport,
@@ -855,6 +856,11 @@ export interface TicketRow {
   /** Whether a live claim's worker belongs to this Hot Sheet server or a separate one seen through
    * the synced store (HS2-DQJPW0); absent without a claim or when the claim predates host records. */
   claim_origin?: 'local' | 'remote';
+  /**
+   * HS2-ZR8B4N: how this server's store sees the live claim beside it: provisional (taken offline, not confirmed,
+   * never exclusive) or lost to another machine while the losing session has not been told. Absent otherwise.
+   */
+  claim_standing?: ClaimStanding;
   legacy_number?: string;
   claim_count: number;
   /** Derived completion confidence of a completed/verified ticket (HS2-RD4M29). */
@@ -871,6 +877,9 @@ export interface TicketRow {
   details?: string;
   notes?: Note[];
 }
+/** HS2-ZR8B4N: a ticket's claim standing (`ClaimStanding` in the contract). */
+export type ClaimStanding =
+  { kind: 'provisional' } | { kind: 'lost'; worker: string; holder: string; detected_at: string };
 export interface ClaimEvent {
   id: string;
   kind: 'claim' | 'renew' | 'release';
@@ -979,7 +988,12 @@ export interface CorruptTicket {
 /** Result of notifying a session after a human note on a Started ticket (HS2-25TP3N). */
 export type FeedbackDelivery =
   | { status: 'sent' | 'queued'; note_id: string; connection_id: string }
-  | { status: 'choose'; note_id: string; sessions: Array<{ id: string; tool: string }> }
+  | {
+      status: 'choose';
+      note_id: string;
+      /** `worker` is the session's claim worker id, when it has one (HS2-5MCAKY). */
+      sessions: Array<{ id: string; tool: string; worker?: string }>;
+    }
   | { status: 'start'; note_id: string }
   /** Best-effort delivery failed; the saved note reaches the AI when it next reads the ticket (HS2-H9Z9KZ). */
   | { status: 'not_shared'; note_id: string };
@@ -1179,6 +1193,8 @@ export interface HostedOrchestrationProjectChoice {
   name: string;
   added: boolean;
   target_id?: string;
+  /** HS2-89YNGN: the ticket store it reaches (non-secret digest), absent when the server could not read it. */
+  checkout_authority?: string;
 }
 /** `DELETE /checkouts/{owner}/orchestration/projects/{target}` (HS2-W27N1D). */
 export interface RemovedOrchestrationProject {
@@ -1499,8 +1515,18 @@ export interface TerminalInfo {
   /** This live terminal's AI session is its project's primary: proactive feedback delivery goes
    * here when no claim names a session (HS2-DB2FQ2). Absent otherwise. */
   feedback_primary?: boolean;
+  /** HS2-H3S7YQ: the primary role is held because a person chose this terminal. Absent otherwise. */
+  feedback_primary_chosen?: boolean;
+  /** HS2-H3S7YQ: this live terminal's AI session accepts pushed messages, so it may be chosen as
+   * the project's feedback-primary session. Absent otherwise. */
+  feedback_eligible?: boolean;
   /** HS2-6MNMVB: an orchestrator started this terminal's session on this machine. */
   orchestrator?: TerminalOrchestrator;
+  /**
+   * HS2-G2X7RT: for an orchestrator's live session whose tool reports its session start, whether it has;
+   * `false` while it may wait on a first-run question a person answers in this terminal. Absent otherwise.
+   */
+  tool_ready?: boolean;
 }
 /** HS2-6MNMVB: the hosted orchestrator session in a terminal, which a person may take over. */
 export interface TerminalOrchestrator {
@@ -1682,6 +1708,24 @@ export interface TrashPurgePreview {
   trash_cleanup_days: number;
   purge_count: number;
 }
+/** A Trash ticket an external provider kept on Empty Trash (GH-5). */
+export interface RetainedTrashTicket {
+  qualified_id: string;
+  slug: string;
+  message: string;
+}
+/** An external provider connection whose Trash could not be emptied (GH-5). */
+export interface UnavailableTrashSource {
+  connection_id: string;
+  message: string;
+}
+/** `POST /checkouts/{id}/trash/empty`. Older servers omit `retained` and `unavailable`. */
+export interface TrashEmptyResult {
+  purged: number;
+  tickets: string[];
+  retained?: RetainedTrashTicket[];
+  unavailable?: UnavailableTrashSource[];
+}
 export interface TerminalRead extends TerminalInfo {
   scrollback: string;
 }
@@ -1699,6 +1743,8 @@ export interface CommandDefinition {
   tool?: string;
   model?: string;
   effort?: string;
+  /** An AI command's run action; absent keeps the legacy queue-and-signal click (HS2-17Y2EC). */
+  action?: 'create_ticket' | 'new_ai_session' | 'reuse_or_new_ai_session';
   icon?: string;
   color?: string;
 }
@@ -1729,6 +1775,15 @@ export interface CommandRun {
   output: CommandOutputLine[];
   started_at?: string;
   launch?: CommandLaunch;
+}
+/** An AI command run through its configured action (HS2-17Y2EC). */
+export interface AiCommandRun {
+  action: NonNullable<CommandDefinition['action']>;
+  /** `queued` for Create Ticket Only, `started` once a session claimed the ticket, `failed` otherwise. */
+  delivery: 'queued' | 'started' | 'failed';
+  reason?: string;
+  ticket: FullTicket;
+  run: CommandRun;
 }
 /** The phase report fields the client reads: each phase's median wall time (HS2-ST6RN1). */
 export interface PhaseReport {
@@ -2020,6 +2075,31 @@ type HostParsedRequest = <T>(parse: ResponseParser<T>, path: string, requested?:
  */
 export const ORCHESTRATION_APP_ACTOR = 'hotsheet-app';
 
+/** HS2-8Z9VHH: an admission refusal's values, from the server's `admission` detail. */
+export interface AdmissionRefusalDetail {
+  reason: string;
+  setting?: string;
+  limit?: number;
+  observed?: number;
+  tool?: string;
+}
+
+/** Reads the `admission` object of a failure body; anything malformed is ignored. */
+export function parseAdmissionRefusal(value: unknown): AdmissionRefusalDetail | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.reason !== 'string' || !record.reason) return undefined;
+  const number = (key: string) => (typeof record[key] === 'number' ? record[key] : undefined);
+  const text = (key: string) => (typeof record[key] === 'string' ? record[key] : undefined);
+  return {
+    reason: record.reason,
+    setting: text('setting'),
+    limit: number('limit'),
+    observed: number('observed'),
+    tool: text('tool'),
+  };
+}
+
 export class ApiHttpError extends Error {
   constructor(
     message: string,
@@ -2028,6 +2108,8 @@ export class ApiHttpError extends Error {
     readonly code?: string,
     /** HS2-9XJEZC: the orchestrator permission request a `permission_required` refusal waits on. */
     readonly requestId?: string,
+    /** HS2-8Z9VHH: a `session_admission_refused` failure's reason, limit and observed value. */
+    readonly admission?: AdmissionRefusalDetail,
   ) {
     super(message);
   }
@@ -2107,6 +2189,7 @@ export class Api {
           response.status,
           errorCodeOf(failure),
           requestIdOf(failure),
+          parseAdmissionRefusal((failure as { admission?: unknown } | null | undefined)?.admission),
         );
       }
       onResponse?.(response);
@@ -3260,6 +3343,16 @@ export class Api {
         body: JSON.stringify({ expected_revision: expectedRevision, label, clear_site_of: true }),
       },
     );
+  /** HS2-NAA3HV: make a site the home of its project; the old home and the other sites become its sites. */
+  makeOrchestrationHomeSite = (owner: string, target: string, expectedRevision: string) =>
+    this.parsed(
+      parseOrchestrationManifest,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/make-home`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ expected_revision: expectedRevision, actor: { role: 'human' } }),
+      },
+    );
   /** HS2-92FJXM: the serving machine's open checkouts, which a client on another machine may add. */
   hostedOrchestrationProjects = (owner: string) =>
     this.parsed(
@@ -3267,7 +3360,11 @@ export class Api {
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,
     );
   /** HS2-92FJXM: add one of them; the serving machine binds it, and a repeat is the same project. */
-  addHostedOrchestrationProject = (owner: string, request: { checkout_id: string; label: string; target_id: string }) =>
+  addHostedOrchestrationProject = (
+    owner: string,
+    // HS2-89YNGN: `site_of` adds it as another site of that project.
+    request: { checkout_id: string; label: string; target_id: string; site_of?: string },
+  ) =>
     this.parsed(
       parseOrchestrationProjectView,
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,
@@ -3428,6 +3525,15 @@ export class Api {
    */
   clearTerminal = (id: string) =>
     this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/clear`, { method: 'POST' });
+  /**
+   * Choose a live AI terminal as its project's feedback-primary session (HS2-H3S7YQ). Rejects with
+   * `409 feedback_primary_ineligible` when its session cannot receive pushed messages.
+   */
+  chooseFeedbackPrimary = (id: string) =>
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/feedback-primary`, { method: 'PUT' });
+  /** Forget the person's feedback-primary choice, so the oldest session receives feedback again (HS2-H3S7YQ). */
+  clearFeedbackPrimary = (id: string) =>
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/feedback-primary`, { method: 'DELETE' });
   /** Save (or, with `null`, clear) a terminal's shared tab name (HS2-89FPV1). */
   renameTerminal = (id: string, name: string | null) =>
     this.parsed(parseTerminalName, `/terminals/${encodeURIComponent(id)}/name`, {
@@ -3447,6 +3553,13 @@ export class Api {
       parseScheduleView,
       `/checkouts/${encodeURIComponent(checkout)}/command-schedules/${encodeURIComponent(commandId)}`,
       { method: 'PUT', body: JSON.stringify(input) },
+    );
+  /** Run an AI command's configured action: queue its ticket or hand it to a session (HS2-17Y2EC). */
+  runAiCommand = (checkout: string, commandId: string) =>
+    this.parsed(
+      parseAiCommandRun,
+      `/checkouts/${encodeURIComponent(checkout)}/commands/${encodeURIComponent(commandId)}/ai-run`,
+      { method: 'POST' },
     );
   deleteCommandSchedule = (checkout: string, commandId: string) =>
     this.parsed(

@@ -167,3 +167,20 @@ test('HS2-Q390N2 pins the explicit standalone fast-push deviation', () => {
     assert.match(source, /override is unavailable to integrators/);
   }
 });
+
+test('HS2-M0ANR4 role skills keep completed side-branch work on merge-pending/<SLUG>', () => {
+  const worker = read('plugins/shared/role-skills/hotsheet-worker.md');
+  const integrator = read('plugins/shared/role-skills/hotsheet-integrator.md');
+  const dispatcher = read('plugins/shared/role-skills/hotsheet-dispatcher.md');
+  assert.match(worker, /secrets, customer data and machine-local paths, then push the worker\s+branch to `merge-pending\/<SLUG>`/);
+  assert.match(worker, /Never rebase or force-push a pushed `merge-pending\/`\s+branch/);
+  assert.match(integrator, /fast-forward, merge or\s+cherry-pick/);
+  assert.match(integrator, /never rebase\s+or force-push it/);
+  assert.match(integrator, /merge-pending-prune --apply/);
+  assert.match(dispatcher, /Name the worker's remote branch in\s+the cue: `merge-pending\/<SLUG>`/);
+  for (const skill of ['plugins/claude/SKILL.md', 'plugins/codex/SKILL.md']) {
+    const text = read(skill);
+    assert.match(text, /completes only from a pushed `merge-pending\/<SLUG>` branch/, skill);
+    assert.match(text, /merge-pending-prune --apply/, skill);
+  }
+});

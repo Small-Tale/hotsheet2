@@ -53,11 +53,14 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     setCategory: vi.fn(),
     setSource: vi.fn(),
     toggleUpNext: vi.fn(),
+    setPriority: vi.fn(),
+    setBacklog: vi.fn(),
     addFiles: vi.fn(),
     removeAttachment: vi.fn(),
     clearAttachments: vi.fn(),
     draggingTickets: () => ticketDrag,
     submit: vi.fn(),
+    minimize: vi.fn(),
   };
   wireQuickTicketComposer({} as HTMLElement, bindings);
 
@@ -68,6 +71,9 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     handler('change', 'new-ticket-source')({}, { value: '' });
     handler('change', 'new-ticket-source')({}, { value: 'git' });
     handler('click', 'toggle-new-ticket-up-next')({}, {});
+    handler('change', 'new-ticket-priority')({}, { value: 'high' });
+    handler('change', 'new-ticket-backlog')({}, { checked: true });
+    handler('change', 'new-ticket-backlog')({}, { checked: false });
     handler('click', 'remove-new-ticket-attachment')({}, { dataset: { pendingAttachmentId: 'a' } });
     handler('click', 'clear-new-ticket-attachments')({}, {});
     const submit = cancelable();
@@ -77,10 +83,26 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     expect(bindings.setCategory).toHaveBeenCalledWith('bug');
     expect(bindings.setSource.mock.calls).toEqual([[undefined], ['git']]);
     expect(bindings.toggleUpNext).toHaveBeenCalledTimes(1);
+    expect(bindings.setPriority).toHaveBeenCalledWith('high');
+    expect(bindings.setBacklog.mock.calls).toEqual([[true], [false]]);
     expect(bindings.removeAttachment).toHaveBeenCalledWith('a');
     expect(bindings.clearAttachments).toHaveBeenCalledTimes(1);
     expect(submit.preventDefault).toHaveBeenCalled();
     expect(bindings.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('HS2-3JR0ZH minimizes from its control without taking focus, and its later hide is no dismissal', () => {
+    const press = cancelable();
+    handler('mousedown', 'minimize-ticket-composer')(press, {});
+    expect(press.preventDefault).toHaveBeenCalledTimes(1);
+    handler('click', 'minimize-ticket-composer')({}, {});
+    expect(bindings.minimize).toHaveBeenCalledTimes(1);
+    // Minimizing collapses the composer before Web Awesome hides it, so the draft is kept.
+    const popup = {};
+    expanded = false;
+    handler('capture:wa-hide', 'quick-ticket-composer')(cancelable({ target: popup }), popup);
+    handler('capture:wa-after-hide', 'quick-ticket-composer')({ target: popup }, popup);
+    expect(bindings.dismissed).not.toHaveBeenCalled();
   });
 
   it('refuses to hide while submitting and resets a user-dismissed expanded composer', () => {

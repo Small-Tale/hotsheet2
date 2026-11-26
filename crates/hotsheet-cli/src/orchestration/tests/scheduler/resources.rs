@@ -73,7 +73,11 @@ impl Scripted {
     }
 }
 impl ClaimSource for Scripted {
-    fn held(&self, namespace: &str) -> Result<Vec<HeldClaim>, ClaimsUnreachable> {
+    fn held(
+        &self,
+        namespace: &str,
+        _: Option<&std::path::Path>,
+    ) -> Result<Vec<HeldClaim>, ClaimsUnreachable> {
         self.asked.fetch_add(1, Ordering::SeqCst);
         if let Some(offline) = *self.unreachable.lock().unwrap() {
             return Err(ClaimsUnreachable { offline });
@@ -87,7 +91,7 @@ impl ClaimSource for Scripted {
             .cloned()
             .collect())
     }
-    fn wait_free(&self, _: &str, _: &str, _: Duration) -> bool {
+    fn wait_free(&self, _: &str, _: &str, _: Duration, _: Option<&std::path::Path>) -> bool {
         self.waiting.fetch_add(1, Ordering::SeqCst);
         // Only the test ends this wait. Real time passing must never wake a loop
         // that runs on the test's own clock; the waiting thread is detached, so a

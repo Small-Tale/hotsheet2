@@ -176,7 +176,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(487); // HS2-S2T4VJ added drawer Retry and Close; HS2-4Q9DVS added minimize and restore; HS2-RWA8V6 added backup controls; HS2-7VB81E added the existing-repository choice, HS2-RJRRSF added selected terminal right-click, HS2-4B0KSD added Renew, Dismiss and Pair Again (3), HS2-WNK73S added Retry now, HS2-3GJZGG feature checkboxes and Restore Defaults, HS2-Q8WF64 added Minimize (2), HS2-7HPXCY added phone search (3), HS2-FN018Q auto-group toggle, HS2-MN0MXT removed the preview action; HS2-CHH28E, HS2-6T8C1D, HS2-J4G9GB, HS2-MCGCPQ, HS2-BT4KN6, HS2-KBVZV1, HS2-NHK8V8, HS2-EFTHS6, HS2-9AN4DN, HS2-JJ9RYN, HS2-TWZSZF, HS2-N2AG8V, HS2-PRXD39, HS2-EQVZTZ, HS2-F788GW, HS2-B8M0QB, HS2-63D6F9, HS2-1YXCCW, HS2-RFJ1GN, HS2-2Z11A5, HS2-PWNPM2, HS2-9YVX6Q, HS2-ZP869N, HS2-KPJWBK, HS2-C7GMQN, HS2-8QJ6W3, HS2-5E8Y9R, HS2-Q0GWXT, HS2-NBDXPW, HS2-M5QPED
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(490); // HS2-W1XEH7 added Show minimized; HS2-HC67SP added the project heading toggle; HS2-EEBM4W added the HS1 job details close; HS2-S2T4VJ added drawer Retry and Close; HS2-4Q9DVS added minimize and restore; HS2-RWA8V6 added backup controls; HS2-7VB81E added the existing-repository choice, HS2-RJRRSF added selected terminal right-click, HS2-4B0KSD added Renew, Dismiss and Pair Again (3), HS2-WNK73S added Retry now, HS2-3GJZGG feature checkboxes and Restore Defaults, HS2-Q8WF64 added Minimize (2), HS2-7HPXCY added phone search (3), HS2-FN018Q auto-group toggle, HS2-MN0MXT removed the preview action; HS2-CHH28E, HS2-6T8C1D, HS2-J4G9GB, HS2-MCGCPQ, HS2-BT4KN6, HS2-KBVZV1, HS2-NHK8V8, HS2-EFTHS6, HS2-9AN4DN, HS2-JJ9RYN, HS2-TWZSZF, HS2-N2AG8V, HS2-PRXD39, HS2-EQVZTZ, HS2-F788GW, HS2-B8M0QB, HS2-63D6F9, HS2-1YXCCW, HS2-RFJ1GN, HS2-2Z11A5, HS2-PWNPM2, HS2-9YVX6Q, HS2-ZP869N, HS2-KPJWBK, HS2-C7GMQN, HS2-8QJ6W3, HS2-5E8Y9R, HS2-Q0GWXT, HS2-NBDXPW, HS2-M5QPED
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))
@@ -210,7 +210,14 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
     // HS2-2055AY/HS2-7DBJMS: Kerf overlay wiring and remote approval remain in the bounded browser entry.
-    expect(main.split('\n')).toHaveLength(58);
+    // HS2-ZF70Y9 added the host-gated `/ux-demo` branch ahead of the app boot.
+    expect(main.split('\n')).toHaveLength(67);
+    // The catalog boot is not awaited: its chunk imports this entry chunk, and awaiting it from the
+    // entry's top-level await deadlocks both modules (HS2-ZF70Y9).
+    expect(main).toContain(
+      'if (shouldBootUxDemo(window.location.pathname, documentHostFeatures(document))) void bootUxDemo(document);',
+    );
+    expect(main).not.toContain('await bootUxDemo(');
     // Kerf DialogSurface's register touches the document, so only the browser entry loads it (HS2-BH7NZ4).
     expect(main).toContain("import '@kerfjs/ui/surface-scaffold/register';");
     // Page-lifetime iOS keyboard root-scroll restore (HS2-BCA512).

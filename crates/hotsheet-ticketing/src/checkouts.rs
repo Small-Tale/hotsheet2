@@ -2,6 +2,9 @@
 //! ticket-store identity: several checkouts may share one repository and each checkout
 //! may use several ticket stores (and vice versa).
 
+#[cfg(test)]
+mod link_relink_tests;
+mod relocation;
 mod respelling;
 mod source_observation;
 pub use source_observation::CheckoutSourceProof;
@@ -205,6 +208,9 @@ impl Checkout {
     }
 }
 
+/// Historical connection id to the current connection id, for one checkout.
+pub type SourceAliases = BTreeMap<String, String>;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct RegistryFile {
     #[serde(default = "registry_schema_version", rename = "schemaVersion")]
@@ -216,6 +222,27 @@ struct RegistryFile {
     /// always contain ids understood by the active provider registry.
     #[serde(default, rename = "sourceAliases")]
     source_aliases: BTreeMap<String, BTreeMap<String, String>>,
+    /// HS2-86ES0B: each former root an explicit `relocate` moved a checkout away from, keyed
+    /// by that root and valued by the durable checkout id. A client that remembered the old
+    /// path (a restored project tab) follows it to the checkout's current root. Kept outside
+    /// `Checkout`, like `source_aliases`; a stale entry is harmless because a lookup ignores
+    /// a root that is registered again or a checkout id that no longer exists.
+    #[serde(
+        default,
+        rename = "relocatedRoots",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    relocated_roots: BTreeMap<String, String>,
+    /// HS2-FVWKJC: the Git connection id each checkout's `.hotsheet2/store` link named when
+    /// an open last observed it, keyed by durable checkout id. Only this link-derived source
+    /// is replaced when the link file later names another store; explicitly linked extra
+    /// stores are never removed by a relink. Kept outside `Checkout`, like `source_aliases`.
+    #[serde(
+        default,
+        rename = "linkSources",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    link_sources: BTreeMap<String, String>,
     /// `(checkout id, connection id)` pairs that exist only because a sourceless entry
     /// was read through its root's `.hotsheet2/store` link. They were never persisted as
     /// registry links, so registering one is a new selection, not a pre-identity link
@@ -235,6 +262,8 @@ impl Default for RegistryFile {
             schema_version: CHECKOUT_REGISTRY_SCHEMA_VERSION,
             checkouts: Vec::new(),
             source_aliases: BTreeMap::new(),
+            relocated_roots: BTreeMap::new(),
+            link_sources: BTreeMap::new(),
             link_derived_sources: BTreeSet::new(),
         }
     }
@@ -361,6 +390,12 @@ pub fn discover_ticket_stores(root: &Path) -> Result<Vec<PathBuf>, CheckoutError
 pub fn checkout_id(root: &Path) -> Result<String, CheckoutError> {
     let canonical = hotsheet_sync::paths::canonicalize(root)
         .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+    Ok(checkout_id_for_canonical(&canonical))
+}
+
+/// [`checkout_id`] for a path that is already canonical, or that no longer exists and was
+/// canonical when it was registered (HS2-86ES0B follows a relocated checkout by it).
+fn checkout_id_for_canonical(canonical: &Path) -> String {
     let name = canonical
         .file_name()
         .and_then(|v| v.to_str())
@@ -380,7 +415,7 @@ pub fn checkout_id(root: &Path) -> Result<String, CheckoutError> {
         "{:x}",
         Sha256::digest(canonical.to_string_lossy().as_bytes())
     );
-    Ok(format!("{}-{}", slug.trim_matches('-'), &hash[..12]))
+    format!("{}-{}", slug.trim_matches('-'), &hash[..12])
 }
 
 #[derive(Debug, Clone)]
@@ -436,6 +471,53 @@ impl PreparedCheckoutLinks<'_> {
 
     pub(crate) fn resolve(&self, reference: &str) -> Result<Checkout, CheckoutError> {
         resolve_checkout(self.file.checkouts.clone(), reference)
+    }
+
+    /// HS2-FVWKJC: a changed `.hotsheet2/store` link replaces only the source the link
+    /// previously named, so setup refresh and every project open agree on one relink rule.
+    /// A checkout linked before the link was recorded treats its sole Git source as that
+    /// link-derived source; with several Git sources and no record nothing is guessed.
+    /// Explicit extra stores and external providers are never removed. Returns the
+    /// `(replaced, replacement)` connection ids when a relink happened.
+    fn relink_link_source(
+        &self,
+        checkout: &mut Checkout,
+        link: &TicketSource,
+        sources: &mut Vec<TicketSource>,
+    ) -> Option<(String, String)> {
+        let previous = match self.file.link_sources.get(&checkout.id) {
+            Some(recorded) => recorded.clone(),
+            None => {
+                let mut git = checkout
+                    .sources
+                    .iter()
+                    .filter(|source| source.provider == "git");
+                match (git.next(), git.next()) {
+                    (Some(only), None) => only.connection_id.clone(),
+                    _ => return None,
+                }
+            }
+        };
+        if previous == link.connection_id {
+            return None;
+        }
+        // Only an admitted ticket store may replace a link; a link to the machine anchor or
+        // an unowned path leaves the checkout's sources unchanged.
+        crate::store_git::admit_store(
+            Path::new(&link.locator),
+            crate::store_git::StoreRole::TicketSource,
+        )
+        .ok()?;
+        checkout
+            .sources
+            .retain(|source| source.connection_id != previous);
+        if !sources
+            .iter()
+            .any(|source| source.connection_id == link.connection_id)
+        {
+            sources.push(link.clone());
+        }
+        Some((previous, link.connection_id.clone()))
     }
 
     fn exact(&self, checkout_id: &str) -> Result<&Checkout, CheckoutError> {
@@ -848,6 +930,10 @@ impl PreparedCheckoutLinks<'_> {
             .position(|entry| entry.id == checkout_id)?;
         let removed = self.file.checkouts.remove(index);
         self.file.source_aliases.remove(checkout_id);
+        self.file
+            .relocated_roots
+            .retain(|_, id| id.as_str() != checkout_id);
+        self.file.link_sources.remove(checkout_id);
         self.file
             .link_derived_sources
             .retain(|(id, _)| id != checkout_id);
@@ -1269,6 +1355,19 @@ impl CheckoutRegistry {
             .find(|checkout| checkout.root == root.to_string_lossy())
             .cloned();
         let is_new = existing.is_none();
+        let link = observed_link_source(
+            &root,
+            existing
+                .as_ref()
+                .map_or(&[][..], |checkout| &checkout.sources),
+        );
+        let mut existing = existing;
+        let mut relinked = None;
+        if let (Some(checkout), Some(link)) = (existing.as_mut(), link.as_ref())
+            && mode != OpenSourceMode::Explicit
+        {
+            relinked = prepared.relink_link_source(checkout, link, &mut sources);
+        }
         let mut alias = alias.map(str::to_owned);
         let mut repository = repository;
         if let Some(existing) = existing {
@@ -1290,7 +1389,10 @@ impl CheckoutRegistry {
                     .iter()
                     .filter(|source| source.provider == "git")
                     .collect::<Vec<_>>();
+                // A link relink already replaced the selected store's predecessor; the
+                // remaining sole Git source is an explicit extra store (HS2-FVWKJC).
                 let replaced_git = (mode == OpenSourceMode::SelectedGitStore
+                    && relinked.is_none()
                     && old_git.len() == 1
                     && new_git.len() == 1
                     && old_git[0].connection_id != new_git[0].connection_id)
@@ -1311,7 +1413,7 @@ impl CheckoutRegistry {
                 sources = retained;
                 if default_source.is_none() {
                     default_source = existing.default_source.and_then(|id| {
-                        if let Some((old, new)) = &replaced_git
+                        if let Some((old, new)) = replaced_git.as_ref().or(relinked.as_ref())
                             && &id == old
                         {
                             return Some(new.clone());
@@ -1335,6 +1437,21 @@ impl CheckoutRegistry {
             default_source,
             false,
         )?;
+        // Record which store the link named once the checkout links it, so a later relink
+        // knows exactly which source it replaces (HS2-FVWKJC).
+        if let Some(linked) = link.as_ref().and_then(|link| {
+            after
+                .sources
+                .iter()
+                .find(|source| source.provider == "git" && source.locator == link.locator)
+        }) && prepared.file.link_sources.get(&after.id) != Some(&linked.connection_id)
+        {
+            prepared
+                .file
+                .link_sources
+                .insert(after.id.clone(), linked.connection_id.clone());
+            prepared.changed = true;
+        }
         prepared.finish_registration(before.as_ref(), after, providers, None)
     }
 
@@ -1403,11 +1520,12 @@ impl CheckoutRegistry {
             .iter_mut()
             .find(|checkout| checkout.id == current.id)
             .expect("resolved checkout remains in the locked registry");
-        entry.root = root_text;
+        let former_root = std::mem::replace(&mut entry.root, root_text.clone());
         if let Some(alias) = alias {
             entry.alias = alias.to_string();
         }
         let relocated = entry.clone();
+        relocation::record(&mut file.relocated_roots, &former_root, &relocated);
         self.write_locked(&file)?;
         Ok(relocated)
     }
@@ -1441,6 +1559,29 @@ impl CheckoutRegistry {
         })?;
         validate_linked_store_identity(&checkout, &source)?;
         Ok((checkout, source))
+    }
+
+    /// HS2-67N8SJ: the checkout registered at exactly `root` (canonical path, never an id
+    /// prefix or alias) and the historical connection ids retained for it. Read-only, so a
+    /// coordination pool can prove a relocated checkout's identity without changing links.
+    /// `None` when nothing is registered at that root.
+    pub fn checkout_identity_at_root(
+        &self,
+        root: &Path,
+    ) -> Result<Option<(Checkout, SourceAliases)>, CheckoutError> {
+        let canonical = hotsheet_sync::paths::canonicalize(root)
+            .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+        let text = canonical.to_string_lossy();
+        let mut file = self.read()?;
+        let mut matches = file.checkouts.iter().filter(|entry| entry.root == text);
+        let Some(checkout) = matches.next().cloned() else {
+            return Ok(None);
+        };
+        if matches.next().is_some() {
+            return Err(CheckoutError::Ambiguous(text.into_owned()));
+        }
+        let aliases = file.source_aliases.remove(&checkout.id).unwrap_or_default();
+        Ok(Some((checkout, aliases)))
     }
 
     fn read(&self) -> Result<RegistryFile, CheckoutError> {
@@ -2345,6 +2486,16 @@ fn legacy_link_source(root: &Path) -> Option<TicketSource> {
         root.join(path)
     };
     Some(TicketSource::git(path))
+}
+
+/// HS2-FVWKJC: the Git store the root's link file names now, when it is an initialized
+/// store. A missing, empty, or dangling link is no observation and never changes links.
+fn observed_link_source(root: &Path, existing: &[TicketSource]) -> Option<TicketSource> {
+    let linked = legacy_link_source(root)?;
+    Path::new(&linked.locator)
+        .join(STORE_METADATA_FILE)
+        .is_file()
+        .then(|| TicketSource::git_keeping_id(&linked.locator, existing))
 }
 
 /// Returns the connection id of a source adopted from the root's link file, if any.

@@ -1,6 +1,7 @@
 import './terminal-visibility-dialog.css';
 
 import { Button } from '@kerfjs/ui/button';
+import { Checkbox } from '@kerfjs/ui/checkbox';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -20,10 +21,13 @@ import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
+  effectiveTerminalVisibleTypes,
+  projectVisibilityToggleTarget,
+  scopeTerminalVisibilityTypes,
   terminalVisibilityItems,
+  terminalVisibilityItemsNoun,
   type TerminalVisibilityState,
   type TerminalVisibilityType,
-  visibleTerminalTypes,
 } from '../terminal-visibility';
 import type { TerminalDashboardGroup } from './terminal-dashboard';
 
@@ -31,7 +35,10 @@ export interface TerminalVisibilityDialogProps {
   open: boolean;
   state: TerminalVisibilityState;
   scope: string;
+  /** The projects the workspace lists: the caller leaves minimized ones out unless shown (HS2-W1XEH7). */
   groups: TerminalDashboardGroup[];
+  /** Whether the AI chat feature area is on; off, AI Chats shows only while a chat is listed (HS2-4TKASN). */
+  chatFeatureOn: boolean;
   contextMenu?: { id: string; x: number; y: number };
 }
 
@@ -95,10 +102,19 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
   );
 }
 
-export function TerminalVisibilityDialog({ open, state, scope, groups, contextMenu }: TerminalVisibilityDialogProps) {
+export function TerminalVisibilityDialog({
+  open,
+  state,
+  scope,
+  groups,
+  chatFeatureOn,
+  contextMenu,
+}: TerminalVisibilityDialogProps) {
   const activeId = state.activeByScope[scope] ?? DEFAULT_TERMINAL_VISIBILITY_GROUP_ID;
   const active = state.groups.find((group) => group.id === activeId) ?? state.groups[0];
-  const types = visibleTerminalTypes(active);
+  const available = scopeTerminalVisibilityTypes(groups, scope, chatFeatureOn);
+  const types = effectiveTerminalVisibleTypes(active, available);
+  const choices = TYPE_CHOICES.filter((choice) => available.includes(choice.value));
   const visibleGroups = terminalVisibilityItems(groups, scope, types);
   const hidden = new Set(active.hiddenKeys);
 
@@ -119,23 +135,31 @@ export function TerminalVisibilityDialog({ open, state, scope, groups, contextMe
         }}
         footer={
           <List id={TERMINAL_VISIBILITY_SCROLL_TARGET.bottom} controlInsets="trbl" flex>
-            <Row hAlign="right" vAlign="middle" gap="xs">
-              <Button
-                emphasis="plain"
-                type="button"
-                action={'hide-all-terminals-in-group'}
-                disabled={visibleGroups.length === 0}
-              >
-                Hide Listed
-              </Button>
-              <Button
-                emphasis="plain"
-                type="button"
-                action={'show-all-terminals-in-group'}
-                disabled={visibleGroups.length === 0}
-              >
-                Show Listed
-              </Button>
+            <Row hAlign="space-between" vAlign="middle" gap="xs" wrap>
+              {/* Per workspace, off by default: minimized projects are left out unless shown (HS2-W1XEH7). */}
+              <Checkbox
+                label="Show minimized"
+                checked={Boolean(active.showMinimized)}
+                action={TERMINALS_ACTIONS.toggleTerminalVisibilityShowMinimized.value}
+              />
+              <Row hAlign="right" vAlign="middle" gap="xs">
+                <Button
+                  emphasis="plain"
+                  type="button"
+                  action={'hide-all-terminals-in-group'}
+                  disabled={visibleGroups.length === 0}
+                >
+                  Hide Listed
+                </Button>
+                <Button
+                  emphasis="plain"
+                  type="button"
+                  action={'show-all-terminals-in-group'}
+                  disabled={visibleGroups.length === 0}
+                >
+                  Show Listed
+                </Button>
+              </Row>
             </Row>
           </List>
         }
@@ -173,8 +197,8 @@ export function TerminalVisibilityDialog({ open, state, scope, groups, contextMe
           </TabBar>
           <List controlInsets="trbl">
             <div role="group" aria-label="Item Types">
-              <div className="terminal-visibility-dialog__type-grid">
-                {TYPE_CHOICES.map((choice) => (
+              <div className="terminal-visibility-dialog__type-grid" data-type-count={String(choices.length)}>
+                {choices.map((choice) => (
                   <Button
                     action={TERMINALS_ACTIONS.toggleTerminalVisibilityType.value}
                     rootAttributes={{ 'data-visibility-type': choice.value }}
@@ -195,40 +219,57 @@ export function TerminalVisibilityDialog({ open, state, scope, groups, contextMe
           {visibleGroups.length === 0 ? (
             <Text tone="quiet">No workspace items match the selected types.</Text>
           ) : (
-            visibleGroups.map((group) => (
-              <section data-key={group.projectId}>
-                <ListHeader label={group.projectName} />
-                <List className="terminal-visibility-dialog__rows">
-                  {group.items.map((item) => {
-                    const { key, label } = item;
-                    const visible = !hidden.has(key);
-                    return (
-                      <ListItem
-                        action="toggle-terminal-visibility"
-                        itemId={key}
-                        accessibleLabel={`${visible ? 'Hide' : 'Show'} ${label}`}
-                        state={visible ? 'visible' : 'hidden'}
-                        icon={<LucideIcon icon={visible ? Eye : EyeOff} name={visible ? 'eye' : 'eye-off'} />}
-                        label={
-                          visible ? (
-                            label
-                          ) : (
-                            <Text variant="span" tone="quiet">
-                              {label}
+            visibleGroups.map((group) => {
+              const show = projectVisibilityToggleTarget(
+                group.items.map((item) => item.key),
+                active.hiddenKeys,
+              );
+              return (
+                <section data-key={group.projectId}>
+                  {/* The heading acts on the project's listed items (HS2-HC67SP): any hidden shows all,
+                    otherwise it hides all. Kerf ListHeader's action mode keeps it one named stop. */}
+                  <ListHeader
+                    label={group.projectName}
+                    action={TERMINALS_ACTIONS.toggleTerminalVisibilityProject.value}
+                    actionLabel={`${show ? 'Show' : 'Hide'} All ${group.projectName} ${terminalVisibilityItemsNoun(
+                      group.items.map((item) => item.kind),
+                    )}`}
+                    // Like each row, the icon reports state (any hidden: eye-off) and the label the action.
+                    actionIcon={<LucideIcon icon={show ? EyeOff : Eye} name={show ? 'eye-off' : 'eye'} />}
+                    triggerAttributes={{ 'data-project-id': group.projectId }}
+                  />
+                  <List className="terminal-visibility-dialog__rows">
+                    {group.items.map((item) => {
+                      const { key, label } = item;
+                      const visible = !hidden.has(key);
+                      return (
+                        <ListItem
+                          action="toggle-terminal-visibility"
+                          itemId={key}
+                          accessibleLabel={`${visible ? 'Hide' : 'Show'} ${label}`}
+                          state={visible ? 'visible' : 'hidden'}
+                          icon={<LucideIcon icon={visible ? Eye : EyeOff} name={visible ? 'eye' : 'eye-off'} />}
+                          label={
+                            visible ? (
+                              label
+                            ) : (
+                              <Text variant="span" tone="quiet">
+                                {label}
+                              </Text>
+                            )
+                          }
+                          trailing={
+                            <Text variant="span" size="compact" tone="quiet">
+                              {visible ? 'Visible' : 'Hidden'}
                             </Text>
-                          )
-                        }
-                        trailing={
-                          <Text variant="span" size="compact" tone="quiet">
-                            {visible ? 'Visible' : 'Hidden'}
-                          </Text>
-                        }
-                      />
-                    );
-                  })}
-                </List>
-              </section>
-            ))
+                          }
+                        />
+                      );
+                    })}
+                  </List>
+                </section>
+              );
+            })
           )}
         </List>
         {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (

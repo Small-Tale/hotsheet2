@@ -103,33 +103,12 @@ fn master_key_with(
     secrets: &dyn SecretStore,
     may_create: bool,
 ) -> io::Result<ActionKey> {
-    // Every rules file in this directory shares one master. Serialize creation across
-    // processes, including simultaneous first opens of different hosted stores.
-    let _lock = Lock::acquire(
-        &path
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(".permission-master"),
-    )?;
     let master_account = master_account(path)?;
+    // HS2-55P61R: an existing master is read without the shared creation lock, so a
+    // keychain access prompt for one store never blocks other stores' vault users.
     let master = match secrets.get(&master_account).map_err(io::Error::other)? {
         Some(encoded) => decode_key(encoded)?,
-        None if may_create => {
-            // If the master was removed, a newly opened store must not replace it and
-            // make already encrypted stores permanently unreadable.
-            if existing_v4_vault(path)? {
-                return Err(invalid("permission-rule credential missing"));
-            }
-            let mut key = [0; 32];
-            getrandom::fill(&mut key).map_err(io::Error::other)?;
-            secrets
-                .set(
-                    &master_account,
-                    &base64::engine::general_purpose::STANDARD.encode(key),
-                )
-                .map_err(io::Error::other)?;
-            key
-        }
+        None if may_create => create_master(path, secrets, &master_account)?,
         None => return Err(invalid("permission-rule credential missing")),
     };
     let salt = ring::hkdf::Salt::new(ring::hkdf::HKDF_SHA256, b"hotsheet-permissions-v4");
@@ -144,6 +123,38 @@ fn master_key_with(
         .fill(&mut bytes)
         .map_err(|_| invalid("invalid permission-rule key"))?;
     Ok(bytes)
+}
+
+/// Every rules file in this directory shares one master. Serialize creation across
+/// processes, including simultaneous first opens of different hosted stores.
+fn create_master(
+    path: &Path,
+    secrets: &dyn SecretStore,
+    master_account: &str,
+) -> io::Result<ActionKey> {
+    let _lock = Lock::acquire(
+        &path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(".permission-master"),
+    )?;
+    if let Some(encoded) = secrets.get(master_account).map_err(io::Error::other)? {
+        return decode_key(encoded);
+    }
+    // If the master was removed, a newly opened store must not replace it and
+    // make already encrypted stores permanently unreadable.
+    if existing_v4_vault(path)? {
+        return Err(invalid("permission-rule credential missing"));
+    }
+    let mut key = [0; 32];
+    getrandom::fill(&mut key).map_err(io::Error::other)?;
+    secrets
+        .set(
+            master_account,
+            &base64::engine::general_purpose::STANDARD.encode(key),
+        )
+        .map_err(io::Error::other)?;
+    Ok(key)
 }
 
 fn file_version(path: &Path) -> io::Result<Option<u8>> {
@@ -189,9 +200,43 @@ enum CachedRead {
     Error(String),
 }
 
+/// HS2-55P61R: lookups never wait behind a backend read. Only backend reads and writes
+/// are serialized (`io`), so concurrent first reads of one credential raise one prompt
+/// while every cached credential stays available during it.
+#[derive(Default)]
+struct SecretCache {
+    values: std::sync::Mutex<std::collections::HashMap<String, CachedRead>>,
+    io: std::sync::Mutex<()>,
+}
+
+impl SecretCache {
+    fn lookup(
+        &self,
+        account: &str,
+    ) -> Option<Result<Option<String>, hotsheet_ticketing::secrets::SecretError>> {
+        let values = self
+            .values
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        values.get(account).map(|value| match value {
+            CachedRead::Present(value) => Ok(Some(value.clone())),
+            CachedRead::Error(error) => Err(hotsheet_ticketing::secrets::SecretError::Backend(
+                error.clone(),
+            )),
+        })
+    }
+
+    fn remember(&self, account: &str, value: CachedRead) {
+        self.values
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(account.into(), value);
+    }
+}
+
 struct CachedSecrets<'a, S> {
     backend: S,
-    cache: &'a std::sync::Mutex<std::collections::HashMap<String, CachedRead>>,
+    cache: &'a SecretCache,
 }
 
 impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
@@ -200,11 +245,14 @@ impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
         account: &str,
         value: &str,
     ) -> Result<(), hotsheet_ticketing::secrets::SecretError> {
+        let _io = self
+            .cache
+            .io
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         self.backend.set(account, value)?;
         self.cache
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(account.into(), CachedRead::Present(value.into()));
+            .remember(account, CachedRead::Present(value.into()));
         Ok(())
     }
 
@@ -212,33 +260,39 @@ impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
         &self,
         account: &str,
     ) -> Result<Option<String>, hotsheet_ticketing::secrets::SecretError> {
-        let mut cache = self
+        if let Some(value) = self.cache.lookup(account) {
+            return value;
+        }
+        let _io = self
             .cache
+            .io
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(value) = cache.get(account) {
-            return match value {
-                CachedRead::Present(value) => Ok(Some(value.clone())),
-                CachedRead::Error(error) => Err(hotsheet_ticketing::secrets::SecretError::Backend(
-                    error.clone(),
-                )),
-            };
+        // Another thread may have finished the same read while this one waited.
+        if let Some(value) = self.cache.lookup(account) {
+            return value;
         }
         let value = self.backend.get(account);
         match &value {
-            Ok(Some(value)) => {
-                cache.insert(account.into(), CachedRead::Present(value.clone()));
-            }
-            Err(error) => {
-                cache.insert(account.into(), CachedRead::Error(error.to_string()));
-            }
+            Ok(Some(value)) => self
+                .cache
+                .remember(account, CachedRead::Present(value.clone())),
+            Err(error) => self
+                .cache
+                .remember(account, CachedRead::Error(error.to_string())),
             Ok(None) => {}
         }
         value
     }
 
     fn delete(&self, account: &str) -> Result<bool, hotsheet_ticketing::secrets::SecretError> {
+        let _io = self
+            .cache
+            .io
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         self.cache
+            .values
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .remove(account);
@@ -248,13 +302,12 @@ impl<S: SecretStore> SecretStore for CachedSecrets<'_, S> {
 
 #[cfg(not(test))]
 fn with_os_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
-    use std::collections::HashMap;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::OnceLock;
 
-    static KEYS: OnceLock<Mutex<HashMap<String, CachedRead>>> = OnceLock::new();
+    static KEYS: OnceLock<SecretCache> = OnceLock::new();
     f(&CachedSecrets {
         backend: OsKeychain,
-        cache: KEYS.get_or_init(|| Mutex::new(HashMap::new())),
+        cache: KEYS.get_or_init(SecretCache::default),
     })
 }
 
@@ -320,18 +373,54 @@ pub(super) fn with_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>)
 }
 
 pub(super) fn key_for(path: &Path) -> io::Result<ActionKey> {
+    with_secrets(|store| locked_with(path, store, false, || key_with(path, store)))
+}
+
+/// HS2-55P61R: read every credential an operation may need before taking a vault lock.
+/// An OS keychain read can wait on a person answering an access prompt; holding the
+/// per-file or shared master lock across it blocked every other vault user, including
+/// terminal launches. The process cache serves the locked re-read without a prompt; a
+/// missing credential is re-read under the lock because only creation needs it.
+fn prefetch_credentials(path: &Path, secrets: &dyn SecretStore) {
+    if matches!(file_version(path), Ok(Some(LEGACY_VERSION))) {
+        if let Ok(account) = account(path) {
+            let _ = secrets.get(&account);
+        }
+    }
+    if let Ok(account) = master_account(path) {
+        let _ = secrets.get(&account);
+    }
+}
+
+fn locked_with<T>(
+    path: &Path,
+    secrets: &dyn SecretStore,
+    require_existing: bool,
+    operation: impl FnOnce() -> io::Result<T>,
+) -> io::Result<T> {
+    let missing = || io::Error::new(io::ErrorKind::NotFound, "permission-rule vault missing");
+    if require_existing && !path.is_file() {
+        return Err(missing());
+    }
+    prefetch_credentials(path, secrets);
     let _lock = Lock::acquire(path)?;
-    with_secrets(|store| key_with(path, store))
+    if require_existing && !path.is_file() {
+        return Err(missing());
+    }
+    operation()
 }
 
 pub(super) fn load(path: &Path) -> io::Result<Vec<StoredRule>> {
     load_with_key(path).map(|(_, rules)| rules)
 }
 
-pub(super) fn load_with_key(path: &Path) -> io::Result<(ActionKey, Vec<StoredRule>)> {
-    let _lock = Lock::acquire(path)?;
-    with_secrets(|store| {
-        let key = key_with(path, store)?;
+fn load_with_key_in(
+    path: &Path,
+    secrets: &dyn SecretStore,
+    require_existing: bool,
+) -> io::Result<(ActionKey, Vec<StoredRule>)> {
+    locked_with(path, secrets, require_existing, || {
+        let key = key_with(path, secrets)?;
         let mut rules = read_locked(path, &key, VERSION)?;
         if dedupe(&mut rules) {
             write_locked(path, &key, &rules)?;
@@ -340,21 +429,27 @@ pub(super) fn load_with_key(path: &Path) -> io::Result<(ActionKey, Vec<StoredRul
     })
 }
 
+pub(super) fn load_with_key(path: &Path) -> io::Result<(ActionKey, Vec<StoredRule>)> {
+    with_secrets(|store| load_with_key_in(path, store, false))
+}
+
 pub(super) fn load_existing_with_key(path: &Path) -> io::Result<(ActionKey, Vec<StoredRule>)> {
-    let _lock = Lock::acquire(path)?;
-    if !path.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "permission-rule vault missing",
-        ));
-    }
-    with_secrets(|store| {
-        let key = key_with(path, store)?;
+    with_secrets(|store| load_with_key_in(path, store, true))
+}
+
+fn mutate_in<T>(
+    path: &Path,
+    secrets: &dyn SecretStore,
+    require_existing: bool,
+    change: impl FnOnce(&mut Vec<StoredRule>) -> io::Result<T>,
+) -> io::Result<T> {
+    locked_with(path, secrets, require_existing, || {
+        let key = key_with(path, secrets)?;
         let mut rules = read_locked(path, &key, VERSION)?;
-        if dedupe(&mut rules) {
-            write_locked(path, &key, &rules)?;
-        }
-        Ok((key, rules))
+        dedupe(&mut rules);
+        let value = change(&mut rules)?;
+        write_locked(path, &key, &rules)?;
+        Ok(value)
     })
 }
 
@@ -362,15 +457,7 @@ pub(super) fn mutate<T>(
     path: &Path,
     change: impl FnOnce(&mut Vec<StoredRule>) -> io::Result<T>,
 ) -> io::Result<T> {
-    let _lock = Lock::acquire(path)?;
-    with_secrets(|store| {
-        let key = key_with(path, store)?;
-        let mut rules = read_locked(path, &key, VERSION)?;
-        dedupe(&mut rules);
-        let value = change(&mut rules)?;
-        write_locked(path, &key, &rules)?;
-        Ok(value)
-    })
+    with_secrets(|store| mutate_in(path, store, false, change))
 }
 
 /// Change a registered vault only when its authenticated file still exists. Migration must
@@ -379,21 +466,7 @@ pub(super) fn mutate_existing<T>(
     path: &Path,
     change: impl FnOnce(&mut Vec<StoredRule>) -> io::Result<T>,
 ) -> io::Result<T> {
-    let _lock = Lock::acquire(path)?;
-    if !path.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "permission-rule vault missing",
-        ));
-    }
-    with_secrets(|store| {
-        let key = key_with(path, store)?;
-        let mut rules = read_locked(path, &key, VERSION)?;
-        dedupe(&mut rules);
-        let value = change(&mut rules)?;
-        write_locked(path, &key, &rules)?;
-        Ok(value)
-    })
+    with_secrets(|store| mutate_in(path, store, true, change))
 }
 
 fn dedupe(rules: &mut Vec<StoredRule>) -> bool {
@@ -783,7 +856,7 @@ mod tests {
         }
 
         let backend = Counting::default();
-        let cache = Mutex::new(HashMap::new());
+        let cache = SecretCache::default();
         let store = CachedSecrets {
             backend: &backend,
             cache: &cache,
@@ -823,17 +896,17 @@ mod tests {
             key_with(&first, &store).unwrap(),
             key_with(&first, &store).unwrap()
         );
+        // Creating the master re-reads it under the creation lock in case another
+        // process created it first; every later store is then served from the cache.
         assert_eq!(
             backend.gets.load(Ordering::SeqCst),
-            5,
+            6,
             "all hosted stores read one master credential"
         );
     }
 
     #[test]
     fn denied_credential_is_not_requested_again_during_the_process() {
-        use std::collections::HashMap;
-        use std::sync::Mutex;
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         struct Denied(AtomicUsize);
@@ -863,7 +936,7 @@ mod tests {
         }
 
         let backend = Denied(AtomicUsize::new(0));
-        let cache = Mutex::new(HashMap::new());
+        let cache = SecretCache::default();
         let store = CachedSecrets {
             backend: &backend,
             cache: &cache,
@@ -872,6 +945,129 @@ mod tests {
             assert!(store.get("permission-rules-v4-master").is_err());
         }
         assert_eq!(backend.0.load(Ordering::SeqCst), 1);
+    }
+
+    /// HS2-55P61R: an OS keychain read that waits on an access prompt holds neither the
+    /// vault's file lock, the shared master lock, nor the credential cache, so other
+    /// vault users and already-read credentials stay available until it is answered.
+    #[test]
+    fn hs2_55p61r_a_prompting_keychain_read_holds_no_vault_lock() {
+        use std::collections::HashMap;
+        use std::sync::Mutex;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        /// A keychain whose read of one account waits until a person answers.
+        struct Prompting {
+            values: Mutex<HashMap<String, String>>,
+            prompting: Option<String>,
+            entered: Mutex<mpsc::Sender<()>>,
+            answered: Mutex<mpsc::Receiver<()>>,
+        }
+        impl SecretStore for &Prompting {
+            fn set(
+                &self,
+                account: &str,
+                value: &str,
+            ) -> Result<(), hotsheet_ticketing::secrets::SecretError> {
+                self.values
+                    .lock()
+                    .unwrap()
+                    .insert(account.into(), value.into());
+                Ok(())
+            }
+            fn get(
+                &self,
+                account: &str,
+            ) -> Result<Option<String>, hotsheet_ticketing::secrets::SecretError> {
+                if self.prompting.as_deref() == Some(account) {
+                    self.entered.lock().unwrap().send(()).unwrap();
+                    self.answered.lock().unwrap().recv().unwrap();
+                }
+                Ok(self.values.lock().unwrap().get(account).cloned())
+            }
+            fn delete(
+                &self,
+                _account: &str,
+            ) -> Result<bool, hotsheet_ticketing::secrets::SecretError> {
+                unreachable!()
+            }
+        }
+        fn within<T: Send + 'static>(what: &str, work: impl FnOnce() -> T + Send + 'static) -> T {
+            let (done, result) = mpsc::channel();
+            std::thread::spawn(move || done.send(work()).unwrap());
+            result
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap_or_else(|_| panic!("{what} waited behind the keychain read"))
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("checkout-one.json");
+        let master_name = master_account(&path).unwrap();
+        // An earlier process created the master and this encrypted vault.
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (answer_tx, answer_rx) = mpsc::channel();
+        let earlier = Prompting {
+            values: Mutex::default(),
+            prompting: None,
+            entered: Mutex::new(entered_tx.clone()),
+            answered: Mutex::new(mpsc::channel().1),
+        };
+        mutate_in(
+            &path,
+            &CachedSecrets {
+                backend: &earlier,
+                cache: &SecretCache::default(),
+            },
+            false,
+            |rules| {
+                rules.push(rule("npm test"));
+                Ok(())
+            },
+        )
+        .unwrap();
+        let values = earlier.values.into_inner().unwrap();
+        let expected = values[&master_name].clone();
+
+        // A new process: its first read of the master waits on a person.
+        let backend: &'static Prompting = Box::leak(Box::new(Prompting {
+            values: Mutex::new(values),
+            prompting: Some(master_name.clone()),
+            entered: Mutex::new(entered_tx),
+            answered: Mutex::new(answer_rx),
+        }));
+        let cache: &'static SecretCache = Box::leak(Box::default());
+        cache.remember("other-credential", CachedRead::Present("ready".into()));
+        let worker_path = path.clone();
+        let loader = std::thread::spawn(move || {
+            load_with_key_in(&worker_path, &CachedSecrets { backend, cache }, false)
+        });
+        entered_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+
+        let file = path.clone();
+        within("the vault file lock", move || {
+            drop(Lock::acquire(&file).unwrap())
+        });
+        let master = dir.path().join(".permission-master");
+        within("the shared master lock", move || {
+            drop(Lock::acquire(&master).unwrap())
+        });
+        let cached = within("a cached credential", move || {
+            CachedSecrets { backend, cache }
+                .get("other-credential")
+                .unwrap()
+        });
+        assert_eq!(cached.as_deref(), Some("ready"));
+
+        answer_tx.send(()).unwrap();
+        let (_, rules) = loader.join().unwrap().unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].action, "npm test");
+        assert_eq!(
+            cache.lookup(&master_name).unwrap().unwrap(),
+            Some(expected),
+            "the answered read is cached for the locked re-read"
+        );
     }
 
     #[test]

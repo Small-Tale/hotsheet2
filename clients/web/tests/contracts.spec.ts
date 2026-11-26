@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(341); // HS2-G5J2E7 command-schedule routes; HS2-4B0KSD renewal request and owner renew routes, HS2-3GJZGG feature settings, HS2-5P112Z hosted target pool, HS2-SHH7WW project sites, HS2-GXKX1Q group delete route, HS2-FN018Q ticket-creation settings, HS2-0G80WD hosted project removal, HS2-92FJXM hosted orchestration projects, HS2-CRBR8X hosted session journal, HS2-5YCGH5 Claude terminal activity, HS2-KB2Y51 target line push and hosted observations, HS2-3D8D6V remote checkout target lines, HS2-HA0Z3A shared terminal clear route, HS2-CEZVSE tts voices route, HS2-82A7A7 store-scoped ticket-flow and activity, HS2-G3VAK4 hosted target deployments, HS2-FJ6MDW hosted speculation setting, HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(345); // HS2-86ES0B follow-relocation route; HS2-17Y2EC AI command run route; HS2-H3S7YQ feedback-primary route; HS2-NAA3HV make-home route; HS2-G5J2E7 command-schedule routes; HS2-4B0KSD renewal request and owner renew routes, HS2-3GJZGG feature settings, HS2-5P112Z hosted target pool, HS2-SHH7WW project sites, HS2-GXKX1Q group delete route, HS2-FN018Q ticket-creation settings, HS2-0G80WD hosted project removal, HS2-92FJXM hosted orchestration projects, HS2-CRBR8X hosted session journal, HS2-5YCGH5 Claude terminal activity, HS2-KB2Y51 target line push and hosted observations, HS2-3D8D6V remote checkout target lines, HS2-HA0Z3A shared terminal clear route, HS2-CEZVSE tts voices route, HS2-82A7A7 store-scoped ticket-flow and activity, HS2-G3VAK4 hosted target deployments, HS2-FJ6MDW hosted speculation setting, HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(341); // HS2-G5J2E7 command-schedule routes; HS2-4B0KSD renewal request and owner renew routes, HS2-3GJZGG feature settings, HS2-5P112Z hosted target pool, HS2-SHH7WW project sites, HS2-GXKX1Q group delete route, HS2-FN018Q ticket-creation settings, HS2-0G80WD hosted project removal, HS2-92FJXM hosted orchestration projects, HS2-CRBR8X hosted session journal, HS2-5YCGH5 Claude terminal activity, HS2-KB2Y51 target line push and hosted observations, HS2-3D8D6V remote checkout target lines, HS2-HA0Z3A shared terminal clear route, HS2-CEZVSE tts voices route, HS2-82A7A7 store-scoped ticket-flow and activity, HS2-G3VAK4 hosted target deployments, HS2-FJ6MDW hosted speculation setting, HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(345); // HS2-86ES0B follow-relocation route; HS2-17Y2EC AI command run route; HS2-H3S7YQ feedback-primary route; HS2-NAA3HV make-home route; HS2-G5J2E7 command-schedule routes; HS2-4B0KSD renewal request and owner renew routes, HS2-3GJZGG feature settings, HS2-5P112Z hosted target pool, HS2-SHH7WW project sites, HS2-GXKX1Q group delete route, HS2-FN018Q ticket-creation settings, HS2-0G80WD hosted project removal, HS2-92FJXM hosted orchestration projects, HS2-CRBR8X hosted session journal, HS2-5YCGH5 Claude terminal activity, HS2-KB2Y51 target line push and hosted observations, HS2-3D8D6V remote checkout target lines, HS2-HA0Z3A shared terminal clear route, HS2-CEZVSE tts voices route, HS2-82A7A7 store-scoped ticket-flow and activity, HS2-G3VAK4 hosted target deployments, HS2-FJ6MDW hosted speculation setting, HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -584,6 +584,90 @@ test('HS2-3KNAPN real worker view and integration strategy responses match the O
  * misses fails a real response. Walk acquire, conflict, show, list, wait, token-only renew
  * and release on a real server, and check the renewal token is no credential elsewhere.
  */
+/**
+ * HS2-ZR8B4N: a real server reads this machine's provisional-claim and claim-conflict records from the store's Git
+ * directory (`claim_gate::ClaimStandings`) and reports them as `claim_standing` on list rows and ticket details. The
+ * records are written in the shape `claim_gate` writes them; the claims themselves go through the real claim route.
+ */
+test('HS2-ZR8B4N real provisional and lost claim standings match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as { components: { schemas: Record<string, object> } };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const schema = (name: string) => ajv.compile({ ...openapi.components.schemas[name], components: openapi.components });
+  const ticketSchema = schema('Ticket'),
+    rowSchema = schema('TicketRow');
+  const server = await realTicketServer();
+  try {
+    const created = [];
+    for (const title of ['Provisional work', 'Lost work', 'Exclusive work'])
+      created.push(await server.request<{ id: string; slug: string }>('/tickets', 'POST', { title }));
+    const [provisional, lost, exclusive] = created;
+    for (const ticket of [provisional, exclusive])
+      await server.request(`/tickets/${ticket.id}/claim`, 'POST', { worker: 'worker-a', lease_minutes: 30 });
+    await server.request(`/tickets/${lost.id}/claim`, 'POST', { worker: 'worker-b', lease_minutes: 30 });
+    const gitPath = async (name: string) =>
+      (
+        await promisify(execFile)('git', ['rev-parse', '--git-path', name], {
+          cwd: server.store,
+          env: withoutGitRepositoryEnv(process.env),
+        })
+      ).stdout.trim();
+    const absolute = (path: string) => (path.startsWith('/') ? path : join(server.store, path));
+    await writeFile(
+      absolute(await gitPath('hotsheet-provisional-claims.json')),
+      JSON.stringify({ [provisional.id]: { claim_id: '01JSYNTHETICATTEMPT0000000', worker: 'worker-a' } }),
+    );
+    await writeFile(
+      absolute(await gitPath('hotsheet-claim-conflicts.json')),
+      JSON.stringify([
+        {
+          ticket: lost.id,
+          slug: lost.slug,
+          worker: 'worker-a',
+          holder: 'worker-b',
+          detected_at: '2026-11-24T12:00:00Z',
+        },
+      ]),
+    );
+    const rows = await server.request<Array<{ id: string; claim_standing?: unknown }>>('/tickets');
+    for (const value of rows) expect(rowSchema(value), JSON.stringify(rowSchema.errors)).toBe(true);
+    const standing = (id: string) => rows.find((value) => value.id === id)?.claim_standing;
+    expect(standing(provisional.id)).toEqual({ kind: 'provisional' });
+    expect(standing(lost.id)).toEqual({
+      kind: 'lost',
+      worker: 'worker-a',
+      holder: 'worker-b',
+      detected_at: '2026-11-24T12:00:00Z',
+    });
+    expect(standing(exclusive.id)).toBeUndefined();
+    for (const [ticket, expected] of [
+      [provisional, { kind: 'provisional' }],
+      [exclusive, undefined],
+    ] as const) {
+      const detail = await server.request<{ claim_standing?: unknown }>(`/tickets/${ticket.id}`);
+      expect(ticketSchema(detail), JSON.stringify(ticketSchema.errors)).toBe(true);
+      expect(detail.claim_standing).toEqual(expected);
+    }
+    // The checkout list a client reads carries the same member.
+    const page = await server.request<{ tickets?: Array<{ id: string; claim_standing?: unknown }> }>(
+      `/checkouts/${server.checkoutId}/tickets`,
+    );
+    const listed = (page.tickets ?? (page as unknown as Array<{ id: string; claim_standing?: unknown }>)).find(
+      (value) => value.id === provisional.id,
+    );
+    expect(listed?.claim_standing).toEqual({ kind: 'provisional' });
+    // Released, the provisional record no longer marks the ticket.
+    await server.request(`/tickets/${provisional.id}/release`, 'POST', { worker: 'worker-a' });
+    expect((await server.request<{ claim_standing?: unknown }>(`/tickets/${provisional.id}`)).claim_standing).toBe(
+      undefined,
+    );
+  } finally {
+    await server.stop();
+  }
+});
+
 test('HS2-FMHH9Y real resource-claim responses match the OpenAPI contract', async () => {
   test.setTimeout(90_000);
   const openapi = YAML.parse(
@@ -865,7 +949,12 @@ test('HS2-GDJXGZ real orchestration session and hosted target session responses 
       const refused = await send('POST', hosted, start);
       expect(refused.status, attempt).toBe(200);
       matches(hostedPath, 'post', '200', refused.body);
-      expect(refused.body, attempt).toEqual({ outcome: 'refused', reason: 'tool_not_installed' });
+      // HS2-8Z9VHH: a refused admission names its reason (here the tool that is not installed).
+      expect(refused.body, attempt).toEqual({
+        outcome: 'refused',
+        reason: 'tool_not_installed',
+        admission: { reason: 'tool_not_installed', tool: 'synthetic-absent-tool' },
+      });
     }
     expect((await send('GET', hosted)).body.sessions).toEqual([]);
 

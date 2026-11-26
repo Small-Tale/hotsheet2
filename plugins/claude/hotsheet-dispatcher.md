@@ -4,7 +4,7 @@ description: Keep a local dispatcher assigning independent Hot Sheet tickets whi
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 10 -->
+<!-- hotsheet-skill-version: 11 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
@@ -129,7 +129,11 @@ For each ready worker and independent ticket, reserve with
 --worker-session <worker-generation> --operation <stable-id>
 --connection <source> --native-id <native-id> --slug <slug>
 --base <published-full-sha> --scope <path-or-reviewed-section>`.
-Repeat `--scope` for all expected changed paths. The runtime serializes fresh
+Repeat `--scope` for all expected changed paths. Name the worker's remote branch in
+the cue: `merge-pending/<SLUG>` for its own ticket, or the batch integration ticket's
+slug (with a `-<label>` suffix per worker) when members integrate together; workers
+push their verified commits there before handoff (HS2-8HCBA1, HS2-M0ANR4). The
+runtime serializes fresh
 ticket, claim, dependency, availability and overlap checks under the selected
 source transaction and coordination lock. A reservation is not the worker's
 atomic ticket claim. Retry an uncertain delivery with the same operation id and

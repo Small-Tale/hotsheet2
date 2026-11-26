@@ -46,8 +46,13 @@ async fn role_started(fleet: &Fleet, role: &str) -> (Value, String, String) {
             |entry| {
                 entry["kind"] == "start"
                     && entry["outcome"] == "started"
-                    && entry["reason"] == "role_needed"
-                    && entry["detail"] == role
+                    // HS2-4JQ41V: an integrator's start names the handoff it is for.
+                    && if role == "integrator" {
+                        entry["reason"] == "integrator_started"
+                            && entry["detail"] == "handoff_pending"
+                    } else {
+                        entry["reason"] == "role_needed" && entry["detail"] == role
+                    }
             },
             2 * MINUTE,
         )
@@ -227,7 +232,13 @@ async fn hs2_1nj04q_the_loop_starts_a_dispatcher_and_an_integrator_on_a_remote_t
                 4 * MINUTE,
             )
             .await;
-        assert_eq!(stop["reason"], "idle", "{stop}");
+        // HS2-4JQ41V: the integrator's wind-down has a reason of its own.
+        let expected = if session == &integrator_id {
+            "integrator_wound_down"
+        } else {
+            "idle"
+        };
+        assert_eq!(stop["reason"], expected, "{stop}");
         assert_eq!(fleet.session(session).await["state"], "stopped");
         assert!(
             !fleet

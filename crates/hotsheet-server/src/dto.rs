@@ -310,6 +310,14 @@ pub(crate) struct UpdateReq {
     /// unspecified, never assumed AI.
     #[serde(default)]
     pub(crate) actor: Option<ActorReq>,
+    /// Commits holding this ticket's work; an AI completion verifies these are on the
+    /// remote instead of searching for slug-first commits (HS2-R8ZH4K).
+    #[serde(default)]
+    pub(crate) commits: Vec<String>,
+    /// The ticket has no code commits: an AI completion skips the remote-commit check and
+    /// records the opt-out (HS2-R8ZH4K).
+    #[serde(default)]
+    pub(crate) no_commit: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -321,6 +329,13 @@ pub(crate) struct AiFeedbackReq {
 }
 
 impl UpdateReq {
+    pub(crate) fn commit_claim(&self) -> hotsheet_ticketing::completion_remote::CommitClaim {
+        hotsheet_ticketing::completion_remote::CommitClaim {
+            commits: self.commits.clone(),
+            no_commit: self.no_commit,
+        }
+    }
+
     pub(crate) fn validate_feedback_only(&self) -> Result<(), ApiError> {
         if self.title.is_some()
             || self.details.is_some()
@@ -421,6 +436,14 @@ pub(crate) struct CloseReq {
     /// Who is closing (HS2-RD4M29); an `ai` completed-close needs a scored cycle.
     #[serde(default)]
     pub(crate) actor: Option<ActorReq>,
+    /// Commits holding this ticket's work; an AI completion verifies these are on the
+    /// remote instead of searching for slug-first commits (HS2-R8ZH4K).
+    #[serde(default)]
+    pub(crate) commits: Vec<String>,
+    /// The ticket has no code commits: an AI completion skips the remote-commit check and
+    /// records the opt-out (HS2-R8ZH4K).
+    #[serde(default)]
+    pub(crate) no_commit: bool,
 }
 
 #[derive(Debug, Deserialize)]

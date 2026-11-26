@@ -5,7 +5,7 @@
  * sends its permission prompts to Hot Sheet. An AI terminal that has not reported in after a short
  * grace period keeps its prompts to itself.
  */
-import { type IconNode, Plug, PlugZap, Unplug } from 'lucide';
+import { Heart, type IconNode, Plug, Unplug } from 'lucide';
 
 import type { TerminalAiConnection } from './api';
 
@@ -90,17 +90,29 @@ export function deriveAiConnectionStates<S extends ConnectableSession, G extends
 
 /**
  * The icon for a terminal's connection state (HS2-YHQM67). Hook connectivity and primary routing
- * are separate facts: every session whose hooks route permission prompts shows a connected plug,
- * even without MCP (warning tone), and only the project's primary for proactive feedback delivery
- * shows the energised plug. Only a session whose hooks never reported in shows the unplugged icon.
+ * are separate facts with separate indicators (HS2-1WFGX1): every session whose hooks route
+ * permission prompts shows a connected plug, even without MCP (warning tone), and only a session
+ * whose hooks never reported in shows the unplugged icon. The primary role is `aiPrimaryIcon`.
  */
-export function aiConnectionIcon(
+export function aiConnectionIcon(state: AiConnectionState): {
+  icon: IconNode;
+  name: 'plug' | 'unplug';
+  tone: 'neutral-on-quiet' | 'warning-on-quiet';
+} {
+  if (state === 'missing') return { icon: Unplug, name: 'unplug', tone: 'warning-on-quiet' };
+  return { icon: Plug, name: 'plug', tone: state === 'connected' ? 'neutral-on-quiet' : 'warning-on-quiet' };
+}
+
+/**
+ * The second indicator a connected session shows when it is its project's primary for proactive
+ * feedback delivery (HS2-1WFGX1): a heart beside the plug. Undefined for any other session, and for
+ * one whose hooks never reported in (it cannot receive the notifications).
+ */
+export function aiPrimaryIcon(
   state: AiConnectionState,
   primary?: boolean,
-): { icon: IconNode; name: 'plug-zap' | 'plug' | 'unplug'; tone: 'neutral-on-quiet' | 'warning-on-quiet' } {
-  if (state === 'missing') return { icon: Unplug, name: 'unplug', tone: 'warning-on-quiet' };
-  const tone = state === 'connected' ? 'neutral-on-quiet' : 'warning-on-quiet';
-  return primary === true ? { icon: PlugZap, name: 'plug-zap', tone } : { icon: Plug, name: 'plug', tone };
+): { icon: IconNode; name: 'heart'; tone: 'brand-on-quiet' } | undefined {
+  return primary === true && state !== 'missing' ? { icon: Heart, name: 'heart', tone: 'brand-on-quiet' } : undefined;
 }
 
 /** The tab label for a terminal's connection state: who is connected, or how to connect. */
@@ -145,4 +157,17 @@ function agentName(agent?: string): string | undefined {
   if (agent === 'codex') return 'Codex';
   if (agent === 'claude') return 'Claude';
   return agent;
+}
+
+/** HS2-G2X7RT: what a drawer tab says while its session's tool may wait on a person. */
+export const TOOL_WAITING_LABEL = 'Waiting for an answer in this terminal';
+
+/**
+ * HS2-G2X7RT: whether a terminal tab marks its orchestrator-started session as waiting: it runs, and its
+ * tool, which reports its session start, has not, so it may be on a first-run question (trust, an MCP or
+ * hook approval, an update notice) that only a person answers in that terminal. The Orchestration header
+ * says the same of a waiting planner.
+ */
+export function toolWaiting(session: { alive: boolean; tool_ready?: boolean }): boolean {
+  return session.alive && session.tool_ready === false;
 }

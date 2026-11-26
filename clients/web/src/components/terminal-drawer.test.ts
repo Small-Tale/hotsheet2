@@ -381,6 +381,8 @@ describe('TerminalDrawer', () => {
     expect(own.match(/data-context-menu="terminal"/g)).toHaveLength(1);
     expect(own).toContain('data-action="open-terminal-project" data-item-id="project:one"');
     expect(own).not.toContain('data-action="hide-dashboard-terminal"');
+    // HS2-H3S7YQ: the drawer grid offers the feedback-primary command too.
+    expect(own).toContain('data-action="set-feedback-primary"');
     // A menu opened for a tile in another grid (e.g. the workspace dashboard) is not duplicated here.
     expect(withMenu('elsewhere:one')).not.toContain('data-context-menu="terminal"');
     // The dedicated (non-grid) view has no tiles, so it never renders the menu.
@@ -931,6 +933,46 @@ describe('halted AI sessions (HS2-HJ4D1H)', () => {
   });
 });
 
+describe('an orchestrator session waiting on its tool (HS2-G2X7RT)', () => {
+  const orchestrator = {
+    checkout_id: 'checkout',
+    operation_id: 'op-1',
+    project: 'Release train',
+    owner: 'orchestrator' as const,
+    paused: false,
+  };
+  const markup = (session: Partial<TerminalDashboardSession>) =>
+    String(
+      TerminalDrawer({
+        projectId: 'project',
+        projectName: 'Project',
+        sessions: [{ ...sessions[0], kind: 'ai', busy: false, orchestrator, ...session }],
+        width: 900,
+        height: 320,
+        fitAcross: 2,
+        fitHigh: 2,
+        selectedId: 'grid',
+      }),
+    );
+  it('marks the tab while its tool has not reported its start, and clears once it has', () => {
+    const waiting = markup({ tool_ready: false });
+    expect(waiting).toContain('class="terminal-drawer__tool-waiting"');
+    expect(waiting).toContain('data-lucide="hand"');
+    expect(waiting).toContain('<title>Waiting for an answer in this terminal</title>');
+    for (const ready of [markup({ tool_ready: true }), markup({}), markup({ tool_ready: false, alive: false })]) {
+      expect(ready).not.toContain('terminal-drawer__tool-waiting');
+    }
+  });
+  it('yields to a halt, which also waits on the person', () => {
+    const halted = markup({
+      tool_ready: false,
+      halt: { error_type: 'overloaded', message: 'Synthetic halt', agent: 'claude', at: '2026-11-24T00:00:00Z' },
+    });
+    expect(halted).toContain('terminal-drawer__halt');
+    expect(halted).not.toContain('terminal-drawer__tool-waiting');
+  });
+});
+
 describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
   const markup = (session: Partial<TerminalDashboardSession>) =>
     String(
@@ -1007,18 +1049,19 @@ describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
     const count = (pattern: RegExp) => both.match(pattern)?.length ?? 0;
     expect(count(/data-ai-connection="connected"/g)).toBe(4);
     expect(count(/data-ai-primary="true"/g)).toBe(2);
-    expect(count(/data-lucide="plug-zap"/g)).toBe(2);
-    expect(count(/data-lucide="plug"/g)).toBe(2);
+    // HS2-1WFGX1: every connected session shows the plug; the primary adds a heart beside it.
+    expect(count(/data-lucide="heart"/g)).toBe(2);
+    expect(count(/data-lucide="plug"/g)).toBe(4);
     expect(both).not.toContain('data-lucide="unplug"');
     expect(both).toContain('Primary session: feedback notifications for this project are sent here.');
     // The primary closed and the server promoted the remaining terminal.
     const promoted = tabs([true]);
     expect(promoted).toContain('data-ai-primary="true"');
-    expect(promoted).toContain('data-lucide="plug-zap"');
+    expect(promoted).toContain('data-lucide="heart"');
     // No primary (for example no push-capable session): every connected tab is a plain plug.
     const none = tabs([false, false]);
     expect(none).not.toContain('data-ai-primary');
-    expect(none).not.toContain('plug-zap');
+    expect(none).not.toContain('data-lucide="heart"');
     expect(none).not.toContain('Primary session');
   });
   it('lets a halt outrank the connection state', () => {

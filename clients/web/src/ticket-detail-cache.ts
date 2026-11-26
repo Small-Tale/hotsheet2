@@ -38,6 +38,7 @@ const ROW_OVERLAY_FIELDS = [
   'claim_started_at',
   'worker_label',
   'claim_origin',
+  'claim_standing',
   'claim_count',
   'latest_confidence',
   'updated_at',

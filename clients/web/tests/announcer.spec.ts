@@ -533,6 +533,8 @@ test('HS2-7YD7S9 grows the current item instead of listing history', async ({ pa
   await overlay.getByRole('button', { name: 'Pop Out Announcer' }).click();
   await page.locator('#announcer-floating').getByRole('button', { name: 'Expand Announcer' }).click();
   await expect(overlay).toHaveAttribute('data-expanded', 'true');
+  // HS2-F880FN: the moved manual popover reopens after the expanded render settles.
+  await expect(page.locator('#announcer-floating:popover-open')).toBeVisible();
   await expect(overlay.getByRole('list')).toHaveCount(0);
   await expect(overlay.getByRole('button', { name: /synthetic choice/ })).toHaveCount(0);
   const panel = await overlay.locator('.announcer__panel').boundingBox();
@@ -647,7 +649,60 @@ test('HS2-R5Q2GY speaks a summary instead of the literal command', async ({ page
   await overlay.getByRole('button', { name: 'Play Narration' }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
-    .toEqual(['claude wrote a file.']);
+    .toEqual(['claude wrote ft.md.']);
+});
+
+test('HS2-NKE7RB speaks what a tool call does, not its raw tool id', async ({ page }) => {
+  await page.addInitScript(() => {
+    const spoken: string[] = [];
+    Object.defineProperty(window, '__announcerSpoken', { value: spoken });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: class {
+        onend?: () => void;
+        constructor(readonly text: string) {}
+      },
+    });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel() {},
+        speak(utterance: { text: string; onend?: () => void }) {
+          spoken.push(utterance.text);
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  const literal = 'mcp__hotsheet__hotsheet_update';
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: [
+        {
+          store_id: 'synthetic-store',
+          event: {
+            id: 'cmd-1',
+            ts: '2026-11-01T01:00:00Z',
+            tool: 'claude',
+            kind: 'tool_call',
+            summary: `claude called ${literal}`,
+            detail: { name: literal },
+            importance: 'high',
+          },
+        },
+      ],
+    }),
+  );
+  await page.getByRole('button', { name: 'Announcer', exact: true }).click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  // The display keeps the precise tool id; speech says what it did.
+  await expect(overlay.locator('[data-component="markdown-preview"]')).toContainText(literal);
+  await overlay.getByRole('button', { name: 'Play Narration' }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
+    .toEqual(['claude updated a ticket.']);
 });
 
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {
@@ -920,6 +975,113 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
     .toEqual(['Changed the synthetic live file']);
+});
+
+test('HS2-RKYCTP edits a live burst into an intent summary and speaks the headline', async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'WebSocket', { configurable: true, value: undefined });
+    const spoken: string[] = [];
+    Object.defineProperty(window, '__announcerSpoken', { value: spoken });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: class {
+        onstart?: () => void;
+        onend?: () => void;
+        constructor(readonly text: string) {}
+      },
+    });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel() {},
+        speak(utterance: { text: string; onstart?: () => void; onend?: () => void }) {
+          spoken.push(utterance.text);
+          utterance.onstart?.();
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+  });
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/activity**', (route) => route.fulfill({ json: [] }));
+  // Codex's real command shape: every command runs inside `zsh -lc`.
+  const command = (id: string, script: string, detail: Record<string, unknown> = {}) => ({
+    id,
+    ts: '2026-11-01T01:01:00Z',
+    tool: 'codex',
+    kind: 'command',
+    summary: `codex ran \`/bin/zsh -lc ${script}\``,
+    detail: { command: `/bin/zsh -lc '${script}'`, ...detail },
+    importance: 'normal',
+  });
+  const batches = [
+    [
+      command('b-1', 'cd /work && rg -n overlay src'),
+      command('b-2', 'sed -n 1,80p src/reel.ts'),
+      command('b-3', 'ls src'),
+      command('b-4', 'git status --short'),
+      command('b-5', 'cd clients/web && npx vitest run', { exit_code: 1 }),
+    ],
+    [command('b-6', 'rg -n failing src'), command('b-7', 'sed -n 1,40p src/speech.ts')],
+  ];
+  let cursor = 0;
+  let release = 0;
+  await page.route('**/ws/poll**', (route) => {
+    const batch = release > 0 ? batches.shift() : undefined;
+    if (!batch) return route.fulfill({ json: { cursor, events: [], overflow: false } });
+    release -= 1;
+    const events = batch.map((activity) => ({
+      cursor: ++cursor,
+      store: 'synthetic-store',
+      kind: 'activity',
+      id: activity.id,
+      slug: '',
+      activity,
+    }));
+    return route.fulfill({ json: { cursor, overflow: false, events } });
+  });
+  const spoken = () => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken);
+  await page.getByRole('button', { name: 'Announcer' }).click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  await overlay.getByRole('button', { name: 'Live' }).click();
+  release = 1;
+  // Five events become two entries: the footwork summarized, then the failing test run said at once.
+  await expect
+    .poll(spoken)
+    .toEqual(['codex looked through the code for overlay.', 'codex ran the unit tests, and they failed.']);
+  await expect(overlay.locator('.announcer__count')).toHaveText('2 / 2');
+  await overlay.getByRole('button', { name: 'Previous Activity' }).click();
+  // The summary still lists every step it folded, with its precise command on screen.
+  await expect(overlay.locator('[data-component="markdown-preview"] li')).toHaveCount(4);
+  await expect(overlay).toContainText('rg -n overlay src');
+  const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
+  if (captureDir) {
+    for (const [name, width, height] of [
+      ['wide', 1280, 800],
+      ['medium', 768, 900],
+      ['narrow', 390, 844],
+      ['return', 1280, 800],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect(overlay.locator('[data-component="markdown-preview"] li')).toHaveCount(4);
+      await page.screenshot({ path: `${captureDir}/hs2-rkyctp-group-${name}.png` });
+    }
+  }
+  await overlay.getByRole('button', { name: 'Next Activity' }).click();
+  // Routine steps alone wait for their window, then are said once.
+  release = 1;
+  await expect(overlay.locator('.announcer__count')).toHaveText('2 / 3');
+  expect(await spoken()).toHaveLength(2);
+  await page.clock.fastForward(46_000);
+  await expect
+    .poll(spoken)
+    .toEqual([
+      'codex looked through the code for overlay.',
+      'codex ran the unit tests, and they failed.',
+      'codex looked through the code for failing.',
+    ]);
+  for (const text of await spoken()) expect(text).not.toMatch(/zsh|\/|-l?c\b/);
 });
 
 // HS2-F880FN: moving an open popover's node, even within the DOM, closes it. A re-render that reorders

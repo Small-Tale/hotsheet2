@@ -92,6 +92,7 @@ export function TicketBoardColumn({
               presentation="column"
               collapsed={collapsedGroups.includes(segment.key)}
               dropTarget={dropGroup === segment.key}
+              memberSlugs={segment.items.map((ticket) => ticket.slug)}
             >
               {segment.items.map((ticket) => (
                 <TicketRow {...ticket} presentation="column" />

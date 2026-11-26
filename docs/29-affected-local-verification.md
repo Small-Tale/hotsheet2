@@ -20,6 +20,28 @@ real-server `contracts.spec.ts` browser check and its fixture as mandatory local
 work. A router-only or OpenAPI-only edit does not pull in shell composition. This
 closes the selection gap exposed by HS2-F1QJ03's missing note-doctor contract.
 
+HS2-K1WG2E makes an edit to a server watcher source (`watcher.rs`,
+`store_watch_scope.rs`, `target_store_watch.rs`, `code_ref_watch.rs`) select the HTTP
+watcher invalidation contract (`cargo nextest run -p hotsheet-server --test http
+--retries 0 -E 'test(/watcher|registered_store_gets_its_own_watcher/)'`) as a forced
+stage ahead of the long Rust suite. A CI First run that spends its budget inside the
+full Rust stage has therefore already proved the contract. Linux-only watcher cases
+are not covered by this macOS stage (HS2-E13GV2).
+
+HS2-E13GV2 covers those Linux-native watcher cases (`#[cfg(target_os = "linux")]`,
+`hs2_c3req1_linux_*`). On a Linux host a watcher edit adds them as a forced,
+retries-off stage. On macOS or Windows the plan, the gate log
+(`Linux-only watcher tests deferred to CI: …`) and the receipt's `linuxWatcher`
+field name them as deferred. The completion note must then cite the green Linux CI
+Rust job rather than claim they ran locally. The maintainer chose this over an opt-in
+Docker probe on 2026-11-25.
+
+HS2-12K3FN lets a push whose updates all delete non-main branches skip the gate in
+`.githooks/pre-push`, because such a push sends no commits or tree. Deleting
+integrated `merge-pending/<SLUG>` branches with `coordination merge-pending-prune
+--apply` is the main use. A push that also sends commits, and any update to `main`,
+keeps the normal path.
+
 ## Read-only dependency edge preview (HS2-55MWQ9)
 
 `scripts/check.sh --plan` also reports an `edgePreview`. This is a candidate
@@ -331,6 +353,54 @@ same plan and receipt as every other stage. A rerun on the same inputs reuses pa
 deferred stages. Under CI First `scripts/push.sh` does not require the receipt at all;
 the covering main CI run is the gate.
 
+**Browser cases within the budget (HS2-FXY4M2).** Under CI First an unforced
+Playwright stage is not an uncapped floor. Before this change, a CSS edit in a component
+selected seven whole spec files, 11 provider cases and 5 ux-demo cases as a mandatory
+floor with an unknown cost. A changed `providers.spec.ts` once selected 621 cases. The
+planner splits each browser stage into units: one whole spec file, or one `--grep`
+alternative. Each unit gets a relevance rank:
+
+1. A changed spec's own tests: the changed titles, or the whole file when its edit has no
+   identified title.
+2. Named regressions: HS2-79GJYG demo-state checks, HS2-P9A21R and HS2-4S22C4 workspace
+   chrome cases, the HS2-WWZS75 startup spec, and contracts after a router or OpenAPI change.
+3. Specs and titles that exercise a changed module (HS2-N7EY18, HS2-R1D0S5, HS2-1DF5PQ).
+4. The baseline real-server contracts and shell composition.
+5. Path-name heuristics, such as terminal, timeline, command or attachment patterns.
+
+A unit's cost comes from the timing history (HS2-TCCKRZ, below). A whole file uses
+its per-file estimate. A grep alternative uses the p75 of that file's recorded passing
+cases, or else the file estimate divided by the spec's statically declared `test(` calls.
+That share overestimates a case in a spec that generates cases in loops. Each new
+Playwright command adds 5 seconds, and the first selected unit adds the fixture build.
+
+The maintainer chose to keep the cases for the changed module. Items 1 and 3 always run,
+even when the floor alone exceeds the budget. They count toward the floor and run first:
+
+- Changed-spec units (item 1) always run.
+- Exercised-module units (item 3) are kept cheapest first. Their cap is the larger of the
+  budget left after the floor and the changed-spec cost, plus `KEPT_EXTRA_MS` in
+  `scripts/gate-browser-budget.mjs` (3 minutes). This safety valve bounds an unusually
+  large exercised set. The rest of that set is deferred by name as
+  `deferred to CI by the kept-case cap`.
+
+Items 2, 4 and 5 fill only what the budget leaves after the floor and the kept cases. They
+are taken first fit in (rank, spec file, declared order) order, so the result does not
+depend on stage order. A unit with no recorded timing is deferred as unknown cost, even in
+item 3. An unknown floor estimate counts as zero here, and the run-time cut still bounds
+the gate.
+
+A stage whose units all share one decision keeps its command. A mixed stage becomes one
+runnable command per decision: changed spec, kept, selected, deferred and trimmed.
+Browser stages run changed spec first, then kept, then by rank, so the run-time cut
+reaches them last. The plan's `browserBudget` and the receipt's `bestEffort.browser`
+record the counts. They also list each kept case planned past the budget
+(`keptOverBudgetCases`, `keptOverBudgetMs`) and every deferred file or grep alternative.
+The final log line `Browser cases (HS2-FXY4M2): ...` shows the same. The deferred
+commands also appear in the plan and receipt deferrals. A forced browser stage
+(HS2-RRNZYN high-impact paths, `testing:browser`) and an explicitly proposed browser
+stage still run whole. Outside CI First, browser stages keep the HS2-GN06JT floor rules.
+
 ### Verified ticket worktree cleanup (HS2-HR3ZX4)
 
 After a direct ticket or reviewed code handoff is completed, its claim is released,
@@ -473,7 +543,11 @@ JUnit report and the ordinary failure exit status. Before using that report to
 retry individual cases, the gate checks that nextest selected and ran the same
 number of tests, that the report contains that many distinct cases, and that none
 was interrupted (HS2-664XN4). A missing count or incomplete report requires a full
-stage rerun. Playwright and Vitest stages set no failure limit.
+stage rerun. Playwright can report an interrupted test or one that did not run
+under its aggregate skipped status. The gate checks the recorded attempts and
+requires an expected skip with a skipped result before treating a case as
+intentionally skipped. A shell exit that encodes a signal also invalidates the
+retry record (HS2-7KCRKQ). Playwright and Vitest stages set no failure limit.
 
 Receipts live under the Git common directory's `hotsheet-local-gate` directory.
 The existing per-worktree `hotsheet-root-gate/<tree>` compatibility marker is written
@@ -560,10 +634,42 @@ metrics enter the history. Raw failures, user data, and machine-local paths are
 discarded. The `clients/web/scripts/lint-web-observations.mjs` helper is the
 `lint:web` entrypoint (HS2-9N8ZMD); it records the existing ESLint, catalog, and
 UI doctor order and first-failure behavior. Doctor
-JSON supplies catalog, TypeScript, ESLint, analyzer, and optional browser stage
+JSON supplies catalog, ESLint, analyzer, and optional browser stage
 outcomes. The doctor report does not provide per-stage wall time, so that duration
 remains unknown. The entrypoint and its static policy assertions passed the real
 lint command and exact-tree gate; covering main CI supplies full browser regression.
+
+### lint:web cost (HS2-N3XBS3)
+
+Two changes cut `lint:web` without narrowing any rule, threshold, or warning budget:
+
+- **ESLint pass reuse.** Before ESLint runs, the entrypoint hashes every file under
+  `clients/web` that the pass can read. It skips the ESLint config's ignored directories
+  and `.kerf-cache`, plus CSS, raster image, video, and font files. TypeScript types
+  those files through `vite/client` ambient modules, and no lint rule reads them. The hash
+  also covers npm's installed-tree record (`node_modules/.package-lock.json`) in the
+  package and in every directory above it, the ESLint arguments, and the Node version. If the hash equals the one recorded after the last passing run, ESLint is
+  skipped and the check is recorded as `reused`. A pass is recorded only when the inputs
+  hash the same after the run as before it. Any failure, and any run with reuse off,
+  deletes the record. ESLint's own `--cache` stays off: with type-aware rules, an edit to
+  one file can change the findings in an unchanged file that a per-file cache would skip.
+  Reuse is local only. `CI` set, or `HOTSHEET_LINT_WEB_REUSE=0`, always runs ESLint, so
+  CI's run is unchanged.
+- **One TypeScript check.** `lint:web` runs the doctor with
+  `target/lint-web-doctor-config.json`. That is `.kerf-ui-doctor.json` with only the
+  `typescript` stage off. Every runner of `lint:web` also runs `npm run typecheck`
+  (`tsc --noEmit`): the affected gate, where `web_lint` is always selected with `web` and
+  a typecheck is a budget floor; `gate-smoke.json`; `check-full.sh`; and the CI web step.
+  `tsc --noEmit` checks a superset of the doctor's program, because the doctor drops
+  gitignored files. A policy test pins every runner. `npm run ui:doctor` keeps its own
+  TypeScript stage.
+
+The doctor still runs `--full`. Its `--changed` mode narrows TypeScript and ESLint
+findings to the changed files, and Kerf's guidance reserves `--full` for gates. Most of
+the remaining doctor cost is the `kerfjs/ui-wiring` rule, which re-reads the application
+module graph once per linted file. That is filed upstream as KF-3J0GC6 and is not worked
+around here. Measurements are in
+[lint-web-performance-2026-11-26.md](lint-web-performance-2026-11-26.md).
 
 CI uploads available nextest/Vitest reports on success or failure as
 `gate-timing-reports`, with run and attempt metadata, and uploads the merged

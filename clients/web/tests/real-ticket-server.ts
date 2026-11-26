@@ -108,6 +108,11 @@ export async function realTicketServer(
      * itself. `defaults` keeps the shipped defaults (experimental areas off).
      */
     features?: 'all' | 'defaults';
+    /**
+     * HS2-HSFVHC: host terminals in the detached broker, as a shipped server does, instead of
+     * the in-process diagnostic fallback every other fixture uses.
+     */
+    terminalBroker?: boolean;
   } = {},
 ) {
   const repo = fileURLToPath(new URL('../../../', import.meta.url)),
@@ -156,7 +161,16 @@ export async function realTicketServer(
   // instead of lingering as an orphan (HS2-VQ8ZWT).
   const child = spawn(
     binary,
-    ['-C', store, '--bind', '127.0.0.1:0', '--secret', secret, '--no-terminal-broker', '--exit-on-stdin-eof'],
+    [
+      '-C',
+      store,
+      '--bind',
+      '127.0.0.1:0',
+      '--secret',
+      secret,
+      ...(options.terminalBroker ? [] : ['--no-terminal-broker']),
+      '--exit-on-stdin-eof',
+    ],
     { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] },
   );
   let output = '',

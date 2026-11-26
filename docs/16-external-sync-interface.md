@@ -735,14 +735,135 @@ provider carries the rest of Hot Sheet's state on **provider-owned labels** it w
 reads itself and never surfaces as tags (HS2-K8R3T8). `state` decides open versus closed and
 a label refines it:
 
-| Hot Sheet                                          | GitHub                                                                                             |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Not started / Started / Backlog                    | open; `status:started` or `status:backlog` when not Not started                                    |
-| Completed                                          | closed, no `status:` label                                                                         |
-| Verified / Archived                                | closed + `status:verified` / `status:archived`                                                     |
-| Closed as Completed / Not planned                  | `state_reason` `completed` / `not_planned`, no `closed:` label                                     |
-| Closed as Duplicate / Obsolete / Works as designed | `state_reason` `not_planned` + `closed:duplicate` / `closed:obsolete` / `closed:works-as-designed` |
-| `duplicate_of`                                     | `duplicate-of:<qualified ticket reference>`                                                        |
+| Hot Sheet                                          | GitHub                                                                                              |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Not started / Started / Backlog                    | open; `status:started` or `status:backlog` when not Not started                                     |
+| Completed                                          | closed, no `status:` label                                                                          |
+| Verified / Archived                                | closed + `status:verified` / `status:archived`                                                      |
+| Closed as Completed / Not planned                  | `state_reason` `completed` / `not_planned`, no `closed:` label                                      |
+| Closed as Duplicate / Obsolete / Works as designed | `state_reason` `not_planned` + `closed:duplicate` / `closed:obsolete` / `closed:works-as-designed`  |
+| `duplicate_of`                                     | `duplicate-of:<qualified ticket reference>`                                                         |
+| Deleted (Trash)                                    | closed `not_planned` + `status:deleted`, `deleted-from:<prior status>`, and `closed:<prior reason>` |
+
+**Trash on GitHub Issues (GH-5).** GitHub has no soft delete, so Delete used to close the
+issue with no marker and it read back as Completed (a Verified ticket also lost
+`status:verified`). Delete now moves the issue to Hot Sheet's Trash:
+
+- **Delete** closes the issue as `not_planned` and labels it `status:deleted`. It also writes
+  `deleted-from:<status>` (`not-started`, `started`, `backlog`, `completed`, `verified`, or
+  `archived`) and, for a ticket that was closed, `closed:<reason>`. Trash overwrites GitHub's
+  own `state_reason`, so `closed:completed` and `closed:not-planned` exist only on trashed
+  issues. Ordinary tags, category, priority, and `duplicate-of:` survive; Up Next does not.
+  Repeating Delete keeps the same restore labels.
+- **Reading**: a closed issue with `status:deleted` reads as `deleted` and appears only in
+  Trash. A reopened issue that still carries the label is not in Trash; the stale label is
+  ignored like any other closed-only label.
+- **Restore** (`POST /checkouts/{id}/tickets/{ticket}/restore`,
+  `POST /providers/{connection}/tickets/{id}/restore`, `hotsheet-cli provider-restore`, and
+  `hotsheet_restore`) removes the Trash labels and returns the issue to its prior status, GitHub
+  state, and close reason. An issue trashed without `deleted-from:` reopens as Not started.
+  Restoring an issue outside Trash is a conflict.
+- **Permanent deletion** (Empty Trash and the retention sweep) uses GraphQL `deleteIssue`; the
+  REST API cannot delete issues. GitHub allows it only to repository admins (and to
+  maintainers where the organization permits it); a GitHub App installation token is refused.
+  When GitHub refuses, the issue stays closed in Trash and the response lists it under
+  `retained` with a provider-neutral reason; it is never counted as purged. An issue already
+  gone (410 Gone) counts as purged, and an issue outside Trash is refused before any write.
+- **Retention**: a GitHub issue has no separate deletion time, so the sweep uses
+  `updated_at`, which is never earlier than the deletion. It runs with the git sweep (at most
+  every six hours) for every provider connection a registered checkout links, using the
+  longest `trash_cleanup_days` among those checkouts.
+
+**Trash on GitLab Issues (HS2-DBKM89).** GitLab had the same bug: Delete sent
+`state_event: close` with no marker, so the ticket read back as Completed. GitLab now uses the
+same Trash design, in the adapter's single-colon label convention (`category:`, `priority:`,
+`status:`):
+
+| Hot Sheet                       | GitLab                                                        |
+| ------------------------------- | ------------------------------------------------------------- |
+| Not started / Started / Backlog | `opened`; `status:started` or `status:backlog`                |
+| Completed                       | `closed`, no `status:` label                                  |
+| Deleted (Trash)                 | `closed` + `status:deleted` and `deleted-from:<prior status>` |
+
+- **Delete** closes the issue and labels it `status:deleted` and `deleted-from:<status>`
+  (`not-started`, `started`, `backlog`, or `completed`). GitLab has one closed state and the
+  adapter maps no close reasons (`close_reasons: false`), so `deleted-from:completed` alone
+  records that the ticket was closed before Delete; no `closed:` label is written. Ordinary
+  tags, category, and priority survive, and repeating Delete keeps the same restore label. An
+  issue that was already closed keeps its original `closed_at`.
+- **Reading**: a closed issue with `status:deleted` reads as `deleted` and appears only in
+  Trash; its `close_reason` is Completed only when it was Completed before Delete. A reopened
+  issue that still carries the label is not in Trash. `deleted-from:` is never a tag.
+- **Restore** (the same routes, CLI, and MCP tool as GitHub) replaces the labels with the
+  prior status's labels and sends `state_event: reopen` only when that status is open, so a
+  Completed ticket stays closed. An issue trashed without `deleted-from:` reopens as Not
+  started, and restoring an issue outside Trash is a conflict.
+- **Permanent deletion** uses `DELETE /projects/:id/issues/:iid`, which GitLab allows only to
+  project Owners and instance administrators. 204 counts as purged, and so does 404 or 410
+  for an issue already gone. A 403 (Maintainer or lower, or a token without the `api` scope)
+  keeps the issue closed in Trash and lists it under `retained` with the provider-neutral
+  reason plus GitLab's message; it is never counted as purged. A 403 carrying GitLab's
+  rate-limit headers is a rate limit, not a refusal, and stops the purge run. An issue
+  outside Trash is refused before any write.
+- **Retention** works as for GitHub, from the issue's `updated_at`.
+- **Tests:** a stateful fake GitLab (REST v4 shapes) covers every starting status, repeat
+  Delete, Restore, purge by an Owner, refusals, 404/410, rate limits, expiry, and Empty Trash
+  (`gitlab_trash_tests.rs`), and `crates/hotsheet-server/tests/gitlab_trash_http.rs` covers
+  the checkout and connection routes, Empty Trash, and the retention sweep. The opt-in
+  `gitlab_live_trash_delete_restore_and_permission_checked_purge` writes only with
+  `HOTSHEET_GITLAB_LIVE_WRITE=1`. It has not run, because the repository names no always-safe
+  GitLab test project.
+
+**Trash on Jira (HS2-73Z1R8).** Jira had no Trash mapping: Delete reached the adapter as a
+status change, which it refuses (`status transitions`), and Restore and permanent deletion
+were refused by capability name. Jira now has a real, restorable Trash that is a single
+provider-owned label and nothing else:
+
+| Hot Sheet       | Jira                                                                     |
+| --------------- | ------------------------------------------------------------------------ |
+| Not started     | a `new` (To Do) category status                                          |
+| Started         | an `indeterminate` (In Progress) category status                         |
+| Completed       | a `done` category status                                                 |
+| Deleted (Trash) | the `hotsheet-trash` label, over whatever workflow status it already had |
+
+- **Why a label and no transition.** The adapter maps no workflow transitions (`close: false`,
+  and other status edits stay `Unsupported("status transitions")`), because Jira workflows are
+  project-specific. Many cannot take an issue from a done status back to the exact status it
+  had, so a Delete that transitioned to Done could not promise an exact Restore. Leaving the
+  workflow status alone makes Delete and Restore an exact, idempotent round trip on every
+  workflow, and no `deleted-from:` marker is needed. The tradeoff: in Jira itself a trashed
+  issue keeps its status and shows on boards with the visible `hotsheet-trash` label until it
+  is restored or permanently deleted.
+- **Delete** adds `hotsheet-trash`, which has no space or colon, so every Jira label
+  configuration accepts it. Ordinary labels, issue type, and priority survive, and repeating
+  Delete changes nothing.
+- **Reading**: any issue carrying the label reads as `deleted` and appears only in Trash,
+  never in open, Queue, or All Tickets lists, even in an open workflow status. A done issue
+  keeps `close_reason` Completed in Trash. The label is never a tag. A tag edit on a trashed
+  issue keeps it in Trash, and the label passed as an ordinary tag is dropped rather than
+  trashing the issue. A Trash read pushes `labels = "hotsheet-trash"` into JQL.
+- **Restore** (the same routes, CLI, and MCP tool as GitHub) removes the label with Jira's
+  `update.labels` `remove` operation. That leaves any label another client added in the
+  meantime, and the ticket returns to its unchanged workflow status. Restoring an issue
+  outside Trash is a conflict.
+- **Permanent deletion** uses `DELETE /rest/api/3/issue/{key}`, which needs the project's
+  Delete Issues permission. 204 counts as purged, and so does 404 for an issue already gone.
+  A 403 keeps the issue in Trash and lists it under `retained` with the provider-neutral reason
+  plus Jira's message. `deleteSubtasks` is never set, because subtasks outside Trash must not
+  be deleted with their parent. Jira's 400 for a parent with subtasks keeps it in Trash as
+  retained with a reason saying it still has child tickets. A 401 fails as an authentication
+  error. A 429 is a rate limit and stops the purge run, and other errors fail. An issue
+  outside Trash is refused before any write.
+- **Retention** works as for GitHub, from the issue's `updated`. Jira writes it with a basic
+  UTC offset (`+0000`), which the shared sweep now also reads, so Jira Trash does expire.
+- **Tests:** a stateful fake Jira (REST v3 shapes) covers each workflow category, repeat
+  Delete, Restore, tag edits, unsupported status changes, Trash and open queries, purge,
+  403/400 refusals, a 404 race, rate limits, expiry, and Empty Trash
+  (`jira_trash_tests.rs`). `crates/hotsheet-server/tests/jira_trash_http.rs` covers the
+  checkout and connection routes, Empty Trash, and the retention sweep. The opt-in
+  `jira_live_trash_delete_restore_and_permission_checked_purge` writes only with
+  `HOTSHEET_JIRA_LIVE_WRITE=1`. It has not run, because the repository names no always-safe
+  Jira test project.
 
 Every write to a closed issue re-sends its current `state_reason` and `closed:` /
 `duplicate-of:` labels, because GitHub silently resets an omitted reason to `completed`;

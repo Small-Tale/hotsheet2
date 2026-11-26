@@ -55,6 +55,8 @@ interface HostedProject {
   /** Serializes this project's deliveries, across worker restarts, so order is preserved. */
   processing: Promise<void>;
   fallbackStop?: () => void;
+  /** Stops forwarding the stream's wake to the worker (HS2-ZTAJ1R). */
+  stopWake?: () => void;
 }
 
 /**
@@ -248,6 +250,11 @@ export function createChangeStreamWorkerHost(options: ChangeStreamWorkerHostOpti
         processing: Promise.resolve(),
       };
       projects.set(project, hosted);
+      // A wake reaches the worker's transport; the main-thread fallback subscribes to it directly.
+      hosted.stopWake = streamOptions.wake?.subscribe(() => {
+        if (mode === 'worker' && projects.get(project) === hosted)
+          post({ type: 'wake', project, generation: hosted.generation });
+      });
       if (mode === 'fallback') startMainThread(hosted);
       else if (!worker && restartTimer === undefined) launch(false);
       else if (worker) openInWorker(project, hosted);
@@ -255,6 +262,7 @@ export function createChangeStreamWorkerHost(options: ChangeStreamWorkerHostOpti
         if (projects.get(project) !== hosted) return;
         projects.delete(project);
         controller.abort();
+        hosted.stopWake?.();
         hosted.fallbackStop?.();
         if (mode === 'worker') post({ type: 'close', project, generation: hosted.generation });
       };
@@ -266,6 +274,7 @@ export function createChangeStreamWorkerHost(options: ChangeStreamWorkerHostOpti
       disposed = true;
       for (const hosted of projects.values()) {
         hosted.controller.abort();
+        hosted.stopWake?.();
         hosted.fallbackStop?.();
       }
       projects.clear();

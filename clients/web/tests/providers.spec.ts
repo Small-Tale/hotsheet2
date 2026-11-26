@@ -4133,7 +4133,7 @@ test('opens a project whose setup refresh was skipped and explains it in a dismi
     await expect(banner).toContainText('Run cargo build -p hotsheet-cli');
     // The project is fully usable: its tickets load and nothing reports it unavailable.
     await expect(page.getByText('Use real project tickets').first()).toBeVisible();
-    await expect(page.getByText('could not be reopened')).toHaveCount(0);
+    await expect(page.locator('.project-restore-error')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: test.info().outputPath(`setup-warning-${width}.png`) });
     await banner.getByRole('button', { name: 'Dismiss' }).click();
@@ -4169,7 +4169,7 @@ test('keeps a project usable through a mismatched shared server and explains it 
     await expect(page.locator('[data-component="project-setup-warning-banner"]')).toHaveCount(0);
     await expect(page.getByText('Different server build is running')).toHaveCount(0);
     await expect(page.getByText('Use real project tickets').first()).toBeVisible();
-    await expect(page.getByText('could not be reopened')).toHaveCount(0);
+    await expect(page.locator('.project-restore-error')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: test.info().outputPath(`server-build-notice-${width}.png`) });
     await banner.getByRole('button', { name: 'Dismiss' }).click();
@@ -6883,11 +6883,11 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(page.locator('[data-component="terminal-dashboard"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const rail = page.locator('#app-right-rail'),
-    projectSelect = page.locator('#app-right-rail kui-select[name="terminal-rail-project"]'),
+    projectSelect = page.locator('#app-right-rail [data-terminal-rail-project]'),
     viewSelect = rail.locator('kui-select[name="terminal-rail-view"]'),
     launcher = rail.locator('[data-component="quick-ticket-composer-launcher"]');
   await expect(rail).toBeVisible();
-  await expect(projectSelect).toHaveAttribute('value', 'demo-checkout');
+  await expect(projectSelect).toHaveAttribute('data-terminal-rail-project', 'demo-checkout');
   await expect(projectSelect.locator('xpath=..')).toHaveAttribute('data-component', 'toolbar-control-group');
   await expect(viewSelect).toHaveAttribute('value', 'all');
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
@@ -6901,7 +6901,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
       search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
-      project = document.querySelector('kui-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
+      project = document.querySelector('[data-terminal-rail-project]')!.getBoundingClientRect(),
       hide = document.querySelector<HTMLElement>('[aria-label="Hide ticket rail"]')!.getBoundingClientRect(),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       // Kerf Button owns the fill inside the app-owned drop shell.
@@ -15695,10 +15695,11 @@ test('keeps a persistently failed project remembered without obscuring a success
   await expect(failedTabRoot.locator('[data-lucide="circle-alert"]')).toBeVisible();
   await failedTab.click();
   const failure = page.locator('.project-restore-error');
-  await expect(failure).toContainText('older-server could not be reopened.');
+  // An unresponsive registered process reads as a server cause; the raw detail stays (HS2-ZKAVZZ).
+  await expect(failure).toContainText('Server Unavailable');
   await expect(failure).toContainText('The older server only supports schema 2.');
-  await expect(failure).toContainText('process (4242) is not responding');
-  await expect(failure).toContainText('Project: /work/older-server');
+  await expect(failure).toContainText('process 4242 is not responding');
+  await expect(failure).toContainText('Project folder: /work/older-server');
   await page.screenshot({ path: 'target/visual-captures/hs2-cygqfn-project-restore-error-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.screenshot({ path: 'target/visual-captures/hs2-cygqfn-project-restore-error-narrow.png', fullPage: true });
@@ -15713,7 +15714,7 @@ test('keeps a persistently failed project remembered without obscuring a success
   await expect(page.getByRole('tab', { name: 'older-server' })).toHaveAttribute('aria-selected', 'true');
   await expect(failure).toContainText('The older server only supports schema 2.');
   available = true;
-  await failure.getByRole('button', { name: 'Retry project' }).click();
+  await failure.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(failure).toHaveCount(0);
   await expect(page.getByRole('tab', { name: 'older-server' }).locator('xpath=..')).not.toHaveAttribute(
     'data-attention',
@@ -16674,6 +16675,98 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await page.setViewportSize({ width: 560, height: 760 });
   await page.waitForTimeout(350);
   await page.screenshot({ path: 'target/visual-captures/hs2-90ntv5-empty-after-create-narrow.png', fullPage: true });
+});
+
+test('selecting a whole column keeps a hidden inspector hidden (HS2-85TR7P)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.getByLabel('Columns View').click();
+  await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
+  const show = page.getByRole('button', { name: 'Show Ticket Inspector' });
+  await expect(show).toBeVisible();
+  const columns = page.locator('[data-component="ticket-board-column"]'),
+    counts = await columns.evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: (node as HTMLElement).dataset.columnId!,
+        rows: node.querySelectorAll('[data-ticket-slug]').length,
+      })),
+    ),
+    busiest = counts.find((column) => column.rows > 1);
+  expect(busiest).toBeDefined();
+  const column = page.locator(`[data-column-id="${busiest!.id}"]`);
+  await column.locator('button.ticket-board-column__header').click();
+  await expect(column.locator('[data-row-selected="true"]')).toHaveCount(busiest!.rows);
+  // A multi-selection shows no single ticket's details, so the inspector is not opened for it.
+  await expect(show).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide Ticket Inspector' })).toHaveCount(0);
+  // Opening it by hand still works and shows the selection.
+  await show.click();
+  await expect(page.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeVisible();
+});
+
+test('creates a ticket with a chosen priority and in Backlog from the composer (HS2-V72HCC)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  const creates: Record<string, unknown>[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname.endsWith('/checkouts/demo-checkout/tickets'))
+      creates.push(request.postDataJSON() as Record<string, unknown>);
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  const launcher = page.getByRole('button', { name: 'New ticket…' }),
+    dialog = page.getByRole('dialog', { name: 'Create ticket' }),
+    priority = dialog.locator('kui-select[name="new-ticket-priority"]'),
+    backlog = dialog.getByRole('checkbox', { name: 'Add to Backlog' }),
+    upNext = dialog.locator('[data-action="toggle-new-ticket-up-next"]');
+  await launcher.click();
+  // Defaults: Default priority and Not Started (unchecked) outside the Backlog view.
+  await expect(priority).toHaveJSProperty('value', 'default');
+  await expect(backlog).not.toBeChecked();
+  await priority.locator('.kui-select__trigger').click();
+  await priority.locator('.kui-select__option[data-value="high"]').click();
+  await expect(priority).toHaveJSProperty('value', 'high');
+  await backlog.check();
+  await expect(backlog).toBeChecked();
+  // Up Next and Backlog are exclusive: each choice clears the other.
+  await upNext.click();
+  await expect(upNext).toHaveAttribute('aria-pressed', 'true');
+  await expect(backlog).not.toBeChecked();
+  await backlog.check();
+  await expect(upNext).toHaveAttribute('aria-pressed', 'false');
+  await page.waitForTimeout(350); // let the dialog's open transition settle before the evidence capture
+  await page.screenshot({ path: 'target/visual-captures/hs2-v72hcc-composer-wide.png' });
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Prioritized backlog idea');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(dialog).toBeHidden();
+  expect(creates.at(-1)).toMatchObject({
+    title: 'Prioritized backlog idea',
+    priority: 'high',
+    status: 'backlog',
+    up_next: false,
+  });
+  // The next draft starts over at the defaults.
+  await launcher.click();
+  await expect(priority).toHaveJSProperty('value', 'default');
+  await expect(backlog).not.toBeChecked();
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Plain queue ticket');
+  await dialog.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(dialog).toBeHidden();
+  expect(creates.at(-1)).toMatchObject({ title: 'Plain queue ticket', status: 'not_started', up_next: false });
+  expect(creates.at(-1)).not.toHaveProperty('priority');
+  // A fresh draft from the Backlog view starts with Add to Backlog checked.
+  await page
+    .getByRole('button', { name: /Backlog/ })
+    .first()
+    .click();
+  await launcher.click();
+  await expect(backlog).toBeChecked();
+  await page.setViewportSize({ width: 560, height: 760 });
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: 'target/visual-captures/hs2-v72hcc-composer-narrow.png' });
 });
 
 test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7)', async ({ page }, testInfo) => {
@@ -17984,6 +18077,302 @@ test('schedules an AI command through Settings and the real server (HS2-17663F)'
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: 'light' });
     await manage.getByRole('button', { name: 'Cancel' }).click();
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('schedules an hourly AI command, previews it, edits it to minutes, and reloads (HS2-29V4ZG)', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(
+      `${server.root}/.hotsheet2/settings.json`,
+      JSON.stringify({
+        $hotsheetSchema: 1,
+        commands: [{ id: 'cleanup', kind: 'ai', title: 'Synthetic cleanup', prompt: 'Clean up synthetic work.' }],
+      }),
+    );
+    await mockProject(page);
+    await page.route(
+      /\/__hotsheet\/project-api\/demo-checkout\/(commands|checkouts\/demo-checkout\/command-schedules)(\/.*)?$/,
+      async (route) => {
+        const incoming = new URL(route.request().url());
+        const path = incoming.pathname
+          .replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', `/checkouts/${server.checkoutId}`)
+          .replace('/__hotsheet/project-api/demo-checkout/commands', `/checkouts/${server.checkoutId}/commands`);
+        const response = await proxyFetch(route, {
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      },
+    );
+    const saved = () =>
+      server.request<
+        Array<{
+          schedule: { command_id: string; local_time: string; recurrence: { kind: string; every?: number } };
+          next_runs: string[];
+        }>
+      >(`/checkouts/${server.checkoutId}/command-schedules`);
+    const capture = (name: string) =>
+      page.screenshot({ path: testInfo.outputPath(`hs2-29v4zg-${name}.png`), animations: 'disabled' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Commands', exact: true }).click();
+    const row = page.locator('[data-component="command-settings-editor"] [data-command-id="cleanup"]');
+    const openSchedule = async () => {
+      await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+      await row.locator('[data-action="open-command-schedule"]').click();
+    };
+    await expect(row).toBeVisible();
+    await openSchedule();
+    const dialog = page.getByRole('dialog', { name: 'Schedule Command' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('radio', { name: 'Repeating' }).check();
+    await dialog.getByRole('combobox', { name: 'Repeats' }).click();
+    await expect(page.getByRole('option', { name: 'Every Few Minutes' })).toBeVisible();
+    await capture('repeats-menu-wide-light');
+    await page.getByRole('option', { name: 'Hourly' }).click();
+    await expect(dialog.getByLabel('Every (Hours)')).toHaveValue('1');
+    await expect(dialog.getByLabel('First Run', { exact: true })).toBeVisible();
+    await dialog.getByLabel('First Run', { exact: true }).fill('00:15');
+    await dialog.getByLabel('First Run', { exact: true }).press('Tab');
+    // The live preview lists three upcoming runs, one hour apart.
+    const hourlyPreview = dialog.getByText(/Then .*:15 and .*:15\./);
+    await expect(hourlyPreview).toBeVisible();
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await capture('hourly-dialog-wide-light');
+    await page.setViewportSize({ width: 900, height: 800 });
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await capture('hourly-dialog-medium-light');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await expect(hourlyPreview).toBeInViewport();
+    await capture('hourly-dialog-phone-dark');
+    await page.setViewportSize({ width: 900, height: 800 });
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await capture('hourly-dialog-medium-dark');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await hourlyPreview.scrollIntoViewIfNeeded();
+    await expect(hourlyPreview).toBeInViewport();
+    await capture('hourly-dialog-wide-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await dialog.getByRole('button', { name: 'Create Schedule' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect.poll(async () => (await saved())[0]?.schedule.recurrence).toMatchObject({ kind: 'hourly', every: 1 });
+    const runs = (await saved())[0]?.next_runs.map((run) => Date.parse(run)) ?? [];
+    expect(runs).toHaveLength(3);
+    expect((runs[1] ?? 0) - (runs[0] ?? 0)).toBe(3_600_000);
+    await expect(row).toContainText('Hourly from 00:15');
+
+    // A reload reads the saved hourly rule back into the Manage dialog.
+    await page.reload();
+    await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Commands', exact: true }).click();
+    await expect(row).toContainText('Hourly from 00:15');
+    await openSchedule();
+    const manage = page.getByRole('dialog', { name: 'Manage Schedule' });
+    await expect(manage).toBeVisible();
+    await expect(manage.getByRole('combobox', { name: 'Repeats' })).toContainText('Hourly');
+    await expect(manage.getByLabel('First Run', { exact: true })).toHaveValue('00:15');
+    await manage.getByRole('combobox', { name: 'Repeats' }).click();
+    await page.getByRole('option', { name: 'Every Few Minutes' }).click();
+    // Switching keeps Every above the floor and states the floor.
+    await expect(manage.getByLabel('Every (Minutes)')).toHaveValue('15');
+    await expect(manage.getByText('Minimum 5 minutes.')).toBeVisible();
+    await manage.getByLabel('Every (Minutes)').fill('30');
+    await manage.getByLabel('Every (Minutes)').press('Tab');
+    await expect(manage.getByText(/Then .*:45 and .*:15\.|Then .*:15 and .*:45\./)).toBeVisible();
+    await capture('minutes-dialog-wide-light');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(manage).toBeVisible();
+    await capture('minutes-dialog-phone-light');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await manage.getByRole('button', { name: 'Save Schedule' }).click();
+    await expect(manage).not.toBeVisible();
+    await expect
+      .poll(async () => (await saved())[0]?.schedule.recurrence)
+      .toMatchObject({ kind: 'minutely', every: 30 });
+    await expect(row).toContainText('Every 30 minutes from 00:15');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('runs an AI command action chosen in its editor from the sidebar, and schedules inherit or override it (HS2-17Y2EC)', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  // No AI tool is on the server's PATH, so a session action exercises the real hand-off failure path
+  // without ever launching a developer's installed AI tool; the successful hand-off is covered by the
+  // server's fake-drive tests (hs2_17y2ec_ai_run_new_session_claims_ticket_and_records_launch).
+  const server = await realTicketServer({ env: { PATH: '/usr/bin:/bin' } });
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(
+      `${server.root}/.hotsheet2/settings.json`,
+      JSON.stringify({
+        $hotsheetSchema: 1,
+        commands: [{ id: 'review', kind: 'ai', title: 'Review synthetic plan', prompt: 'Review a synthetic plan.' }],
+      }),
+    );
+    await mockProject(page);
+    const aiRuns: string[] = [];
+    // Commands, schedules, AI runs, and run history are the real server's; the rest is the project fixture.
+    await page.route(
+      /\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups|command-runs|checkouts\/demo-checkout\/(command-schedules|commands\/[^/]+\/ai-run))(\/.*)?$/,
+      async (route) => {
+        const incoming = new URL(route.request().url());
+        if (incoming.pathname.endsWith('/ai-run')) aiRuns.push(incoming.pathname);
+        const path = projectScopedServerPath(
+          server.checkoutId,
+          incoming.pathname
+            .replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', `/checkouts/${server.checkoutId}`)
+            .replace('/__hotsheet/project-api/demo-checkout', ''),
+        );
+        const response = await proxyFetch(route, {
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      },
+    );
+    // Real-app review captures at wide, medium, narrow, and back to wide, in both schemes (visual QA).
+    const captureAcrossSizes = async (name: string, ready: Locator) => {
+      const sizes = [
+        ['wide-light', 1440, 900, 'light'],
+        ['medium-light', 900, 800, 'light'],
+        ['narrow-light', 390, 844, 'light'],
+        ['narrow-dark', 390, 844, 'dark'],
+        ['wide-dark', 1440, 900, 'dark'],
+      ] as const;
+      for (const [label, width, height, colorScheme] of sizes) {
+        await page.setViewportSize({ width, height });
+        await page.emulateMedia({ colorScheme });
+        await expect(ready).toBeVisible();
+        await page.screenshot({
+          path: testInfo.outputPath(`hs2-17y2ec-${name}-${label}.png`),
+          animations: 'disabled',
+        });
+      }
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.emulateMedia({ colorScheme: 'light' });
+    };
+    const storedCommand = async () =>
+      (await server.request<Array<{ id: string; action?: string }>>(`/checkouts/${server.checkoutId}/commands`)).find(
+        (command) => command.id === 'review',
+      );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    const sidebarCommand = page.getByRole('button', { name: 'Review synthetic plan AI command', exact: true });
+    // An existing command keeps the legacy click and says so.
+    await expect(sidebarCommand).toHaveAttribute('title', /^Click: Create Ticket and Notify an Idle AI Session\./);
+
+    const editor = page.locator('[data-component="command-settings-editor"]'),
+      commandDialog = page.locator('#command-editor-dialog'),
+      row = editor.locator('[data-command-id="review"]').first(),
+      chooseAction = async (value: string) => {
+        await page.getByLabel('Settings View').click();
+        await page.getByRole('button', { name: 'Commands', exact: true }).click();
+        await row.dblclick();
+        const action = commandDialog.locator('kui-select[name="action"]');
+        await expect(action).toBeVisible();
+        await action.locator('.kui-select__trigger').click();
+        await action.locator(`.kui-select__option[data-value="${value}"]`).click();
+        await expect(action).toHaveJSProperty('value', value);
+        return action;
+      };
+    await chooseAction('create_ticket');
+    await captureAcrossSizes('command-editor', commandDialog);
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(async () => (await storedCommand())?.action).toBe('create_ticket');
+
+    // Create Ticket Only: the host queues the exact command ticket and claims nothing.
+    await page.getByLabel('List View').click();
+    await expect(sidebarCommand).toHaveAttribute('title', /^Click: Create Ticket Only\./);
+    const queuedResponse = page.waitForResponse((response) => response.url().endsWith('/ai-run'));
+    await sidebarCommand.click();
+    const queued = (await (await queuedResponse).json()) as { delivery: string; ticket: FullTicket };
+    expect(queued.delivery).toBe('queued');
+    const queuedTicket = await server.request<FullTicket>(`/tickets/${queued.ticket.id}`);
+    expect(queuedTicket.tags).toContain('hs2-command:review');
+    expect(queuedTicket.claimed_by ?? null).toBeNull();
+    await expect(page.locator('.app-toast', { hasText: `Queued ${queued.ticket.slug}.` })).toBeVisible();
+
+    // Auto-Start in a New AI Session: the click goes to the host, which reports why no session took it.
+    await chooseAction('new_ai_session');
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(async () => (await storedCommand())?.action).toBe('new_ai_session');
+    await page.getByLabel('List View').click();
+    await expect(sidebarCommand).toHaveAttribute('title', /^Click: Auto-Start in a New AI Session\./);
+    const sessionResponse = page.waitForResponse((response) => response.url().endsWith('/ai-run'));
+    await sidebarCommand.click();
+    const session = (await (await sessionResponse).json()) as {
+      action: string;
+      delivery: string;
+      reason?: string;
+      ticket: FullTicket;
+    };
+    expect(session).toMatchObject({ action: 'new_ai_session', delivery: 'failed', reason: 'ai_provider_unavailable' });
+    const sessionTicket = await server.request<FullTicket>(`/tickets/${session.ticket.id}`);
+    expect(sessionTicket.claimed_by ?? null).toBeNull();
+    expect(sessionTicket.notes.some((note) => note.text.includes('ai_provider_unavailable'))).toBe(true);
+    await expect(
+      page.locator('.app-toast', { hasText: `Queued ${session.ticket.slug}; no AI session could start it` }),
+    ).toBeVisible();
+    expect(aiRuns).toHaveLength(2);
+    await expect
+      .poll(async () =>
+        (
+          await server.request<Array<{ command_id: string; launch?: { kind: string } }>>(
+            `/checkouts/${server.checkoutId}/command-runs`,
+          )
+        ).map((run) => `${run.command_id}:${run.launch?.kind}`),
+      )
+      .toEqual(['review:ai', 'review:ai']);
+
+    // A new schedule inherits the command's action; an explicit choice overrides it.
+    const savedSchedule = () =>
+      server.request<Array<{ schedule: { action?: string }; effective_action?: string }>>(
+        `/checkouts/${server.checkoutId}/command-schedules`,
+      );
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Commands', exact: true }).click();
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    const dialog = page.getByRole('dialog', { name: 'Schedule Command' });
+    const scheduleAction = dialog.locator('kui-select[name="action"]');
+    await expect(scheduleAction).toHaveJSProperty('value', 'command_default');
+    await expect(scheduleAction).toContainText('Use Command Default (Auto-Start in a New AI Session)');
+    await captureAcrossSizes('schedule-dialog', dialog);
+    const future = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+    await dialog.getByLabel('Date').fill(future);
+    await dialog.getByRole('button', { name: 'Create Schedule' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect.poll(async () => (await savedSchedule())[0]?.effective_action).toBe('new_ai_session');
+    expect((await savedSchedule())[0]?.schedule.action).toBeUndefined();
+
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
+    await row.locator('[data-action="open-command-schedule"]').click();
+    const manage = page.getByRole('dialog', { name: 'Manage Schedule' });
+    const manageAction = manage.locator('kui-select[name="action"]');
+    await expect(manageAction).toHaveJSProperty('value', 'command_default');
+    await manageAction.locator('.kui-select__trigger').click();
+    await manageAction.locator('.kui-select__option[data-value="create_ticket"]').click();
+    await expect(manageAction).toHaveJSProperty('value', 'create_ticket');
+    await manage.getByRole('button', { name: 'Save Schedule' }).click();
+    await expect(manage).not.toBeVisible();
+    await expect.poll(async () => (await savedSchedule())[0]?.schedule.action).toBe('create_ticket');
+    expect((await savedSchedule())[0]?.effective_action).toBe('create_ticket');
   } finally {
     await server.stop(page);
   }
@@ -32380,6 +32769,69 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   await page.screenshot({ path: 'target/visual-captures/hs2-rdvwzx-empty-trash-complete-narrow.png', fullPage: true });
 });
 
+// GH-5 / HS2-DBKM89: a provider that may not permanently delete keeps its tickets in Trash; the
+// toast names the tickets that stayed and why, stays up long enough to read, and the workspace
+// returns to the Trash view that still holds them. Synthetic provider ids only.
+test('keeps provider Trash the connection may not delete and explains it after Empty Trash', async ({ page }) => {
+  const notPermitted =
+    "this connection's credentials cannot permanently delete tickets in the provider, so the ticket stays closed in Trash; reconnect with an account that can delete issues, or delete it in the provider (GitLab said: 403 Forbidden)";
+  await mockProject(page);
+  await page.route('**/trash/empty', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({
+          json: {
+            purged: 1,
+            tickets: ['HS2-OLD001'],
+            retained: [
+              { qualified_id: 'gitlab-main:5', slug: 'acme/repo#5', message: notPermitted },
+              { qualified_id: 'gitlab-main:6', slug: 'acme/repo#6', message: notPermitted },
+            ],
+            unavailable: [],
+          },
+        })
+      : route.fallback(),
+  );
+  const toast = page.locator('wa-toast-item .app-toast');
+  const expected = `Emptied Trash — 1 ticket permanently removed. 2 tickets stayed in Trash (acme/repo#5, acme/repo#6): ${notPermitted}.`;
+  await page.clock.install();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openMockedProject(page);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Empty Trash leaves Trash optimistically; the retained tickets bring the workspace back.
+    await page.locator('[data-action="select-view"][data-item-id="trash"]').click();
+    await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
+    await page.getByRole('button', { name: 'Empty Trash' }).click();
+    await page
+      .locator('[data-dialog-component="empty-trash-dialog"]')
+      .getByRole('button', { name: 'Empty Trash' })
+      .click();
+    await expect(page.locator('[data-dialog-component="empty-trash-dialog"]')).toHaveCount(0);
+    await expect(toast).toHaveText(expected);
+    await expect(page.locator('#workspace-page-title')).toContainText('Trash');
+    await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
+    // Past the default 2.5-second lifetime the explanation is still readable.
+    await page.clock.runFor(3_000);
+    await expect(toast).toHaveText(expected);
+    for (const [label, width, height] of [
+      ['wide', 1440, 900],
+      ['medium', 1024, 768],
+      ['narrow', 390, 844],
+      ['wide-again', 1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await settledAnimations(page.locator('[data-component="app-shell"]'));
+      await expect(toast).toBeVisible();
+      await page.screenshot({ path: `target/visual-captures/gh-5-trash-retained-toast-${scheme}-${label}.png` });
+    }
+    // It still leaves on its own once its reading time is over.
+    await page.clock.runFor(30_000);
+    await expect(toast).toHaveCount(0);
+  }
+});
+
 test('restores Trash and surfaces a persistent error when emptying fails', async ({ page }) => {
   await mockProject(page);
   await page.route('**/trash/empty', (route) =>
@@ -33586,6 +34038,44 @@ test('copies one or every selected ticket ID from row and More actions menus (HS
   await captureMenu('hs2-f0xzax-multiple-phone');
 });
 
+// HS2-PC7VRA: every toast stays up for its message's reading time (300 ms a word, at least 2.5 s,
+// at most 20 s) without its call opting in. A copy failure with a long synthetic browser reason
+// goes through the ordinary `showToast` call, so it proves the central rule.
+test('keeps a long toast past the 2.5-second floor for its reading time (HS2-PC7VRA)', async ({ page }) => {
+  const reason = 'The clipboard is held by another application, so this browser could not write to it right now.';
+  await page.addInitScript((message) => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error(message)) },
+    });
+    document.execCommand = () => false;
+  }, reason);
+  await mockProject(page);
+  await page.clock.install();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openMockedProject(page);
+  const toast = page.locator('wa-toast-item .app-toast'),
+    expected = `Copy failed: ${reason}`,
+    readingTime = expected.split(/\s+/).length * 300;
+  expect(readingTime).toBeGreaterThan(5_000);
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click({ button: 'right' });
+  await page
+    .locator('[data-context-menu="ticket"]')
+    .getByRole('menuitem', { name: 'Copy ticket ID', exact: true })
+    .click();
+  await expect(toast).toHaveText(expected);
+  // Past the old fixed 2.5-second lifetime the message is still there to read.
+  await page.clock.runFor(3_000);
+  await expect(toast).toHaveText(expected);
+  await page.screenshot({ path: 'target/visual-captures/hs2-pc7vra-long-toast-after-3s-1440.png' });
+  await page.clock.runFor(readingTime - 3_000 - 500);
+  await expect(toast).toHaveText(expected);
+  // It still leaves on its own once its reading time is over.
+  await page.clock.runFor(1_000);
+  await expect(toast).toHaveCount(0);
+});
+
 for (const surface of ['workspace', 'rail'] as const) {
   for (const theme of ['light', 'dark'] as const) {
     test(`projects native tri-state toolbar stars through ${surface} in ${theme} (HS2-WP15AF)`, async ({ page }) => {
@@ -34756,6 +35246,119 @@ test('keeps an inspector tab chosen during a held activation refresh when the se
   await expect(attachmentsTab).toHaveAttribute('aria-selected', 'true');
   await expect(attachmentsTab).toBeFocused();
   await expect(inspector.locator('[data-inspector-tab="attachments"]')).toHaveAttribute('data-selected', 'true');
+});
+
+test('keeps a ticket view chosen during a held activation refresh when the session restore lands (HS2-123CV9)', async ({
+  page,
+}) => {
+  let holdRefreshes = false;
+  const pending = new Map<string, import('@playwright/test').Route>();
+  await mockProject(page);
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
+    const root = route.request().postDataJSON().root as string;
+    if (root === '/work/other')
+      return route.fulfill({
+        status: 201,
+        json: {
+          ...project,
+          id: 'other-checkout',
+          root,
+          name: 'other',
+          apiPath: '/__hotsheet/project-api/other-checkout',
+        },
+      });
+    return route.fulfill({ status: 201, json: project });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  await page.route(/\/tickets(?:\?.*)?$/, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const other = new URL(route.request().url()).pathname.includes('/other-checkout/');
+    if (holdRefreshes && !other) {
+      pending.set('demo', route);
+      return;
+    }
+    return route.fulfill({ json: ticketsJson(route.request(), other ? [] : [row, notStartedRow]) });
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  // Park the demo project on the Queue view, then switch away.
+  const queue = page.getByRole('button', { name: /^Queue/ }).first(),
+    backlog = page.getByRole('button', { name: /^Backlog/ }).first();
+  await expect(queue).toHaveAttribute('aria-current', 'page');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).some((key) => (localStorage.getItem(key) ?? '').includes('"selectedView":"all"')),
+      ),
+    )
+    .toBe(true);
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+  // Switch back with the activation refresh (and so the delayed session restore) held.
+  holdRefreshes = true;
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await expect.poll(() => pending.has('demo')).toBe(true);
+  holdRefreshes = false;
+  // The user picks Backlog before the held refresh lands.
+  await backlog.click();
+  await expect(backlog).toHaveAttribute('aria-current', 'page');
+  // Releasing the refresh runs the restore of the parked Queue view; it must keep the user's choice.
+  const network = trackNetworkQuietExceptChangePolls(page);
+  await pending.get('demo')!.fulfill({ json: ticketsJson(pending.get('demo')!.request(), [row, notStartedRow]) });
+  await network.quiet();
+  await expect(backlog).toHaveAttribute('aria-current', 'page');
+  await expect(queue).not.toHaveAttribute('aria-current', 'page');
+});
+
+test('keeps a ticket selected between the session restores of a project activated twice while it opens (HS2-CN0CS7)', async ({
+  page,
+}) => {
+  // The project has a parked session with nothing selected.
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'hotsheet.workspace.project-session.v1.demo-checkout',
+      JSON.stringify({ selectedView: 'all', selectedTicketSlugs: [], composer: { open: false } }),
+    );
+  });
+  await mockProject(page);
+  // Hold the startup remote-tab restore and the opening project's wiring, so the startup's
+  // "reveal a tab when idle" step activates the project while its own open is still wiring it.
+  const held = new Map<string, Route>();
+  await page.route('**/__hotsheet/remotes/selected-projects', (route) => {
+    held.set('remotes', route);
+  });
+  await page.route('**/permission-automation', (route) => {
+    if (route.request().method() !== 'GET' || held.has('automation')) return route.fallback();
+    held.set('automation', route);
+  });
+  await page.goto('/');
+  await expect.poll(() => held.has('remotes')).toBe(true);
+  // HS2-GDBK53: the open is driven by hand because this test holds the activation requests (HS2-CN0CS7).
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect.poll(() => held.has('automation')).toBe(true);
+  // The first activation: startup reveals the wired tab and restores its parked session.
+  const firstList = ticketListLoaded(page);
+  await held.get('remotes')!.fulfill({ json: [] });
+  await firstList;
+  let network = trackNetworkQuietExceptChangePolls(page);
+  await network.quiet();
+  // The user selects a ticket between the two activations.
+  const inspector = page.locator('#app-right-rail'),
+    selected = page.getByRole('option', { name: /^HS2-DEMO01: / });
+  await page.getByText('Use real project tickets').click();
+  await expect(selected).toHaveAttribute('aria-selected', 'true');
+  await expect(inspector.getByRole('button', { name: 'Open Ticket Reader' })).toBeVisible();
+  // The open finishes wiring and activates the project again; its session restore runs after the
+  // refresh. It must keep the user's ticket, not the parked empty selection.
+  network = trackNetworkQuietExceptChangePolls(page);
+  await held.get('automation')!.fallback();
+  await network.quiet();
+  await expect(selected).toHaveAttribute('aria-selected', 'true');
+  await expect(inspector.getByRole('button', { name: 'Open Ticket Reader' })).toBeVisible();
+  await expect(inspector.getByText('Select a ticket to see and edit its details')).toHaveCount(0);
 });
 
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus', async ({
@@ -38953,6 +39556,13 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     await note.getByRole('button', { name: 'Add response at a character position' }).click();
     await note.getByRole('textbox', { name: /Response at character/ }).fill('Use the revised flow. This is my answer.');
     await note.getByRole('button', { name: 'Respond' }).click();
+    // HS2-6RXBS9: with no AI session open, the saved answer offers to start one in a top-layer card.
+    // Dismiss it (the note stays for the AI's next read) so it cannot cover the reader's controls;
+    // a test that raced ahead of the card passed locally and timed out on CI (HS2-FZAE4Y).
+    const startPrompt = page.getByRole('dialog', { name: 'Start an AI Session' });
+    await expect(startPrompt).toBeVisible();
+    await startPrompt.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(startPrompt).toHaveCount(0);
     await expect(inspector).toHaveAttribute('data-needs-review', 'false');
     await expect(inspector.locator('.ticket-inspector__feedback')).toHaveCount(0);
     const persisted = await server.request<FullTicket>(`/tickets/${created.id}`),
@@ -39907,6 +40517,9 @@ test('shows the testing-phase time-left estimate on list rows, column cards, and
 });
 
 test('coalesces Not Working note typing per pause and submits the latest draft (HS2-9CWDSB)', async ({ page }) => {
+  // HS2-37D3H8: the page clock is installed so typing can run with time paused. Under load a real
+  // 10 ms keystroke gap can outlast the 150 ms pause, and a render mid-typing is then correct.
+  await page.clock.install();
   await mockProject(page);
   const bodies: string[] = [];
   await page.route('**/not-working', async (route) => {
@@ -39943,10 +40556,12 @@ test('coalesces Not Working note typing per pause and submits the latest draft (
   });
   const mutations = () =>
     page.evaluate(() => (window as unknown as { __notWorkingMutations: number }).__notWorkingMutations);
+  await page.clock.pauseAt(new Date(Date.now() + 60_000));
   await note.pressSequentially('Still broken', { delay: 10 });
   expect(await mutations()).toBe(0);
   await expect(note).toHaveValue('Still broken');
   // The dialog render catches up once typing pauses.
+  await page.clock.resume();
   await expect.poll(mutations).toBeGreaterThan(0);
   // Typing more and submitting mid-debounce sends the complete draft.
   await note.press('End');

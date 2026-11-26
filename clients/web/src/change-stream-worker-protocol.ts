@@ -39,6 +39,8 @@ export type ChangeStreamMainMessage =
   | { type: 'hello'; protocol: number }
   | ChangeStreamWorkerOpen
   | { type: 'close'; project: string; generation: number }
+  /** Retry this project's stream now if it is backing off (HS2-ZTAJ1R). */
+  | { type: 'wake'; project: string; generation: number }
   | { type: 'ack'; project: string; generation: number; seq: number };
 
 export type ChangeStreamDelivery =
@@ -67,6 +69,7 @@ export function parseChangeStreamMainMessage(value: unknown): ChangeStreamMainMe
   if (typeof value.project !== 'string' || !isCount(value.generation)) return undefined;
   const { project, generation } = value;
   if (value.type === 'close') return { type: 'close', project, generation };
+  if (value.type === 'wake') return { type: 'wake', project, generation };
   if (value.type === 'ack')
     return isCount(value.seq) ? { type: 'ack', project, generation, seq: value.seq } : undefined;
   if (value.type !== 'open' || typeof value.apiUrl !== 'string' || typeof value.clientId !== 'string') return undefined;

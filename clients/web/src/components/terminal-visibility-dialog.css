@@ -7,3 +7,8 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--kui-space-xs);
 }
+
+/* AI Chats is left out while the AI chat feature is off and nothing is listed (HS2-4TKASN). */
+.terminal-visibility-dialog__type-grid[data-type-count='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}

@@ -291,3 +291,84 @@ export function createStandbyIdleTimer(options: StandbyIdleTimerOptions) {
 }
 
 export type StandbyIdleTimer = ReturnType<typeof createStandbyIdleTimer>;
+
+/** How long the pointer must rest before standby hides it again (HS2-1RGBCT). */
+export const STANDBY_CURSOR_HIDE_MS = 3_000;
+/** How far, in CSS pixels, the pointer must travel to show the cursor; a nudged desk is no wake. */
+export const STANDBY_CURSOR_WAKE_PX = 8;
+
+export interface StandbyCursorOptions {
+  /** Called with `true` when the cursor should hide and `false` when it should show. */
+  onChange: (hidden: boolean) => void;
+  hideMs?: number;
+  wakePx?: number;
+  setTimer?: (callback: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
+}
+
+/**
+ * Standby's cursor (HS2-1RGBCT): hidden as soon as standby shows, shown again once the pointer moves
+ * a little (past `wakePx` from where it last rested), and hidden again after `hideMs` without moving.
+ * One pending timer; it never issues a request.
+ */
+export function createStandbyCursor(options: StandbyCursorOptions) {
+  const hideMs = options.hideMs ?? STANDBY_CURSOR_HIDE_MS,
+    wakePx = options.wakePx ?? STANDBY_CURSOR_WAKE_PX,
+    setTimer = options.setTimer ?? ((callback: () => void, ms: number) => globalThis.setTimeout(callback, ms)),
+    clearTimer =
+      options.clearTimer ??
+      ((handle: unknown) => {
+        globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>);
+      });
+  let active = false,
+    hidden = false,
+    anchor: { x: number; y: number } | undefined,
+    handle: unknown;
+  function cancel() {
+    if (handle !== undefined) clearTimer(handle);
+    handle = undefined;
+  }
+  function set(next: boolean) {
+    if (next === hidden) return;
+    hidden = next;
+    options.onChange(next);
+  }
+  function hide() {
+    handle = undefined;
+    if (!active) return;
+    anchor = undefined;
+    set(true);
+  }
+  return {
+    /** Standby showed: hide the cursor now. */
+    start() {
+      active = true;
+      anchor = undefined;
+      cancel();
+      set(true);
+    },
+    /** The pointer is at (`x`, `y`). */
+    move(x: number, y: number) {
+      if (!active) return;
+      if (hidden) {
+        // The first report after hiding is where it rests; it shows only once it travels from there.
+        if (!anchor) {
+          anchor = { x, y };
+          return;
+        }
+        if (Math.hypot(x - anchor.x, y - anchor.y) < wakePx) return;
+        set(false);
+      }
+      cancel();
+      handle = setTimer(hide, hideMs);
+    },
+    /** Standby exited: show the cursor and stop. */
+    stop() {
+      active = false;
+      anchor = undefined;
+      cancel();
+      set(false);
+    },
+    hidden: () => hidden,
+  };
+}

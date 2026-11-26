@@ -19,6 +19,9 @@ pub struct ApiError {
     /// HS2-XHQ1EH: one identifier field an automated caller acts on, such as the
     /// `request_id` of a permission request to answer.
     field: Option<(&'static str, String)>,
+    /// HS2-8Z9VHH: one structured detail object beside `code`, such as a refused
+    /// admission's reason, limit and observed value.
+    detail: Option<Box<(&'static str, serde_json::Value)>>,
 }
 
 impl ApiError {
@@ -28,6 +31,7 @@ impl ApiError {
             message: message.into(),
             code: None,
             field: None,
+            detail: None,
         }
     }
     /// Attach a stable machine-readable `code` an automated caller can branch on.
@@ -38,6 +42,11 @@ impl ApiError {
     /// Attach one identifier field, such as `request_id`, beside `code`.
     pub(crate) fn with_field(mut self, name: &'static str, value: impl Into<String>) -> Self {
         self.field = Some((name, value.into()));
+        self
+    }
+    /// HS2-8Z9VHH: attach one structured detail object, such as `admission`.
+    pub(crate) fn with_detail(mut self, name: &'static str, value: serde_json::Value) -> Self {
+        self.detail = Some(Box::new((name, value)));
         self
     }
     pub(crate) fn not_found(id: &str) -> Self {
@@ -72,6 +81,10 @@ impl IntoResponse for ApiError {
         if let Some((name, value)) = self.field {
             body[name] = serde_json::Value::from(value);
         }
+        if let Some(detail) = self.detail {
+            let (name, value) = *detail;
+            body[name] = value;
+        }
         (self.status, Json(body)).into_response()
     }
 }
@@ -85,6 +98,7 @@ impl From<hotsheet_ticketing::actor::RuleViolation> for ApiError {
             message: violation.message,
             code: Some(violation.code),
             field: None,
+            detail: None,
         }
     }
 }

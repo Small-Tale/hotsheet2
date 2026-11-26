@@ -25,6 +25,7 @@ pub(crate) async fn open_terminal(
     Json(req): Json<OpenTerminalReq>,
 ) -> Result<Json<TerminalInfo>, ApiError> {
     let id = req.id.clone().unwrap_or_else(|| Ulid::new().to_string());
+    let fence = LaunchFence::new(req.launch_within_ms);
     let launch_state = state.clone();
     let launch_id = id.clone();
     // Setup and model discovery may launch subprocesses or wait for a shared catalog
@@ -55,6 +56,10 @@ pub(crate) async fn open_terminal(
         .clone()
         .unwrap_or_else(|| state.store.root().to_string_lossy().into_owned());
     let connection_project = terminal_permission_project(&state, &req);
+    // HS2-62099G: the last point before anything runs. A caller that already gave up
+    // would never record this terminal, so a late launch spawns nothing. A caller
+    // that disconnects drops this handler before it gets here.
+    fence.check()?;
 
     // Broker mode: the PTY lives in the detached broker (survives a server restart).
     if let Some(tb) = &state.terminal_broker {
@@ -172,6 +177,30 @@ pub(crate) async fn open_terminal(
         }
     }
     Ok(Json(term_info(&term, &id)))
+}
+
+/// HS2-62099G: the window a caller waits for a launch's answer, measured from the
+/// request's arrival. A launch whose window has passed before its terminal spawns is
+/// refused, so a caller that timed out never leaves a terminal running untracked.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LaunchFence(Option<std::time::Instant>);
+
+impl LaunchFence {
+    pub(crate) fn new(within_ms: Option<u64>) -> Self {
+        Self(within_ms.and_then(|ms| {
+            std::time::Instant::now().checked_add(std::time::Duration::from_millis(ms))
+        }))
+    }
+
+    pub(crate) fn check(self) -> Result<(), ApiError> {
+        match self.0 {
+            Some(deadline) if std::time::Instant::now() >= deadline => Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "the launch window passed before the terminal started; nothing was started",
+            )),
+            _ => Ok(()),
+        }
+    }
 }
 
 /// Compose the caller's explicit command, a plugin-declared interactive launch, or the user's
@@ -643,7 +672,20 @@ fn terminal_permission_identity(state: &AppState, cwd: Option<&str>) -> String {
         || format!("unregistered:{}", cwd.display()),
         |checkout| {
             let identity = checkout.permission_identity();
-            state.register_checkout_permission_rules(&identity);
+            // HS2-55P61R: loading the checkout vault may wait on an OS keychain access
+            // prompt. The launch needs only the identity; a permission request for this
+            // checkout registers the vault itself before it can auto-answer, so a
+            // background load never weakens a decision.
+            let background = state.clone();
+            let register = identity.clone();
+            let spawned = std::thread::Builder::new()
+                .name("checkout-permission-rules".into())
+                .spawn(move || {
+                    background.register_checkout_permission_rules(&register);
+                });
+            if let Err(error) = spawned {
+                tracing::warn!(%error, "checkout permission vault load not started");
+            }
             identity
         },
     )
@@ -771,7 +813,12 @@ fn register_terminal_connection(
                 crate::routes::orchestration_sessions::note_session_change(&events, &conn_id);
                 break;
             }
-            let busy = matches!(term.activity(), hotsheet_terminals::Activity::Busy);
+            // HS2-2AN9C8: a Claude or Codex turn report outranks the byte inference.
+            let busy = super::hook_busy_or(
+                &events,
+                &conn_id,
+                matches!(term.activity(), hotsheet_terminals::Activity::Busy),
+            );
             {
                 let mut r = registry.lock_or_recover();
                 if !r.is_generation(&conn_id, generation) {
@@ -844,18 +891,20 @@ fn register_broker_terminal_connection(
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             match broker.info(&conn_id).await {
                 Ok(Some(info)) if info.alive => {
+                    // HS2-2AN9C8: a Claude or Codex turn report outranks the inference.
+                    let busy = super::hook_busy_or(&events, &conn_id, info.busy);
                     {
                         let mut r = registry.lock_or_recover();
                         if !r.is_generation(&conn_id, generation) {
                             break;
                         }
-                        if info.busy {
+                        if busy {
                             r.note_activity(&conn_id, now_ms());
                         } else {
                             r.set_idle(&conn_id);
                         }
                     }
-                    if turn.ended(info.busy) {
+                    if turn.ended(busy) {
                         crate::routes::orchestration_sessions::note_session_change(
                             &events, &conn_id,
                         );
@@ -887,6 +936,8 @@ fn register_broker_terminal_connection(
 /// Wake subscribed clients when an AI PTY closes so a failed launch's retained
 /// diagnostic tab appears without client network polling (HS2-JRQG1T).
 fn announce_terminal_exit(state: &AppState, id: &str) {
+    // HS2-H3S7YQ: an exited terminal's feedback-primary choice ends with it.
+    super::signals::forget_feedback_primary(state, id);
     state.emit(crate::ChangeEvent {
         live: None,
         cursor: None,
@@ -1321,6 +1372,84 @@ mod turn_end_tests {
             let mut turn = TurnEnd::default();
             let ended: Vec<bool> = feed.iter().map(|busy| turn.ended(*busy)).collect();
             assert_eq!(ended, expected, "{feed:?}");
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod checkout_permission_launch_tests {
+    use super::terminal_permission_identity;
+    use hotsheet_sync::LockExt;
+    use std::os::fd::AsRawFd;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    /// HS2-55P61R: a terminal launch never waits on a checkout permission vault that is
+    /// busy, for example behind an OS keychain access prompt. The vault still loads in
+    /// the background once it is free.
+    #[test]
+    fn hs2_55p61r_launch_does_not_wait_on_a_busy_checkout_vault() {
+        hotsheet_aitools::enable_test_permission_vault();
+        let home = tempfile::tempdir().unwrap();
+        let store_dir = home.path().join("store");
+        let store = hotsheet_ticketing::FsStore::init_git(
+            &store_dir,
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+        let rules = home.path().join("permissions").join("rules.json");
+        let state = crate::AppState::new(store, "synthetic-secret".into())
+            .unwrap()
+            .with_machine_home(home.path())
+            .with_checkout_registry(home.path().join("checkouts.json"))
+            .with_permission_rules(&rules);
+        let root = home.path().join("checkout");
+        std::fs::create_dir_all(&root).unwrap();
+        let checkout = state
+            .checkout_registry
+            .register(&root, None, None, vec![store_dir])
+            .unwrap();
+        let identity = checkout.permission_identity();
+
+        // Another vault user holds this checkout vault's lock.
+        let lock_path = rules.with_file_name(format!("checkout-{}.json.lock", checkout.id));
+        let held = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&lock_path)
+            .unwrap();
+        // SAFETY: flock on an owned, open descriptor.
+        assert_eq!(unsafe { libc::flock(held.as_raw_fd(), libc::LOCK_EX) }, 0);
+
+        let (done, launched) = mpsc::channel();
+        let launching = state.clone();
+        let cwd = root.display().to_string();
+        std::thread::spawn(move || {
+            done.send(terminal_permission_identity(&launching, Some(&cwd)))
+                .unwrap()
+        });
+        assert_eq!(
+            launched.recv_timeout(Duration::from_secs(10)).unwrap(),
+            identity,
+            "the launch waited on the busy vault"
+        );
+        assert!(
+            !state
+                .permission_rule_paths
+                .lock_or_recover()
+                .contains_key(&identity)
+        );
+
+        drop(held);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !state
+            .permission_rule_paths
+            .lock_or_recover()
+            .contains_key(&identity)
+        {
+            assert!(Instant::now() < deadline, "the checkout vault never loaded");
+            std::thread::yield_now();
         }
     }
 }

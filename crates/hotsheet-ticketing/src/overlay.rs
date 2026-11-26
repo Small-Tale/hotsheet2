@@ -95,7 +95,7 @@ impl LocalOverlay {
 
     /// Ensure `local/` is in the store's `.gitignore`, so the overlay is never committed.
     fn ensure_gitignored(&self) -> io::Result<()> {
-        let entry = "local/";
+        let entry = crate::store::READ_OVERLAY_IGNORE;
         let gi = self.store_root.join(".gitignore");
         let existing = std::fs::read_to_string(&gi).unwrap_or_default();
         if existing.lines().any(|l| l.trim() == entry) {

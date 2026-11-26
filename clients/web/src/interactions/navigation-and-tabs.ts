@@ -8,6 +8,7 @@ import { PROJECT_TAB_BAR_ID, type ProjectTabBarMode } from '../components/projec
 import { TERMINAL_DRAWER_TAB_BAR_ID } from '../components/terminal-drawer';
 import { reorderDrawerTabIds } from '../drawer-tab-order';
 import { NAVIGATION_AND_TABS_ACTIONS, NAVIGATION_AND_TABS_TARGETS } from '../interaction-attrs/navigation-and-tabs';
+import { saveProjectTabOrder } from '../project-tab-order';
 import { reorderTabs } from '../tab-order';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
@@ -17,6 +18,8 @@ import { type Control, type Project } from './types';
 export interface NavigationAndTabInteractionsDependencies {
   readonly projects: Signal<Project[]>;
   readonly currentRememberedProjectRoots: () => string[];
+  /** Every project tab key in shown order, local and remote together (HS2-NRBWGF). */
+  readonly currentProjectTabOrder: () => string[];
   readonly project: () => Project | undefined;
   readonly persistDrawerTabOrder: (projectId: string, ids: readonly string[]) => void;
   readonly currentDrawerTabIds: (projectId: string) => string[];
@@ -54,6 +57,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
   const {
     projects,
     currentRememberedProjectRoots,
+    currentProjectTabOrder,
     project,
     persistDrawerTabOrder,
     currentDrawerTabIds,
@@ -85,6 +89,8 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
         if (barId === PROJECT_TAB_BAR_ID) {
           projects.value = reorderTabs(projects.value, (item) => item.id, sourceId, targetId, position);
           localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
+          // Remote tabs are not in that list; keep the mixed order across reloads (HS2-NRBWGF).
+          saveProjectTabOrder(localStorage, currentProjectTabOrder());
           return;
         }
         if (barId !== TERMINAL_DRAWER_TAB_BAR_ID) return;
@@ -173,9 +179,16 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'kui-select[name="terminal-rail-project"]', (_event, target) => {
-      selectTerminalRailProject((target as Control).value);
-    }),
+    // The rail's project PopupMenu rows, including its Minimized Projects submenu (HS2-2609BW).
+    delegate(
+      document.body,
+      'click',
+      NAVIGATION_AND_TABS_ACTIONS.selectTerminalRailProject.selector,
+      (_event, target) => {
+        const id = data(target).projectId;
+        if (id) selectTerminalRailProject(id);
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'change', 'kui-select[name="terminal-rail-view"]', (_event, target) => {

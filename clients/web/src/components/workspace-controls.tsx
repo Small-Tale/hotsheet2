@@ -137,6 +137,11 @@ export interface WorkspaceHeaderProps {
   selectedTicketsUpNext?: WorkspaceUpNextState;
   selectedTicketsUpNextEligible?: boolean;
   selectedTicketsMutable?: boolean;
+  /**
+   * The selected project is not ready (HS2-H0QGK7): every control stays in place but is disabled, and
+   * this reason is its tooltip.
+   */
+  unavailableReason?: string;
 }
 
 /** The project name as Toolbar leading text; it hides at the narrowest toolbar widths. */
@@ -172,6 +177,8 @@ export type TicketViewActionSpec =
       size?: 'default' | 'compact';
       /** A dragged ticket is over the launcher (HS2-G8EK08). */
       dropTarget?: boolean;
+      /** The selected project is not ready: the launcher stays, disabled with this tooltip (HS2-H0QGK7). */
+      disabledReason?: string;
     }
   | { kind: 'empty-trash' }
   /** Settings → Ticket sources: open the add-source dialog (HS2-G9J35B). */
@@ -211,6 +218,7 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
           label={action.label}
           size={action.size}
           dropTarget={action.dropTarget}
+          disabledReason={action.disabledReason}
         />
       );
     case 'add-data-source':
@@ -379,8 +387,10 @@ function WorkspaceOverflowControls({
   selectedTicketsUpNextEligible,
   presentation,
   orchestration,
+  unavailableReason,
 }: {
   orchestration: boolean;
+  unavailableReason?: string;
   mode: WorkspaceViewMode;
   projectActionsDisabled: boolean;
   searchDisabled: boolean;
@@ -427,6 +437,7 @@ function WorkspaceOverflowControls({
       icon={<LucideIcon icon={MoreHorizontal} name="ellipsis" />}
       caret={false}
       placement="bottom-end"
+      disabled={Boolean(unavailableReason)}
       rootAttributes={{ 'data-workspace-overflow': 'true', 'data-search-field-keep-open': 'true' }}
       items={[
         {
@@ -550,10 +561,13 @@ export function WorkspaceControls({
   selectedTicketsUpNext = 'none',
   selectedTicketsUpNextEligible = false,
   selectedTicketsMutable = true,
+  unavailableReason,
 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
+  const unavailable = Boolean(unavailableReason);
   const projectActionsDisabled =
-    mode === 'settings' || mode === 'notifications' || mode === 'workers' || mode === 'orchestration';
-  const searchDisabled = (projectActionsDisabled && !guidanceSearch) || mode === 'workers' || mode === 'orchestration';
+    unavailable || mode === 'settings' || mode === 'notifications' || mode === 'workers' || mode === 'orchestration';
+  const searchDisabled =
+    unavailable || (projectActionsDisabled && !guidanceSearch) || mode === 'workers' || mode === 'orchestration';
   const visibleSearchOpen = searchOpen && !searchDisabled;
   const selectedActionsDisabled = projectActionsDisabled || selectedTicketCount === 0;
   const ticketActionsDisabled = selectedActionsDisabled || !selectedTicketsMutable;
@@ -582,6 +596,7 @@ export function WorkspaceControls({
         appearance="toolbar"
         shape={rail ? 'rounded' : 'pill'}
         layout={rail ? 'equal' : 'content'}
+        disabled={unavailable}
       />
     ),
     sortSelect = (
@@ -608,7 +623,7 @@ export function WorkspaceControls({
           aria-label="Toggle Up Next for Selected Tickets"
           aria-pressed={selectedTicketsUpNext === 'mixed' ? 'mixed' : String(selectedTicketsUpNext === 'all')}
           data-selected-chrome="none"
-          title="Toggle Up Next for selected tickets"
+          title={unavailableReason ?? 'Toggle Up Next for selected tickets'}
         >
           <WorkspaceUpNextIcon state={selectedTicketsUpNext} />
         </button>
@@ -617,7 +632,7 @@ export function WorkspaceControls({
           disabled={selectedActionsDisabled}
           {...TICKET_SELECTION_ACTIONS.openSelectedTicketActions.attrs}
           aria-label="More Actions for Selected Tickets"
-          title="More actions for selected tickets"
+          title={unavailableReason ?? 'More actions for selected tickets'}
         >
           <LucideIcon icon={MoreHorizontal} name="ellipsis" />
         </button>
@@ -658,6 +673,7 @@ export function WorkspaceControls({
       selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
       presentation={presentation}
       orchestration={orchestration}
+      unavailableReason={unavailableReason}
     />
   );
   return (

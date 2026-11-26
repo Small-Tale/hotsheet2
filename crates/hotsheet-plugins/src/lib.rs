@@ -318,6 +318,13 @@ pub struct DriveSpec {
     /// members to tell a rate or usage limit from another failure; never its text.
     #[serde(default)]
     pub error_line: Option<String>,
+    /// Spawn transport only (HS2-JM0GVB): arguments that make `program` print its usage
+    /// report as JSON without an agent turn or quota spend (agy `-p /usage
+    /// --output-format json`). The host runs it once when a driven turn fails on a typed
+    /// usage limit, under `model_catalog_identity`, and reads only each quota bucket's
+    /// typed `remaining_fraction` and `reset_time`. Empty: no query.
+    #[serde(default)]
+    pub usage_query_args: Vec<String>,
     /// Plugin-owned model catalog. Clients consume this declaration rather than
     /// hard-coding provider/model names.
     #[serde(default)]
@@ -914,6 +921,10 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v6.md"),
         ),
         (
+            "legacy-testing-philosophy-v7.md",
+            include_str!("../../../plugins/shared/legacy-testing-philosophy-v7.md"),
+        ),
+        (
             "legacy-testing-philosophy.md",
             include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
         ),
@@ -930,6 +941,10 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
             include_str!("../../../plugins/shared/legacy-ticket-driven-work-v6.md"),
         ),
         (
+            "legacy-ticket-driven-work-v8.md",
+            include_str!("../../../plugins/shared/legacy-ticket-driven-work-v8.md"),
+        ),
+        (
             "legacy-ticket-driven-work.md",
             include_str!("../../../plugins/shared/legacy-ticket-driven-work.md"),
         ),
@@ -940,6 +955,10 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
         (
             "legacy-workflow-v64.md",
             include_str!("../../../plugins/shared/legacy-workflow-v64.md"),
+        ),
+        (
+            "legacy-workflow-v65.md",
+            include_str!("../../../plugins/shared/legacy-workflow-v65.md"),
         ),
         (
             "requirements-documentation.md",

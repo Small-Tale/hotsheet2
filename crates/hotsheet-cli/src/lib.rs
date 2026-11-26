@@ -18,11 +18,15 @@ pub mod import;
 mod import_completion;
 pub mod import_recovery;
 pub mod launched_env;
+pub mod merge_pending;
 pub mod migration_progress;
 pub mod notify_watch;
 pub mod orchestration;
 pub mod process_liveness;
-pub use import_completion::verify_backup as verify_hs1_backup;
+pub use import_completion::{
+    back_up as back_up_hs1_import, prepare_backup as prepare_hs1_backup,
+    verify_backup as verify_hs1_backup,
+};
 // Launch-safety machinery lives in the shared `hotsheet-aitools` crate (so the server can
 // reuse it too, HS2-1TY7GC); re-exported here to keep the `hotsheet_cli::launch_safety` path.
 pub use hotsheet_aitools::launch_safety;

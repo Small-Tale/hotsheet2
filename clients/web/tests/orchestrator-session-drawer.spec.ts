@@ -50,6 +50,7 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
     const tab = drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${terminal}"]`);
     await expect(tab).toBeVisible();
     await expect(tab).toContainText(label);
+    const caption = drawer.locator('[data-component="terminal-tile"] .terminal-tile__identity').first();
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       for (const width of [1440, 1100, 390, 1440]) {
@@ -78,9 +79,104 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
             }),
           )
           .toEqual({ tail: `run ${RUN.slice(-8)}`, tailClipped: false, tailInside: true });
+        // HS2-3RBYJK: the Project Grid tile's `project › terminal` caption keeps the same suffix whole.
+        await expect(caption).toBeVisible();
+        await expect
+          .poll(() =>
+            caption.evaluate((element) => {
+              const text = element.querySelector<HTMLElement>('.kui-text')!;
+              const tail = element.querySelector<HTMLElement>('.kui-text__truncate-tail');
+              if (!tail) return { tail: null };
+              const box = text.getBoundingClientRect(),
+                tailBox = tail.getBoundingClientRect();
+              return {
+                tail: tail.textContent,
+                tailClipped: tail.scrollWidth > tail.clientWidth + 1,
+                tailInside: tailBox.left >= box.left - 1 && tailBox.right <= box.right + 1,
+              };
+            }),
+          )
+          .toEqual({ tail: `run ${RUN.slice(-8)}`, tailClipped: false, tailInside: true });
         await page.screenshot({ path: `target/visual-captures/hs2-kthjn2-drawer-${scheme}-${width}.png` });
       }
     }
+  } finally {
+    await app.stop();
+  }
+});
+
+// HS2-G2X7RT: a session an orchestrator starts here whose tool reports its session start marks its
+// drawer tab as waiting on a person until that report arrives, as it would while the tool sits on a
+// first-run question in the terminal; the mark clears live when the tool reports in.
+test('marks an orchestrator session waiting on its tool in the real drawer (HS2-G2X7RT)', async ({
+  context,
+  baseURL,
+}) => {
+  test.setTimeout(150_000);
+  const app = await desktopApp(context, baseURL!, {
+    canonicalRoot: true,
+    seed: async (fixture) => syntheticTool(fixture.env.HOTSHEET_HOME!, { reportsStart: true }),
+  });
+  try {
+    const started = await app.server.request<{
+      outcome: string;
+      session?: { tool_ready?: boolean; session: { session_id: string } };
+    }>(`/checkouts/${app.server.checkoutId}/target-sessions`, 'POST', {
+      session: {
+        operation_id: 'sched-start-waiting',
+        tool: TOOL,
+        origin: { owner_checkout_id: app.server.checkoutId, project: 'Release train', run_id: RUN },
+      },
+      limits: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+      actor: person,
+    });
+    expect(started, JSON.stringify(started)).toMatchObject({ outcome: 'started', session: { tool_ready: false } });
+    const terminal = started.session!.session.session_id;
+    const listed = (await app.server.request<TerminalInfo[]>('/terminals')).find((row) => row.id === terminal);
+    expect(listed?.tool_ready).toBe(false);
+
+    const page = await app.launch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openMockedProject(page);
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    const tab = drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${terminal}"]`);
+    const waiting = tab.locator('.terminal-drawer__tool-waiting[data-lucide="hand"]');
+    await expect(waiting).toBeVisible();
+    await expect(waiting.locator('title')).toHaveText('Waiting for an answer in this terminal');
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const width of [1440, 1100, 390, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.waitForFunction(() =>
+          document.getAnimations().every((animation) => animation.playState !== 'running'),
+        );
+        await expect(waiting).toBeVisible();
+        // The mark sits inside the tab, on the label's center line.
+        const [tabBox, iconBox, nameBox] = await Promise.all([
+          tab.boundingBox(),
+          waiting.boundingBox(),
+          tab.locator('.kui-tab-bar-item__name').boundingBox(),
+        ]);
+        expect(iconBox!.x).toBeGreaterThanOrEqual(tabBox!.x);
+        expect(iconBox!.x + iconBox!.width).toBeLessThanOrEqual(tabBox!.x + tabBox!.width + 0.5);
+        expect(Math.abs(nameBox!.y + nameBox!.height / 2 - (iconBox!.y + iconBox!.height / 2))).toBeLessThanOrEqual(
+          1.5,
+        );
+        await page.screenshot({ path: `target/visual-captures/hs2-g2x7rt-drawer-${scheme}-${width}.png` });
+      }
+    }
+    // A person answered and the tool's SessionStart hook reported in: the mark clears live.
+    // The route answers 204 with no body, which the JSON helper cannot parse.
+    await app.server
+      .request(`/terminals/${terminal}/ai-connection`, 'POST', { agent: 'synthetic' })
+      .catch((error: unknown) => {
+        if (!(error instanceof SyntaxError)) throw error;
+      });
+    await expect(waiting).toHaveCount(0);
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'));
+    await page.screenshot({ path: 'target/visual-captures/hs2-g2x7rt-drawer-ready-light-1440.png' });
   } finally {
     await app.stop();
   }

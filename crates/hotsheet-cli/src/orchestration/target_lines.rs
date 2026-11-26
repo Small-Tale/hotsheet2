@@ -16,8 +16,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use hotsheet_ticketing::orchestration::{
-    BindingRegistry, DecisionJournal, LineObservations, ObservedOwner, RunEventJournal,
-    TargetLineSource, TargetLines, Timeline, target_lines_observed,
+    BindingRegistry, DecisionJournal, LineObservations, ObservedOwner, ProjectSites,
+    RunEventJournal, TargetLineSource, TargetLines, Timeline, target_lines_observed,
 };
 
 use super::scheduler::WAKE_DIRECTORY;
@@ -72,7 +72,7 @@ impl OrchestrationRuntime {
                 owners.push((target.owner_checkout_id, vec![target.target_id]));
             }
         }
-        let mut read: Vec<(String, String, Vec<String>, Timeline)> = Vec::new();
+        let mut read: Vec<(String, String, Vec<String>, Timeline, ProjectSites)> = Vec::new();
         let mut stores: Vec<PathBuf> = Vec::new();
         for (owner_id, targets) in owners {
             // An owner whose checkout is gone, or no longer an orchestration project
@@ -87,15 +87,18 @@ impl OrchestrationRuntime {
                 .filter(|alias| !alias.is_empty())
                 .unwrap_or_else(|| owner.id.clone());
             stores.extend(watched);
-            read.push((owner.id, label, targets, view));
+            // HS2-CQ0PNT: a step through another site of a project bound here is a line.
+            let sites = self.project_sites(&owner.id).unwrap_or_default();
+            read.push((owner.id, label, targets, view, sites));
         }
         let sources: Vec<TargetLineSource<'_>> = read
             .iter()
-            .map(|(owner, label, targets, view)| TargetLineSource {
+            .map(|(owner, label, targets, view, sites)| TargetLineSource {
                 owner_checkout_id: owner,
                 owner_label: label,
                 target_ids: targets,
                 timeline: view,
+                sites,
             })
             .collect();
         // HS2-KB2Y51: a checkout hosted here also shows the lines other machines

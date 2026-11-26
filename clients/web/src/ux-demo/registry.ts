@@ -36,6 +36,7 @@ import { demoModule as listHeader } from './list-header-demo';
 import { demoModule as listItem } from './list-item-demo';
 import { demoModule as minimizedTicketsControl } from './minimized-tickets-control-demo';
 import { demoModule as notWorkingDialog } from './not-working-dialog-demo';
+import { demoModule as noteDelivery } from './note-delivery-demo';
 import { demoModule as notificationCard } from './notification-card-demo';
 import { demoModule as notificationSettings } from './notification-settings-demo';
 import { demoModule as orchestration } from './orchestration-demo';
@@ -97,6 +98,7 @@ export const demoModules: readonly DemoModule[] = [
   notificationCard,
   corruptTicketInspector,
   haltedSession,
+  noteDelivery,
   permissionComponents,
   appChrome,
   projectSidebar,

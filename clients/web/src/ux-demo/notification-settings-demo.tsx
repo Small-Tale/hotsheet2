@@ -234,7 +234,6 @@ function liveProps() {
     config: settings.config.value,
     deliveries: settings.deliveries.value,
     message: settings.message.value,
-    status: settings.status.value,
     busyChannels: settings.busyChannels.value,
     channelEditor: settings.channelEditor.value,
     ruleEditor: settings.ruleEditor.value,

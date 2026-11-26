@@ -32,8 +32,9 @@ pub struct RuntimeModelCatalog {
 /// Optional live capability exposed by a drive transport.
 pub trait RuntimeModelCatalogSource {
     /// Stable runtime version/fingerprint used to invalidate the cache after upgrades.
-    fn version(&self) -> Result<String, String>;
-    /// Query the installed runtime's current catalog.
+    /// `cwd` is the probe's private working directory ([`crate::probe::probe_workspace`]).
+    fn version(&self, cwd: &Path) -> Result<String, String>;
+    /// Query the installed runtime's current catalog, running in `cwd` (HS2-BNDRYP).
     fn discover(&self, cwd: &Path) -> Result<RuntimeModelCatalog, String>;
 }
 
@@ -70,27 +71,18 @@ impl CommandModelCatalog {
     }
 
     fn safe_program(&self) -> Result<PathBuf, String> {
-        match self.identity_policy.as_deref() {
-            None => Ok(PathBuf::from(&self.program)),
-            Some("native-default-install") => native_default_install(&self.program),
-            Some(policy) => Err(format!(
-                "unsupported catalog executable identity policy '{policy}'"
-            )),
-        }
+        trusted_program(&self.program, self.identity_policy.as_deref())
     }
 
-    fn output(&self, args: &[String], cwd: Option<&Path>) -> Result<String, String> {
+    fn output(&self, args: &[String], cwd: &Path) -> Result<String, String> {
         let program = self.safe_program()?;
         // HS2-E5B0K0: resolved for the directory it runs in (posix_spawn, no fork).
         let mut command = hotsheet_ticketing::git::launch_resolved(
             &program,
             std::env::var_os("PATH").as_deref(),
-            cwd,
+            Some(cwd),
         );
-        command.args(args);
-        if let Some(cwd) = cwd {
-            command.current_dir(cwd);
-        }
+        command.args(args).current_dir(cwd);
         // Bounded: a hung tool is killed and the manifest catalog stands in (HS2-BH3M53).
         let output = crate::probe::run_probe(&mut command)?;
         if !output.status.success() {
@@ -106,7 +98,7 @@ impl CommandModelCatalog {
 }
 
 impl RuntimeModelCatalogSource for CommandModelCatalog {
-    fn version(&self) -> Result<String, String> {
+    fn version(&self, cwd: &Path) -> Result<String, String> {
         // A rejected launcher gets its own cache key. A previously accepted CLI must not
         // keep showing its live catalog after PATH changes to an IDE launcher.
         let identity = if self.identity_policy.is_some() {
@@ -124,14 +116,14 @@ impl RuntimeModelCatalogSource for CommandModelCatalog {
             String::new()
         };
         let args = vec!["--version".to_string()];
-        let value = self.output(&args, None)?.trim().to_string();
+        let value = self.output(&args, cwd)?.trim().to_string();
         (!value.is_empty())
             .then(|| format!("{identity}{value}"))
             .ok_or_else(|| format!("'{} --version' returned no version", self.program))
     }
 
     fn discover(&self, cwd: &Path) -> Result<RuntimeModelCatalog, String> {
-        let output = self.output(&self.args, Some(cwd))?;
+        let output = self.output(&self.args, cwd)?;
         Ok(
             if self.identity_policy.as_deref() == Some("native-default-install") {
                 parse_aligned_catalog(&output, &self.effort_levels, self.default_effort.as_deref())
@@ -139,6 +131,19 @@ impl RuntimeModelCatalogSource for CommandModelCatalog {
                 parse_command_catalog(&output, &self.effort_levels, self.default_effort.as_deref())
             },
         )
+    }
+}
+
+/// The executable a plugin's read-only command probe may run, under its declared
+/// identity policy (`model_catalog_identity`). HS2-JM0GVB: the usage-reset query uses the
+/// same check, so an IDE launcher of the same name is never run.
+pub fn trusted_program(program: &str, identity_policy: Option<&str>) -> Result<PathBuf, String> {
+    match identity_policy {
+        None => Ok(PathBuf::from(program)),
+        Some("native-default-install") => native_default_install(program),
+        Some(policy) => Err(format!(
+            "unsupported catalog executable identity policy '{policy}'"
+        )),
     }
 }
 
@@ -292,7 +297,7 @@ impl ModelCatalogCache {
             return manifest;
         };
         let Some(version) = source
-            .version()
+            .version(cwd)
             .ok()
             .filter(|value| !value.trim().is_empty())
         else {
@@ -361,28 +366,37 @@ pub fn ai_tool_probes_enabled() -> bool {
 
 /// Discover all installed drivable plugins, enriching only those whose drive exposes a
 /// runtime catalog capability. Registry order remains stable.
+///
+/// Every probe runs in one fresh private directory for this scan, never in a ticket
+/// store or the caller's directory (HS2-BNDRYP, [`crate::probe::probe_workspace`]).
+/// When that directory cannot be made, no tool runs and the bundled catalogs stand in.
 pub fn discover_ai_tool_descriptors(
     search_dirs: &[PathBuf],
-    cwd: &Path,
     cache: &mut ModelCatalogCache,
     refresh: bool,
 ) -> Vec<AiToolDescriptor> {
-    let probes = ai_tool_probes_enabled();
+    let workspace = ai_tool_probes_enabled()
+        .then(crate::probe::probe_workspace)
+        .and_then(Result::ok);
+    let cwd = workspace.as_ref().map(tempfile::TempDir::path);
     hotsheet_plugins::detected_drivable_plugins(search_dirs)
         .into_iter()
-        .filter_map(|plugin| resolve_plugin(&plugin, cwd, cache, refresh, probes))
+        .filter_map(|plugin| resolve_plugin(&plugin, cwd, cache, refresh))
         .collect()
 }
 
+/// `cwd` is the scan's probe workspace; `None` means no tool may run.
 fn resolve_plugin(
     plugin: &Plugin,
-    cwd: &Path,
+    cwd: Option<&Path>,
     cache: &mut ModelCatalogCache,
     refresh: bool,
-    probes: bool,
 ) -> Option<AiToolDescriptor> {
     let manifest = hotsheet_plugins::ai_tool_descriptor(plugin)?;
-    let drive = probes.then(|| drive_for(plugin)).flatten();
+    let Some(cwd) = cwd else {
+        return Some(cache.resolve(manifest, None, Path::new("."), refresh));
+    };
+    let drive = drive_for(plugin);
     Some(
         cache.resolve(
             manifest,
@@ -476,7 +490,7 @@ mod tests {
     }
 
     impl RuntimeModelCatalogSource for FakeCatalog {
-        fn version(&self) -> Result<String, String> {
+        fn version(&self, _cwd: &Path) -> Result<String, String> {
             self.version.borrow().clone()
         }
 

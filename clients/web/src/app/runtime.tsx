@@ -7,7 +7,7 @@ import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { wireDialogStack } from '@kerfjs/ui/surface-scaffold';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
-import { batch, computed, effect, mount, signal } from 'kerfjs';
+import { batch, computed, effect, mount, type SafeHtml, signal } from 'kerfjs';
 
 import {
   claimEtaPresentation,
@@ -85,6 +85,7 @@ import {
   selectDevelopmentStrategy,
 } from '../components/development-strategy-settings-interactions';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
+import { NoteDeliveryPopup } from '../components/note-delivery-popup';
 import {
   NO_RESPONSE_LINK,
   type NoteMetadataDialogState,
@@ -99,7 +100,12 @@ import { type ProjectCloseDialogState } from '../components/project-close-dialog
 import { projectRestoreTabId } from '../components/project-restore-error';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabMenuState } from '../components/project-tab-context-menu';
-import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../components/quick-ticket-composer';
+import {
+  focusQuickTicketComposerTitle,
+  quickTicketComposerHidden,
+  quickTicketComposerPanel,
+  showQuickTicketComposer,
+} from '../components/quick-ticket-composer';
 import type { CompactionPreviewState, RepositorySizeState } from '../components/repository-size';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
 import { type SettingsCategory, settingsCategoryShown } from '../components/settings-navigation';
@@ -131,7 +137,12 @@ import { createConfirmation } from '../confirmation';
 import { withControlledOpen } from '../controlled-open';
 import { createConversationUnreadTracker, trackDocumentVisibility } from '../conversation-unread';
 import { copyText } from '../copy-text';
-import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
+import {
+  aiCommandRunMessage,
+  customAiCommandSignalConnection,
+  customAiCommandTicket,
+  HOTSHEET_SKILL_SIGNAL,
+} from '../custom-ai-command';
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import { syncDesktopWindowTheme } from '../desktop-window-theme';
 import { developmentStrategyTagSuggestions } from '../development-strategy-tags';
@@ -158,6 +169,8 @@ import { createHotSheetApp } from '../features/hot-sheet-app';
 import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
 import { createLinkedReaderSubjects } from '../features/linked-reader-subject';
+import { createMinimizedComposer } from '../features/minimized-composer';
+import { createMinimizedDialogs } from '../features/minimized-dialogs';
 import { createMinimizedReaders } from '../features/minimized-readers';
 import { createNotificationSettings } from '../features/notification-settings';
 import {
@@ -218,6 +231,7 @@ import { createWorkspaceSearchController, type SidebarSearchCounts } from '../fe
 import { createWorkspaceSurface } from '../features/workspace-surface';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { createFeedbackResponseDrafts } from '../feedback-response-drafts';
+import { feedbackSessionLabel } from '../feedback-session-labels';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import { createGuidanceSearchModel } from '../guidance-search-model';
 import {
@@ -237,6 +251,8 @@ import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } fr
 import { createLiveStateStore } from '../live-state';
 import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
+import { machineSettingsKey, machineSettingsProject } from '../machine-settings-source';
+import { loadMinimizedComposers, type MinimizedComposer } from '../minimized-composer';
 import { loadMinimizedReaders, type MinimizedReader } from '../minimized-readers';
 import { isMobileViewport, isSidePanelPortal } from '../mobile-layout';
 import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
@@ -249,7 +265,7 @@ import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRo
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
 import { type DrawerAIChat } from '../project-drive';
-import { projectLiveSummary, workersLive } from '../project-live-summary';
+import { liveCiClockRunning, projectLiveSummary, workersLive } from '../project-live-summary';
 import {
   loadMinimizedProjects,
   minimizeProject,
@@ -259,6 +275,7 @@ import {
 } from '../project-minimization';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { projectTabActionFit } from '../project-tab-action-fit';
+import { loadProjectTabOrder, projectTabRanks } from '../project-tab-order';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
   appendUniqueTicketRows,
@@ -280,6 +297,7 @@ import {
   desktopRemoteServers as listDesktopRemoteServers,
   desktopRemoteSession,
 } from '../remote-projects/client';
+import { loadRemoteHostNames, rememberRemoteHostNames, saveRemoteHostNames } from '../remote-projects/host-names';
 import { isRemoteProjectId, parseRemoteProjectId } from '../remote-projects/identity';
 import {
   createRemoteReconnect,
@@ -293,6 +311,7 @@ import { remoteFailureKind, remoteFailureText } from '../remote-session-lifetime
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { parseGuidanceSourceUpdates } from '../server-response-parsers';
+import { restoreSectionTabs, selectionRestorable, type SessionSectionTabs } from '../session-restore-guard';
 import { interleaveByRank } from '../tab-order';
 import {
   TERMINAL_GRID_DEFAULT_ACROSS,
@@ -424,7 +443,6 @@ export async function startHotSheetWebClient() {
   const developmentReports = signal<Record<string, DevelopmentStrategyReport | undefined>>({}),
     developmentDrafts = signal<Record<string, DevelopmentStrategyDraft | undefined>>({}),
     developmentMessages = signal<Record<string, string>>({}),
-    developmentStatuses = signal<Record<string, string>>({}),
     developmentLoading = signal<Record<string, boolean>>({}),
     developmentSaving = signal<Record<string, boolean>>({});
   const { corruptRecovery, revealCorruptTicket, queueCorruptTicketRepair } = createCorruptTicketRecoveryController({
@@ -739,8 +757,13 @@ export async function startHotSheetWebClient() {
     initialProjectRestorePending = signal(rememberedRoots.length > 0),
     // Remembered roots still opening in the background after the active project was revealed (HS2-2BEJXD).
     projectRestorePendingRoots = signal<readonly string[]>(rememberedRoots);
+  // The combined local-and-remote tab order a drag saved; ranks both kinds of tab on reload (HS2-NRBWGF).
+  const projectTabRank = projectTabRanks(loadProjectTabOrder(localStorage));
   const pendingRestoreEntries = <T,>(item: (root: string) => T) =>
-    projectRestorePendingRoots.value.map((root) => ({ rank: rememberedRoots.indexOf(root), item: item(root) }));
+    projectRestorePendingRoots.value.map((root) => ({
+      rank: projectTabRank(root, rememberedRoots.indexOf(root)),
+      item: item(root),
+    }));
   const initialTerminalDrawerVisible = localStorage.getItem('hotsheet.terminals.drawer-open') === 'true';
   const terminalDrawerVisible = signal(initialTerminalDrawerVisible),
     terminalDrawerMounted = signal(initialTerminalDrawerVisible),
@@ -1016,8 +1039,9 @@ export async function startHotSheetWebClient() {
     }
     if (toastHost.isConnected) void toastPresentation.publish(state);
   });
-  function showToast(message: string) {
-    toastLifetime.show(message);
+  // Every toast stays up for its message's reading time (HS2-PC7VRA); `lifetime` overrides it.
+  function showToast(message: string, lifetime?: number) {
+    toastLifetime.show(message, lifetime);
   }
   const activeTicketCount = signal(0),
     projectTabClaimClock = signal(Date.now()),
@@ -1053,6 +1077,9 @@ export async function startHotSheetWebClient() {
     composerDetails = signal(''),
     composerCategory = signal(lastUsedTicketCategory),
     composerUpNext = signal(false),
+    // The composer's priority and Add to Backlog choices (HS2-V72HCC).
+    composerPriority = signal('default'),
+    composerBacklog = signal(false),
     // The new ticket's target source while the composer is open, and the last source a ticket was
     // created in per project — in memory only, never persisted (HS2-NZMJBJ).
     composerSource = signal<string | undefined>(undefined),
@@ -1073,10 +1100,13 @@ export async function startHotSheetWebClient() {
     restoringProjectSession = false,
     projectSessionDirtyDuringRestore = false,
     projectSessionInteractionVersion = 0,
-    // The selection an activation applied; a different array later means the user selected since (HS2-VDJJEY).
+    // The selection the activation or its latest session restore applied; a different array later means the
+    // user selected since (HS2-VDJJEY). It outlives each restore, since one activation can restore twice
+    // (HS2-CN0CS7).
     activationTicketSelection: string[] | undefined,
-    // The section tabs when an activation began; a different tab later means the user chose one (HS2-KBM5QK).
-    activationSectionTabs: { inspector: InspectorTab; reader: InspectorTab } | undefined;
+    // The section tabs and ticket view the activation or its latest restore applied; a different value
+    // later means the user chose one (HS2-KBM5QK, HS2-123CV9, HS2-CN0CS7).
+    activationSectionTabs: SessionSectionTabs | undefined;
   const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-left-rail')),
     inspectorSize = signal(loadAppRegionSize(localStorage, 'app-right-rail'));
   const detailsMode = signal<MarkdownEditorMode>('preview'),
@@ -1086,6 +1116,8 @@ export async function startHotSheetWebClient() {
     linkedReaderStack = signal<TicketReaderFrame[]>([]),
     // Minimized ticket readers, per project tab, restored across reloads (HS2-Q8WF64).
     minimizedReaders = signal<MinimizedReader[]>(loadMinimizedReaders(localStorage)),
+    // A minimized new-ticket composer per project tab; its draft stays in the project session (HS2-3JR0ZH).
+    minimizedComposers = signal<MinimizedComposer[]>(loadMinimizedComposers(localStorage)),
     readerLargeText = signal(localStorage.getItem('hotsheet.reader.large-text') === 'true');
   const readerReturnFocus = new Map<string, HTMLElement>();
   const readerClosing = new Set<string>(),
@@ -1650,6 +1682,15 @@ export async function startHotSheetWebClient() {
     if (opened) void activateOpenedProject(opened);
     else if (placeholder) selectProjectTab(remotePlaceholderTabId(placeholder.id));
   }
+  // Each opened remote tab's machine name, kept per device so its placeholder is named the same way
+  // next time, before the host answers (HS2-GN0WKS).
+  let remoteHostNames = loadRemoteHostNames(localStorage);
+  const disposeRemoteHostNames = effect(() => {
+    const next = rememberRemoteHostNames(remoteHostNames, projects.value);
+    if (next === remoteHostNames) return;
+    remoteHostNames = next;
+    saveRemoteHostNames(localStorage, next);
+  });
   async function restoreRemoteProjectTabs() {
     if (isRemoteClient()) return;
     const [servers, selected] = await Promise.all([
@@ -1657,7 +1698,12 @@ export async function startHotSheetWebClient() {
       desktopRemoteSelected().catch(() => []),
     ]);
     desktopRemoteServers.value = servers;
-    const restoring = remoteReconnect.restore(remoteTabPlaceholders(selected, servers));
+    const restoring = remoteReconnect.restore(
+      remoteTabPlaceholders(selected, servers, loadRemoteHostNames(localStorage)).map((placeholder) => ({
+        ...placeholder,
+        rank: projectTabRank(placeholder.id, placeholder.rank),
+      })),
+    );
     revealRemoteTabWhenIdle();
     await restoring;
   }
@@ -1836,6 +1882,7 @@ export async function startHotSheetWebClient() {
   // App Settings → Notifications (HS2-DPBJJA): machine-wide channels and rules, loaded each time the
   // category opens; every change re-reads what the server stored. Nothing polls.
   const notificationSettings = createNotificationSettings({
+    notify: showToast,
     api: () => {
       const current = project();
       return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
@@ -2001,6 +2048,24 @@ export async function startHotSheetWebClient() {
   });
   const ticketStoreSyncReport = ticketStoreSync.report;
   // Still-opening remembered roots stay remembered, in place, if the set is saved mid-restore (HS2-2BEJXD).
+  /**
+   * Every tab of the project strip in its shown order, local tabs by root and remote tabs by project
+   * id, including still-opening local roots and not-yet-open remote placeholders (HS2-NRBWGF).
+   */
+  const currentProjectTabOrder = () =>
+    interleaveByRank<string>(
+      projects.value.map((item) => (parseRemoteProjectId(item.root) ? item.id : item.root)),
+      (key) => {
+        const item = projects.value.find((candidate) => candidate.root === key || candidate.id === key);
+        return item && projectRestoreRank(item.id);
+      },
+      [
+        ...pendingRestoreEntries((root) => root),
+        ...remoteReconnect.placeholders.value
+          .filter((placeholder) => !projects.value.some((item) => item.id === placeholder.id))
+          .map((placeholder) => ({ rank: placeholder.rank, item: placeholder.id })),
+      ],
+    );
   const currentRememberedProjectRoots = () => [
     ...new Set([
       ...interleaveByRank(
@@ -2075,7 +2140,6 @@ export async function startHotSheetWebClient() {
           : changeDevelopmentStrategyField(draft, field, value),
     };
     developmentMessages.value = { ...developmentMessages.value, [current.id]: '' };
-    developmentStatuses.value = { ...developmentStatuses.value, [current.id]: '' };
   }
   async function saveDevelopmentStrategy() {
     const current = project();
@@ -2095,12 +2159,12 @@ export async function startHotSheetWebClient() {
       if (developmentDrafts.value[id] === draft) {
         developmentDrafts.value = { ...developmentDrafts.value, [id]: draftFromDevelopmentReport(saved) };
       }
-      developmentStatuses.value = { ...developmentStatuses.value, [id]: 'Development strategy saved.' };
+      // HS2-1K6122: a save's outcome is a toast; a failure also stays beside the form until the next change.
+      showToast('Development strategy saved.');
     } catch (error) {
-      developmentMessages.value = {
-        ...developmentMessages.value,
-        [id]: error instanceof Error ? error.message : String(error),
-      };
+      const reason = error instanceof Error ? error.message : String(error);
+      developmentMessages.value = { ...developmentMessages.value, [id]: reason };
+      showToast(`The development strategy could not be saved. ${reason}`);
     } finally {
       developmentSaving.value = { ...developmentSaving.value, [id]: false };
     }
@@ -2614,7 +2678,8 @@ export async function startHotSheetWebClient() {
     if (review?.state === 'not_started' || !review?.preview.outbound_prompt) return;
     try {
       await copyText(review.preview.outbound_prompt);
-      guidanceMessage.value = 'Interview prompt copied. Share it with an AI tool you choose.';
+      // HS2-1K6122: an action's outcome is a toast, never the inline status line.
+      showToast('Interview prompt copied. Share it with an AI tool you choose.');
     } catch (error) {
       guidanceInterviewError.value = error instanceof Error ? error.message : String(error);
     }
@@ -2644,7 +2709,7 @@ export async function startHotSheetWebClient() {
       );
       if (generation === guidanceInterviewGeneration && project()?.id === current.id) {
         guidanceInterview.value = result;
-        guidanceMessage.value = 'AI advice recorded for review. Guidance selection is unchanged.';
+        showToast('AI advice recorded for review. Guidance selection is unchanged.');
       }
     } catch (error) {
       if (generation === guidanceInterviewGeneration && project()?.id === current.id)
@@ -2670,10 +2735,11 @@ export async function startHotSheetWebClient() {
       if (generation !== guidanceRecommendationsGeneration || project()?.id !== current.id) return;
       guidanceOverview.value = overview;
       void refreshGuidanceInterview(current);
-      guidanceMessage.value =
+      showToast(
         decision.decision === 'accepted'
           ? 'Suggestion selected. Apply Selected Guidance when ready.'
-          : 'Suggestion dismissed for this evidence.';
+          : 'Suggestion dismissed for this evidence.',
+      );
     } catch (error) {
       if (generation === guidanceRecommendationsGeneration && project()?.id === current.id)
         guidanceRecommendationsError.value = error instanceof Error ? error.message : String(error);
@@ -2695,19 +2761,24 @@ export async function startHotSheetWebClient() {
         guidanceRulePreview.value = undefined;
         void refreshGuidanceRecommendations(current);
         if (action.action === 'register' || action.action === 'register_batch') void checkGuidanceUpdates(true);
-        guidanceMessage.value = {
-          register: 'Source pinned. Review the selection, then apply.',
-          register_batch: 'Reviewed source revisions pinned. Review the selection, then apply.',
-          select: 'Selection updated. Apply to install it.',
-          cache_rule_version: 'Older rule version cached. Choose it, preview changes, then apply.',
-          choose_rule_version: 'Rule version selected. Preview changes, then apply.',
-          owner: 'Instruction writer selected. Apply when ready.',
-          apply: 'Selected guidance applied.',
-        }[action.action];
+        showToast(
+          {
+            register: 'Source pinned. Review the selection, then apply.',
+            register_batch: 'Reviewed source revisions pinned. Review the selection, then apply.',
+            select: 'Selection updated. Apply to install it.',
+            cache_rule_version: 'Older rule version cached. Choose it, preview changes, then apply.',
+            choose_rule_version: 'Rule version selected. Preview changes, then apply.',
+            owner: 'Instruction writer selected. Apply when ready.',
+            apply: 'Selected guidance applied.',
+          }[action.action],
+        );
       }
     } catch (error) {
-      if (generation === guidanceLoadGeneration)
+      if (generation === guidanceLoadGeneration) {
+        // The failure also stays on the page until the next change (its persistent record).
         guidanceMessage.value = error instanceof Error ? error.message : String(error);
+        showToast(`The guidance could not be changed. ${guidanceMessage.value}`);
+      }
     } finally {
       if (generation === guidanceLoadGeneration) guidanceLoading.value = false;
     }
@@ -2899,6 +2970,8 @@ export async function startHotSheetWebClient() {
     refreshDriveConnections,
     reconcileTerminalNames,
     workspaceTerminalGroups: () => workspaceTerminalGroups(),
+    chatFeatureOn: () => featureOn('ai-chat'),
+    minimizedProjectIds: () => minimizedProjectIds.value,
     aiToolLabel,
     showToast,
     error,
@@ -2906,6 +2979,8 @@ export async function startHotSheetWebClient() {
   const {
     terminalSession,
     terminalHiddenKeys,
+    terminalScopeGroups,
+    terminalAvailableTypes,
     terminalVisibleTypes,
     terminalHiddenCount,
     persistTerminalVisibility,
@@ -2916,6 +2991,7 @@ export async function startHotSheetWebClient() {
     persistDrawerTabOrder,
     refreshTerminalDashboard,
     clearTerminalHalt,
+    setFeedbackPrimary,
   } = terminalDashboardController;
   // The workspace grid and drawer sizes follow whichever element currently renders them: a re-render
   // that replaces the measured node must re-bind the observer, or the size freezes (HS2-0PF13V).
@@ -3090,8 +3166,13 @@ export async function startHotSheetWebClient() {
   }
   // Switch the active project tab (shared by the desktop project tab click and the mobile project Select —
   // HS2-4C5RM7). `next` is a tab id: a project id, or a restore-failure tab id.
+  /** Wakes a project's change stream; set once the change-stream controller exists (HS2-ZTAJ1R). */
+  const wakeChangeStreamRef: { current?: (projectId?: string) => void } = {};
   function selectProjectTab(next: string) {
     projectSelectionGeneration += 1;
+    // Selecting a tab retries its change stream at once if it is backing off after an outage, so a
+    // reconnecting remote tab recovers on click; a live stream ignores the wake (HS2-ZTAJ1R).
+    wakeChangeStreamRef.current?.(next);
     exitMobileTerminalFocus();
     const projectStatsActive = shellMode.value === 'stats' && statsProjectId.value !== undefined;
     const keepProjectStats =
@@ -3282,6 +3363,8 @@ export async function startHotSheetWebClient() {
         details: composerDetails.value,
         category: composerCategory.value,
         upNext: composerUpNext.value,
+        priority: composerPriority.value,
+        backlog: composerBacklog.value,
         attachments: [
           ...composerAttachments.value.map(({ id, name }) => ({ id, name })),
           ...composerUnrestoredAttachments.value,
@@ -3395,6 +3478,8 @@ export async function startHotSheetWebClient() {
           composerDetails.value = stored.composer.details;
           composerCategory.value = stored.composer.category;
           composerUpNext.value = stored.composer.upNext;
+          composerPriority.value = stored.composer.priority;
+          composerBacklog.value = stored.composer.backlog;
           composerUnrestoredAttachments.value = [...stored.composer.attachments];
           if (stored.notWorking) {
             notWorkingTarget.value = {
@@ -3446,7 +3531,7 @@ export async function startHotSheetWebClient() {
         selectedTicket.value = null;
         selectedTicketSlugs.value = selection;
         activationTicketSelection = selection;
-        activationSectionTabs = { inspector: inspectorTab.value, reader: readerTab.value };
+        activationSectionTabs = { inspector: inspectorTab.value, reader: readerTab.value, view: selectedView.value };
         ticketSelectionAnchor = selection[0];
         error.value = '';
         refreshError.value = '';
@@ -3581,23 +3666,32 @@ export async function startHotSheetWebClient() {
       // If the user opened the new-ticket composer during this activation's async refresh window, leave it
       // alone — a delayed session restore must not close a composer the user just opened (HS2-T1F2VT).
       const composerOpenedByUser = composerExpanded.value;
-      selectedView.value =
-        stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
+      // A section tab or ticket view the user chose during the activation's async refresh window wins
+      // over the parked session; resetting it left the clicked tab focused but unselected (HS2-KBM5QK),
+      // and reverted a view switch to Queue under load (HS2-123CV9).
+      const tabs = restoreSectionTabs(
+        activationSectionTabs,
+        { inspector: inspectorTab.value, reader: readerTab.value, view: selectedView.value },
+        {
+          inspector: stored.inspectorTab,
+          reader: stored.readerTab,
+          view: stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView,
+        },
+      );
+      activationSectionTabs = tabs.applied;
+      selectedView.value = tabs.show.view;
       // Search was restored during activation; a delayed network refresh must not undo a new edit.
       searchMatchKeys.value = undefined;
-      // A section tab the user chose during the activation's async refresh window wins over the parked
-      // session too; resetting it left the clicked tab focused but unselected (HS2-KBM5QK).
-      const tabsAtActivation = activationSectionTabs;
-      activationSectionTabs = undefined;
-      if (!tabsAtActivation || inspectorTab.value === tabsAtActivation.inspector)
-        inspectorTab.value = stored.inspectorTab;
-      if (!tabsAtActivation || readerTab.value === tabsAtActivation.reader) readerTab.value = stored.readerTab;
+      inspectorTab.value = tabs.show.inspector;
+      readerTab.value = tabs.show.reader;
       if (!composerOpenedByUser && canRestoreComposer) {
         composerExpanded.value = false;
         composerTitle.value = stored.composer.title;
         composerDetails.value = stored.composer.details;
         composerCategory.value = stored.composer.category;
         composerUpNext.value = stored.composer.upNext;
+        composerPriority.value = stored.composer.priority;
+        composerBacklog.value = stored.composer.backlog;
       }
       const previousFiles = composerAttachments.value,
         previousUnrestored = composerUnrestoredAttachments.value,
@@ -3633,15 +3727,14 @@ export async function startHotSheetWebClient() {
       }
       // A ticket the user selected during this activation's async refresh window wins over the parked
       // session, like the composer above (HS2-VDJJEY); its stored per-ticket drafts belong elsewhere.
-      const userSelected =
-        activationTicketSelection !== undefined && selectedTicketSlugs.value !== activationTicketSelection;
-      activationTicketSelection = undefined;
+      const userSelected = !selectionRestorable(activationTicketSelection, selectedTicketSlugs.value);
       const live = new Set(tickets.value.map((ticket) => ticket.slug)),
         selection = userSelected
           ? selectedTicketSlugs.value
           : stored.selectedTicketSlugs.filter((slug) => live.has(slug));
       if (!userSelected) {
         selectedTicketSlugs.value = selection;
+        activationTicketSelection = selection;
         ticketSelectionAnchor = selection[0];
       }
       if (!userSelected && selection.length === 1) {
@@ -3952,6 +4045,7 @@ export async function startHotSheetWebClient() {
     phaseEstimate: phaseEstimatePresentation(ticket, claimEtaClock.value),
     agentName: claimHolderName(ticket),
     remoteClaim: ticket.claim_origin === 'remote',
+    claimStanding: ticket.claim_standing?.kind,
     updatedLabel: ago(ticket.updated_at),
     latestConfidence: ticket.latest_confidence,
     aiCreatorLabel: aiCreatorLabel(ticket.created_by),
@@ -4898,6 +4992,25 @@ export async function startHotSheetWebClient() {
   effect(() => {
     if (liveStates.states.value.size > 0 || liveClockTimer.running()) liveClockTimer.sync();
   });
+  // The compact CI chip's `CI · 1:05` face moves each second (HS2-505PHC): a second render-only clock,
+  // running only while the page and sidebar show, the section is compact, and the selected project's
+  // newest `main` run is running with a known start. It writes the same clock and never issues a request.
+  const ciChipClockRunning = () =>
+    liveCiClockRunning(sidebarLiveStates.forProject(selectedProjectId.value), {
+      visible: pageVisible.value && sidebarVisible.value,
+      expanded: liveSectionExpanded.value,
+    });
+  const ciChipClockTimer = createTurnClock(
+    ciChipClockRunning,
+    () => {
+      liveClock.value = Date.now();
+    },
+    1_000,
+  );
+  // Tracks the same signals, so the clock starts and stops as soon as any of them changes.
+  effect(() => {
+    if (ciChipClockRunning() || ciChipClockTimer.running()) ciChipClockTimer.sync();
+  });
   // Standby (HS2-EQVZTZ): the idle-entered night display over the same live state; its settings are
   // machine-wide on the server the active project talks to.
   /** Set once the Stats glance exists: a stream resync re-reads the Overnight history while Stats shows. */
@@ -4905,9 +5018,10 @@ export async function startHotSheetWebClient() {
   const standby = createStandbyController({
     liveStates,
     openProjectIds: () => projects.value.map((item) => item.id),
+    // Machine-wide: this computer's server, even while a remote tab is selected (HS2-N3QBVG).
     api: () => {
-      const current = project();
-      return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
+      const source = machineSettingsProject(projects.value, project());
+      return source ? new Api(source.apiPath, '', { trackBusy: false }) : undefined;
     },
     // The away digest (HS2-JJ9RYN): host rows from the pushed host health; completions read once on exit.
     hostHealth: () => hostHealth.state.value.snapshot,
@@ -4948,16 +5062,18 @@ export async function startHotSheetWebClient() {
   // App Settings › Features (HS2-3GJZGG): the machine-wide feature-area choices of the server the
   // active project talks to, kept current by `feature_settings` events.
   const featureAreas = createFeatureAreasController({
+    // Machine-wide: this computer's server, even while a remote tab is selected (HS2-N3QBVG).
     api: () => {
-      const current = project();
-      return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
+      const source = machineSettingsProject(projects.value, project());
+      return source ? new Api(source.apiPath, '', { trackBusy: false }) : undefined;
     },
   });
   let standbySettingsServer: string | undefined;
   effect(() => {
-    const current = project();
-    if (!current) return;
-    const server = new URL(current.apiPath, window.location.href).origin;
+    const source = machineSettingsProject(projects.value, project());
+    if (!source) return;
+    // Keyed by the source, not the URL origin: remote tabs share this computer's origin (HS2-N3QBVG).
+    const server = machineSettingsKey(source, window.location.href);
     if (server === standbySettingsServer) return;
     standbySettingsServer = server;
     queueMicrotask(() => {
@@ -4965,7 +5081,11 @@ export async function startHotSheetWebClient() {
       void featureAreas.refresh();
     });
   });
-  const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
+  const {
+    syncProjectChangeStreams,
+    wakeProjectChangeStream,
+    dispose: disposeProjectChangeStreams,
+  } = createProjectChangeStreamsController({
     projects,
     project,
     shellMode,
@@ -5026,9 +5146,16 @@ export async function startHotSheetWebClient() {
     },
     liveHistory: { resync: () => statsOvernight.resync?.() ?? Promise.resolve() },
   });
+  wakeChangeStreamRef.current = wakeProjectChangeStream;
+  // The network came back: every stream backing off retries now instead of waiting out its delay.
+  const wakeChangeStreamsOnline = () => {
+    wakeProjectChangeStream();
+  };
+  window.addEventListener('online', wakeChangeStreamsOnline);
   const {
     feedbackDelivery,
     chooseFeedbackSession,
+    dismissFeedbackDelivery,
     attachmentEpochs,
     restoreTicketDraft,
     flushTicketDrafts,
@@ -5094,6 +5221,11 @@ export async function startHotSheetWebClient() {
     submitNewTicket,
     submitNotWorking,
   } = createTicketWorkflows({
+    confirm: (options) => confirmation.request(options),
+    openRemoteHostCheckout: (bindingId, checkoutId) =>
+      projectLifecycleController.openRemoteHostCheckout(bindingId, checkoutId),
+    remoteHostCheckoutName: (bindingId, checkoutId) =>
+      projectLifecycleController.remoteHostCheckoutName(bindingId, checkoutId),
     state: {
       get blockedReasonDraftBase() {
         return blockedReasonDraftBase;
@@ -5229,6 +5361,8 @@ export async function startHotSheetWebClient() {
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     composerSource,
     lastTicketSourceByProject,
     composerAttachments,
@@ -5278,6 +5412,9 @@ export async function startHotSheetWebClient() {
     activeTicketSurface,
     draftScope,
     ago,
+    composerOpened: (projectId) => {
+      minimizedComposerControls.opened(projectId);
+    },
     beginBulkUpdateProgress: bulkUpdateActivities.begin,
   });
   // Minimizing ticket readers without closing them (HS2-Q8WF64).
@@ -5361,6 +5498,52 @@ export async function startHotSheetWebClient() {
       if (menu) openPopupMenu(menu);
     },
   });
+  // Minimizing the new-ticket composer into the same control (HS2-3JR0ZH).
+  const minimizedComposerControls = createMinimizedComposer({
+    minimizedComposers,
+    selectedProjectId,
+    composerExpanded,
+    submitting: () => composerSubmitting.value,
+    draft: () => ({
+      title: composerTitle.value,
+      details: composerDetails.value,
+      attachmentCount: composerAttachments.value.length + composerUnrestoredAttachments.value.length,
+    }),
+    flushDraftInputs,
+    openComposer: () => {
+      openTicketComposer();
+    },
+    discardComposer: () => {
+      resetTicketComposer();
+    },
+    persistSession: persistProjectSessionNow,
+    composerPanel: () => quickTicketComposerPanel(document),
+    composerHidden: () => quickTicketComposerHidden(document),
+    storage: () => (typeof localStorage === 'undefined' ? undefined : localStorage),
+  });
+  // Every minimized dialog kind behind the one Minimized Tickets control (HS2-3JR0ZH).
+  const minimizedDialogs = createMinimizedDialogs({
+    kinds: [minimizedReaderControls.kind, minimizedComposerControls.kind],
+    selectedProjectId,
+    confirm: (options) => confirmation.request(options),
+    openMinimizedMenu: () => {
+      const menu = document.querySelector<HTMLElement>('[data-minimized-tickets-control="menu"]');
+      if (menu) openPopupMenu(menu);
+    },
+  });
+  /** The Minimized Tickets control's commands and the minimize shortcut across every kind. */
+  const minimizedControls = {
+    minimize: minimizedReaderControls.minimize,
+    restore: minimizedDialogs.restore,
+    restoreAll: minimizedDialogs.restoreAll,
+    closeAll: minimizedDialogs.closeAll,
+    toggle: (activeReaderId: string | undefined, composerOpen = false) => {
+      if (activeReaderId) void minimizedReaderControls.minimize(activeReaderId);
+      // A composer still animating closed after a minimize is not open; the command restores it.
+      else if (composerOpen && composerExpanded.value) void minimizedComposerControls.minimize();
+      else minimizedDialogs.restoreOrList();
+    },
+  };
   // A linked reader frame's own ticket, project, and Code Review for reader edits (HS2-NXSMC7).
   const linkedReaderSubject = createLinkedReaderSubjects({
     linkedReaderStack: () => linkedReaderStack.value,
@@ -5368,6 +5551,41 @@ export async function startHotSheetWebClient() {
     refreshCodeReview: refreshLinkedCodeReview,
     replaceFrame: replaceLinkedReaderFrame,
   });
+  /** The app-level Choose/Start an AI Session prompt for a saved human note (HS2-6RXBS9, HS2-5MCAKY). */
+  function noteDeliveryPopup(): SafeHtml | undefined {
+    const pending = feedbackDelivery.value,
+      owner = pending && projects.value.find((item) => item.id === pending.projectId);
+    if (!pending || !owner || (pending.delivery.status !== 'choose' && pending.delivery.status !== 'start')) return;
+    const rows = owner.id === selectedProjectId.value ? tickets.value : (ticketRowsByProject.value[owner.id] ?? []),
+      context = {
+        projectName: owner.name,
+        terminals: terminalGroups.value.find((group) => group.projectId === owner.id)?.sessions ?? [],
+        chats: terminalDrawerChatsByProject.value[owner.id] ?? [],
+        claims: rows.flatMap((ticket) =>
+          ticket.claimed_by ? [{ worker: ticket.claimed_by, slug: ticket.slug, title: ticket.title }] : [],
+        ),
+        toolLabel: aiToolLabel,
+      };
+    return (
+      <NoteDeliveryPopup
+        prompt={{
+          key: `note-delivery:${pending.delivery.note_id}`,
+          ticketId: pending.ticketId,
+          slug: pending.slug,
+          title: pending.title,
+          projectName: owner.name,
+          kind: pending.delivery.status,
+          sessions:
+            pending.delivery.status === 'choose'
+              ? pending.delivery.sessions.map((session) => ({
+                  id: session.id,
+                  ...feedbackSessionLabel(session, context),
+                }))
+              : [],
+        }}
+      />
+    );
+  }
   document.body.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -5383,7 +5601,17 @@ export async function startHotSheetWebClient() {
       if (ticketId && connectionId) void chooseFeedbackSession(ticketId, connectionId);
       return;
     }
-    if (target.closest('[data-action="start-feedback-session"]')) void toggleSidebarDrive();
+    if (target.closest('[data-action="dismiss-feedback-delivery"]')) {
+      dismissFeedbackDelivery();
+      return;
+    }
+    if (target.closest('[data-action="start-feedback-session"]')) {
+      // The prompt can be answered from any tab: start the session in the note's own project.
+      const owner = feedbackDelivery.value?.projectId;
+      dismissFeedbackDelivery();
+      if (owner && owner !== selectedProjectId.value) selectProjectTab(owner);
+      void toggleSidebarDrive();
+    }
   });
   const projectTeardown = createProjectTeardown({
     projects,
@@ -5399,7 +5627,7 @@ export async function startHotSheetWebClient() {
     readerOpen,
     linkedReaderStack,
     disposeMinimizedReaders: (ids) => {
-      minimizedReaderControls.disposeProjects(ids);
+      minimizedDialogs.disposeProjects(ids);
     },
     projectRecords: [
       ticketRowsByProject,
@@ -5548,6 +5776,37 @@ export async function startHotSheetWebClient() {
       await finishLocalCreation();
     }
   }
+  /**
+   * Run an AI command's configured action on the host (HS2-17Y2EC): it creates the command ticket and, for a
+   * session action, claims it under the selected session and hands it off, recording the launch itself.
+   */
+  async function runAiCommandAction(command: CommandDefinition, current: Project) {
+    if (!(defaultProvider()?.capabilities.create ?? true)) {
+      error.value = 'The default ticket source does not support ticket creation.';
+      return;
+    }
+    const finishLocalCreation = beginLocalTicketCreation();
+    try {
+      const result = await new Api(current.apiPath).runAiCommand(current.id, command.id),
+        created = result.ticket;
+      localTicketChangeAcknowledgements.acknowledge(current.id, {
+        store: created.connection_id,
+        id: created.id,
+        kind: 'created',
+      });
+      pendingCreatedTickets.register(current.id, created);
+      if (project()?.id === current.id) {
+        tickets.value = prependCreatedTicketRow(tickets.value, created);
+        publishOptimisticTicketRows(current.id);
+        commandRuns.value = [result.run, ...commandRuns.value.filter((item) => item.id !== result.run.id)];
+      }
+      showToast(aiCommandRunMessage(result, aiToolLabel));
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      await finishLocalCreation();
+    }
+  }
   async function runCommand(commandId: string) {
     const command = commandDefinitions.value.find((item) => item.id === commandId),
       current = project();
@@ -5579,7 +5838,9 @@ export async function startHotSheetWebClient() {
       return;
     }
     if (command.kind === 'ai') {
-      await queueAiCommand(command, current);
+      // A command without an action keeps the legacy click; any explicit action runs on the host (HS2-17Y2EC).
+      if (command.action) await runAiCommandAction(command, current);
+      else await queueAiCommand(command, current);
       return;
     }
     try {
@@ -5744,6 +6005,7 @@ export async function startHotSheetWebClient() {
     },
     remoteServerLabels: async () =>
       Object.fromEntries((await listDesktopRemoteServers()).map((server) => [server.id, server.label])),
+    showToast,
   });
   orchestrationSurfaceRef.current = orchestrationSurface;
   const { settingsWorkspace } = createSettingsSurface({
@@ -5765,7 +6027,6 @@ export async function startHotSheetWebClient() {
         loading: developmentLoading.value[projectId] ?? false,
         saving: developmentSaving.value[projectId] ?? false,
         message: developmentMessages.value[projectId] ?? '',
-        status: developmentStatuses.value[projectId] ?? '',
         cadence: currentStream
           ? Object.entries(workerViews.value)
               .filter(([source, view]) => sourceIds.has(source) && view.cadence)
@@ -5834,6 +6095,8 @@ export async function startHotSheetWebClient() {
     commandScheduleDialog: () => ({
       commandTitle: commandSettingsDefinitions().find((item) => item.id === commandSchedules.openCommandId.value)
         ?.title,
+      commandAction: commandSettingsDefinitions().find((item) => item.id === commandSchedules.openCommandId.value)
+        ?.action,
       draft: commandSchedules.draft.value,
       saved: commandSchedules.currentView(),
       preview: commandSchedules.preview.value,
@@ -5857,7 +6120,6 @@ export async function startHotSheetWebClient() {
       config: notificationSettings.config.value,
       deliveries: notificationSettings.deliveries.value,
       message: notificationSettings.message.value,
-      status: notificationSettings.status.value,
       busyChannels: notificationSettings.busyChannels.value,
       channelEditor: notificationSettings.channelEditor.value,
       ruleEditor: notificationSettings.ruleEditor.value,
@@ -6212,6 +6474,7 @@ export async function startHotSheetWebClient() {
         magnifiedTerminalKey,
         terminalHiddenKeys,
         terminalVisibleTypes,
+        terminalScopeGroups,
         terminalDashboardLoading,
         terminalDashboardMessage,
         terminalContextMenu,
@@ -6280,7 +6543,6 @@ export async function startHotSheetWebClient() {
   const { terminalOperationsSurfaceProps } = terminalOperationsSurface;
   const { notWorkingSurfaceProps, attachmentItems, selectedInspectorProps, previewInspectorProps } =
     createInspectorSurface({
-      feedbackDelivery,
       ago,
       api,
       attachmentContext,
@@ -6511,6 +6773,8 @@ export async function startHotSheetWebClient() {
       selectedStep: orchestrationView.selectedStep.value,
       collapsedGroups: orchestrationView.collapsedGroups(),
       propose: orchestrationView.proposeAvailability(),
+      planning: orchestrationView.planning.value,
+      defaultGoal: orchestrationView.defaultGoal.value,
     }),
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
@@ -6549,7 +6813,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
-    minimizedTickets: () => minimizedReaderControls.summaries(),
+    minimizedTickets: () => minimizedDialogs.items(),
     settingsInspector: (current) => orchestrationSurfaceRef.current?.inspector(current),
     desktopRemoteServers,
     announcerTrigger: announcerController.trigger,
@@ -6564,6 +6828,7 @@ export async function startHotSheetWebClient() {
     customViewsFor,
     globalWorkspaceSurfaceProps,
     haltedSessionsController,
+    noteDeliveryPopup,
     hs1MigrationProject,
     hs1SourceIdentity,
     initialProjectRestorePending,
@@ -6765,6 +7030,8 @@ export async function startHotSheetWebClient() {
     composerTitle,
     followUpSource,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     conversationExportDialog,
     conversationOpen,
     conversationRenderRevision,
@@ -6879,7 +7146,7 @@ export async function startHotSheetWebClient() {
     unhealthyServerRecoveryBusy,
     viewMode,
     workspaceSearchActive,
-    workspaceTerminalGroups,
+    terminalScopeGroups,
   });
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
   wireDialogStack(appRoot);
@@ -7197,6 +7464,7 @@ export async function startHotSheetWebClient() {
     ticketBlockers: ticketBlockersController,
     openProject,
     currentRememberedProjectRoots,
+    currentProjectTabOrder,
     persistDrawerTabOrder,
     currentDrawerTabIds,
     focusDrawerTab,
@@ -7238,6 +7506,7 @@ export async function startHotSheetWebClient() {
     terminalFitPhone,
     terminalSession,
     clearTerminalHalt,
+    setFeedbackPrimary,
     magnifiedTerminalKey,
     openTerminalInProject,
     terminalContextMenu,
@@ -7248,6 +7517,8 @@ export async function startHotSheetWebClient() {
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,
     terminalKeysForVisibilityDialog,
+    terminalAvailableTypes,
+    terminalVisibleTypes,
     openGridAIChat,
     setTerminalDrawerVisible,
     terminalDrawerVisible,
@@ -7577,10 +7848,15 @@ export async function startHotSheetWebClient() {
     composerSubmitting,
     composerExpanded,
     resetTicketComposer,
+    minimizeTicketComposer: () => {
+      void minimizedComposerControls.minimize();
+    },
     composerTitle,
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     composerSource,
     addNewTicketFiles,
     composerAttachments,
@@ -7686,7 +7962,7 @@ export async function startHotSheetWebClient() {
     approveTicketReaderClose,
     finishTicketReaderClose,
     readerLargeText,
-    minimizedReaderControls,
+    minimizedReaderControls: minimizedControls,
     linkedReaderStack,
     inspectorTab,
     setSidebarVisible,
@@ -7984,12 +8260,17 @@ export async function startHotSheetWebClient() {
   void restoreRemoteProjectTabs().catch(() => undefined);
   const disposeRemoteReconnectWakeups = wireRemoteReconnectWakeups(remoteReconnect);
   void (async () => {
+    // Remembered roots that opened a relocated checkout at its new root (HS2-86ES0B).
+    const followedRelocations = new Set<string>();
     try {
       await restoreRememberedProjects({
         roots: rememberedRoots,
         activeRoot: rememberedActiveRoot,
         fetch: (root) => openProjectFetch(root),
-        wire: wireOpenedProject,
+        wire: (root, opened, index) => {
+          if (opened.project.root !== root) followedRelocations.add(root);
+          return wireOpenedProject(root, opened, projectTabRank(root, index));
+        },
         retainFailure: (root, failure) => {
           retainProjectRestoreFailure(root, failure.error, failure.recovery?.expected.pid);
         },
@@ -8012,6 +8293,9 @@ export async function startHotSheetWebClient() {
         },
       });
       localProjectRestoreSettled = true;
+      // Remember the current root, so the next start opens it directly (HS2-86ES0B).
+      if (followedRelocations.size > 0)
+        localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
       revealRemoteTabWhenIdle();
       if (startupTicketDeepLink) await openStartupTicketDeepLink(startupTicketDeepLink);
       startPermissionUpdates();
@@ -8049,6 +8333,9 @@ export async function startHotSheetWebClient() {
       workerDetailRefresh?.dispose();
       orchestrationView.dispose();
       orchestrationTargetLines.dispose();
+      window.removeEventListener('online', wakeChangeStreamsOnline);
+      disposeRemoteHostNames();
+      wakeChangeStreamRef.current = undefined;
       disposeProjectChangeStreams();
       statsGlance.dispose();
       hostCpu.stop();
@@ -8059,6 +8346,7 @@ export async function startHotSheetWebClient() {
       liveStates.reset();
       remoteLiveStates.reset();
       liveClockTimer.stop();
+      ciChipClockTimer.stop();
       disposeStandby();
       announcerController.dispose();
       terminalDashboardController.dispose();

@@ -11,11 +11,20 @@ import { wireOrchestrationTimeline } from '../components/orchestration-timeline-
 import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { TicketRow } from '../components/ticket-row';
-import type { TimelinePhase } from '../orchestration-timeline';
+import type { TimelineItem, TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
-import { demoClock, demoContention, demoDecisions, demoSummary, demoTimeline } from './orchestration-fixtures';
+import {
+  DEMO_NOW,
+  demoClock,
+  demoContention,
+  demoDecisions,
+  demoIntegrator,
+  demoRoles,
+  demoSummary,
+  demoTimeline,
+} from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
 
 /** HS2-J89JC7: the Orchestration view's production components with synthetic timelines. */
@@ -30,6 +39,14 @@ export const orchestrationDemoSettings = {
   defaultGoal: signal(false),
   /** HS2-R2N33M: placement runs because the policy leaves it Auto and a plan exists. */
   autoPlacement: signal(false),
+  /** HS2-1DC8X1: no policy is saved, so Start Orchestration says why and offers the settings. */
+  policyAbsent: signal(false),
+  /** HS2-FXY5QM: the condition of API-12's run: '' is a worker at work. */
+  runCondition: signal(''),
+  /** HS2-65AD6J: how the project's integrator stands for a card with a run; '' shows no Integration section. */
+  integrator: signal('keep'),
+  /** HS2-747WQA: what the ready DOC-9 waits for: a held resource, or a Models pattern that resolves to no model. */
+  docWait: signal('resource_held'),
   collapsed: signal<string[]>([]),
 };
 
@@ -52,6 +69,56 @@ const PLANNING = [
   { value: 'asked', label: 'Asked a Question' },
 ];
 
+const INTEGRATOR = [
+  { value: '', label: 'Not Read' },
+  { value: 'start', label: 'Starts' },
+  { value: 'keep', label: 'Running' },
+  { value: 'wind_down', label: 'Winding Down' },
+  { value: 'not_started', label: 'Not Started: Session Limit' },
+  { value: 'opt_out', label: 'Not Started: Integrates by Hand' },
+  // HS2-747WQA: the project's Models pattern resolves to no model its machine reports.
+  { value: 'no_model', label: 'Not Started: No Model Resolves' },
+  { value: 'unavailable', label: 'Unavailable' },
+  { value: 'none', label: 'Not Needed' },
+];
+
+const RUN_CONDITIONS = [
+  { value: '', label: 'A Worker at Work' },
+  { value: 'intervened', label: 'No Worker Holds It' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'cancelling', label: 'Cancelling' },
+  { value: 'unreachable', label: 'Project Unreachable' },
+];
+
+/** HS2-FXY5QM: the running timeline with API-12's run in the chosen condition. */
+function runningTimeline(phase: TimelinePhase = 'running') {
+  const timeline = demoTimeline(phase),
+    condition = orchestrationDemoSettings.runCondition.value;
+  if (!condition) return timeline;
+  const change = (run: NonNullable<TimelineItem['run']>) => ({
+    ...run,
+    state: condition === 'intervened' ? 'intervened' : run.state,
+    paused: condition === 'paused' || run.paused,
+    cancel_requested: condition === 'cancelling' || run.cancel_requested,
+    unreachable_since_ms: condition === 'unreachable' ? DEMO_NOW - 600_000 : run.unreachable_since_ms,
+  });
+  return {
+    ...timeline,
+    waves: timeline.waves.map((wave) => ({
+      ...wave,
+      items: wave.items.map((item) =>
+        item.step_id === 'step-3' && item.run ? { ...item, run: change(item.run) } : item,
+      ),
+    })),
+  };
+}
+
+const DOC_WAITS = [
+  { value: 'resource_held', label: 'A Held Resource' },
+  { value: 'model_unresolved', label: 'Models Not Reported' },
+  { value: 'no_matching_model', label: 'No Matching Model' },
+];
+
 const SELECTIONS = [
   { value: 'step-3', label: 'API-12 Running' },
   { value: 'step-5', label: 'DOC-7 Provisional' },
@@ -71,15 +138,27 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.busy.value = false;
   settings.defaultGoal.value = false;
   settings.autoPlacement.value = false;
+  settings.policyAbsent.value = false;
+  settings.runCondition.value = '';
+  settings.integrator.value = 'keep';
+  settings.docWait.value = 'resource_held';
   settings.collapsed.value = [];
   if (root)
     syncSettingsControls(root, 'orchestration', {
-      values: { phase: settings.phase.value, selected: settings.selected.value, planning: settings.planning.value },
+      values: {
+        phase: settings.phase.value,
+        selected: settings.selected.value,
+        planning: settings.planning.value,
+        integrator: settings.integrator.value,
+        'doc-wait': settings.docWait.value,
+        'run-condition': settings.runCondition.value,
+      },
       checked: {
         'propose-available': settings.proposeAvailable.value,
         busy: settings.busy.value,
         'default-goal': settings.defaultGoal.value,
         'auto-placement': settings.autoPlacement.value,
+        'policy-absent': settings.policyAbsent.value,
       },
     });
 }
@@ -90,13 +169,13 @@ const propose = () =>
     : { available: false, reason: 'Choose an AI tool for this project in Settings first' };
 
 const card = (step: string) => {
-  const timeline = demoTimeline('running');
+  const timeline = runningTimeline();
   return timelineCard(findTimelineItem(timeline, step)!.item, timeline, undefined, demoClock);
 };
 
 /** The work area: wide (grid, opened at its right end in the app) and phone (paged). */
 export function OrchestrationTimelineViewDemo() {
-  const timeline = demoTimeline(orchestrationDemoSettings.phase.value),
+  const timeline = runningTimeline(orchestrationDemoSettings.phase.value),
     view = (layout: 'grid' | 'paged') => (
       <OrchestrationTimelineView
         timeline={timeline}
@@ -104,6 +183,9 @@ export function OrchestrationTimelineViewDemo() {
         selectedStep={orchestrationDemoSettings.selected.value}
         collapsedGroups={orchestrationDemoSettings.collapsed.value}
         propose={propose()}
+        planning={orchestrationDemoSettings.planning.value}
+        busy={orchestrationDemoSettings.busy.value}
+        defaultGoal={orchestrationDemoSettings.defaultGoal.value}
         clock={demoClock}
       />
     );
@@ -166,6 +248,15 @@ export function OrchestrationToolbarDemo() {
             timeline={{
               ...demoTimeline(value),
               automatic_by_default: value === 'running' && orchestrationDemoSettings.autoPlacement.value,
+              ...((value === 'proposed' || value === 'paused') && orchestrationDemoSettings.policyAbsent.value
+                ? {
+                    kick_off: {
+                      ...demoTimeline(value).kick_off,
+                      can_start: false,
+                      start_blocked: 'policy_absent' as const,
+                    },
+                  }
+                : {}),
             }}
             propose={propose()}
             update={propose()}
@@ -183,7 +274,7 @@ export function OrchestrationToolbarDemo() {
 
 /** The inspector of the selected card, in the state the settings choose. */
 export function OrchestrationInspectorDemo() {
-  const timeline = demoTimeline('running'),
+  const timeline = runningTimeline(),
     found = findTimelineItem(timeline, orchestrationDemoSettings.selected.value);
   return (
     <>
@@ -222,23 +313,34 @@ export function OrchestrationInspectorDemo() {
               { step_id: 'e2e-login', check: 'profile', state: 'skipped', reason: 'prerequisite_not_passed' },
             ],
             runRead: true,
+            // HS2-65AD6J: the project's integrator for a card with a run.
+            integrator: demoIntegrator(orchestrationDemoSettings.integrator.value),
             // HS2-77SRHC, HS2-5GRXFN: DOC-9 is ready and waits for the VM someone holds.
             explanation:
-              orchestrationDemoSettings.selected.value === 'step-8'
-                ? {
-                    standing: 'not_placed',
-                    reason: 'resource_held',
-                    retry_at_ms: timeline.now_ms + 40 * 60_000,
-                    resources: [
-                      {
-                        namespace: 'vm',
-                        resource: 'macos-vm',
-                        state: 'held',
-                        expires_at_ms: timeline.now_ms + 40 * 60_000,
-                      },
-                    ],
-                  }
-                : undefined,
+              orchestrationDemoSettings.selected.value !== 'step-8'
+                ? undefined
+                : orchestrationDemoSettings.docWait.value !== 'resource_held'
+                  ? {
+                      // HS2-747WQA: a pattern-only Models list on both of Docs's sites resolves to no model.
+                      standing: 'not_placed',
+                      reason: 'no_tool_available',
+                      detail: orchestrationDemoSettings.docWait.value,
+                      retry_at_ms: timeline.now_ms + 10 * 60_000,
+                      sites: [{ target_id: 'api', reason: 'no_tool_available', detail: 'model_unresolved' }],
+                    }
+                  : {
+                      standing: 'not_placed',
+                      reason: 'resource_held',
+                      retry_at_ms: timeline.now_ms + 40 * 60_000,
+                      resources: [
+                        {
+                          namespace: 'vm',
+                          resource: 'macos-vm',
+                          state: 'held',
+                          expires_at_ms: timeline.now_ms + 40 * 60_000,
+                        },
+                      ],
+                    },
             // HS2-0D60T8: DOC-7 was built ahead of WEB-33's CI, which failed.
             builtAhead:
               orchestrationDemoSettings.selected.value === 'step-5'
@@ -277,7 +379,12 @@ export function OrchestrationInspectorDemo() {
           timeline={timeline}
           projectName="Launch"
           clock={demoClock}
-          overview={{ decisions: demoDecisions(), contention: demoContention(), summary: demoSummary() }}
+          overview={{
+            decisions: demoDecisions(),
+            contention: demoContention(),
+            summary: demoSummary(),
+            roles: demoRoles(),
+          }}
         />
       </CatalogExample>
       <CatalogExample label="No Timeline Yet" viewport={{ width: 'compact', height: 'app', frame: 'solid' }}>
@@ -304,9 +411,13 @@ export function OrchestrationDemoSettings() {
       <Select name="selected" label="Selected Card" value={settings.selected.value} choices={SELECTIONS} />
       <Checkbox name="propose-available" checked={settings.proposeAvailable.value} label="Planner Available" />
       <Select name="planning" label="Planning Session" value={settings.planning.value} choices={PLANNING} />
+      <Select name="integrator" label="Integrator" value={settings.integrator.value} choices={INTEGRATOR} />
+      <Select name="doc-wait" label="DOC-9 Waits For" value={settings.docWait.value} choices={DOC_WAITS} />
+      <Select name="run-condition" label="API-12’s Run" value={settings.runCondition.value} choices={RUN_CONDITIONS} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
       <Checkbox name="auto-placement" checked={settings.autoPlacement.value} label="Placement On by Default" />
+      <Checkbox name="policy-absent" checked={settings.policyAbsent.value} label="No Policy Saved" />
       <Button type="button" action={'reset-settings'}>
         Reset
       </Button>
@@ -326,9 +437,13 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'selected') settings.selected.value = control.value;
       if (name === 'propose-available') settings.proposeAvailable.value = control.checked;
       if (name === 'planning') settings.planning.value = control.value;
+      if (name === 'integrator') settings.integrator.value = control.value;
+      if (name === 'doc-wait') settings.docWait.value = control.value;
+      if (name === 'run-condition') settings.runCondition.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
       if (name === 'auto-placement') settings.autoPlacement.value = control.checked;
+      if (name === 'policy-absent') settings.policyAbsent.value = control.checked;
     }),
   );
   scope.add(

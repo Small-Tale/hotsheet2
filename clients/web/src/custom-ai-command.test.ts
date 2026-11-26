@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ToolConnection } from './api';
-import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from './custom-ai-command';
+import type { AiCommandRun, ToolConnection } from './api';
+import {
+  aiCommandRunMessage,
+  customAiCommandSignalConnection,
+  customAiCommandTicket,
+  HOTSHEET_SKILL_SIGNAL,
+} from './custom-ai-command';
 
 const connection = (value: Partial<ToolConnection> & Pick<ToolConnection, 'id'>): ToolConnection => ({
   tool: 'codex',
@@ -46,5 +51,51 @@ describe('custom AI commands', () => {
       connection({ id: 'claude', tool: 'claude' }),
     ];
     expect(customAiCommandSignalConnection(connections, 'codex', 'codex')).toBeUndefined();
+  });
+});
+
+describe('HS2-17Y2EC AI command run message', () => {
+  const result = (value: Partial<AiCommandRun>): AiCommandRun => ({
+    action: 'create_ticket',
+    delivery: 'queued',
+    ticket: { slug: 'HS2-RUN001' } as AiCommandRun['ticket'],
+    run: { id: 'run', command_id: 'review', state: 'completed', output: [] },
+    ...value,
+  });
+  const label = (tool: string) => (tool === 'codex' ? 'Codex' : tool);
+
+  it('names the outcome of each action', () => {
+    expect(aiCommandRunMessage(result({}), label)).toBe('Queued HS2-RUN001.');
+    expect(
+      aiCommandRunMessage(
+        result({
+          action: 'new_ai_session',
+          delivery: 'started',
+          run: {
+            id: 'run',
+            command_id: 'review',
+            state: 'completed',
+            output: [],
+            launch: { kind: 'ai', tool: 'codex' },
+          },
+        }),
+        label,
+      ),
+    ).toBe('Started HS2-RUN001 in a Codex session.');
+    expect(aiCommandRunMessage(result({ action: 'new_ai_session', delivery: 'started' }), label)).toBe(
+      'Started HS2-RUN001 in an AI session.',
+    );
+    expect(
+      aiCommandRunMessage(
+        result({ action: 'reuse_or_new_ai_session', delivery: 'failed', reason: 'ai_handoff_failed' }),
+        label,
+      ),
+    ).toBe('Queued HS2-RUN001; no AI session could start it (the AI session did not start).');
+    expect(aiCommandRunMessage(result({ delivery: 'failed', reason: 'new_code' }), label)).toBe(
+      'Queued HS2-RUN001; no AI session could start it (new_code).',
+    );
+    expect(aiCommandRunMessage(result({ delivery: 'failed' }), label)).toBe(
+      'Queued HS2-RUN001; no AI session could start it.',
+    );
   });
 });

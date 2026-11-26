@@ -705,6 +705,31 @@ Rules are role-specific, and their feedback is written for the reader:
   same text. The message is machine-actionable: it gives the exact retry for each surface,
   the `## Confidence` section shape, and the rubric bands, so one retry succeeds.
 - **Humans:** human and `system` actors are never required to score.
+- **Remote-commit rule (HS2-R8ZH4K):** an `ai` completion through CLI `edit`/`close`,
+  MCP `hotsheet_update`/`hotsheet_close`, or the git-backed server routes must have its
+  commits on the remote, as the workflow requires (HS2-8HCBA1). The engine is
+  `hotsheet_ticketing::completion_remote`, called beside the confidence rule:
+  - **Code checkout:** the request's checkout, else a registered checkout linked to the
+    ticket's store (the CLI prefers the one containing its working directory). The ticket
+    store's own repository never counts. With no checkout the check is skipped and the
+    response warns.
+  - **Commits:** those named with `--commit <sha>` (MCP/HTTP `commits`), else every commit
+    whose subject leads with the slug (`HS2-A HS2-B …` names both).
+  - **Check:** after a best-effort `git fetch --all`, each commit must be reachable from a
+    remote-tracking ref, or be patch-equivalent (`git patch-id --stable`) to a remote commit
+    naming the slug, so a rebased or cherry-picked commit passes.
+  - **Refusals (422, nothing changes):** `commit_not_on_remote` lists each missing SHA, its
+    local branches, and the exact `git push origin <branch>:merge-pending/<SLUG>`;
+    `commits_not_found` explains how to name commits or opt out;
+    `commit_remote_unverified` means the fetch failed and a commit is not on the last
+    fetched refs: offline completions are refused rather than passed silently;
+    `commit_invalid` covers an unknown named commit or commits combined with the opt-out.
+  - **Opt-out:** `--no-commit` (MCP/HTTP `no_commit: true`) is for tickets with no code
+    (docs in the store, investigations, decisions). The completion appends an activity
+    note, "Completed without code commits", to the history.
+  - **Pinned by** `crates/hotsheet-ticketing/tests/completion_remote_policy.rs`: every
+    completion-rule site also checks remote commits. Provider-backed routes are exempt
+    until HS2-Z0VYZ5.
 
 The actor is also recorded (HS2-32QDZ3):
 
@@ -761,7 +786,7 @@ and per-ticket commit hygiene — while explicitly **leaving the push/PR decisio
 repository** rather than mandating it. The four first-party blocks share one body; the
 `every_builtin_carries_the_full_default_guidance` test pins that content.
 
-**Human ticket feedback delivery (HS2-25TP3N).** On a Started Git ticket, the web client's human note write uses checkout-scoped ticket PATCH with `actor: {role: "human"}`. After the note commits, the server sends a short ticket reference to the reachable session holding the live claim. If no live claim names a reachable session, or that session is unreachable, it uses the project's **primary AI session** (HS2-DB2FQ2): the oldest live terminal in the checkout whose reported session accepts pushed messages, by terminal connection start time and then id. The primary is derived, never stored, so closing it promotes the next oldest and opening another terminal never takes the role; a failed send drops that session and tries the next primary. `GET /terminals` marks it with `feedback_primary: true`, and an exited push-capable session is announced as a `terminal_ai_connection` change so clients refetch without polling. Only when no terminal is reachable does the server use one same-project/source client drive, return an inline chooser among several drives, or return a start action. The chooser has its own note notification POST. The server records delivery as an activity note; a driven chat already busy receives the reference after its turn. Delivery is at most once (HS2-WKRFD5): before a Git ticket's reference is sent, the server durably writes a per-note `sending` entry under `${HOTSHEET_HOME}/feedback-deliveries/`, marks it `sent` after the send, and removes it once the activity note commits. If the intent cannot be written nothing is sent (503). If the activity write fails, the entry stays and refuses every resend; a retry, or the next successful delivery to that store, writes the missing activity note. A `sending` entry found after a restart means the outcome is unknown: the reference is never resent, the retry gets a 409 with code `feedback_delivery_uncertain`, and the ticket records a "may have notified" activity note. A turn queued behind a busy drive is journaled only when it is sent, so a restart while it waits loses it and a later retry may deliver it. This path does not invoke the completed-ticket Not Working report.
+**Human ticket feedback delivery (HS2-25TP3N).** On a Started Git ticket, the web client's human note write uses checkout-scoped ticket PATCH with `actor: {role: "human"}`. After the note commits, the server sends a short ticket reference to the reachable session holding the live claim. If no live claim names a reachable session, or that session is unreachable, it uses the project's **primary AI session** (HS2-DB2FQ2): the oldest live terminal in the checkout whose reported session accepts pushed messages, by terminal connection start time and then id. The primary is derived, never stored, so closing it promotes the next oldest and opening another terminal never takes the role; a failed send drops that session and tries the next primary. `GET /terminals` marks it with `feedback_primary: true`, and an exited push-capable session is announced as a `terminal_ai_connection` change so clients refetch without polling. A person may override the derived primary (HS2-H3S7YQ): right-clicking an AI terminal's drawer tab, or the More actions menu of its drawer grid or workspace tile, offers **Receive Feedback Notifications**, which calls `PUT /terminals/{id}/feedback-primary`; the chosen tab then offers **Stop Receiving Feedback Notifications** (`DELETE /terminals/{id}/feedback-primary`). Headless: `hotsheet-cli terminal feedback-primary <terminal-id> [--clear]`. There are no MCP terminal tools, so no MCP equivalent exists. The choice is per checkout on this server instance and kept in memory: it lasts while the chosen terminal lives, is forgotten when that terminal exits or is closed (its id may be reused), and is not persisted across a server restart, which returns the project to the derived rule. Only a live terminal whose session accepts pushed messages may be chosen (`409 feedback_primary_ineligible` otherwise); the menu disables the command with its reason for a shell, an ended session, a session without push, or the current derived primary. While the chosen terminal is eligible it is the primary; once it is not, the oldest-terminal rule applies again at once. The choice changes only the no-claim fallback: a live claim's session, and the AI that asked a FEEDBACK NEEDED question (HS2-N5BDE4), still come first, and a failed send to the chosen session falls back to the next oldest. `GET /terminals` adds `feedback_primary_chosen` and `feedback_eligible`, and every choose, clear, or forgetting emits a `terminal_feedback_primary` change event so every client refetches its terminals without polling. Only when no terminal is reachable does the server use one same-project/source client drive, return an inline chooser among several drives, or return a start action. The chooser and the start action are an app-level prompt (HS2-6RXBS9): the same native top-layer notification card as a permission request or a halted session, naming the ticket and project, shown after any pending permission request or halted session and kept while the person selects another ticket, project, or view, until they choose a session, start one in the note's project, or dismiss it (the note stays for the AI's next read). It does not count toward project attention. The chooser has its own note notification POST. Each chooser entry carries the session's claim `worker` when it has one, and the client names it by its drawer tab title (or the tool), its project, and the ticket that worker claims (for example `Codex 2 · demo · HS2-ABC123`), keeping the session id only in the tooltip (HS2-5MCAKY). The server records delivery as an activity note; a driven chat already busy receives the reference after its turn. Delivery is at most once (HS2-WKRFD5): before a Git ticket's reference is sent, the server durably writes a per-note `sending` entry under `${HOTSHEET_HOME}/feedback-deliveries/`, marks it `sent` after the send, and removes it once the activity note commits. If the intent cannot be written nothing is sent (503). If the activity write fails, the entry stays and refuses every resend; a retry, the next successful delivery to that store, or the server's next start writes the missing activity note: once the server has hosted its stores at startup, and whenever it hosts another store, it records every journaled delivery of each hosted store (HS2-5TE2TG). A `sending` entry found after a restart means the outcome is unknown: the reference is never resent, the retry gets a 409 with code `feedback_delivery_uncertain`, and the ticket records a "may have notified" activity note. A turn queued behind a busy drive is journaled only when it is sent, so a restart while it waits loses it and a later retry may deliver it. This path does not invoke the completed-ticket Not Working report.
 
 **External-provider tickets (HS2-H9Z9KZ).** A human note (including a FEEDBACK NEEDED answer) on a Started GitHub, GitLab or Jira ticket uses the same checkout PATCH and routing, best-effort and immediately. Authorship comes from the write request, because providers such as GitHub read comments back without an actor. A safe Jira advisory claim (remote-verified, not provisional or conflicted, exactly one live claim) selects the claimed session; other providers fall back to one reachable session, the chooser, or Start. Nothing beyond the human note is persisted, so there is no delivery activity record and no duplicate guard across restarts. A failed send returns `not_shared`, and the client shows a brief toast; the saved note reaches the AI when it next reads the ticket. The chooser's notify POST also accepts provider tickets.
 
@@ -1137,8 +1162,14 @@ install --server <bundled hotsheet-server>` before it starts the local bridge. T
     application data and the operating system releases their lock on process exit.
     If initial broker readiness exhausts its existing probe window, its diagnostic names
     the spawned PID, observed exit status or still-running state, and last probe error
-    kind/numeric OS error (HS2-C8J6WS). No raw child output, command or environment is
-    logged. A healthy Pong still succeeds even if this launch's contender exited; startup
+    kind/numeric OS error (HS2-C8J6WS). Direct launches capture the broker's startup
+    stderr in a private temporary file and include at most 4 KiB in the local startup
+    error if the child exits (HS2-8GVYHQ). The broker disconnects that file once it
+    binds, and the server removes it after an ordinary attempt. An abrupt server kill
+    can leave a private 0600 capture file in the per-user broker socket directory;
+    inspect and remove it locally during crash recovery. Commands,
+    environments, and this diagnostic are not sent to telemetry. A healthy Pong still
+    succeeds even if this launch's contender exited; startup
     does not change ownership. The intermittent historical failure's cause remains tracked
     separately in HS2-2ETGGC.
     The readiness window follows the spawned broker (HS2-KCM23W), at server startup and when
@@ -1244,6 +1275,15 @@ and reads only that line's typed members (`status`, an HTTP or gRPC code, `retry
 `short_error`). A limit becomes the failed turn's `error_type` (`rate_limit` or
 `usage_limit_exceeded`), never a search of its text.
 
+It may also name **`usage_query_args`** (HS2-JM0GVB): arguments that make the drive's
+`program` print its usage report as JSON without an agent turn or quota spend (Antigravity:
+`["-p", "/usage", "--output-format", "json"]`, which answers
+`command.data.groups[].buckets[]`). When a driven turn fails on a typed usage limit, the host
+runs it once in the background, under the same `model_catalog_identity` check as the model
+catalog, and only when AI-tool probes are enabled (`HOTSHEET_AI_TOOL_PROBES`). It reads each
+bucket's typed `remaining_fraction` and `reset_time`, never names or descriptions; the latest
+reset of a spent bucket still ahead becomes the limit's reset time. Nothing polls it.
+
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
 `usage_limit_errors`, `reset_times`, `usage_events` and `cost` is `"reported"` or `"unknown"`, and
@@ -1251,13 +1291,16 @@ an omitted key or section is `unknown`. No value means that a limit never happen
 cannot report a limit is never assumed to be available. The loader refuses an unknown key or value,
 `reset_times` without a reported limit error, and `cost` without reported `usage_events`. Claude
 and Codex declare all five (Codex's request-rate limits since HS2-2BAVAM); OpenCode only
-`usage_events`; Antigravity rate and usage limit errors (HS2-86MK1Y). Orchestration reads the declaration when it judges tool capacity
+`usage_events`; Antigravity rate and usage limit errors (HS2-86MK1Y) and reset times (from
+`usage_query_args`, HS2-JM0GVB). Orchestration reads the declaration when it judges tool capacity
 ([26](26-orchestration-projects.md) §26.11). A plugin changes its declaration in the same change
 that adds or removes the detection it describes.
 
 Use `hotsheet-cli terminal message <terminal-id> --text "Your message"` against the local
 server to message a capable session (HS2-NN6EXP). It uses the authenticated
 `POST /connections/{id}/message` operation and reports unavailable or unreachable sessions.
+`hotsheet-cli terminal feedback-primary <terminal-id> [--clear]` chooses or clears the project's
+feedback-primary session through the same route the terminal menus use (HS2-H3S7YQ).
 The terminal drawer's Message AI Session button and browser-native prompt were removed after
 UX review (HS2-JVSFES); CLI messaging, Drive-to-session routing, and the transport remain available.
 
@@ -1367,6 +1410,18 @@ declarative.
      markers through unchanged, but it drops an OSC sequence that arrives as typed
      input. Windows has no tty echo that would turn input back into output
      (HS2-YM55P3, confirmed on Windows 11 ARM64).
+  3. **Turn reports for Claude and Codex (HS2-2AN9C8).** Neither tool writes OSC 133,
+     so their terminals' `busy` and `idle_since_ms` come from the turn boundaries the
+     server already receives: Claude's `UserPromptSubmit` opens a turn and `Stop` or
+     `StopFailure` ends it (the `claude-turn` report), and a watched Codex rollout's
+     `task_started` opens one and `task_complete` ends it, with or without an error.
+     Once a terminal's session has reported a boundary, that report is the terminal's
+     busy state in `GET /terminals`, the broker listing, the connection registry and
+     every session host's safe-point facts; a repeated boundary keeps the original
+     time, and ending the session returns the terminal to byte inference. The state is
+     in memory only, so after a server restart a terminal reads inferred busy until its
+     next boundary. Claude runs no `Stop` hook when a person interrupts a turn, so such
+     a terminal reads busy until its next prompt (HS2-HZ294D).
      The registry exposes `isBusy(connection)`; the UI shows "X working / X idle."
 
 **Ticket-level active work.** Connection busy state answers whether a tool connection is
@@ -1561,7 +1616,12 @@ explicit Always answer returns 503 without resolving the pending request. Once
 the authenticated vault loads, its rules become available without replacing
 in-session or checkout answers, and a rule-change event notifies open clients;
 a load failure leaves the legacy vault locked. Health and unrelated routes
-remain available during an OS credential prompt.
+remain available during an OS credential prompt. No vault operation holds a
+vault file lock, the shared master-creation lock, or the process credential cache
+while an OS credential read may wait on a person; the shared lock is taken only to
+create a missing master. A terminal launch registers its checkout vault in the
+background, so launches never wait on a credential prompt; a permission request for
+that checkout still loads the vault before it can auto-answer (HS2-55P61R).
 Legacy fingerprint-only rules
 are discarded and require fresh approval; no migration guesses an action.
 Rules are personal machine state, stored per linked ticket store under
@@ -2203,6 +2263,14 @@ terminal” only clears the notice. A later `UserMessage` item in the same sessi
 typed in the terminal, or the queued one) clears it, and questions stay per terminal and
 session. The TUI's own queued-question entry stays until Codex consumes the follow-up input.
 
+Because the turn keeps running, a permission ask the same session raises while the question is
+open leaves it open. Only `SessionStart` names a terminal's session: a permission ask adopts a
+session only when none is known, and an ask naming another session never replaces it. A
+permission hook run by hand inside a Codex terminal inherits that terminal's id, and replacing
+the reported session with its made-up one stopped the rollout watch, so the next question never
+reached a local or remote tab (HS2-HSFVHC). The remote-project parity suite covers the
+question, its change event, and the queued answer for a local and a remote tab of one server.
+
 In the isolated live Claude check (HS2-5CX10W), a server-launched terminal delivered
 two choices, a multi-select answer, and free text to Claude. Native fallback and
 stale-answer rejection after session replacement also worked. A browser-created
@@ -2395,6 +2463,12 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 >   `codex app-server`, `hotsheet-cli permission-hook` ignores `HOTSHEET_TERMINAL_ID`.
 > - A PermissionRequest there still reaches Hot Sheet, with no `terminal_id`. SessionStart
 >   and SessionEnd report nothing.
+> - It also names no inherited project (`HOTSHEET_PERMISSION_PROJECT`/`HOTSHEET_PROJECT`), which
+>   belongs to whichever session started the daemon. The ask sends the hook input's `cwd`
+>   instead, and the server files it under the registered checkout containing that directory
+>   (`checkout:<id>`), falling back to the primary store when none contains it. That checkout's
+>   tab, a remote tab included, shows the prompt; before, a Codex ask could land in another
+>   project and never reach the remote tab it came from (HS2-HSFVHC).
 > - Codex runs hook commands through a shell. Arguments after a shell script flag (`-c`,
 >   `-lc`, `/C`) are therefore not program candidates, so the wrapper's `--agent codex` never
 >   hides the daemon above it.
@@ -2417,7 +2491,7 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > hook-only session gets the same 15 s grace, then keeps the plug in the warning tone with an
 > accessible label that names what is missing ("MCP not connected", how to fix it), because its
 > permission prompts still reach Hot Sheet (HS2-YHQM67); `unplug` is reserved for a session
-> whose hooks never reported. The project's primary session shows `plug-zap` (HS2-YHQM67). A
+> whose hooks never reported. The project's primary session adds a Lucide `heart` beside its plug (HS2-YHQM67, HS2-1WFGX1). A
 > current server always serializes `mcp_connected`; one that omits it predates MCP presence and
 > keeps the hook-only verdict (version skew). The client
 > re-reads terminals on `mcp_presence` events, never by polling.
@@ -2588,6 +2662,31 @@ refuse the upgraded state. Stop old waiters and switch all members to the verifi
 schema-three artifact before any live pool open; checking `coordination --help`
 alone does not prove this capability (HS2-A1F615/HS2-AEBJYN).
 
+**Moved checkouts and stores (HS2-67N8SJ).** The pool's `project_id` and `source_id`
+derive from the checkout and store paths. Moving either one changes the recomputed ids.
+Every open, under the pool lock, migrates the stored ids only when the machine's
+checkout registry (`$HOTSHEET_HOME/checkouts.json`, read-only here) proves both.
+
+- **Project:** the stored project id is this checkout's id, or the durable registry id
+  of the checkout registered at this shipping root. `checkouts relocate` keeps that id.
+- **Source:** following that checkout's `sourceAliases` from the stored source's
+  connection id reaches a Git source the checkout links at the current store path.
+  The connection id is the 16-hex prefix of the stored hash. Following stops on a cycle.
+
+A migration rewrites only the two ids and appends one provenance line to
+`hotsheet-coordination/identity-migrations.log`; the pool schema does not change.
+Any other mismatch is refused as before ("incompatible coordination state" or "bound to
+another source"), and the error names the headless recovery:
+`hotsheet-cli -C <store> coordination --project <repo> repair-identity [--dry-run]`.
+That command prints the stored and current ids, the evidence, and whether they are
+equivalent. Without `--dry-run` it migrates a proven pool with the same proof. It
+never creates a pool. It exits nonzero for an unproven pool and leaves the pool unchanged;
+it never force-rebinds. `scripts/push.sh` refuses a mismatched pool with
+`Incompatible coordination pool or ticket source`, naming the same command. In a linked
+worktree without its own `.hotsheet2/store` link, `push.sh` resolves the source store
+through the shipping checkout's link before falling back to the repo path, so
+`--source-store` is no longer needed there.
+
 Use the same prefix, with `--project` before the subcommand:
 
 | Command                                                                                                                                                                                                                                                        | Effect                                                                                                                                                                             |
@@ -2602,6 +2701,7 @@ Use the same prefix, with `--project` before the subcommand:
 | `recover --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                                                                     | Fence a stale reservation only after inspecting and preserving its ticket/worktree/commit. The selected local source must have no live claim and must contain the inspection note. |
 | `review-return --id <integrator> --session <generation> --assignment <id> --evidence-note <note-id> --inspected`                                                                                                                                               | Preserve a reviewed handoff and fence its integration, permitting a new stable correction assignment (HS2-65ETRJ).                                                                 |
 | `retire-finished --id <integrator> --session <generation> [--dry-run]`                                                                                                                                                                                         | Retire every non-done assignment whose selected-source ticket is closed, including review returns and findings handoffs, with an inspection note on each ticket (HS2-V9BXWF).      |
+| `merge-pending-prune [--remote <name>] [--shipping <ref>] [--apply] [--no-fetch]`                                                                                                                                                                              | Report, and with `--apply` delete, integrated `merge-pending/<SLUG>` branches of closed tickets; no pool (HS2-ZTG8FD).                                                             |
 | `finish --id <integrator> --session <generation> --reason <reason>`                                                                                                                                                                                            | End the run only when no work/handoff/CI remains in flight; waiting workers receive the outcome.                                                                                   |
 | `leave --role <role> --id <id> --session <generation>`                                                                                                                                                                                                         | Withdraw availability on final exit without erasing assignments or handoffs. `setup --resume` explicitly reopens a stopped run.                                                    |
 
@@ -2931,6 +3031,24 @@ reports their count as `past_workers`; `coordination workers --include-past`, th
 route's `include_past=true`, and MCP `hotsheet_workers` with `include_past: true`
 (HS2-7R945V) list them too. An assignment on another source keeps its
 phase, because its ticket status is not read here.
+
+`merge-pending-prune` cleans up the remote `merge-pending/<SLUG>[-<label>]` branches
+that the workflow requires for completed work not yet on the shipping branch
+(HS2-8HCBA1, HS2-ZTG8FD). It runs `git fetch --prune <remote>` (skipped with
+`--no-fetch`; a failed fetch is reported as `fetch_error` and the last fetched refs are
+used), then evaluates every `<remote>/merge-pending/*` branch against the shipping ref
+(`--shipping`, else `<remote>/HEAD`, else `<remote>/main`). `git cherry` counts commits
+that are neither on the shipping branch nor patch-equivalent there, so merged and
+cherry-picked branches both count as integrated. A branch is eligible only when that
+count is zero and its slug resolves to a completed, verified, archived or deleted
+ticket in the selected store. Otherwise it is kept with a reason:
+`malformed_name`, `unknown_slug`, `unintegrated_commits` (with the count), `ticket_open`
+or `ticket_moved`. The default is a dry run (`would_delete`); `--apply` runs
+`git push <remote> --delete` and reports `deleted` or `delete_failed` with the Git
+error. The repository's `pre-push` hook lets a delete-only push of non-main branches
+skip the local gate, because it sends no code (HS2-12K3FN). A rerun is a no-op. The
+integration ticket runs it for its own branch before
+completion; an integrator or maintainer can run it for every branch.
 
 `retire-finished` is the one supported step that retires these records, so an
 integrator never edits the pool file. It needs the exact live integrator session. For
@@ -3705,6 +3823,16 @@ still detects installed tools on `PATH`, but every provider keeps its bundled ca
 and no tool is executed. Any other value, or no value, leaves probing on. The Rust test
 environment forces it off so tests never run the developer's installed tools
 (HS2-7W3D7V).
+Every probe (`--version`, the model catalog, the Codex catalog app-server and
+`usage_query_args`) runs in a fresh private empty directory made for that scan or query
+and removed afterwards, never in a hosted ticket store or the caller's directory
+(HS2-BNDRYP). `agy models` starts every MCP server registered at Antigravity's user scope
+(`~/.gemini/config/mcp_config.json`) in its working directory, even signed out. A
+leftover HS1 `hotsheet-channel` entry there wrote `.hotsheet/mcp.log` and `channel-port*`
+into a newly hosted store, which then failed the HS1 backup readiness check. If the
+directory cannot be made, discovery keeps the bundled catalogs and runs nothing. The store
+ignore rules deliberately do not list `.hotsheet/`: Hot Sheet does not run tools there, and
+`.hotsheet/` is the HS1 project marker that migration detects.
 The provenance review (HS2-3VHPFR, 2026-10-08) found no documented offline check
 strong enough to prove an installed `agy` is the agent CLI across supported platforms.
 Google's current [Unix installer](https://antigravity.google/cli/install.sh) and

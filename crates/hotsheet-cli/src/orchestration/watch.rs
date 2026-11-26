@@ -14,6 +14,10 @@
 //! its tickets (a prerequisite, or the step's own ticket), whether or not a run
 //! stands on it. A change of such a ticket reads it again through the gate and
 //! publishes the readiness level it changes.
+//!
+//! HS2-BQN0M5: while the default goal is re-planned automatically, every project
+//! target is followed, and a new or reopened ticket no step names starts one
+//! background Update Plan (`auto_replan`).
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::checkouts::Checkout;
 use hotsheet_ticketing::orchestration::{
@@ -112,6 +116,10 @@ pub struct WatchState {
     authorized: Option<(Authorized, u64)>,
     /// HS2-WBREDM: the last step failed, so the next one that succeeds is a reconnect.
     reconnecting: bool,
+    /// HS2-BQN0M5: tickets handed to an automatic re-plan, and those waiting for one.
+    /// HS2-G6F5BP: the in-process copy of the owner's machine-local memory, used only
+    /// while that file cannot be read.
+    replan: hotsheet_ticketing::orchestration::ReplanMemory,
 }
 
 impl WatchState {
@@ -138,6 +146,8 @@ pub struct WatchStep {
     pub refreshed: usize,
     /// HS2-FJ6MDW: the target's own speculation setting changed and was stored.
     pub speculation_changed: bool,
+    /// HS2-BQN0M5: what this step did about re-planning the default goal.
+    pub replan: super::AutoReplan,
 }
 
 /// The actor a run's supervision acts as: whoever dispatched it.
@@ -214,13 +224,19 @@ impl OrchestrationRuntime {
         let planner = planner
             .filter(|_| !tickets.is_empty())
             .and_then(|id| MutationActor::parse("system", Some(id)).ok());
-        // Idle: no run, no session and no planned ticket, no request.
+        // HS2-BQN0M5: while the default goal is re-planned automatically, the target
+        // is followed for its new tickets, as the scheduler's actor.
+        let replanner = self.replan_actor(owner_id);
+        // Idle: no run, no session, no planned ticket and no re-plan, no request.
         let Some(lead) = runs
             .iter()
             .find_map(supervisor)
             .or_else(|| sessions.iter().find_map(session_supervisor))
             .or(planner)
+            .or_else(|| replanner.clone())
         else {
+            // HS2-G6F5BP: the re-plan does not apply either; forget what it remembered.
+            self.replan_forget(owner_id, &mut state.replan);
             *state = WatchState::default();
             return WatchStep::default();
         };
@@ -370,6 +386,24 @@ impl OrchestrationRuntime {
                 self.readiness_reevaluate(owner_id, tx.clock.now_ms());
                 step.refreshed = count;
             }
+        }
+        // HS2-BQN0M5: a new or reopened ticket no step names re-plans the default goal.
+        // After a handshake, an overflow or a reconnect nothing says which are new.
+        match (&replanner, &state.authorized) {
+            (Some(actor), Some((authorized, _))) => {
+                let mut named = tickets.clone();
+                named.extend(runs.iter().map(|run| run.target.clone()));
+                let events: &[TargetTicketEvent] = if caught_up { &[] } else { &page.events };
+                step.replan = self.replan_follow(
+                    (owner_id, target_id),
+                    events,
+                    &named,
+                    (authorized, actor),
+                    &mut state.replan,
+                    tx,
+                );
+            }
+            _ => self.replan_forget(owner_id, &mut state.replan),
         }
         if caught_up {
             // Nothing is known about what happened before: catch every run up.

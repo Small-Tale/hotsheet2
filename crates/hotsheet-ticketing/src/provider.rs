@@ -1471,6 +1471,30 @@ pub trait TicketProvider: Send + Sync {
         worker: &str,
     ) -> Result<ApiTicket, ProviderError>;
 
+    /// Move a Trash ticket back to the status it had before it was deleted (GH-5). A
+    /// provider whose Delete is not a restorable Trash refuses by capability name, and a
+    /// ticket outside Trash is [`OpError::NotInTrash`].
+    fn restore(&self, _native_id: &str, _now: Timestamp) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "trash_restore",
+        })
+    }
+
+    /// Permanently delete one Trash ticket from the provider (GH-5). Implementations must
+    /// refuse a ticket outside Trash, report an already-removed ticket as purged, and return
+    /// [`crate::provider_trash::ProviderPurgeOutcome::Retained`], never a silent success,
+    /// when the connection's credentials do not allow permanent deletion.
+    fn purge_trashed(
+        &self,
+        _native_id: &str,
+    ) -> Result<crate::provider_trash::ProviderPurgeOutcome, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "permanent_delete",
+        })
+    }
+
     /// Assign the ticket to the provider account behind this connection's credential.
     fn assign_current_user(&self, _native_id: &str) -> Result<ApiTicket, ProviderError> {
         Err(ProviderError::Unsupported {

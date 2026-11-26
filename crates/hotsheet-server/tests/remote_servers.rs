@@ -488,6 +488,10 @@ async fn hs2_1y45mz_shipped_project_path_and_server_mcp_stdio_share_remote_workf
     peer.stop().await;
 }
 
+// HS2-TZCCBJ: the automatic default-goal re-plan with a real PTY planner.
+#[cfg(unix)]
+#[path = "remote_servers/auto_replan.rs"]
+mod auto_replan;
 #[path = "remote_servers/capacity.rs"]
 mod capacity;
 #[path = "remote_servers/claim_provisional.rs"]

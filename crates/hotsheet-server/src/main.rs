@@ -424,6 +424,12 @@ async fn main() -> Result<()> {
     if extra > 0 {
         println!("hosting {extra} configured store(s) from stores.json");
     }
+    // HS2-5TE2TG: record deliveries journaled before this restart (the primary store included;
+    // a configured store also reconciles as it is hosted).
+    {
+        let state = state.clone();
+        tokio::task::spawn_blocking(move || state.reconcile_feedback_deliveries());
+    }
     // Terminals that survived a restart in the broker get their session monitors back, so an
     // ended session still releases its claims (HS2-RXWXQ8).
     hotsheet_server::resume_broker_terminal_sessions(&state).await;
@@ -900,6 +906,12 @@ fn stop_when_test_owner_exits(_state: AppState, _owner_pid: i32) {}
 
 /// Install the stderr diagnostics subscriber (HS2-PD8NJ6). `RUST_LOG` overrides the
 /// default `info` filter; stdout stays reserved for the startup contract lines.
+///
+/// HS2-R9AJW5: diagnostics are best effort. When the owner dies it usually takes the reader
+/// of our stderr pipe with it, and every later event write fails with `EPIPE`. By default
+/// `tracing-subscriber` reports that failure with `eprintln!`, which panics on the same dead
+/// stderr; an event on the main thread during the shutdown sequence then exited 101 instead
+/// of 0. Write failures are dropped instead, like [`shutdown_log`].
 fn init_logging() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
@@ -908,6 +920,7 @@ fn init_logging() {
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
         .with_target(false)
+        .log_internal_errors(false)
         .try_init();
 }
 

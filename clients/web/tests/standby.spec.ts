@@ -213,6 +213,87 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
+  test('hides the mouse cursor until it moves a little, and hides it again after a rest (HS2-1RGBCT)', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openStandbyProject(page);
+    await page.mouse.move(700, 450);
+    await page.getByRole('button', { name: 'Enter Standby' }).click();
+    const screen = standby(page),
+      cursorOver = () =>
+        screen.evaluate((node) => getComputedStyle(node.querySelector('.standby-screen__content')!).cursor);
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true');
+    expect(await cursorOver()).toBe('none');
+    // A nudge of a few pixels is not a wake.
+    await page.mouse.move(702, 450);
+    await page.mouse.move(704, 452);
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true');
+    // A real move shows it, and the display stays up.
+    await page.mouse.move(760, 480, { steps: 4 });
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'false');
+    expect(await cursorOver()).not.toBe('none');
+    await expect(screen).toBeVisible();
+    // Resting a few seconds hides it again.
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true', { timeout: 6_000 });
+    // Exiting restores the cursor over the app.
+    await page.keyboard.press('Escape');
+    await expect(screen).toHaveCount(0);
+    expect(await page.evaluate(() => getComputedStyle(document.body).cursor)).not.toBe('none');
+  });
+
+  test('clicking the sidebar Standby button hides the cursor natively, with no move after the click (HS2-1RGBCT)', async ({
+    page,
+  }) => {
+    // WebKit (the desktop app's WKWebView) repaints a CSS cursor change only on the next pointer move,
+    // so `cursor: none` alone leaves the arrow over the display after the click. The desktop shell
+    // hides it until the mouse moves; a fake shell records each request.
+    await page.addInitScript(() => {
+      const host = window as unknown as {
+        cursorRequests: boolean[];
+        __TAURI_INTERNALS__: { invoke: (command: string, args: { hidden?: boolean }) => Promise<unknown> };
+      };
+      host.cursorRequests = [];
+      host.__TAURI_INTERNALS__ = {
+        invoke: (command, args) => {
+          if (command === 'desktop_hide_cursor_until_moves') host.cursorRequests.push(args.hidden === true);
+          return Promise.resolve(undefined);
+        },
+      };
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openStandbyProject(page);
+    const requests = () => page.evaluate(() => (window as unknown as { cursorRequests: boolean[] }).cursorRequests);
+    expect(await requests()).toEqual([]);
+    const moon = page
+        .getByRole('complementary', { name: 'Sidebar rail' })
+        .getByRole('button', { name: 'Enter Standby' }),
+      box = (await moon.boundingBox())!;
+    await moon.click();
+    const screen = standby(page);
+    await expect(screen).toBeVisible();
+    // Hidden right after the click, before the pointer moves at all, over whatever it rests on.
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true');
+    expect(
+      await page.evaluate(
+        ([x, y]) => getComputedStyle(document.elementFromPoint(x, y)!).cursor,
+        [box.x + box.width / 2, box.y + box.height / 2],
+      ),
+    ).toBe('none');
+    await expect.poll(requests).toEqual([true]);
+    // A nudge keeps it hidden; a real move shows it; a rest hides it natively again.
+    await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2);
+    await page.mouse.move(box.x + 300, box.y + 200, { steps: 4 });
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'false');
+    await expect.poll(requests).toEqual([true, false]);
+    await expect(screen).toHaveAttribute('data-cursor-hidden', 'true', { timeout: 6_000 });
+    await expect.poll(requests).toEqual([true, false, true]);
+    // Exiting releases it.
+    await page.keyboard.press('Escape');
+    await expect(screen).toHaveCount(0);
+    await expect.poll(requests).toEqual([true, false, true, false]);
+  });
+
   test('enters after the idle threshold, shows all projects from the grid, and lights a stalled project', async ({
     page,
   }) => {
@@ -252,6 +333,25 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     await expect(screen).toHaveJSProperty('offsetWidth', 390);
     await expectFits(page);
     await capture(page, 'attention-phone');
+
+    // A second stalled project on a short laptop display: both callouts, both rows, and the freshness
+    // line stay inside the screen instead of clipping under its hidden overflow (HS2-D9F3CA).
+    const bothStalled = store('hs2', 'Hot Sheet 2', 'demo-checkout', 'stalled', host.now, 2);
+    for (const socket of host.sockets)
+      socket.send(
+        JSON.stringify({ cursor: 2, store: 'hs2', kind: 'live_state', id: 'hs2', slug: '', live: bothStalled }),
+      );
+    await expect(alert).toHaveCount(2);
+    for (const size of [
+      { width: 800, height: 500 },
+      { width: 1280, height: 800 },
+    ]) {
+      await page.setViewportSize(size);
+      await page.clock.runFor(100);
+      await expect(screen).toHaveJSProperty('offsetHeight', size.height);
+      await expectFits(page);
+      await capture(page, `two-alerts-${size.width}x${size.height}`);
+    }
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.clock.runFor(100);
     await expect(screen).toHaveJSProperty('offsetWidth', 1440);

@@ -7,6 +7,7 @@ import {
   containsRepositorySizeChange,
   containsTicketChange,
   containsTicketStoreSyncChange,
+  createProjectChangeWake,
   startProjectChangeStream,
 } from './project-change-poll';
 
@@ -638,6 +639,143 @@ describe('project change resync (HS2-NKCXW4)', () => {
     await vi.waitFor(() => {
       expect(onResync.mock.calls.map((call) => call[0])).toEqual(['initial', 'reconnect']);
     });
+    stop();
+  });
+});
+
+describe('waking a backed-off change stream (HS2-ZTAJ1R)', () => {
+  /** A wait that only ends when its signal aborts or the test releases it, recording each delay. */
+  function heldWaits() {
+    const delays: number[] = [],
+      releases: Array<() => void> = [];
+    const wait = (milliseconds: number, signal: AbortSignal) =>
+      new Promise<void>((resolve) => {
+        delays.push(milliseconds);
+        if (signal.aborted) {
+          resolve();
+          return;
+        }
+        signal.addEventListener('abort', () => {
+          resolve();
+        });
+        releases.push(resolve);
+      });
+    return { delays, releases, wait };
+  }
+
+  it('retries a polling outage at once and restarts its backoff, then backs off again', async () => {
+    const wake = createProjectChangeWake(),
+      { delays, releases, wait } = heldWaits(),
+      pollEvents = vi.fn().mockRejectedValue(new Error('remote down')),
+      onError = vi.fn();
+    const stop = startProjectChangeStream({
+      client: { pollEvents },
+      refresh: vi.fn().mockResolvedValue(undefined),
+      wait,
+      wake,
+      onError,
+    });
+    await vi.waitFor(() => {
+      expect(delays).toEqual([500]);
+    });
+    releases.shift()!();
+    await vi.waitFor(() => {
+      expect(delays).toEqual([500, 1_000]);
+    });
+    releases.shift()!();
+    await vi.waitFor(() => {
+      expect(delays).toEqual([500, 1_000, 2_000]);
+    });
+    expect(pollEvents).toHaveBeenCalledTimes(3);
+    // A tab click: the 2 s sleep ends now, one attempt runs, and the next sleep starts over.
+    wake.wake();
+    await vi.waitFor(() => {
+      expect(delays).toEqual([500, 1_000, 2_000, 500]);
+    });
+    expect(pollEvents).toHaveBeenCalledTimes(4);
+    // Repeated wakes each make exactly one attempt.
+    wake.wake();
+    await vi.waitFor(() => {
+      expect(pollEvents).toHaveBeenCalledTimes(5);
+    });
+    stop();
+    wake.wake();
+    await Promise.resolve();
+    expect(pollEvents).toHaveBeenCalledTimes(5);
+  });
+
+  it('ends a WebSocket replay window on a wake without dropping the cursor', async () => {
+    const wake = createProjectChangeWake(),
+      sockets: FakeSocket[] = [],
+      onError = vi.fn(),
+      since: Array<number | undefined> = [];
+    const pollEvents = vi.fn((cursor: number | undefined, signal?: AbortSignal, timeoutMs?: number) => {
+      since.push(cursor);
+      // The handshake and the subscribe-race catch-up answer at once; a replay long-poll holds.
+      if (cursor === undefined || timeoutMs === 0) return Promise.resolve(response(7));
+      return new Promise<PollResponse>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('aborted', 'AbortError'));
+        });
+      });
+    });
+    const stop = startProjectChangeStream({
+      client: { pollEvents, changeWebSocketUrl: () => 'ws://localhost/project/ws/sync' },
+      refresh: vi.fn().mockResolvedValue(undefined),
+      wake,
+      onError,
+      retryMs: 500,
+      maxRetryMs: 30_000,
+      openWebSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.fail();
+        });
+        return socket as unknown as WebSocket;
+      },
+    });
+    await vi.waitFor(() => {
+      expect(since).toEqual([undefined, 7]);
+    });
+    expect(sockets).toHaveLength(1);
+    const errorsBefore = onError.mock.calls.length;
+    wake.wake();
+    // The held replay ends without an outage: no fresh handshake, and the socket is retried now.
+    await vi.waitFor(() => {
+      expect(sockets).toHaveLength(2);
+    });
+    expect(since.filter((cursor) => cursor === undefined)).toHaveLength(1);
+    expect(onError.mock.calls.slice(errorsBefore).some(([reason]) => reason instanceof DOMException)).toBe(false);
+    stop();
+  });
+
+  it('does nothing for a live socket: no extra request or socket', async () => {
+    const wake = createProjectChangeWake(),
+      sockets: FakeSocket[] = [];
+    const pollEvents = vi.fn().mockResolvedValue(response(3));
+    const stop = startProjectChangeStream({
+      client: { pollEvents, changeWebSocketUrl: () => 'ws://localhost/project/ws/sync' },
+      refresh: vi.fn().mockResolvedValue(undefined),
+      wake,
+      openWebSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.open();
+        });
+        return socket as unknown as WebSocket;
+      },
+    });
+    await vi.waitFor(() => {
+      expect(pollEvents).toHaveBeenCalledTimes(2);
+    });
+    wake.wake();
+    wake.wake();
+    // Let any wake-driven attempt start: two macrotask turns, no fixed delay.
+    for (let turn = 0; turn < 2; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(pollEvents).toHaveBeenCalledTimes(2);
+    expect(sockets).toHaveLength(1);
     stop();
   });
 });

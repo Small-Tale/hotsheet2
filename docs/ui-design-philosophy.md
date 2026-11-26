@@ -7,6 +7,8 @@ installed `@kerfjs/ui/docs/interaction-conventions.md` and its linked
 `clients/web/ai/component-catalog-extension.json` define component selection and
 geometry ownership. This file records Hot Sheet decisions and ticket evidence; it
 does not fork Kerf's guidance.
+The [Kerf consumer fitness audit](https://github.com/brianwestphal/kerf/blob/main/docs/kerf-consumer-fitness-audit.md#hot-sheet-2-adoption)
+tracks upstream gaps and Hot Sheet adoption work against a dated source snapshot.
 
 ## Product decisions
 
@@ -68,6 +70,22 @@ does not fork Kerf's guidance.
   The remaining filename, command-group, and AI-launch prompts use controlled in-app inputs
   (HS2-WMZ6Z5). ESLint now rejects every native `alert`, `confirm`, `prompt`, and
   `window.open` call (HS2-ECT6FE); see [tauri-desktop.md](tauri-desktop.md).
+- **Action feedback is a toast, never an inline line (HS2-1K6122).** The maintainer's
+  explicit rule, after the same bug recurred several times: the outcome of an action a
+  person pressed (success, refusal or failure) is announced through the app's one toast
+  path, `showToast` in `app/runtime.tsx` (passed to features as `showToast` or
+  `notify`), never as a status or message line inlined on the page. This is the project
+  decision beside Kerf's "do not use a toast as the only record of failure": a failed
+  action is toasted _and_ keeps any persistent record its surface already has (an error
+  line, a state banner, a field's error), so the failure is never only transient. Inline
+  live regions stay for what is not an action's outcome: loading and progress, a read or
+  load failure, a dialog's own submit and field validation, and live state. A refusal says
+  why in words and what to change, never a bare code (HS2-8Z9VHH,
+  `clients/web/src/orchestration-refusals.ts`). The `HS2-1K6122` case in
+  `clients/web/src/eslint-policy.test.ts` fails on a new inline success line and pins
+  the remaining inline message regions in a list that only shrinks (`HS2-M4P3QM`). The
+  toast stays the app's own host until `HS2-E4F1WM` moves it to Kerf's toast.
+
 - A question before an action that undo cannot cover uses the shared in-app
   `ConfirmationDialog` through `createConfirmation().request(...)` (HS2-6S1346), never a
   per-feature dialog. Erasing a gallery annotation asks nothing, because markup undo and
@@ -77,8 +95,11 @@ does not fork Kerf's guidance.
 - Application banners above the workspace (setup warnings, Codex hook review, update and
   source notices, repository size, paused notifications, Hot Sheet 1 migration, and the
   connection banner) use one inset treatment: Kerf's rounded `StateBanner` inset by a
-  Kerf `List` (`controlInsets="trl"`) on the header surface, through `ShellBanner`
-  (HS2-YCB15Z). No banner is a flush full-width strip.
+  Kerf `List` (`controlInsets="t"`) on the header surface, through `ShellBanner`
+  (HS2-YCB15Z). Every banner sits 8 px from the slot's sides and top, stacked banners are
+  8 px apart, and the slot ends 8 px below the last one (HS2-GXJTSE); a policy test in
+  `eslint-policy.test.ts` keeps every banner in the slot on that inset. No banner is a flush
+  full-width strip.
 
 - A `StateBanner` whose detail is computed (a server or validation message, or an
   interpolated sentence) sets Kerf's `copyLayout="stacked"`, so the detail wraps
@@ -106,10 +127,31 @@ does not fork Kerf's guidance.
   `core:window:allow-set-theme` for this; a browser or a debug desktop build
   without that capability skips the call.
 
+- A drawer tab whose orchestrator-started session may wait on a first-run question
+  (`tool_ready: false`) carries the glance surfaces' waiting-on-you glyph (Lucide `hand`,
+  `pop` tone) as its trailing status, below a halt or exit and above the Hot Sheet
+  connection mark (HS2-G2X7RT). It reuses that state's icon instead of adding one; see
+  [26-orchestration-projects.md](26-orchestration-projects.md) §26.16.
+
 - Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) follow Kerf's Lists
   and selection defaults with no deviation: the group header's commands open from
   a `ListHeader` `overflowAction` button and from its context menu, and the title
   aligns with the ticket rows through `leadingEdge="summary-row"` (HS2-HKXSB1).
+
+- Manage Workspace Visibility's **Show minimized** (HS2-W1XEH7) is a Kerf `Checkbox`, not
+  the `Switch` Kerf recommends for a setting that applies at once. The maintainer asked for
+  a checkbox beside Hide Listed / Show Listed. It applies immediately and is remembered per
+  workspace, like the rest of the dialog's visibility choices.
+- The shell's regions never disappear with the selected project's state (HS2-H0QGK7). A tab
+  that is unavailable, still opening, or whose remote server is unreachable keeps the sidebar,
+  inspector, toolbar, and terminal drawer at the user's sizes: rails show a Kerf `EmptyState`,
+  and project controls are disabled with the reason as their tooltip rather than removed.
+- The unavailable project's main panel names the cause, never a raw system error (HS2-ZKAVZZ).
+  The pure `project-unavailable-cause` module maps the error to a title-style `EmptyState` title,
+  a sentence-style next step, and which of Retry and Close Tab is primary; the raw error and root
+  sit in a compact `Disclosure` (Technical Details) inside the empty state. Server-unreachable
+  copy reuses the H0QGK7 region title Server Unavailable, and an unrecognized error reuses
+  Project Unavailable.
 
 ## Hot Sheet ticket lessons
 

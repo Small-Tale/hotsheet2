@@ -9,6 +9,7 @@ import { Ellipsis } from 'lucide';
 import { TICKET_GROUP_ACTIONS } from '../interaction-attrs/ticket-groups';
 import { ticketGroupDomId, ticketGroupKey } from '../ticket-groups';
 import type { TicketRowPresentation } from './ticket-row';
+import { encodeHiddenTicketSlugs } from './ticket-selection';
 
 export interface TicketGroupProps {
   /** The group's stored value: its id, or a legacy group's name (HS2-9KZSD4). */
@@ -24,6 +25,11 @@ export interface TicketGroupProps {
   collapsed?: boolean;
   /** A dragged ticket is over this group. */
   dropTarget?: boolean;
+  /**
+   * The slugs of the tickets this container holds. A collapsed group draws no rows, so it carries
+   * them for a column header's Select All and ⌘A, which select hidden members too (HS2-3SJ5G8).
+   */
+  memberSlugs?: readonly string[];
   children?: SafeHtml | SafeHtml[];
 }
 
@@ -42,6 +48,7 @@ export function TicketGroup({
   presentation = 'list',
   collapsed = false,
   dropTarget = false,
+  memberSlugs = [],
   children,
 }: TicketGroupProps) {
   const key = ticketGroupKey(group),
@@ -57,6 +64,7 @@ export function TicketGroup({
       data-ticket-drop-group={group}
       data-collapsed={String(collapsed)}
       data-drop-target={dropTarget ? 'true' : undefined}
+      data-ticket-group-hidden-slugs={collapsed ? encodeHiddenTicketSlugs(memberSlugs) : undefined}
       role="group"
       aria-label={`${name} group`}
     >

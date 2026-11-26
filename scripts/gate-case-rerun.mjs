@@ -8,8 +8,8 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
 
-// HS2-664XN4: older nextest records could have come from incomplete runs.
-const VERSION = 2;
+// HS2-7KCRKQ: older partial records could include unrun Playwright cases.
+const VERSION = 3;
 const SAFE_TOKEN = /^[A-Za-z0-9_@%+=:,./-]+$/;
 const SAFE_NEXTEST = /^[A-Za-z0-9_:.\-/ ]+$/;
 // Playwright options whose next token is a value, never a file filter.
@@ -50,34 +50,29 @@ export function tokenize(command) {
   return tokens;
 }
 
+function playwrightOutcome(test) {
+  const results = test.results ?? [];
+  const last = results.at(-1)?.status;
+  // HS2-7KCRKQ: Playwright includes aborted and unrun tests among aggregate skips.
+  if (last === undefined || results.some((result) => result.status === 'interrupted')) return 'interrupted';
+  if (test.status === 'skipped' || last === 'skipped')
+    return last === 'skipped' && test.expectedStatus === 'skipped' ? 'skip' : 'interrupted';
+  if (test.status === 'flaky' || test.status === 'expected') return 'pass';
+  return test.status === 'unexpected' || last !== 'passed' ? 'fail' : 'pass';
+}
+
 function playwrightCases(report) {
   const cases = [];
   const visit = (suite, titles) => {
     const next = suite.title && !suite.file?.endsWith(suite.title) ? [...titles, suite.title] : titles;
     for (const spec of suite.specs ?? [])
       for (const test of spec.tests ?? []) {
-        const results = test.results ?? [];
-        const last = results.at(-1)?.status;
-        const outcome =
-          test.status === 'flaky' || test.status === 'expected'
-            ? last === 'skipped'
-              ? 'skip'
-              : 'pass'
-            : test.status === 'skipped' || (!results.length && test.status === undefined)
-              ? 'skip'
-              : last === 'interrupted'
-                ? 'interrupted'
-                : test.status === 'unexpected' || (last !== undefined && last !== 'passed' && last !== 'skipped')
-                  ? 'fail'
-                  : last === 'skipped'
-                    ? 'skip'
-                    : 'pass';
         const title = [...next, spec.title].join(' › ');
         cases.push({
           key: `${test.projectName ?? ''}|${spec.file}:${spec.line}|${title}`,
           name: `${test.projectName ? `[${test.projectName}] ` : ''}${spec.file}:${spec.line} › ${title}`,
           selector: typeof spec.file === 'string' && Number.isInteger(spec.line) ? `${spec.file}:${spec.line}` : null,
-          outcome,
+          outcome: playwrightOutcome(test),
         });
       }
     for (const child of suite.suites ?? []) visit(child, next);
@@ -215,9 +210,14 @@ export function narrowedCommand(command, kind, failed) {
   return null;
 }
 
+function wasInterrupted(kind, status, signal) {
+  // Playwright's shell wrapper can return 128 + a signal number as an ordinary exit status.
+  return Boolean(signal) || (kind === 'playwright' && status >= 129 && status <= 192);
+}
+
 /** What a full stage run leaves for the next attempt, or null to rerun the whole stage. */
 export function partialFromRun({ key, command, kind, status, signal, body, root, transcript }) {
-  if (status === 0 || signal || body === null || body === undefined) return null;
+  if (status === 0 || wasInterrupted(kind, status, signal) || body === null || body === undefined) return null;
   const cases = reportCases(kind, body, root);
   if (!cases?.length || cases.some((entry) => entry.outcome === 'interrupted')) return null;
   if (kind === 'nextest' && !completeNextestRun(body, transcript, cases)) return null;
@@ -243,7 +243,8 @@ export function partialFromRun({ key, command, kind, status, signal, body, root,
  * could not be proven, so drop the record and rerun the whole stage next time.
  */
 export function judgeNarrowedRun(partial, { status, signal, body, root, transcript }) {
-  if (signal) return { result: 'full', reason: 'the targeted rerun was interrupted' };
+  if (wasInterrupted(partial.kind, status, signal))
+    return { result: 'full', reason: 'the targeted rerun was interrupted' };
   const cases = body === null || body === undefined ? null : reportCases(partial.kind, body, root);
   if (!cases) return { result: 'full', reason: 'the targeted rerun left no readable report' };
   if (partial.kind === 'nextest' && !completeNextestRun(body, transcript, cases))

@@ -7,7 +7,7 @@
  */
 import { batch, computed, effect, type Signal, signal } from 'kerfjs';
 
-import { Api } from '../api';
+import { Api, ApiHttpError } from '../api';
 import type { OrchestrationDecisionsDialogState } from '../components/orchestration-decisions-dialog';
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
 import type { OrchestrationProposeAvailability } from '../components/orchestration-timeline-view';
@@ -17,10 +17,18 @@ import type { Project } from '../interactions/types';
 import { parseBuiltAhead } from '../orchestration-built-ahead';
 import { parsePlanHealth, PLAN_FAILURE_CODES, type PlanHealth } from '../orchestration-plan-health';
 import { parseProgressSummary, type ProgressSummaryView } from '../orchestration-progress';
+import { describeRefusal } from '../orchestration-refusals';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseContention, type ResourceContentionView } from '../orchestration-resources';
 import { parseRunReconciliation } from '../orchestration-run-checks';
-import { parseDecisionPage, parseExplanation, type SchedulerDecisionPage } from '../orchestration-scheduler';
+import {
+  parseDecisionPage,
+  parseExplanation,
+  parseIntegratorStanding,
+  parseRoleStandings,
+  type RoleStandingView,
+  type SchedulerDecisionPage,
+} from '../orchestration-scheduler';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import {
@@ -131,20 +139,13 @@ export function planningQuestion(view: Record<string, unknown> | undefined): Pla
   };
 }
 
-const PLANNING_REFUSALS: Record<string, string> = {
-  plan_no_targets: 'Add projects in Orchestration settings before proposing a plan.',
-  plan_no_goals: 'Add a Git ticket source to this project before proposing a plan.',
-  plan_goal_not_open: 'That goal ticket is not open.',
-  // HS2-190RDX
-  plan_update_planner_busy: 'The planning session is still working. Try again when it finishes its turn.',
-  plan_update_not_open: 'No plan update is in progress.',
-  plan_update_not_found: 'No plan update is in progress.',
-};
-
+/**
+ * A planning refusal in words (HS2-8Z9VHH): every code, and a refused admission with its limit and
+ * observed value, reads through the shared refusal map; the code stays as secondary detail.
+ */
 function planningRefusal(reason: unknown): never {
-  const code = (reason as { code?: string } | undefined)?.code;
-  const known = code ? PLANNING_REFUSALS[code] : undefined;
-  if (known) throw new Error(known, { cause: reason });
+  if (reason instanceof ApiHttpError && (reason.code || reason.admission))
+    throw new Error(describeRefusal(reason), { cause: reason });
   throw reason;
 }
 
@@ -382,6 +383,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     | {
         decisions?: SchedulerDecisionPage;
         contention?: ResourceContentionView[];
+        roles?: RoleStandingView[];
         summary?: ProgressSummaryView;
         error?: string;
       }
@@ -684,12 +686,14 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
     details.value = { ...(details.value ?? {}), loading: true };
     const client = clientFor(current);
-    const [gates, events, validations, record, readiness] = await Promise.allSettled([
+    const [gates, events, validations, record, readiness, explained] = await Promise.allSettled([
       client.orchestrationRunGates(current.id, run.run_id),
       client.orchestrationRunEvents(current.id, run.run_id),
       client.orchestrationValidations(current.id, item.goal),
       client.orchestrationRun(current.id, run.run_id),
       client.orchestrationReadiness(current.id, item.step_id),
+      // HS2-65AD6J: whether the project's integrator runs for the work, read with the run's records.
+      client.orchestrationSchedulerExplain(current.id, item.step_id, dependencies.personId()),
     ]);
     if (request !== detailsRequest) return;
     const value = <T>(result: PromiseSettledResult<T>) => (result.status === 'fulfilled' ? result.value : undefined);
@@ -707,6 +711,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         value(readiness),
       ),
       error: failed ? 'Some of this run’s records could not be read.' : undefined,
+      integrator: parseIntegratorStanding(value(explained)),
       pendingValidations: pending,
     };
   }
@@ -845,7 +850,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         } else {
           next.delete(key);
           if (refusal.code === 'permission_denied') denied += 1;
-          else failed ||= message(reason);
+          else failed ||= describeRefusal(reason);
         }
       }
     }
@@ -909,6 +914,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     overview.value = {
       decisions: page.status === 'fulfilled' ? parseDecisionPage(page.value) : overview.value?.decisions,
       contention: plan.status === 'fulfilled' ? parseContention(plan.value) : overview.value?.contention,
+      // HS2-65AD6J: each project's integrator and the role sessions this pass does not start.
+      roles: plan.status === 'fulfilled' ? parseRoleStandings(plan.value) : overview.value?.roles,
       summary: summary.status === 'fulfilled' ? parseProgressSummary(summary.value) : overview.value?.summary,
       error:
         page.status === 'rejected' || plan.status === 'rejected' || summary.status === 'rejected'
@@ -985,14 +992,14 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       const client = clientFor(current),
         stored = await client.orchestrationPolicy(current.id);
       if (!stored.policy) {
-        dependencies.showToast('Set the orchestration limits in Orchestration settings first.');
+        dependencies.showToast('No policy is saved yet. Apply one in Orchestration settings first.');
         return;
       }
       const placement = { ...(stored.policy.placement ?? {}), automatic };
       await client.setOrchestrationPolicy(current.id, stored.revision, { ...stored.policy, placement });
       dependencies.showToast(automatic ? 'Orchestration started.' : 'Orchestration paused. Running work continues.');
     } catch (reason) {
-      dependencies.showToast(`${automatic ? 'Start' : 'Pause'} failed: ${message(reason)}`);
+      dependencies.showToast(`${automatic ? 'Start' : 'Pause'} failed: ${describeRefusal(reason)}`);
     } finally {
       busy.value = false;
     }
@@ -1041,7 +1048,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
           reason: 'person_correction',
         });
     } catch (reason) {
-      dependencies.showToast(`The run could not be changed: ${message(reason)}`);
+      dependencies.showToast(`The run could not be changed: ${describeRefusal(reason)}`);
     } finally {
       busy.value = false;
     }
@@ -1066,7 +1073,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       await clientFor(current).orchestrationReopen(current.id, item.step_id, reason, dependencies.personId());
       dependencies.showToast(`The work on ${name} was reopened.`);
     } catch (reason) {
-      dependencies.showToast(`The work could not be reopened: ${message(reason)}`);
+      dependencies.showToast(`The work could not be reopened: ${describeRefusal(reason)}`);
     } finally {
       busy.value = false;
     }
@@ -1095,7 +1102,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       dependencies.showToast('This machine now uses the checked-in plan.');
       restarts.value += 1;
     } catch (reason) {
-      dependencies.showToast(`The plan could not be changed: ${message(reason)}`);
+      dependencies.showToast(`The plan could not be changed: ${describeRefusal(reason)}`);
     } finally {
       busy.value = false;
     }
@@ -1113,7 +1120,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       dependencies.showToast(await planner.propose(current));
       planning.value = 'planning';
     } catch (reason) {
-      dependencies.showToast(`Propose Plan failed: ${message(reason)}`);
+      dependencies.showToast(`Propose Plan failed: ${describeRefusal(reason)}`);
     } finally {
       busy.value = false;
     }
@@ -1128,7 +1135,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       dependencies.showToast(await planner.update(current));
       planning.value = 'updating';
     } catch (reason) {
-      dependencies.showToast(`Update Plan failed: ${message(reason)}`);
+      dependencies.showToast(`Update Plan failed: ${describeRefusal(reason)}`);
     } finally {
       busy.value = false;
     }
@@ -1142,7 +1149,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       dependencies.showToast(await planner.cancelUpdate(current));
       void refreshPlanning(current, generation);
     } catch (reason) {
-      dependencies.showToast(`Cancel Plan Update failed: ${message(reason)}`);
+      dependencies.showToast(`Cancel Plan Update failed: ${describeRefusal(reason)}`);
     } finally {
       busy.value = false;
     }

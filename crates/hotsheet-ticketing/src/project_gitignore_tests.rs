@@ -70,7 +70,8 @@ fn legacy_single_file_lines_are_folded_into_the_block() {
 #[test]
 fn equivalent_hand_written_rules_are_left_alone() {
     let dir = git_repo();
-    let hand = "# local\n/.hotsheet2/*\n!/.hotsheet2/settings.json\n!/.hotsheet2/groups/\n";
+    let hand = format!("# local\n{}\n", BLOCK_RULES.join("\n"));
+    let hand = hand.as_str();
     write(dir.path(), hand);
     assert_eq!(plan_project_block(dir.path()).unwrap(), None);
     let report = ensure_project_block(dir.path()).unwrap();
@@ -154,7 +155,12 @@ fn a_bare_directory_rule_is_reported_as_hiding_committed_paths() {
         .iter()
         .filter(|conflict| conflict.expected == Expectation::Committed)
         .collect();
-    assert_eq!(hidden.len(), 2, "{:?}", report.conflicts);
+    assert_eq!(
+        hidden.len(),
+        COMMITTED_PROBES.len(),
+        "{:?}",
+        report.conflicts
+    );
     assert!(
         hidden
             .iter()
@@ -180,7 +186,11 @@ fn a_later_rule_that_re_includes_a_local_file_is_reported() {
         vec![GitignoreConflict {
             path: ".hotsheet2/store".into(),
             expected: Expectation::Ignored,
-            rule: Some(".gitignore:6:!/.hotsheet2/store".into()),
+            // The rule follows the block: its begin line, its rules, and its end line.
+            rule: Some(format!(
+                ".gitignore:{}:!/.hotsheet2/store",
+                BLOCK_RULES.len() + 3
+            )),
         }]
     );
     assert!(
@@ -196,13 +206,8 @@ fn a_later_broad_rule_that_hides_settings_is_reported() {
     write(dir.path(), &format!("{}*.json\n", block()));
     let report = ensure_project_block(dir.path()).unwrap();
     let paths: Vec<_> = report.conflicts.iter().map(|c| c.path.as_str()).collect();
-    assert_eq!(
-        paths,
-        [
-            ".hotsheet2/settings.json",
-            ".hotsheet2/groups/0000000000.json"
-        ]
-    );
+    // Every committed JSON file is hidden, the shared orchestration files included (HS2-GY8C2D).
+    assert_eq!(paths, COMMITTED_PROBES);
 }
 
 #[test]
@@ -244,4 +249,107 @@ fn rule_patterns_parse_with_colons_in_the_source() {
     assert_eq!(pattern_of("::"), None);
     assert!(rule_ignores(".gitignore:1:x"));
     assert!(!rule_ignores(".gitignore:1:!x"));
+}
+
+/// HS2-GY8C2D: the old two-re-include rules hid the shared orchestration files, so a project
+/// with them (hand-written or an older managed block) gets the current block.
+#[test]
+fn hs2_gy8c2d_rules_that_hide_shared_orchestration_files_get_the_block() {
+    let dir = git_repo();
+    write(
+        dir.path(),
+        "/.hotsheet2/*\n!/.hotsheet2/settings.json\n!/.hotsheet2/groups/\n",
+    );
+    assert!(ensure_project_block(dir.path()).unwrap().changed);
+    let old_block = format!(
+        "{BLOCK_BEGIN}\n/.hotsheet2/*\n!/.hotsheet2/settings.json\n!/.hotsheet2/groups/\n{BLOCK_END}\n"
+    );
+    let dir = git_repo();
+    write(dir.path(), &old_block);
+    let report = ensure_project_block(dir.path()).unwrap();
+    assert!(report.changed);
+    assert_eq!(read(dir.path()), block());
+    assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
+}
+
+/// HS2-GY8C2D: every shared path is re-included by the block, in order, and the generated block
+/// leaves each one committable while machine-local files stay ignored, as Git reports it.
+#[test]
+fn hs2_gy8c2d_the_block_re_includes_every_shared_path_and_git_agrees() {
+    let expected: Vec<String> = std::iter::once("/.hotsheet2/*".to_owned())
+        .chain(SHARED_PROJECT_PATHS.iter().map(|path| format!("!/{path}")))
+        .collect();
+    assert_eq!(BLOCK_RULES, expected.as_slice());
+    let dir = git_repo();
+    ensure_project_block(dir.path()).unwrap();
+    let probe = |path: &str| {
+        let status = crate::git::command()
+            .arg("-C")
+            .arg(dir.path())
+            .args(["check-ignore", "-q", "--no-index", "--", path])
+            .status()
+            .unwrap();
+        status.code() == Some(0)
+    };
+    for path in SHARED_PROJECT_PATHS {
+        let file = if path.ends_with('/') {
+            format!("{path}0000000000.json")
+        } else {
+            (*path).to_owned()
+        };
+        assert!(!probe(&file), "{file} is ignored but shared");
+        assert!(
+            COMMITTED_PROBES.contains(&file.as_str()),
+            "{file} is not probed"
+        );
+    }
+    for path in LOCAL_PROBES {
+        assert!(probe(path), "{path} should stay machine-local");
+    }
+}
+
+/// HS2-GY8C2D: a file written as shared project data must be listed in `SHARED_PROJECT_PATHS`.
+/// Scans this crate for `Storage::shared_named(_, ".hotsheet2/…")` literals and the shared-path
+/// constants, so a new shared writer cannot silently land in the ignored catch-all.
+#[test]
+fn hs2_gy8c2d_every_shared_writer_path_is_listed() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut found = vec![
+        crate::orchestration::SHARED_PLAN_PATH.to_owned(),
+        crate::claim_backends::PROJECT_REGISTRY_FILE.to_owned(),
+    ];
+    let mut stack = vec![root];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            // This file's own docs and fixtures are not writers.
+            if path.ends_with("project_gitignore_tests.rs") {
+                continue;
+            }
+            for (index, _) in text.match_indices("shared_named(") {
+                let call = &text[index..text.len().min(index + 200)];
+                if let Some(start) = call.find("\".hotsheet2/") {
+                    let rest = &call[start + 1..];
+                    let end = rest.find('"').unwrap();
+                    found.push(rest[..end].to_owned());
+                }
+            }
+        }
+    }
+    // The five shared orchestration writers known today; a scan that finds fewer is broken.
+    assert!(found.len() >= 5, "{found:?}");
+    for path in found {
+        assert!(
+            SHARED_PROJECT_PATHS.contains(&path.as_str()),
+            "{path} is written as shared project data but the managed .gitignore block ignores it"
+        );
+    }
 }

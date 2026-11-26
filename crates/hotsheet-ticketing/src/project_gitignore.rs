@@ -1,9 +1,10 @@
 //! The one writer of a code project's `.gitignore` (HS2-61ZMVA).
 //!
-//! Hot Sheet keeps checkout-local files under `<project>/.hotsheet2/`. Two of them are
-//! committed: the shared settings file and the project group registry (HS2-9KZSD4).
-//! Everything else there (the local settings file, the standalone store link, the group
-//! registry lock, and any later machine-local file) must stay out of Git.
+//! Hot Sheet keeps checkout-local files under `<project>/.hotsheet2/`. The ones listed in
+//! [`SHARED_PROJECT_PATHS`] are committed: the shared settings file, the project group
+//! registry (HS2-9KZSD4), and the shared orchestration files (HS2-GY8C2D). Everything else
+//! there (the local settings file, the standalone store link, the group registry lock, and
+//! any later machine-local file) must stay out of Git.
 //!
 //! Rather than appending one line per file, every caller that writes into
 //! `.hotsheet2/` calls [`ensure_project_block`]. It keeps one delimited, Hot Sheet-owned
@@ -14,6 +15,8 @@
 //! /.hotsheet2/*
 //! !/.hotsheet2/settings.json
 //! !/.hotsheet2/groups/
+//! !/.hotsheet2/orchestration.json
+//! … (one re-include per shared path)
 //! # <<< Hot Sheet 2 <<<
 //! ```
 //!
@@ -40,11 +43,31 @@ use std::path::{Path, PathBuf};
 pub const BLOCK_BEGIN: &str = "# >>> Hot Sheet 2 (managed; edit outside this block) >>>";
 /// The last line of the managed block.
 pub const BLOCK_END: &str = "# <<< Hot Sheet 2 <<<";
-/// The block's rules, in order. The catch-all must come before the re-includes.
+/// Every `.hotsheet2/` path Hot Sheet shares with the project through Git (HS2-GY8C2D). A
+/// writer that stores a file meant to be committed (an orchestration `Storage::shared_named`
+/// file, the shared plan, the project resource-claim registry) must be listed here, so the
+/// managed block re-includes it; a policy test fails for an unlisted shared writer. A trailing
+/// `/` names a directory.
+pub const SHARED_PROJECT_PATHS: &[&str] = &[
+    ".hotsheet2/settings.json",
+    ".hotsheet2/groups/",
+    ".hotsheet2/orchestration.json",
+    ".hotsheet2/orchestration-plan.json",
+    ".hotsheet2/orchestration-policy.json",
+    ".hotsheet2/validation-profiles.json",
+    ".hotsheet2/resource-claims.json",
+];
+/// The block's rules, in order: the catch-all, then one re-include per [`SHARED_PROJECT_PATHS`]
+/// entry (a test pins the correspondence). The catch-all must come before the re-includes.
 pub const BLOCK_RULES: &[&str] = &[
     "/.hotsheet2/*",
     "!/.hotsheet2/settings.json",
     "!/.hotsheet2/groups/",
+    "!/.hotsheet2/orchestration.json",
+    "!/.hotsheet2/orchestration-plan.json",
+    "!/.hotsheet2/orchestration-policy.json",
+    "!/.hotsheet2/validation-profiles.json",
+    "!/.hotsheet2/resource-claims.json",
 ];
 /// Single-file lines that older releases appended. The block covers them, so they are
 /// removed when the block is written.
@@ -54,6 +77,11 @@ pub const LEGACY_LINES: &[&str] = &[".hotsheet2/settings.local.json", ".hotsheet
 const COMMITTED_PROBES: &[&str] = &[
     ".hotsheet2/settings.json",
     ".hotsheet2/groups/0000000000.json",
+    ".hotsheet2/orchestration.json",
+    ".hotsheet2/orchestration-plan.json",
+    ".hotsheet2/orchestration-policy.json",
+    ".hotsheet2/validation-profiles.json",
+    ".hotsheet2/resource-claims.json",
 ];
 /// Paths that must stay out of Git. The last one stands for any future machine-local file.
 const LOCAL_PROBES: &[&str] = &[

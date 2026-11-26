@@ -69,6 +69,13 @@ pub struct ToolAvailability {
     pub installed: bool,
     /// The hosted checkout has not opted out of it.
     pub configured: bool,
+    /// HS2-0VTQFF: the model ids the host's catalog reports for the tool (the same
+    /// catalog as `/ai-tools` `models[]`): the catalog's default first, then the rest
+    /// in the catalog's own order, newest first. A start resolves a pattern-only
+    /// model list to the first id it matches. `None` when the host did not report
+    /// them (an older peer, or a tool it did not detect); never a guess.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<Vec<String>>,
 }
 
 /// One running AI session: an id, its tool and what it was observed to use.
@@ -191,6 +198,15 @@ pub struct PoolState {
     /// Assignments handed off and not yet done: in handoff, verifying, integrating,
     /// suspended integration or CI.
     pub handoffs_pending: u32,
+    /// HS2-4JQ41V: of those, the ones integrated and waiting on their CI gate. The
+    /// integrator is kept for them with detail `ci_pending`; the rest are its queue.
+    /// Written only when not zero, so a snapshot without it keeps its version.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub ci_pending: u32,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 /// HS2-P5GTSW: free memory is compared in steps of this many MiB.
@@ -230,8 +246,15 @@ pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
             let mut tools: Vec<String> = tools
                 .iter()
                 .map(|tool| {
+                    // HS2-0VTQFF: models only when reported, so a snapshot without them
+                    // keeps its version.
+                    let models = tool
+                        .models
+                        .as_ref()
+                        .map(|models| format!("[{}]", models.join("|")))
+                        .unwrap_or_default();
                     format!(
-                        "{}:{}{}",
+                        "{}:{}{}{models}",
                         tool.tool,
                         u8::from(tool.installed),
                         u8::from(tool.configured)
@@ -301,6 +324,10 @@ pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
             u8::from(pool.integrator_live),
             pool.handoffs_pending
         );
+        // HS2-4JQ41V: likewise only when not zero.
+        if pool.ci_pending > 0 {
+            let _ = write!(text, "/c{}", pool.ci_pending);
+        }
     }
     // HS2-ZY4Z4G: likewise only when reported. It changes when a tool or toolchain is
     // installed, removed or upgraded.
@@ -425,6 +452,17 @@ impl CapacitySnapshot {
     }
 
     /// The host's own part, as a probe that relays another server's snapshot needs it.
+    /// HS2-0VTQFF: the model ids the host reports for `tool`, newest first; `None`
+    /// when it reported none for it.
+    pub fn reported_models(&self, tool: &str) -> Option<&[String]> {
+        self.tools
+            .as_ref()?
+            .iter()
+            .find(|known| known.tool == tool)?
+            .models
+            .as_deref()
+    }
+
     pub fn into_host(self) -> HostObservation {
         HostObservation {
             sampled_at_ms: self.sampled_at_ms,
@@ -660,6 +698,91 @@ pub struct AdmissionDecision {
     pub footprint_mb: u64,
     pub footprint_source: FootprintSource,
     pub sampled_at_ms: Option<u64>,
+    /// HS2-8Z9VHH: the limit behind `reason`, with the value it was compared against,
+    /// so a refusal can say what to change. `None` when accepted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<AdmissionRefusal>,
+}
+
+/// HS2-8Z9VHH: why a machine refused or reduced a session, in values: the admission
+/// reason code, the machine limit it names (`setting`, a [`MachineLimits`] field), that
+/// limit's value and what the machine observed. A reason with no limit (a tool that is
+/// not installed, an unknown measurement) carries the tool or nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdmissionRefusal {
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setting: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+}
+
+impl AdmissionRefusal {
+    /// A refusal that names only its reason code.
+    pub fn bare(reason: &str) -> Self {
+        Self {
+            reason: reason.to_owned(),
+            setting: None,
+            limit: None,
+            observed: None,
+            tool: None,
+        }
+    }
+
+    /// HS2-8Z9VHH: the session cap, with the running sessions it counted.
+    pub fn session_cap(max_sessions: u32, running: u64) -> Self {
+        Self {
+            setting: Some("max_sessions".into()),
+            limit: Some(u64::from(max_sessions)),
+            observed: Some(running),
+            ..Self::bare(AdmissionReason::SessionCapReached.code())
+        }
+    }
+
+    /// The refusal in plain words, with its numbers, for a CLI or a log line.
+    pub fn describe(&self) -> String {
+        let value =
+            |value: Option<u64>| value.map_or_else(|| "unknown".to_owned(), |v| v.to_string());
+        match self.reason.as_str() {
+            "session_cap_reached" => format!(
+                "this machine already runs {} AI sessions; its limit (max_sessions) is {}",
+                value(self.observed),
+                value(self.limit)
+            ),
+            "above_cpu_ceiling" => format!(
+                "CPU load is {}%, above the {}% ceiling (max_cpu_percent)",
+                value(self.observed),
+                value(self.limit)
+            ),
+            "below_disk_floor" => format!(
+                "{} MB of disk is free, below the {} MB floor (min_free_disk_mb)",
+                value(self.observed),
+                value(self.limit)
+            ),
+            "below_ram_floor" => format!(
+                "{} MB of memory is free, which leaves no room for a session above the {} MB floor (min_free_ram_mb)",
+                value(self.observed),
+                value(self.limit)
+            ),
+            "tool_not_installed" => format!(
+                "{} is not installed on this machine",
+                self.tool.as_deref().unwrap_or("the AI tool")
+            ),
+            "tool_not_configured" => format!(
+                "this project opted out of {}",
+                self.tool.as_deref().unwrap_or("the AI tool")
+            ),
+            "capacity_unknown" => {
+                "this machine could not measure its capacity and does not allow unknown measurements"
+                    .to_owned()
+            }
+            other => other.to_owned(),
+        }
+    }
 }
 
 /// One session's estimated resident memory: the owner's estimate, raised to what a
@@ -777,7 +900,44 @@ pub fn decide_admission(
             }
         }
     };
+    // HS2-8Z9VHH: the limit behind the reason, with what the snapshot measured.
+    let refusal = reason.map(|reason| {
+        let bare = AdmissionRefusal::bare(reason.code());
+        let limit = |setting: &str, limit: u64, observed: Option<u64>| AdmissionRefusal {
+            setting: Some(setting.into()),
+            limit: Some(limit),
+            observed,
+            ..bare.clone()
+        };
+        match reason {
+            R::SessionCapReached => AdmissionRefusal {
+                observed: running_sessions.map(u64::from),
+                ..AdmissionRefusal::session_cap(limits.max_sessions, 0)
+            },
+            R::AboveCpuCeiling => limit(
+                "max_cpu_percent",
+                u64::from(limits.max_cpu_percent),
+                snapshot.cpu.load_percent.map(u64::from),
+            ),
+            R::BelowDiskFloor => limit(
+                "min_free_disk_mb",
+                limits.min_free_disk_mb,
+                snapshot.disk.free_mb,
+            ),
+            R::BelowRamFloor => limit(
+                "min_free_ram_mb",
+                limits.min_free_ram_mb,
+                snapshot.memory.free_mb,
+            ),
+            R::ToolNotInstalled | R::ToolNotConfigured => AdmissionRefusal {
+                tool: Some(request.tool.clone()),
+                ..bare.clone()
+            },
+            R::CapacityUnknown => bare.clone(),
+        }
+    });
     AdmissionDecision {
+        refusal,
         outcome,
         tool: request.tool.clone(),
         model: request.model.clone(),

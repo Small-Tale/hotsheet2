@@ -252,6 +252,114 @@ test('project sidebar Live section shows reported main CI as a chip only when it
   }
 });
 
+// HS2-505PHC: the compact `main` CI chip names itself. A running run reported to the real server reads
+// `CI · m:ss` from its reported start and advances each second from the render-only display clock without a
+// single request; queued and failed runs read `CI · queued` and `CI failed`. Captured wide, medium, narrow,
+// and wide again, in light and dark.
+test('HS2-505PHC labels the Live CI chip with its elapsed time and ticks without requests', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const requests: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith('/__hotsheet/')) requests.push(`${request.method()} ${url.pathname}`);
+    });
+    await openProject(page, server);
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
+    const chip = live.locator('[data-live-chip="ci"]');
+    await expect(chip).toHaveCount(0);
+
+    const report = (status: 'in_progress' | 'queued' | 'failure', startedAtMs: number, finishedAtMs?: number) =>
+      server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+        status,
+        branch: 'main',
+        sha: '9f8e7d6c5b4a',
+        workflow: 'CI',
+        started_at_ms: startedAtMs,
+        ...(finishedAtMs === undefined ? {} : { finished_at_ms: finishedAtMs }),
+      });
+    // Queued first: a word, no clock. (A later report only replaces it when it did not start earlier.)
+    await report('queued', Date.now() - 90_000);
+    await expect(chip).toHaveText('CI · queued', { timeout: 30_000 });
+    await expect(chip).toHaveAttribute('title', 'main CI queued · 9f8e7d6');
+    await expect(chip.locator('[data-lucide="clock"]')).toBeVisible();
+
+    // Running from a start 65 seconds ago: `CI · 1:05` or a second or two later, then it counts up.
+    await report('in_progress', Date.now() - 65_000);
+    await expect(chip).toHaveText(/^CI · 1:0\d$/u, { timeout: 30_000 });
+    await expect(chip).toHaveAttribute('data-tone', 'neutral');
+    await expect(chip).toHaveAttribute('title', /^main CI running for 1:\d\d · 9f8e7d6$/u);
+    await expect(chip.locator('[data-lucide="loader-circle"]')).toBeVisible();
+    const seconds = async () => {
+      const match = /(\d+):(\d\d)$/u.exec((await chip.textContent()) ?? '');
+      return match ? Number(match[1]) * 60 + Number(match[2]) : Number.NaN;
+    };
+    // Let the report's own change delivery settle, then watch three ticks: the clock adds no request, so
+    // the only traffic is the change stream's own long poll (the WebSocket is refused here).
+    await expect.poll(seconds).toBeGreaterThan(await seconds());
+    const quietFrom = requests.length,
+      firstTick = await seconds();
+    await expect.poll(seconds, { timeout: 10_000 }).toBeGreaterThanOrEqual(firstTick + 3);
+    const whileTicking = requests.slice(quietFrom);
+    testInfo.annotations.push({ type: 'requests-while-ticking', description: whileTicking.join(', ') });
+    expect(
+      whileTicking.filter((request) => !/^GET \/__hotsheet\/project-api\/[^/]+\/ws\/poll$/u.test(request)),
+    ).toEqual([]);
+
+    await page.mouse.move(640, 880);
+    const capture = async (name: string) => {
+      await live.screenshot({ path: `target/visual-captures/hs2-505phc-${name}.png` });
+    };
+    for (const width of [1280, 1024, 390, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
+      if (await showSidebar.isVisible()) await showSidebar.click();
+      await expect(chip).toBeVisible();
+      await expect(chip).toHaveText(/^CI · \d+:\d\d$/u);
+      // The label stays on one line inside the badge at every width.
+      const box = await chip.boundingBox();
+      expect(box?.height ?? 0).toBeLessThan(32);
+      await capture(`running-${width}`);
+      if (width === 1280) {
+        const sidebarBox = await sidebar.boundingBox();
+        if (sidebarBox)
+          await page.screenshot({
+            path: 'target/visual-captures/hs2-505phc-running-sidebar-top.png',
+            clip: {
+              x: sidebarBox.x,
+              y: sidebarBox.y,
+              width: sidebarBox.width,
+              height: Math.min(420, sidebarBox.height),
+            },
+          });
+      }
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('running-dark-1280');
+
+    // Failed: a word in the danger tone, and the clock stops.
+    const now = Date.now();
+    await report('failure', now - 65_000, now - 1_000);
+    await expect(chip).toHaveText('CI failed', { timeout: 30_000 });
+    await expect(chip).toHaveAttribute('data-tone', 'danger');
+    await expect(chip.locator('[data-lucide="circle-x"]')).toBeVisible();
+    await capture('failed-dark-1280');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await capture('failed-1280');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 // HS2-4R99XY: a cross-server (remote) project tab shows the same Live gauges and badges as a local one. The
 // browser's `remote:<binding>:<checkout>` id never equals the remote server's checkout id, so the section reads
 // the tab's own live store by the remote checkout id; a reported failing run still reaches its chip.

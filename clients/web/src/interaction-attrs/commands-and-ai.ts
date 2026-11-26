@@ -152,4 +152,4 @@ export const COMMANDS_AND_AI_TARGETS = {
  * ChoiceChips color radios by their action (HS2-EBY4E3).
  */
 export const COMMAND_FIELD_SELECTOR =
-  '[data-command-field] input, [data-command-field] textarea, [data-command-editor-dialog] kui-select[name="kind"], [data-action="select-command-color"]';
+  '[data-command-field] input, [data-command-field] textarea, [data-command-editor-dialog] kui-select[name="kind"], [data-command-editor-dialog] kui-select[name="action"], [data-action="select-command-color"]';

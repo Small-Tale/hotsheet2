@@ -157,13 +157,41 @@ impl LaunchContext {
         command: &mut Command,
         detach: Detach,
     ) -> io::Result<DetachedChild> {
+        self.spawn_detached_as_with_stderr_file(command, detach, None)
+    }
+
+    /// Capture a detached child's startup stderr in a caller-owned private file. The caller
+    /// keeps and removes that file after observing startup; the child never inherits a pipe.
+    pub fn spawn_detached_with_stderr_file(
+        &self,
+        command: &mut Command,
+        stderr_file: &std::path::Path,
+    ) -> io::Result<DetachedChild> {
+        self.spawn_detached_as_with_stderr_file(command, Detach::default(), Some(stderr_file))
+    }
+
+    fn spawn_detached_as_with_stderr_file(
+        &self,
+        command: &mut Command,
+        detach: Detach,
+        stderr_file: Option<&std::path::Path>,
+    ) -> io::Result<DetachedChild> {
         command
             .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+            .stdout(std::process::Stdio::null());
+        if let Some(path) = stderr_file {
+            command.stderr(std::process::Stdio::from(
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .truncate(true)
+                    .open(path)?,
+            ));
+        } else {
+            command.stderr(std::process::Stdio::null());
+        }
         #[cfg(target_os = "macos")]
         {
-            let pid = spawn_attributes::spawn(command, detach)?;
+            let pid = spawn_attributes::spawn(command, detach, stderr_file)?;
             let launch_id = self.record(pid);
             Ok(DetachedChild {
                 inner: Detached::Spawned { pid, status: None },
@@ -485,7 +513,11 @@ mod spawn_attributes {
         vars
     }
 
-    pub(super) fn spawn(command: &Command, detach: Detach) -> io::Result<u32> {
+    pub(super) fn spawn(
+        command: &Command,
+        detach: Detach,
+        stderr_file: Option<&std::path::Path>,
+    ) -> io::Result<u32> {
         let vars = environment(command);
         let search = vars
             .iter()
@@ -562,6 +594,9 @@ mod spawn_attributes {
                 &mut spawn.attributes,
                 &defaults,
             ))?;
+            let stderr = stderr_file
+                .map(|path| c_string(path.as_os_str()))
+                .transpose()?;
             for (fd, mode) in [
                 (0, libc::O_RDONLY),
                 (1, libc::O_WRONLY),
@@ -570,7 +605,14 @@ mod spawn_attributes {
                 check(libc::posix_spawn_file_actions_addopen(
                     &mut spawn.actions,
                     fd,
-                    null.as_ptr(),
+                    if fd == 2 {
+                        stderr
+                            .as_ref()
+                            .map(|path| path.as_ptr())
+                            .unwrap_or(null.as_ptr())
+                    } else {
+                        null.as_ptr()
+                    },
                     mode,
                     0,
                 ))?;
@@ -1056,6 +1098,26 @@ mod tests {
     #[test]
     fn hs2_etmkcw_detached_children_inherit_no_stray_descriptor() {
         use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+        // HS2-2CT6AT: the fixture leaves a pipe writer inheritable on purpose, so under a shared
+        // `cargo test` process a sibling test's child could inherit it and hold the pipe open. The
+        // body runs in a re-executed process that runs only this test.
+        const ROLE: &str = "HS2_2CT6AT_ISOLATED";
+        const NAME: &str = "tests::hs2_etmkcw_detached_children_inherit_no_stray_descriptor";
+        if std::env::var_os(ROLE).is_none() {
+            let output = Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", NAME, "--nocapture", "--test-threads=1"])
+                .env(ROLE, "1")
+                .stdin(std::process::Stdio::null())
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         let leaked = || {
             let mut fds = [0; 2];
             // SAFETY: pipe fills two new descriptors, which are owned below.

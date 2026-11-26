@@ -20,8 +20,10 @@ mod policy;
 mod project_type;
 mod provisional;
 mod readiness;
+// HS2-BQN0M5, HS2-G6F5BP: the automatic re-plan's machine-local memory.
 mod reconcile;
 mod reconcile_sources;
+mod replan_memory;
 mod resources;
 mod role_delivery;
 mod run_events;
@@ -64,13 +66,13 @@ pub use capabilities::{
     requirement_misses, valid_toolchain, validate_toolchains,
 };
 pub use capacity::{
-    AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRequest,
-    AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB, CAPACITY_LOAD_STEP_PERCENT,
-    CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot, CpuCapacity,
-    DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim, HostObservation,
-    MAX_CLAIM_NAMESPACES, MAX_CLAIM_PAGES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, PoolState,
-    SessionFootprint, TargetSpeculation, ToolAvailability, UnreadableNamespace, capacity_version,
-    decide_admission, effective_limits, estimated_footprint,
+    AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRefusal,
+    AdmissionRequest, AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB,
+    CAPACITY_LOAD_STEP_PERCENT, CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot,
+    CpuCapacity, DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim,
+    HostObservation, MAX_CLAIM_NAMESPACES, MAX_CLAIM_PAGES, MAX_SESSION_FOOTPRINT_MB,
+    MemoryCapacity, PoolState, SessionFootprint, TargetSpeculation, ToolAvailability,
+    UnreadableNamespace, capacity_version, decide_admission, effective_limits, estimated_footprint,
 };
 pub use contract::*;
 pub use gates::{
@@ -114,7 +116,7 @@ pub use planning::{
 };
 pub use policy::{
     AUTO_TOOL_WEIGHT, AccountPolicy, IgnoredField, MAX_POLICY_ACCOUNTS, MAX_POLICY_MODELS,
-    MAX_POLICY_SESSIONS, MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits,
+    MAX_POLICY_SESSIONS, MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, ModelUnresolved,
     ORCHESTRATOR_ACTOR_PREFIX, PlacementPolicy, PolicyBody, PolicyDenial, PolicyProblem,
     PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView, PolicyWarning, ROLE_SESSIONS_NOT_HOME,
     RoleSessionKind, SessionLoad, SetPolicy, Speculation, TargetPolicy, TargetRoleSessions,
@@ -147,6 +149,9 @@ pub use reconcile_sources::{
     NOTE_WATCH_ADOPTED, SessionNeed, SourceWork, ci_work, combine_work, deployment_work,
     session_work, validation_attempt, validation_work,
 };
+pub use replan_memory::{
+    MAX_REPLAN_HANDED, REPLAN_MEMORY_DIR, ReplanKey, ReplanMemory, ReplanMemoryStore,
+};
 pub use resources::{
     MAX_STEP_RESOURCES, MAX_TARGET_RESOURCES, OfflinePolicy, ResourceContention, ResourceStanding,
     ResourceState, TargetResources, UnreadableClaims, UnreadableReason, resource_standings,
@@ -165,9 +170,11 @@ pub use runs::{
 };
 pub use scheduler::{
     Blocker, DecisionEntry, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
-    DecisionRecord, HeldResource, MAX_SCHEDULE_SESSIONS, MAX_SCHEDULE_WORK, Placement,
-    PlacementAction, PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason,
-    REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, SITE_NOT_CHOSEN,
+    DecisionRecord, HeldResource, INTEGRATOR_CI_PENDING, INTEGRATOR_HANDOFF_PENDING,
+    INTEGRATOR_IDLE, INTEGRATOR_POLICY_OPT_OUT, INTEGRATOR_QUEUE, INTEGRATOR_TARGET_DISABLED,
+    INTEGRATOR_WORKER_RUN, MAX_SCHEDULE_SESSIONS, MAX_SCHEDULE_WORK, Placement, PlacementAction,
+    PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason, REFUSAL_BACKOFF_BASE_MS,
+    REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, RoleBlocker, RoleUnplaced, SITE_NOT_CHOSEN,
     Schedule, ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts, SessionActivity,
     SitePass, Standing, TargetState, TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation,
     is_capacity_refusal, lift_capacity_refusal, plan, refusal_backoff_ms, remember,
@@ -284,6 +291,22 @@ pub enum OrchestrationError {
     /// HS2-SHH7WW: a site of a project does not fit the project it names.
     #[error("orchestration site refused the request: {}", .0.code())]
     Site(SiteError),
+    /// HS2-061YTB: a dispatch of a planned ticket whose target machine does not meet
+    /// a requirement of its plan step (`unmet`) or did not report it (`unknown`).
+    /// `requirement` names it, such as `os:windows`.
+    #[error(
+        "orchestration dispatch refused: the target's machine {} requirement `{requirement}`",
+        if *.state == RequirementState::Unmet { "does not meet" } else { "did not report" }
+    )]
+    Requirement {
+        state: RequirementState,
+        requirement: String,
+    },
+    /// HS2-8Z9VHH: the session's machine refused admission. Its code stays
+    /// `session_admission_refused`; the refusal names the reason, the limit and the
+    /// observed value, so a person learns what to change.
+    #[error("the machine refused the session: {}", .0.describe())]
+    AdmissionRefused(Box<AdmissionRefusal>),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -316,6 +339,28 @@ impl OrchestrationError {
             Self::Readiness(error) => error.code(),
             Self::Session(error) => error.code(),
             Self::Site(error) => error.code(),
+            Self::Requirement { state, .. } => match state {
+                RequirementState::Unmet => "requirement_unmet",
+                RequirementState::Unknown => "requirement_unknown",
+            },
+            Self::AdmissionRefused(_) => SessionError::AdmissionRefused.code(),
+        }
+    }
+
+    /// HS2-061YTB: a refusal's detail that is not a record to answer: the step
+    /// requirement a dispatch's target machine misses, as `("requirement", name)`.
+    pub fn refusal_detail(&self) -> Option<(&'static str, &str)> {
+        match self {
+            Self::Requirement { requirement, .. } => Some(("requirement", requirement)),
+            _ => None,
+        }
+    }
+
+    /// HS2-8Z9VHH: the admission refusal behind a `session_admission_refused` error.
+    pub fn admission_refusal(&self) -> Option<&AdmissionRefusal> {
+        match self {
+            Self::AdmissionRefused(refusal) => Some(refusal),
+            _ => None,
         }
     }
 
@@ -499,6 +544,8 @@ mod hosted_audit_tests;
 #[cfg(test)]
 mod hosted_validation_tests;
 #[cfg(test)]
+mod integrator_session_tests;
+#[cfg(test)]
 mod joining_tests;
 #[cfg(test)]
 mod line_observations_tests;
@@ -522,6 +569,8 @@ mod readiness_tests;
 mod reconcile_source_tests;
 #[cfg(test)]
 mod reconcile_tests;
+#[cfg(test)]
+mod replan_memory_tests;
 #[cfg(test)]
 mod resource_tests;
 #[cfg(test)]

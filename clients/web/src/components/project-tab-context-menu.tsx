@@ -6,6 +6,8 @@ import {
   CircleX,
   Hand,
   HandHelping,
+  Heart,
+  HeartOff,
   type IconNode,
   Minus,
   Pause,
@@ -16,6 +18,7 @@ import {
 
 import type { TerminalOrchestrator } from '../api';
 import { contextMenuAnchor } from '../context-menu-position';
+import type { FeedbackPrimaryMenuItem } from '../terminal-feedback-primary';
 
 export type AppTabKind = 'project' | 'terminal' | 'ai-chat';
 /** An open tab context menu: where, which tab, and what the tab's terminal runs. */
@@ -29,6 +32,8 @@ export interface AppTabMenuState {
   restoreFailure?: boolean;
   /** HS2-6MNMVB: the orchestrator session in a terminal tab, when one started it here. */
   orchestrator?: Pick<TerminalOrchestrator, 'owner'>;
+  /** HS2-H3S7YQ: a terminal tab's feedback-primary command, enabled or disabled with its reason. */
+  feedback?: FeedbackPrimaryMenuItem;
 }
 export function AppTabContextMenu({
   kind,
@@ -38,6 +43,7 @@ export function AppTabContextMenu({
   direction = 'right',
   orchestrator,
   restoreFailure = false,
+  feedback,
 }: {
   kind: AppTabKind;
   id: string;
@@ -46,13 +52,35 @@ export function AppTabContextMenu({
   direction?: 'left' | 'right';
   orchestrator?: Pick<TerminalOrchestrator, 'owner'>;
   restoreFailure?: boolean;
+  feedback?: FeedbackPrimaryMenuItem;
 }) {
   const directional =
     direction === 'left'
       ? { id: 'close-left', label: 'Close Tabs to the Left', icon: ArrowLeft, iconName: 'arrow-left' }
       : { id: 'close-right', label: 'Close Tabs to the Right', icon: ArrowRight, iconName: 'arrow-right' };
-  const actions: ReadonlyArray<{ id: string; label: string; icon: IconNode; iconName: string; danger?: boolean }> = [
+  const actions: ReadonlyArray<{
+    id: string;
+    label: string;
+    icon: IconNode;
+    iconName: string;
+    danger?: boolean;
+    description?: string;
+    disabledReason?: string;
+  }> = [
     ...(kind === 'terminal' ? [{ id: 'rename', label: 'Rename…', icon: Pencil, iconName: 'pencil' }] : []),
+    // HS2-H3S7YQ: choose this AI session as the project's feedback-primary, or clear the choice.
+    ...(kind === 'terminal' && feedback
+      ? [
+          {
+            id: `feedback-primary-${feedback.command}`,
+            label: feedback.label,
+            icon: feedback.command === 'clear' ? HeartOff : Heart,
+            iconName: feedback.command === 'clear' ? 'heart-off' : 'heart',
+            description: feedback.description,
+            disabledReason: feedback.disabledReason,
+          },
+        ]
+      : []),
     // HS2-6MNMVB: a person takes an orchestrator-started session over at this machine; once it is
     // theirs the orchestrator leaves it alone, and these are no longer offered.
     ...(kind === 'terminal' && orchestrator?.owner === 'orchestrator'
@@ -124,6 +152,8 @@ export function AppTabContextMenu({
           action,
           tone: item.danger ? 'danger' : 'default',
           icon: <LucideIcon icon={item.icon} name={item.iconName} />,
+          ...(item.description && !item.disabledReason ? { description: item.description } : {}),
+          ...(item.disabledReason ? { disabled: true, disabledReason: item.disabledReason } : {}),
           attributes: { 'data-tab-action': item.id, 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId },
         },
       ])}

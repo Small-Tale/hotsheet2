@@ -1,5 +1,6 @@
 import type {
   AdvisoryClaimStatus,
+  AiCommandRun,
   AiToolDefaults,
   AiToolDescriptor,
   CalibrationReport,
@@ -99,6 +100,7 @@ import type {
   TicketUsage,
   ToolConnection,
   ToolSession,
+  TrashEmptyResult,
   TrashPurgePreview,
   TrashSettings,
   TtsVoice,
@@ -527,6 +529,16 @@ export const parseOpenedCheckout: ResponseParser<OpenedCheckout> = (value) => {
   return value as OpenedCheckout;
 };
 
+/** `POST /projects/follow-relocation` (HS2-86ES0B): the relocated checkout, or `null`. */
+export const parseFollowedRelocation: ResponseParser<{ root: string } | undefined> = (value) => {
+  const what = 'project relocation',
+    body = record(value, what);
+  if (body.checkout === null) return undefined;
+  const checkout = record(body.checkout, what);
+  requiredString(checkout, 'root', what);
+  return { root: checkout.root as string };
+};
+
 /** `GET /checkouts/{id}/corrupt-tickets` reduced to the paths the bridge authorizes reveals for. */
 export const parseCorruptTicketPaths: ResponseParser<Array<{ path: string }>> = (value) =>
   list(value, 'corrupt ticket list', (entry) => {
@@ -542,11 +554,27 @@ export const parseAccountIdentity: ResponseParser<{ identity: string }> = (value
   return body as { identity: string };
 };
 
-/** `POST /checkouts/{id}/trash/empty`. */
-export const parseTrashPurge: ResponseParser<{ purged: number; tickets: string[] }> = (value) => {
+/** `POST /checkouts/{id}/trash/empty`; provider tickets kept in Trash are listed, never counted (GH-5). */
+export const parseTrashPurge: ResponseParser<TrashEmptyResult> = (value) => {
   const body = record(value, 'trash purge');
   if (typeof body.purged !== 'number' || !isStringArray(body.tickets)) invalid('trash purge');
-  return body as { purged: number; tickets: string[] };
+  const entries = (field: string, keys: readonly string[]) => {
+    const list = body[field];
+    if (list === undefined) return;
+    if (
+      !Array.isArray(list) ||
+      !list.every(
+        (entry) =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          keys.every((key) => typeof (entry as Record<string, unknown>)[key] === 'string'),
+      )
+    )
+      invalid('trash purge');
+  };
+  entries('retained', ['qualified_id', 'slug', 'message']);
+  entries('unavailable', ['connection_id', 'message']);
+  return body as unknown as TrashEmptyResult;
 };
 
 /** One group a project's tickets store (HS2-9KZSD4): its stored value, display name, and flags. */
@@ -892,7 +920,11 @@ export const parseFeedbackDelivery: ResponseParser<FeedbackDelivery> = (value) =
     value.status === 'choose' &&
     Array.isArray(value.sessions) &&
     value.sessions.every(
-      (session) => isRecord(session) && typeof session.id === 'string' && typeof session.tool === 'string',
+      (session) =>
+        isRecord(session) &&
+        typeof session.id === 'string' &&
+        typeof session.tool === 'string' &&
+        (session.worker === undefined || typeof session.worker === 'string'),
     )
   )
     return value as FeedbackDelivery;
@@ -1524,6 +1556,11 @@ const terminalOptional: Record<string, Check> = {
   last_hook_report: isObject,
   mcp_connected: isBoolean,
   feedback_primary: isBoolean,
+  // HS2-H3S7YQ: a person chose this primary; the session may be chosen.
+  feedback_primary_chosen: isBoolean,
+  feedback_eligible: isBoolean,
+  // HS2-G2X7RT: an orchestrator's session whose tool has not reported its start.
+  tool_ready: isBoolean,
   // HS2-6MNMVB: the hosted orchestrator session behind the tab.
   orchestrator: (value) =>
     isRecord(value) &&
@@ -1694,10 +1731,21 @@ export const parseTrashPurgePreview = shape<TrashPurgePreview>('trash purge prev
   purge_count: isNumber,
 });
 
+const isScheduleActionValue = (value: unknown) =>
+  value === 'create_ticket' || value === 'new_ai_session' || value === 'reuse_or_new_ai_session';
+
 export const parseCommandDefinition = shape<CommandDefinition>(
   'command',
   { id: isString, title: isString },
-  { kind: isString, program: isString, args: isStringArray, group: isString, command: isString, prompt: isString },
+  {
+    kind: isString,
+    program: isString,
+    args: isStringArray,
+    group: isString,
+    command: isString,
+    prompt: isString,
+    action: isScheduleActionValue,
+  },
 );
 
 export const parseCustomView = shape<CustomView>('view', { id: isString, name: isString, query: isString });
@@ -1719,6 +1767,19 @@ export const parseCommandRun = shape<CommandRun>(
   'command run',
   { id: isString, command_id: isString, state: isString, output: listOf(isObject) },
   { exit_code: isNumber, started_at: isString, launch: parseCommandLaunch.check },
+);
+
+/** `POST /checkouts/{reference}/commands/{id}/ai-run` (HS2-17Y2EC). */
+export const parseAiCommandRun = shape<AiCommandRun>(
+  'AI command run',
+  {
+    action: isScheduleActionValue,
+    delivery: (value) => value === 'queued' || value === 'started' || value === 'failed',
+    ticket: parseFullTicket.check,
+    run: parseCommandRun.check,
+  },
+  {},
+  { reason: isString },
 );
 
 export const parsePollResponse = shape<PollResponse>('change poll', {
@@ -1796,7 +1857,7 @@ export const parseHostedOrchestrationProjectChoice = shape<HostedOrchestrationPr
   'hosted project',
   { checkout_id: isString, name: isString, added: isBoolean },
   {},
-  { target_id: isString },
+  { target_id: isString, checkout_authority: isString },
 );
 export const parseRemovedOrchestrationProject = shape<RemovedOrchestrationProject>('removed project', {
   target_id: isString,

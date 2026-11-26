@@ -3,6 +3,7 @@
 //! provider account probe, implicit source creation or credential copying.
 mod access;
 mod assignment;
+mod auto_replan;
 mod cancel_hold;
 mod capacity;
 mod capacity_watch;
@@ -52,6 +53,7 @@ mod validation_runner;
 mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION};
+pub use auto_replan::{AUTO_REPLAN_ACTION, AutoReplan};
 pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
     CAPACITY_RESAMPLE_MS, CapacityProbe, LocalServerCapacity, MAX_CAPACITY_WAIT_MS, ReadCapacity,
@@ -126,11 +128,12 @@ pub use sessions::{
     HAND_BACK_OWNER_REMOTE, HOSTED_SESSION_SIGNAL_DIRECTORY, HandBackSession, HostCall, HostLaunch,
     HostSessionState, HostedControlReply, HostedRoles, HostedSessionControl, HostedSessionList,
     HostedSessionStart, HostedSessionStop, HostedSessionView, HostedStartOutcome, HostedStartReply,
-    HostedStopReply, LAUNCH_ANSWER, Launched, LocalServerSessions, NoSessionHost, PushAttempt,
-    RolePrompt, SessionHost, SessionHostError, SessionSyncFailure, SessionSyncSummary, SessionView,
-    StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession, ToolSetup, classify_transport,
-    launch_outcome, planner_prompt_text, plugin_reports_start, plugin_role_paths, pool_joined,
-    role_prompt_text, setup_store, target_tool_setup, tool_ready,
+    HostedStopReply, LAUNCH_ANSWER, LAUNCH_FENCE_MARGIN, Launched, LocalServerSessions,
+    NoSessionHost, PushAttempt, RolePrompt, SessionHost, SessionHostError, SessionSyncFailure,
+    SessionSyncSummary, SessionView, StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession,
+    ToolSetup, classify_transport, launch_body, launch_outcome, planner_prompt_text,
+    plugin_reports_start, plugin_role_paths, pool_joined, role_prompt_text, setup_store,
+    target_tool_setup, tool_ready,
 };
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use ticket_list::{
@@ -250,6 +253,12 @@ impl OrchestrationRuntime {
                 // HS2-17HVNP: Buildkite builds and CircleCI pipelines, likewise.
                 Arc::new(GithubActionsGates::buildkite(&home)),
                 Arc::new(GithubActionsGates::circleci(&home)),
+                // HS2-7H0S8R: Jenkins builds, likewise.
+                Arc::new(GithubActionsGates::jenkins(&home)),
+                // HS2-JZ1DD2: Azure Pipelines builds, likewise.
+                Arc::new(GithubActionsGates::azure_pipelines(&home)),
+                // HS2-BWF72S: Bitbucket Pipelines, likewise.
+                Arc::new(GithubActionsGates::bitbucket_pipelines(&home)),
             ],
             sessions: Arc::new(NoSessionHost),
             session_executor: Arc::new(ExecutorUnavailable),
@@ -637,6 +646,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 | E::DeploymentScriptUntracked => 409,
             }
         }
+        // HS2-8Z9VHH: a refused admission, with its reason and limit.
+        OrchestrationError::AdmissionRefused(_) => 409,
         OrchestrationError::Session(error) => {
             use hotsheet_ticketing::orchestration::SessionError as E;
             match error {
@@ -660,6 +671,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
             404
         }
         OrchestrationError::Site(_) => 409,
+        // HS2-061YTB: the target's machine is not what the plan step requires.
+        OrchestrationError::Requirement { .. } => 409,
         OrchestrationError::TargetOperation(error) => {
             use hotsheet_ticketing::orchestration::TargetOpError as E;
             match error {

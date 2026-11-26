@@ -14,6 +14,11 @@ last_remote_sha=''
 # itself. A fast-forward whose new commits touch only those data files, with no merge, skips the
 # gate and the main-integration window; anything else takes the normal path below.
 registry_only=1
+# HS2-12K3FN: a push whose every update deletes a non-main branch (the local side is the zero
+# SHA) sends no commits or tree, so it has nothing to gate. `coordination merge-pending-prune`
+# deletes integrated `merge-pending/<SLUG>` branches this way. Any update that sends commits, or
+# that touches main, takes the normal path below.
+delete_only=1
 registry_only_update() {
   local local_sha="$1" remote_sha="$2" paths
   [[ ! "$local_sha" =~ ^0+$ && ! "$remote_sha" =~ ^0+$ ]] || return 1
@@ -27,6 +32,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   total_updates=$((total_updates + 1))
   if ! registry_only_update "$local_sha" "$remote_sha"; then
     registry_only=0
+  fi
+  if [[ ! "$local_sha" =~ ^0+$ || "$remote_ref" == refs/heads/main ]]; then
+    delete_only=0
   fi
   last_remote_ref="$remote_ref"
   last_local_sha="$local_sha"
@@ -42,6 +50,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
 done
 if [[ "$total_updates" -gt 0 && "$registry_only" -eq 1 && -z "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then
+  exit 0
+fi
+if [[ "$total_updates" -gt 0 && "$delete_only" -eq 1 && -z "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then
   exit 0
 fi
 # HS2-GT57BQ: a reserved ci-staged push to the integration branch carries the window token;

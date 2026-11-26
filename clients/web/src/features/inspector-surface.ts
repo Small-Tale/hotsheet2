@@ -6,7 +6,6 @@ import type {
   Capabilities,
   CodeReview,
   DuplicateBacklink,
-  FeedbackDelivery,
   FullTicket,
   ProviderOutboxOperation,
   TicketRow as WireTicketRow,
@@ -39,7 +38,6 @@ import type { StoredPendingAttachment } from '../workspace-session';
 
 /** Live application bindings createInspectorSurface reads (HS2-K0VC2C). */
 export interface InspectorSurfaceDependencies {
-  feedbackDelivery: Signal<{ ticketId: string; delivery: FeedbackDelivery } | undefined>;
   ago: (value?: string) => string;
   api: () => Api;
   attachmentContext: (ticket: FullTicket, current?: Project) => AttachmentReferenceContext | undefined;
@@ -123,7 +121,6 @@ export interface InspectorSurfaceDependencies {
  */
 export function createInspectorSurface(dependencies: InspectorSurfaceDependencies) {
   const {
-    feedbackDelivery,
     ago,
     api,
     attachmentContext,
@@ -230,9 +227,6 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       );
     return {
       slug: ticket.slug,
-      feedbackDelivery:
-        feedbackDelivery.value?.ticketId === ticket.qualified_id ? feedbackDelivery.value.delivery : undefined,
-      feedbackTicketId: ticket.qualified_id,
       source,
       title: ticket.title,
       liveClaim: liveClaimNotice(ticket),

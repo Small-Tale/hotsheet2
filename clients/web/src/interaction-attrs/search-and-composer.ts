@@ -8,6 +8,8 @@ import { action } from 'kerfjs/actions';
  */
 export const SEARCH_AND_COMPOSER_ACTIONS = {
   expandTicketComposer: action('expand-ticket-composer'),
+  /** Minimize the open composer into the Minimized Tickets control, keeping its draft (HS2-3JR0ZH). */
+  minimizeTicketComposer: action('minimize-ticket-composer'),
   toggleNewTicketUpNext: action('toggle-new-ticket-up-next'),
   removeNewTicketAttachment: action('remove-new-ticket-attachment'),
   clearNewTicketAttachments: action('clear-new-ticket-attachments'),
@@ -25,6 +27,8 @@ export const SEARCH_AND_COMPOSER_TARGETS = {
   newTicketTitleField: attr('name', 'new-ticket-title'),
   newTicketDetailsField: attr('name', 'new-ticket-details'),
   newTicketCategoryField: attr('name', 'new-ticket-category'),
+  newTicketPriorityField: attr('name', 'new-ticket-priority'),
+  newTicketBacklogField: attr('name', 'new-ticket-backlog'),
   newTicketSourceField: attr('name', 'new-ticket-source'),
   newTicketDropTarget: attr('data-new-ticket-drop-target', 'true'),
   newTicketAttachmentsField: attr('name', 'new-ticket-attachments'),

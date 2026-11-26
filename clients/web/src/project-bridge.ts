@@ -22,6 +22,7 @@ import { errorMessageOf, isRecord, parseJson, responseJson, responseJsonBody } f
 import { hotsheetHome, hotsheetLegacyHome, type MachineHomeEnvironment, nonBlank } from './machine-home';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
+import { resolveProjectRoot } from './project-relocation';
 import type { RegisteredProject } from './registered-projects-model';
 import {
   remoteConnectionCreate,
@@ -36,6 +37,7 @@ import {
   requireCurrentRemoteBinding,
 } from './remote-projects/host';
 import { remoteHostLabel, remoteProjectId, remoteProjectTabName } from './remote-projects/identity';
+import { remotePermissionList, type RemotePermissionScope } from './remote-projects/permissions';
 import {
   remoteTerminalItem,
   remoteTerminalLaunchCwd,
@@ -49,6 +51,7 @@ import {
   parseCheckout,
   parseCheckouts,
   parseCorruptTicketPaths,
+  parseFollowedRelocation,
   parseOpenedCheckout,
   parseServerCompatibility,
   type ResponseParser,
@@ -347,6 +350,10 @@ const HS1_CLEANUP_ENTRIES = new Set([
 ]);
 export function hs1MigrationArgs(root: string, ticketStore: string, exporter: string): string[] {
   return [resolve(root, '.hotsheet'), '-C', ticketStore, '--migrator', exporter];
+}
+/** The migrator step that commits Hot Sheet's own store ignore rules before a backup push (HS2-HSHT2G). */
+export function hs1BackupPreparationArgs(ticketStore: string): string[] {
+  return ['-C', ticketStore, '--prepare-backup'];
 }
 export function preserveHs1Entry(name: string): boolean {
   return !HS1_CLEANUP_ENTRIES.has(name);
@@ -1049,26 +1056,37 @@ export async function connectGitTicketStoreRemote(
   runner: GitRunner = runGitCommand,
   git: BackupGit = backupGit,
   observe?: (progress: MigrationProgress) => void | Promise<void>,
+  /** Commits Hot Sheet's own store ignore rules before the readiness check (HS2-HSHT2G). */
+  prepare?: (store: string) => Promise<void>,
 ): Promise<void> {
   const remote = remoteInput.trim();
   if (!remote || remote.startsWith('-') || /[\r\n]/.test(remote)) throw new Error('Enter a valid Git remote URL.');
   const store = await realpath(storeInput.trim());
   if (!(await exists(resolve(store, 'hotsheet-store.json'))))
     throw new Error('The ticket repository is no longer available.');
-  const completion = await readImportCompletion(store, git),
-    existing = await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined);
-  let added = false;
-  if (existing && existing !== remote)
-    throw describeGitRemoteFailure(new Error('remote origin already exists.'), 'add');
-  if (completion) await invalidateHs1Backup(store, git);
-  if (!existing) {
+  // HS2-8SEWHJ: save the entered URL first, so a later readiness or push failure cannot
+  // discard it. Hot Sheet records the origin it saved; only that origin may be replaced
+  // by a corrected URL, and a user's own different origin is refused.
+  const existing = await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined);
+  if (existing !== remote) {
+    const saved = await git(store, ['config', '--get', SAVED_BACKUP_ORIGIN_KEY]).catch(() => undefined);
+    if (existing && existing !== saved)
+      throw describeGitRemoteFailure(new Error('remote origin already exists.'), 'add');
     try {
-      await runner('git', ['-C', store, 'remote', 'add', 'origin', remote]);
-      added = true;
+      await runner('git', ['-C', store, 'remote', existing ? 'set-url' : 'add', 'origin', remote]);
+      await runner('git', ['-C', store, 'config', SAVED_BACKUP_ORIGIN_KEY, remote]);
     } catch (error) {
       throw describeGitRemoteFailure(error, 'add');
     }
   }
+  let completion: Awaited<ReturnType<typeof readImportCompletion>>;
+  try {
+    await prepare?.(store);
+    completion = await readImportCompletion(store, git);
+  } catch (error) {
+    throw savedOriginError(remote, error);
+  }
+  if (completion) await invalidateHs1Backup(store, git);
   try {
     if (observe) {
       await observe({ version: 1, phase: 'push_start' });
@@ -1090,12 +1108,18 @@ export async function connectGitTicketStoreRemote(
     await observe?.({ version: 1, phase: 'verify_backup' });
     if (completion) await recordHs1Backup(store, completion, git);
   } catch (error) {
-    // A failed first push must remain retryable from the setup screen. Roll back only
-    // the origin this operation just added; never leave a half-configured repository.
-    if (added && (await git(store, ['remote', 'get-url', 'origin']).catch(() => undefined)) === remote)
-      await runner('git', ['-C', store, 'remote', 'remove', 'origin']).catch(() => undefined);
-    throw describeGitRemoteFailure(error, 'push');
+    // The saved origin stays (HS2-8SEWHJ): Retry reuses it, and Change backup replaces it.
+    throw savedOriginError(remote, describeGitRemoteFailure(error, 'push'));
   }
+}
+
+/** The store Git config key naming the origin Hot Sheet saved for a backup (HS2-8SEWHJ). */
+export const SAVED_BACKUP_ORIGIN_KEY = 'hotsheet.backupOrigin';
+
+/** Say that the entered URL is kept when a step after saving it fails (HS2-8SEWHJ). */
+export function savedOriginError(remote: string, error: unknown): Error {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new Error(`Saved ${remote} as the ticket repository’s origin. ${detail}`);
 }
 
 export function gitTicketStoreConnectionId(path: string): string {
@@ -1714,8 +1738,25 @@ async function serverRequest<T>(
   return parse(await responseJsonBody(response));
 }
 
+/** HS2-86ES0B: ask the bootstrap server which checkout a relocate moved away from `root`. */
+async function followProjectRelocation(root: string): Promise<string | undefined> {
+  const store = await bootstrapStore();
+  const instance = await ensureServer(store);
+  const followed = await serverRequest(
+    { url: instance.url, secret: instance.secret, serverStore: store },
+    '/projects/follow-relocation',
+    parseFollowedRelocation,
+    { method: 'POST', body: JSON.stringify({ root }) },
+  );
+  return followed?.root;
+}
+
 export async function openLocalProject(rootInput: string, ticketStoreInput?: string): Promise<ProjectSession> {
-  const root = await realpath(rootInput.trim());
+  // A remembered root that `checkout relocate` moved opens at the checkout's current root (HS2-86ES0B).
+  // An explicitly chosen ticket store belongs to the path as typed, so it is never redirected.
+  const root = ticketStoreInput?.trim()
+    ? await realpath(rootInput.trim())
+    : await resolveProjectRoot(rootInput.trim(), { realpath, followRelocation: followProjectRelocation });
   const ticketStore = ticketStoreInput?.trim()
     ? await realpath(ticketStoreInput.trim())
     : ((await linkedTicketStore(root)) ?? (await suggestedTicketStore(root)));
@@ -2094,6 +2135,45 @@ async function remoteConnectionScopes(target: SessionTarget): Promise<RemoteConn
   });
 }
 
+/** Every open tab on the same reviewed server, in the host's checkout terms, for permission
+ * ownership (HS2-HSFVHC). Like {@link remoteConnectionScopes}, only the current binding counts. */
+async function remotePermissionScopes(target: SessionTarget): Promise<RemotePermissionScope[]> {
+  const current = target.remote;
+  if (!current) return [];
+  const peers = [...sessions.entries()].filter(
+    ([, session]) =>
+      session.remote?.bindingId === current.bindingId &&
+      session.remote.bindingRevision === current.bindingRevision &&
+      session.remote.connection.binding.identity.server_id === current.connection.binding.identity.server_id,
+  );
+  const roots = await Promise.all(peers.map(([id, session]) => remoteCheckoutRoot(id, session).catch(() => undefined)));
+  return peers.flatMap(([id, session], index) => {
+    const root = roots[index];
+    return root === undefined || !session.remote
+      ? []
+      : [{ id, checkoutId: session.remote.checkoutId, root, stores: session.remote.stores ?? [] }];
+  });
+}
+
+/** A remote host's pending permission requests, each labelled with the open tab that owns it. */
+async function remotePermissionResponse(response: Response, target: SessionTarget): Promise<Response> {
+  const text = await response.text();
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return new Response(text, { status: response.status, headers: response.headers });
+  }
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  headers.delete('content-encoding');
+  headers.set('content-type', 'application/json');
+  return new Response(JSON.stringify(remotePermissionList(value, await remotePermissionScopes(target))), {
+    status: response.status,
+    headers,
+  });
+}
+
 function remoteConnectionCreateBody(body: ArrayBuffer | undefined, projectId: string, checkoutId: string): ArrayBuffer {
   const text = body ? Buffer.from(body).toString('utf8') : '';
   const value: unknown = text.trim() ? JSON.parse(text) : {};
@@ -2205,8 +2285,9 @@ export async function proxyProjectRequest(
       const connectionList =
         request.method === 'GET' && (pathname === '/connections' || pathname === '/drive/sessions');
       const connectionCreate = pathname === '/drive/connections' && request.method === 'POST';
+      const permissionList = request.method === 'GET' && pathname === '/permissions';
       // Terminal answers are rewritten for ownership, so they must arrive uncompressed (HS2-JJKVJJ).
-      if (terminalPath || connectionList || connectionCreate) headers.delete('accept-encoding');
+      if (terminalPath || connectionList || connectionCreate || permissionList) headers.delete('accept-encoding');
       let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
       if (pathname === '/terminals' && request.method === 'POST') {
         const root = await remoteCheckoutRoot(projectId, target);
@@ -2259,6 +2340,7 @@ export async function proxyProjectRequest(
         );
       if ((connectionList || connectionCreate) && response.ok)
         return await remoteConnectionResponse(response, projectId, target, connectionList);
+      if (permissionList && response.ok) return await remotePermissionResponse(response, target);
       return new Response(response.body, { status: response.status, headers: response.headers });
     } catch {
       return Response.json({ error: 'Remote server is unavailable or its approval changed.' }, { status: 503 });
@@ -2342,8 +2424,9 @@ export function projectScopedServerPath(projectId: string, path: string): string
       // (HS2-SM9PM8); there is no machine-wide catalog of sources to browse.
       pathname === '/providers' ||
       /^\/provider-connections(?:\/[^/]+(?:\/disabled)?)?$/.test(pathname) ||
-      // A shell or AI launch joins the same checkout's run history as a program run (HS2-PWNPM2).
-      /^\/commands\/[^/]+\/(?:run|launches)$/.test(pathname) ||
+      // A shell or AI launch joins the same checkout's run history as a program run (HS2-PWNPM2);
+      // an AI command's configured action runs on the host (HS2-17Y2EC).
+      /^\/commands\/[^/]+\/(?:run|launches|ai-run)$/.test(pathname) ||
       /^\/command-runs\/[^/]+(?:\/cancel)?$/.test(pathname);
   // The server learns which projects are open from which checkout each change stream serves
   // (HS2-ARJ9J1); the browser only knows its project, so the bridge names the checkout.
@@ -2511,6 +2594,9 @@ export async function runHs1MigrationJob(
       },
       async (store, args) => (await ownedRunner('git', ['-C', store, ...args], job.root)).trim(),
       observe,
+      async (store) => {
+        await ownedRunner(migrateBinary(), hs1BackupPreparationArgs(store), job.root);
+      },
     );
     return undefined;
   }

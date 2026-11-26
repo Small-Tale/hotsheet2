@@ -5,6 +5,7 @@
 mod attach;
 pub(crate) mod claude_usage;
 pub(crate) mod codex_watch;
+pub(crate) mod hook_turns;
 pub(crate) mod launch;
 mod replay;
 mod signals;
@@ -22,12 +23,13 @@ pub use launch::{
     prune_orphaned_terminal_names, release_orphaned_drive_sessions, resume_broker_terminal_sessions,
 };
 pub(crate) use signals::{
-    TerminalAiConnectionReq, answer_terminal_question, ask_terminal_question, clear_terminal,
-    clear_terminal_halt, connect_terminal_ai, disconnect_terminal_ai,
-    emit_permission_rules_changed, halt_terminal, kill_terminal, list_permission_rules,
-    list_terminals, poll_terminal_question_answer, read_terminal, remember_permission_after_allow,
-    rename_terminal, resolve_permission, resolve_terminal_question, revoke_permission_rule,
-    try_live_terminal_infos, update_permission_rule, write_terminal,
+    TerminalAiConnectionReq, answer_terminal_question, ask_terminal_question,
+    choose_feedback_primary, clear_feedback_primary, clear_terminal, clear_terminal_halt,
+    connect_terminal_ai, disconnect_terminal_ai, emit_permission_rules_changed, halt_terminal,
+    kill_terminal, list_permission_rules, list_terminals, poll_terminal_question_answer,
+    read_terminal, remember_permission_after_allow, rename_terminal, resolve_permission,
+    resolve_terminal_question, revoke_permission_rule, try_live_terminal_infos,
+    update_permission_rule, write_terminal,
 };
 
 use crate::AppState;
@@ -71,6 +73,12 @@ pub(crate) struct OpenTerminalReq {
     /// `[launch] prompt_args`.
     #[serde(default)]
     pub(crate) initial_prompt: Option<String>,
+    /// HS2-62099G: a caller that stops waiting for the answer after a bounded time
+    /// fences the launch: once this many milliseconds have passed since the request
+    /// arrived, the server refuses it (409) instead of spawning a terminal nobody
+    /// records. Omitted, the launch waits as long as its setup takes.
+    #[serde(default)]
+    pub(crate) launch_within_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -578,6 +586,14 @@ pub(crate) struct TerminalInfo {
     /// delivery goes here when no claim names a session (HS2-DB2FQ2). Absent otherwise.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub(crate) feedback_primary: bool,
+    /// HS2-H3S7YQ: the primary role is held because a person chose this terminal, not by the
+    /// derived oldest-terminal rule. Absent otherwise.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) feedback_primary_chosen: bool,
+    /// HS2-H3S7YQ: this live terminal's AI session accepts pushed messages, so it may be chosen
+    /// as the project's feedback-primary session. Absent otherwise.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) feedback_eligible: bool,
     /// HS2-6MNMVB: an orchestrator started this terminal's session on this machine;
     /// names the hosted operation a person takes over or pauses. Absent otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -586,6 +602,11 @@ pub(crate) struct TerminalInfo {
     /// launch), in milliseconds since the epoch; absent while busy.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) idle_since_ms: Option<u64>,
+    /// HS2-G2X7RT: for an orchestrator's live session whose tool reports its session
+    /// start, whether it has: `false` while it may wait on a first-run question a
+    /// person answers in this terminal. Absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) tool_ready: Option<bool>,
 }
 
 /// HS2-6MNMVB: the orchestrator-owned session in a terminal, by identifiers and labels.
@@ -901,7 +922,10 @@ pub(crate) fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> Termin
         last_hook_report: None,
         mcp_connected: false,
         feedback_primary: false,
+        feedback_primary_chosen: false,
+        feedback_eligible: false,
         orchestrator: None,
+        tool_ready: None,
     }
 }
 
@@ -927,7 +951,10 @@ pub(crate) fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInf
         last_hook_report: None,
         mcp_connected: false,
         feedback_primary: false,
+        feedback_primary_chosen: false,
+        feedback_eligible: false,
         orchestrator: None,
+        tool_ready: None,
     }
 }
 
@@ -942,4 +969,29 @@ pub(crate) fn broker_err(resp: hotsheet_terminals::BrokerResponse) -> ApiError {
             format!("unexpected broker response: {other:?}"),
         ),
     }
+}
+
+/// HS2-2AN9C8: record a turn boundary terminal `id`'s Claude or Codex session reported.
+pub(crate) fn note_hook_turn(state: &AppState, id: &str, boundary: hook_turns::TurnBoundary) {
+    use hotsheet_sync::LockExt;
+    state.terminal_hook_turns.lock_or_recover().record(
+        id,
+        boundary,
+        crate::routes::permissions::now_ms(),
+    );
+}
+
+/// HS2-2AN9C8: terminal `id`'s session ended; its next session starts unreported.
+pub(crate) fn forget_hook_turn(state: &AppState, id: &str) {
+    use hotsheet_sync::LockExt;
+    state.terminal_hook_turns.lock_or_recover().forget(id);
+}
+
+/// HS2-2AN9C8: whether terminal `id` is busy, by its tool's report when it made one.
+pub(crate) fn hook_busy_or(state: &AppState, id: &str, inferred: bool) -> bool {
+    use hotsheet_sync::LockExt;
+    state
+        .terminal_hook_turns
+        .lock_or_recover()
+        .busy_or(id, inferred)
 }

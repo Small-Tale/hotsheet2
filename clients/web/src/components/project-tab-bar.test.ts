@@ -156,8 +156,8 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
 
   it('HS2-4Q9DVS shows Minimized Projects before Add Project and keeps it when all tabs are hidden', () => {
     const minimizedProjects = [
-      { id: 'docs', name: 'Docs Portal' },
-      { id: 'analytics', name: 'Analytics Service', description: 'Host B' },
+      { id: 'docs', name: 'Docs Portal', location: 'local' as const },
+      { id: 'analytics', name: 'Analytics Service', location: 'local' as const, description: 'Host B' },
     ];
     const desktop = String(
       ProjectTabBar({ tabs: [{ id: 'studio', name: 'Studio', location: 'local', selected: true }], minimizedProjects }),
@@ -173,5 +173,18 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
     expect(empty).toContain('aria-label="Minimized Projects"');
     expect(empty).toContain('aria-label="Add Project"');
     expect(String(ProjectTabBar({ tabs: [] }))).not.toContain('aria-label="Minimized Projects"');
+  });
+
+  it('HS2-7DWS3S keeps the Restore Project menu on the default popup inset in every strip layout', () => {
+    const minimizedProjects = [{ id: 'docs', name: 'Docs Portal', location: 'local' as const }];
+    for (const markup of [
+      String(ProjectTabBar({ tabs: [{ id: 'studio', name: 'Studio', location: 'local' }], minimizedProjects })),
+      String(ProjectTabBar({ tabs: [], minimizedProjects })),
+      String(ProjectTabBar({ mobile: true, tabs: [], minimizedProjects })),
+    ]) {
+      const restoreGroup = /<div class="kui-toolbar-control-group"[^>]*data-nested-dropdown="true"[^>]*>/.exec(markup);
+      expect(restoreGroup?.[0]).toContain('data-menu-inset="default"');
+      expect(markup).toContain('data-minimized-projects="true"');
+    }
   });
 });

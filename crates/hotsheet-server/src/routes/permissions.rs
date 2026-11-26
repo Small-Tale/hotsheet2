@@ -517,6 +517,30 @@ pub(crate) struct AskBody {
     /// Identifies the reporting session so a late end from an earlier session cannot clear it.
     #[serde(default)]
     session_id: Option<String>,
+    /// The asking session's working directory, from the hook input. A hook under a shared host
+    /// (the Codex app-server daemon) cannot trust its inherited project, so it sends none and the
+    /// project is the registered checkout containing this directory (HS2-HSFVHC).
+    #[serde(default)]
+    cwd: Option<String>,
+}
+
+/// The project an ask belongs to: the hook's own, else the registered checkout containing its
+/// working directory (HS2-HSFVHC), else this server's primary store.
+fn ask_project(state: &AppState, project: String, cwd: Option<&str>) -> String {
+    if !project.is_empty() {
+        return project;
+    }
+    cwd.filter(|cwd| !cwd.trim().is_empty())
+        .and_then(|cwd| {
+            crate::routes::terminals::usage_store::checkout_containing(
+                state,
+                std::path::Path::new(cwd),
+            )
+        })
+        .map_or_else(
+            || state.store.root().display().to_string(),
+            |checkout| format!("checkout:{}", checkout.id),
+        )
 }
 
 /// A read-only authenticated probe for the exact route and secret a local hook would use.
@@ -564,11 +588,7 @@ pub(crate) async fn ask_permission(
         )
         .await;
     }
-    let project = if body.project.is_empty() {
-        state.store.root().display().to_string()
-    } else {
-        body.project
-    };
+    let project = ask_project(&state, body.project, body.cwd.as_deref());
     if project.starts_with("checkout:") {
         state.register_checkout_permission_rules(&project);
     }
@@ -742,7 +762,6 @@ pub(crate) fn discovered_ai_tools(
         &state.ai_tool_generation,
         &state.ai_tool_discovery,
         &state.plugin_dirs,
-        state.store.root(),
         refresh,
         std::time::Instant::now(),
     )
@@ -758,7 +777,6 @@ fn discover_ai_tools_memoized(
     generation: &AtomicU64,
     config: &ai_tool_discovery::AiToolDiscoveryConfig,
     plugin_dirs: &[std::path::PathBuf],
-    root: &FsPath,
     refresh: bool,
     arrived: std::time::Instant,
 ) -> Vec<hotsheet_plugins::AiToolDescriptor> {
@@ -769,7 +787,7 @@ fn discover_ai_tools_memoized(
         generation,
         config.ttl,
         refresh,
-        |catalogs, refresh| (config.scanner)(plugin_dirs, root, catalogs, refresh),
+        |catalogs, refresh| (config.scanner)(plugin_dirs, catalogs, refresh),
         std::time::Instant::now,
     )
 }
@@ -779,6 +797,8 @@ impl AppState {
     /// without waiting for a discovery in progress (HS2-QV8B7R).
     pub(crate) fn invalidate_ai_tool_discovery(&self) {
         self.ai_tool_generation.fetch_add(1, Ordering::AcqRel);
+        // HS2-0VTQFF: capacity's model reading comes from the same discovery.
+        self.capacity.forget_models();
     }
 }
 
@@ -805,7 +825,6 @@ pub(crate) async fn discovered_ai_tools_off_runtime(
     let generation = state.ai_tool_generation.clone();
     let config = state.ai_tool_discovery.clone();
     let plugin_dirs = state.plugin_dirs.clone();
-    let root = state.store.root().to_path_buf();
     let arrived = std::time::Instant::now();
     // A detached thread, not the blocking pool (HS2-NPBZJ9): the scan runs installed tools'
     // `--version`/catalog subprocesses with no deadline of their own, and the runtime waits
@@ -820,7 +839,6 @@ pub(crate) async fn discovered_ai_tools_off_runtime(
                 &generation,
                 &config,
                 &plugin_dirs,
-                &root,
                 refresh,
                 arrived,
             ));
@@ -1460,14 +1478,14 @@ async fn send_drive_turn_inner(
                 }
                 hotsheet_aitools::TurnEvent::Done(reason) => {
                     // HS2-86MK1Y: a typed limit failure is a limit signal for the tool's
-                    // capacity; a client drive has no terminal, so it is unattributed.
-                    crate::tool_capacity_signals::record(
+                    // capacity; HS2-WTSYQJ: a completed turn of a tool that reports limits
+                    // but no usage confirms its recovery. A client drive has no terminal,
+                    // so both are unattributed.
+                    // HS2-JM0GVB: a usage limit also reads the tool's reset time once.
+                    crate::tool_capacity_signals::record_driven_outcome(
                         &thread_state,
-                        crate::tool_capacity_signals::driven_failure_signal(
-                            &tool,
-                            reason,
-                            time::OffsetDateTime::now_utc(),
-                        ),
+                        &tool,
+                        reason,
                     );
                     event.clone()
                 }

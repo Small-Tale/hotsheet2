@@ -1400,6 +1400,7 @@ impl Index {
                     claim_started_at: r.get(25)?,
                     started_phase_since: r.get(28)?,
                     started_phase_estimate_ms: None,
+                    claim_standing: None,
                     worker_label: r.get(20)?,
                     // HS2-DQJPW0: relative to the host reading the index.
                     claim_origin: hotsheet_ticketing::claim_host::origin(

@@ -71,7 +71,8 @@ test('insets every application banner consistently (HS2-YCB15Z)', async ({ page 
       label,
     ).toEqual(['project-setup-warning-banner', 'codex-hooks-notice-banner', 'source-stale-notice-banner']);
     for (const banner of banners) {
-      expect(banner.left, `${label} ${banner.component} left inset`).toBeGreaterThan(0);
+      // 8px from the slot's sides and top, 8px between (HS2-GXJTSE).
+      expect(banner.left, `${label} ${banner.component} left inset`).toBe(8);
       expect(banner.left, `${label} ${banner.component} insets match`).toBe(banners[0].left);
       expect(banner.right, `${label} ${banner.component} insets match`).toBe(banners[0].left);
       expect(banner.radius, `${label} ${banner.component} is rounded`).toBeGreaterThan(0);
@@ -79,6 +80,7 @@ test('insets every application banner consistently (HS2-YCB15Z)', async ({ page 
     const gaps = banners.slice(1).map((banner, index) => banner.top - banners[index].bottom);
     expect(new Set(gaps).size, `${label} one gap between stacked banners`).toBe(1);
     expect(gaps[0], `${label} stacked banners sit one top inset apart`).toBe(banners[0].offset);
+    expect(banners[0].offset, `${label} top inset`).toBe(8);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `${label}: no horizontal page scroll`).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `target/visual-captures/hs2-ycb15z-banners-${label}.png` });

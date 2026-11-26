@@ -63,6 +63,11 @@ export interface TicketRowProps {
   /** The live claim belongs to a separate Hot Sheet server seen through the synced store; its owner
    * shows as remote instead of a worker name local to that machine (HS2-DQJPW0). */
   remoteClaim?: boolean;
+  /**
+   * HS2-ZR8B4N: the live claim is provisional (taken offline, never exclusive), or a claim this machine held was lost
+   * to another machine.
+   */
+  claimStanding?: 'provisional' | 'lost';
   /** Progress toward the live claim's ETA, shown beside the active-work indicator (HS2-XQMDQB). */
   claimEta?: ClaimEtaPresentation;
   /** Estimated time left in the current testing phase, beside the phase chip (HS2-YDGM04). */
@@ -131,8 +136,19 @@ export function ticketRowIndicator(
   return undefined;
 }
 
-function RowClaimIndicator({ agentName = 'AI', claimEta }: { agentName?: string; claimEta?: ClaimEtaPresentation }) {
-  const label = `${agentName} is actively working on this ticket`;
+function RowClaimIndicator({
+  agentName = 'AI',
+  claimEta,
+  provisional,
+}: {
+  agentName?: string;
+  claimEta?: ClaimEtaPresentation;
+  provisional?: boolean;
+}) {
+  // HS2-ZR8B4N: a provisional claim is never announced as exclusive work.
+  const label = provisional
+    ? `${agentName} is working on this ticket under a provisional claim`
+    : `${agentName} is actively working on this ticket`;
   return (
     <span class="ticket-list-row__claim" title={`${label} while it stays active`}>
       <ActiveClaimIndicator label={label} eta={claimEta} />
@@ -332,7 +348,13 @@ export function TicketRow(raw: TicketRowProps) {
             {props.status === 'started' && props.startedPhase && props.phaseEstimate && (
               <PhaseEstimate estimate={props.phaseEstimate} compact />
             )}
-            {props.busy && <RowClaimIndicator agentName={props.agentName} claimEta={props.claimEta} />}
+            {props.busy && (
+              <RowClaimIndicator
+                agentName={props.agentName}
+                claimEta={props.claimEta}
+                provisional={props.claimStanding === 'provisional'}
+              />
+            )}
             {needsReview && (
               <span class="ticket-list-row__feedback" role="img" aria-label="Needs review" title="Needs review">
                 <Badge tone="warning" appearance="outline" size="compact" ariaHidden>
@@ -381,6 +403,28 @@ export function TicketRow(raw: TicketRowProps) {
                   {props.agentName}
                 </span>
               ))}
+            {props.busy && props.claimStanding === 'provisional' && (
+              <Badge
+                tone="warning"
+                appearance="quiet"
+                size="compact"
+                title="Claimed while the claim service could not be reached; another machine may hold it."
+                rootAttributes={{ 'data-claim-standing': 'provisional' }}
+              >
+                Provisional
+              </Badge>
+            )}
+            {props.claimStanding === 'lost' && (
+              <Badge
+                tone="danger"
+                appearance="quiet"
+                size="compact"
+                title="A claim this machine held was lost to another machine."
+                rootAttributes={{ 'data-claim-standing': 'lost' }}
+              >
+                Claim lost
+              </Badge>
+            )}
             {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
             {confidence !== undefined && featureOn('confidence') && <ConfidenceBadge value={confidence} />}
             {props.orchestration && <OrchestrationLine line={props.orchestration} />}

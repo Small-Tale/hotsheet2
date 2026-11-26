@@ -108,6 +108,11 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
         JSON.stringify([resolve(root, '.hotsheet'), resolve(workspace, 'other/.hotsheet')]),
       );
       const mcpPath = resolve(root, '.mcp.json');
+      // HS2-ZZQZPR: a config shared with other servers carries the portable HS2 entry
+      // `hotsheet-mcp --project .` (02f17507b HS2-JPXM6R, docs/05 §5.1a). Every project open
+      // refreshes setup, which rewrites an older `--path <store>` entry to that form, so the
+      // cleanup assertions below pin the documented form rather than the legacy one.
+      const hs2Entry = { command: 'hotsheet-mcp', args: ['--project', '.'] };
       await writeFile(
         mcpPath,
         JSON.stringify({
@@ -116,18 +121,33 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
               command: 'legacy',
               args: ['channel.js', '--data-dir', resolve(root, '.hotsheet')],
             },
-            hotsheet: { command: 'hotsheet-mcp', args: ['--path', store] },
+            hotsheet: hs2Entry,
           },
         }),
       );
       expect((await app.request(`/__hotsheet/projects/${session.id}/hs1-data`, { method: 'DELETE' })).status).toBe(400);
       expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8'))).toHaveLength(2);
+      // HS2-HSHT2G: the server hosting the imported store adds no ignore line of its own.
+      expect(await backupGit(store, ['status', '--porcelain=v1', '--untracked-files=all', '--', '.gitignore'])).toBe(
+        '',
+      );
+      // A store an older build left with an uncommitted ignore line still backs up: the job
+      // commits Hot Sheet's own `.gitignore` before its readiness check.
+      const ignore = resolve(store, '.gitignore'),
+        current = await readFile(ignore, 'utf8'),
+        legacy = current.replace(/^metrics\/local\/\n/m, '');
+      await writeFile(ignore, legacy);
+      await backupGit(store, ['commit', '-qm', 'Older build ignore rules', '--', '.gitignore']);
+      await writeFile(ignore, `${legacy}metrics/local/\n`);
       const remote = resolve(workspace, 'backup.git');
       await backupGit(workspace, ['init', '--bare', remote]);
       job = (await (await start({ ...input, kind: 'backup', remote })).json()) as MigrationJob;
       expect(job.status).toBe('running');
       await waitForTerminal();
       expect(job.status, job.error).toBe('succeeded');
+      // HS2-8SEWHJ: the URL entered for the backup is the store's saved origin.
+      expect(await backupGit(store, ['remote', '-v'])).toContain(`origin\t${remote} (push)`);
+      expect(await backupGit(store, ['config', '--get', 'hotsheet.backupOrigin'])).toBe(remote);
       expect(await hasHs1Backup(store, root)).toBe(true);
       expect(await readFile(resolve(root, '.hotsheet/attachments/proof.txt'), 'utf8')).toBe('ACTUAL PAYLOAD');
       expect((await app.request(`/__hotsheet/projects/${session.id}/hs1-data`, { method: 'DELETE' })).status).toBe(200);
@@ -138,7 +158,7 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
         mcpServers: Record<string, { args: string[] }>;
       };
       expect(Object.keys(repairedMcp.mcpServers)).toEqual(['hotsheet']);
-      expect(repairedMcp.mcpServers.hotsheet.args).toEqual(['--path', store]);
+      expect(repairedMcp.mcpServers.hotsheet.args).toEqual(hs2Entry.args);
       // Restoring the old app from its saved project list no longer opens this project.
       expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8')) as string[]).not.toContain(
         resolve(root, '.hotsheet'),
@@ -153,7 +173,7 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
         JSON.stringify({
           mcpServers: {
             'hotsheet-channel-project': { command: 'legacy', args: ['--data-dir', resolve(root, '.hotsheet')] },
-            hotsheet: { command: 'hotsheet-mcp', args: ['--path', store] },
+            hotsheet: hs2Entry,
           },
         }),
       );
@@ -181,7 +201,7 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
         mcpServers: Record<string, { args: string[] }>;
       };
       expect(Object.keys(afterRepairMcp.mcpServers)).toEqual(['hotsheet']);
-      expect(afterRepairMcp.mcpServers.hotsheet.args).toEqual(['--path', store]);
+      expect(afterRepairMcp.mcpServers.hotsheet.args).toEqual(hs2Entry.args);
       const repairedOpen = await app.request('/__hotsheet/projects/open', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

@@ -84,15 +84,13 @@ pub(crate) async fn restore_provider_ticket(
     Path((connection_id, id)): Path<(String, String)>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let Some(entry) = state.host.get(&connection_id) else {
-        // Preserve not-found diagnostics for unknown connections, then report the
-        // capability boundary for every configured non-git provider.
-        let _ = provider_for(&state, &connection_id)?;
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!(
-                "provider connection '{connection_id}' does not support git-backed Hot Sheet Trash restore"
-            ),
-        ));
+        // An external provider restores from its own Trash (GitHub Issues GH-5, GitLab
+        // HS2-DBKM89, Jira HS2-73Z1R8) or refuses by capability name; unknown connections keep
+        // their not-found diagnostics.
+        return provider_for(&state, &connection_id)?
+            .restore(&id, now())
+            .map(Json)
+            .map_err(provider_transfer_error);
     };
     let ticket = entry
         .resolve(&id)?

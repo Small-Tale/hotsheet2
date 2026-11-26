@@ -11,6 +11,7 @@ import {
 } from './change-stream-worker-protocol';
 import { createChangeWebSocketMultiplexers } from './change-ws-mux';
 import { type ProjectChangeTransportOptions, runProjectChangeTransport } from './project-change-poll';
+import { createProjectChangeWake } from './project-change-poll';
 import { parsePollResponse } from './server-response-parsers';
 
 type ChangeClient = ProjectChangeTransportOptions['client'];
@@ -103,7 +104,7 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
   };
   const subscriptions = new Map<
     string,
-    { generation: number; controller: AbortController; queue: ChangeStreamDeliveryQueue }
+    { generation: number; controller: AbortController; queue: ChangeStreamDeliveryQueue; wake: () => void }
   >();
 
   const close = (project: string, generation?: number) => {
@@ -123,10 +124,19 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
     const queue = new ChangeStreamDeliveryQueue((seq, delivery: ChangeStreamDelivery) => {
       if (!controller.signal.aborted) options.post({ type: 'batch', project, generation, seq, ...delivery });
     }, options.maxQueuedEvents);
-    subscriptions.set(project, { generation, controller, queue });
+    const wake = createProjectChangeWake();
+    subscriptions.set(project, {
+      generation,
+      controller,
+      queue,
+      wake: () => {
+        wake.wake();
+      },
+    });
     run(
       {
         client: changeClient(message),
+        wake,
         ...(message.changeMuxUrl && message.webSocketUrl
           ? {
               openWebSocket: (url: string) =>
@@ -177,7 +187,10 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
         relayClientBuild();
       } else if (message.type === 'open') open(message);
       else if (message.type === 'close') close(message.project, message.generation);
-      else {
+      else if (message.type === 'wake') {
+        const current = subscriptions.get(message.project);
+        if (current?.generation === message.generation) current.wake();
+      } else {
         const current = subscriptions.get(message.project);
         if (current?.generation === message.generation) current.queue.ack(message.seq);
       }

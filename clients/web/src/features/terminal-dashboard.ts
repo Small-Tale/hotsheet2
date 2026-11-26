@@ -7,17 +7,20 @@ import type { Project } from '../interactions/types';
 import type { DrawerAIChat } from '../project-drive';
 import { applyRememberedTabOrder } from '../tab-order';
 import { deriveAiConnectionStates } from '../terminal-ai-connection';
+import { type FeedbackPrimaryCommand, feedbackPrimaryToast } from '../terminal-feedback-primary';
 import { defaultTerminalNames, terminalNameKey, terminalTitle } from '../terminal-names';
 import { terminalProjectOwner } from '../terminal-project-scope';
 import { sameTerminalDashboardSnapshot, TerminalSnapshotRefresh } from '../terminal-snapshot-refresh';
 import {
   activeTerminalVisibilityGroup,
+  effectiveTerminalVisibleTypes,
+  includedTerminalProjectGroups,
   type parseTerminalVisibilityState,
+  scopeTerminalVisibilityTypes,
   TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
   TERMINAL_VISIBILITY_STORAGE_KEY,
   terminalProjectVisibilityScope,
   terminalVisibilityItems,
-  visibleTerminalTypes,
 } from '../terminal-visibility';
 import type { createDriveConversationsController } from './drive-conversations';
 import type { createTerminalNamesController } from './terminal-names';
@@ -42,6 +45,10 @@ export interface TerminalDashboardDependencies {
   reconcileTerminalNames: ReturnType<typeof createTerminalNamesController>['reconcileTerminalNames'];
   /** The workspace's visible terminal groups; built after this owner, so read lazily. */
   workspaceTerminalGroups: () => Parameters<typeof terminalVisibilityItems>[0];
+  /** Whether the AI chat feature area is on (HS2-4TKASN). */
+  chatFeatureOn: () => boolean;
+  /** Minimized project tabs, left out of a workspace unless it shows them (HS2-W1XEH7). */
+  minimizedProjectIds: () => readonly string[];
   aiToolLabel: (tool: string) => string;
   showToast: (message: string) => void;
   error: Signal<string>;
@@ -69,6 +76,8 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
     refreshDriveConnections,
     reconcileTerminalNames,
     workspaceTerminalGroups,
+    chatFeatureOn,
+    minimizedProjectIds,
     aiToolLabel,
     showToast,
     error,
@@ -83,15 +92,30 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   function terminalHiddenKeys(scope: string) {
     return activeTerminalVisibilityGroup(terminalVisibility.value, scope).hiddenKeys;
   }
+  /** The projects a scope's workspace lists and shows: minimized ones only when it says so (HS2-W1XEH7). */
+  function terminalScopeGroups(scope: string) {
+    return includedTerminalProjectGroups(
+      workspaceTerminalGroups(),
+      activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+      minimizedProjectIds(),
+    );
+  }
+  /** The types a scope's visibility dialog offers (HS2-4TKASN). */
+  function terminalAvailableTypes(scope: string) {
+    return scopeTerminalVisibilityTypes(terminalScopeGroups(scope), scope, chatFeatureOn());
+  }
   function terminalVisibleTypes(scope: string) {
-    return visibleTerminalTypes(activeTerminalVisibilityGroup(terminalVisibility.value, scope));
+    return effectiveTerminalVisibleTypes(
+      activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+      terminalAvailableTypes(scope),
+    );
   }
   function terminalHiddenCount(scope: string, projectId?: string) {
     const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
-      visibleTypes = visibleTerminalTypes(active),
+      visibleTypes = terminalVisibleTypes(scope),
       hiddenKeys = new Set(active.hiddenKeys);
     return terminalVisibilityItems(
-      workspaceTerminalGroups(),
+      terminalScopeGroups(scope),
       projectId ? terminalProjectVisibilityScope(projectId) : scope,
     )
       .flatMap((group) => group.items)
@@ -107,12 +131,15 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
       TERMINAL_DASHBOARD_VISIBILITY_SCOPE
     );
   }
-  function terminalKeysForVisibilityDialog() {
+  /** The dialog's listed keys, or one project's (HS2-HC67SP). */
+  function terminalKeysForVisibilityDialog(projectId?: string) {
     return terminalVisibilityItems(
-      workspaceTerminalGroups(),
+      terminalScopeGroups(terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
       terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
       terminalVisibleTypes(terminalVisibilityDialogScope() ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
-    ).flatMap((group) => group.items.map((item) => item.key));
+    )
+      .filter((group) => projectId === undefined || group.projectId === projectId)
+      .flatMap((group) => group.items.map((item) => item.key));
   }
   function drawerTabOrder(projectId: string) {
     return terminalDrawerOrderByProject.value[projectId] ?? loadDrawerTabOrder(localStorage, projectId);
@@ -217,6 +244,24 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
       error.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
+  /**
+   * Choose a terminal as its project's feedback-primary session, or clear that choice (HS2-H3S7YQ).
+   * The server announces the change to every client; this one refetches at once so its own tab
+   * indicator moves before the event arrives.
+   */
+  async function setFeedbackPrimary(key: string, command: FeedbackPrimaryCommand) {
+    const session = terminalSession(key),
+      current = projects.value.find((item) => item.id === session?.projectId);
+    if (!session || !current) return;
+    try {
+      const api = new Api(current.apiPath);
+      await (command === 'choose' ? api.chooseFeedbackPrimary(session.id) : api.clearFeedbackPrimary(session.id));
+      await refreshTerminalDashboard(true, current);
+      showToast(feedbackPrimaryToast(command, session.title ?? session.id));
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
   function dispose() {
     clearTimeout(aiConnectionTimer);
     aiConnectionTimer = undefined;
@@ -224,6 +269,8 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
   return {
     terminalSession,
     terminalHiddenKeys,
+    terminalScopeGroups,
+    terminalAvailableTypes,
     terminalVisibleTypes,
     terminalHiddenCount,
     persistTerminalVisibility,
@@ -235,6 +282,7 @@ export function createTerminalDashboardController(dependencies: TerminalDashboar
     applyAiConnectionStates,
     refreshTerminalDashboard,
     clearTerminalHalt,
+    setFeedbackPrimary,
     dispose,
   };
 }

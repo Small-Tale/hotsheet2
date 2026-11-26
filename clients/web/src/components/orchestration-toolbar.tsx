@@ -1,14 +1,22 @@
 import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Sparkles, X } from 'lucide';
+import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Settings, Sparkles, X } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
-import { type ClockFormat, clockTime, startBlockedReason, timelineStatus } from '../orchestration-timeline-board';
+import {
+  type ClockFormat,
+  clockTime,
+  plannerWorkingLabel,
+  startBlockedInSettings,
+  startBlockedReason,
+  timelineStatus,
+} from '../orchestration-timeline-board';
 import type { OrchestrationProposeAvailability } from './orchestration-timeline-view';
 
 export interface OrchestrationToolbarProps {
@@ -67,6 +75,16 @@ export function OrchestrationToolbar({
   const goal = defaultGoal && timeline.phase !== 'no_projects' ? ' · Working through all open tickets' : '';
   const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
   const blocked = startBlockedReason(timeline);
+  // HS2-1DC8X1: the reason a person can act on is a banner with the way there, never only a disabled title.
+  const openSettings = startBlockedInSettings(timeline) ? (
+    <Button
+      size="compact"
+      action={ORCHESTRATION_ACTIONS.openOrchestrationSettings.value}
+      icon={<LucideIcon size="s" icon={Settings} name="settings" />}
+    >
+      Open Orchestration Settings
+    </Button>
+  ) : undefined;
   const updating = planning === 'updating';
   const answer =
     planning === 'asked' && question ? (
@@ -116,13 +134,29 @@ export function OrchestrationToolbar({
     switch (timeline.phase) {
       case 'no_projects':
         return undefined;
-      case 'no_plan':
+      case 'no_plan': {
+        // HS2-2Z4M6M: while the press is on its way or the planner starts or works, the button shows
+        // that state (busy, with the state as its name) instead of an idle Propose Plan.
+        const working = plannerWorkingLabel(planning, busy);
+        if (working)
+          return (
+            <Button
+              emphasis="primary"
+              shape="pill"
+              disabled
+              rootAttributes={{ 'data-planner-state': working }}
+              title={propose.available ? 'Starting the planning session' : propose.reason}
+              icon={<LoadingSpinner size="s" />}
+            >
+              {working}
+            </Button>
+          );
         return (
           <Button
             emphasis="primary"
             shape="pill"
             action={ORCHESTRATION_ACTIONS.proposeOrchestrationPlan.value}
-            disabled={busy || !propose.available}
+            disabled={!propose.available}
             title={
               propose.available
                 ? defaultGoal
@@ -135,6 +169,7 @@ export function OrchestrationToolbar({
             Propose Plan
           </Button>
         );
+      }
       case 'running':
         return (
           <Button
@@ -187,6 +222,21 @@ export function OrchestrationToolbar({
             detail={`Columns run from the newest work on the left to the first work on the right. Start Orchestration starts sessions within the Orchestration settings.${
               blocked ? ` ${blocked}.` : ''
             }`}
+            action={openSettings}
+            actionPlacement="below"
+          />
+        </List>
+      )}
+      {timeline.phase === 'paused' && blocked !== undefined && (
+        <List controlInsets="trl">
+          <StateBanner
+            copyLayout="stacked"
+            tone="warning"
+            title="Start Orchestration Is Unavailable"
+            detail={`${blocked}. Work already running continues.`}
+            action={openSettings}
+            actionPlacement="below"
+            rootAttributes={{ 'data-orchestration-start-blocked': timeline.kick_off.start_blocked ?? '' }}
           />
         </List>
       )}

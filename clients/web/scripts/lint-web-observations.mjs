@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// HS2-5RDMEV: record the three existing lint:web commands without changing their order or stop behavior.
+// HS2-5RDMEV: record the three lint:web commands in their first-failure order.
+// HS2-N3XBS3: skip an ESLint pass whose exact inputs already passed, and leave TypeScript to
+// `npm run typecheck`, which runs wherever lint:web runs.
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { recordAttempt } from '../../../scripts/gate-timings.mjs';
 import { withoutGitRepositoryEnv } from './repository-env.mjs';
@@ -13,8 +15,36 @@ const cwd = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const execute = (command, dir) =>
   spawnSync(command.file, command.args, { cwd: dir, stdio: 'inherit', env: withoutGitRepositoryEnv(process.env) });
 
+// HS2-N3XBS3: the doctor stages lint:web reads from the report. TypeScript is disabled in the
+// lint:web doctor configuration because `tsc --noEmit` (npm run typecheck) checks a superset of the
+// same program in every place that runs lint:web: scripts/check.sh, check-full.sh and CI.
+export const DOCTOR_STAGES = ['catalog', 'eslint', 'analyzer', 'browser'];
+
+// HS2-N3XBS3: directories the ESLint pass never reads. The ESLint config's own ignores are added
+// at run time; `.kerf-cache` is the UI doctor's result cache and `.git` is repository metadata.
+const UNREAD_DIRECTORIES = ['.git', '.kerf-cache'];
+// HS2-N3XBS3: file types no ESLint rule or TypeScript program in this package reads. TypeScript
+// types `*.css` and asset imports through `vite/client` ambient modules, so their bytes cannot
+// change a type. Everything else, including Markdown skills the kerfjs/ai-assistant-configs rule
+// reads, stays in the key, so an unknown input type invalidates the reuse instead of escaping it.
+export const ESLINT_UNREAD_EXTENSIONS = new Set([
+  '.css',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.ico',
+  '.icns',
+  '.mp4',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+]);
+
 // HS2-5RDMEV: invoke the same package CLIs with the active Node executable on every platform.
-export function lintWebCommands(root, reportPath, node = process.execPath) {
+export function lintWebCommands(root, reportPath, node = process.execPath, doctorConfigPath = null) {
   return [
     {
       id: 'web-lint:eslint',
@@ -41,6 +71,7 @@ export function lintWebCommands(root, reportPath, node = process.execPath) {
           '--max-old-space-size=4096',
           join(root, 'node_modules/@kerfjs/ui/doctor/cli.mjs'),
           '--full',
+          ...(doctorConfigPath ? ['--config', doctorConfigPath] : []),
           '--format',
           'json',
           '--output',
@@ -51,9 +82,63 @@ export function lintWebCommands(root, reportPath, node = process.execPath) {
   ];
 }
 
+/**
+ * HS2-N3XBS3: the lint:web doctor configuration is the package's `.kerf-ui-doctor.json` with only
+ * the TypeScript stage turned off. Every other stage, threshold, suppression and ownership option
+ * is the package's own.
+ */
+export function lintWebDoctorConfig(config) {
+  return { ...config, stages: { ...config.stages, typescript: false } };
+}
+
+function ignoredDirectories(ignores) {
+  // ESLint flat-config ignores in eslint.config.mjs are `<dir>/**` patterns.
+  return ignores.map((pattern) => pattern.replace(/\/\*\*$/, '')).filter((dir) => !/[*?[{]/.test(dir));
+}
+
+/**
+ * HS2-N3XBS3: a content key for one ESLint pass. It covers every file under the package root that
+ * the pass can read (sources, JSON, configuration, guidance), the installed dependency tree through
+ * `node_modules/.package-lock.json`, the ESLint arguments and the Node version. Equal keys mean
+ * byte-identical inputs, so a recorded pass for the key is the pass ESLint would report again.
+ */
+export function eslintInputKey(root, { ignores, args, nodeVersion = process.version }) {
+  const skipped = new Set([...UNREAD_DIRECTORIES, ...ignoredDirectories(ignores)]);
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify({ schema: 1, args, nodeVersion }));
+  const visit = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const path = join(dir, entry.name);
+      const rel = relative(root, path).split(sep).join('/');
+      if (entry.isDirectory()) {
+        if (!skipped.has(rel)) visit(path);
+      } else if (entry.isFile() && !ESLINT_UNREAD_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+        hash.update(`${rel}\0`);
+        hash.update(createHash('sha256').update(readFileSync(path)).digest('hex'));
+        hash.update('\0');
+      }
+    }
+  };
+  visit(root);
+  // Node resolves packages from ancestor node_modules too, so every installed tree on the way up counts.
+  for (let dir = resolve(root); ; dir = dirname(dir)) {
+    let installed = 'missing';
+    try {
+      installed = createHash('sha256')
+        .update(readFileSync(join(dir, 'node_modules/.package-lock.json')))
+        .digest('hex');
+    } catch {
+      /* Without npm's installed-tree record the key still changes with package-lock.json. */
+    }
+    hash.update(`installed\0${dir === resolve(root) ? '.' : relative(root, dir)}\0${installed}\0`);
+    if (dirname(dir) === dir) break;
+  }
+  return hash.digest('hex');
+}
+
 export function doctorStageObservations(report) {
   return (report?.stages ?? []).flatMap((stage) => {
-    if (!['catalog', 'typescript', 'eslint', 'analyzer', 'browser'].includes(stage.id)) return [];
+    if (!DOCTOR_STAGES.includes(stage.id)) return [];
     const hasError = report.diagnostics?.some((item) => item.stage === stage.id && item.severity === 'error');
     const outcome =
       stage.status === 'skipped'
@@ -71,24 +156,48 @@ export function doctorStageObservations(report) {
   });
 }
 
-export function runLintWeb({
+const readStamp = (path) => {
+  try {
+    return readFileSync(path, 'utf8').trim();
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * HS2-N3XBS3: ESLint pass reuse is local only. CI and `HOTSHEET_LINT_WEB_REUSE=0` always run
+ * ESLint, so CI's coverage is the full uncached run.
+ */
+export function eslintReuseEnabled(env) {
+  return !env.CI && env.HOTSHEET_LINT_WEB_REUSE !== '0';
+}
+
+export async function loadEslintIgnores(root) {
+  const { default: config } = await import(pathToFileURL(join(root, 'eslint.config.mjs')).href);
+  return config.flatMap((item) =>
+    item && Object.keys(item).length === 1 && Array.isArray(item.ignores) ? item.ignores : [],
+  );
+}
+
+export async function runLintWeb({
   root = cwd,
   run = execute,
   historyPath = null,
   reportPath = join(root, 'target/lint-web-doctor-report.json'),
+  doctorConfigPath = join(root, 'target/lint-web-doctor-config.json'),
+  stampPath = join(root, 'target/lint-web-eslint-pass.sha256'),
   node = process.execPath,
   now = Date.now,
+  flags = process.env,
+  eslintIgnores = () => loadEslintIgnores(root),
 } = {}) {
-  const steps = lintWebCommands(root, reportPath, node);
+  const steps = lintWebCommands(root, reportPath, node, doctorConfigPath);
   const attempt = {
     id: `local:${randomUUID()}`,
     source: 'local',
     cohort: 'lint-web',
     startedAt: now(),
-    selected: [
-      ...steps.map((step) => step.id),
-      ...['catalog', 'typescript', 'eslint', 'analyzer', 'browser'].map((id) => `web-lint:doctor:${id}`),
-    ],
+    selected: [...steps.map((step) => step.id), ...DOCTOR_STAGES.map((id) => `web-lint:doctor:${id}`)],
     deferred: [],
     checks: [],
   };
@@ -102,14 +211,33 @@ export function runLintWeb({
   };
   remember();
   for (const step of steps) {
+    mkdirSync(resolve(root, 'target'), { recursive: true });
     if (step.id === 'web-lint:doctor') {
-      mkdirSync(resolve(root, 'target'), { recursive: true });
       rmSync(reportPath, { force: true });
+      const packageConfig = JSON.parse(readFileSync(join(root, '.kerf-ui-doctor.json'), 'utf8'));
+      writeFileSync(doctorConfigPath, `${JSON.stringify(lintWebDoctorConfig(packageConfig), null, 2)}\n`);
     }
     const startedAt = now();
     const check = { id: step.id, outcome: 'interrupted', startedAt };
     attempt.checks.push(check);
     remember();
+    let key = null;
+    let keyOf = null;
+    if (step.id === 'web-lint:eslint') {
+      if (eslintReuseEnabled(flags)) {
+        keyOf = async () => eslintInputKey(root, { ignores: await eslintIgnores(), args: step.command.args.slice(2) });
+        key = await keyOf();
+        if (readStamp(stampPath) === key) {
+          check.endedAt = now();
+          check.ms = check.endedAt - startedAt;
+          check.outcome = 'reused';
+          check.category = null;
+          console.log('lint:web ESLint inputs match the last passing run; reusing its pass (HS2-N3XBS3).');
+          remember();
+          continue;
+        }
+      }
+    }
     const result = run(step.command, root);
     check.endedAt = now();
     check.ms = check.endedAt - startedAt;
@@ -120,6 +248,11 @@ export function runLintWeb({
         : result.signal
           ? `signal:${result.signal}`
           : null;
+    if (step.id === 'web-lint:eslint') {
+      // An input edited while ESLint ran changes the key, so that pass is not recorded for either version.
+      if (key && check.outcome === 'pass' && (await keyOf()) === key) writeFileSync(stampPath, `${key}\n`);
+      else rmSync(stampPath, { force: true });
+    }
     if (step.id === 'web-lint:doctor') {
       try {
         attempt.checks.push(...doctorStageObservations(JSON.parse(readFileSync(reportPath, 'utf8'))));
@@ -146,5 +279,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     env: withoutGitRepositoryEnv(process.env),
   });
   const historyPath = git.status === 0 ? join(resolve(cwd, git.stdout.trim()), 'hotsheet-gate-timings.json') : null;
-  process.exitCode = runLintWeb({ historyPath });
+  process.exitCode = await runLintWeb({ historyPath });
 }

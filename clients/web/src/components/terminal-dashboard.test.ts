@@ -75,6 +75,41 @@ describe('TerminalDashboard', () => {
     expect(halted).toContain('Clear stopped state');
     expect(halted).toContain('data-action="clear-terminal-halt"');
   });
+  it('offers the feedback-primary command in the More actions menu (HS2-H3S7YQ)', () => {
+    const menuFor = (session: Partial<(typeof groups)[0]['sessions'][0]>, actions?: ('open' | 'feedback-primary')[]) =>
+      String(
+        TerminalDashboard({
+          groups: [{ ...groups[0], sessions: [{ ...groups[0].sessions[0], ...session }] }],
+          width: 1200,
+          height: 700,
+          fitAcross: 4,
+          fitHigh: 2,
+          contextMenu: { key: 'one:term-1', x: 100, y: 100 },
+          ...(actions ? { contextMenuActions: actions } : {}),
+        }),
+      );
+    const eligible = menuFor({ kind: 'ai', alive: true, feedback_eligible: true });
+    expect(eligible).toContain('Receive Feedback Notifications');
+    expect(eligible).toContain('data-action="set-feedback-primary"');
+    expect(eligible).toMatch(/data-item-id="one:term-1" data-feedback-command="choose"/);
+    expect(eligible).not.toMatch(/data-feedback-command="choose"[^>]*aria-disabled/);
+    const chosen = menuFor({
+      kind: 'ai',
+      alive: true,
+      feedback_eligible: true,
+      feedback_primary: true,
+      feedback_primary_chosen: true,
+    });
+    expect(chosen).toContain('Stop Receiving Feedback Notifications');
+    expect(chosen).toContain('data-feedback-command="clear"');
+    const shell = menuFor({ kind: 'shell' });
+    expect(shell).toMatch(/data-feedback-command="choose"[^>]*aria-disabled="true"/);
+    expect(shell).toContain('A shell terminal cannot receive feedback notifications.');
+    // A grid that does not list the action never offers it.
+    expect(menuFor({ kind: 'ai', alive: true, feedback_eligible: true }, ['open'])).not.toContain(
+      'set-feedback-primary',
+    );
+  });
   it('renders every dashboard terminal as a fixed 80x24 scaled non-interactive viewport with Kerf floating zoom controls', () => {
     const markup = String(TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }));
     expect(markup).toContain('data-basis="across"');
@@ -164,6 +199,39 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('aria-label="Open Codex in Project One"');
     expect(markup).toMatch(/class="terminal-tile__state" title="Busy"><span class="kui-badge"[^>]*aria-label="Busy"/);
     expect(markup).not.toContain('/work/one');
+  });
+  it('keeps an orchestrator session’s run suffix in its grid caption through Kerf Text (HS2-3RBYJK)', () => {
+    const orchestrated: TerminalDashboardGroup[] = [
+      {
+        ...groups[0],
+        chats: [],
+        sessions: [
+          {
+            ...groups[0].sessions[0],
+            title: 'Release train: run Q69G5FB0',
+            orchestrator: {
+              checkout_id: 'one',
+              operation_id: 'op',
+              project: 'Release train',
+              owner: 'orchestrator',
+              paused: false,
+            },
+          },
+          { ...groups[0].sessions[0], id: 'term-2', title: 'Plain shell: one' },
+        ],
+      },
+    ];
+    const markup = String(
+      TerminalDashboard({ groups: orchestrated, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }),
+    );
+    // The orchestrator's caption cuts the middle and keeps `run Q69G5FB0` whole.
+    expect(markup).toContain('class="kui-text__truncate-tail"><strong>run Q69G5FB0</strong>');
+    expect(markup).toContain('title="Project One › Release train: run Q69G5FB0"');
+    // Another terminal keeps the ordinary end ellipsis.
+    expect(markup).toContain('Project One › Plain shell: one');
+    expect(markup.match(/kui-text__truncate-middle/g)).toHaveLength(1);
+    // No app rule reaches the strong inside Kerf Text.
+    expect(css).not.toMatch(/\.terminal-tile__identity(:hover)? strong/);
   });
   it('keeps fixed 80x24 sizing in dashboard previews and magnified terminals', () => {
     const session = groups[0].sessions[0],
@@ -288,7 +356,9 @@ describe('TerminalDashboard', () => {
     );
     expect(markup).toContain('data-action="open-terminal-context-menu"');
     expect(markup).toContain('data-context-menu="terminal"');
-    expect(markup.match(/class="kui-popup-menu__item"/g)).toHaveLength(2);
+    // Receive Feedback Notifications (HS2-H3S7YQ), Open, and Hide.
+    expect(markup.match(/class="kui-popup-menu__item"/g)).toHaveLength(3);
+    expect(markup).toContain('data-action="set-feedback-primary"');
     expect(markup).toContain('data-action="open-terminal-project"');
     expect(markup).toContain('data-action="hide-dashboard-terminal"');
     const openOnly = String(
@@ -424,7 +494,7 @@ describe('TerminalDashboard', () => {
     expect(css).toContainSource(".terminal-viewport[data-display-mode='interactive'] { -webkit-touch-callout: none; }");
     // The identity button's reset is merged into its one rule (HS2-GWDD1Z).
     expect(css).toContainSource(
-      '.terminal-tile__identity { display: flex; min-width: 0; padding: 0; border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-quiet); background: transparent; flex: 1; flex-direction: column; text-align: left; }',
+      '.terminal-tile__identity { display: flex; min-width: 0; padding: 0; border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-quiet); background: transparent; font-size: var(--wa-font-size-s); flex: 1; flex-direction: column; text-align: left; }',
     );
     expect(css.match(/^\.terminal-tile__identity \{/gm)).toHaveLength(1);
     expect(css.match(/^\.terminal-dashboard-controls__visibility-select \{/gm)).toHaveLength(1);
@@ -528,7 +598,11 @@ describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
       const primary = String(
         FixedAspectTerminalCard({ session: { ...session, aiConnection, feedback_primary: true } }),
       );
-      expect(primary).toContain(`data-lucide="${aiConnection === 'missing' ? 'unplug' : 'plug-zap'}"`);
+      expect(primary).toContain(`data-lucide="${aiConnection === 'missing' ? 'unplug' : 'plug'}"`);
+      // HS2-1WFGX1: a primary that can receive notifications adds a heart beside the plug.
+      if (aiConnection === 'missing') expect(primary).not.toContain('data-lucide="heart"');
+      else expect(primary).toContain('data-lucide="heart"');
+      expect(markup).not.toContain('data-lucide="heart"');
       expect(primary).toContain('data-ai-primary="true"');
       expect(primary).toContain('Primary session: feedback notifications for this project are sent here.');
       expect(markup).not.toContain('data-ai-primary');

@@ -36,7 +36,9 @@ Hot Sheet will build the browser implementation first for rapid UX iteration, th
 host it in Tauri and implement a closely corresponding native macOS SwiftUI client.
 The browser exposes the real production components at `/ux-demo`, backed by a
 deterministic mock service. Demo interactions should communicate intent even before
-their server integration exists.
+their server integration exists. Development servers always serve the catalog. A production
+host serves it only when started with `--feature ux-demo` (or `HOTSHEET_FEATURES=ux-demo`),
+and then loads it as a separate on-demand chunk ([06](06-clients.md) §6.3, HS2-ZF70Y9).
 
 ## 1. Shared component architecture
 
@@ -2051,8 +2053,10 @@ capability-aware sections when their underlying features and data contracts land
   `RadioGroup`, `Select`, `TextField`, `Grid`, and `StateBanner`; it previews the next three local
   occurrences through the server's recurrence engine before saving. The form supports one-time,
   daily, weekly, monthly, yearly, and selected-date rules, an explicit time zone, exceptions,
-  pause/resume, and the three ticket/AI-session actions. A skipped occurrence links to the
-  outstanding ticket for that command. Shell and program schedules remain HS2-8J7ZRF.
+  pause/resume, and the three ticket/AI-session actions. Its Action defaults to **Use Command
+  Default (…)**, which names the action it inherits; an AI command's own editor carries the same
+  Kerf `Select` as **Action**, whose first choice keeps the legacy click (HS2-17Y2EC). A skipped
+  occurrence links to the outstanding ticket for that command. Shell and program schedules remain HS2-8J7ZRF.
   The list still permits
   double-clicking a row edits it. The page actions are pills in the workspace action zone where ticket views put
   New ticket… (the project tab bar's far edge, or the narrow page header): a secondary outlined

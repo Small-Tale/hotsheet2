@@ -6,6 +6,7 @@ import type { MigrationJob } from '../migration-progress';
 import {
   Hs1CleanupBanner,
   Hs1JobBanner,
+  Hs1JobDetailsDialog,
   Hs1MigrationBanner,
   Hs1MigrationDialog,
   Hs1RegistrationRepairBanner,
@@ -130,17 +131,21 @@ it('transitions measured, unknown, failed and warned success with explicit owner
   expect(markup).not.toContain('retry-migration-job');
   markup = String(Hs1JobBanner({ job: { ...job, progress: { version: 1, phase: 'open_database' } } }));
   expect(markup).toContain('indeterminate');
-  markup = String(
-    Hs1JobBanner({ job: { ...job, status: 'failed', error: 'Disk full' }, details: true, connectionError: 'Offline' }),
-  );
+  markup = String(Hs1JobBanner({ job: { ...job, status: 'failed', error: 'Disk full' }, connectionError: 'Offline' }));
   expect(markup).toContain('Disk full');
   expect(markup).toContain('retry-migration-job');
   expect(markup).toContain('reconnect-migration-job');
   expect(markup).not.toContain('wa-progress-bar');
-  markup = String(
-    Hs1JobBanner({ job: { ...job, status: 'succeeded', warnings: ['Tool setup needs attention'] }, details: true }),
+  markup = String(Hs1JobBanner({ job: { ...job, status: 'succeeded', warnings: ['Tool setup needs attention'] } }));
+  // Details live in a modal dialog, never inline under the banner (HS2-EEBM4W).
+  expect(markup).not.toContain('Tool setup needs attention');
+  expect(markup).toContain('aria-haspopup="dialog"');
+  const dialog = String(
+    Hs1JobDetailsDialog({ job: { ...job, status: 'succeeded', warnings: ['Tool setup needs attention'] } }),
   );
-  expect(markup).toContain('Tool setup needs attention');
+  expect(dialog).toContain('Tool setup needs attention');
+  expect(dialog).toContain('Import destination');
+  expect(Hs1JobDetailsDialog({})).toBeNull();
   expect(markup).toContain('retry-migration-job');
   expect(markup).toContain('backup-migration-job');
   expect(markup).not.toContain('remove-hs1-data');

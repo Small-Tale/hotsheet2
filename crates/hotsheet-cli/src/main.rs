@@ -317,7 +317,7 @@ enum Cmd {
         #[arg(long)]
         provisional: bool,
     },
-    /// Restore a ticket in a git-backed provider's Trash.
+    /// Restore a Trash ticket in a git-backed provider, GitHub Issues, GitLab, or Jira (GH-5).
     ProviderRestore { connection: String, id: String },
     /// Atomically reopen a Not Working ticket with a note and/or evidence files.
     ProviderReportNotWorking {
@@ -412,6 +412,13 @@ enum Cmd {
         /// The duplicate target (slug or ULID); required when reason=duplicate.
         #[arg(long)]
         duplicate_of: Option<String>,
+        /// A commit holding this ticket's work; repeatable. An AI `completed` close
+        /// verifies these are on the remote (HS2-R8ZH4K).
+        #[arg(long = "commit", value_name = "SHA")]
+        commits: Vec<String>,
+        /// The ticket has no code commits; record the opt-out (HS2-R8ZH4K).
+        #[arg(long, conflicts_with = "commits")]
+        no_commit: bool,
     },
     /// Restore a ticket from Trash to the status it held before it was deleted.
     Restore { id: String },
@@ -1559,10 +1566,9 @@ fn parse_close_reason(s: &str) -> Result<CloseReason> {
 }
 
 fn discovered_ai_tools() -> Vec<hotsheet_plugins::AiToolDescriptor> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    // HS2-BNDRYP: probes run in a private workspace, never this directory.
     hotsheet_aitools::discover_ai_tool_descriptors(
         &hotsheet_plugins::default_dirs(),
-        &cwd,
         &mut hotsheet_aitools::ModelCatalogCache::default(),
         false,
     )

@@ -65,6 +65,27 @@ export async function hasCompletedHs1Import(store: string | undefined, root: str
   }
 }
 
+/** Paths in `git status --porcelain=v1 -z` output; a rename's original path is skipped (HS2-HSHT2G).
+ * The status runner trims its output, so the first entry may have lost a leading space. */
+export function porcelainPaths(status: string): string[] {
+  const entries = status.split('\0').filter(Boolean),
+    paths: string[] = [];
+  for (let index = 0; index < entries.length; index += 1) {
+    const match = /^([ MTADRCU?!]{1,2}) (.+)$/s.exec(entries[index]);
+    if (!match) continue;
+    paths.push(match[2]);
+    if (/[RC]/.test(match[1])) index += 1;
+  }
+  return paths;
+}
+
+/** Name what blocks backup instead of describing it generically (HS2-HSHT2G). */
+export function uncommittedMessage(paths: string[], shown = 5): string {
+  const listed = paths.slice(0, shown).join(', '),
+    more = paths.length > shown ? ` and ${paths.length - shown} more` : '';
+  return `Commit these ticket-store changes before backup or Hot Sheet 1 cleanup: ${listed}${more}.`;
+}
+
 /** Validate the migrator's exact committed revision before any backup attempt. */
 export async function readImportCompletion(
   store: string,
@@ -72,8 +93,8 @@ export async function readImportCompletion(
 ): Promise<ImportCompletion | undefined> {
   const proof = await loadImportCompletion(store, git);
   if (!proof) return undefined;
-  if (await git(store, ['status', '--porcelain=v1', '--untracked-files=all']))
-    throw new Error('Commit all imported ticket-store changes before backup or Hot Sheet 1 cleanup.');
+  const uncommitted = porcelainPaths(await git(store, ['status', '--porcelain=v1', '-z', '--untracked-files=all']));
+  if (uncommitted.length) throw new Error(uncommittedMessage(uncommitted));
   const pending = await readdir(resolve(store, 'hotsheet-hs1-import-pending')).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;

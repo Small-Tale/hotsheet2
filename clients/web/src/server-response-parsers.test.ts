@@ -16,6 +16,7 @@ import {
   parseCustomView,
   parseDevelopmentStrategyReport,
   parseFeedbackDelivery,
+  parseFollowedRelocation,
   parseFullTicket,
   parseGitHubAuthStatus,
   parseGroupCreate,
@@ -380,9 +381,20 @@ describe('server response parsers (HS2-34P6XY)', () => {
     expect(parseCheckout(full)).toBe(full);
     expect(parseCheckouts([checkout])).toEqual([checkout]);
     expect(parseOpenedCheckout({ checkout: { ...checkout, sources: [] } }).checkout.id).toBe('c');
+    // HS2-86ES0B: the relocated checkout's current root, or nothing to follow.
+    expect(parseFollowedRelocation({ checkout: { ...checkout, root: '/moved' } })).toEqual({ root: '/moved' });
+    expect(parseFollowedRelocation({ checkout: null })).toBeUndefined();
     expect(parseCorruptTicketPaths([{ path: '/x.md', error: 'bad' }])).toEqual([{ path: '/x.md', error: 'bad' }]);
     expect(parseAccountIdentity({ identity: 'me' })).toEqual({ identity: 'me' });
     expect(parseTrashPurge({ purged: 1, tickets: ['a'] })).toEqual({ purged: 1, tickets: ['a'] });
+    // GH-5: provider tickets kept in Trash and unreachable providers are listed, not counted.
+    const kept = {
+      purged: 0,
+      tickets: [],
+      retained: [{ qualified_id: 'github-main:5', slug: 'acme/repo#5', message: 'kept' }],
+      unavailable: [{ connection_id: 'github-main', message: 'offline' }],
+    };
+    expect(parseTrashPurge(kept)).toEqual(kept);
     expect(parseGroupRename({ name: 'Board', updated: 2 })).toEqual({ name: 'Board', updated: 2 });
     expect(parseGroupUngroup({ updated: 2 })).toEqual({ updated: 2 });
     // A server before the registry (HS2-9KZSD4) lists names only: each reads as a legacy group.
@@ -455,9 +467,13 @@ describe('server response parsers (HS2-34P6XY)', () => {
     ['checkout', () => parseCheckout({ ...checkout, unverified_store_sources: { g: 1 } })],
     ['checkout list', () => parseCheckouts({ checkouts: [] })],
     ['project open', () => parseOpenedCheckout({ checkout: { ...checkout } })],
+    ['project relocation', () => parseFollowedRelocation({})],
+    ['project relocation', () => parseFollowedRelocation({ checkout: { id: 'c' } })],
     ['corrupt ticket', () => parseCorruptTicketPaths([{}])],
     ['account identity', () => parseAccountIdentity([])],
     ['trash purge', () => parseTrashPurge({ purged: '1', tickets: [] })],
+    ['trash purge', () => parseTrashPurge({ purged: 0, tickets: [], retained: [{ slug: 'x' }] })],
+    ['trash purge', () => parseTrashPurge({ purged: 0, tickets: [], unavailable: {} })],
     ['group rename', () => parseGroupRename({ name: 'Board', updated: '2' })],
     ['group ungroup', () => parseGroupUngroup({})],
     ['group list', () => parseGroupList({ groups: [{ name: 'Board' }] })],
@@ -589,6 +605,17 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseTerminalInfo.list, [{ id: 't', alive: true, busy: false }]],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, mcp_connected: true }],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, feedback_primary: true }],
+    [
+      parseTerminalInfo,
+      {
+        id: 't',
+        alive: true,
+        busy: false,
+        feedback_primary: true,
+        feedback_primary_chosen: true,
+        feedback_eligible: true,
+      },
+    ],
     [parseTerminalRead, { id: 't', alive: true, busy: false, scrollback: '' }],
     [parseCommandRun, { id: 'r', command_id: 'c', state: 'running', output: [] }],
     // A recorded shell or AI launch carries its start time and destination (HS2-PWNPM2).
@@ -646,6 +673,8 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseCommandRun, { id: 'r', command_id: 'c', state: 'completed', output: [], started_at: 7 }],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, mcp_connected: 'yes' }],
     [parseTerminalInfo, { id: 't', alive: true, busy: false, feedback_primary: 'yes' }],
+    [parseTerminalInfo, { id: 't', alive: true, busy: false, feedback_primary_chosen: 'yes' }],
+    [parseTerminalInfo, { id: 't', alive: true, busy: false, feedback_eligible: 1 }],
     [parsePermissionDecision, { connection: 'c', decision: 'maybe' }],
     [
       parsePermissionRequest,

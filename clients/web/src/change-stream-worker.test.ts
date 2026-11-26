@@ -14,6 +14,7 @@ import {
 } from './change-stream-worker-protocol';
 import { createChangeStreamWorkerRuntime } from './change-stream-worker-runtime';
 import type { ProjectChangeSink, ProjectChangeTransportOptions } from './project-change-poll';
+import { createProjectChangeWake } from './project-change-poll';
 
 const event = (cursor: number | undefined, kind = 'changed', slug = 'HS2-ONE'): ChangeEvent => ({
   store: 'local',
@@ -818,5 +819,39 @@ describe('change-stream worker host (HS2-SH9179)', () => {
     });
     expect(terminate).toHaveBeenCalled();
     silentHost.dispose();
+  });
+});
+
+describe('waking a worker-hosted change stream (HS2-ZTAJ1R)', () => {
+  it('parses wake messages, forwards a wake for the current generation, and drops stale ones', () => {
+    expect(parseChangeStreamMainMessage({ type: 'wake', project: 'a', generation: 2 })).toEqual({
+      type: 'wake',
+      project: 'a',
+      generation: 2,
+    });
+    expect(parseChangeStreamMainMessage({ type: 'wake', project: 'a' })).toBeUndefined();
+    const transports = fakeTransports();
+    const memory = inMemoryWorker(transports.runTransport);
+    const host = createChangeStreamWorkerHost({ createWorker: () => memory.worker, clientId: 'tab-1' });
+    const wake = createProjectChangeWake();
+    const stop = host.start('a', { ...consumerOptions().options, wake }, { apiUrl: 'http://host/p/a' });
+    // The host posts the wake for the project's current generation; the worker's transport receives it.
+    const woken = vi.fn();
+    const transportWake = transports.runs[0].options.wake;
+    expect(transportWake).toBeDefined();
+    transportWake?.subscribe(woken);
+    wake.wake();
+    expect(memory.received.filter((message) => message.type === 'wake')).toEqual([
+      { type: 'wake', project: 'a', generation: host.generation('a') },
+    ]);
+    expect(woken).toHaveBeenCalledTimes(1);
+    // A wake for an older generation reaches nothing.
+    memory.worker.postMessage({ type: 'wake', project: 'a', generation: 0 });
+    expect(woken).toHaveBeenCalledTimes(1);
+    // After stop the wake is no longer forwarded: still the host's one wake plus the stale one above.
+    stop();
+    wake.wake();
+    expect(memory.received.filter((message) => message.type === 'wake')).toHaveLength(2);
+    host.dispose();
   });
 });

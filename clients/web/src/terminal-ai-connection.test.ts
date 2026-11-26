@@ -5,7 +5,9 @@ import {
   aiConnectionIcon,
   aiConnectionLabel,
   aiConnectionState,
+  aiPrimaryIcon,
   deriveAiConnectionStates,
+  toolWaiting,
 } from './terminal-ai-connection';
 
 const connection = { agent: 'codex', at: '2026-10-05T08:00:00Z' };
@@ -117,11 +119,14 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
       return `${name}:${tone}`;
     };
     expect(icon('connected')).toBe('plug:neutral-on-quiet');
-    expect(icon('connected', true)).toBe('plug-zap:neutral-on-quiet');
     expect(icon('mcp_missing')).toBe('plug:warning-on-quiet');
-    expect(icon('mcp_missing', true)).toBe('plug-zap:warning-on-quiet');
     expect(icon('missing')).toBe('unplug:warning-on-quiet');
-    expect(icon('missing', true)).toBe('unplug:warning-on-quiet');
+    // HS2-1WFGX1: the primary role is a second icon (a heart) beside the plug, never a different plug.
+    expect(aiPrimaryIcon('connected', true)).toMatchObject({ name: 'heart', tone: 'brand-on-quiet' });
+    expect(aiPrimaryIcon('mcp_missing', true)?.name).toBe('heart');
+    expect(aiPrimaryIcon('missing', true)).toBeUndefined();
+    expect(aiPrimaryIcon('connected', false)).toBeUndefined();
+    expect(aiPrimaryIcon('connected')).toBeUndefined();
     expect(aiConnectionLabel('connected', 'claude', undefined, undefined, true, true)).toMatch(
       /^Claude is connected to Hot Sheet: .* Primary session: feedback notifications for this project are sent here\.$/,
     );
@@ -196,5 +201,14 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
     deriveAiConnectionStates([], firstSeen, 22_000);
     expect(firstSeen.size).toBe(0);
     expect(states(false, false, false, 23_000)).toEqual([undefined, undefined]);
+  });
+});
+
+describe('toolWaiting (HS2-G2X7RT)', () => {
+  it('is true only for a live session whose tool has not reported its start', () => {
+    expect(toolWaiting({ alive: true, tool_ready: false })).toBe(true);
+    expect(toolWaiting({ alive: true, tool_ready: true })).toBe(false);
+    expect(toolWaiting({ alive: true })).toBe(false);
+    expect(toolWaiting({ alive: false, tool_ready: false })).toBe(false);
   });
 });

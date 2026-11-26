@@ -79,6 +79,39 @@ export function demoLiveState(scenario: DemoLiveScenario): LiveStoreState {
   };
 }
 
+/** The `main` CI run a demo shows (HS2-505PHC): none reported, running, running before a start, queued, failed. */
+export type DemoCiScenario = 'none' | 'running' | 'running-no-start' | 'queued' | 'failed' | 'passed';
+
+/** A synthetic reported `main` run for a scenario at {@link DEMO_LIVE_NOW_MS}; `undefined` for none. */
+export function demoLiveCi(scenario: DemoCiScenario): LiveStoreState['ci'] {
+  if (scenario === 'none') return undefined;
+  const status = (
+    {
+      running: 'in_progress',
+      'running-no-start': 'in_progress',
+      queued: 'queued',
+      failed: 'failure',
+      passed: 'success',
+    } as const
+  )[scenario];
+  const finished = status === 'failure' || status === 'success';
+  return {
+    status,
+    checkout: 'hotsheet',
+    branch: 'main',
+    sha: '9f8e7d6c5b4a',
+    run_url: null,
+    workflow: 'CI',
+    // Running 1:05, or queued 30 seconds ago; a finished run started 18 minutes ago and took six.
+    started_at_ms:
+      scenario === 'running-no-start'
+        ? null
+        : DEMO_LIVE_NOW_MS - (finished ? 18 * MINUTE : status === 'queued' ? 30_000 : 65_000),
+    finished_at_ms: finished ? DEMO_LIVE_NOW_MS - 12 * MINUTE : null,
+    reported_at_ms: DEMO_LIVE_NOW_MS - (finished ? 12 * MINUTE : 5_000),
+  };
+}
+
 const NORMAL = { status: 'normal' as const, reason: null, since: null };
 
 /** The server host's synthetic health for a scenario. */

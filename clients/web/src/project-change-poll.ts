@@ -33,6 +33,66 @@ export interface ProjectChangePollOptions {
   retryMs?: number;
   maxRetryMs?: number;
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  /** An explicit retry request (a tab click, the network coming back) that cuts a backoff short (HS2-ZTAJ1R). */
+  wake?: ProjectChangeWake;
+}
+
+/**
+ * A wake for one change stream (HS2-ZTAJ1R). A wake during a backoff sleep or a replay window ends
+ * it and resets the delay to its first step, so a stream that is down retries at once. A live stream
+ * ignores it: a wake never adds a timer or a request of its own.
+ */
+export interface ProjectChangeWake {
+  subscribe(listener: () => void): () => void;
+}
+
+/** A wake source its owner triggers; each stream subscribes to it. */
+export function createProjectChangeWake(): ProjectChangeWake & { wake(): void } {
+  const listeners = new Set<() => void>();
+  return {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    wake() {
+      for (const listener of [...listeners]) listener();
+    },
+  };
+}
+
+/**
+ * One interruptible nap per backoff: `signal` aborts with the stream or with a wake, and `woke()`
+ * tells the two apart, so a woken replay poll ends its window instead of counting as an outage.
+ */
+function napper(signal: AbortSignal, wake: ProjectChangeWake | undefined, reset: () => void) {
+  let current: AbortController | undefined,
+    woken = false;
+  const stop = wake?.subscribe(() => {
+    reset();
+    woken = true;
+    current?.abort();
+  });
+  signal.addEventListener(
+    'abort',
+    () => {
+      stop?.();
+      current?.abort();
+    },
+    { once: true },
+  );
+  return {
+    /** A signal for one backoff sleep or replay window. */
+    start(): AbortSignal {
+      current = new AbortController();
+      woken = false;
+      if (signal.aborted) current.abort();
+      return current.signal;
+    },
+    /** Whether the last nap ended by a wake rather than its timeout or the stream stopping. */
+    woke: () => woken && !signal.aborted,
+  };
 }
 
 /** Why a change stream asked its owner to reconcile event-driven state. */
@@ -142,6 +202,8 @@ export interface ProjectChangeTransportOptions {
    * undefined cursor performs a fresh handshake that reconciles as a reconnect.
    */
   resume?: { cursor?: number };
+  /** Cuts a backoff short and resets it (HS2-ZTAJ1R). */
+  wake?: ProjectChangeWake;
 }
 
 /**
@@ -184,6 +246,9 @@ export function runProjectChangePollTransport(options: ProjectChangeTransportOpt
     let cursor: number | undefined = options.resume?.cursor;
     let reconnecting = options.resume !== undefined && options.resume.cursor === undefined;
     let retryDelay = retryMs;
+    const nap = napper(signal, options.wake, () => {
+      retryDelay = retryMs;
+    });
     for (;;) {
       let response: PollResponse;
       try {
@@ -197,8 +262,8 @@ export function runProjectChangePollTransport(options: ProjectChangeTransportOpt
         // the workspace on every retry.
         reconnecting = true;
         cursor = undefined;
-        await wait(retryDelay, signal);
-        retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
+        await wait(retryDelay, nap.start());
+        if (!nap.woke()) retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
         if (wasAborted(signal)) return;
         continue;
       }
@@ -269,12 +334,15 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
     let cursor: number | undefined = options.resume?.cursor,
       reconnecting = options.resume !== undefined,
       retryDelay = retryMs;
+    const nap = napper(controller.signal, options.wake, () => {
+      retryDelay = retryMs;
+    });
     const consume = async (response: PollResponse, forceRefresh = false) => {
       if (wasAborted(controller.signal)) return;
       await sink.deliver(response, forceRefresh);
     };
-    const poll = async (since: number | undefined, timeoutMs?: number) =>
-      options.client.pollEvents(since, controller.signal, timeoutMs);
+    const poll = async (since: number | undefined, timeoutMs?: number, signal = controller.signal) =>
+      options.client.pollEvents(since, signal, timeoutMs);
 
     for (;;) {
       if (wasAborted(controller.signal)) return;
@@ -292,8 +360,8 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
           if (wasAborted(controller.signal)) return;
           options.onError?.(reason);
           reconnecting = true;
-          await wait(retryDelay, controller.signal);
-          retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
+          await wait(retryDelay, nap.start());
+          if (!nap.woke()) retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
         }
         continue;
       }
@@ -396,7 +464,8 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
       // A socket that served live for a while was healthy: replay and reconnect promptly.
       if (liveSince !== undefined && now() - liveSince >= stableMs) retryDelay = retryMs;
       // HS2-Y0H2EE: use the same clock as socket stability so replay timing is testable.
-      const fallbackStarted = now();
+      const fallbackStarted = now(),
+        window = nap.start();
       try {
         // Long-poll through the whole retry window (HS2-BX4MCH). A page that returns early
         // with events is followed by another long poll for the rest of the window, so an
@@ -405,7 +474,7 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
         // either the server held the poll for the whole window, or it ignored the timeout. In
         // that case the bounded wait below still rate-limits the retries.
         for (;;) {
-          const replay = await poll(cursor, Math.max(0, retryDelay - (now() - fallbackStarted)));
+          const replay = await poll(cursor, Math.max(0, retryDelay - (now() - fallbackStarted)), window);
           // The replay cursor is authoritative. An empty gap after a failed upgrade does not
           // invalidate ticket state; forcing a refresh here made every unsupported WebSocket
           // retry wake the entire workspace. Ticket events and overflow still reconcile through
@@ -413,16 +482,19 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
           cursor = replay.cursor;
           await consume(replay);
           if (wasAborted(controller.signal)) return;
-          if (replay.events.length === 0 || now() - fallbackStarted >= retryDelay) break;
+          if (replay.events.length === 0 || now() - fallbackStarted >= retryDelay || window.aborted) break;
         }
       } catch (reason) {
-        options.onError?.(reason);
-        cursor = undefined;
+        // A wake that ends the replay window is not an outage: keep the cursor and reconnect now.
+        if (!nap.woke()) {
+          options.onError?.(reason);
+          cursor = undefined;
+        }
       }
       if (wasAborted(controller.signal)) return;
-      const remaining = Math.max(0, retryDelay - (now() - fallbackStarted));
-      if (remaining) await wait(remaining, controller.signal);
-      retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
+      const remaining = nap.woke() ? 0 : Math.max(0, retryDelay - (now() - fallbackStarted));
+      if (remaining) await wait(remaining, window);
+      if (!nap.woke()) retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
     }
   })();
 }

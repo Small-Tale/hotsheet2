@@ -191,14 +191,64 @@ impl ToolScope {
         }
     }
 
-    /// HS2-1X1TXC: the model a session the orchestrator starts names: the first exact
-    /// model listed. A list of patterns only names none, so the tool runs its own
-    /// default model.
+    /// HS2-1X1TXC: the first exact model listed. A list of patterns only names none;
+    /// a start resolves such a list against the host's models with
+    /// [`Self::resolve_start_model`].
     pub fn start_model(&self) -> Option<String> {
         self.models
             .iter()
             .find(|model| !model.contains('*'))
             .cloned()
+    }
+
+    /// HS2-0VTQFF: the model a session the orchestrator starts names. No models names
+    /// none (the tool's own default, any model being allowed); a list with an exact
+    /// model names the first exact one, as before. A list of patterns only names the
+    /// newest model the host reports that a pattern matches: `reported` lists the
+    /// tool's catalog default first, then the catalog in its own order, newest first
+    /// (see `ToolAvailability::models`), so the first match wins. A host that did not
+    /// report the tool's models, or reported none that match, starts nothing rather
+    /// than the tool's default, which may not match.
+    pub fn resolve_start_model(
+        &self,
+        reported: Option<&[String]>,
+    ) -> Result<Option<String>, ModelUnresolved> {
+        if self.models.is_empty() {
+            return Ok(None);
+        }
+        if let Some(exact) = self.start_model() {
+            return Ok(Some(exact));
+        }
+        let reported = reported.ok_or(ModelUnresolved::CatalogUnknown)?;
+        reported
+            .iter()
+            .find(|model| {
+                self.models
+                    .iter()
+                    .any(|pattern| super::wildcard_match(pattern, model))
+            })
+            .cloned()
+            .map(Some)
+            .ok_or(ModelUnresolved::NoMatch)
+    }
+}
+
+/// HS2-0VTQFF: why a pattern-only model list names no model to start with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelUnresolved {
+    /// The host did not report the tool's models: an older peer, a tool it did not
+    /// detect, or a catalog it could not read.
+    CatalogUnknown,
+    /// The host reported the tool's models and no pattern matches any of them.
+    NoMatch,
+}
+
+impl ModelUnresolved {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::CatalogUnknown => "model_unresolved",
+            Self::NoMatch => "no_matching_model",
+        }
     }
 }
 
@@ -563,6 +613,11 @@ pub struct SessionLoad {
     pub account: Option<String>,
     #[serde(default)]
     pub account_sessions: u32,
+    /// HS2-4JQ41V: the start is a project's integrator, which may run one over the
+    /// target's cap so workers filling it never starve integration. The machine's,
+    /// tool's and account's caps still apply.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub integrator: bool,
 }
 
 pub struct PolicyQuestion<'a> {
@@ -1093,7 +1148,10 @@ impl PolicyBody {
         if tool.is_off() {
             return Err(D::ToolNotPermitted);
         }
-        if load.target_sessions >= self.target_cap(target) {
+        let cap = self.target_cap(target);
+        // HS2-4JQ41V: an integrator's one slot over the cap; a cap of 0 starts nothing.
+        let reserve = u32::from(load.integrator && cap > 0);
+        if load.target_sessions >= cap + reserve {
             return Err(D::TargetCap);
         }
         if load.machine_sessions >= self.machine_limits(&target.target_id).max_sessions {
@@ -1147,6 +1205,40 @@ fn check_machine(
             "resource floors are megabytes",
             subject,
         );
+    }
+}
+
+impl PolicyBody {
+    /// HS2-NAA3HV: the policy after `new_home` became the home of `old_home`'s project.
+    /// The maintainer's default decision: per-target entries move with the home, so the
+    /// entries keyed by the old home (`targets`, `placement.resources`,
+    /// `placement.role_sessions`) are keyed by the new home and the new home's own
+    /// entries by the old home. `None` when the policy names neither.
+    #[must_use]
+    pub fn with_home_moved(&self, old_home: &str, new_home: &str) -> Option<Self> {
+        let swap = |id: &mut String| {
+            if id == old_home {
+                *id = new_home.to_owned();
+                true
+            } else if id == new_home {
+                *id = old_home.to_owned();
+                true
+            } else {
+                false
+            }
+        };
+        let mut moved = self.clone();
+        let mut changed = false;
+        for target in &mut moved.targets {
+            changed |= swap(&mut target.target_id);
+        }
+        for entry in &mut moved.placement.resources {
+            changed |= swap(&mut entry.target_id);
+        }
+        for entry in &mut moved.placement.role_sessions {
+            changed |= swap(&mut entry.target_id);
+        }
+        changed.then_some(moved)
     }
 }
 

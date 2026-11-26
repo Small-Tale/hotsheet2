@@ -689,6 +689,7 @@ fn hs2_ycjdeb_each_concurrency_cap_denies_exactly_at_its_bound() {
         tool_sessions: tool,
         account: Some("team".into()),
         account_sessions: account,
+        integrator: false,
     };
     // Caps: target 2, machine 3, tool 2, account "team" 1.
     assert_eq!(run(team(1, 2, 1, 0)), V::Allowed);
@@ -882,6 +883,7 @@ fn hs2_n3hwp9_admission_treats_auto_as_machine_bounded_and_zero_as_off() {
         tool_sessions: tool,
         account: None,
         account_sessions: 0,
+        integrator: false,
     };
     let mut body = policy();
     body.tools.clear();
@@ -995,4 +997,78 @@ fn hs2_1x1txc_model_patterns_allow_matching_models_and_pick_the_start_model() {
         ask(Some("sonnet-4")),
         PolicyVerdict::Denied(PolicyDenial::ModelNotPermitted)
     );
+}
+
+/// HS2-0VTQFF: a start resolves a pattern-only list to the first model the host
+/// reports that a pattern matches (the catalog default first, then the catalog's own
+/// newest-first order). Exact and mixed lists keep their first exact model; an
+/// unreported catalog or one with no match resolves to nothing, with a stable code.
+#[test]
+fn hs2_0vtqff_a_pattern_only_list_resolves_to_the_newest_reported_model() {
+    let scope = |models: &[&str]| scope("claude", models);
+    let reported = |models: &[&str]| models.iter().map(|m| (*m).to_owned()).collect::<Vec<_>>();
+    let catalog = reported(&[
+        "model-sonnet-5",
+        "model-opus-5",
+        "model-opus-4",
+        "model-haiku-4",
+    ]);
+
+    // Patterns only, with matches: the first reported match, not the tool default.
+    let family = scope(&["model-opus-*"]);
+    assert_eq!(
+        family.resolve_start_model(Some(&catalog)),
+        Ok(Some("model-opus-5".into()))
+    );
+    // Two patterns: the catalog's order decides, not the order of the patterns.
+    let two = scope(&["model-haiku-*", "model-opus-*"]);
+    assert_eq!(
+        two.resolve_start_model(Some(&catalog)),
+        Ok(Some("model-opus-5".into()))
+    );
+    // The catalog default is listed first, so it wins whenever it matches.
+    let sonnet_default = reported(&["model-opus-4", "model-opus-5"]);
+    assert_eq!(
+        family.resolve_start_model(Some(&sonnet_default)),
+        Ok(Some("model-opus-4".into()))
+    );
+    // Reported, no match: refused with its code.
+    assert_eq!(
+        scope(&["gpt-*"]).resolve_start_model(Some(&catalog)),
+        Err(ModelUnresolved::NoMatch)
+    );
+    assert_eq!(ModelUnresolved::NoMatch.code(), "no_matching_model");
+    // Reported empty is reported: still no match.
+    assert_eq!(
+        family.resolve_start_model(Some(&[])),
+        Err(ModelUnresolved::NoMatch)
+    );
+    // Unknown catalog: nothing starts on a guess.
+    assert_eq!(
+        family.resolve_start_model(None),
+        Err(ModelUnresolved::CatalogUnknown)
+    );
+    assert_eq!(ModelUnresolved::CatalogUnknown.code(), "model_unresolved");
+
+    // Exact lists are unchanged, with or without a catalog, even one without them.
+    let exact = scope(&["model-a"]);
+    for reported in [None, Some(&catalog[..]), Some(&[][..])] {
+        assert_eq!(
+            exact.resolve_start_model(reported),
+            Ok(Some("model-a".into()))
+        );
+    }
+    // Mixed lists keep their first exact model.
+    let mixed = scope(&["model-opus-*", "model-b"]);
+    assert_eq!(
+        mixed.resolve_start_model(Some(&catalog)),
+        Ok(Some("model-b".into()))
+    );
+    assert_eq!(mixed.resolve_start_model(None), Ok(Some("model-b".into())));
+    // No models: any model, so the tool's own default, catalog or not.
+    assert_eq!(scope(&[]).resolve_start_model(None), Ok(None));
+    assert_eq!(scope(&[]).resolve_start_model(Some(&catalog)), Ok(None));
+    // A resolved model always passes the policy's own check.
+    let resolved = family.resolve_start_model(Some(&catalog)).unwrap();
+    assert!(family.allows(resolved.as_deref()));
 }

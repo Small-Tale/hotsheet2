@@ -266,7 +266,9 @@ static WATCHERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<
     std::sync::OnceLock::new();
 
 /// Start a follower for every target of this owner that has an unfinished run, or an
-/// unfinished session (HS2-257Q2Z), and no follower yet. A follower holds one bounded
+/// unfinished session (HS2-257Q2Z), a planned ticket (HS2-TMA4YA), or, while the
+/// default goal is re-planned automatically, every project target (HS2-BQN0M5), and
+/// no follower yet. A follower holds one bounded
 /// request open on its target, syncs the runs whose tickets changed, wakes the owner's
 /// scheduler for a session change no run event reports, backs off after a failure, and
 /// ends when the target has neither. With none, nothing is started and no target is
@@ -292,6 +294,9 @@ fn ensure_watchers(state: &AppState, owner: &str) {
     // HS2-TMA4YA: a target whose tickets an unfinished plan step names, with or without
     // a run on them.
     targets.extend(shared.planned_targets(owner));
+    // HS2-BQN0M5: every project target while a new ticket there re-plans the default
+    // goal automatically.
+    targets.extend(shared.replan_targets(owner));
     for target in targets {
         let key = format!("{}|{target}", loop_key(state, owner));
         let registry = WATCHERS.get_or_init(Default::default);
@@ -636,6 +641,17 @@ fn changed_owner(method: &Method, path: &str) -> Option<String> {
             ],
         )
         | ("PATCH" | "DELETE", ["checkouts", owner, "orchestration", "targets", _])
+        | (
+            "POST",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "targets",
+                _,
+                "make-home",
+            ],
+        )
         | ("PUT" | "DELETE", ["checkouts", owner, "orchestration", "targets", _, "binding"])
         | ("POST", ["checkouts", owner, "orchestration", "session-sync"])
         | (
@@ -678,6 +694,19 @@ pub(crate) fn orchestration_error(error: OrchestrationError) -> ApiError {
         error.to_string(),
     )
     .with_code(error.code());
+    // HS2-061YTB: a refused dispatch names the step requirement its target misses.
+    let api = match error.refusal_detail() {
+        Some((field, value)) => api.with_field(field, value),
+        None => api,
+    };
+    // HS2-8Z9VHH: a refused admission names its reason, limit and observed value.
+    let api = match error
+        .admission_refusal()
+        .and_then(|refusal| serde_json::to_value(refusal).ok())
+    {
+        Some(admission) => api.with_detail("admission", admission),
+        None => api,
+    };
     match error.answer_reference() {
         Some((field, id)) => api.with_field(field, id),
         None => api,
@@ -960,4 +989,41 @@ pub(crate) async fn write(
     // HS2-CRBR8X: the hosting machine's session journal names who asked.
     let requester = requester.map(|axum::Extension(requester)| requester.0);
     execute(state, method, uri.path().into(), body, requester).await
+}
+
+#[cfg(test)]
+mod hs2_8z9vhh_tests {
+    use axum::response::IntoResponse;
+    use hotsheet_ticketing::orchestration::{AdmissionRefusal, OrchestrationError};
+
+    /// HS2-8Z9VHH: a refused admission's body keeps its code and adds the reason, the
+    /// limit and the observed value, so a client says what to change.
+    #[tokio::test]
+    async fn hs2_8z9vhh_a_refused_admission_body_names_its_limit() {
+        let error =
+            OrchestrationError::AdmissionRefused(Box::new(AdmissionRefusal::session_cap(2, 3)));
+        let response = super::orchestration_error(error).into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::CONFLICT);
+        let body = axum::body::to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["code"], "session_admission_refused");
+        assert_eq!(
+            body["admission"],
+            serde_json::json!({
+                "reason": "session_cap_reached",
+                "setting": "max_sessions",
+                "limit": 2,
+                "observed": 3
+            })
+        );
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap()
+                .contains("already runs 3 AI sessions"),
+            "{body}"
+        );
+    }
 }

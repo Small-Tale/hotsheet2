@@ -178,6 +178,11 @@ fn host_routes(missing: &str) -> Vec<(&'static str, String, Value)> {
             "/projects/open".into(),
             json!({ "root": missing, "stores": [] }),
         ),
+        (
+            "POST",
+            "/projects/follow-relocation".into(),
+            json!({ "root": missing }),
+        ),
         ("POST", "/checkouts".into(), json!({ "root": missing })),
         ("POST", "/stores".into(), json!({ "path": missing })),
         (

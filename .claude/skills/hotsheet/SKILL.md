@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 75 -->
+<!-- hotsheet-skill-version: 77 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -43,7 +43,13 @@ policy changes at a safe ticket/integration boundary, never during active work.
    A delegated worker's commits in a git worktree or side branch are not integrated until the
    primary agent merges or cherry-picks them onto the branch this project ships from and
    confirms they are reachable there (`git branch --contains <sha>`); never complete a ticket
-   whose work exists only in a worktree, a side branch, or a sub-agent's report.
+   whose work exists only in a worktree, a local side branch, or a sub-agent's report.
+   Completed work is always on the remote (HS2-8HCBA1): work not yet on the shipping branch
+   completes only from a pushed `merge-pending/<SLUG>` branch (a batch uses its integration
+   ticket's slug), reviewed for secrets, customer data and machine-local paths before the
+   push, integrated later by merge or cherry-pick (never rebase or force-push it), and
+   pruned by its integration ticket with `hotsheet-cli coordination --project <checkout>
+   merge-pending-prune --apply` (HS2-ZTG8FD).
 3. **Work each ticket end to end under an exact claim lease.** Choose one stable,
    session-specific worker id: the value of `HOTSHEET_WORKER_ID` when your environment sets
    it (Hot Sheet then releases that id's claims when your session ends), otherwise your
@@ -118,7 +124,8 @@ policy changes at a safe ticket/integration boundary, never during active work.
 docs; scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-
 unimplemented behavior, open questions, and known gaps; immediately create tickets for
 every incomplete item; confirm work done in a git worktree, side branch, or delegated
-agent is integrated into the branch this project ships from (name the commits); include
+agent is integrated into the branch this project ships from, or pushed to its
+`merge-pending/<SLUG>` branch (name the commits and branch); include
 result, verification, and all follow-up slugs in the completing note.
 
 **Preliminary thoughts:** for a ticket that is not trivially simple, add a short `regular`
@@ -151,6 +158,11 @@ generated MCP configs declare it for the `hotsheet-mcp` shim; otherwise pass
 `--actor-role ai --actor-id <worker>` on CLI writes (MCP `actor_role: "ai"`, `actor_id`).
 An AI completion without a confidence score is rejected with `confidence_required` and
 changes nothing; retry the same call with the score.
+An AI completion whose commits are not on the remote is rejected with
+`commit_not_on_remote` (or `commits_not_found` / `commit_remote_unverified`) and changes
+nothing: push the slug-first commits to the shipping branch or `merge-pending/<SLUG>`,
+name them with `--commit <sha>` (MCP `commits`), or pass `--no-commit` (MCP
+`no_commit: true`) for a ticket with no code (HS2-R8ZH4K).
 
 Format AI-authored notes for human scanning. Lead with the outcome or decision, not a
 chronological transcript. For a substantial note, use short Markdown sections such as

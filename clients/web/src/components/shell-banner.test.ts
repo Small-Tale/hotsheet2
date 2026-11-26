@@ -22,7 +22,7 @@ describe('ShellBanner (HS2-BF8C76)', () => {
     expect(markup).toContain('All set.');
     expect(markup).not.toContain('role="alert"');
     expect(markup).toMatch(
-      /data-component="list"[^>]*data-control-insets="trl"|data-control-insets="trl"[^>]*data-component="list"/,
+      /data-component="list"[^>]*data-control-insets="t"|data-control-insets="t"[^>]*data-component="list"/,
     );
   });
 

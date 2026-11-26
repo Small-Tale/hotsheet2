@@ -16,6 +16,7 @@ import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { AdvisoryClaimNotice } from '../components/advisory-claim-notice';
 import { NotificationCenter } from '../components/notification-center';
 import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
+import { type TicketPriority, ticketPriorityValue } from '../components/priority-presentation';
 import {
   QuickTicketComposer,
   QuickTicketLauncher,
@@ -135,6 +136,9 @@ export const composerTitle = signal('');
 export const composerDetails = signal('');
 export const composerCategory = signal('task');
 export const composerUpNext = signal(false);
+/** The demo composer's priority and Add to Backlog choices (HS2-V72HCC). */
+export const composerPriority = signal<TicketPriority>('default');
+export const composerBacklog = signal(false);
 /** Writable ticket sources the demo composer can target (HS2-NZMJBJ). */
 export const composerSources = [
   { value: 'git-local', label: 'Hot Sheet Git', attachments: true },
@@ -314,8 +318,16 @@ export function TerminalTicketRailDemo() {
         projects={[
           { id: 'demo', name: 'Demo project' },
           { id: 'docs', name: 'Documentation and release planning' },
+          { id: 'site', name: 'Marketing site' },
+          { id: 'remote:mini', name: 'Mac mini · Demo project' },
         ]}
         selectedProjectId="demo"
+        // Minimized projects leave the switcher's top level for its Minimized Projects submenu, drawn
+        // like Restore Project rows (HS2-2609BW, HS2-R64JXA).
+        minimizedProjects={[
+          { id: 'site', name: 'Marketing site', location: 'local', upNextCount: 3, activeTicketCount: 1 },
+          { id: 'remote:mini', name: 'Mac mini · Demo project', location: 'remote', notificationCount: 2 },
+        ]}
         views={[
           { id: 'all', label: 'Queue' },
           { id: 'backlog', label: 'Backlog' },
@@ -408,8 +420,8 @@ export function createDemoTicket(): boolean {
     {
       slug,
       title,
-      status: 'not_started',
-      priority: 'default',
+      status: composerBacklog.value && !composerUpNext.value ? 'backlog' : 'not_started',
+      priority: composerPriority.value,
       category: category.value,
       tags: ['new'],
       selected: true,
@@ -424,6 +436,8 @@ export function createDemoTicket(): boolean {
   composerTitle.value = '';
   composerDetails.value = '';
   composerUpNext.value = false;
+  composerPriority.value = 'default';
+  composerBacklog.value = false;
   composerAttachments.value = [];
   const source = demoComposerSource();
   composerSource.value = source.value;
@@ -553,6 +567,8 @@ export function QuickTicketComposerDemo() {
           details={composerDetails.value}
           category={composerCategory.value}
           upNext={composerUpNext.value}
+          priority={composerPriority.value}
+          backlog={composerBacklog.value}
           providerName={demoComposerSource().label}
           defaultSourceName={composerSources[0].label}
           sourceIsDefault={demoComposerSource().value === composerSources[0].value}
@@ -579,11 +595,22 @@ export function QuickTicketComposerDemo() {
 }
 
 /** Live-claim header states the TicketInspector demo exposes (HS2-QKNQXC). */
-export type InspectorLiveClaimDemo = 'none' | 'estimate' | 'overrun' | 'no-eta' | 'generated-id';
+export type InspectorLiveClaimDemo =
+  | 'none'
+  | 'estimate'
+  | 'overrun'
+  | 'no-eta'
+  | 'generated-id'
+  // HS2-ZR8B4N: a provisional claim and a claim lost to another machine.
+  | 'provisional'
+  | 'lost';
 export const inspectorLiveClaim = signal<InspectorLiveClaimDemo>('none');
 function demoLiveClaim(): LiveClaimNoticeProps | undefined {
   const state = inspectorLiveClaim.value;
   if (state === 'none') return undefined;
+  if (state === 'provisional')
+    return { agentName: 'Claude', eta: TICKET_ROW_CLAIM_ETA.estimate, standing: { kind: 'provisional' } };
+  if (state === 'lost') return { agentName: 'Claude', standing: { kind: 'lost', holder: 'Build host worker' } };
   return {
     agentName: state === 'generated-id' ? 'codex-01M44ZE2BPEZKWTW49DCTATTPW' : 'Claude',
     eta: state === 'no-eta' ? undefined : TICKET_ROW_CLAIM_ETA[state === 'generated-id' ? 'estimate' : state],
@@ -680,6 +707,8 @@ export function TicketInspectorSettings() {
           { value: 'overrun', label: 'Past Its ETA (Soon)' },
           { value: 'no-eta', label: 'Without an ETA' },
           { value: 'generated-id', label: 'Generated Worker Id with ETA' },
+          { value: 'provisional', label: 'Provisional Claim' },
+          { value: 'lost', label: 'Claim Lost to Another Machine' },
         ]}
       />
       <Select
@@ -1001,6 +1030,8 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
         composerTitle.value = '';
         composerDetails.value = '';
         composerUpNext.value = false;
+        composerPriority.value = 'default';
+        composerBacklog.value = false;
         composerSourcePick.value = undefined;
         composerRecoveryBlocked.value = false;
         composerAttachments.value = [];
@@ -1020,6 +1051,14 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
       },
       toggleUpNext: () => {
         composerUpNext.value = !composerUpNext.value;
+        if (composerUpNext.value) composerBacklog.value = false;
+      },
+      setPriority: (priority) => {
+        composerPriority.value = ticketPriorityValue(priority);
+      },
+      setBacklog: (backlog) => {
+        composerBacklog.value = backlog;
+        if (backlog) composerUpNext.value = false;
       },
       addFiles: (files) => {
         composerAttachments.value = [

@@ -15,10 +15,12 @@ import { AwayDigestDialog } from '../components/away-digest-dialog';
 import { StandbyScreen } from '../components/standby-screen';
 import { STANDBY_SETTING_FIELDS } from '../components/standby-settings';
 import { withControlledOpen } from '../controlled-open';
+import { syncDesktopCursorHidden } from '../desktop-cursor';
 import { featureOn } from '../feature-areas';
 import type { HostHealthSnapshot } from '../host-health';
 import type { LiveStateStore } from '../live-state';
 import {
+  createStandbyCursor,
   createStandbyIdleTimer,
   formatStandbyClock,
   standbyFreshnessLabel,
@@ -65,6 +67,11 @@ export interface StandbyControllerDependencies {
     sinceMs: number,
     untilMs: number,
   ) => Promise<AwayWindowUsage | undefined>;
+  /**
+   * Hide (`true`) or release (`false`) the cursor natively; WebKit repaints a CSS cursor change only
+   * on the next pointer move (HS2-1RGBCT). Defaults to the desktop shell's command, a no-op in a browser.
+   */
+  nativeCursorHidden?: (hidden: boolean) => void;
   /** Injected for tests. */
   setInterval?: (callback: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
@@ -79,6 +86,9 @@ const browserWakeLock = (): WakeLockLike | undefined =>
   typeof navigator !== 'undefined' && 'wakeLock' in navigator
     ? (navigator as Navigator & { wakeLock: WakeLockLike }).wakeLock
     : undefined;
+const desktopCursorHidden = (hidden: boolean) => {
+  if (typeof window !== 'undefined') void syncDesktopCursorHidden(hidden);
+};
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
 
 /**
@@ -94,6 +104,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     streamGraceMs = dependencies.streamGraceMs ?? 20_000,
     touchDevice = dependencies.touchDevice ?? coarsePointer,
     wakeLock = dependencies.wakeLock ?? browserWakeLock,
+    nativeCursorHidden = dependencies.nativeCursorHidden ?? desktopCursorHidden,
     startInterval =
       dependencies.setInterval ?? ((callback: () => void, ms: number) => globalThis.setInterval(callback, ms)),
     stopInterval =
@@ -111,7 +122,15 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     /** The while-you-were-away digest to show, once standby exits after something happened (HS2-JJ9RYN). */
     awayDigest = signal<AwayDigest | undefined>(undefined),
     /** When standby was last entered in this session; Stats' Overnight window can start there (HS2-9AN4DN). */
-    enteredAtMs = signal<number | undefined>(undefined);
+    enteredAtMs = signal<number | undefined>(undefined),
+    /** The pointer is hidden over the display until it moves a little (HS2-1RGBCT). */
+    cursorHidden = signal(false);
+  const cursor = createStandbyCursor({
+    onChange: (hidden) => {
+      cursorHidden.value = hidden;
+      nativeCursorHidden(hidden);
+    },
+  });
   let away: AwayRecord | undefined,
     awaySeen: ReadonlyMap<string, LiveStoreState> = new Map(),
     awayHost: HostHealthSnapshot | undefined,
@@ -243,6 +262,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
       nowMs.value = now();
     }, tickMs);
     void holdWakeLock();
+    cursor.start();
     // Take focus off any editor beneath once the top-layer watcher has shown the display.
     if (page && typeof requestAnimationFrame === 'function')
       requestAnimationFrame(() => {
@@ -256,6 +276,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     if (ticker !== undefined) stopInterval(ticker);
     ticker = undefined;
     releaseWakeLock();
+    cursor.stop();
     idle.resume();
     const focus = returnFocus;
     returnFocus = undefined;
@@ -386,11 +407,16 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
           model={standbyModel(dependencies.liveStates.forProjects(dependencies.openProjectIds()), at)}
           freshness={{ live: isLive, label: standbyFreshnessLabel({ live: isLive, updatedAtMs: updatedAtMs.value }) }}
           touch={touchDevice()}
+          cursorHidden={cursorHidden.value}
         />
       );
     });
-    const onActivity = () => {
+    const onActivity = (event: Event) => {
       idle.activity();
+      if (event.type === 'pointermove' && scope.peek()) {
+        const pointer = event as PointerEvent;
+        if (pointer.pointerType !== 'touch') cursor.move(pointer.clientX, pointer.clientY);
+      }
     };
     // Any key exits and goes no further: the app beneath never sees it (an editor, a shortcut,
     // Escape on a dialog). Clicks and taps exit through the overlay's `exit-standby` action.
@@ -445,6 +471,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     awayDigest,
     dismissAwayDigest,
     enteredAtMs,
+    cursorHidden,
     saveSettings,
     wire,
   };

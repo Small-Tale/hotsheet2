@@ -3,19 +3,29 @@ import { describe, expect, it } from 'vitest';
 import {
   activeTerminalVisibilityGroup,
   addTerminalVisibilityGroup,
+  availableTerminalVisibilityTypes,
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
+  effectiveTerminalVisibleTypes,
   hideNewTerminalInNamedGroups,
+  includedTerminalProjectGroups,
   initialTerminalVisibilityState,
   parseTerminalVisibilityState,
+  projectVisibilityToggleTarget,
   removeTerminalVisibilityGroup,
   renameTerminalVisibilityGroup,
+  scopeTerminalVisibilityTypes,
   selectTerminalVisibilityGroup,
   setAllTerminalsVisibleInGroup,
+  setShowMinimizedInGroup,
   setTerminalTypeVisibleInGroup,
   setTerminalVisibleInGroup,
   TERMINAL_VISIBILITY_TYPES,
   terminalVisibilityItems,
+  terminalVisibilityItemsNoun,
+  type TerminalVisibilityState,
+  type TerminalVisibilityType,
   terminalVisibilityTypes,
+  toggleEffectiveTerminalTypeInGroup,
   visibleTerminalTypes,
 } from './terminal-visibility';
 
@@ -162,5 +172,162 @@ describe('workspace visibility type filtering', () => {
     state = setAllTerminalsVisibleInGroup(state, 'focus', keys(TERMINAL_VISIBILITY_TYPES), true);
     state = setAllTerminalsVisibleInGroup(state, 'focus', keys(['ai']), false);
     expect(state.groups[1].hiddenKeys).toEqual(['one:agent']);
+  });
+});
+
+describe('workspace visibility segment availability (HS2-4TKASN)', () => {
+  const group = (hiddenTypes?: TerminalVisibilityType[]) => ({
+    id: 'default',
+    name: 'Default',
+    hiddenKeys: [],
+    hiddenTypes,
+  });
+  const session = { id: 's', projectId: 'p', projectName: 'P', alive: true, busy: false, scrollback: '' };
+  const chat = { id: 'ai-chat:c', projectId: 'p', projectName: 'P', name: 'Chat', tool: 'Codex' };
+
+  it('offers AI Chats only while the feature is on or a chat is listed', () => {
+    expect(availableTerminalVisibilityTypes(true, false)).toEqual(['shell', 'ai', 'chat']);
+    expect(availableTerminalVisibilityTypes(true, true)).toEqual(['shell', 'ai', 'chat']);
+    expect(availableTerminalVisibilityTypes(false, true)).toEqual(['shell', 'ai', 'chat']);
+    expect(availableTerminalVisibilityTypes(false, false)).toEqual(['shell', 'ai']);
+  });
+
+  it('reads chats from the listed scope only', () => {
+    const groups = [
+      { projectId: 'p', projectName: 'P', sessions: [session] },
+      { projectId: 'q', projectName: 'Q', sessions: [], chats: [{ ...chat, projectId: 'q', projectName: 'Q' }] },
+    ];
+    expect(scopeTerminalVisibilityTypes(groups, 'dashboard', false)).toEqual(['shell', 'ai', 'chat']);
+    expect(scopeTerminalVisibilityTypes(groups, 'project:p', false)).toEqual(['shell', 'ai']);
+    expect(scopeTerminalVisibilityTypes(groups, 'project:q', false)).toEqual(['shell', 'ai', 'chat']);
+    expect(scopeTerminalVisibilityTypes([], 'dashboard', false)).toEqual(['shell', 'ai']);
+    expect(scopeTerminalVisibilityTypes([], 'dashboard', true)).toEqual(['shell', 'ai', 'chat']);
+  });
+
+  it('never applies an unavailable type and falls back to the first available one', () => {
+    const available: TerminalVisibilityType[] = ['shell', 'ai'];
+    expect(effectiveTerminalVisibleTypes(group(), available)).toEqual(['shell', 'ai']);
+    expect(effectiveTerminalVisibleTypes(group(['shell']), available)).toEqual(['ai']);
+    // A chat-only choice falls back to Terminals instead of showing nothing.
+    expect(effectiveTerminalVisibleTypes(group(['shell', 'ai']), available)).toEqual(['shell']);
+    // An explicit "nothing shown" stays empty.
+    expect(effectiveTerminalVisibleTypes(group(['shell', 'ai', 'chat']), available)).toEqual([]);
+    expect(effectiveTerminalVisibleTypes(group(['shell', 'ai']), [])).toEqual([]);
+    expect(effectiveTerminalVisibleTypes(group(['shell', 'ai']))).toEqual(['chat']);
+  });
+
+  it('toggles from the applied types without trapping a fallback or losing the stored chat choice', () => {
+    const available: TerminalVisibilityType[] = ['shell', 'ai'];
+    let state: TerminalVisibilityState = { groups: [group(['shell', 'ai'])], activeByScope: {} };
+    const applied = () => effectiveTerminalVisibleTypes(state.groups[0], available);
+    expect(applied()).toEqual(['shell']);
+    // Releasing the fallback stores an explicit nothing-shown choice.
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'shell', available);
+    expect(applied()).toEqual([]);
+    expect(state.groups[0].hiddenTypes).toEqual(['shell', 'ai', 'chat']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'ai', available);
+    expect(applied()).toEqual(['ai']);
+    expect(state.groups[0].hiddenTypes).toEqual(['shell', 'chat']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'shell', available);
+    expect(applied()).toEqual(['shell', 'ai']);
+    // Chat keeps its stored choice while unavailable, and returns with it.
+    expect(state.groups[0].hiddenTypes).toEqual(['chat']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'chat', available);
+    expect(state.groups[0].hiddenTypes).toEqual(['chat']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'missing', 'shell', available);
+    expect(applied()).toEqual(['shell', 'ai']);
+    state = toggleEffectiveTerminalTypeInGroup(state, 'default', 'chat', TERMINAL_VISIBILITY_TYPES);
+    expect(effectiveTerminalVisibleTypes(state.groups[0])).toEqual(['shell', 'ai', 'chat']);
+  });
+});
+
+describe('project heading toggle (HS2-HC67SP)', () => {
+  it('shows all when any listed item is hidden and hides all when all are visible', () => {
+    // Mixed: one hidden shows all.
+    expect(projectVisibilityToggleTarget(['p:a', 'p:b'], ['p:b'])).toBe(true);
+    // All hidden shows all.
+    expect(projectVisibilityToggleTarget(['p:a', 'p:b'], ['p:a', 'p:b'])).toBe(true);
+    // All visible hides all; hidden keys outside the listed set do not count.
+    expect(projectVisibilityToggleTarget(['p:a', 'p:b'], [])).toBe(false);
+    expect(projectVisibilityToggleTarget(['p:a', 'p:b'], ['q:c'])).toBe(false);
+    expect(projectVisibilityToggleTarget([], ['p:a'])).toBe(false);
+  });
+
+  it('applies the rule through repeated, interleaved, and refill sequences', () => {
+    const keys = ['p:a', 'p:b', 'p:c'];
+    let state = addTerminalVisibilityGroup(initialTerminalVisibilityState(), 'focus').state;
+    const toggle = () =>
+      (state = setAllTerminalsVisibleInGroup(
+        state,
+        'focus',
+        keys,
+        projectVisibilityToggleTarget(keys, state.groups[1].hiddenKeys),
+      ));
+    toggle();
+    expect(state.groups[1].hiddenKeys).toEqual(keys);
+    toggle();
+    expect(state.groups[1].hiddenKeys).toEqual([]);
+    state = setTerminalVisibleInGroup(state, 'focus', 'p:b', false);
+    state = setTerminalVisibleInGroup(state, 'focus', 'q:other', false);
+    toggle();
+    expect(state.groups[1].hiddenKeys).toEqual(['q:other']);
+    toggle();
+    expect(state.groups[1].hiddenKeys).toEqual(['q:other', ...keys]);
+    expect(state.groups[0].hiddenKeys).toEqual([]);
+  });
+
+  it('names the listed types in title style', () => {
+    expect(terminalVisibilityItemsNoun(['ai', 'ai'])).toBe('AI Shells');
+    expect(terminalVisibilityItemsNoun(['shell'])).toBe('Terminals');
+    expect(terminalVisibilityItemsNoun(['chat'])).toBe('AI Chats');
+    expect(terminalVisibilityItemsNoun(['shell', 'ai'])).toBe('Items');
+    expect(terminalVisibilityItemsNoun([])).toBe('Items');
+  });
+});
+
+describe('Show minimized per workspace (HS2-W1XEH7)', () => {
+  const projects = [{ projectId: 'a' }, { projectId: 'b' }, { projectId: 'c' }];
+
+  it('leaves minimized projects out unless the workspace shows them', () => {
+    expect(includedTerminalProjectGroups(projects, {}, ['b'])).toEqual([{ projectId: 'a' }, { projectId: 'c' }]);
+    expect(includedTerminalProjectGroups(projects, { showMinimized: false }, ['b', 'c'])).toEqual([{ projectId: 'a' }]);
+    expect(includedTerminalProjectGroups(projects, { showMinimized: true }, ['b', 'c'])).toEqual(projects);
+    expect(includedTerminalProjectGroups(projects, {}, [])).toEqual(projects);
+    expect(includedTerminalProjectGroups(projects, {}, ['missing'])).toEqual(projects);
+    expect(includedTerminalProjectGroups(projects, {}, ['a', 'b', 'c'])).toEqual([]);
+    expect(includedTerminalProjectGroups([], {}, ['a'])).toEqual([]);
+  });
+
+  it('keeps each workspace its own choice, off by default, through persistence', () => {
+    let state = addTerminalVisibilityGroup(initialTerminalVisibilityState(), 'ai', 'AI').state;
+    expect(state.groups.map((group) => group.showMinimized)).toEqual([undefined, undefined]);
+    state = setShowMinimizedInGroup(state, 'ai', true);
+    expect(state.groups.map((group) => Boolean(group.showMinimized))).toEqual([false, true]);
+    // Repeating a choice changes nothing; a missing workspace changes nothing.
+    expect(setShowMinimizedInGroup(state, 'ai', true).groups).toEqual(state.groups);
+    expect(setShowMinimizedInGroup(state, 'missing', true)).toEqual(state);
+    const reloaded = parseTerminalVisibilityState(JSON.stringify(state));
+    expect(reloaded.groups.map((group) => Boolean(group.showMinimized))).toEqual([false, true]);
+    state = setShowMinimizedInGroup(setShowMinimizedInGroup(reloaded, 'default', true), 'ai', false);
+    expect(state.groups.map((group) => Boolean(group.showMinimized))).toEqual([true, false]);
+    // Off stores no field, so older saved groups and new ones read the same.
+    expect(Object.hasOwn(state.groups[1], 'showMinimized')).toBe(false);
+    expect(parseTerminalVisibilityState(JSON.stringify(state)).groups.map((group) => group.showMinimized)).toEqual([
+      true,
+      undefined,
+    ]);
+  });
+
+  it('ignores malformed persisted choices', () => {
+    const parsed = parseTerminalVisibilityState(
+      JSON.stringify({
+        groups: [
+          { id: 'default', name: 'Default', hiddenKeys: [], showMinimized: 'yes' },
+          { id: 'x', name: 'X', hiddenKeys: [], showMinimized: 1 },
+          { id: 'y', name: 'Y', hiddenKeys: [], showMinimized: true },
+        ],
+      }),
+    );
+    expect(parsed.groups.map((group) => group.showMinimized)).toEqual([undefined, undefined, true]);
   });
 });

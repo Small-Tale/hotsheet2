@@ -9,10 +9,10 @@ use std::sync::{Arc, Mutex};
 
 use common::{CHECKOUT, Fixture, LEASE_MS, LOST_AFTER_MS, external, fixture, new_job};
 use hotsheet_jobs::{
-    CancelReply, Capabilities, ExternalRef, FIXTURE_KIND, FeedLine, FixtureWatchSource, Job,
-    Liveness, Monitor, MonitorConfig, MonitorControl, MonitorExit, NoProbe, Observation, Observed,
-    Outcome, Poll, ProducerFamily, Status, Step, StepStatus, WATCH_STATE_KEY, Wake, WatchError,
-    WatchSource,
+    CURRENT_STEP_KEY, CancelReply, Capabilities, ExternalRef, FIXTURE_KIND, FeedLine,
+    FixtureWatchSource, Job, Liveness, Monitor, MonitorConfig, MonitorControl, MonitorExit,
+    NoProbe, Observation, Observed, Outcome, Poll, ProducerFamily, Status, Step, StepStatus,
+    WATCH_STATE_KEY, Wake, WatchError, WatchSource,
 };
 
 const POLL_MS: u64 = 100;
@@ -793,4 +793,56 @@ fn hs2_ecwg50_a_waiter_over_several_directories_wakes_on_each() {
     // A lock file is only ever locked: touching one is not a change.
     std::fs::write(second.join("token.lock"), b"").unwrap();
     assert!(!waiter.wait(Duration::from_millis(700)));
+}
+
+fn reading(state: Observed, step: Option<&str>) -> Result<Poll, WatchError> {
+    let latest = step
+        .map(|name| BTreeMap::from([(CURRENT_STEP_KEY.to_owned(), name.to_owned())]))
+        .unwrap_or_default();
+    Ok(Poll::Observed(Box::new(Observation {
+        latest,
+        ..Observation::new(state)
+    })))
+}
+
+#[test]
+fn hs2_hr83e5_a_final_reading_clears_the_current_step_unless_it_names_one() {
+    let fx = fixture();
+    let source = Scripted::default();
+    let green = fx.create(ProducerFamily::Watch);
+    let mut second = new_job(ProducerFamily::Watch);
+    second.checkout_id = "other-ba9876543210".into();
+    let red = fx.store.create(second).unwrap();
+    // Polls alternate between the two Jobs: both run through stages, then one
+    // finishes green with no step named and the other red naming the failed stage.
+    source.push(reading(Observed::Running, Some("Build")));
+    source.push(reading(Observed::Running, Some("Build")));
+    source.push(reading(Observed::Running, Some("Deploy")));
+    source.push(reading(Observed::Running, Some("Test")));
+    source.push(reading(Observed::Succeeded(outcome("green")), None));
+    source.push(reading(Observed::Failed(outcome("red")), Some("Test")));
+
+    let mut monitor = monitor(&fx, "monitor-a", &source);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&green.id).latest[CURRENT_STEP_KEY], "Build");
+    let mut control = Stepper {
+        fx: &fx,
+        stop_after: None,
+        waits: 0,
+    };
+    assert_eq!(monitor.run(&mut control).unwrap(), MonitorExit::Idle);
+
+    let green = fx.get(&green.id);
+    assert_eq!(green.status, Status::Succeeded);
+    assert!(
+        !green.latest.contains_key(CURRENT_STEP_KEY),
+        "a finished run is in no step: {:?}",
+        green.latest
+    );
+    let red = fx.store.get("other-ba9876543210", &red.id).unwrap();
+    assert_eq!(red.status, Status::Failed);
+    assert_eq!(
+        red.latest[CURRENT_STEP_KEY], "Test",
+        "the failed stage stays named"
+    );
 }

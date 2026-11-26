@@ -155,6 +155,27 @@ describe('terminal drawer owner (HS2-BSSWGV)', () => {
     expect(bindings.terminalDrawerMounted.value).toBe(false);
   });
 
+  it('opens and settles the drawer even when storage refuses the remembered choice (HS2-N7QZJ4)', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException('quota', 'QuotaExceededError');
+      },
+    });
+    const { drawer, bindings, calls } = owner();
+    expect(() => {
+      drawer.setTerminalDrawerVisible(true);
+    }).not.toThrow();
+    expect(bindings.terminalDrawerVisible.value).toBe(true);
+    expect(calls.refreshTerminalDashboard).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(220);
+    expect(bindings.terminalDrawerTransitioning.value).toBe(false);
+    drawer.setTerminalDrawerVisible(false);
+    vi.advanceTimersByTime(220);
+    expect(bindings.terminalDrawerTransitioning.value).toBe(false);
+    expect(bindings.terminalDrawerMounted.value).toBe(false);
+  });
+
   it('selects a drawer chat, binds its conversation, and requests terminal focus for a terminal', () => {
     const { drawer, bindings } = owner();
     bindings.terminalDrawerChatsByProject.value = {

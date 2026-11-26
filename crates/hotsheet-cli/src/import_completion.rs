@@ -51,6 +51,7 @@ pub fn verify_backup(store: &Path) -> Result<String> {
     {
         bail!("invalid HS1 completed-import proof; retry migration");
     }
+    commit_ignore_rules(&store)?;
     require_clean(&store)?;
     git(&store, &["merge-base", "--is-ancestor", revision, "HEAD"])?;
     let remote = git(&store, &["remote", "get-url", "origin"])?;
@@ -92,6 +93,97 @@ pub fn verify_backup(store: &Path) -> Result<String> {
     Ok(revision.to_string())
 }
 
+/// HS2-8SEWHJ: the store's Git config key that records the origin URL Hot Sheet itself
+/// saved for a backup. Only an origin equal to it may be replaced by a later backup URL;
+/// an origin the user configured is never replaced.
+pub const SAVED_ORIGIN_KEY: &str = "hotsheet.backupOrigin";
+
+fn git_optional(store: &Path, args: &[&str]) -> Option<String> {
+    let output = hotsheet_ticketing::git::command()
+        .arg("-C")
+        .arg(store)
+        .args(args)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+/// Save `url` as the store's `origin` before anything else can fail, so the URL the
+/// user entered is kept even when readiness or the push fails (HS2-8SEWHJ). Adds a
+/// missing origin, keeps a matching one, replaces only an origin Hot Sheet saved
+/// earlier, and refuses any other existing origin.
+fn save_backup_origin(store: &Path, url: &str) -> Result<()> {
+    let url = url.trim();
+    if url.is_empty() || url.starts_with('-') || url.contains(['\r', '\n']) {
+        bail!("enter a valid Git remote URL");
+    }
+    let existing = git_optional(store, &["remote", "get-url", "origin"]);
+    match existing.as_deref() {
+        Some(current) if current == url => return Ok(()),
+        Some(current) => {
+            if git_optional(store, &["config", "--get", SAVED_ORIGIN_KEY]).as_deref()
+                != Some(current)
+            {
+                bail!(
+                    "origin is already configured as {current}; refusing to replace a remote Hot Sheet did not save. Use that remote, or remove or rename it first"
+                );
+            }
+            git(store, &["remote", "set-url", "origin", url])
+                .context("saving the backup remote as origin")?;
+        }
+        None => {
+            git(store, &["remote", "add", "origin", url])
+                .context("saving the backup remote as origin")?;
+        }
+    }
+    git(store, &["config", SAVED_ORIGIN_KEY, url])?;
+    Ok(())
+}
+
+/// The headless counterpart of the bridge's backup job (HS2-8SEWHJ): save the origin,
+/// commit Hot Sheet's own ignore rules and require a clean store, push, and record the
+/// same verified backup proof. Rerunning it with the same URL is a no-op push and a
+/// fresh verification.
+pub fn back_up(store: &Path, url: &str) -> Result<String> {
+    let store = hotsheet_sync::paths::canonicalize(store)?;
+    save_backup_origin(&store, url)?;
+    prepare_backup(&store)?;
+    let path = proof_path(&store, BACKUP)?;
+    match std::fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let output = hotsheet_ticketing::git::command()
+        .arg("-C")
+        .arg(&store)
+        .args(["push", "-u", "origin", "HEAD"])
+        .output()?;
+    // Git's own diagnostics stay on stderr so machine stdout stays parseable.
+    eprint!("{}", String::from_utf8_lossy(&output.stdout));
+    eprint!("{}", String::from_utf8_lossy(&output.stderr));
+    if !output.status.success() {
+        bail!(
+            "pushing the imported ticket store failed; origin is saved as {}. Fix access to the remote and rerun the backup",
+            url.trim()
+        );
+    }
+    verify_backup(&store)
+}
+
+/// The step before a backup push (HS2-HSHT2G): commit Hot Sheet's own store
+/// `.gitignore`, then require a clean store with no pending attachment import. The
+/// bridge's backup job and the headless backup share it.
+pub fn prepare_backup(store: &Path) -> Result<()> {
+    let store = hotsheet_sync::paths::canonicalize(store)?;
+    commit_ignore_rules(&store)?;
+    require_clean(&store)
+}
+
 /// A new attempt cannot inherit cleanup permission from an earlier import/push.
 pub fn invalidate(store: &Path) -> Result<()> {
     // HS2-V6JEBR: the owning repository, not `<store>/.git`, says where proofs live.
@@ -108,23 +200,54 @@ pub fn invalidate(store: &Path) -> Result<()> {
     Ok(())
 }
 
+/// HS2-HSHT2G: commit Hot Sheet's own store `.gitignore` before a readiness check, so a
+/// store an older build left with an uncommitted ignore line can still be backed up.
+fn commit_ignore_rules(store: &Path) -> Result<()> {
+    if FsStore::git_owner_at(store).is_supported() {
+        FsStore::open(store)?.commit_ignore_rules()?;
+    }
+    Ok(())
+}
+
+/// The paths `git status --porcelain=v1 -z` reports, in order. A rename or copy entry
+/// is followed by its original path, which is skipped.
+fn porcelain_paths(status: &str) -> Vec<&str> {
+    let mut paths = Vec::new();
+    let mut entries = status.split('\0').filter(|entry| entry.len() > 3);
+    while let Some(entry) = entries.next() {
+        paths.push(&entry[3..]);
+        if matches!(entry.as_bytes()[0], b'R' | b'C') {
+            entries.next();
+        }
+    }
+    paths
+}
+
+/// HS2-HSHT2G: name what is uncommitted, so the user sees which file blocks backup.
+/// `git status` compares content, so a rewrite with identical bytes is not reported.
 fn require_clean(store: &Path) -> Result<()> {
-    if !git(
+    let status = git(
         store,
         // Scoped to the store: a designated root's enclosing work tree may hold
         // unrelated edits (HS2-V6JEBR).
         &[
             "status",
             "--porcelain=v1",
+            "-z",
             "--untracked-files=all",
             "--",
             ".",
         ],
-    )?
-    .is_empty()
-    {
+    )?;
+    let paths = porcelain_paths(&status);
+    if !paths.is_empty() {
+        const SHOWN: usize = 5;
+        let mut named = paths[..paths.len().min(SHOWN)].join(", ");
+        if paths.len() > SHOWN {
+            named.push_str(&format!(" and {} more", paths.len() - SHOWN));
+        }
         bail!(
-            "HS1 import is not fully committed; commit the imported ticket store and retry migration before backup or cleanup"
+            "HS1 import is not fully committed ({named}); commit these ticket-store changes and retry before backup or cleanup"
         );
     }
     let pending = store.join("hotsheet-hs1-import-pending");
@@ -377,6 +500,16 @@ mod tests {
         assert!(
             error.to_string().contains("verifying HS1 attachment"),
             "{error:#}"
+        );
+    }
+
+    /// HS2-HSHT2G: the readiness error names paths; a rename's original is skipped.
+    #[test]
+    fn hs2_hsht2g_porcelain_paths_name_each_change_once() {
+        assert!(porcelain_paths("").is_empty());
+        assert_eq!(
+            porcelain_paths(" M .gitignore\0?? notes with space.txt\0R  new.md\0old.md\0"),
+            vec![".gitignore", "notes with space.txt", "new.md"]
         );
     }
 

@@ -70,6 +70,7 @@ fn roomy() -> HostObservation {
                     tool: tool.into(),
                     installed: true,
                     configured: true,
+                    models: None,
                 })
                 .into(),
         ),
@@ -2351,13 +2352,27 @@ fn hs2_tk9adc_the_scheduler_starts_a_dispatcher_then_an_integrator_through_the_e
         .log()
         .into_iter()
         .filter(|record| {
-            record.kind == DecisionKind::Start && record.reason.as_deref() == Some("role_needed")
+            record.kind == DecisionKind::Start
+                && matches!(
+                    record.reason.as_deref(),
+                    Some("role_needed" | "integrator_started")
+                )
         })
-        .map(|record| record.detail)
+        .map(|record| (record.reason, record.detail))
         .collect();
+    // HS2-4JQ41V: an integrator's start says it was for a pending handoff.
     assert_eq!(
         logged,
-        [Some("dispatcher".to_owned()), Some("integrator".to_owned())]
+        [
+            (
+                Some("role_needed".to_owned()),
+                Some("dispatcher".to_owned())
+            ),
+            (
+                Some("integrator_started".to_owned()),
+                Some("handoff_pending".to_owned())
+            )
+        ]
     );
 }
 
@@ -2553,4 +2568,47 @@ fn hs2_r2n33m_unlisted_role_sessions_follow_placement() {
         })
         .collect();
     assert_eq!(roles, [Some(SessionRole::Dispatcher), None]);
+}
+
+/// HS2-0VTQFF: a target whose tool lists only model patterns starts a session on the
+/// newest model the target's machine reports that matches, through the runtime and
+/// its executor. Without a report it starts nothing and says why.
+#[test]
+fn hs2_0vtqff_a_pattern_only_tool_starts_the_newest_reported_matching_model() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    s.ready("Pattern model", &mut tx);
+    let mut body = policy(true);
+    body.targets[0].tools = vec![ToolScope {
+        tool: "codex".into(),
+        models: vec!["syn-codex-*".into()],
+    }];
+    // The machine reports no models (an older peer): nothing starts on a guess.
+    set_policy(&s.m, body, &mut tx);
+    let tick = s.tick(&mut tx);
+    assert_eq!(
+        unplaced(&tick.view),
+        [("no_tool_available", Some("model_unresolved"))],
+        "{tick:#?}"
+    );
+    assert!(s.sessions.calls().is_empty());
+
+    // It reports its catalog, default first: the first match starts.
+    s.probe.set(|observation| {
+        let tools = observation.tools.as_mut().unwrap();
+        tools[0].models = Some(vec![
+            "syn-other-9".into(),
+            "syn-codex-3".into(),
+            "syn-codex-2".into(),
+        ]);
+    });
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)], "{tick:#?}");
+    let [SessionCall::Start(request)] = &s.sessions.calls()[..] else {
+        panic!("one start");
+    };
+    assert_eq!(
+        (request.tool.as_str(), request.model.as_deref()),
+        ("codex", Some("syn-codex-3"))
+    );
 }

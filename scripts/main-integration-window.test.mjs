@@ -295,6 +295,36 @@ test('HS2-822EVF selects the linked ticket store and preserves an explicit sourc
   }
 });
 
+test("HS2-67N8SJ a linked worktree uses the shipping checkout's store link before the repo path", () => {
+  const f = fixture();
+  try {
+    const store = resolve(f.root, 'tickets');
+    const worktree = resolve(f.root, 'worktree');
+    run('git', ['worktree', 'add', '-q', '-b', 'side', worktree], f.repo, f.env);
+    // Neither checkout links a store: the worktree path is the fallback.
+    assert.equal(selectedSourceStore(worktree), worktree);
+    // The shipping checkout's link (git common dir parent) applies to the worktree.
+    put(resolve(f.repo, '.hotsheet2/store'), `${store}\n`);
+    assert.equal(selectedSourceStore(worktree), store);
+    // The worktree's own link and an explicit --source-store still win, in that order.
+    const own = resolve(f.root, 'own-tickets');
+    put(resolve(worktree, '.hotsheet2/store'), `${own}\n`);
+    assert.equal(selectedSourceStore(worktree), own);
+    assert.equal(selectedSourceStore(worktree, f.repo), f.repo);
+    rmSync(resolve(worktree, '.hotsheet2'), { recursive: true });
+    // A malformed shipping link is refused, never silently replaced by the repo path.
+    put(resolve(f.repo, '.hotsheet2/store'), 'relative/store\n');
+    assert.throws(() => selectedSourceStore(worktree), /absolute store path/);
+    // The shipping root resolver is injectable; the shipping checkout itself is not re-read.
+    assert.equal(
+      selectedSourceStore(worktree, null, () => worktree),
+      worktree,
+    );
+  } finally {
+    f.dispose();
+  }
+});
+
 for (const shape of [
   'absent',
   'valid_blob',
@@ -1463,6 +1493,7 @@ function strategyFixture(selection) {
   for (const path of [
     'scripts/gate-ticket-profile.mjs',
     'scripts/gate-budget.mjs',
+    'scripts/gate-browser-budget.mjs',
     'scripts/gate-timings.mjs',
     'scripts/test-profile.mjs',
   ])
@@ -1486,7 +1517,8 @@ const selectionFor = (preset) => ({
   preset,
   source: 'project',
   integration: preset === 'ticket-assured' || preset === 'ci-first' ? 'serial' : 'ci-staged',
-  local_gate: { 'ticket-assured': 'full-local', 'steady-main': 'targeted', 'risk-guided': 'risk-selected' }[preset] ??
+  local_gate:
+    { 'ticket-assured': 'full-local', 'steady-main': 'targeted', 'risk-guided': 'risk-selected' }[preset] ??
     'best-effort',
   require_green_main_sha: preset !== 'ci-first',
   attribute_red_ci_before_completion: true,

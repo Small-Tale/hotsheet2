@@ -42,7 +42,7 @@ test('reconciles independent hook and MCP attribution without guessing terminal 
     const tabState = async (id: string, expected: 'missing' | 'mcp_missing' | 'connected') => {
       await expect(tab(id)).toHaveAttribute('data-ai-connection', expected);
       // HS2-YHQM67: hooks that route permission prompts keep a connected plug even without MCP; a
-      // push-capable session may also be its project's primary (plug-zap).
+      // push-capable session may also be its project's primary (plug plus heart, HS2-1WFGX1).
       await expect(icon(id)).toHaveAttribute('data-lucide', expected === 'missing' ? 'unplug' : /^plug(-zap)?$/);
     };
     const state = async (id: string, expected: 'missing' | 'mcp_missing' | 'connected') => {
@@ -289,13 +289,16 @@ test('keeps every hooked session connected and marks one primary across close an
     const expectTabs = async (primary: string, secondary: string[]) => {
       await expect(tab(primary)).toHaveAttribute('data-ai-connection', 'connected');
       await expect(tab(primary)).toHaveAttribute('data-ai-primary', 'true');
-      await expect(icon(primary)).toHaveAttribute('data-lucide', 'plug-zap');
+      // HS2-1WFGX1: the primary keeps the plug and adds a heart beside it.
+      await expect(icon(primary)).toHaveAttribute('data-lucide', 'plug');
+      await expect(tab(primary).locator('.terminal-drawer__ai-primary')).toHaveAttribute('data-lucide', 'heart');
       await expect(icon(primary).locator('title')).toContainText('Primary session');
       for (const id of secondary) {
         // A connected secondary session is never drawn as disconnected.
         await expect(tab(id)).toHaveAttribute('data-ai-connection', 'connected');
         await expect(tab(id)).not.toHaveAttribute('data-ai-primary', 'true');
         await expect(icon(id)).toHaveAttribute('data-lucide', 'plug');
+        await expect(tab(id).locator('.terminal-drawer__ai-primary')).toHaveCount(0);
         await expect(icon(id).locator('title')).not.toContainText('Primary session');
       }
     };
@@ -313,9 +316,9 @@ test('keeps every hooked session connected and marks one primary across close an
     ] as const) {
       await page.setViewportSize({ width, height: 844 });
       await expectTabs('primary-a', ['primary-b']);
-      await page.screenshot({ path: test.info().outputPath(`hs2-yhqm67-two-sessions-${label}.png`) });
+      await page.screenshot({ path: `target/visual-captures/hs2-1wfgx1-two-sessions-${label}.png` });
     }
-    await tab('primary-a').screenshot({ path: test.info().outputPath('hs2-yhqm67-primary-tab-detail.png') });
+    await tab('primary-a').screenshot({ path: 'target/visual-captures/hs2-1wfgx1-primary-tab-detail.png' });
 
     // Close the primary from its tab: the remaining session is promoted without a reload.
     await tab('primary-a').hover();
@@ -331,6 +334,148 @@ test('keeps every hooked session connected and marks one primary across close an
     await expectTabs('primary-b', ['primary-c']);
     expect(await primaries()).toEqual(['primary-b']);
     await page.screenshot({ path: test.info().outputPath('hs2-yhqm67-reopened-wide.png') });
+  } finally {
+    await app.stop();
+  }
+});
+
+test('chooses the feedback-primary session from a drawer tab and follows it on every client (HS2-H3S7YQ)', async ({
+  context,
+  baseURL,
+}) => {
+  test.setTimeout(150_000);
+  const app = await desktopApp(context, baseURL!);
+  try {
+    // Synthetic Claude sessions only, each reporting an inbox Hot Sheet could push to, plus a shell.
+    const open = async (id: string) => {
+      await app.server.request('/terminals', 'POST', {
+        id,
+        connect: 'claude',
+        ...printThenEcho(''),
+        cwd: app.server.root,
+      });
+      await app.server.request('/mcp-presence', 'POST', {
+        lease_id: `synthetic-mcp-${id}`,
+        pid: process.pid,
+        tool: 'claude',
+        cwd: app.server.root,
+        terminal_id: id,
+      });
+      const report = await fetch(`${app.server.url}/terminals/${id}/ai-connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': app.server.secret },
+        body: JSON.stringify({
+          agent: 'claude',
+          session_id: `synthetic-session-${id}`,
+          messaging_socket: `${app.server.root}/synthetic-${id}.sock`,
+          messaging_token: 'synthetic-inbox-token',
+          tool_version: '2.1.302',
+        }),
+      });
+      expect(report.status).toBe(204);
+    };
+    await open('feedback-a');
+    await open('feedback-b');
+    await app.server.request('/terminals', 'POST', {
+      id: 'feedback-shell',
+      ...printThenEcho(''),
+      cwd: app.server.root,
+    });
+    const page = await app.launch();
+    await openMockedProject(page);
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    const tab = (id: string) => drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${id}"]`);
+    const heart = (id: string) => tab(id).locator('.terminal-drawer__ai-primary');
+    const menu = page.locator('[data-context-menu="app-tab"]');
+    const item = (action: string) => menu.locator(`[data-tab-action="${action}"]`);
+    // Capture an open menu only after its opening transition settles.
+    const settled = () =>
+      page.evaluate(() =>
+        Promise.all(
+          document
+            .getAnimations()
+            // Busy indicators loop forever; only finite transitions such as the menu's opening settle.
+            .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+            .map((animation) => animation.finished.catch(() => undefined)),
+        ).then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))),
+      );
+    const primaries = async () =>
+      (await app.server.request<TerminalInfo[]>('/terminals'))
+        .filter((row) => row.feedback_primary)
+        .map((row) => row.id);
+    const expectPrimary = async (primary: string, other: string) => {
+      await expect(tab(primary)).toHaveAttribute('data-ai-primary', 'true');
+      await expect(heart(primary)).toHaveAttribute('data-lucide', 'heart');
+      await expect(tab(other)).not.toHaveAttribute('data-ai-primary', 'true');
+      await expect(heart(other)).toHaveCount(0);
+    };
+    await expect(tab('feedback-shell')).toBeVisible();
+    await expectPrimary('feedback-a', 'feedback-b');
+
+    // A shell tab offers the command disabled, with its reason.
+    await tab('feedback-shell').click({ button: 'right' });
+    await expect(item('feedback-primary-choose')).toHaveAttribute('aria-disabled', 'true');
+    await expect(item('feedback-primary-choose')).toHaveAttribute('title', /shell terminal/);
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    // The current derived primary offers it disabled too.
+    await tab('feedback-a').click({ button: 'right' });
+    await expect(item('feedback-primary-choose')).toHaveAttribute('aria-disabled', 'true');
+    await page.keyboard.press('Escape');
+
+    // Right-click the newer session and choose it: the heart moves without a reload.
+    for (const [label, width] of [
+      ['wide', 1280],
+      ['medium', 900],
+      ['narrow', 390],
+      ['wide-return', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 844 });
+      await tab('feedback-b').scrollIntoViewIfNeeded();
+      await tab('feedback-b').click({ button: 'right' });
+      await expect(item('feedback-primary-choose')).toContainText('Receive Feedback Notifications');
+      await expect(item('feedback-primary-choose')).not.toHaveAttribute('aria-disabled', 'true');
+      await settled();
+      await page.screenshot({ path: `target/visual-captures/hs2-h3s7yq-menu-${label}.png` });
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+    }
+    // The same menu in the dark scheme.
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await tab('feedback-b').click({ button: 'right' });
+    await settled();
+    await page.screenshot({ path: 'target/visual-captures/hs2-h3s7yq-menu-wide-dark.png' });
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await page.emulateMedia({ colorScheme: 'light' });
+    await tab('feedback-b').click({ button: 'right' });
+    await item('feedback-primary-choose').click();
+    await expect(menu).toHaveCount(0);
+    await expectPrimary('feedback-b', 'feedback-a');
+    expect(await primaries()).toEqual(['feedback-b']);
+    await settled();
+    await page.screenshot({ path: 'target/visual-captures/hs2-h3s7yq-chosen-wide.png' });
+
+    // The chosen tab offers clearing; clearing returns the role to the oldest session.
+    await tab('feedback-b').click({ button: 'right' });
+    await expect(item('feedback-primary-clear')).toContainText('Stop Receiving Feedback Notifications');
+    await settled();
+    await page.screenshot({ path: 'target/visual-captures/hs2-h3s7yq-clear-menu-wide.png' });
+    await item('feedback-primary-clear').click();
+    await expectPrimary('feedback-a', 'feedback-b');
+    expect(await primaries()).toEqual(['feedback-a']);
+
+    // Another client (here the headless route) chooses: this client follows the change event.
+    await app.server.request('/terminals/feedback-b/feedback-primary', 'PUT');
+    await expectPrimary('feedback-b', 'feedback-a');
+
+    // Closing the chosen session hands the role back to the derived rule.
+    await tab('feedback-b').hover();
+    await tab('feedback-b').getByRole('button', { name: /close/i }).click();
+    await expect(tab('feedback-b')).toHaveCount(0);
+    await expect(tab('feedback-a')).toHaveAttribute('data-ai-primary', 'true');
+    expect(await primaries()).toEqual(['feedback-a']);
   } finally {
     await app.stop();
   }

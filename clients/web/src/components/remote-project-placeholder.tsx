@@ -2,6 +2,7 @@ import { Button } from '@kerfjs/ui/button';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Ban, Clock, WifiOff } from 'lucide';
 
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
@@ -26,7 +27,8 @@ export interface RemoteProjectPlaceholderProps {
 /**
  * The workspace of a selected remembered remote project that is not open yet. Loading reuses the
  * opening presentation; reconnecting says the server is not answering, that Hot Sheet keeps trying,
- * and offers an immediate retry. The tab stays until the user closes it.
+ * and offers an immediate retry. The tab stays until the user closes it. Paired actions share a Kerf
+ * Row with an `xs` gap, as the unavailable-project panel does, so they never touch (HS2-2N2F4Y).
  */
 export function RemoteProjectPlaceholder({
   projectId,
@@ -68,7 +70,7 @@ export function RemoteProjectPlaceholder({
           busy={connecting}
           icon={<LucideIcon icon={Clock} name="clock" />}
           action={
-            <>
+            <Row hAlign="center" gap="xs" wrap>
               {renewalRequested ? undefined : (
                 <Button
                   emphasis="primary"
@@ -80,7 +82,7 @@ export function RemoteProjectPlaceholder({
                 </Button>
               )}
               {checkAgain}
-            </>
+            </Row>
           }
         />
       </List>
@@ -93,7 +95,7 @@ export function RemoteProjectPlaceholder({
           detail="The remote host removed this computer’s approval. Pair it again to restore access, or close the tab."
           icon={<LucideIcon icon={Ban} name="ban" />}
           action={
-            <>
+            <Row hAlign="center" gap="xs" wrap>
               <Button
                 emphasis="primary"
                 action={NAVIGATION_AND_TABS_ACTIONS.reviewRemoteServer.value}
@@ -102,7 +104,7 @@ export function RemoteProjectPlaceholder({
                 Pair Again
               </Button>
               {checkAgain}
-            </>
+            </Row>
           }
         />
       </List>

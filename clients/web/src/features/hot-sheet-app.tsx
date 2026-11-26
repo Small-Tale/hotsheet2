@@ -28,6 +28,7 @@ import type { ManualModelDialogState } from '../components/manual-model-dialog';
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import { NoteMetadataDialog, type NoteMetadataDialogState } from '../components/note-metadata-dialog';
 import { type NotificationView } from '../components/notification-navigation';
+import { ticketPriorityValue } from '../components/priority-presentation';
 import { ProjectCloseDialog, type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
 import { ProjectSourceChoiceDialog } from '../components/project-source-choice-dialog';
@@ -73,6 +74,7 @@ import { type WorkspaceViewMode } from '../components/workspace-header';
 import type { ConfirmationWorkflow } from '../confirmation';
 import { syncConversationScroll } from '../conversation-scroll';
 import { draftFiles } from '../draft-file-recovery';
+import { featureOn } from '../feature-areas';
 import type { NotWorkingTarget, PendingEvidence, Project, UnhealthyServerRecovery } from '../interactions/types';
 import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSources } from '../new-ticket-source';
 import type { DesktopRemoteDiscovery, DesktopRemotePairing, DesktopRemoteServer } from '../remote-projects/client';
@@ -130,6 +132,8 @@ export interface HotSheetAppDependencies {
   composerTitle: Signal<string>;
   followUpSource: () => string | undefined;
   composerUpNext: Signal<boolean>;
+  composerPriority: Signal<string>;
+  composerBacklog: Signal<boolean>;
   conversationExportDialog: Signal<ConversationExportDialogState | undefined>;
   conversationOpen: Signal<boolean>;
   conversationRenderRevision: Signal<number>;
@@ -215,7 +219,7 @@ export interface HotSheetAppDependencies {
   syncRepositoryPaginationObserver: () => void;
   syncTerminalDrawerMaximum: () => void;
   syncTerminalRailNavStack: () => void;
-  syncTerminalViewportMounts: () => void;
+  syncTerminalViewportMounts: (focusedInput?: HTMLElement) => void;
   terminalCopy: Signal<TerminalCopyState | undefined>;
   terminalDashboardLoading: Signal<boolean>;
   terminalDashboardSizeObserver: TrackedSizeObserver;
@@ -249,7 +253,8 @@ export interface HotSheetAppDependencies {
   unhealthyServerRecoveryBusy: Signal<boolean>;
   viewMode: Signal<WorkspaceViewMode>;
   workspaceSearchActive: () => boolean;
-  workspaceTerminalGroups: () => TerminalDashboardGroup[];
+  /** The projects a scope's workspace lists: minimized ones only when it shows them (HS2-W1XEH7). */
+  terminalScopeGroups: (scope: string) => TerminalDashboardGroup[];
 }
 
 /**
@@ -285,6 +290,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     composerTitle,
     followUpSource,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     conversationExportDialog,
     conversationOpen,
     conversationRenderRevision,
@@ -395,11 +402,20 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     unhealthyServerRecoveryBusy,
     viewMode,
     workspaceSearchActive,
-    workspaceTerminalGroups,
+    terminalScopeGroups,
   } = dependencies;
   let renderedTicketCollectionKey = initialRenderedTicketCollectionKey;
   function HotSheetApp() {
     void permissionRevision.value;
+    // Capture before Kerf morphs the magnified terminal. Moving its live viewport or presenting its
+    // top-layer popover can drop the xterm input's focus (HS2-PSV7BG).
+    const active = document.activeElement;
+    const focusedTerminalInput =
+      active instanceof HTMLElement &&
+      appRoot.contains(active) &&
+      active.matches('[data-component="terminal-viewport"][data-display-mode="interactive"] .xterm-helper-textarea')
+        ? active
+        : undefined;
     // WebKit can zero independently scrolling board columns after a top-layer permission dialog is
     // removed, one frame after the render's normal scroll restore. Capture the live position while
     // the dialog still exists so the browser's delayed layout step can be corrected (HS2-0M3DS2).
@@ -441,7 +457,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         });
       }
       animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
-      syncTerminalViewportMounts();
+      syncTerminalViewportMounts(focusedTerminalInput);
       syncTerminalRailNavStack();
       syncRepositoryNavStack();
       terminalDrawerSizeObserver.sync();
@@ -578,7 +594,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           open={Boolean(visibilityScope)}
           state={terminalVisibility.value}
           scope={visibilityScope ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE}
-          groups={workspaceTerminalGroups()}
+          groups={terminalScopeGroups(visibilityScope ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE)}
+          chatFeatureOn={featureOn('ai-chat')}
           contextMenu={terminalVisibilityContextMenu.value}
         />
         <TerminalVisibilityNameDialog prompt={terminalVisibilityNamePrompt.value} />
@@ -610,6 +627,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           details={composerDetails.value}
           category={composerCategory.value}
           upNext={composerUpNext.value}
+          priority={ticketPriorityValue(composerPriority.value)}
+          backlog={composerBacklog.value}
           providerName={composerTarget?.name ?? provider?.name ?? 'Hot Sheet Git'}
           defaultSourceName={provider?.name ?? 'Hot Sheet Git'}
           sourceIsDefault={composerTarget?.default ?? true}

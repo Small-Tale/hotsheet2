@@ -770,9 +770,11 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
         return Ok(());
     }
 
-    let project = hotsheet_cli::launched_env::value("HOTSHEET_PERMISSION_PROJECT")
-        .or_else(|| hotsheet_cli::launched_env::value("HOTSHEET_PROJECT"))
-        .unwrap_or_default();
+    let project = hotsheet_cli::permission_hook::permission_project(
+        hotsheet_cli::launched_env::value("HOTSHEET_PERMISSION_PROJECT")
+            .or_else(|| hotsheet_cli::launched_env::value("HOTSHEET_PROJECT")),
+        hook_under_shared_host(installed_agent),
+    );
     let route = hook_server_route();
     let terminal_env = hook_terminal_id(installed_agent);
     let terminal = permission_terminal_id(event, terminal_env.as_deref());
@@ -794,6 +796,7 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
                 "project": project, "connection": connection, "tool": tool, "action": action,
                 "agent": agent, "terminal_id": terminal,
                 "session_id": input.get("session_id").and_then(serde_json::Value::as_str),
+                "cwd": input.get("cwd").and_then(serde_json::Value::as_str),
             });
             match ask_server(&url, &secret, &request) {
                 Ok(reply) => Some(decision_from_server(&reply)),
@@ -823,19 +826,23 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
 /// it (HS2-4J7WCV). The installed `--agent` decides which hosts apply, so a Claude hook never
 /// reads the process table.
 fn hook_terminal_id(installed_agent: Option<&str>) -> Option<String> {
+    hotsheet_cli::permission_hook::trusted_terminal_id(
+        hotsheet_cli::launched_env::value("HOTSHEET_TERMINAL_ID"),
+        || hook_under_shared_host(installed_agent),
+    )
+}
+
+/// Whether this hook runs under a host serving many sessions, whose inherited environment
+/// belongs to whichever session started it (HS2-4J7WCV, HS2-HSFVHC).
+fn hook_under_shared_host(installed_agent: Option<&str>) -> bool {
     use hotsheet_plugins::shared_host::{
         ANCESTOR_DEPTH, ancestor_commands, hook_identity_untrusted, shared_hosts_for,
     };
     let env_agent = hotsheet_cli::launched_env::value("HOTSHEET_AGENT");
     let agent = installed_agent.or(env_agent.as_deref());
-    hotsheet_cli::permission_hook::trusted_terminal_id(
-        hotsheet_cli::launched_env::value("HOTSHEET_TERMINAL_ID"),
-        || {
-            hook_identity_untrusted(agent, shared_hosts_for, || {
-                ancestor_commands(ANCESTOR_DEPTH)
-            })
-        },
-    )
+    hook_identity_untrusted(agent, shared_hosts_for, || {
+        ancestor_commands(ANCESTOR_DEPTH)
+    })
 }
 
 /// Report a native Claude turn boundary without sending prompt or transcript content.

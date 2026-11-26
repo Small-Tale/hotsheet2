@@ -167,6 +167,7 @@ impl<A: GithubApi> CircleciSource<A> {
             method: ApiMethod::Get,
             path,
             if_none_match: None,
+            body: None,
         };
         self.api
             .send(&request)
@@ -393,6 +394,7 @@ impl<A: GithubApi> WatchSource for CircleciSource<A> {
                 method: ApiMethod::Post,
                 path: format!("workflow/{}/cancel", query_value(&workflow)),
                 if_none_match: None,
+                body: None,
             };
             match self.api.send(&request) {
                 Ok(response) if (200..300).contains(&response.status) => {}

@@ -65,4 +65,5 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
  */
 export const PROJECT_LIFECYCLE_TARGETS = {
   hs1MigrationDialog: attr('data-component', 'hs1-migration-dialog'),
+  hs1JobDetailsDialog: attr('data-hs1-job-details', 'true'),
 } as const;

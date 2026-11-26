@@ -18,8 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Gate, GateKind, GateState, MAX_RUN_HISTORY, OrchestratedSession, Run, RunControl, RunEvent,
-    RunEventKind, RunState, ValidationEvidence, summarize,
+    Gate, GateKind, GateState, MAX_RUN_HISTORY, OrchestratedSession, ProjectSites, Run, RunControl,
+    RunEvent, RunEventKind, RunState, ValidationEvidence, summarize,
 };
 
 /// The stable name of the attribution rule above, carried in every summary.
@@ -155,6 +155,17 @@ impl WorkItemKey {
     pub fn of(run: &Run) -> Self {
         Self {
             connection_id: run.target.connection_id.clone(),
+            native_id: run.target.native_id.clone(),
+        }
+    }
+
+    /// HS2-CQ0PNT: the work item of a run whatever site of its project reached it: the
+    /// ticket under the home site's connection id for the source the run names.
+    pub fn in_project(run: &Run, sites: &ProjectSites) -> Self {
+        Self {
+            connection_id: sites
+                .home_connection(&run.target.target_id, &run.target.connection_id)
+                .to_owned(),
             native_id: run.target.native_id.clone(),
         }
     }
@@ -414,8 +425,12 @@ pub struct ProgressInput<'a> {
     pub events: &'a [RunEvent],
     /// Retention removed events older than the ones given.
     pub events_trimmed: bool,
-    /// One reading per work item. A missing one reports `cost_not_read`.
+    /// One reading per work item. A missing one reports `cost_not_read`. Keyed by
+    /// [`WorkItemKey::in_project`].
     pub costs: &'a BTreeMap<WorkItemKey, Metric<CostReading>>,
+    /// HS2-CQ0PNT: which targets are sites of one project, so a ticket reached
+    /// through two sites, whose connection ids differ by machine, is one work item.
+    pub sites: &'a ProjectSites,
 }
 
 fn state_code(state: RunState) -> &'static str {
@@ -718,7 +733,7 @@ pub fn summarize_progress(input: &ProgressInput<'_>) -> ProgressSummary {
     let mut items: BTreeMap<WorkItemKey, WorkItemProgress> = BTreeMap::new();
     let mut runs = Vec::with_capacity(owned.len());
     for run in owned {
-        let key = WorkItemKey::of(run);
+        let key = WorkItemKey::in_project(run, input.sites);
         let item = items
             .entry(key.clone())
             .or_insert_with(|| WorkItemProgress {

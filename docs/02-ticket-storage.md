@@ -250,6 +250,14 @@ of the store's shared resource-claims registry (`.hotsheet2/resource-claims.json
 beside it (HS2-JBF90Q): a sync once committed it into the shared history, and a copy
 already committed leaves the index the same way.
 
+The list also names the machine-local runtime directories a server or CLI fills after
+the store exists: `metrics/local/` (live-state record, peaks and history),
+`metrics/raw/` (raw usage events), `activity/recent/`, and `local/` (the per-user read
+overlay). Their writers still check for their own line, but a new or imported store
+already commits all of them with its first commit, so hosting it leaves `git status`
+empty (HS2-HSHT2G). An older store gains the lines when it is next opened, and the next
+ticket commit, or the HS1 backup step's own `.gitignore` commit (§7.3), records them.
+
 A single unparseable ticket file must never make a whole project un-openable. Store
 enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every
 healthy ticket **plus** a separate report of the files that failed to parse
@@ -515,7 +523,11 @@ workflow `status`:
   cannot silently select the wrong project or source. This is a real reference, so the
   UI links to the canonical ticket. Reverse backlinks from the canonical ticket are
   tracked separately in **HS2-HEQR6E**.
-  Checkout registry ids are durable across an explicit `checkout relocate`; non-Git
+  Checkout registry ids are durable across an explicit `checkout relocate`, which also
+  records the former root in the registry's optional `relocatedRoots` map (former root to
+  checkout id), so a client that remembered the old path follows the checkout to its new
+  root (HS2-86ES0B). A checkout relocated before that map existed is still followed by the
+  id its first canonical root produced. An older reader ignores the map; non-Git
   source renames retain an alias chain through `checkout rename-source`. Resolution
   follows those aliases to the current connection id and rejects cycles or ambiguous
   retargeting. Git source ids remain path-derived and require a store migration instead.
@@ -567,8 +579,14 @@ wins to prevent an earlier purge on behalf of another project. `hotsheet-cli pur
 uses the active project's setting by default; `--older-than-days N` explicitly overrides it
 for that run (including zero to empty Trash immediately). Purging only removes the
 working-tree files: git history retains them.
-Trash is the git provider's lifecycle; other providers own deletion natively and reject
-restore explicitly.
+Trash is the git provider's lifecycle. GitHub Issues and GitLab (HS2-DBKM89) map it onto provider-owned labels
+(`status:deleted`, `deleted-from:<status>`) with the same restore, Empty Trash, and retention
+behavior, and permanently deletes an issue only when the connection's credentials allow it;
+otherwise the issue stays closed in Trash and Empty Trash reports it as retained
+([16](16-external-sync-interface.md), GH-5). Jira (HS2-73Z1R8) maps Trash onto the single
+`hotsheet-trash` label and never transitions the workflow, so Restore removes the label and
+the ticket returns to its unchanged status. It permanently deletes an issue only with the Delete
+Issues permission, and otherwise reports it as retained in the same way.
 
 Up Next and priority are ordering metadata rather than substantive ticket content. A patch
 whose only effective changes are `up_next` and/or `priority` preserves `updated_at`, so
@@ -901,7 +919,21 @@ standalone store with `hotsheet-cli link <store>`, which writes a **gitignored**
 `.hotsheet2/store` file (managed `.gitignore` block, [04](04-core-server-cli.md) §4.7.0) holding the store's absolute path. Any later `hotsheet-cli`
 run inside that repo resolves the store automatically: an explicit `-C` wins, else
 `$HOTSHEET_STORE`, else the nearest `.hotsheet2/store` walking up from the cwd, with
-read-only fallback to the legacy `.hotsheet/store` location. A
+read-only fallback to the legacy `.hotsheet/store` location.
+
+**Relinking a project** (HS2-FVWKJC): a checkout can link several stores, but its
+`.hotsheet2/store` link names exactly one of them. The machine checkout registry records,
+per checkout, which linked Git source the link named (`linkSources`, outside the checkout
+record like `sourceAliases`; an older reader ignores it). When any project open or
+`setup --refresh` sees the link name a different initialized ticket store, that one
+link-derived source is replaced by the newly linked store, and the default moves with it
+when it was the default. Explicitly linked extra stores and external providers stay.
+Relinking back to an earlier store replaces again, and repeated opens are idempotent.
+A missing, empty, or dangling link changes nothing. A registry written before the record
+existed treats a sole Git source as the link-derived one; with several Git sources nothing
+is guessed and the newly linked store is added. An explicit full source set is never
+rewritten by the link. The rule lives in the registry, so the headless CLI setup and the
+server open cannot disagree. A
 standalone store also wants **aggressive auto commit+push** so its independent churn
 propagates without manual git — the ticket write auto-commit + the server's
 background sync loop cover this (§2.12).

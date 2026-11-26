@@ -13,6 +13,8 @@ export const NAVIGATION_AND_TABS_ACTIONS = {
   setShellMode: action('set-shell-mode'),
   openProjectStats: action('open-project-stats'),
   selectProjectTab: action('select-project-tab'),
+  /** Switch the workspace grid ticket rail to the row's `data-project-id` (HS2-2609BW). */
+  selectTerminalRailProject: action('select-terminal-rail-project'),
   retryProjectRestore: action('retry-project-restore'),
   /** Retry a remembered remote project's placeholder tab now (HS2-WNK73S). */
   retryRemoteProject: action('retry-remote-project'),

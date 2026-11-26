@@ -188,8 +188,11 @@ enum GateCmd {
         #[arg(long)]
         branch: Option<String>,
         /// The CI provider adapter: github-actions (default), gitlab-ci (HS2-TPAHYA),
-        /// buildkite (`--repo <organization>/<pipeline>`) or circleci (`--repo
-        /// <vcs>/<organization>/<project>`, HS2-17HVNP).
+        /// buildkite (`--repo <organization>/<pipeline>`), circleci (`--repo
+        /// <vcs>/<organization>/<project>`, HS2-17HVNP), jenkins (`--repo
+        /// <folder>/<job>`, HS2-7H0S8R), azure-pipelines (`--repo
+        /// <organization>/<project>/<definition-id>`, HS2-JZ1DD2) or bitbucket-pipelines
+        /// (`--repo <workspace>/<repo_slug>`, HS2-BWF72S).
         #[arg(long)]
         provider: Option<String>,
         /// HS2-TQG6AT: the artifact whose digest a passed verdict records, by name;
@@ -404,6 +407,12 @@ enum RunCmd {
         /// decision note on the goal ticket (HS2-XHQ1EH); repeat it after the answer.
         #[arg(long)]
         override_readiness: bool,
+        /// HS2-061YTB: start this operation although the target's machine does not meet,
+        /// or did not report, a requirement of its plan step (`requirement_unmet`,
+        /// `requirement_unknown`). A person's own override goes ahead; an AI's waits as
+        /// `decision_required` on a decision note on the goal ticket.
+        #[arg(long)]
+        override_requirements: bool,
     },
     /// Runs of this project; --active leaves out finished ones.
     List {
@@ -494,13 +503,15 @@ fn run_route(project: &str, command: RunCmd) -> (&'static str, String, Value) {
             worker_label,
             lease_minutes,
             override_readiness,
+            override_requirements,
         } => (
             "POST",
             base,
             json!({"ticket":{"connection_id":source,"native_id":ticket},"target_id":target,
                 "connection_id":connection,"native_id":id,"operation_id":operation_id,
                 "mode":via,"worker_id":worker,"worker_label":worker_label,
-                "lease_minutes":lease_minutes,"override_readiness":override_readiness}),
+                "lease_minutes":lease_minutes,"override_readiness":override_readiness,
+                "override_requirements":override_requirements}),
         ),
         RunCmd::List { active } => ("GET", format!("{base}?active={active}"), Value::Null),
         RunCmd::Show { run_id } => ("GET", format!("{base}/{run_id}"), Value::Null),
@@ -1257,6 +1268,14 @@ enum TargetCmd {
         #[arg(long)]
         clear_site_of: bool,
     },
+    /// HS2-NAA3HV: make a site the home of its project at the expected manifest
+    /// revision; the old home and every other site become its sites, and the policy's
+    /// per-target entries move with the home.
+    MakeHome {
+        id: String,
+        #[arg(long)]
+        expected_revision: String,
+    },
     /// HS2-SHH7WW: each project with its sites and this machine's binding of each.
     Sites {
         /// HS2-D4G81Q: also read what each bound site's machine is (OS, architecture,
@@ -1351,6 +1370,14 @@ fn route(project: &str, command: TargetCmd) -> Result<(&'static str, String, Val
             "PATCH",
             format!("{prefix}/{id}"),
             json!({"expected_revision":expected_revision,"label":label,"expected_repository_identity":expected_repository_identity,"clear_expected_repository_identity":clear_expected_repository_identity,"site_of":site_of,"clear_site_of":clear_site_of}),
+        ),
+        TargetCmd::MakeHome {
+            id,
+            expected_revision,
+        } => (
+            "POST",
+            format!("{prefix}/{id}/make-home"),
+            json!({"expected_revision":expected_revision}),
         ),
         // HS2-D4G81Q: reading the machines passes the gate, so the actor rides in a body.
         TargetCmd::Sites { capabilities } => {

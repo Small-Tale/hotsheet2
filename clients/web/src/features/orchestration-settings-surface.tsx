@@ -10,6 +10,7 @@ import type { Choose, Confirm } from '../confirmation';
 import type { Project } from '../interactions/types';
 import {
   addChoices,
+  hostedSiteSources,
   projectRows,
   resourceSuggestions,
   siteChoicesByProject,
@@ -43,6 +44,8 @@ export interface OrchestrationSettingsSurfaceDependencies {
   showInspector: () => void;
   /** Reviewed remote server names by registration id. */
   remoteServerLabels: () => Promise<Record<string, string>>;
+  /** HS2-1K6122: the app's toast, for each change's outcome. */
+  showToast?: (message: string) => void;
 }
 
 /**
@@ -76,6 +79,7 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     hasTerminal: (projectId, terminalId) => dependencies.hasTerminal(`${projectId}:${terminalId}`),
     knownTools: () => dependencies.aiTools().map((tool) => tool.id),
     showInspector: dependencies.showInspector,
+    notify: dependencies.showToast,
   });
 
   /**
@@ -147,10 +151,15 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     };
   }
 
+  /** HS2-DXAB4K: the server a project open from another server is served by, as + Add Project names it. */
+  function servedBy(current: Project): string | undefined {
+    return isRemoteProjectId(current.id) ? (current.remoteHost ?? 'the server') : undefined;
+  }
+
   function orchestration(current: Project): OrchestrationSettingsProps {
     const state = settings.settings.value[current.id],
       labels = settings.remoteLabels.value,
-      rows = projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites),
+      rows = projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites, servedBy(current), current.id),
       choices = addChoices(
         projects.value.map((item) => ({ id: item.id, name: item.name })),
         current.id,
@@ -161,9 +170,26 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     return {
       rows,
       choices,
-      // HS2-E9VVQF: a project served here offers Add a Site on each project row.
+      // HS2-E9VVQF: a project served here offers Add a Site on each project row. HS2-89YNGN: one open from
+      // another server offers that server's open checkouts of the same ticket store.
       ...(isRemoteProjectId(current.id)
-        ? {}
+        ? state?.hosted
+          ? (() => {
+              const hosted = hostedSiteSources(state.hosted, servedBy(current) ?? 'the server');
+              return {
+                siteChoices: siteChoicesByProject(
+                  rows,
+                  hosted.choices,
+                  hosted.stores,
+                  state.manifest,
+                  state.bindings,
+                  Boolean(state.showAllSites),
+                ),
+                showAllSites: Boolean(state.showAllSites),
+                hostedSites: true,
+              };
+            })()
+          : {}
         : {
             siteChoices: siteChoicesByProject(
               rows,
@@ -180,7 +206,6 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
       loading: state?.loading ?? true,
       busy: state?.busy,
       message: state?.message,
-      status: state?.status,
       // HS2-92FJXM: a project open from another server adds that server's open projects.
       ...(isRemoteProjectId(current.id)
         ? {
@@ -206,7 +231,14 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     const target = settings.selected.value[current.id];
     if (!target) return undefined;
     const state = settings.settings.value[current.id],
-      rows = projectRows(state?.manifest, state?.bindings ?? {}, settings.remoteLabels.value),
+      rows = projectRows(
+        state?.manifest,
+        state?.bindings ?? {},
+        settings.remoteLabels.value,
+        undefined,
+        servedBy(current),
+        current.id,
+      ),
       row = rows.find((item) => item.targetId === target),
       // HS2-D4G81Q: every site of the target's project, with what each machine is.
       siteProject = state?.sites?.projects.find((item) => item.sites.some((site) => site.target_id === target)),

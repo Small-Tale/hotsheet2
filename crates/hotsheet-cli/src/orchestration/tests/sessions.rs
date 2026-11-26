@@ -264,6 +264,7 @@ pub(super) fn roomy() -> HostObservation {
                     tool: tool.into(),
                     installed: true,
                     configured: true,
+                    models: None,
                 })
                 .into(),
         ),
@@ -497,6 +498,8 @@ fn pool_session(expires_at: i64) -> crate::coordination::Session {
 fn session_error(result: Result<SessionView, OrchestrationError>) -> SessionError {
     match result {
         Err(OrchestrationError::Session(error)) => error,
+        // HS2-8Z9VHH: a refused admission keeps its code and adds the reason.
+        Err(OrchestrationError::AdmissionRefused(_)) => SessionError::AdmissionRefused,
         Err(other) => panic!("expected a session error, got {other}"),
         Ok(view) => panic!("expected a session error, got {:?}", view.session.state),
     }
@@ -872,9 +875,20 @@ fn hs2_gdjxgz_the_targets_machine_may_refuse_and_a_refusal_never_launches() {
     // Its own admission says no: below the RAM floor.
     f.probe
         .set(|observation| observation.memory.free_mb = Some(100));
-    assert_eq!(
-        session_error(f.start("op-1", 1, "codex", json!({}), &mut tx)),
-        SessionError::AdmissionRefused
+    // HS2-8Z9VHH: the refusal names its limit and what the machine observed.
+    let refused = f.start("op-1", 1, "codex", json!({}), &mut tx).unwrap_err();
+    assert_eq!(refused.code(), SessionError::AdmissionRefused.code());
+    let admission = refused
+        .admission_refusal()
+        .expect("admission detail")
+        .clone();
+    assert_eq!(admission.reason, "below_ram_floor");
+    assert_eq!(admission.setting.as_deref(), Some("min_free_ram_mb"));
+    assert_eq!(admission.observed, Some(100));
+    assert!(admission.limit.is_some());
+    assert!(
+        refused.to_string().contains("100 MB of memory is free"),
+        "{refused}"
     );
     assert_eq!(
         reason("op-1"),
@@ -925,10 +939,17 @@ fn hs2_gdjxgz_the_targets_machine_may_refuse_and_a_refusal_never_launches() {
             reported: None,
         });
     }
-    assert_eq!(
-        session_error(f.start("op-3", 1, "codex", json!({}), &mut tx)),
-        SessionError::AdmissionRefused
-    );
+    let refused = f.start("op-3", 1, "codex", json!({}), &mut tx).unwrap_err();
+    assert_eq!(refused.code(), SessionError::AdmissionRefused.code());
+    // HS2-8Z9VHH: the fresh listing's count and the cap it broke.
+    let admission = refused
+        .admission_refusal()
+        .expect("admission detail")
+        .clone();
+    assert_eq!(admission.reason, "session_cap_reached");
+    assert_eq!(admission.setting.as_deref(), Some("max_sessions"));
+    assert_eq!(admission.observed, Some(4));
+    assert!(admission.limit.is_some_and(|limit| limit <= 4));
     assert_eq!(reason("op-3").1.as_deref(), Some("session_cap_reached"));
     f.host.live().clear();
 
@@ -1526,9 +1547,34 @@ fn hs2_gdjxgz_a_role_session_starts_only_when_the_target_has_none() {
         dispatcher.label.as_deref(),
         Some(format!("{}: dispatcher", f.m.owner.alias).as_str())
     );
-    // A dispatcher answers for every unfinished assignment of the pool, not only for
-    // one worker's.
+    // HS2-4JQ41V: until the pool names it in its role it answers for no assignment,
+    // so a dispatcher that never took up its role can be stopped.
     f.pool(|state| {
+        state.assignments.insert(
+            "assignment-1".into(),
+            assignment("some-worker", crate::coordination::Phase::Ci),
+        );
+    });
+    assert!(
+        f.safe_point(&dispatcher.session.session_id, &mut tx)
+            .is_empty()
+    );
+    // Once the pool names it in its role (here with a lease that has since lapsed), a
+    // dispatcher answers for every unfinished assignment of the pool, not only for
+    // one worker's.
+    let worker_id = dispatcher
+        .session
+        .hosted
+        .as_ref()
+        .unwrap()
+        .worker_id
+        .clone();
+    f.pool(|state| {
+        state.dispatcher = Some(
+            serde_json::from_value(json!({"id": worker_id, "generation": "g1",
+                "expires_at": 0, "return_route": {"kind": "human_relay"}}))
+            .unwrap(),
+        );
         state.assignments.insert(
             "assignment-1".into(),
             assignment("some-worker", crate::coordination::Phase::Ci),
@@ -3700,4 +3746,94 @@ fn hs2_ywn8jt_a_launch_the_host_took_is_never_read_as_no_host() {
     );
     // The launch waits as long as a person may need for a prompt the host shows.
     assert!(LAUNCH_ANSWER >= std::time::Duration::from_secs(5 * 60));
+}
+
+/// HS2-62099G: a headless launch fences itself on the server. The server refuses a
+/// launch it reaches after the window, and the window closes before this side stops
+/// waiting, so a terminal that does spawn is still awaited or found in the listing.
+#[test]
+fn hs2_62099g_a_headless_launch_carries_a_fence_inside_its_wait() {
+    let launch = HostLaunch {
+        session_id: "terminal-1".into(),
+        tool: "claude".into(),
+        model: None,
+        effort: None,
+        label: "Project: worker".into(),
+        role: SessionRole::Worker,
+        role_prompt: "Work".into(),
+    };
+    let body = launch_body("/checkout", &launch);
+    assert_eq!(body["id"], "terminal-1");
+    assert_eq!(body["cwd"], "/checkout");
+    assert_eq!(body["session_role"], "worker");
+    let window = body["launch_within_ms"].as_u64().unwrap();
+    let wait = u64::try_from(LAUNCH_ANSWER.as_millis()).unwrap();
+    assert_eq!(
+        window,
+        wait - u64::try_from(LAUNCH_FENCE_MARGIN.as_millis()).unwrap()
+    );
+    assert!(window > 0 && window < wait);
+    // A fenced launch is the server's refusal: nothing runs, the reservation goes.
+    assert_eq!(
+        launch_outcome(HostCall::Status(409), false),
+        Err(SessionHostError::Refused)
+    );
+}
+
+/// HS2-G2X7RT: the orchestrator's session answer carries the host's `tool_ready` on
+/// every sync, through waiting, answered, a host that cannot say and a lost session,
+/// and the machine-local record never keeps it.
+#[test]
+fn hs2_g2x7rt_a_synced_session_carries_the_hosts_tool_ready() {
+    let mut rng = Rng(170);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1], &mut tx);
+    let owner = f.m.owner.id.clone();
+    f.git(&["init", "-q"]);
+    let started = f.started("op-1", 1, "codex", &mut tx);
+    let sid = started.session.session_id.clone();
+    let terminal = started.session.hosted.as_ref().unwrap().session_id.clone();
+    let sync = |tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .session_sync(&owner, &sid, Some(&worker()), tx)
+            .unwrap()
+    };
+    // A host that does not say says nothing.
+    assert_eq!(sync(&mut tx).tool_ready, None);
+    // Launched and its tool has not reported its start: it may wait on a person.
+    f.host.report(&terminal, Some(false));
+    let waiting = sync(&mut tx);
+    assert_eq!(waiting.tool_ready, Some(false));
+    assert!(
+        serde_json::to_value(&waiting).unwrap()["tool_ready"] == false,
+        "the answer serializes it"
+    );
+    // The safe-point read carries it as well.
+    assert_eq!(
+        f.m.runtime
+            .session_safe_point(&owner, &sid, Some(&worker()), &mut tx)
+            .unwrap()
+            .tool_ready,
+        Some(false)
+    );
+    // Never in the stored record, nor in the record-only list.
+    let record = serde_json::to_value(f.m.runtime.session(&owner, &sid).unwrap()).unwrap();
+    assert!(record.get("tool_ready").is_none(), "{record}");
+    // A person answered and the tool reported its start.
+    f.host.report(&terminal, Some(true));
+    assert_eq!(sync(&mut tx).tool_ready, Some(true));
+    // Waiting again, then a host that cannot be asked cannot say.
+    f.host.report(&terminal, Some(false));
+    assert_eq!(sync(&mut tx).tool_ready, Some(false));
+    f.host.down.store(true, Ordering::SeqCst);
+    assert_eq!(sync(&mut tx).tool_ready, None);
+    f.host.down.store(false, Ordering::SeqCst);
+    // Its terminal is gone: the session is lost and nothing waits.
+    f.host.crash(&terminal);
+    let lost = sync(&mut tx);
+    assert_eq!(lost.session.state, SessionState::Lost);
+    assert_eq!(lost.tool_ready, None);
 }

@@ -1,6 +1,6 @@
 /* QuickTicketComposer: Kerf Row and Text own the source cluster, footer copy, and attachment messages
    and notices (HS2-PZB8T3). These rules lay out the composer's own dialog (Web Awesome dialog parts
-   under the existing L011 exception), form grid, Up Next toggle, auto-growing details textarea,
+   under the existing L011 exception), form grid, Up Next toggle, priority/backlog placement row, auto-growing details textarea,
    staged-attachment rows, drop zone, and mobile stacking, which no Kerf component
    expresses. */
 /* This app-owned drop shell surrounds a Kerf Button; the shell alone draws drag feedback. */
@@ -73,6 +73,24 @@
 .quick-ticket-composer__up-next:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
+}
+/* Priority and Add to Backlog (HS2-V72HCC): the priority select keeps the metadata column's width
+   and the Kerf Checkbox sits beside it on the select's centre line. */
+.quick-ticket-composer__placement {
+  display: flex;
+  min-width: 0;
+  grid-column: 1 / -1;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--kui-space-xs) var(--kui-space-l);
+}
+.quick-ticket-composer__priority {
+  width: min(100%, remify(240px));
+}
+.quick-ticket-composer__backlog {
+  display: flex;
+  min-height: var(--wa-form-control-height);
+  align-items: center;
 }
 .quick-ticket-composer__details {
   display: grid;

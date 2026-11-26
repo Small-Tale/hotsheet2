@@ -247,38 +247,36 @@ Any project with a rendered interface keeps a UI conventions document. It points
 
 <!-- hotsheet:end section=requirements-documentation -->
 
-<!-- hotsheet:begin section=testing-philosophy v=7 -->
+<!-- hotsheet:begin section=testing-philosophy v=8 -->
 
 ## Testing Philosophy
 
-- Scale testing to risk. Declare a tier in the ticket's preliminary-thoughts note (in the claim note for trivial work); reviewers may raise it. **T0 trivial** (copy, docs, constants, one style token or config value): lint, typecheck, and directly related tests; check visuals only when something visibly changes. **T1 normal** (an ordinary feature or bug fix): the affected tests only; a fix adds one regression test at the most natural layer, and a new feature gets unit and end-to-end coverage. **T2 high-risk** (merge and sync logic, claims and leases, indexes, file formats and parsers, shared components, auth and credentials, data migrations, and any surface the project names as high-risk): everything below, plus the full affected suites.
-- Cover each feature with unit tests of its logic and end-to-end tests through the real shipped flow. Mock external dependencies in unit tests; keep browser fixtures faithful to real server shapes, optional fields, and status codes. Exercise each newly composed API surface against a real server as well as mocked client tests.
-- Aim to cover every documented feature and reach 100% line and branch coverage. Treat those numbers as a floor: executed lines do not prove behavior or sequences. For stateful modules, enumerate states and transitions, then test repeated, interleaved, out-of-order, reset, and empty-then-refill sequences.
-- Test stateful controls in both directions: control to application state and rendered output, and programmatic state changes back to live controls. Verify resets and a further edit. For custom elements, assert live properties and relevant focus/events. Check every part of a selected presentation, including icons, badges, counts, and other derived decoration.
-- Exercise child actions through each shipped parent composition. A demo or isolated preview is insufficient evidence that the real parent wires an enabled control; disable unsupported controls explicitly.
-- Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated.
-- Give every code package a working local lint command and configuration when it is added. Keep lint warning-free, fix lint and type errors before finishing, and document justified suppressions.
-- When a reviewer corrects a convention, pin it in the same change as a source-level policy test or lint rule named with the ticket slug; prose alone does not hold.
-- Keep test output quiet: run suites with failure-only reporters (the project's quiet test wrapper when it has one) and read the summary and failure excerpts, not the full log. A cheaper background agent may run the tests and report only pass/fail and the failures.
-- Rerun only what failed. After a failure, rerun just the failing tests (for example `cargo nextest run -E 'test(<name>)'`, `vitest run <file> -t '<name>'`, or `playwright test -g '<title>'`) until they pass, then run the ticket's affected set once. A rebase onto commits that do not touch the ticket's area needs no rerun; an overlapping one reruns only the overlap's affected tests. Never rerun a passing suite to double-check.
-- Verify on the rebuilt instance and reproduce the user's actual steps or command before claiming a fix; never test against the user's running host or a stale build. Isolation, build-once, and flake policy live in the `test-operations` rule when a project installs it.
+- Declare risk tier in preliminary thoughts (claim note for trivial work); reviewers may raise it. **T0 trivial**: copy/docs/constants/one style token or config value; lint, typecheck, directly related tests, visuals when visible. **T1 normal**: affected tests; a fix adds a regression at the natural layer, a feature gets unit and E2E coverage. **T2 high-risk**: merge/sync, claims/leases, indexes, formats/parsers, shared components, auth/credentials, migrations and project-named risks; all requirements below plus full affected suites.
+- Cover each feature with isolated unit tests (external dependencies mocked) and real-flow E2E with minimal mocking. Fakes match real shapes, optional fields and status codes. Newly composed APIs need real-server exercises as well as mocked-client tests.
+- Aim for all documented features and 100% line/branch coverage; execution is not proof of behavior/sequences. Enumerate state/transition matrices; test repeated, interleaved, out-of-order, reset and empty-then-refill sequences.
+- Test controls both ways: user control → app state/output and programmatic state → live controls; reset, then edit again. Assert custom-element live properties, focus/events and all derived icons/badges/counts. Exercise child actions through shipped parents; isolated demos cannot prove wiring. Explicitly disable unsupported controls.
+- Maintain feature-by-feature unit/E2E/manual evidence as behavior changes and a manual plan for what cannot reliably be automated.
+- Every new code package has working local lint/config. Fix lint/type errors before finishing; keep warning-free and document justified suppressions. Reviewer convention corrections get a source policy test or lint rule named with the ticket slug in the same change.
+- Keep output quiet: use failure-only reporters or the project's quiet wrapper; read summaries/failure excerpts, not full logs. A background agent may report pass/fail and failures only.
+- **Rerun only what failed.** Target failing tests until green, then run the affected set once. After rebase rerun only overlapping affected areas; unrelated commits need no rerun. Never repeat a passing suite just to double-check.
+- Verify the rebuilt instance using the user's actual steps/command; never test against the user's running host or a stale build. `test-operations` owns isolation, build-once and flake policy when installed.
 
 <!-- hotsheet:end section=testing-philosophy -->
 
-<!-- hotsheet:begin section=ticket-driven-work v=8 -->
+<!-- hotsheet:begin section=ticket-driven-work v=9 -->
 
 ## Ticket-Driven Work
 
-The Hot Sheet workflow owns ticket creation, claims, phases and ETAs, releasing, follow-ups, the `FEEDBACK NEEDED` rule, and the completion checklist (HS2-B39GQ9). This rule adds what the workflow does not say.
+The Hot Sheet workflow owns lifecycle, claims, phases/ETAs, follow-ups, feedback and completion (HS2-B39GQ9). This rule adds:
 
-- A claim is the live activity signal; `claim_count` records past attempts and must not be used to infer current activity.
-- Before asking for feedback, check open tickets and the code. Status reports, release waits, and sandbox blockers are regular notes, not feedback requests; close tickets you created yourself; give a visual tradeoff captures and `CHOICE` options.
-- Re-read the whole ticket, including notes added since your last read, before every action on it, and quote the note you are acting on in your result.
-- Change only what the ticket asks and preserve neighboring appearance and behavior; propose collateral changes as separate tickets. When the ticket names an attachment, reference art, a prior implementation, or another project, open it before designing.
-- Measure before restructuring: record the number that justifies a performance or architecture change, and close the ticket as not worth it when the number is small.
-- Record `activity` notes when a meaningful subtask starts and finishes; keep repeated or reversed transitions as separate history entries. Put conclusions, decisions, and recommendations in `regular` Markdown notes, with a short activity entry pointing to them when useful.
-- Give each AI-authored activity note a one-line, outcome-oriented `note_summary` in the same update as its Markdown body. Keep the summary plain text and preferably under 80 characters; put implementation and verification detail in the body.
-- For multiline CLI Markdown, use `--note-file <path>` (or `--note-file -` for stdin) with real line breaks. Use `--allow-literal-backslash-n` only when literal backslash-n prose is intentional.
+- Only a live claim signals activity; `claim_count` counts past attempts.
+- Before feedback, check open tickets and code. Status reports, release waits and sandbox blockers are regular notes. Close tickets you created yourself; show visual tradeoffs with captures and `CHOICE` options.
+- Re-read the whole ticket and new notes before every action; quote the note acted on in your result.
+- Preserve scope and neighboring behavior/appearance; ticket collateral changes separately. Open named attachments, reference art, prior implementations and other projects before designing.
+- Measure before performance/architecture restructuring; record the justification and close as not worth it when the number is small.
+- Record `activity` at meaningful subtask start/finish, including repeated/reversed transitions. Keep conclusions/decisions/recommendations in regular Markdown notes, optionally linked from activity.
+- AI activity writes include a plain one-line outcome `note_summary`, preferably under 80 characters; details belong in the body.
+- Multiline CLI notes use `--note-file <path>` or `--note-file -` with real newlines; `--allow-literal-backslash-n` is only for intentional literal escapes.
 
 <!-- hotsheet:end section=ticket-driven-work -->
 

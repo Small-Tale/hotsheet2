@@ -34,6 +34,7 @@ function harness(
   let nextInterval = 0;
   const released = vi.fn(() => Promise.resolve());
   const request = vi.fn(() => Promise.resolve({ release: released }));
+  const nativeCursor = vi.fn<(hidden: boolean) => void>();
   const controller = createStandbyController({
     openProjectIds: options.openProjectIds ?? (() => []),
     liveStates: options.liveStates ?? createLiveStateStore(),
@@ -45,6 +46,7 @@ function harness(
     now: () => (vi.isFakeTimers() ? Date.now() : clock),
     touchDevice: () => options.touch ?? false,
     wakeLock: () => ({ request }),
+    nativeCursorHidden: nativeCursor,
     streamGraceMs: 20_000,
     setInterval: (callback) => {
       intervals.set(++nextInterval, callback);
@@ -59,6 +61,7 @@ function harness(
     intervals,
     request,
     released,
+    nativeCursor,
     tick: (ms: number) => {
       clock += ms;
       for (const callback of intervals.values()) callback();
@@ -83,6 +86,21 @@ describe('standby controller (HS2-EQVZTZ)', () => {
     expect(controller.scope.value).toBeUndefined();
     expect(intervals.size).toBe(0);
     controller.exit();
+  });
+
+  it('hides the cursor natively on entry and releases it on exit, paired across repeats (HS2-1RGBCT)', () => {
+    vi.useFakeTimers();
+    const { controller, nativeCursor } = harness();
+    // Entry hides at once, with no pointer move after the click that entered (the sidebar button).
+    controller.enter();
+    expect(controller.cursorHidden.value).toBe(true);
+    expect(nativeCursor.mock.calls).toEqual([[true]]);
+    controller.exit();
+    expect(nativeCursor.mock.calls).toEqual([[true], [false]]);
+    // Repeated entry and exit stay paired.
+    controller.enter();
+    controller.exit();
+    expect(nativeCursor.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 
   it('enters after the configured idle threshold and not while disabled', async () => {

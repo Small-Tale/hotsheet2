@@ -23,11 +23,13 @@ pub mod claim_backends;
 pub mod claim_codec;
 pub mod claim_gate;
 pub mod claim_host;
+pub mod completion_remote;
 pub mod corrupt_cache;
 pub mod distclaim;
 pub mod distwork;
 pub mod features;
 pub mod git;
+mod git_discovery;
 pub mod github_endpoint;
 pub mod gitref_cas;
 pub mod groups;
@@ -53,6 +55,7 @@ pub mod pricing;
 pub mod project_gitignore;
 pub mod provider;
 pub mod provider_outbox;
+pub mod provider_trash;
 pub mod provisional;
 pub mod registry;
 pub mod remote_servers;
@@ -108,6 +111,9 @@ pub use provider::{
     keyset_page_from_rows, legacy_store_provider_config_path, machine_provider_config_path,
     migrate_machine_provider_config, move_between, provider_group_matches,
     provider_migration_ledger_path, provider_text_matches, store_config_key, unbounded_query,
+};
+pub use provider_trash::{
+    ProviderPurgeOutcome, ProviderTrashPurge, RetainedTrashTicket, purge_provider_trash,
 };
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};

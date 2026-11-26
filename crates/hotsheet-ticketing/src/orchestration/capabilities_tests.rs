@@ -13,6 +13,7 @@ fn tool(name: &str, installed: bool, configured: bool) -> ToolAvailability {
         tool: name.into(),
         installed,
         configured,
+        models: None,
     }
 }
 
@@ -478,4 +479,185 @@ fn hs2_zy4z4g_the_owner_declares_the_toolchains_a_machine_reports() {
     assert!(config.validate().is_err());
     config.toolchains = Some((0..=MAX_TOOLCHAINS).map(|n| format!("t{n}")).collect());
     assert!(config.validate().is_err());
+}
+
+/// One minimum-version case: the requirement, the reported codex and node versions,
+/// and the misses expected.
+type VersionCase<'a> = (
+    &'a str,
+    Option<&'a str>,
+    Option<&'a str>,
+    Vec<(String, RequirementState)>,
+);
+
+/// A machine reporting `codex` at `codex_version` and `node` installed at
+/// `node_version` (each `None` when it did not say).
+fn versioned(codex_version: Option<&str>, node_version: Option<&str>) -> CapacitySnapshot {
+    let mut caps = capabilities();
+    caps.ai_tools = Some(vec![ToolVersion {
+        tool: "codex".into(),
+        version: codex_version.map(Into::into),
+    }]);
+    caps.toolchains = Some(vec![ToolchainCapability {
+        name: "node".into(),
+        installed: true,
+        version: node_version.map(Into::into),
+    }]);
+    snapshot(Some(caps), Some(32 * 1024))
+}
+
+#[test]
+fn hs2_zh9c6w_a_minimum_version_is_met_unmet_or_unknown() {
+    // (requirement, codex version, node version, expected misses)
+    let cases: Vec<VersionCase<'_>> = vec![
+        // Toolchains: equal, higher in a later part, higher in an earlier part.
+        ("toolchain=node>=20", None, Some("20.0.0"), vec![]),
+        ("toolchain=node>=20", None, Some("v20.11.1"), vec![]),
+        ("toolchain=node>=20", None, Some("22"), vec![]),
+        (
+            "toolchain=node>=20.11",
+            None,
+            Some("20.9.0"),
+            one("toolchain:node>=20.11", Unmet),
+        ),
+        (
+            "toolchain=node>=20",
+            None,
+            Some("v18.19.0"),
+            one("toolchain:node>=20", Unmet),
+        ),
+        // No version reported, or one without a number: unknown, never a guess.
+        (
+            "toolchain=node>=20",
+            None,
+            None,
+            one("toolchain:node>=20", Unknown),
+        ),
+        (
+            "toolchain=node>=20",
+            None,
+            Some("unknown"),
+            one("toolchain:node>=20", Unknown),
+        ),
+        // A bare name ignores the version.
+        ("toolchain=node", None, None, vec![]),
+        // AI tools: the reported version with its prefix and suffix.
+        ("tool=codex>=0.40", Some("codex-cli 0.41.0"), None, vec![]),
+        ("tool=codex>=0.40", Some("0.40"), None, vec![]),
+        (
+            "tool=codex>=0.40",
+            Some("0.39.9"),
+            None,
+            one("tool:codex>=0.40", Unmet),
+        ),
+        (
+            "tool=codex>=0.40",
+            Some("0.4"),
+            None,
+            one("tool:codex>=0.40", Unmet),
+        ),
+        (
+            "tool=codex>=0.40",
+            None,
+            None,
+            one("tool:codex>=0.40", Unknown),
+        ),
+        // A tool that is not usable is unmet whatever its version.
+        (
+            "tool=claude>=1",
+            Some("9"),
+            None,
+            one("tool:claude>=1", Unmet),
+        ),
+    ];
+    for (spec, codex, node, expected) in cases {
+        assert_eq!(
+            misses(req(&[spec]), &versioned(codex, node)),
+            expected,
+            "{spec} with codex {codex:?}, node {node:?}"
+        );
+    }
+    // A machine that did not report its AI tool versions at all.
+    let mut caps = capabilities();
+    caps.ai_tools = None;
+    assert_eq!(
+        misses(req(&["tool=codex>=0.40"]), &snapshot(Some(caps), Some(1))),
+        one("tool:codex>=0.40", Unknown)
+    );
+    // No capabilities at all: a versioned toolchain is unknown, a versioned tool too.
+    assert_eq!(
+        misses(
+            req(&["tool=codex>=0.40", "toolchain=node>=20"]),
+            &snapshot(None, Some(1))
+        ),
+        [
+            ("tool:codex>=0.40".to_owned(), Unknown),
+            ("toolchain:node>=20".to_owned(), Unknown)
+        ]
+    );
+}
+
+#[test]
+fn hs2_zh9c6w_minimum_versions_have_one_canonical_form() {
+    let spelled = req(&[
+        "toolchain=node",
+        "toolchain=node>=18",
+        "toolchain=node>= 20.0",
+        "toolchain=cargo>=1.079.0",
+        "tool=codex>=0.40.0",
+        "tool=codex",
+        "tool=claude",
+    ])
+    .normalized()
+    .unwrap();
+    assert_eq!(spelled.toolchains, ["cargo>=1.79", "node>=20"]);
+    assert_eq!(spelled.tools, ["claude", "codex>=0.40"]);
+    assert_eq!(spelled.clone().normalized().unwrap(), spelled);
+    // The order given does not matter: the highest minimum stays.
+    let other = req(&["toolchain=node>=20", "toolchain=node>=18", "toolchain=node"])
+        .normalized()
+        .unwrap();
+    assert_eq!(other.toolchains, ["node>=20"]);
+    // A zero version is the version 0.
+    assert_eq!(
+        req(&["toolchain=node>=0.0"])
+            .normalized()
+            .unwrap()
+            .toolchains,
+        ["node>=0"]
+    );
+    // Malformed versions and names are refused.
+    for spec in [
+        "toolchain=node>=",
+        "toolchain=node>=20.x",
+        "toolchain=node>=1.2.3.4.5",
+        "toolchain=node>=-1",
+        "toolchain=node>=1..2",
+        "toolchain=node>=1234567890",
+        "toolchain=Node>=20",
+        "tool=has space>=1",
+        "toolchain=>=20",
+    ] {
+        assert!(req(&[spec]).normalized().is_err(), "{spec} refused");
+    }
+    // It travels as the same JSON strings.
+    assert_eq!(
+        serde_json::to_value(&spelled).unwrap()["toolchains"],
+        serde_json::json!(["cargo>=1.79", "node>=20"])
+    );
+}
+
+#[test]
+fn hs2_zh9c6w_versions_compare_part_by_part() {
+    assert_eq!(version_parts("v20.11.1"), Some(vec![20, 11, 1]));
+    assert_eq!(version_parts("codex-cli 0.41.0"), Some(vec![0, 41, 0]));
+    assert_eq!(version_parts("1.79.0 (stable)"), Some(vec![1, 79, 0]));
+    assert_eq!(version_parts("none"), None);
+    assert!(version_at_least(&[20], &[20, 0, 0]));
+    assert!(version_at_least(&[20, 0, 1], &[20]));
+    assert!(!version_at_least(&[19, 99], &[20]));
+    assert!(version_at_least(&[1, 10], &[1, 9]));
+    assert!(!version_at_least(&[1, 9], &[1, 10]));
+    assert_eq!(split_minimum("node>=20"), ("node", Some("20")));
+    assert_eq!(split_minimum("node"), ("node", None));
 }

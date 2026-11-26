@@ -584,7 +584,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['toolbar-text', 3],
     ['toolbar-control-group', 8],
     ['value-table', 1],
-    ['hs1-migration-banner', 7],
+    ['hs1-migration-banner', 8],
     ['notifications-paused-banner', 2],
     ['floating-toolbar', 1],
     ['tab-bar-item', 1],
@@ -632,7 +632,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['terminal-visibility-dialog', 1],
     ['ai-conversation', 1],
     ['project-tab', 1],
-    ['project-tabs', 5],
+    ['project-tabs', 6],
     ['resizable-region', 2],
     ['connection-state-banner', 5],
     ['app-shell', 1],
@@ -1672,8 +1672,9 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect(dashboard).toHaveAttribute('data-fit', '3');
   await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(4);
-  // HS2-YHQM67: the demo's only connected tile is the project's primary, so it shows plug-zap.
-  await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="plug-zap"]')).toBeVisible();
+  // HS2-YHQM67, HS2-1WFGX1: the demo's only connected tile is the project's primary: plug plus heart.
+  await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
+  await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="heart"]')).toBeVisible();
   await expect(dashboard.locator('[data-ai-connection="connected"]')).toHaveAttribute(
     'title',
     /hotsheet-mcp tools are connected\. Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z/,
@@ -1698,11 +1699,24 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(menu).toHaveCount(0);
   const first = dashboard.locator('[data-component="terminal-tile"]').first();
   await first.getByRole('button', { name: /More Actions/ }).click();
-  await expect(menu.getByRole('menuitem')).toHaveCount(2);
+  // Receive Feedback Notifications (HS2-H3S7YQ), Open, and Hide.
+  await expect(menu.getByRole('menuitem')).toHaveCount(3);
   await expect(menu.getByText('Open')).toBeVisible();
   await expect(menu.getByText('Hide Terminal')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
+  // HS2-H3S7YQ: choosing the Review session moves the primary heart to it, and clearing returns it.
+  const primaryOf = (id: string) => dashboard.locator(`[data-terminal-key="demo:${id}"] [data-ai-primary="true"]`);
+  const review = dashboard.locator('[data-terminal-key="demo:mcp-missing"]');
+  await expect(primaryOf('shell')).toHaveCount(1);
+  await review.getByRole('button', { name: /More Actions/ }).click();
+  await menu.getByRole('menuitem', { name: 'Receive Feedback Notifications' }).click();
+  await expect(primaryOf('mcp-missing')).toHaveCount(1);
+  await expect(primaryOf('shell')).toHaveCount(0);
+  await review.getByRole('button', { name: /More Actions/ }).click();
+  await menu.getByRole('menuitem', { name: 'Stop Receiving Feedback Notifications' }).click();
+  await expect(primaryOf('shell')).toHaveCount(1);
+  await expect(primaryOf('mcp-missing')).toHaveCount(0);
   await first.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });
@@ -1766,11 +1780,12 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   // selector before the standard toggle, above the pinned controls and the scrolling ticket list.
   const panel = page.getByRole('region', { name: 'Interactive', exact: true }),
     rail = page.locator('[data-component="terminal-ticket-rail"]'),
-    project = panel.locator('kui-select[name="terminal-rail-project"]'),
+    project = panel.locator('[data-terminal-rail-project]'),
     view = rail.locator('kui-select[name="terminal-rail-view"]'),
     launcher = rail.locator('[data-component="quick-ticket-composer-launcher"]');
   await expect(rail).toBeVisible();
-  await expect(project).toHaveAttribute('value', 'demo');
+  // The project switcher is a PopupMenu naming the selected project (HS2-2609BW).
+  await expect(project).toHaveAttribute('data-terminal-rail-project', 'demo');
   await expect(view).toHaveAttribute('value', 'all');
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
   await expect(launcher).toContainText('Ticket…');
@@ -1789,7 +1804,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
       search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
-      project = document.querySelector('kui-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
+      project = document.querySelector('[data-terminal-rail-project]')!.getBoundingClientRect(),
       projectChrome = getComputedStyle(
         document.querySelector<HTMLElement>('[data-catalog-example-viewport] [data-nav-stack-chrome] .kui-toolbar')!,
       ),
@@ -1863,14 +1878,14 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     node.scrollTop = 0;
   });
   await rail.screenshot({ path: 'target/visual-captures/hs2-r292m4-terminal-ticket-rail-wide.png' });
-  await project.click();
-  const longProject = project.locator('.kui-select__option[data-value="docs"]');
+  await project.getByRole('button', { name: 'Demo project' }).click();
+  const longProject = project.getByRole('menuitemcheckbox', { name: 'Documentation and release planning' });
   await expect(longProject).toBeVisible();
   const menuGeometry = await project.evaluate((node) => {
-    const listbox = node.querySelector<HTMLElement>('.kui-select__popup')!,
+    const listbox = node.querySelector<HTMLElement>('[role="menu"]')!,
       listboxBox = listbox.getBoundingClientRect(),
-      option = node.querySelector<HTMLElement>('.kui-select__option[data-value="docs"]')!,
-      label = option.querySelector<HTMLElement>('.kui-select__option-label')!;
+      option = node.querySelector<HTMLElement>('[role="menuitemcheckbox"][data-project-id="docs"]')!,
+      label = option.querySelector<HTMLElement>('.kui-popup-menu__item-label')!;
     return {
       triggerWidth: node.getBoundingClientRect().width,
       listboxWidth: listboxBox.width,
@@ -1892,6 +1907,13 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     path: 'target/visual-captures/hs2-fpftyy-terminal-ticket-rail-project-menu-wide.png',
     fullPage: true,
   });
+  // HS2-2609BW: the demo's minimized projects sit only in the final Minimized Projects submenu.
+  await expect(project.locator(':scope > [role="menu"] > [data-project-id="site"]')).toHaveCount(0);
+  await project.locator('[data-rail-minimized-projects="true"]').hover();
+  await expect(project.locator('[data-project-id="site"]')).toBeVisible();
+  await expect(project.locator('[data-project-id="remote:mini"] [data-lucide="cloud"]')).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-2609bw-terminal-ticket-rail-minimized-submenu.png' });
+  await page.keyboard.press('Escape');
   // HS2-7N6F67: the compact view selector must not clip its longer option labels either.
   await page.keyboard.press('Escape');
   await view.click();
@@ -10690,7 +10712,7 @@ test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one 
     await back.click();
     await expect(root).toHaveAttribute('data-nav-active', 'true');
     await expect(pushed).toHaveCount(0);
-    await expect(rail.locator('kui-select[name="terminal-rail-project"]')).toBeVisible();
+    await expect(rail.locator('[data-terminal-rail-project]')).toBeVisible();
     await page.screenshot({ path: `target/visual-captures/hs2-fy06n4-rail-root-${width}.png` });
   }
 });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ApiHttpError, type OrchestrationSession } from '../api';
 import { OrchestrationSettings } from '../components/orchestration-settings';
 import type { ConfirmationAnswer, ConfirmationOptions } from '../confirmation';
+import { hostedSiteSources, projectRows, siteChoicesByProject } from '../orchestration-settings-model';
 import { remoteProjectId } from '../remote-projects/identity';
 import { remoteTerminalList } from '../remote-projects/terminals';
 import { terminalProjectOwner } from '../terminal-project-scope';
@@ -12,6 +13,7 @@ import {
   DEMO_OWNER,
   DEMO_REMOTE,
   DEMO_TARGETS,
+  demoStore,
 } from '../ux-demo/orchestration-settings-fixtures';
 import { createOrchestrationSettings, type OrchestrationApi } from './orchestration-settings';
 
@@ -26,6 +28,7 @@ function setup({ empty = false, answers = [] as boolean[], choices = [] as Confi
   const deferred: (() => void)[] = [];
   const activated: string[] = [];
   const shown: string[] = [];
+  const toasts: string[] = [];
   const settings = createOrchestrationSettings({
     api: () => api,
     openProjects: () => open,
@@ -49,10 +52,12 @@ function setup({ empty = false, answers = [] as boolean[], choices = [] as Confi
     knownTools: () => ['claude', 'codex'],
     showInspector: vi.fn(),
     defer: (run) => deferred.push(run),
+    notify: (message) => toasts.push(message),
   });
   return {
     settings,
     api,
+    toasts,
     asked,
     activated,
     shown,
@@ -146,6 +151,8 @@ describe('Settings → Orchestration (HS2-W27N1D)', () => {
     expect(state(t).manifest?.targets).toHaveLength(1);
     await t.settings.addOpenProject(DEMO_OWNER, 'web-0000000000ab');
     expect(state(t).status).toBe('Web is already added.');
+    // HS2-1K6122: each outcome is announced through the toast, once.
+    expect(t.toasts).toEqual(['Web added.', 'Web is already added.']);
     // The owner itself and an unknown tab add nothing.
     await t.settings.addOpenProject(DEMO_OWNER, DEMO_OWNER);
     await t.settings.addOpenProject(DEMO_OWNER, 'not-open');
@@ -192,6 +199,8 @@ describe('Settings → Orchestration (HS2-W27N1D)', () => {
     expect(t.settings.selected.value[DEMO_OWNER]).toBeUndefined();
     expect(state(t).manifest?.targets.filter((target) => target.state === 'active')).toHaveLength(2);
     expect(state(t).status).toBe('Web removed.');
+    // HS2-40CTDS: the outcome is one toast.
+    expect(t.toasts).toEqual(['Web removed.']);
   });
 });
 
@@ -330,6 +339,8 @@ describe('a project detail (HS2-W27N1D)', () => {
     await t.settings.stopSession(DEMO_OWNER, worker);
     expect(t.api.stopOrchestrationSession).toHaveBeenLastCalledWith(DEMO_OWNER, worker, true);
     expect(state(t).status).toBe('Session stopped.');
+    // HS2-40CTDS: the cancelled stop says nothing; the one that stops is one toast.
+    expect(t.toasts).toEqual(['Session stopped.']);
   });
 
   it('takes a session over after confirmation and shows one in its drawer', async () => {
@@ -347,6 +358,7 @@ describe('a project detail (HS2-W27N1D)', () => {
     await t.settings.takeOverSession(DEMO_OWNER, '01JSYNTHSESSION00000000001');
     expect(t.asked[0].title).toBe('Take over this session?');
     expect(state(t).status).toBe('Session taken over.');
+    expect(t.toasts).toEqual(['Session taken over.']);
   });
 });
 
@@ -358,6 +370,8 @@ describe('the policy form (HS2-W27N1D)', () => {
     await t.settings.applyPolicy(DEMO_OWNER);
     expect(state(t).message).toBe('CPU Ceiling must be 1 to 100.');
     expect(t.api.setOrchestrationPolicy).not.toHaveBeenCalled();
+    // HS2-40CTDS: a draft's own validation stays beside the form, not in a toast.
+    expect(t.toasts).toEqual([]);
     t.settings.changePolicy(DEMO_OWNER, 'machine.max_cpu_percent', '80');
     await t.settings.applyPolicy(DEMO_OWNER);
     expect(t.api.setOrchestrationPolicy).toHaveBeenCalledWith(
@@ -366,6 +380,7 @@ describe('the policy form (HS2-W27N1D)', () => {
       expect.objectContaining({ machine: expect.objectContaining({ max_cpu_percent: 80 }) }),
     );
     expect(state(t).status).toBe('Policy saved.');
+    expect(t.toasts).toEqual(['Policy saved.']);
     expect(state(t).draft?.machine.max_cpu_percent).toBe('80');
   });
 });
@@ -410,6 +425,7 @@ describe("a project's limits and tool accounts (HS2-7WF6JD)", () => {
       max_sessions: 2,
     });
     expect(state(t).status).toBe('Limits for API saved.');
+    expect(t.toasts).toEqual(['Limits for API saved.']);
     // Saved: the form follows the stored policy again, and admission is asked for the new tool.
     await vi.waitFor(() => {
       expect(t.settings.detailOf(DEMO_OWNER)?.admissionTools).toEqual(['claude']);
@@ -437,6 +453,8 @@ describe("a project's limits and tool accounts (HS2-7WF6JD)", () => {
       limitsMessage: 'Could not save the limits. state changed',
       limits: { max_sessions: '1' },
     });
+    // HS2-40CTDS: the local refusal stays beside the limits; the server's refusal is toasted and kept there too.
+    expect(t.toasts).toEqual(['Could not save the limits. state changed']);
   });
 
   it('adds, edits and removes a tool account in the policy form', async () => {
@@ -666,6 +684,7 @@ describe("adding a remote server's open projects (HS2-92FJXM)", () => {
       ['Web', true],
       ['Billing', false],
       ['Docs', true],
+      ['Mobile', false],
     ]);
     // Added through the hosted route, then read again: Billing is checked.
     await t.settings.addHostedProject(REMOTE_OWNER, 'billing-0000000000ab');
@@ -691,7 +710,7 @@ describe("adding a remote server's open projects (HS2-92FJXM)", () => {
     vi.mocked(t.api.hostedOrchestrationProjects).mockRejectedValueOnce(new Error('The server did not answer.'));
     await t.settings.loadSettings(REMOTE_OWNER);
     expect(remote().hostedError).toBe('The server did not answer.');
-    expect(remote().hosted).toHaveLength(3);
+    expect(remote().hosted).toHaveLength(4);
     // The next read succeeds and clears it.
     await t.settings.loadSettings(REMOTE_OWNER);
     expect(remote().hostedError).toBeUndefined();
@@ -701,6 +720,65 @@ describe("adding a remote server's open projects (HS2-92FJXM)", () => {
     await t.settings.addHostedProject(REMOTE_OWNER, 'billing-0000000000ab');
     expect(remote().message).toContain('Could not add Billing.');
     expect(remote().busy).not.toContain('add');
+  });
+});
+
+describe("adding a remote server's open project as a site (HS2-89YNGN)", () => {
+  const REMOTE_OWNER = `remote:${DEMO_REMOTE}:launch-0000000000ab`;
+  const remote = (t: ReturnType<typeof setup>) => t.settings.settings.value[REMOTE_OWNER]!;
+
+  it('offers the same-store checkouts as sites and adds one through the hosted route', async () => {
+    const t = setup();
+    await t.settings.loadSettings(REMOTE_OWNER);
+    const state = remote(t);
+    const hosted = hostedSiteSources(state.hosted!, 'Build Host');
+    expect(hosted.stores['mobile-0000000000ab']).toBe(demoStore('mobile-0000000000ab'));
+    const rows = projectRows(state.manifest, state.bindings, {}, undefined, 'Build Host');
+    const sites = siteChoicesByProject(rows, hosted.choices, hosted.stores, state.manifest, state.bindings, false);
+    // API's store is Mobile's; Billing reaches another one and shows only under Show All Projects.
+    expect(sites[DEMO_TARGETS.api].map((choice) => [choice.name, choice.machine, choice.sameStore])).toEqual([
+      ['Mobile', 'Build Host', true],
+    ]);
+    await t.settings.addSite(REMOTE_OWNER, DEMO_TARGETS.api, 'mobile-0000000000ab');
+    expect(t.api.addHostedOrchestrationProject).toHaveBeenLastCalledWith(
+      REMOTE_OWNER,
+      expect.objectContaining({ checkout_id: 'mobile-0000000000ab', label: 'Mobile', site_of: DEMO_TARGETS.api }),
+    );
+    expect(remote(t).status).toBe('Mobile added as a site of API.');
+    expect(remote(t).manifest?.targets.find((target) => target.label === 'Mobile')?.site_of).toBe(DEMO_TARGETS.api);
+    // Another store's checkout is refused by the server, in the message line.
+    vi.mocked(t.api.addHostedOrchestrationProject).mockRejectedValueOnce(
+      new ApiHttpError('store mismatch', 409, 'site_store_mismatch'),
+    );
+    await t.settings.addSite(REMOTE_OWNER, DEMO_TARGETS.api, 'billing-0000000000ab');
+    expect(remote(t).message).toBe(
+      'Could not add Billing as a site of API. It reaches a different ticket store than this project.',
+    );
+    // An unknown project row is a no-op.
+    const calls = vi.mocked(t.api.addHostedOrchestrationProject).mock.calls.length;
+    await t.settings.addSite(REMOTE_OWNER, 'missing', 'mobile-0000000000ab');
+    expect(vi.mocked(t.api.addHostedOrchestrationProject).mock.calls).toHaveLength(calls);
+  });
+
+  it('asks about a duplicate from + Add Project: site, separate project, or nothing', async () => {
+    const t = setup({ choices: ['cancel', 'confirm'] });
+    await t.settings.loadSettings(REMOTE_OWNER);
+    // Billing's store is no added project's: added at once, nothing asked.
+    await t.settings.addHostedProject(REMOTE_OWNER, 'billing-0000000000ab');
+    expect(t.asked).toHaveLength(0);
+    expect(remote(t).status).toBe('Billing added.');
+    // Mobile shares API's store: asked, and Cancel adds nothing.
+    const calls = vi.mocked(t.api.addHostedOrchestrationProject).mock.calls.length;
+    await t.settings.addHostedProject(REMOTE_OWNER, 'mobile-0000000000ab');
+    expect(t.asked.at(-1)?.title).toBe('Is Mobile another site of API?');
+    expect(vi.mocked(t.api.addHostedOrchestrationProject).mock.calls).toHaveLength(calls);
+    // Confirmed: added as a site of API.
+    await t.settings.addHostedProject(REMOTE_OWNER, 'mobile-0000000000ab');
+    expect(t.api.addHostedOrchestrationProject).toHaveBeenLastCalledWith(
+      REMOTE_OWNER,
+      expect.objectContaining({ checkout_id: 'mobile-0000000000ab', site_of: DEMO_TARGETS.api }),
+    );
+    expect(remote(t).status).toBe('Mobile added as a site of API.');
   });
 });
 
@@ -781,6 +859,31 @@ describe('Add a Site and Separate from <project> (HS2-E9VVQF)', () => {
     await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, 'closed-0000000000ab');
     expect(t.api.addOrchestrationProject).toHaveBeenCalledTimes(2);
 
+    // HS2-NAA3HV: Make Mobile the Home Site: API becomes Mobile's site, with no question asked.
+    const before = t.asked.length;
+    (t.api.makeOrchestrationHomeSite as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new ApiHttpError('plan conflict', 409, 'site_plan_conflict'),
+    );
+    await t.settings.makeHomeSite(DEMO_OWNER, site!.target_id);
+    expect(state(t).message).toBe(
+      'Could not make Mobile the home site of API. The plan would have two steps on one ticket of the project.',
+    );
+    expect(state(t).busy).not.toContain(site!.target_id);
+    await t.settings.makeHomeSite(DEMO_OWNER, site!.target_id);
+    expect(t.asked).toHaveLength(before);
+    expect(t.api.makeOrchestrationHomeSite).toHaveBeenLastCalledWith(DEMO_OWNER, site!.target_id, expect.any(String));
+    expect(state(t).message).toBe('');
+    expect(state(t).status).toBe('Mobile is the home site of the project now.');
+    const declared = (id: string) => state(t).manifest?.targets.find((target) => target.target_id === id);
+    expect(declared(site!.target_id)?.site_of).toBeUndefined();
+    expect(declared(DEMO_TARGETS.api)?.site_of).toBe(site!.target_id);
+    // A home has nothing to move; and API is made the home again.
+    await t.settings.makeHomeSite(DEMO_OWNER, site!.target_id);
+    expect(t.api.makeOrchestrationHomeSite).toHaveBeenCalledTimes(2);
+    await t.settings.makeHomeSite(DEMO_OWNER, DEMO_TARGETS.api);
+    expect(declared(DEMO_TARGETS.api)?.site_of).toBeUndefined();
+    expect(declared(site!.target_id)?.site_of).toBe(DEMO_TARGETS.api);
+
     // A stale revision: the refusal shows with the project's name, and the site stays.
     (t.api.separateOrchestrationSite as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new ApiHttpError('orchestration declaration changed', 409, 'conflict'),
@@ -800,6 +903,7 @@ describe('Add a Site and Separate from <project> (HS2-E9VVQF)', () => {
     );
     expect(state(t).message).toBe('');
     expect(state(t).status).toBe('Mobile is its own project again.');
+    expect(t.toasts.at(-1)).toBe('Mobile is its own project again.');
     expect(state(t).manifest?.targets.find((target) => target.label === 'Mobile')?.site_of).toBeUndefined();
     // A project that is not a site: nothing to separate.
     await t.settings.separateSite(DEMO_OWNER, DEMO_TARGETS.web);
@@ -929,5 +1033,77 @@ describe('the Add a Site and Separate menus (HS2-E9VVQF)', () => {
     expect(hosted).not.toContain('Add a Site');
     // A site row still separates there.
     expect(hosted).toContain('Separate from Widgets');
+    // HS2-89YNGN: once the server's open checkouts are read, Add a Site offers them, without opening a new one.
+    const served = String(
+      OrchestrationSettings({
+        rows,
+        hostedChoices: [],
+        hostedSites: true,
+        siteChoices: { W: [{ ...clone, sameStore: true }] },
+      }),
+    );
+    expect(served).toContain('Add a Site');
+    expect(served).not.toContain('Open Another Project…');
+    expect(all).toContain('Open Another Project…');
+  });
+});
+
+describe('a change’s outcome is a toast, and a failure keeps its record (HS2-40CTDS)', () => {
+  const refused = () => new ApiHttpError('state changed', 409, 'conflict');
+
+  it('toasts each failed change once and keeps it in the message line until the next change', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.web);
+    await vi.waitFor(() => {
+      expect(t.settings.detailOf(DEMO_OWNER)?.sessions).toHaveLength(2);
+    });
+    const failures: Array<[() => Promise<unknown>, keyof OrchestrationApi, string]> = [
+      [
+        () => t.settings.removeProject(DEMO_OWNER, DEMO_TARGETS.docs),
+        'removeOrchestrationProject',
+        'Could not remove Docs. state changed',
+      ],
+      [
+        () => t.settings.stopSession(DEMO_OWNER, '01JSYNTHSESSION00000000002'),
+        'stopOrchestrationSession',
+        'Could not stop the session. state changed',
+      ],
+      [
+        () => t.settings.takeOverSession(DEMO_OWNER, '01JSYNTHSESSION00000000002'),
+        'takeOverOrchestrationSession',
+        'Could not take over the session. state changed',
+      ],
+      [() => t.settings.applyPolicy(DEMO_OWNER), 'setOrchestrationPolicy', 'Could not save the policy. state changed'],
+    ];
+    for (const [run, call, message] of failures) {
+      vi.mocked(t.api[call] as (...args: unknown[]) => unknown).mockRejectedValueOnce(refused());
+      await run();
+      expect(state(t).message).toBe(message);
+      expect(state(t).status).toBe('');
+      expect(t.toasts.at(-1)).toBe(message);
+    }
+    expect(t.toasts).toEqual(failures.map(([, , message]) => message));
+    // The next change clears the record, and its success is the only new toast.
+    await t.settings.applyPolicy(DEMO_OWNER);
+    expect(state(t).message).toBe('');
+    expect(t.toasts.slice(failures.length)).toEqual(['Policy saved.']);
+  });
+
+  it('toasts a refused add, and a refused site change, in words', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    vi.mocked(t.api.addOrchestrationProject).mockRejectedValueOnce(refused());
+    await t.settings.addOpenProject(DEMO_OWNER, 'web-0000000000ab');
+    expect(state(t).message).toBe('Could not add Web. state changed');
+    expect(t.toasts).toEqual(['Could not add Web. state changed']);
+  });
+
+  it('reads a failed read into the message line only', async () => {
+    const t = setup();
+    vi.mocked(t.api.orchestrationTargets).mockRejectedValueOnce(new Error('offline'));
+    await t.settings.loadSettings(DEMO_OWNER);
+    expect(state(t).message).toBe('Could not read the orchestration settings. offline');
+    expect(t.toasts).toEqual([]);
   });
 });

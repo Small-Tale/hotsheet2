@@ -2128,6 +2128,7 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
             include_str!("../../../plugins/shared/legacy-ticket-driven-work-v4.md"),
             include_str!("../../../plugins/shared/legacy-ticket-driven-work-v5.md"),
             include_str!("../../../plugins/shared/legacy-ticket-driven-work-v6.md"),
+            include_str!("../../../plugins/shared/legacy-ticket-driven-work-v8.md"),
         ],
     },
     GuidanceSection {
@@ -2139,6 +2140,7 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v4.md"),
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v5.md"),
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v6.md"),
+            include_str!("../../../plugins/shared/legacy-testing-philosophy-v7.md"),
         ],
     },
     GuidanceSection {
@@ -2637,9 +2639,9 @@ fn marked_artifact_requires_preservation(
             && installed_version.checked_add(1) == Some(bundled_version)
             && !push_policy_only_diff(installed, bundled))
             || (version_prefix == INSTRUCTIONS_VERSION_PREFIX
-                && bundled_version == 66
-                && installed_version == 65
-                && !known_previous_workflow(installed))
+                && bundled_version >= 66
+                && (65..bundled_version).contains(&installed_version)
+                && !known_previous_workflow(installed, bundled))
             || installed_version > bundled_version
             || (installed_version == bundled_version
                 && installed != bundled
@@ -2647,25 +2649,38 @@ fn marked_artifact_requires_preservation(
     })
 }
 
-/// Version 65 was the project-rendered v64 workflow. Upgrade only its exact managed body;
-/// a project customization at that version belongs to the project (HS2-SZA1KH).
-fn known_previous_workflow(installed: &str) -> bool {
-    let Some(normalized) = without_push_policy(installed) else {
-        return false;
-    };
-    let Some(start) = normalized.find(INSTRUCTIONS_VERSION_PREFIX) else {
-        return false;
-    };
+/// The managed workflow text from its version marker to the block end, with the
+/// version number and the declared push-policy span normalized away.
+fn managed_workflow_body(contents: &str) -> Option<String> {
+    let normalized =
+        without_push_policy(contents)?.replace(LEGACY_POLICY, "{{HOTSHEET_PUSH_POLICY}}");
+    let start = normalized.find(INSTRUCTIONS_VERSION_PREFIX)?;
     let body = &normalized[start..];
     let end = body.find("\n<!-- END hotsheet:").unwrap_or(body.len());
-    let previous = include_str!("../../../plugins/shared/legacy-workflow-v64.md")
-        .replacen(
-            "<!-- hotsheet-instructions-version: 64 -->",
-            "<!-- hotsheet-instructions-version: 65 -->",
-            1,
-        )
-        .replace(LEGACY_POLICY, "{{HOTSHEET_PUSH_POLICY}}");
-    body[..end].trim() == previous.trim()
+    let marker_end = body.find(" -->")? + " -->".len();
+    Some(
+        format!("{{{{VERSION}}}}{}", &body[marker_end..end])
+            .trim()
+            .to_owned(),
+    )
+}
+
+/// Exact managed workflow bodies a project may hold from earlier writers: the v64 body
+/// (HS2-SZA1KH), the ai-playbook v1.8.0 v65 body, and the current bundled body, each
+/// unrendered or rendered with a push policy (HS2-8HCBA1). Upgrade only those; any
+/// other text at a migratable version is a project customization and is preserved.
+fn known_previous_workflow(installed: &str, bundled: &str) -> bool {
+    let Some(installed) = managed_workflow_body(installed) else {
+        return false;
+    };
+    [
+        include_str!("../../../plugins/shared/legacy-workflow-v64.md"),
+        include_str!("../../../plugins/shared/legacy-workflow-v65.md"),
+        bundled,
+    ]
+    .into_iter()
+    .filter_map(managed_workflow_body)
+    .any(|known| known == installed)
 }
 
 /// A changed declared policy owns only this generated span. An edit anywhere else
@@ -4104,7 +4119,7 @@ mod tests {
                 path,
                 section,
                 installed_version: 1,
-                bundled_version: 8,
+                bundled_version: 9,
             } if path == "AGENTS.md" && section == "ticket-driven-work"
         ));
         assert!(render_guidance_sections(&old, true).contains(&old));
@@ -4379,11 +4394,61 @@ args = ["--path", "{{store}}"]
     fn hs2_sza1kh_upgrades_only_the_exact_previous_workflow() {
         let previous = rendered_previous_workflow();
         let installed = per_tool("codex", previous.trim_end());
-        assert!(known_previous_workflow(&installed));
-        assert!(!known_previous_workflow(&installed.replace(
-            "## Hot Sheet — ticket workflow",
-            "## Customized Hot Sheet — ticket workflow",
-        )));
+        let bundled = include_str!("../../../plugins/claude/instructions.md");
+        assert!(known_previous_workflow(&installed, bundled));
+        assert!(!known_previous_workflow(
+            &installed.replace(
+                "## Hot Sheet — ticket workflow",
+                "## Customized Hot Sheet — ticket workflow",
+            ),
+            bundled,
+        ));
+    }
+
+    #[test]
+    fn hs2_8hcba1_upgrades_both_known_v65_workflow_bodies() {
+        let policy = "<!-- hotsheet:push-policy:begin -->\nPush policy: `push-per-ticket`.\n<!-- hotsheet:push-policy:end -->";
+        let v65 = include_str!("../../../plugins/shared/legacy-workflow-v65.md");
+        let rendered = v65
+            .replacen(
+                "<!-- hotsheet-instructions-version: 65 -->",
+                "<!-- hotsheet-instructions-version: 66 -->",
+                1,
+            )
+            .replace(LEGACY_POLICY, policy);
+        let bundled = crate::builtin_plugins()
+            .into_iter()
+            .find(|plugin| plugin.id() == "codex")
+            .unwrap()
+            .instructions_body()
+            .trim_end()
+            .to_owned();
+        let bundled_version = marked_version(&bundled, INSTRUCTIONS_VERSION_PREFIX).unwrap();
+        assert!(bundled_version >= 67);
+        for installed in [
+            per_tool("codex", rendered.trim_end()),
+            per_tool("codex", v65.trim_end()),
+            per_tool("codex", rendered_previous_workflow().trim_end()),
+        ] {
+            assert!(known_previous_workflow(&installed, &bundled));
+            assert!(!marked_artifact_requires_preservation(
+                &installed,
+                &bundled,
+                bundled_version + 1,
+                INSTRUCTIONS_VERSION_PREFIX,
+            ));
+            let customized = installed.replace(
+                "## Hot Sheet — ticket workflow",
+                "## Customized Hot Sheet — ticket workflow",
+            );
+            assert!(!known_previous_workflow(&customized, &bundled));
+            assert!(marked_artifact_requires_preservation(
+                &customized,
+                &bundled,
+                bundled_version + 1,
+                INSTRUCTIONS_VERSION_PREFIX,
+            ));
+        }
     }
 
     #[test]
@@ -4836,9 +4901,9 @@ args = ["--path", "{{store}}"]
         }
         assert_eq!(claude.matches("@AGENTS.md").count(), 1);
         for rule in [
-            "meaningful subtask starts and finishes",
-            "separate history entries",
-            "`regular` Markdown notes",
+            "Record `activity` at meaningful subtask start/finish",
+            "repeated/reversed transitions",
+            "regular Markdown notes",
             "`note_summary`",
             "`--note-file <path>`",
         ] {
@@ -4900,20 +4965,21 @@ args = ["--path", "{{store}}"]
             .unwrap();
         let rules = testing.current;
         for required in [
-            "real server shapes, optional fields, and status codes",
-            "each newly composed API surface against a real server",
-            "controls in both directions",
-            "Verify resets and a further edit",
-            "assert live properties",
-            "every part of a selected presentation",
-            "through each shipped parent composition",
-            "disable unsupported controls explicitly",
+            // ai-playbook v1.9.0 condensed wording (HS2-JS9A83, adopted by HS2-8HCBA1).
+            "Fakes match real shapes, optional fields and status codes",
+            "Newly composed APIs need real-server exercises",
+            "Test controls both ways",
+            "reset, then edit again",
+            "Assert custom-element live properties",
+            "all derived icons/badges/counts",
+            "Exercise child actions through shipped parents",
+            "Explicitly disable unsupported controls",
             // Testing effort scales with a declared risk tier (HS2-GC3D2X).
-            "Scale testing to risk",
+            "Declare risk tier in preliminary thoughts",
             "**T0 trivial**",
             "**T1 normal**",
             "**T2 high-risk**",
-            "merge and sync logic, claims and leases, indexes, file formats and parsers",
+            "merge/sync, claims/leases, indexes, formats/parsers",
         ] {
             assert!(rules.contains(required), "missing shared rule: {required}");
         }

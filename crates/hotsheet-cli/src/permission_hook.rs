@@ -151,6 +151,19 @@ pub fn trusted_terminal_id(
         .filter(|_| !shared_host())
 }
 
+/// The project a permission ask names (HS2-HSFVHC): the inherited one, unless the hook runs under
+/// a shared host whose environment belongs to whichever session started it. Such a hook names
+/// none and sends its input's `cwd`, which the server resolves to the containing checkout, so a
+/// Codex ask is not filed under another project (and never reached a remote tab).
+#[must_use]
+pub fn permission_project(inherited: Option<String>, shared_host: bool) -> String {
+    if shared_host {
+        String::new()
+    } else {
+        inherited.unwrap_or_default()
+    }
+}
+
 /// Map a native hook **input** to the bridge's `(tool, action)` rule key. The
 /// action is the command (Bash), else a file path (Edit/Write/Read), else empty — the same
 /// coarse key codex uses, so an `Always` rule remembered on one transport matches the other.
@@ -563,6 +576,17 @@ mod tests {
             trusted_terminal_id(Some(String::new()), || panic!("not consulted")),
             None
         );
+    }
+
+    #[test]
+    fn hs2_hsfvhc_a_shared_host_hook_names_no_inherited_project() {
+        assert_eq!(
+            permission_project(Some("checkout:a".into()), false),
+            "checkout:a"
+        );
+        assert_eq!(permission_project(None, false), "");
+        // The daemon's environment belongs to whichever session started it.
+        assert_eq!(permission_project(Some("checkout:a".into()), true), "");
     }
 
     #[test]

@@ -44,10 +44,18 @@ import {
   visiblePendingDrawerTabs,
 } from '../drawer-tab-order';
 import { featureOn } from '../feature-areas';
+import { liveWordColor } from '../grid-sidebar-live';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
+import { LIVE_STATE_ICONS } from '../live-state-icons';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import { aiConnectionIcon, aiConnectionLabel } from '../terminal-ai-connection';
+import {
+  aiConnectionIcon,
+  aiConnectionLabel,
+  aiPrimaryIcon,
+  TOOL_WAITING_LABEL,
+  toolWaiting,
+} from '../terminal-ai-connection';
 import { TERMINAL_GRID_PHONE_BREAKPOINT, terminalGridContentSize } from '../terminal-grid-layout';
 import { orchestratorTabNameKeep } from '../terminal-names';
 import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
@@ -150,8 +158,8 @@ export interface TerminalDrawerSearch {
   hasQuery?: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
-// Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
-const DRAWER_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'clear-halt'];
+// Terminal visibility is scoped to the workspace dashboard, so the drawer grid never offers Hide.
+const DRAWER_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'clear-halt', 'feedback-primary'];
 
 /**
  * The New drawer item menu's AI shell entry (HS2-3HT4PA): with one provider it is named for that
@@ -312,6 +320,18 @@ export function TerminalDrawer({
                     label={`Exited with status ${session.exit_code}`}
                     title={`Exited with status ${session.exit_code}`}
                   />
+                ) : toolWaiting(session) ? (
+                  // HS2-G2X7RT: an orchestrator's session whose tool may be on a first-run question
+                  // waits on a person, with the glance surfaces' waiting-on-you glyph.
+                  <LucideIcon
+                    className="terminal-drawer__tool-waiting"
+                    size="s"
+                    icon={LIVE_STATE_ICONS.waiting_on_you.icon}
+                    name={LIVE_STATE_ICONS.waiting_on_you.name}
+                    color={liveWordColor('waiting_on_you')}
+                    label={TOOL_WAITING_LABEL}
+                    title={TOOL_WAITING_LABEL}
+                  />
                 ) : session.aiConnection ? (
                   <Row vAlign="middle" gap="2xs">
                     {/* Whether the tab's AI session reaches Hot Sheet (HS2-EV1XK3), and whether it is the
@@ -319,9 +339,9 @@ export function TerminalDrawer({
                     <LucideIcon
                       className="terminal-drawer__ai-connection"
                       size="s"
-                      icon={aiConnectionIcon(session.aiConnection, session.feedback_primary).icon}
-                      name={aiConnectionIcon(session.aiConnection, session.feedback_primary).name}
-                      color={uiColor(aiConnectionIcon(session.aiConnection, session.feedback_primary).tone)}
+                      icon={aiConnectionIcon(session.aiConnection).icon}
+                      name={aiConnectionIcon(session.aiConnection).name}
+                      color={uiColor(aiConnectionIcon(session.aiConnection).tone)}
                       label={aiConnectionLabel(
                         session.aiConnection,
                         session.ai_connection?.agent,
@@ -339,6 +359,20 @@ export function TerminalDrawer({
                         session.feedback_primary,
                       )}
                     />
+                    {(() => {
+                      // The primary role is its own indicator beside the plug (HS2-1WFGX1); the plug's
+                      // label already names the role, so the heart is decorative.
+                      const primary = aiPrimaryIcon(session.aiConnection, session.feedback_primary);
+                      return primary ? (
+                        <LucideIcon
+                          className="terminal-drawer__ai-primary"
+                          size="s"
+                          icon={primary.icon}
+                          name={primary.name}
+                          color={uiColor(primary.tone)}
+                        />
+                      ) : undefined;
+                    })()}
                     {session.busy ? <BusyDot /> : undefined}
                   </Row>
                 ) : session.busy ? (

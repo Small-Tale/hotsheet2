@@ -6,6 +6,7 @@ import {
   normalizeCommandGroups,
   reorderCommandsMultiple,
 } from './command-order';
+import { isScheduleAction } from './command-schedules';
 
 /** Parse the editor draft without losing the last loaded definitions to partial JSON. */
 export function commandDefinitionsFromDraft(
@@ -48,6 +49,7 @@ export function editCommandDefinition(
         delete updated.tool;
         delete updated.model;
         delete updated.effort;
+        delete updated.action;
       } else if (value === 'shell') {
         delete updated.program;
         delete updated.args;
@@ -55,11 +57,16 @@ export function editCommandDefinition(
         delete updated.tool;
         delete updated.model;
         delete updated.effort;
+        delete updated.action;
       } else {
         delete updated.program;
         delete updated.args;
         delete updated.command;
       }
+    } else if (field === 'action') {
+      // The editor's default choice stores no action, keeping the legacy click (HS2-17Y2EC).
+      if (isScheduleAction(value)) updated.action = value;
+      else delete updated.action;
     } else if (field === 'id' || field === 'title') updated[field] = value;
     else {
       const textField = (

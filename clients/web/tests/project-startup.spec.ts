@@ -583,7 +583,7 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   await page.screenshot({ path: 'target/visual-captures/hs2-rsx13q-restore-failure-390.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   fixture.unavailable.delete('beta');
-  await failure.getByRole('button', { name: 'Retry project' }).click();
+  await failure.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.open-projects'))).resolves.toBe(
@@ -594,6 +594,115 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   await projectTab(page, 'alpha').click();
   await expect(failure).toContainText('111');
   await page.screenshot({ path: 'target/visual-captures/hs2-v9zvw0-partial-recovery-wide.png', fullPage: true });
+});
+
+test('HS2-H0QGK7 keeps the sidebars, toolbar, and drawer for an unavailable tab, with project controls disabled', async ({
+  page,
+}) => {
+  const fixture = await startupFixture(page, ['alpha', 'beta'], 'alpha', false);
+  fixture.unavailable.set('beta', {});
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  const sidebar = page.getByRole('complementary', { name: 'Sidebar rail' }),
+    inspector = page.getByRole('complementary', { name: 'Inspector rail' }),
+    toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
+    failure = page.locator('.project-restore-error'),
+    viewModes = toolbar.getByRole('group', { name: 'View mode' }).getByRole('button'),
+    sortSelect = toolbar.locator('kui-select[name="workspace-sort"]'),
+    newTicket = page.locator('[data-component="quick-ticket-composer-launcher"]'),
+    showDrawer = page.getByRole('button', { name: 'Show Terminal Drawer' }),
+    sidebarToggle = page.locator('[data-action="toggle-project-sidebar"]').first();
+  const geometry = async () => Promise.all([sidebar, inspector, toolbar].map(async (region) => region.boundingBox()));
+  const expectReady = async () => {
+    await expect(failure).toHaveCount(0);
+    await expect(viewModes.first()).toBeEnabled();
+    await expect(sortSelect).not.toHaveAttribute('disabled', /.*/u);
+    await expect(newTicket).toHaveAttribute('data-action', 'expand-ticket-composer');
+    await expect(showDrawer).toBeEnabled();
+  };
+  await expect(sidebar).toBeVisible();
+  await expect(toolbar).toBeVisible();
+  await expectReady();
+  const ready = await geometry();
+  expect(ready[0]).not.toBeNull();
+
+  // The unavailable tab keeps every region where it was; each renders empty and project controls are
+  // disabled with the reason, never removed.
+  const betaTab = page.locator('[data-tab-kind="project"][data-restore-failure="true"]');
+  await expect(page.locator('.project-tab-bar [data-project-pending="true"]')).toHaveCount(0);
+  await betaTab.getByRole('tab', { name: 'beta' }).click();
+  await expect(failure).toContainText('Server Unavailable');
+  await expect(failure.getByRole('button', { name: 'Retry', exact: true })).toBeEnabled();
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar.locator('[data-project-unavailable-region="sidebar"]')).toContainText('Project Unavailable');
+  await expect(toolbar).toBeVisible();
+  const reason = 'Unavailable because beta could not be opened';
+  await expect(viewModes).not.toHaveCount(0);
+  for (const mode of await viewModes.all()) await expect(mode).toBeDisabled();
+  await expect(sortSelect).toHaveAttribute('disabled', /.*/u);
+  await expect(toolbar.locator('[data-action="toggle-selected-up-next"]')).toBeDisabled();
+  await expect(toolbar.locator('[data-action="toggle-selected-up-next"]')).toHaveAttribute('title', reason);
+  await expect(newTicket).not.toHaveAttribute('data-action', /.*/u);
+  await expect(newTicket.locator('wa-button, button').first()).toHaveAttribute('disabled', /.*/u);
+  await expect(showDrawer).toBeDisabled();
+  await expect(showDrawer).toHaveAttribute('title', reason);
+  // Rail toggles stay live: they only change layout.
+  await expect(sidebarToggle).toBeEnabled();
+  expect(await geometry()).toEqual(ready);
+  // Clicking a disabled New Ticket opens no composer.
+  await newTicket.click({ force: true });
+  await expect(page.locator('[data-component="quick-ticket-composer"][data-expanded="true"]')).toHaveCount(0);
+
+  // Wide, medium, phone, and back to wide in both schemes: the unavailable shell follows the same
+  // breakpoints. HS2_H0QGK7_CAPTURE_DIR saves each state for visual review.
+  const captureDir = process.env.HS2_H0QGK7_CAPTURE_DIR;
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [name, width, height] of [
+      ['wide', 1440, 900],
+      ['medium', 940, 800],
+      ['narrow', 390, 844],
+      ['returned-wide', 1440, 900],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect(failure).toBeVisible();
+      await expect(toolbar).toBeVisible();
+      if (captureDir) {
+        // The shell changes layout at the phone breakpoint; capture after its finite transition settles.
+        await page.waitForTimeout(250);
+        await page.screenshot({ path: `${captureDir}/hs2-h0qgk7-unavailable-${name}-${scheme}.png` });
+      }
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // Back on the working project every control is enabled again, with the same region geometry.
+  await projectTab(page, 'alpha').click();
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  await expectReady();
+  expect(await geometry()).toEqual(ready);
+  // An open terminal drawer stays open on the unavailable tab, empty, with its own Hide action.
+  await showDrawer.click();
+  const drawerRegion = page.locator('[data-project-unavailable-region="drawer"]');
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toHaveCount(0);
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-h0qgk7-working-drawer-open-wide-light.png` });
+  await betaTab.getByRole('tab', { name: 'beta' }).click();
+  await expect(drawerRegion).toContainText('Terminals appear here once beta opens again.');
+  if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-h0qgk7-unavailable-drawer-open-wide-light.png` });
+  await drawerRegion.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await expect(drawerRegion).toBeHidden();
+  await expect(showDrawer).toBeDisabled();
+  await projectTab(page, 'alpha').click();
+  await expect(showDrawer).toBeEnabled();
+  if (captureDir) {
+    await page.screenshot({ path: `${captureDir}/hs2-h0qgk7-working-wide-light.png` });
+    await showDrawer.screenshot({ path: `${captureDir}/hs2-h0qgk7-drawer-control-enabled.png` });
+    await betaTab.getByRole('tab', { name: 'beta' }).click();
+    await expect(showDrawer).toBeDisabled();
+    await showDrawer.screenshot({ path: `${captureDir}/hs2-h0qgk7-drawer-control-disabled.png` });
+    await newTicket.screenshot({ path: `${captureDir}/hs2-h0qgk7-new-ticket-disabled.png` });
+  }
 });
 
 test('defers inactive setup and migration prompts until their tab is activated', async ({ page }) => {
@@ -658,6 +767,47 @@ test('survives all-failed, empty, and refilled startup transitions without retai
   await expect(page.getByText('gamma restored work', { exact: true })).toBeVisible();
   await expect(page.locator('.project-restore-error')).toHaveCount(0);
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/gamma/'))).toBe(true);
+});
+
+test('HS2-86ES0B a restored tab follows a relocated checkout and remembers its new root', async ({ page }) => {
+  // The bridge resolved the remembered `/work/beta` to the checkout `checkout relocate` moved.
+  const fixture = await startupFixture(page, ['alpha', 'beta'], 'beta');
+  fixture.projects.set('beta', { ...projectFor('beta'), root: '/moved/beta' });
+  await page.goto('/');
+  await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
+  await expect(page.locator('.project-restore-error')).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.open-projects')))
+    .toBe(JSON.stringify(['/work/alpha', '/moved/beta']));
+  await expect(page.evaluate(() => localStorage.getItem('hotsheet.workspace.active-project-root.v1'))).resolves.toBe(
+    '/moved/beta',
+  );
+  // The next start opens the new root directly and keeps the tab order.
+  fixture.openBodies.length = 0;
+  await page.reload();
+  await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.project-tab-bar [role="tab"]')).toHaveText([/^alpha/, /^beta/]);
+  expect(fixture.openBodies.map((body) => body.root).sort()).toEqual(['/moved/beta', '/work/alpha']);
+});
+
+test('HS2-86ES0B Retry project follows a checkout relocated after its restore failed', async ({ page }) => {
+  const fixture = await startupFixture(page, ['alpha', 'beta'], 'beta');
+  fixture.unavailable.set('beta', {});
+  await page.goto('/');
+  const failure = page.locator('.project-restore-error');
+  await expect(failure).toContainText('beta server unavailable');
+  fixture.unavailable.delete('beta');
+  fixture.projects.set('beta', { ...projectFor('beta'), root: '/moved/beta' });
+  await failure.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
+  await expect
+    .poll(async () =>
+      (
+        JSON.parse((await page.evaluate(() => localStorage.getItem('hotsheet.open-projects'))) ?? '[]') as string[]
+      ).sort(),
+    )
+    .toEqual(['/moved/beta', '/work/alpha']);
 });
 
 test('activates a passive tab after closing the active project, then opens again after closing every project', async ({
@@ -1032,8 +1182,9 @@ test('shows remembered remote tabs before any open resolves and opens each host 
     );
   await expect(studio).toHaveAttribute('data-project-pending', 'true');
   await expect(laptop).toHaveAttribute('data-project-pending', 'true');
-  await expect(page.getByRole('tab', { name: /Studio · one-name/ })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Laptop · two-name/ })).toBeVisible();
+  // Named like the opened tab: the origin's host until the peer has reported a name (HS2-GN0WKS).
+  await expect(page.getByRole('tab', { name: /studio\.test · one-name/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /laptop\.test · two-name/ })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-ej5k09-loading-tabs-wide.png', animations: 'disabled' });
   await page.setViewportSize({ width: 900, height: 700 });
   await page.screenshot({ path: 'target/visual-captures/hs2-ej5k09-loading-tabs-medium.png', animations: 'disabled' });
@@ -1065,6 +1216,59 @@ test('shows remembered remote tabs before any open resolves and opens each host 
   );
 });
 
+test('names an unreachable remote tab with the host name its opened tab last showed (HS2-GN0WKS)', async ({ page }) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  const remote = await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const opened = page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(STUDIO, 'one')}"]`),
+    placeholder = page.locator(
+      `[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`,
+    );
+  // The opened tab names the peer's machine (the fixture's peer reports "Studio").
+  await expect(opened).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Studio · one-name/ })).toBeVisible();
+  // The host goes away; after a reload its tab waits as a placeholder under the same name.
+  remote.up.set(STUDIO, false);
+  await page.reload();
+  await expect(placeholder).toBeVisible();
+  await expect(placeholder.getByRole('tab', { name: /Studio · one-name/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /studio\.test/ })).toHaveCount(0);
+});
+
+test('keeps a dragged mix of local and remote project tabs in order across reloads (HS2-NRBWGF)', async ({ page }) => {
+  await startupFixture(page, ['alpha', 'beta'], 'alpha', false);
+  await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const studio = remoteProjectId(STUDIO, 'one'),
+    tab = (id: string) => page.locator(`[data-tab-kind="project"][data-project-id="${id}"]`);
+  await expect(tab(studio)).toBeVisible();
+  await expect(tab('beta')).toBeVisible();
+  // Before any drag, remote tabs follow the local ones.
+  await expect.poll(() => projectTabIds(page)).toEqual(['alpha', 'beta', studio]);
+  // Drag the remote tab between the two local ones.
+  const bounds = (await tab('alpha').boundingBox())!,
+    dataTransfer = await page.evaluateHandle(() => new DataTransfer()),
+    event = { dataTransfer, clientX: bounds.x + bounds.width - 1, clientY: bounds.y + bounds.height / 2 };
+  await tab(studio).dispatchEvent('dragstart', event);
+  await tab('alpha').dispatchEvent('dragover', event);
+  await tab('alpha').dispatchEvent('drop', event);
+  await tab(studio).dispatchEvent('dragend', event);
+  await expect.poll(() => projectTabIds(page)).toEqual(['alpha', studio, 'beta']);
+  for (const round of [1, 2]) {
+    await page.reload();
+    await expect(tab(studio), `reload ${round}`).toBeVisible();
+    await expect(tab('beta'), `reload ${round}`).toBeVisible();
+    await expect.poll(() => projectTabIds(page), `reload ${round}`).toEqual(['alpha', studio, 'beta']);
+  }
+  // The local reopen list stays local-only.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.open-projects') ?? '[]'))).toEqual([
+    '/work/alpha',
+    '/work/beta',
+  ]);
+});
+
 test('keeps an unreachable remote tab reconnecting and opens it in place once the host answers (HS2-WNK73S)', async ({
   page,
 }) => {
@@ -1087,7 +1291,7 @@ test('keeps an unreachable remote tab reconnecting and opens it in place once th
   expect(await projectTabIds(page)).toEqual(['alpha', placeholderId, remoteProjectId(LAPTOP, 'two')]);
   await studio.click();
   const panel = page.locator('[data-remote-project-placeholder="reconnecting"]');
-  await expect(panel).toContainText('Reconnecting to Studio · one-name');
+  await expect(panel).toContainText('Reconnecting to studio.test · one-name');
   for (const [scheme, width, height] of [
     ['light', 1440, 900],
     ['light', 900, 700],
@@ -1178,6 +1382,47 @@ test('keeps an open remote tab with a reconnecting state while its host drops mi
   await expect(tab).toHaveAttribute('data-disconnected', 'false');
 });
 
+test('a click on a reconnecting remote tab retries its change stream at once, not after its backoff (HS2-ZTAJ1R)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  await remoteRegistryFixture(page, [{ id: LAPTOP, label: 'Laptop', checkouts: ['two'] }]);
+  const id = remoteProjectId(LAPTOP, 'two'),
+    host = { down: false, failedPolls: 0, sockets: [] as WebSocketRoute[] };
+  await page.routeWebSocket(/\/__hotsheet\/project-api\/remote[^/]+\/ws\/sync(?:\?.*)?$/, (socket) => {
+    if (host.down) void socket.close();
+    else host.sockets.push(socket);
+  });
+  await page.route(/\/__hotsheet\/project-api\/remote[^/]+\/ws\/poll/, (route) => {
+    if (!host.down) return route.fallback();
+    host.failedPolls += 1;
+    return route.fulfill({ status: 502, json: { error: 'Remote server unreachable.' } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const tab = page.locator(`[data-tab-kind="project"][data-project-id="${id}"]`),
+    alpha = page.locator('[data-tab-kind="project"][data-project-id="alpha"]'),
+    banner = page.locator('[data-component="remote-reconnecting-banner"]');
+  await tab.click();
+  await expect(page.getByText('Workspace restored work', { exact: true })).toBeVisible();
+  host.down = true;
+  for (const socket of host.sockets.splice(0)) await socket.close();
+  await expect(banner).toContainText('Reconnecting to Laptop', { timeout: 15_000 });
+  // Let the stream back off until its next retry is many seconds away (500 ms doubling per failure).
+  await expect.poll(() => host.failedPolls, { timeout: 60_000 }).toBeGreaterThanOrEqual(7);
+  const before = host.failedPolls;
+  host.down = false;
+  // The host is back, but the stream is asleep in its backoff; selecting the tab wakes it now.
+  await alpha.click();
+  const clicked = Date.now();
+  await tab.click();
+  await expect(banner).toHaveCount(0, { timeout: 6_000 });
+  expect(Date.now() - clicked).toBeLessThan(6_000);
+  await expect(tab).toHaveAttribute('data-disconnected', 'false');
+  expect(host.failedPolls).toBe(before);
+});
+
 test('an expired remote approval offers Renew, never reconnecting, and opens once the host renews it (HS2-4B0KSD)', async ({
   page,
 }) => {
@@ -1192,7 +1437,7 @@ test('an expired remote approval offers Renew, never reconnecting, and opens onc
   );
   await studio.click();
   const panel = page.locator('[data-remote-project-placeholder="expired"]');
-  await expect(panel).toContainText('Renew Access to Studio · one-name');
+  await expect(panel).toContainText('Renew Access to studio.test · one-name');
   await expect(page.locator('[data-remote-project-placeholder="reconnecting"]')).toHaveCount(0);
   for (const [scheme, width, height] of [
     ['light', 1440, 900],
@@ -1240,10 +1485,63 @@ test('a revoked remote approval says so and offers pairing again (HS2-4B0KSD)', 
     .locator(`[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`)
     .click();
   const panel = page.locator('[data-remote-project-placeholder="revoked"]');
-  await expect(panel).toContainText('Access Revoked by Studio · one-name');
+  await expect(panel).toContainText('Access Revoked by studio.test · one-name');
   await expect(panel.getByRole('button', { name: 'Pair Again' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Renew' })).toHaveCount(0);
 });
+
+for (const [phase, failure, first] of [
+  ['expired', 'session_expired', 'Renew'],
+  ['revoked', 'session_revoked', 'Pair Again'],
+] as const)
+  test(`the ${phase} remote placeholder's two buttons keep the Row gap at every width (HS2-2N2F4Y)`, async ({
+    page,
+  }) => {
+    await startupFixture(page, ['alpha'], 'alpha', false);
+    const remote = await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+    remote.up.set(STUDIO, false);
+    remote.failures.set(STUDIO, failure);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page
+      .locator(`[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`)
+      .click();
+    const panel = page.locator(`[data-remote-project-placeholder="${phase}"]`);
+    const buttons = [panel.getByRole('button', { name: first }), panel.getByRole('button', { name: 'Check Again' })];
+    await expect(buttons[1]).toBeVisible();
+    // The Row's `xs` gap, resolved from the public Kerf token in this theme.
+    const gap = await page.evaluate(() => {
+      const probe = document.createElement('div');
+      probe.style.width = 'var(--kui-space-xs)';
+      document.body.append(probe);
+      const width = probe.getBoundingClientRect().width;
+      probe.remove();
+      return width;
+    });
+    expect(gap).toBeGreaterThan(0);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [step, width, height] of [
+        ['wide', 1440, 900],
+        ['medium', 900, 700],
+        ['narrow', 390, 844],
+        ['wide-again', 1440, 900],
+      ] as const) {
+        await page.setViewportSize({ width, height });
+        await expect(buttons[0]).toBeInViewport();
+        await expect(buttons[1]).toBeInViewport();
+        await page.screenshot({
+          path: `target/visual-captures/hs2-2n2f4y-${phase}-${scheme}-${step}.png`,
+          animations: 'disabled',
+        });
+        const [a, b] = await Promise.all(buttons.map((button) => button.boundingBox()));
+        if (!a || !b) throw new Error('A placeholder button has no box.');
+        // Side by side on one line, separated by exactly the Row gap, never touching.
+        expect(Math.abs(a.y - b.y), `${scheme} ${step}`).toBeLessThan(1);
+        expect(b.x - (a.x + a.width), `${scheme} ${step}`).toBeCloseTo(gap, 0);
+      }
+    }
+  });
 
 test('an open remote tab reminds before its approval expires, with Renew and Dismiss (HS2-4B0KSD)', async ({
   page,

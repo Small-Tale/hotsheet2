@@ -11,11 +11,13 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use hotsheet_model::{Priority, Status, Ticket};
 
 use crate::auto_context::{self, AutoContextEntry};
 use crate::checkouts::Checkout;
+use crate::git_discovery::{DiscoveryCache, Reuse, Watch};
 use crate::ops::priority_rank;
 use crate::settings::Settings;
 use crate::store::{FsStore, StoreError};
@@ -344,8 +346,18 @@ fn local_git_exclude(checkout: &Path) -> Option<(PathBuf, String)> {
 /// A checkout directory inside an enclosing work tree, such as a designated ticket-store
 /// root used as its own checkout (HS2-V6JEBR). Its worklist is excluded by an anchored
 /// pattern in the enclosing repository, so a store-scoped commit never records it.
+///
+/// The answer depends only on where the checkout sits, so it is reused while the
+/// checkout and every `.git` on its path are unchanged (HS2-CBZV9W); a checkout outside
+/// any repository is the common case and is reused as well.
 fn enclosing_git_exclude(checkout: &Path) -> Option<(PathBuf, String)> {
-    let output = crate::git::command()
+    static ENCLOSING: LazyLock<DiscoveryCache<Option<(PathBuf, String)>>> =
+        LazyLock::new(DiscoveryCache::new);
+    ENCLOSING.get_or_probe(checkout, Watch::Location, probe_enclosing_git_exclude)
+}
+
+pub(crate) fn probe_enclosing_git_exclude(checkout: &Path) -> (Option<(PathBuf, String)>, Reuse) {
+    let Ok(output) = crate::git::command()
         .arg("-C")
         .arg(checkout)
         .args([
@@ -355,16 +367,35 @@ fn enclosing_git_exclude(checkout: &Path) -> Option<(PathBuf, String)> {
             "--show-prefix",
         ])
         .output()
-        .ok()
-        .filter(|output| output.status.success())?;
-    let stdout = String::from_utf8(output.stdout).ok()?;
-    let mut lines = stdout.lines();
-    let common = PathBuf::from(lines.next()?);
-    let prefix = lines.next().unwrap_or_default();
-    Some((
-        common.join("info/exclude"),
-        format!("/{prefix}{CHECKOUT_WORKLIST}"),
-    ))
+    else {
+        return (None, Reuse::Never);
+    };
+    if !output.status.success() {
+        let outside = String::from_utf8_lossy(&output.stderr).contains("not a git repository");
+        return (
+            None,
+            if outside {
+                Reuse::WhileUnchanged
+            } else {
+                Reuse::Never
+            },
+        );
+    }
+    let parsed = String::from_utf8(output.stdout).ok().and_then(|stdout| {
+        let mut lines = stdout.lines();
+        let common = PathBuf::from(lines.next()?);
+        let prefix = lines.next().unwrap_or_default();
+        Some((
+            common.join("info/exclude"),
+            format!("/{prefix}{CHECKOUT_WORKLIST}"),
+        ))
+    });
+    let reuse = if parsed.is_some() {
+        Reuse::WhileUnchanged
+    } else {
+        Reuse::Never
+    };
+    (parsed, reuse)
 }
 
 #[cfg(test)]

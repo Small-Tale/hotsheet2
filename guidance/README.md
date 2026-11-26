@@ -11,7 +11,7 @@ and SHA-256 hashes. The files in `plugins/shared/` and the four first-party
 existing paths, so installed setup and refresh stay headless and offline. They do
 not invoke Rulesync, fetch source, or need a local playbook checkout.
 
-The v1.8.0 source catalog offers 23 selectable rules. The built-in offline bundle
+The v1.9.0 source catalog offers 23 selectable rules. The built-in offline bundle
 still contains its five established Hot Sheet rules; the other rules are selected
 per project from a registered pinned source. The snapshot updater reads those five
 entries from the larger manifest and keeps the previous exact bodies as migration

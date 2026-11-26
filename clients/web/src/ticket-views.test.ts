@@ -112,8 +112,11 @@ describe('ticket views', () => {
   it('creates into the visible active destination and disables creation for Archive', () => {
     expect(newTicketStatusForView('all')).toBe('not_started');
     expect(newTicketStatusForView('backlog')).toBe('backlog');
-    expect(newTicketCreationPlacement('backlog', false)).toEqual({ status: 'backlog', up_next: false });
-    expect(newTicketCreationPlacement('backlog', true)).toEqual({ status: 'not_started', up_next: true });
+    // The composer's Add to Backlog choice decides the status; Up Next wins over it (HS2-V72HCC).
+    expect(newTicketCreationPlacement(false, false)).toEqual({ status: 'not_started', up_next: false });
+    expect(newTicketCreationPlacement(false, true)).toEqual({ status: 'backlog', up_next: false });
+    expect(newTicketCreationPlacement(true, false)).toEqual({ status: 'not_started', up_next: true });
+    expect(newTicketCreationPlacement(true, true)).toEqual({ status: 'not_started', up_next: true });
     expect(canCreateTicketInView('all')).toBe(true);
     expect(canCreateTicketInView('backlog')).toBe(true);
     expect(canCreateTicketInView('archive')).toBe(false);

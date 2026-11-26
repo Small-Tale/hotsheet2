@@ -1405,7 +1405,7 @@ fn a_hanging_catalog_scan_never_holds_the_runtime_open() {
     let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
     let entered_tx = std::sync::Mutex::new(entered_tx);
     let release_rx = std::sync::Mutex::new(release_rx);
-    let state = state.with_ai_tool_discovery(Duration::from_secs(3600), move |_, _, _, _| {
+    let state = state.with_ai_tool_discovery(Duration::from_secs(3600), move |_, _, _| {
         let _ = entered_tx.lock().unwrap().send(());
         // Bounded so a failed run never leaves the thread parked forever.
         let _ = release_rx
@@ -1518,7 +1518,7 @@ async fn hs2_xz3tth_requests_queued_behind_a_slow_scan_share_it() {
     let ttl = Duration::from_millis(200);
     let router = app(state
         .with_machine_home(_dir.path().join("machine-home"))
-        .with_ai_tool_discovery(ttl, move |_, _, _, _| {
+        .with_ai_tool_discovery(ttl, move |_, _, _| {
             if scan_count.fetch_add(1, Ordering::SeqCst) == 0 {
                 let _ = entered_tx.send(());
                 // Bounded so a failed run never leaves the thread parked forever.
@@ -1595,7 +1595,7 @@ async fn ai_tool_discovery_is_memoized_with_refresh_and_setup_invalidation() {
         .with_plugin_dirs(vec![plugins.path().to_path_buf()])
         .with_ai_tool_discovery(
             std::time::Duration::from_secs(3600),
-            move |dirs, _root, _catalogs, refresh| {
+            move |dirs, _catalogs, refresh| {
                 scan_log.lock().unwrap().push(refresh);
                 dirs.iter()
                     .flat_map(|dir| hotsheet_plugins::load_dir(dir))
@@ -3000,6 +3000,108 @@ async fn hs2_5ycgh5_an_interactive_claude_terminal_session_is_narrated() {
     );
 }
 
+/// HS2-2AN9C8: Claude emits no OSC 133, so its terminal's `busy` and `idle_since_ms`
+/// follow its prompt and stop hooks once it reports one, through the listing every
+/// session host reads; ending the session returns the terminal to byte inference.
+#[tokio::test]
+async fn hs2_2an9c8_claude_hooks_drive_the_terminal_busy_state() {
+    let (dir, state) = state();
+    let router = app(state);
+    let transcript_dir = dir.path().join("projects").join("fixture");
+    std::fs::create_dir_all(&transcript_dir).unwrap();
+    let path = transcript_dir
+        .join("turn-session.jsonl")
+        .to_string_lossy()
+        .to_string();
+    let send = |method: &'static str, uri: String, body: Option<String>| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, &uri, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    let turn = |event: &str| {
+        Some(
+            serde_json::json!({
+                "event": event, "session_id": "turn-session", "transcript_path": path
+            })
+            .to_string(),
+        )
+    };
+    let listed = || async {
+        let terminals = body_json(send("GET", "/terminals".into(), None).await).await;
+        let terminal = terminals
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|terminal| terminal["id"] == "claude-turns")
+            .unwrap()
+            .clone();
+        (terminal["busy"].clone(), terminal["idle_since_ms"].clone())
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals".into(),
+            Some(r#"{"command":"cat","id":"claude-turns"}"#.into())
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/claude-turns/ai-connection".into(),
+            Some(r#"{"agent":"claude","session_id":"turn-session"}"#.into())
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let endpoint = || "/terminals/claude-turns/claude-turn".to_owned();
+    // Before any hook the byte inference stands: `cat` prints no OSC 133, so idle.
+    assert_eq!(listed().await.0, false);
+    // UserPromptSubmit: mid-turn.
+    assert_eq!(
+        send("POST", endpoint(), turn("start")).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        listed().await,
+        (serde_json::json!(true), serde_json::Value::Null)
+    );
+    // Stop: idle since the stop, kept through a duplicate Stop.
+    send("POST", endpoint(), turn("stop")).await;
+    let (busy, idle_since) = listed().await;
+    assert_eq!(busy, false);
+    let idle_since = idle_since.as_u64().unwrap();
+    send("POST", endpoint(), turn("stop")).await;
+    assert_eq!(listed().await.1, idle_since);
+    // A turn that fails (StopFailure) also ends the busy stretch.
+    send("POST", endpoint(), turn("start")).await;
+    assert_eq!(listed().await.0, true);
+    send("POST", endpoint(), turn("failure")).await;
+    assert_eq!(listed().await.0, false);
+    // A new prompt while the session ends: the ended session forgets its turn.
+    send("POST", endpoint(), turn("start")).await;
+    assert_eq!(listed().await.0, true);
+    assert_eq!(
+        send(
+            "DELETE",
+            "/terminals/claude-turns/ai-connection?session_id=turn-session".into(),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(listed().await.0, false);
+    send("DELETE", "/terminals/claude-turns".into(), None).await;
+}
+
 #[tokio::test]
 async fn native_claude_turn_usage_is_deduplicated_and_bound_to_its_start_claim() {
     let (dir, state) = state();
@@ -3351,6 +3453,20 @@ async fn hs2_ssmdq1_turn_reports_after_a_restart_reconnect_and_permission_asks_k
             .status(),
         StatusCode::NO_CONTENT,
         "the session survives a permission ask that names none"
+    );
+    // HS2-HSFVHC: ...or one naming another session, such as a hook run by hand in the terminal.
+    send(
+        "POST",
+        "/terminals/survivor/ai-connection".into(),
+        Some(r#"{"agent":"claude","session_id":"hand-run","source":"permission_request"}"#.into()),
+    )
+    .await;
+    assert_eq!(
+        send("POST", endpoint(), turn("restart-session"))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT,
+        "only SessionStart replaces the terminal's session"
     );
     // ...but another agent's ask does not inherit it.
     send(
@@ -4044,6 +4160,72 @@ async fn terminal_ai_connection_ignores_stale_session_end_after_clear() {
     let ended = body_json(send("GET", "/terminals", None).await).await;
     assert!(ended[0].get("ai_connection").is_none());
     assert!(ended[0].get("halt").is_none());
+}
+
+/// HS2-62099G: a launch whose caller's window has passed before the terminal spawns
+/// starts nothing, so a caller that gave up never leaves a terminal running untracked;
+/// within its window, or without one, the same launch starts.
+#[tokio::test]
+#[cfg(unix)]
+async fn hs2_62099g_a_launch_past_its_window_starts_nothing() {
+    let (_dir, st) = state();
+    let router = app(st);
+    let late = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"late","launch_within_ms":0}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(late.status(), StatusCode::CONFLICT);
+    let listed = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed, serde_json::json!([]), "nothing spawned: {listed}");
+    for (id, body) in [
+        (
+            "in-window",
+            r#"{"command":"cat","id":"in-window","launch_within_ms":600000}"#,
+        ),
+        ("unfenced", r#"{"command":"cat","id":"unfenced"}"#),
+    ] {
+        let opened = router
+            .clone()
+            .oneshot(authed("POST", "/terminals", Some(body)))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK, "{id}");
+    }
+    let listed = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let mut ids: Vec<_> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|terminal| terminal["id"].as_str().unwrap().to_owned())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, ["in-window", "unfenced"]);
+    for id in ids {
+        router
+            .clone()
+            .oneshot(authed("DELETE", &format!("/terminals/{id}"), None))
+            .await
+            .unwrap();
+    }
 }
 
 #[tokio::test]
@@ -15289,6 +15471,7 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             tool: None,
             model: None,
             effort: None,
+            action: None,
             icon: None,
             color: None,
         },
@@ -15306,6 +15489,7 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             tool: None,
             model: None,
             effort: None,
+            action: None,
             icon: None,
             color: None,
         },

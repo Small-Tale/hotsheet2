@@ -31,6 +31,7 @@ import type { TicketCloseDialogState } from '../components/ticket-close-dialog';
 import type { InspectorTab } from '../components/ticket-inspector';
 import type { TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { isPlainTicketReselection, updateTicketSelection } from '../components/ticket-selection';
+import type { Confirm } from '../confirmation';
 import { copyWithSelection } from '../copy-text';
 import {
   createDebouncedAutosave,
@@ -67,6 +68,7 @@ import { submitNotWorkingReport } from '../not-working-workflow';
 import { noteAuthorship } from '../note-authorship';
 import { responseLinkUnavailable } from '../note-response-link';
 import { type PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
+import { parseRemoteProjectId } from '../remote-projects/identity';
 import {
   bulkTagChoices,
   type BulkTicketAction,
@@ -81,6 +83,7 @@ import {
   type DuplicateTarget,
   duplicateTargetKey,
   parseDuplicateReference,
+  relationTargetProject,
   resolveDuplicateReferenceTarget,
   ticketCloseReasonLabel,
   validateTicketClose,
@@ -108,7 +111,7 @@ import {
 } from '../ticket-field-reconciliation';
 import { ticketGroupCollapsed } from '../ticket-group-state';
 import { withoutCollapsedGroupMembers } from '../ticket-groups';
-import { type TicketLinkMatch, ticketLinkMatchKey } from '../ticket-link-resolution';
+import { bestTicketCopies, type TicketLinkMatch, ticketLinkMatchKey } from '../ticket-link-resolution';
 import { projectTicketPatch, reportMutationTiming, ticketRowFromFull } from '../ticket-mutation';
 import {
   type ClipboardTicket,
@@ -133,10 +136,12 @@ import {
   createdTicketVisibleInView,
   isTrashedTicket,
   newTicketCreationPlacement,
+  newTicketStatusForView,
   selectionVisibleInView,
   type TicketView,
 } from '../ticket-views';
 import { timelineStageEstimate, typicalPhaseDurations } from '../timeline-stage-estimate';
+import { trashEmptyLeftTickets, trashEmptySummary } from '../trash-empty-summary';
 import { ensureVideoPoster } from '../video-posters';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { reconcileWorkerTicketSelection } from '../worker-ticket-refresh';
@@ -159,6 +164,12 @@ interface TicketWorkflowMutableState {
 }
 
 export interface TicketWorkflowDependencies {
+  /** The shared in-app confirmation, offering to open a link's unopened remote project (HS2-4JTETR). */
+  confirm?: Confirm;
+  /** Opens a paired remote host's checkout as a tab (HS2-4JTETR). */
+  openRemoteHostCheckout?: (bindingId: string, checkoutId: string) => Promise<Project>;
+  /** A paired host's name for one of its checkouts; `null` when it lists none (HS2-4JTETR). */
+  remoteHostCheckoutName?: (bindingId: string, checkoutId: string) => Promise<string | null | undefined>;
   state: TicketWorkflowMutableState;
   CLOSED_NOT_WORKING_TARGET: NotWorkingTarget;
   projects: Signal<Project[]>;
@@ -224,6 +235,8 @@ export interface TicketWorkflowDependencies {
   composerDetails: Signal<string>;
   composerCategory: Signal<string>;
   composerUpNext: Signal<boolean>;
+  composerPriority: Signal<string>;
+  composerBacklog: Signal<boolean>;
   /** The source picked in the open composer, if any (HS2-NZMJBJ). */
   composerSource: Signal<string | undefined>;
   /** The source each project last created a ticket in, in memory only (HS2-NZMJBJ). */
@@ -288,32 +301,55 @@ export interface TicketWorkflowDependencies {
   activeTicketSurface: () => ParentNode;
   draftScope: (kind: 'composer' | 'not-working', projectId?: string) => string;
   ago: (value?: string) => string;
+  /** The composer opened in this project, so a minimized composer there is restored (HS2-3JR0ZH). */
+  composerOpened?: (projectId: string | undefined) => void;
+}
+
+/** A saved human note waiting on the app-level Choose/Start an AI Session prompt (HS2-6RXBS9). */
+export interface PendingFeedbackDelivery {
+  ticketId: string;
+  projectId: string;
+  slug: string;
+  title: string;
+  delivery: FeedbackDelivery;
 }
 
 /** Ticket mutation, selection, transfer, attachment, close, and composer workflows. */
 export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) {
-  const feedbackDelivery = signal<{ ticketId: string; delivery: FeedbackDelivery } | undefined>();
-  /** Show the saved note's notification outcome; `choose` and `start` render in the inspector. */
-  function announceFeedbackDelivery(ticketId: string, delivery: FeedbackDelivery) {
-    feedbackDelivery.value = { ticketId, delivery };
+  /**
+   * A saved human note still waiting for the person to choose, or start, the AI session to notify. It
+   * keeps its own project and ticket so the app-level prompt survives selecting another ticket,
+   * project, or view (HS2-6RXBS9).
+   */
+  const feedbackDelivery = signal<PendingFeedbackDelivery | undefined>();
+  /** Show the saved note's notification outcome; `choose` and `start` wait in the app-level prompt. */
+  function announceFeedbackDelivery(
+    owner: Project,
+    ticket: Pick<WireTicketRow, 'qualified_id' | 'slug' | 'title'>,
+    delivery: FeedbackDelivery,
+  ) {
+    feedbackDelivery.value =
+      delivery.status === 'choose' || delivery.status === 'start'
+        ? { ticketId: ticket.qualified_id, projectId: owner.id, slug: ticket.slug, title: ticket.title, delivery }
+        : undefined;
     if (delivery.status === 'sent') showToast('The AI session was notified.');
     if (delivery.status === 'queued') showToast('The AI session will be notified after its current turn.');
     // HS2-H9Z9KZ: delivery is best-effort; the note stays on the ticket for the AI's next read.
     if (delivery.status === 'not_shared') showToast('Saved, but the AI session could not be told right now.');
   }
   async function chooseFeedbackSession(ticketId: string, connectionId: string) {
-    const current = project();
-    const ticket = tickets.value.find((item) => item.qualified_id === ticketId);
     const pending = feedbackDelivery.value;
-    if (!current || !ticket || pending?.ticketId !== ticketId || pending.delivery.status !== 'choose') return;
+    if (pending?.ticketId !== ticketId || pending.delivery.status !== 'choose') return;
+    const owner = projects.value.find((item) => item.id === pending.projectId);
+    if (!owner) return;
     try {
-      const delivery = await api().notifyTicketNote(
-        current.id,
-        ticket.qualified_id,
+      const delivery = await new Api(owner.apiPath).notifyTicketNote(
+        owner.id,
+        ticketId,
         pending.delivery.note_id,
         connectionId,
       );
-      feedbackDelivery.value = { ticketId, delivery };
+      if (feedbackDelivery.value === pending) feedbackDelivery.value = undefined;
       showToast(
         delivery.status === 'queued'
           ? 'The AI session will be notified after its current turn.'
@@ -322,6 +358,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     } catch (reason) {
       showToast(reason instanceof Error ? reason.message : String(reason));
     }
+  }
+  /** The person dismissed the prompt; the note stays on the ticket for the AI's next read. */
+  function dismissFeedbackDelivery() {
+    feedbackDelivery.value = undefined;
   }
   const {
     state,
@@ -386,6 +426,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerDetails,
     composerCategory,
     composerUpNext,
+    composerPriority,
+    composerBacklog,
     composerSource,
     lastTicketSourceByProject,
     composerAttachments,
@@ -436,6 +478,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     activeTicketSurface,
     draftScope,
     ago,
+    composerOpened,
   } = dependencies;
   /** Each project's median phase durations for the in-progress timeline stage, loaded once (HS2-ST6RN1). */
   const typicalPhasesByProject = signal<Record<string, Readonly<Record<string, number>>>>({});
@@ -676,7 +719,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
                 base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
               );
               updated = result.ticket;
-              if (result.feedbackDelivery) announceFeedbackDelivery(ticket.qualified_id, result.feedbackDelivery);
+              if (result.feedbackDelivery) announceFeedbackDelivery(current, ticket, result.feedbackDelivery);
             }
             localTicketChangeAcknowledgements.acknowledge(current.id, {
               store: updated.connection_id,
@@ -1526,8 +1569,22 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     scheduleClaimLeaseExpiry();
     try {
       const result = await new Api(current.apiPath).emptyCheckoutTrash(current.id);
-      if (project()?.id === current.id) await refreshTicketCollection('all');
-      showToast(`Emptied Trash — ${result.purged} ticket${result.purged === 1 ? '' : 's'} permanently removed.`);
+      if (trashEmptyLeftTickets(result)) {
+        // A provider kept some Trash (GH-5): show what is still there instead of an empty Trash.
+        ticketCountsByProject.value = {
+          ...ticketCountsByProject.value,
+          [current.id]: {
+            ...beforeCounts,
+            total: Math.max(0, beforeCounts.total - result.purged),
+            trash: Math.max(0, (beforeCounts.trash ?? 0) - result.purged),
+          },
+        };
+        if (project()?.id === current.id) {
+          selectTicketView('trash', { refresh: false });
+          await refreshTicketCollection('trash');
+        }
+      } else if (project()?.id === current.id) await refreshTicketCollection('all');
+      showToast(trashEmptySummary(result));
     } catch (reason) {
       if (!projects.value.some((item) => item.id === current.id)) return;
       setProjectTicketRows(current.id, beforeRows);
@@ -2415,7 +2472,41 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   async function openDuplicateTarget(id: string) {
     const reference = parseDuplicateReference(id);
     if (reference) {
-      const target = projects.value.find((item) => item.id === reference.project_id);
+      // The reference names a checkout on the source ticket's own server (HS2-4SPTA4).
+      const source = project(),
+        sourceRemote = source ? parseRemoteProjectId(source.id) : undefined;
+      let target = relationTargetProject(projects.value, reference.project_id, source?.id);
+      if (!target && sourceRemote && source?.remoteHost) {
+        // HS2-4JTETR: the project is on the same paired host but not open here; offer to open it.
+        const host = source.remoteHost,
+          name = await dependencies.remoteHostCheckoutName?.(sourceRemote.bindingId, reference.project_id);
+        if (name === null) {
+          showToast(`That project is not available on ${host}.`);
+          return;
+        }
+        if (
+          dependencies.confirm &&
+          dependencies.openRemoteHostCheckout &&
+          (await dependencies.confirm({
+            title: `Open ${name ?? reference.project_id} from ${host}?`,
+            message: `This ticket is in a project on ${host} that is not open here. It opens in a new tab.`,
+            confirmLabel: 'Open Project',
+          }))
+        ) {
+          try {
+            target = await dependencies.openRemoteHostCheckout(sourceRemote.bindingId, reference.project_id);
+          } catch (reason) {
+            showToast(
+              `Could not open that project on ${host}. ${reason instanceof Error ? reason.message : String(reason)}`,
+            );
+            return;
+          }
+        } else {
+          if (!dependencies.confirm || !dependencies.openRemoteHostCheckout)
+            showToast(`Open that project on ${host} to view this ticket.`);
+          return;
+        }
+      }
       if (!target) {
         showToast(`Open project ${reference.project_id} to view this duplicate target.`);
         return;
@@ -2458,11 +2549,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               slug: result.value.ticket.slug,
               title: result.value.ticket.title,
               status: result.value.ticket.status,
+              nativeId: result.value.ticket.native_id,
+              updatedAt: result.value.ticket.updated_at,
             },
           ]
         : [],
     );
-    const unique = new Map(matches.map((match) => [ticketLinkMatchKey(match), match]));
+    // Copies of one ticket in several tabs open the best copy without asking (HS2-MBFGRV).
+    const unique = new Map(bestTicketCopies(matches).map((match) => [ticketLinkMatchKey(match), match]));
     if (unique.size === 0) {
       showToast(`No exact match for ${id}.`);
       return;
@@ -2507,7 +2601,12 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     if (trigger && document.activeElement !== trigger) trigger.focus({ preventScroll: true });
     const epoch = ++composerAttachmentEpoch,
       projectId = project()?.id;
+    // A fresh draft from the Backlog view starts with Add to Backlog checked; a restored draft keeps
+    // its own choice (HS2-V72HCC).
+    if (!composerTitle.value.trim() && !composerDetails.value.trim() && !composerUpNext.value)
+      composerBacklog.value = newTicketStatusForView(selectedView.value) === 'backlog';
     composerExpanded.value = true;
+    composerOpened?.(projectId);
     scheduleProjectSessionPersistence();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -2559,6 +2658,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     composerTitle.value = '';
     composerDetails.value = '';
     composerUpNext.value = false;
+    composerPriority.value = 'default';
+    composerBacklog.value = false;
     composerSource.value = undefined;
     composerFollowUpTo = undefined;
     composerAttachments.value = [];
@@ -2642,13 +2743,15 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         details: composerDetails.value,
         category: composerCategory.value,
         upNext: composerUpNext.value,
+        priority: composerPriority.value,
+        backlog: composerBacklog.value,
         attachments: submitted.map(({ id, name }) => ({ id, name })),
       },
       active = () => composerAttachmentEpoch === epoch && project()?.id === origin.id;
     const client = new Api(origin.apiPath),
       files = submitted.map((item) => item.file),
       batch_id = browserRandomId(),
-      placement = newTicketCreationPlacement(selectedView.value, composerUpNext.value),
+      placement = newTicketCreationPlacement(composerUpNext.value, composerBacklog.value),
       finishLocalCreation = beginLocalTicketCreation();
     let completedEpoch: number | undefined;
     composerSubmitting.value = true;
@@ -2666,6 +2769,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               title,
               details: snapshot.details,
               category: snapshot.category,
+              ...(snapshot.priority !== 'default' ? { priority: snapshot.priority } : {}),
               ...placement,
               follow_up_to: composerFollowUpTo?.qualified,
             },
@@ -2868,6 +2972,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   return {
     feedbackDelivery,
     chooseFeedbackSession,
+    dismissFeedbackDelivery,
     attachmentEpochs: () => ({ composer: composerAttachmentEpoch, notWorking: notWorkingAttachmentEpoch }),
     applyTicketPatch,
     restoreTicketDraft,

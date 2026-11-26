@@ -63,9 +63,10 @@ pub(crate) fn observe(state: &AppState, snapshot: &LiveStoreState, at_ms: i64) {
     // The history is machine-local: keep `metrics/local/` out of the store's Git history.
     if known.is_none() {
         if let Some(entry) = state.host.get(&snapshot.store) {
-            if let Err(error) =
-                hotsheet_ticketing::metrics::ensure_gitignored(&entry.store, "metrics/local/")
-            {
+            if let Err(error) = hotsheet_ticketing::metrics::ensure_gitignored(
+                &entry.store,
+                hotsheet_ticketing::store::METRICS_LOCAL_IGNORE,
+            ) {
                 tracing::warn!(store = %snapshot.store, %error, "could not ignore metrics/local");
             }
         }

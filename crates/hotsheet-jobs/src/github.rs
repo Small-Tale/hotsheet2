@@ -36,6 +36,13 @@ pub const GITLAB_CI_KIND: &str = "gitlab-ci";
 pub const BUILDKITE_KIND: &str = "buildkite";
 /// HS2-17HVNP: the Job kind name and the `external.system` of a CircleCI watch.
 pub const CIRCLECI_KIND: &str = "circleci";
+/// HS2-7H0S8R: the Job kind name and the `external.system` of a Jenkins watch.
+pub const JENKINS_KIND: &str = "jenkins";
+/// HS2-JZ1DD2: the Job kind name and the `external.system` of an Azure Pipelines watch.
+pub const AZURE_PIPELINES_KIND: &str = "azure-pipelines";
+/// HS2-BWF72S: the Job kind name and the `external.system` of a Bitbucket Pipelines
+/// watch.
+pub const BITBUCKET_PIPELINES_KIND: &str = "bitbucket-pipelines";
 
 /// HS2-TPAHYA: which CI provider a watch observes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -47,6 +54,12 @@ pub enum CiProvider {
     Buildkite,
     /// HS2-17HVNP: CircleCI pipelines and their workflows.
     Circleci,
+    /// HS2-7H0S8R: Jenkins builds of one job, or of a multibranch project's branch job.
+    Jenkins,
+    /// HS2-JZ1DD2: Azure Pipelines builds of one pipeline definition.
+    AzurePipelines,
+    /// HS2-BWF72S: Bitbucket Pipelines of one repository.
+    BitbucketPipelines,
 }
 
 impl CiProvider {
@@ -57,14 +70,20 @@ impl CiProvider {
             Self::GitlabCi => GITLAB_CI_KIND,
             Self::Buildkite => BUILDKITE_KIND,
             Self::Circleci => CIRCLECI_KIND,
+            Self::Jenkins => JENKINS_KIND,
+            Self::AzurePipelines => AZURE_PIPELINES_KIND,
+            Self::BitbucketPipelines => BITBUCKET_PIPELINES_KIND,
         }
     }
 
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 7] = [
         Self::GithubActions,
         Self::GitlabCi,
         Self::Buildkite,
         Self::Circleci,
+        Self::Jenkins,
+        Self::AzurePipelines,
+        Self::BitbucketPipelines,
     ];
 
     pub fn from_kind(kind: &str) -> Option<Self> {
@@ -87,7 +106,10 @@ pub struct CiTarget {
     pub provider: CiProvider,
     /// `owner/name`; for GitLab the project's full path, `group/[subgroup/…]project`;
     /// for Buildkite `organization/pipeline` (slugs); for CircleCI the project slug
-    /// `vcs/organization/project`, for example `gh/acme/widgets` (HS2-17HVNP).
+    /// `vcs/organization/project`, for example `gh/acme/widgets` (HS2-17HVNP); for
+    /// Jenkins the job's full name, `[folder/…]job` (HS2-7H0S8R); for Azure Pipelines
+    /// `organization/project/definition-id` (HS2-JZ1DD2); for Bitbucket Pipelines
+    /// `workspace/repo_slug` (HS2-BWF72S).
     pub repo: String,
     /// Full 40-character commit SHA, lowercase.
     pub sha: String,
@@ -194,6 +216,79 @@ impl CiTarget {
         Self::checked(CiProvider::Circleci, project, sha, workflow, branch)
     }
 
+    /// HS2-7H0S8R: a Jenkins target: `job` is the job's full name, one to ten
+    /// `/`-separated segments (`folder/job`, or a multibranch project, whose branch job
+    /// the watch reads). Jenkins builds have no workflow of their own, so `workflow`
+    /// must be `*`.
+    pub fn jenkins(
+        job: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        let segments: Vec<&str> = job.split('/').collect();
+        if !(1..=10).contains(&segments.len()) || !segments.iter().all(|s| part(s)) {
+            return Err(crate::JobError::Invalid("ci.repo"));
+        }
+        if workflow != "*" {
+            return Err(crate::JobError::Invalid("ci.workflow"));
+        }
+        Self::checked(CiProvider::Jenkins, job, sha, workflow, branch)
+    }
+
+    /// HS2-JZ1DD2: an Azure Pipelines target: `pipeline` is
+    /// `organization/project/definition-id`. A project name may hold spaces; the
+    /// definition is the pipeline's numeric id. Builds have no workflow of their own, so
+    /// `workflow` must be `*`.
+    pub fn azure_pipelines(
+        pipeline: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        let valid = match pipeline.split('/').collect::<Vec<_>>().as_slice() {
+            [organization, project, definition] => {
+                part(organization)
+                    && azure_project(project)
+                    && (1..=10).contains(&definition.len())
+                    && definition.bytes().all(|b| b.is_ascii_digit())
+                    && definition.parse::<u32>().is_ok_and(|id| id > 0)
+            }
+            _ => false,
+        };
+        if !valid {
+            return Err(crate::JobError::Invalid("ci.repo"));
+        }
+        if workflow != "*" {
+            return Err(crate::JobError::Invalid("ci.workflow"));
+        }
+        Self::checked(CiProvider::AzurePipelines, pipeline, sha, workflow, branch)
+    }
+
+    /// HS2-BWF72S: a Bitbucket Pipelines target: `repository` is `workspace/repo_slug`.
+    /// Its pipelines have no workflow of their own here, so `workflow` must be `*`.
+    pub fn bitbucket_pipelines(
+        repository: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        match repository.split_once('/') {
+            Some((workspace, slug)) if part(workspace) && part(slug) => {}
+            _ => return Err(crate::JobError::Invalid("ci.repo")),
+        }
+        if workflow != "*" {
+            return Err(crate::JobError::Invalid("ci.workflow"));
+        }
+        Self::checked(
+            CiProvider::BitbucketPipelines,
+            repository,
+            sha,
+            workflow,
+            branch,
+        )
+    }
+
     /// HS2-17HVNP: the target of any provider, as its own constructor validates it.
     pub fn for_provider(
         provider: CiProvider,
@@ -207,6 +302,11 @@ impl CiTarget {
             CiProvider::GitlabCi => Self::gitlab(repo, sha, workflow, branch),
             CiProvider::Buildkite => Self::buildkite(repo, sha, workflow, branch),
             CiProvider::Circleci => Self::circleci(repo, sha, workflow, branch),
+            CiProvider::Jenkins => Self::jenkins(repo, sha, workflow, branch),
+            CiProvider::AzurePipelines => Self::azure_pipelines(repo, sha, workflow, branch),
+            CiProvider::BitbucketPipelines => {
+                Self::bitbucket_pipelines(repo, sha, workflow, branch)
+            }
         }
     }
 
@@ -342,6 +442,18 @@ fn slug_part(value: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
+/// HS2-JZ1DD2: an Azure DevOps project name: letters, digits, spaces, `-`, `_` and
+/// `.`, at most 64 characters, not starting or ending with a space or `.`.
+fn azure_project(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && !value.starts_with([' ', '.'])
+        && !value.ends_with([' ', '.'])
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b" -_.".contains(&b))
+}
+
 /// One segment of a repository or project path.
 fn part(value: &str) -> bool {
     !value.is_empty()
@@ -367,6 +479,8 @@ pub enum ApiMethod {
     Post,
     /// HS2-17HVNP: Buildkite cancels a build with `PUT`.
     Put,
+    /// HS2-JZ1DD2: Azure Pipelines cancels a build with `PATCH`.
+    Patch,
 }
 
 /// One REST request. `path` is relative to the API root, for example
@@ -377,6 +491,8 @@ pub struct ApiRequest {
     pub path: String,
     /// Sent as `If-None-Match`. A 304 answer costs no rate limit.
     pub if_none_match: Option<String>,
+    /// HS2-JZ1DD2: a JSON request body, sent as `application/json`.
+    pub body: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -670,6 +786,7 @@ impl<A: GithubApi> GithubActionsSource<A> {
             method: ApiMethod::Get,
             path,
             if_none_match: etag,
+            body: None,
         };
         self.api
             .send(&request)
@@ -956,6 +1073,7 @@ impl<A: GithubApi> WatchSource for GithubActionsSource<A> {
             method: ApiMethod::Post,
             path: format!("repos/{}/actions/runs/{run_id}/cancel", target.repo),
             if_none_match: None,
+            body: None,
         };
         match self.api.send(&request) {
             Ok(response) if (200..300).contains(&response.status) => CancelReply::Requested,

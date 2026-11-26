@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 30 -->
+<!-- hotsheet-skill-version: 31 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -466,8 +466,10 @@ For a code handoff, follow these integration steps:
    when set), record an ETA and the `integrating` phase, and renew the lease during
    long work. Preserve unrelated dirty or staged files in the main checkout. If
    integration would disturb them, resolve the isolation issue before proceeding.
-   Integrate only this ticket's verified commits by fast-forward or cherry-pick,
-   resolving conflicts against the intended scope. Confirm the integrated commit
+   Integrate only this ticket's verified commits by fast-forward, merge or
+   cherry-pick, resolving conflicts against the intended scope. The handoff names
+   its `merge-pending/<SLUG>` remote branch (HS2-8HCBA1): fetch it, and never rebase
+   or force-push it; it is shared history. Confirm the integrated commit
    is reachable from `main` with `git branch --contains <sha>`; if cherry-picking
    changed its SHA, record the new main SHA. Keep the worker branch available until
    that check succeeds.
@@ -513,7 +515,11 @@ For a code handoff, follow these integration steps:
    before cleanup. It also rechecks idle status, clean tree, source
    preservation, exact-tree gate and green covering CI before removing the
    worktree, its ignored build output and branch. On refusal, record the precise
-   reason and retry the same command after resolving it (HS2-HR3ZX4). A `partial`
+   reason and retry the same command after resolving it (HS2-HR3ZX4). Then delete the
+   ticket's integrated `merge-pending/` branch with `hotsheet-cli coordination
+   --project <main-checkout> merge-pending-prune --apply` (HS2-ZTG8FD). It deletes only
+   branches whose commits are on `main` (or patch-equivalent there) and whose ticket is
+   closed, and reports every branch it keeps with the reason. A `partial`
    result (exit 2) means the worktree was removed but its branch was preserved;
    record `branchReason` and rerun the same command to finish only the branch
    (HS2-EBART6). On a ticket-caused CI failure, return to working,

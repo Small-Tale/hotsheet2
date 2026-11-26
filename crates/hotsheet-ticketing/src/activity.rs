@@ -329,7 +329,7 @@ pub fn record(store: &FsStore, event: &ActivityEvent) -> io::Result<()> {
         .open(path)?;
     writeln!(f, "{line}")?;
     drop(f);
-    ensure_gitignored(store.root(), "activity/recent/")?;
+    ensure_gitignored(store.root(), crate::store::ACTIVITY_RECENT_IGNORE)?;
     prune_by_age(&dir, event.day(), MAX_RECENT_ACTIVITY_AGE_DAYS)?;
     Ok(())
 }
@@ -577,10 +577,18 @@ pub fn codex_activity(item: &Value, id: &str, ts: &str) -> Option<ActivityEvent>
     let ty = item.get("type").or_else(|| item.get("item_type"));
     let ty = ty.and_then(Value::as_str)?;
     let (kind, detail) = match ty {
-        "command" | "exec" | "shell" | "commandExecution" => (
-            ActivityKind::Command,
-            serde_json::json!({ "command": item.get("command").and_then(Value::as_str).unwrap_or("") }),
-        ),
+        "command" | "exec" | "shell" | "commandExecution" => {
+            let mut detail = serde_json::json!({ "command": item.get("command").and_then(Value::as_str).unwrap_or("") });
+            // A finished command's exit code lets narration say a run passed or failed (HS2-RKYCTP).
+            if let Some(code) = item
+                .get("exitCode")
+                .or_else(|| item.get("exit_code"))
+                .and_then(Value::as_i64)
+            {
+                detail["exit_code"] = code.into();
+            }
+            (ActivityKind::Command, detail)
+        }
         "edit" | "patch" | "file_change" | "fileChange" => (
             ActivityKind::Edit,
             serde_json::json!({ "path": item.get("path").and_then(Value::as_str).or_else(|| {
@@ -1031,6 +1039,27 @@ mod tests {
             codex_activity(&json!({ "type": "exec", "command": "ls -la" }), "01A", "t").unwrap();
         assert_eq!(e.kind, ActivityKind::Command);
         assert_eq!(e.summary, "codex ran `ls -la`");
+        assert!(e.detail.get("exit_code").is_none());
+        for (item, code) in [
+            (
+                json!({"type": "commandExecution", "command": "cargo test", "exitCode": 0}),
+                0,
+            ),
+            (
+                json!({"type": "exec", "command": "cargo test", "exit_code": 101}),
+                101,
+            ),
+        ] {
+            let e = codex_activity(&item, "01G", "t").unwrap();
+            assert_eq!(e.detail["exit_code"], code, "{item}");
+        }
+        let e = codex_activity(
+            &json!({"type": "commandExecution", "command": "ls", "exitCode": null}),
+            "01H",
+            "t",
+        )
+        .unwrap();
+        assert!(e.detail.get("exit_code").is_none());
 
         let e = codex_activity(&json!({ "type": "patch", "path": "a.rs" }), "01B", "t").unwrap();
         assert_eq!(e.kind, ActivityKind::Edit);

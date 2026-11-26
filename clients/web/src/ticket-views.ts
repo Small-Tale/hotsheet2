@@ -33,8 +33,12 @@ export function ticketSearchScope(view: TicketView, allTickets: boolean, searchi
 export const canCreateTicketInView = (view: TicketView): boolean => !['archive', 'trash', 'errors'].includes(view);
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' =>
   view === 'backlog' ? 'backlog' : 'not_started';
-export const newTicketCreationPlacement = (view: TicketView, upNext: boolean) => ({
-  status: upNext ? ('not_started' as const) : newTicketStatusForView(view),
+/**
+ * Where a new ticket lands. The composer's Add to Backlog choice (HS2-V72HCC) starts checked in the
+ * Backlog view and unchecked elsewhere; Up Next always means Not Started, so the two never combine.
+ */
+export const newTicketCreationPlacement = (upNext: boolean, backlog: boolean) => ({
+  status: !upNext && backlog ? ('backlog' as const) : ('not_started' as const),
   up_next: upNext,
 });
 

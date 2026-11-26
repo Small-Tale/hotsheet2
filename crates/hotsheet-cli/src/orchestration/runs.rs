@@ -58,6 +58,16 @@ pub struct DispatchRun {
     /// says its work is not ready. Never set by automation on its own.
     #[serde(default)]
     pub override_readiness: bool,
+    /// HS2-061YTB: start this operation although the target's machine does not meet,
+    /// or did not report, a requirement of its plan step. A person's own override goes
+    /// ahead; the orchestrator's waits on a decision. Never set by automation on its own.
+    #[serde(default)]
+    pub override_requirements: bool,
+    /// HS2-061YTB: the scheduler placed this dispatch against the target's capacity
+    /// snapshot it just read, so the requirement guard does not read it again. Never
+    /// read from a request.
+    #[serde(skip)]
+    pub requirements_checked: bool,
 }
 
 /// The longest one events request waits; a client re-polls with its cursor.
@@ -597,6 +607,22 @@ impl OrchestrationRuntime {
                     override_readiness: request.override_readiness,
                 },
                 &authorized,
+                actor,
+                tx,
+            )?;
+            // HS2-061YTB: and only on a machine that meets its plan step's requirements.
+            self.requirement_guard(
+                owner_id,
+                &super::readiness::RequirementDispatch {
+                    target: &RunTarget {
+                        target_id: request.target.target_id.clone(),
+                        connection_id: request.target.connection_id.clone(),
+                        native_id: native_id.clone(),
+                    },
+                    operation_id: &request.operation_id,
+                    override_requirements: request.override_requirements,
+                    checked: request.requirements_checked,
+                },
                 actor,
                 tx,
             )?;

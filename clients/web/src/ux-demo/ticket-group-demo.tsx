@@ -107,6 +107,7 @@ export function TicketGroupDemo() {
           scope="list"
           collapsed={collapsed.value}
           dropTarget={dropTarget.value}
+          memberSlugs={TICKET_GROUP_DEMO_TICKETS.map((ticket) => ticket.slug)}
         >
           <List gap="none" rootAttributes={{ role: 'none' }}>
             {TICKET_GROUP_DEMO_TICKETS.map((ticket, index) => (
@@ -133,6 +134,7 @@ export function TicketGroupDemo() {
           presentation="column"
           collapsed={collapsed.value}
           dropTarget={dropTarget.value}
+          memberSlugs={TICKET_GROUP_DEMO_TICKETS.slice(1).map((ticket) => ticket.slug)}
         >
           {TICKET_GROUP_DEMO_TICKETS.slice(1).map((ticket) => (
             <TicketRow {...ticket} qualifiedId={`column:${ticket.slug}`} presentation="column" draggable={false} />

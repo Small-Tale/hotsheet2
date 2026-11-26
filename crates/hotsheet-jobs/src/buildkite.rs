@@ -153,6 +153,7 @@ impl<A: GithubApi> BuildkiteSource<A> {
             method: ApiMethod::Get,
             path,
             if_none_match: None,
+            body: None,
         };
         self.api
             .send(&request)
@@ -279,6 +280,7 @@ impl<A: GithubApi> WatchSource for BuildkiteSource<A> {
             method: ApiMethod::Put,
             path: format!("{pipeline}/builds/{number}/cancel"),
             if_none_match: None,
+            body: None,
         };
         match self.api.send(&request) {
             Ok(response) if (200..300).contains(&response.status) => CancelReply::Requested,

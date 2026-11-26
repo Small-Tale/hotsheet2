@@ -393,6 +393,48 @@ pub fn purge_all_trash(state: &AppState) -> Vec<(String, usize)> {
         .collect()
 }
 
+/// Permanently delete external provider Trash tickets past retention (GH-5), on the same
+/// cadence as the git sweep. A provider ticket the connection may not delete stays in Trash
+/// and is logged; a disabled or unreachable connection is skipped and retried next sweep.
+/// Returns each connection's purged and retained counts.
+pub fn purge_all_provider_trash(state: &AppState) -> Vec<(String, usize, usize)> {
+    let Some(_lifecycle_guard) = state.begin_background_work() else {
+        return Vec::new();
+    };
+    let now = crate::now();
+    let mut swept = Vec::new();
+    for (connection_id, days) in state.provider_trash_retention() {
+        if crate::routes::providers::connection_disabled(state, &connection_id).unwrap_or(true) {
+            continue;
+        }
+        let Ok(provider) = crate::routes::providers::provider_for(state, &connection_id) else {
+            continue;
+        };
+        match hotsheet_ticketing::purge_provider_trash(
+            provider.as_ref(),
+            &now,
+            Some(i64::from(days)),
+        ) {
+            Ok(report) => {
+                for retained in &report.retained {
+                    tracing::warn!(
+                        ticket = %retained.qualified_id,
+                        reason = %retained.message,
+                        "provider Trash ticket past retention was not deleted"
+                    );
+                }
+                swept.push((connection_id, report.purged.len(), report.retained.len()));
+            }
+            Err(error) => tracing::warn!(
+                connection = %connection_id,
+                %error,
+                "provider Trash sweep failed"
+            ),
+        }
+    }
+    swept
+}
+
 fn run(state: AppState, base: Duration, rx: Receiver<SyncKick>) {
     let mut last_trash_purge: Option<std::time::Instant> = None;
     let mut levels = SizeLevels::default();
@@ -406,6 +448,7 @@ fn run(state: AppState, base: Duration, rx: Receiver<SyncKick>) {
         }
         if last_trash_purge.is_none_or(|at| at.elapsed() >= TRASH_PURGE_INTERVAL) {
             purge_all_trash(&state);
+            purge_all_provider_trash(&state);
             last_trash_purge = Some(std::time::Instant::now());
         }
         let mut reports = sync_all_with_sizes(&state, &mut levels, git_object_size);

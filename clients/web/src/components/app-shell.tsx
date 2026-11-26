@@ -96,6 +96,8 @@ export interface AppShellProps {
   terminalDrawerMin?: number;
   terminalDrawerTransitioning?: boolean;
   terminalFocusMode?: boolean;
+  /** The selected project is not ready (HS2-H0QGK7): Show Terminal Drawer stays, disabled with this tooltip. */
+  terminalDrawerDisabledReason?: string;
   sidePanelSeparator?: ResizableRegionSeparator;
   terminalDrawerContentOverflow?: ResizableRegionContentOverflow;
   /** `framed` (default) draws the shell as a bordered window at a desktop size floor, as the UX demo
@@ -156,6 +158,7 @@ export function AppShell({
   terminalDrawerMin = TERMINAL_DRAWER_MIN_SIZE,
   terminalDrawerTransitioning = false,
   terminalFocusMode = false,
+  terminalDrawerDisabledReason,
   sidePanelSeparator = 'auto',
   terminalDrawerContentOverflow = 'clip',
   presentation = 'framed',
@@ -284,8 +287,9 @@ export function AppShell({
                   <button
                     type="button"
                     {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
+                    disabled={Boolean(terminalDrawerDisabledReason)}
                     aria-label="Show Terminal Drawer"
-                    title="Show terminal drawer"
+                    title={terminalDrawerDisabledReason ?? 'Show terminal drawer'}
                   >
                     <LucideIcon icon={PanelBottomOpen} name="panel-bottom-open" />
                   </button>

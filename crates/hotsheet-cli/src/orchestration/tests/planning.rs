@@ -626,10 +626,16 @@ fn hs2_30vkv9_propose_plan_is_admitted_under_the_projects_policy_limits() {
         );
     });
     // The policy defaults: refused, and nothing launched or left reserved.
-    assert_eq!(
-        code(f.propose(json!({"operation_id": "press-1"}), &mut tx)),
-        SessionError::AdmissionRefused.code()
-    );
+    // HS2-8Z9VHH: the refusal says how many sessions run and what the cap is.
+    let refused = f
+        .propose(json!({"operation_id": "press-1"}), &mut tx)
+        .unwrap_err();
+    assert_eq!(refused.code(), SessionError::AdmissionRefused.code());
+    let admission = refused.admission_refusal().expect("admission detail");
+    assert_eq!(admission.reason, "session_cap_reached");
+    assert_eq!(admission.setting.as_deref(), Some("max_sessions"));
+    assert_eq!(admission.limit, Some(2));
+    assert_eq!(admission.observed, Some(5));
     assert!(f.host.launches().is_empty());
 
     // A stricter machine admission file refuses even under the project's 10.

@@ -15,9 +15,11 @@
 //! baseline so a cached index notices when the owning repository changes.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use ulid::Ulid;
 
+use crate::git_discovery::{DiscoveryCache, Reuse, Watch};
 use crate::store::{FsStore, STORE_METADATA_FILE, StoreError};
 
 /// The repository that owns a ticket store, as classified by [`FsStore::git_owner`].
@@ -267,6 +269,80 @@ fn unsupported(root: &Path, owner: StoreGitOwner) -> StoreError {
     .into()
 }
 
+/// What one `rev-parse` owner probe found, before the tracking check (HS2-CBZV9W).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum OwnerProbe {
+    Located {
+        toplevel: String,
+        git_dir: String,
+        prefix: String,
+        head: Option<String>,
+    },
+    Classified(StoreGitOwner),
+}
+
+/// Owner probes per canonical store directory (HS2-CBZV9W).
+static OWNER_PROBES: LazyLock<DiscoveryCache<OwnerProbe>> = LazyLock::new(DiscoveryCache::new);
+
+/// One scrubbed `rev-parse` call: the working tree, Git directory, prefix and `HEAD`.
+/// `NoRepository` is reusable while the path's `.git` entries stay as they are; a probe
+/// that could not describe a working tree is never reused.
+pub(crate) fn probe_owner(root: &Path) -> (OwnerProbe, Reuse) {
+    let output = crate::git::command()
+        .arg("-C")
+        .arg(root)
+        .args([
+            "rev-parse",
+            "--show-toplevel",
+            "--absolute-git-dir",
+            "--show-prefix",
+            "--verify",
+            "-q",
+            "HEAD",
+        ])
+        .output();
+    let output = match output {
+        Ok(output) => output,
+        Err(error) => {
+            let owner = StoreGitOwner::Unavailable {
+                reason: format!("could not run git: {error}"),
+            };
+            return (OwnerProbe::Classified(owner), Reuse::Never);
+        }
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    // Exit 0 prints all four values; exit 1 is `--verify -q` rejecting an unborn
+    // HEAD after the three location values were printed. Anything else means Git
+    // found no usable working tree.
+    let head = match (output.status.code(), lines.as_slice()) {
+        (Some(0), [_, _, _, head, ..]) => Some((*head).to_owned()),
+        (Some(1), [_, _, _]) => None,
+        _ => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return if stderr.contains("not a git repository") {
+                (
+                    OwnerProbe::Classified(StoreGitOwner::NoRepository),
+                    Reuse::WhileUnchanged,
+                )
+            } else {
+                let owner = StoreGitOwner::Unavailable {
+                    reason: stderr.trim().to_owned(),
+                };
+                (OwnerProbe::Classified(owner), Reuse::Never)
+            };
+        }
+    };
+    let reuse = Reuse::WithGitDir(hotsheet_sync::paths::from_git(lines[1]));
+    let probe = OwnerProbe::Located {
+        toplevel: lines[0].to_owned(),
+        git_dir: lines[1].to_owned(),
+        prefix: lines[2].to_owned(),
+        head,
+    };
+    (probe, reuse)
+}
+
 impl FsStore {
     /// Initialize (or re-initialize) the store at `root` and settle its Git repository
     /// with [`ensure_store_repository`] (HS2-V6JEBR). Classification happens before any
@@ -314,49 +390,22 @@ impl FsStore {
     /// Classify the directory `root` exactly as [`FsStore::git_owner`] does, before it
     /// holds store metadata (HS2-V6JEBR: `init` classifies before it writes anything). An
     /// untracked directory inside an enclosing work tree is [`StoreGitOwner::Unowned`].
+    ///
+    /// The `rev-parse` probe is answered from [`OWNER_PROBES`] while the directory, every
+    /// `.git` on its path and the nearest repository's `HEAD` are unchanged (HS2-CBZV9W);
+    /// the `ls-files` tracking check for a nested store always asks Git.
     #[must_use]
     pub fn git_owner_at(root: &Path) -> StoreGitOwner {
-        let output = crate::git::command()
-            .arg("-C")
-            .arg(root)
-            .args([
-                "rev-parse",
-                "--show-toplevel",
-                "--absolute-git-dir",
-                "--show-prefix",
-                "--verify",
-                "-q",
-                "HEAD",
-            ])
-            .output();
-        let output = match output {
-            Ok(output) => output,
-            Err(error) => {
-                return StoreGitOwner::Unavailable {
-                    reason: format!("could not run git: {error}"),
-                };
-            }
+        let probe = OWNER_PROBES.get_or_probe(root, Watch::LocationAndHead, probe_owner);
+        let (toplevel, git_dir, prefix, head) = match probe {
+            OwnerProbe::Located {
+                toplevel,
+                git_dir,
+                prefix,
+                head,
+            } => (toplevel, git_dir, prefix, head),
+            OwnerProbe::Classified(owner) => return owner,
         };
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let lines: Vec<&str> = stdout.lines().collect();
-        // Exit 0 prints all four values; exit 1 is `--verify -q` rejecting an unborn
-        // HEAD after the three location values were printed. Anything else means Git
-        // found no usable working tree.
-        let head = match (output.status.code(), lines.as_slice()) {
-            (Some(0), [_, _, _, head, ..]) => Some((*head).to_owned()),
-            (Some(1), [_, _, _]) => None,
-            _ => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                return if stderr.contains("not a git repository") {
-                    StoreGitOwner::NoRepository
-                } else {
-                    StoreGitOwner::Unavailable {
-                        reason: stderr.trim().to_owned(),
-                    }
-                };
-            }
-        };
-        let (toplevel, git_dir, prefix) = (lines[0], lines[1], lines[2]);
         let key = format!("{toplevel}\n{git_dir}\n{prefix}");
         if prefix.is_empty() {
             return StoreGitOwner::Owned { key, head };
@@ -365,12 +414,12 @@ impl FsStore {
             StoreGitOwner::Designated {
                 key,
                 head,
-                toplevel: hotsheet_sync::paths::from_git(toplevel),
-                prefix: prefix.to_owned(),
+                toplevel: hotsheet_sync::paths::from_git(&toplevel),
+                prefix,
             }
         } else {
             StoreGitOwner::Unowned {
-                toplevel: hotsheet_sync::paths::from_git(toplevel),
+                toplevel: hotsheet_sync::paths::from_git(&toplevel),
             }
         }
     }

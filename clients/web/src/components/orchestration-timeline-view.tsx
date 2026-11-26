@@ -3,6 +3,7 @@ import './orchestration-timeline-view.css';
 import { Button } from '@kerfjs/ui/button';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Sparkles, Workflow } from 'lucide';
@@ -10,7 +11,7 @@ import { Sparkles, Workflow } from 'lucide';
 import { ORCHESTRATION_ACTIONS, ORCHESTRATION_TARGETS } from '../interaction-attrs/orchestration';
 import type { PlanHealth, StepName } from '../orchestration-plan-health';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
-import { type ClockFormat, clockTime, timelineColumns } from '../orchestration-timeline-board';
+import { type ClockFormat, clockTime, plannerWorkingLabel, timelineColumns } from '../orchestration-timeline-board';
 import { OrchestrationPlanProblem } from './orchestration-plan-problem';
 import { TicketBoard, type TicketBoardLayout } from './ticket-board';
 
@@ -34,6 +35,13 @@ export interface OrchestrationTimelineViewProps {
   selectedStep?: string;
   collapsedGroups?: readonly string[];
   propose?: OrchestrationProposeAvailability;
+  /** HS2-2Z4M6M: where the planner stands, so Propose Plan shows a starting or working planner. */
+  planning?: string;
+  /**
+   * HS2-GSRFG0: no explicit goal ticket is open, so Propose Plan works through all open tickets of the
+   * orchestrated projects (HS2-YSRT6Y); the No Plan Yet empty state says goal tickets are optional.
+   */
+  defaultGoal?: boolean;
   clock?: ClockFormat;
 }
 
@@ -54,8 +62,11 @@ export function OrchestrationTimelineView({
   selectedStep,
   collapsedGroups = [],
   propose = { available: false },
+  planning,
+  defaultGoal = false,
   clock = clockTime,
 }: OrchestrationTimelineViewProps) {
+  const working = plannerWorkingLabel(planning, busy);
   const failure =
     planHealth && planHealth.state !== 'ok' ? (
       <OrchestrationPlanProblem health={planHealth} name={stepName} busy={busy} />
@@ -103,17 +114,39 @@ export function OrchestrationTimelineView({
           <EmptyState
             icon={<LucideIcon icon={Workflow} name="workflow" />}
             title="No Plan Yet"
-            detail="Write goal tickets in this project, then propose a plan. The plan stays a dry run until you start orchestration."
+            detail={
+              defaultGoal
+                ? 'Propose a plan to work through all open tickets of the chosen projects, or write goal tickets in this project to plan only those. The plan stays a dry run until you start orchestration.'
+                : 'Propose a plan from the open goal tickets in this project. The plan stays a dry run until you start orchestration.'
+            }
             action={
-              <Button
-                emphasis="primary"
-                action={ORCHESTRATION_ACTIONS.proposeOrchestrationPlan.value}
-                disabled={!propose.available}
-                title={propose.available ? 'Propose a plan from the goal tickets' : propose.reason}
-                icon={<LucideIcon size="s" icon={Sparkles} name="sparkles" />}
-              >
-                Propose Plan
-              </Button>
+              working ? (
+                <Button
+                  emphasis="primary"
+                  disabled
+                  rootAttributes={{ 'data-planner-state': working }}
+                  title={propose.available ? 'Starting the planning session' : propose.reason}
+                  icon={<LoadingSpinner size="s" />}
+                >
+                  {working}
+                </Button>
+              ) : (
+                <Button
+                  emphasis="primary"
+                  action={ORCHESTRATION_ACTIONS.proposeOrchestrationPlan.value}
+                  disabled={!propose.available}
+                  title={
+                    propose.available
+                      ? defaultGoal
+                        ? 'Propose a plan that works through all open tickets'
+                        : 'Propose a plan from the goal tickets'
+                      : propose.reason
+                  }
+                  icon={<LucideIcon size="s" icon={Sparkles} name="sparkles" />}
+                >
+                  Propose Plan
+                </Button>
+              )
             }
           />
         </List>

@@ -4239,6 +4239,78 @@
       }
     },
     {
+      "key": "hotsheet-web:note-delivery-popup",
+      "package": "hotsheet-web",
+      "id": "note-delivery-popup",
+      "name": "NoteDeliveryPopup",
+      "kind": "component",
+      "purpose": "The app-level Choose/Start an AI Session prompt after a saved human note: the ticket, project, and one labeled button per candidate session, or Start AI Session (HS2-6RXBS9).",
+      "publicExports": [
+        {
+          "name": "NoteDeliveryPopup"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/note-delivery-popup.tsx",
+        "src/feedback-session-labels.ts"
+      ],
+      "source": "src/components/note-delivery-popup.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "self",
+          "border": "self",
+          "padding": "child",
+          "notes": [
+            "Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY)."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "note-delivery-popup"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "note-delivery-popup"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/note-delivery-popup.tsx",
+        "composition": "src/components/note-delivery-popup.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:note-metadata-dialog",
       "package": "hotsheet-web",
       "id": "note-metadata-dialog",

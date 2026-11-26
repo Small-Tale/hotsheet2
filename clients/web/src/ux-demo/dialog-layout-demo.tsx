@@ -1,11 +1,20 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
-import { delegate, signal } from 'kerfjs';
+import { delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
+import {
+  Hs1CleanupBanner,
+  Hs1JobBanner,
+  Hs1JobDetailsDialog,
+  Hs1MigrationBanner,
+  Hs1MigrationDialog,
+} from '../components/hs1-migration';
 import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
+import { syncControlledOpen } from '../controlled-open';
+import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
+import type { MigrationJob } from '../migration-progress';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
@@ -98,6 +107,45 @@ const hs1JobLabels = {
   'backup-unverified': 'Backup unverified',
 } as const;
 
+type Hs1DemoJobState = keyof typeof hs1JobLabels;
+
+/** A synthetic job in each banner state; no customer content. */
+function hs1DemoJob(state: Hs1DemoJobState): MigrationJob {
+  return {
+    id: 'demo-migration',
+    attempt: state,
+    revision: 1,
+    projectId: 'demo',
+    root: '/work/demo',
+    sourceIdentity: '/work/demo/.hotsheet/db',
+    store: '/work/demo.hs2',
+    kind: state === 'backup-unverified' ? 'backup' : 'import',
+    ownerPid: 0,
+    updatedAt: '',
+    warnings: [],
+    status:
+      state === 'failed' ? 'failed' : state === 'succeeded' || state === 'backup-unverified' ? 'succeeded' : 'running',
+    progress:
+      state === 'measured'
+        ? { version: 1, phase: 'copy_database', completed: 5242880, total: 10485760, unit: 'bytes' }
+        : { version: 1, phase: 'open_database' },
+    error: state === 'failed' ? 'The repository could not be written. Free disk space, then retry.' : undefined,
+    result:
+      state === 'succeeded'
+        ? {
+            ticketStore: '/work/demo.hs2',
+            connectionId: 'git-demo',
+            tickets: 12,
+            attachments: 4,
+            toolsConfigured: true,
+          }
+        : undefined,
+  };
+}
+
+/** The Details dialog over the failed job, opened from its banner's own Details button (HS2-EEBM4W). */
+export const hs1JobDetailsDemoOpen = signal(false);
+
 export function Hs1MigrationBannerDemo() {
   return (
     <>
@@ -106,47 +154,19 @@ export function Hs1MigrationBannerDemo() {
       </CatalogExample>
       {(['measured', 'unknown', 'failed', 'succeeded', 'backup-unverified'] as const).map((state) => (
         <CatalogExample label={hs1JobLabels[state]}>
-          <Hs1JobBanner
-            details
-            backupVerified={state !== 'backup-unverified'}
-            job={{
-              id: 'demo-migration',
-              attempt: state,
-              revision: 1,
-              projectId: 'demo',
-              root: '/work/demo',
-              sourceIdentity: '/work/demo/.hotsheet/db',
-              store: '/work/demo.hs2',
-              kind: state === 'backup-unverified' ? 'backup' : 'import',
-              ownerPid: 0,
-              updatedAt: '',
-              warnings: [],
-              status:
-                state === 'failed'
-                  ? 'failed'
-                  : state === 'succeeded' || state === 'backup-unverified'
-                    ? 'succeeded'
-                    : 'running',
-              progress:
-                state === 'measured'
-                  ? { version: 1, phase: 'copy_database', completed: 5242880, total: 10485760, unit: 'bytes' }
-                  : { version: 1, phase: 'open_database' },
-              error:
-                state === 'failed' ? 'The repository could not be written. Free disk space, then retry.' : undefined,
-              result:
-                state === 'succeeded'
-                  ? {
-                      ticketStore: '/work/demo.hs2',
-                      connectionId: 'git-demo',
-                      tickets: 12,
-                      attachments: 4,
-                      toolsConfigured: true,
-                    }
-                  : undefined,
-            }}
-          />
+          <Hs1JobBanner backupVerified={state !== 'backup-unverified'} job={hs1DemoJob(state)} />
         </CatalogExample>
       ))}
+      <CatalogExample label="Details Dialog" note="Details opens a modal dialog, never inline text (HS2-EEBM4W).">
+        <Hs1JobBanner job={{ ...hs1DemoJob('failed'), warnings: ['Tool setup needs attention'] }} />
+        <Hs1JobDetailsDialog
+          job={
+            hs1JobDetailsDemoOpen.value
+              ? { ...hs1DemoJob('failed'), warnings: ['Tool setup needs attention'] }
+              : undefined
+          }
+        />
+      </CatalogExample>
       <CatalogExample label="Cleanup Offered">
         <Hs1CleanupBanner />
       </CatalogExample>
@@ -165,6 +185,27 @@ function wireDialogLayoutDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.dismissHs1Migration.selector, closeHs1MigrationDialogDemo));
+  const setDetailsOpen = (open: boolean) => {
+    hs1JobDetailsDemoOpen.value = open;
+    queueMicrotask(() => {
+      syncControlledOpen(root);
+    });
+  };
+  demoListeners.add(
+    delegate(root, 'click', PROJECT_LIFECYCLE_ACTIONS.migrationJobDetails.selector, () => {
+      setDetailsOpen(true);
+    }),
+  );
+  demoListeners.add(
+    delegateCapture(
+      root,
+      'kui-request-close',
+      PROJECT_LIFECYCLE_TARGETS.hs1JobDetailsDialog.selector,
+      (event, target) => {
+        if (event.target === target) setDetailsOpen(false);
+      },
+    ),
+  );
   demoListeners.add(
     delegate(root, 'wa-hide', DEMO_COMPONENTS.hs1MigrationDialog.selector, closeHs1MigrationDialogDemo),
   );

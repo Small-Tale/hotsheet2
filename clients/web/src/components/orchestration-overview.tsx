@@ -9,7 +9,14 @@ import { History } from 'lucide';
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import { progressRows, type ProgressSummaryView, projectRows } from '../orchestration-progress';
 import { contentionRows, type ResourceContentionView } from '../orchestration-resources';
-import { decisionText, lastPassText, latestDecisions, type SchedulerDecisionPage } from '../orchestration-scheduler';
+import {
+  decisionText,
+  lastPassText,
+  latestDecisions,
+  roleStandingRows,
+  type RoleStandingView,
+  type SchedulerDecisionPage,
+} from '../orchestration-scheduler';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import type { ClockFormat } from '../orchestration-timeline-board';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
@@ -22,6 +29,8 @@ export interface OrchestrationOverviewData {
   summary?: ProgressSummaryView;
   /** HS2-5GRXFN: `scheduler plan`'s contention: each resource that deferred work, and who waits. */
   contention?: ResourceContentionView[];
+  /** HS2-65AD6J: `scheduler plan`'s integrator of each project and the role sessions it does not start. */
+  roles?: RoleStandingView[];
   /** A read failed; the parts that were read still show. */
   error?: string;
 }
@@ -48,6 +57,7 @@ const placementText = (timeline: OrchestrationTimeline) =>
  * the scheduler's placement mode, sessions and last pass, and its latest three decisions with Show All
  * Decisions…, which opens the whole log in a dialog. HS2-5GRXFN: each contended resource and who waits.
  * HS2-XJEH08: progress and cost, overall and per project; unknown is never zero and partial is labelled.
+ * HS2-65AD6J: each project's integrator and any coordination session the scheduler does not start, and why.
  */
 export function OrchestrationOverview({ timeline, overview, projectName, clock }: OrchestrationOverviewProps) {
   const decisions = overview?.decisions,
@@ -93,6 +103,24 @@ export function OrchestrationOverview({ timeline, overview, projectName, clock }
             value={lastPass ?? (decisions ? 'No pass logged yet' : 'Reading the decision log…')}
           />
         </ValueTable>
+      </OrchestrationInspectorSection>
+      <OrchestrationInspectorSection
+        label="Coordination Sessions"
+        note={
+          overview?.roles === undefined
+            ? 'Reading whether each project’s integrator runs…'
+            : overview.roles.length === 0
+              ? 'No integrator runs now, and no coordination session waits to start.'
+              : undefined
+        }
+      >
+        {overview?.roles && overview.roles.length > 0 ? (
+          <ValueTable label="Coordination sessions" density="compact" stackBelow="narrow">
+            {roleStandingRows(overview.roles, clock, timeline).map((row) => (
+              <ValueTableRow label={row.label} value={row.value} />
+            ))}
+          </ValueTable>
+        ) : undefined}
       </OrchestrationInspectorSection>
       <OrchestrationInspectorSection
         label="Resources"

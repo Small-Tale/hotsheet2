@@ -50,6 +50,7 @@ export type OrchestrationApi = Pick<
   | 'addOrchestrationProject'
   | 'inspectOrchestrationTarget'
   | 'separateOrchestrationSite'
+  | 'makeOrchestrationHomeSite'
   | 'removeOrchestrationProject'
   | 'hostedOrchestrationProjects'
   | 'addHostedOrchestrationProject'
@@ -89,7 +90,10 @@ export interface OrchestrationSettingsState {
   loading: boolean;
   /** The last failure, until the next successful change or read. */
   message: string;
-  /** The last success, for the polite status line. */
+  /**
+   * The last success. HS2-1K6122: it is announced through the app's toast when it is set and is
+   * never rendered inline; the state keeps it as the record of the last change.
+   */
   status: string;
   /** Targets, sessions, `add` or `policy` with a change in flight. */
   busy: readonly string[];
@@ -163,6 +167,8 @@ export interface OrchestrationSettingsDependencies {
   showInspector: () => void;
   /** Run after a microtask, for settling the open flow; tests run it at once. */
   defer?: (run: () => void) => void;
+  /** HS2-1K6122: the app's toast, which announces each change's outcome. */
+  notify?: (message: string) => void;
 }
 
 const messageOf = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
@@ -226,6 +232,16 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
   const stateOf = (projectId: string): OrchestrationSettingsState => settings.value[projectId] ?? EMPTY;
   const put = (projectId: string, change: Partial<OrchestrationSettingsState>) => {
     settings.value = { ...settings.value, [projectId]: { ...stateOf(projectId), ...change } };
+    // HS2-1K6122: a change's outcome is a toast, never an inline status line.
+    if (change.status) dependencies.notify?.(change.status);
+  };
+  /**
+   * HS2-40CTDS: a failed change is toasted like its success and keeps its inline record until the next change
+   * (HS2-1K6122). A read failure or a draft's own validation stays inline only.
+   */
+  const failed = (projectId: string, message: string) => {
+    put(projectId, { message });
+    dependencies.notify?.(message);
   };
   const busy = (projectId: string, key: string, on: boolean) => {
     const list = stateOf(projectId).busy.filter((item) => item !== key);
@@ -429,11 +445,12 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       });
       await loadSettings(projectId);
     } catch (reason) {
-      put(projectId, {
-        message: site
+      failed(
+        projectId,
+        site
           ? `Could not add ${label} as a site of ${site.label}. ${siteFailure(reason)}`
           : `Could not add ${label}. ${messageOf(reason)}`,
-      });
+      );
     } finally {
       busy(projectId, 'add', false);
     }
@@ -444,6 +461,11 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
 
   /** HS2-E9VVQF: a project row's Add a Site → an open project, added as another site of that project. */
   function addSite(ownerId: string, projectTargetId: string, projectId: string) {
+    // HS2-89YNGN: for a project open from another server, `projectId` is one of that server's open checkouts.
+    if (isRemoteProjectId(ownerId)) {
+      const label = targetLabel(ownerId, projectTargetId);
+      return label ? addHosted(ownerId, projectId, { targetId: projectTargetId, label }) : Promise.resolve();
+    }
     const open = dependencies.openProjects().find((project) => project.id === projectId),
       label = targetLabel(ownerId, projectTargetId);
     if (!open || !label || projectId === ownerId) return Promise.resolve();
@@ -464,9 +486,36 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       put(ownerId, { status: `${declaration.label} is its own project again.` });
       await loadSettings(ownerId);
     } catch (reason) {
-      put(ownerId, {
-        message: `Could not separate ${declaration.label} from ${project ?? 'its project'}. ${siteFailure(reason)}`,
-      });
+      failed(
+        ownerId,
+        `Could not separate ${declaration.label} from ${project ?? 'its project'}. ${siteFailure(reason)}`,
+      );
+    } finally {
+      busy(ownerId, targetId, false);
+    }
+  }
+
+  /**
+   * HS2-NAA3HV: a site row's Make <site> the Home Site. The old home and every other site become its sites, and
+   * the policy's per-target entries move with the home. Undoable the same way, so it does not ask.
+   */
+  async function makeHomeSite(ownerId: string, targetId: string) {
+    const api = dependencies.api(ownerId),
+      state = stateOf(ownerId),
+      declaration = state.manifest?.targets.find((target) => target.target_id === targetId),
+      project = declaration?.site_of ? targetLabel(ownerId, declaration.site_of) : undefined;
+    if (!api || !declaration?.site_of || !state.manifest?.revision || state.busy.includes(targetId)) return;
+    busy(ownerId, targetId, true);
+    put(ownerId, { message: '', status: '' });
+    try {
+      await api.makeOrchestrationHomeSite(ownerId, targetId, state.manifest.revision);
+      put(ownerId, { status: `${declaration.label} is the home site of the project now.` });
+      await loadSettings(ownerId);
+    } catch (reason) {
+      failed(
+        ownerId,
+        `Could not make ${declaration.label} the home site of ${project ?? 'its project'}. ${siteFailure(reason)}`,
+      );
     } finally {
       busy(ownerId, targetId, false);
     }
@@ -477,6 +526,29 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
    * project open from another server. That server binds it; a repeat is the same project.
    */
   async function addHostedProject(ownerId: string, checkoutId: string) {
+    const choice = stateOf(ownerId).hosted?.find((item) => item.checkout_id === checkoutId),
+      choose = dependencies.choose;
+    if (!choice || stateOf(ownerId).busy.includes('add')) return;
+    // HS2-89YNGN: as for a project served here, a duplicate of an added project's ticket store is asked about.
+    if (choose && !choice.added) {
+      const state = stateOf(ownerId),
+        duplicate = duplicateProject(choice.checkout_authority, state.manifest, state.bindings);
+      if (duplicate) {
+        const answer = await choose({
+          title: `Is ${choice.name} another site of ${duplicate.label}?`,
+          message: `${choice.name} uses the same ticket store as ${duplicate.label}. A site is the same project in another place, such as another computer, and shares its tickets, plan and runs.`,
+          confirmLabel: `Add as a Site of ${duplicate.label}`,
+          alternateLabel: 'Add as a Separate Project',
+        });
+        if (answer === 'cancel') return;
+        if (answer === 'confirm') return addHosted(ownerId, checkoutId, duplicate);
+      }
+    }
+    return addHosted(ownerId, checkoutId);
+  }
+
+  /** HS2-92FJXM, HS2-89YNGN: add one of the serving machine's open checkouts, as a site of `site` when given. */
+  async function addHosted(ownerId: string, checkoutId: string, site?: { targetId: string; label: string }) {
     const api = dependencies.api(ownerId),
       choice = stateOf(ownerId).hosted?.find((item) => item.checkout_id === checkoutId);
     if (!api || !choice || stateOf(ownerId).busy.includes('add')) return;
@@ -487,11 +559,23 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
         checkout_id: checkoutId,
         label: choice.name,
         target_id: newUlid(),
+        ...(site ? { site_of: site.targetId } : {}),
       });
-      put(ownerId, { status: added.added ? `${added.label} added.` : `${added.label} is already added.` });
+      put(ownerId, {
+        status: !added.added
+          ? `${added.label} is already added.`
+          : site
+            ? `${added.label} added as a site of ${site.label}.`
+            : `${added.label} added.`,
+      });
       await loadSettings(ownerId);
     } catch (reason) {
-      put(ownerId, { message: `Could not add ${choice.name}. ${messageOf(reason)}` });
+      failed(
+        ownerId,
+        site
+          ? `Could not add ${choice.name} as a site of ${site.label}. ${siteFailure(reason)}`
+          : `Could not add ${choice.name}. ${messageOf(reason)}`,
+      );
     } finally {
       busy(ownerId, 'add', false);
     }
@@ -593,7 +677,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       if (selected.value[projectId] === targetId) closeDetail(projectId);
       await loadSettings(projectId);
     } catch (reason) {
-      put(projectId, { message: `Could not remove ${label}. ${messageOf(reason)}` });
+      failed(projectId, `Could not remove ${label}. ${messageOf(reason)}`);
     } finally {
       busy(projectId, targetId, false);
     }
@@ -713,7 +797,9 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
   function sessionTab(projectId: string, session: OrchestrationSession): string | undefined {
     const destination = stateOf(projectId).bindings[session.target_id]?.destination;
     if (!destination || !session.hosted) return undefined;
-    const tab = tabProjectIdOf(destination);
+    // HS2-7SHGQH: bindings are the serving tab's, which may be another server's.
+    const tab = tabProjectIdOf(destination, projectId);
+    if (!tab) return undefined;
     return dependencies.openProjects().some((project) => project.id === tab) &&
       dependencies.hasTerminal(tab, session.hosted.session_id)
       ? tab
@@ -750,7 +836,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       }
       put(projectId, { status: 'Session stopped.' });
     } catch (reason) {
-      put(projectId, { message: `Could not stop the session. ${messageOf(reason)}` });
+      failed(projectId, `Could not stop the session. ${messageOf(reason)}`);
     } finally {
       busy(projectId, sessionId, false);
       const target = selected.value[projectId];
@@ -775,7 +861,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       await api.takeOverOrchestrationSession(projectId, sessionId);
       put(projectId, { status: 'Session taken over.' });
     } catch (reason) {
-      put(projectId, { message: `Could not take over the session. ${messageOf(reason)}` });
+      failed(projectId, `Could not take over the session. ${messageOf(reason)}`);
     } finally {
       busy(projectId, sessionId, false);
       const target = selected.value[projectId];
@@ -853,10 +939,10 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       });
       void loadDetail(projectId, target);
     } catch (reason) {
-      putDetail(projectId, target, {
-        limitsSaving: false,
-        limitsMessage: `Could not save the limits. ${messageOf(reason)}`,
-      });
+      const limitsMessage = `Could not save the limits. ${messageOf(reason)}`;
+      putDetail(projectId, target, { limitsSaving: false, limitsMessage });
+      // HS2-40CTDS: toasted like the save, and kept beside the limits until the next change.
+      dependencies.notify?.(limitsMessage);
     }
   }
 
@@ -882,7 +968,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       const target = selected.value[projectId];
       if (target) syncLimits(projectId, target);
     } catch (reason) {
-      put(projectId, { message: `Could not save the policy. ${messageOf(reason)}` });
+      failed(projectId, `Could not save the policy. ${messageOf(reason)}`);
     } finally {
       busy(projectId, 'policy', false);
     }
@@ -911,6 +997,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     addHostedProject,
     addSite,
     separateSite,
+    makeHomeSite,
     toggleAllSites,
     loadStores,
     openAnother,

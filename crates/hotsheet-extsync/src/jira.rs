@@ -11,9 +11,10 @@ use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderMutationTiming,
-    ProviderPatch, ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
-    TicketRef, checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
-    keyset_page_from_native_pages, keyset_page_from_rows, provider_text_matches, unbounded_query,
+    ProviderPatch, ProviderTicketPage, ProviderTicketSummary, SortKey, TicketCollection,
+    TicketProvider, TicketQuery, TicketRef, checkout_order::MergeKey, compare_provider_tickets,
+    filter_provider_ticket_page, keyset_page_from_native_pages, keyset_page_from_rows,
+    provider_text_matches, unbounded_query,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -22,6 +23,10 @@ use sha2::{Digest, Sha256};
 use crate::note_trailer;
 
 mod attachments;
+
+/// Label-only Trash, restore, and permission-checked permanent deletion (HS2-73Z1R8).
+#[path = "jira_trash.rs"]
+mod trash;
 
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
@@ -125,20 +130,29 @@ impl JiraProvider {
         url: &str,
         body: Option<&Value>,
     ) -> Result<HttpResponse, ProviderError> {
+        let response = self.send(method, url, body)?;
+        self.checked(url, response)
+    }
+
+    /// One authenticated request whose status the caller interprets itself.
+    fn send(
+        &self,
+        method: &str,
+        url: &str,
+        body: Option<&Value>,
+    ) -> Result<HttpResponse, ProviderError> {
         let credentials = base64(&format!("{}:{}", self.config.email, self.config.token));
         let headers = [
             ("Authorization", format!("Basic {credentials}")),
             ("Accept", "application/json".into()),
             ("User-Agent", "hotsheet2".into()),
         ];
-        let response = self
-            .transport
+        self.transport
             .request(method, url, &headers, body)
             .map_err(|message| ProviderError::Conflict {
                 ticket: self.config.connection_id.clone(),
                 message,
-            })?;
-        self.checked(url, response)
+            })
     }
 
     /// Map a Jira status to a typed provider error (shared by JSON and binary requests).
@@ -497,10 +511,17 @@ impl JiraProvider {
 
     fn ticket(&self, issue: JiraIssue, comments: Vec<JiraComment>) -> ApiTicket {
         let details_with_marker = adf_to_text(issue.fields.description.as_ref());
-        let status = match issue.fields.status.status_category.key.as_str() {
+        let workflow_status = match issue.fields.status.status_category.key.as_str() {
             "done" => Status::Completed,
             "indeterminate" => Status::Started,
             _ => Status::NotStarted,
+        };
+        // The Trash label wins over the workflow status, which Delete leaves unchanged
+        // (HS2-73Z1R8).
+        let status = if trash::is_trashed(&issue.fields.labels) {
+            Status::Deleted
+        } else {
+            workflow_status
         };
         let priority = issue
             .fields
@@ -574,7 +595,7 @@ impl JiraProvider {
             up_next: false,
             feedback_needed,
             needs_review: false,
-            tags: issue.fields.labels,
+            tags: trash::labels_with_trash(issue.fields.labels, false),
             blocked_by: vec![],
             follow_ups: vec![],
             orchestration_links: Vec::new(),
@@ -585,7 +606,8 @@ impl JiraProvider {
             completed_at: issue.fields.resolution_date.clone(),
             verified_at: None,
             closed_at: issue.fields.resolution_date,
-            close_reason: (status == Status::Completed).then_some(CloseReason::Completed),
+            // A Trash ticket keeps the close it had: a done issue stays closed in Trash.
+            close_reason: (workflow_status == Status::Completed).then_some(CloseReason::Completed),
             duplicate_of: None,
             copied_from: None,
             transfer_operation_id: marker(&details_with_marker, "operation"),
@@ -598,6 +620,7 @@ impl JiraProvider {
             claim_started_at: None,
             started_phase_since: None,
             started_phase_estimate_ms: None,
+            claim_standing: None,
             worker_label: None,
             claim_origin: None,
             legacy_number: None,
@@ -668,7 +691,20 @@ impl TicketProvider for JiraProvider {
                     .is_none_or(|value| ticket.category == value)
             })
             .filter(|ticket| query.tags.iter().all(|tag| ticket.tags.contains(tag)))
-            .filter(|ticket| !query.open_only || ticket.close_reason.is_none())
+            // A trashed issue can keep an open workflow status, so openness and collections
+            // follow the Hot Sheet status (HS2-73Z1R8).
+            .filter(|ticket| {
+                !query.open_only || matches!(ticket.status, Status::NotStarted | Status::Started)
+            })
+            .filter(|ticket| {
+                query.collection.is_none_or(|collection| match collection {
+                    TicketCollection::Trash => ticket.status == Status::Deleted,
+                    TicketCollection::Archive => false,
+                    TicketCollection::Queue | TicketCollection::All => {
+                        ticket.status != Status::Deleted
+                    }
+                })
+            })
             .filter(|ticket| {
                 query
                     .closed
@@ -921,9 +957,14 @@ impl TicketProvider for JiraProvider {
             });
         }
         timing.token_check = token_started.elapsed();
-        if patch.status.is_some() {
-            return self.unsupported("status transitions");
-        }
+        // Delete is the one status change the adapter makes: it adds the Trash label and
+        // leaves the workflow status alone (HS2-73Z1R8). Other statuses need workflow
+        // transitions the adapter does not map.
+        let trashed = match patch.status {
+            None => trash::is_trashed(&current.fields.labels),
+            Some(Status::Deleted) => true,
+            Some(_) => return self.unsupported("status transitions"),
+        };
         if patch
             .blocked_by
             .as_ref()
@@ -943,7 +984,7 @@ impl TicketProvider for JiraProvider {
             "description":text_to_adf(&details),
             "issuetype":{"name":patch.category.unwrap_or(current.fields.issue_type.name)},
             "priority":{"name":priority_name(patch.priority.unwrap_or_else(||current.fields.priority.as_ref().and_then(|value|parse_priority(&value.name)).unwrap_or_default()))},
-            "labels":patch.tags.unwrap_or(current.fields.labels)
+            "labels":trash::labels_with_trash(patch.tags.unwrap_or(current.fields.labels), trashed)
         });
         let write_started = Instant::now();
         self.request(
@@ -1068,6 +1109,17 @@ impl TicketProvider for JiraProvider {
         _: Option<String>,
     ) -> Result<ApiTicket, ProviderError> {
         self.unsupported("close transitions require project workflow mapping")
+    }
+
+    fn restore(&self, native_id: &str, _now: Timestamp) -> Result<ApiTicket, ProviderError> {
+        self.restore_from_trash(native_id)
+    }
+
+    fn purge_trashed(
+        &self,
+        native_id: &str,
+    ) -> Result<hotsheet_ticketing::ProviderPurgeOutcome, ProviderError> {
+        self.delete_trashed_issue(native_id)
     }
 
     fn assign(
@@ -1426,6 +1478,8 @@ fn native_filter(query: &TicketQuery) -> String {
         Some(Status::Completed) => clauses.push("statusCategory = 3".into()),
         Some(Status::Started) => clauses.push("statusCategory = 4".into()),
         Some(Status::NotStarted) => clauses.push("statusCategory not in (3, 4)".into()),
+        // Trash is a label over any workflow status (HS2-73Z1R8).
+        Some(Status::Deleted) => clauses.push(format!("labels = \"{}\"", trash::TRASH_LABEL)),
         // No Jira issue maps to any other Hot Sheet status.
         Some(_) => clauses.push("statusCategory = 3 AND statusCategory != 3".into()),
     }
@@ -1436,6 +1490,9 @@ fn native_filter(query: &TicketQuery) -> String {
         (_, Some(true)) => clauses.push("statusCategory = 3".into()),
         (true, _) | (_, Some(false)) => clauses.push("statusCategory != 3".into()),
         _ => {}
+    }
+    if query.collection == Some(TicketCollection::Trash) {
+        clauses.push(format!("labels = \"{}\"", trash::TRASH_LABEL));
     }
     for tag in &query.tags {
         clauses.push(format!("labels = \"{}\"", jql_escape(tag)));

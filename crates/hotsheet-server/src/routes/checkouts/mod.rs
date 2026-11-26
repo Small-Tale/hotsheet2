@@ -210,8 +210,17 @@ fn schedule_worklist_regeneration(
 pub(crate) async fn open_project(
     State(state): State<AppState>,
     _host: HostAccess,
-    Json(body): Json<OpenProjectBody>,
+    Json(mut body): Json<OpenProjectBody>,
 ) -> Result<(StatusCode, Json<OpenProjectResponse>), ApiError> {
+    // HS2-86ES0B: a remembered root that an explicit relocate moved opens the checkout at
+    // its current root. An existing folder is never redirected.
+    if let Some(moved) = state
+        .checkout_registry
+        .follow_relocation(FsPath::new(&body.root))
+        .map_err(checkout_lookup_error)?
+    {
+        body.root = moved.root;
+    }
     let discovered = body.stores.is_none() && body.sources.is_none();
     let source_mode = if body.sources.is_some() {
         hotsheet_ticketing::checkouts::OpenSourceMode::Explicit
@@ -261,7 +270,7 @@ pub(crate) async fn open_project(
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     let root = FsPath::new(&body.root);
-    let requested_git_sources = sources
+    let mut requested_git_sources = sources
         .iter()
         .filter(|source| source.provider == "git")
         .cloned()
@@ -280,6 +289,21 @@ pub(crate) async fn open_project(
             },
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    // HS2-FVWKJC: a relinked `.hotsheet2/store` can add the newly linked store even when
+    // this request selected another one. Host every Git source the open newly linked.
+    for source in checkout.sources.iter().filter(|source| {
+        source.provider == "git"
+            && existing
+                .as_ref()
+                .is_none_or(|prior| prior.source(&source.connection_id).is_none())
+    }) {
+        if !requested_git_sources
+            .iter()
+            .any(|requested| requested.locator == source.locator)
+        {
+            requested_git_sources.push(source.clone());
+        }
+    }
     let hosting_state = state.clone();
     tokio::task::spawn_blocking(move || {
         for source in &requested_git_sources {
@@ -322,6 +346,31 @@ pub(crate) async fn open_project(
             discovered,
         }),
     ))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct FollowRelocationBody {
+    root: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct FollowRelocationResponse {
+    checkout: Option<hotsheet_ticketing::checkouts::Checkout>,
+}
+
+/// HS2-86ES0B: the checkout an explicit relocate moved away from a vanished `root`, or
+/// `null`. The local bridge asks before it prepares an open, so a restored tab that
+/// remembered the old path reopens the checkout at its current root.
+pub(crate) async fn follow_project_relocation(
+    State(state): State<AppState>,
+    _host: HostAccess,
+    Json(body): Json<FollowRelocationBody>,
+) -> Result<Json<FollowRelocationResponse>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .follow_relocation(FsPath::new(&body.root))
+        .map_err(checkout_lookup_error)?;
+    Ok(Json(FollowRelocationResponse { checkout }))
 }
 
 pub(crate) async fn list_checkouts(

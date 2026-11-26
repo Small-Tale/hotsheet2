@@ -106,7 +106,7 @@ export function ConnectionStateBanner({ state, detail }: ConnectionStateBannerPr
   ) : undefined;
   // Inset like every other application banner (HS2-YCB15Z, see ShellBanner).
   return (
-    <List controlInsets="trl">
+    <List controlInsets="t">
       <StateBanner
         title={item.label}
         detail={detail}

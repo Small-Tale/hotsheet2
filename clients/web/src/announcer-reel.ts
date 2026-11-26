@@ -72,7 +72,7 @@ export function retainedAnnouncerReel(
 }
 
 /** A digest favors important events, keeps recording order, and has a deliberate upper bound. */
-export function announcerDigest(reel: readonly AnnouncerReelItem[], limit = 12): AnnouncerReelItem[] {
+export function announcerDigest<Item extends AnnouncerReelItem>(reel: readonly Item[], limit = 12): Item[] {
   const selected = reel.filter((item) => item.event.importance !== 'low');
   return selected.slice(-Math.max(0, limit));
 }

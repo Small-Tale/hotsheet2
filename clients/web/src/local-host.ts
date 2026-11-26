@@ -4,8 +4,9 @@
  *
  * The bridge is `createDevApp(true)`: every local endpoint (project open, API proxy with the server
  * secret, folder picking, migration) stays enabled because this is the same local-machine host as
- * `npm run dev`. The development-only surfaces, the `/ux-demo` catalog and its
- * modification feed, are not served; the production bundle already omits their client code.
+ * `npm run dev`. The `/ux-demo` component catalog is served only when the host is started with
+ * `--feature ux-demo` (or `HOTSHEET_FEATURES=ux-demo`, HS2-ZF70Y9); the production bundle loads its
+ * code as a separate on-demand chunk. Otherwise `/ux-demo` is the host's ordinary 404.
  */
 import { createHash } from 'node:crypto';
 import {
@@ -37,6 +38,7 @@ import { localClientUrl, publishClientUrl } from './client-discovery';
 import { desktopStorageBridge } from './desktop-storage-bridge';
 import { createDevApp } from './dev-server';
 import { signMacOSSnapshotIfConfigured } from './dev-signing';
+import { type HostFeature, isUxDemoPath, parseHostFeatures, stampHostFeatures } from './host-features';
 import { isRecord, parseJson } from './json-value';
 import { hotsheetHome, type MachineHomeEnvironment, nonBlank } from './machine-home';
 import { installPeerWebSocketGateway, peerGateway } from './peer-gateway';
@@ -319,8 +321,6 @@ function documentNoCache(): MiddlewareHandler {
     context.res = new Response(context.res.body, { status: context.res.status, headers });
   };
 }
-const DEVELOPMENT_ONLY = /^\/ux-demo(?:[/?]|$)/;
-
 /** The same production dist can be served locally or remotely; stamp the running host's mode. */
 export function stampBrowserAuthMode(html: string, remote = remoteBrowserAuthRequired()): string {
   const tag = `<meta name="hotsheet-browser-auth" content="${remote ? 'remote' : 'local'}">`;
@@ -344,17 +344,35 @@ export function clientReadyFile(environment: MachineHomeEnvironment = process.en
   return nonBlank(environment.HOTSHEET_CLIENT_READY_FILE);
 }
 
-/** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
+/**
+ * Build the host app: the bridge owns `/__hotsheet`, the rest is static. `/ux-demo` is a 404 unless
+ * `features` has `ux-demo`; then it is the application document stamped with the host's features, so
+ * the entry loads the catalog instead of the app (HS2-ZF70Y9). The bridge's development catalog shell
+ * is never served: it loads source modules that a production `dist/` does not have.
+ */
 export function createLocalHostApp(
   distRoot: string,
   bridge: Hono = createDevApp(true),
   desktopStorageDirectory = desktopStorageDirectoryFrom(),
   gateway: MiddlewareHandler = peerGateway(),
+  features: ReadonlySet<HostFeature> = new Set(),
 ): Hono {
   const app = new Hono();
   app.use('*', async (context, next) => {
-    if (DEVELOPMENT_ONLY.test(context.req.path)) return context.notFound();
-    await next();
+    if (!isUxDemoPath(context.req.path)) {
+      await next();
+      return;
+    }
+    if (!features.has('ux-demo') || !['GET', 'HEAD'].includes(context.req.method)) return context.notFound();
+    let html: string;
+    try {
+      html = readFileSync(resolve(distRoot, 'index.html'), 'utf8');
+    } catch {
+      return context.notFound();
+    }
+    const response = context.html(stampBrowserAuthMode(stampHostFeatures(html, features)));
+    response.headers.set('Cache-Control', 'no-cache');
+    return response;
   });
   const storageDirectory = nonBlank(desktopStorageDirectory);
   if (storageDirectory !== undefined && !remoteBrowserAuthRequired())
@@ -386,10 +404,11 @@ export function startLocalHost({
   host = '127.0.0.1',
   port = LOCAL_HOST_DEFAULT_PORT,
   distRoot = fileURLToPath(new URL('../dist', import.meta.url)),
-}: { host?: string; port?: number; distRoot?: string } = {}): Promise<Server> {
+  features = new Set<HostFeature>(),
+}: { host?: string; port?: number; distRoot?: string; features?: ReadonlySet<HostFeature> } = {}): Promise<Server> {
   if (!['127.0.0.1', '::1', 'localhost'].includes(host) && !remoteBrowserAuthRequired())
     throw new Error('A non-loopback browser host requires HOTSHEET_BROWSER_AUTH_MODE=remote.');
-  const listener = getRequestListener(createLocalHostApp(distRoot).fetch),
+  const listener = getRequestListener(createLocalHostApp(distRoot, undefined, undefined, undefined, features).fetch),
     server = createServer((request, response) => {
       void listener(request, response);
     });
@@ -423,10 +442,12 @@ function argument(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-// Started directly (`node dist-host/local-host.js [--host <address>] [--port <port>]`).
+// Started directly (`node dist-host/local-host.js [--host <address>] [--port <port>] [--feature <name>]…`).
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const host = argument('host') ?? '127.0.0.1',
-    port = Number(argument('port') ?? LOCAL_HOST_DEFAULT_PORT);
+    port = Number(argument('port') ?? LOCAL_HOST_DEFAULT_PORT),
+    // Parsed before any snapshot work, so a misspelled feature fails fast (HS2-ZF70Y9).
+    features = parseHostFeatures(process.argv.slice(2), process.env);
   // A packaged desktop host supplies all binaries from its own resources. It has no
   // source checkout or target directory to inspect (HS2-5R706Q).
   // A blank override counts as unset (HS2-GVSJ5Y).
@@ -457,7 +478,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   );
   let server: Server;
   try {
-    server = await startLocalHost({ host, port, distRoot: snapshot.distRoot });
+    server = await startLocalHost({ host, port, distRoot: snapshot.distRoot, features });
   } catch (error) {
     snapshot.dispose();
     throw error;
@@ -471,6 +492,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       mode: 0o600,
     });
   console.log(`Hot Sheet production client on http://${host}:${listening}/`);
+  if (features.has('ux-demo')) console.log(`UX component catalog on http://${host}:${listening}/ux-demo`);
   let stopping = false;
   const stop = () => {
     if (stopping) return;

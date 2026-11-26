@@ -66,6 +66,9 @@ note and a feedback reply, and press Minimize; confirm ⌘M still minimizes the 
 ⌥⇧⌘M minimizes the reader. Quit and relaunch the app, then restore the ticket from the
 floating control and confirm the note and reply text return. Repeat with VoiceOver to hear
 the control's name, its draft indicator, and the list's Restore All and Close All.
+For HS2-3JR0ZH, start a synthetic new ticket with a title, details, and a staged file, press
+the composer's Minimize, then quit and relaunch; restore _New ticket: <title>_ from the same
+control and confirm every field and the staged file return before creating it.
 
 For the macOS Tauri host (HS2-5R706Q), build the `.app` with
 `npm run desktop:build` from `clients/web` using a Developer ID identity.
@@ -211,6 +214,18 @@ is Dark, then Auto: the chrome follows the system again. Repeat in an installed
 Safari web app (Add to Dock) and confirm its title bar color follows the same
 choices. Automated coverage asserts the meta contents and the mocked Tauri call
 only; the native rendering needs this check.
+
+### Standby hides the cursor in the desktop app (HS2-1RGBCT)
+
+On the packaged macOS desktop app (a release build: debug builds lack the command's
+permission), click the moon in the sidebar rail and keep the mouse still: the cursor must
+disappear at once, without moving. Nudge the mouse a few pixels: it stays hidden. Move it
+an inch: it shows, and standby stays up. Rest 3 seconds without moving: it disappears again.
+Press a key: standby exits and the cursor shows over the app on the next move. Repeat with
+idle entry. Then repeat the moon click in Safari and in Chrome and note whether the cursor
+hides before the first move (Safari may keep it until the pointer moves; Chrome should hide
+it at once). Automated coverage asserts the CSS rule and the mocked shell requests only; the
+real cursor needs this check.
 
 ### WebKit list scroll after ticket mutation (HS2-KTXBK2)
 
@@ -487,6 +502,14 @@ behavior; this browser also needs pairing while remote auth mode is enabled. Sto
 with Ctrl-C and confirm the machine server keeps running. Automated coverage runs the real
 host on loopback only.
 
+HS2-ZF70Y9 — run `npm run prod -- --feature ux-demo` in `clients/web`. Open
+`http://127.0.0.1:4175/ux-demo` and confirm the catalog renders and its theme, contrast,
+and sidebar controls work. Then open `/` and confirm the app starts normally. Restart
+without the flag and confirm `/ux-demo` shows the plain 404 page. For the packaged app, quit
+it and run `open -a "Hot Sheet 2" --args --feature ux-demo`. Then open `/ux-demo` in a browser
+at the app's host URL, which the app's local host publishes for client discovery. Automated coverage drives a production build through an
+in-process host; the packaged desktop forwarding is unit-tested only.
+
 HS2-EFEWSC / HS2-6VQ5RV — after an explicit production rebuild and relaunch, keep the
 host and server running while editing a Rust source file in the disposable checkout
 where its binaries were built. Rebuild the web client and Rust executables in that
@@ -700,6 +723,16 @@ idle matching session, then with a mismatched provider; confirm reuse in the fir
 and a new session in the second. A held ticket claim must leave delivery pending and
 resume after the holder releases it. This live-provider check supplements the hermetic
 real-store and fake-drive regressions without copying customer content.
+
+### AI command click starts a live session (HS2-17Y2EC)
+
+With a synthetic AI command and an installed provider, set the command's Action to
+Auto-Start in a New AI Session and click it in the sidebar. Confirm one Up Next ticket
+appears, claimed by the new session, and the session's chat opens a turn naming it. Set
+Reuse or Start an AI Session with an idle matching chat open and confirm the click reuses
+it. Hover the button and confirm the tooltip begins with the chosen action. The browser
+suite covers the click against a real server without a provider; this check covers the
+live hand-off.
 
 ### Command edit survives an immediate reload (HS2-25HAK3)
 
@@ -1028,8 +1061,19 @@ that incident's cause. Never use the running user host or real customer actions.
 ### Primary AI session icon (HS2-YHQM67)
 
 Open two Claude terminals on a synthetic project. Confirm both tabs show a connected plug and
-only the older one shows `plug-zap` with the "Primary session" label. Close it and confirm the
-other tab takes `plug-zap` without a reload; reopen a terminal and confirm the role stays.
+only the older one shows the plug plus a heart with the "Primary session" label. Close it and confirm the
+other tab takes the heart without a reload; reopen a terminal and confirm the role stays.
+
+### Choosing the feedback-primary session (HS2-H3S7YQ)
+
+With two Claude terminals and a shell on a synthetic project, right-click the newer AI tab and
+choose Receive Feedback Notifications. Confirm the heart moves to it in this window and in a second
+browser window without a reload, and that a human note on a synthetic Started, unclaimed ticket is
+delivered to it. Confirm the shell tab and the current derived primary show the command disabled
+with a reason. Choose Stop Receiving Feedback Notifications and confirm the oldest session takes the
+heart back; choose again, close the chosen terminal, and confirm the oldest session is primary.
+Repeat once with `hotsheet-cli terminal feedback-primary <id>` and `--clear`. Restart the server
+and confirm the choice is gone.
 
 ### Codex questions in the app (HS2-D0QTGB)
 
@@ -1063,6 +1107,17 @@ item, switch voices while audio is pending, and close the panel. Confirm that
 only the selected synthetic item plays and no temporary speech file remains.
 Repeat with an incoming synthetic live event while Live is enabled. The browser
 suite uses fake audio to verify request and state wiring; it cannot hear output.
+
+### Announcer editing of a real agent session (HS2-RKYCTP)
+
+With Live on, drive a real Codex and a real Claude session on a synthetic project
+through a task that reads and searches the code, edits a few files, runs tests,
+and commits. Listen for a few minutes: routine reading and searching should come
+as an occasional summary ("codex looked through the code for …"), never "ran zsh"
+or a path or flag; test runs, commits, ticket claims, permission requests, and
+the turn end should be said promptly, and a Codex test run should say whether it
+passed. Judge whether the pace feels edited rather than exhaustive. Unit and
+browser tests pin the policy; only listening can judge the pace.
 
 ### Grid sidebar touch swipe on a phone or tablet (HS2-EZSQDF)
 
@@ -1535,6 +1590,8 @@ engine-specific parts by hand. The saver takes over the display and a key press 
 4. Start the saver from the Screen Saver pane's Preview, and then by letting the Mac idle. Confirm it shows
    the same screen as standby with this project's name and state, the clock, and a "live" freshness line.
 5. While it shows, claim or release a ticket. Confirm the row and gauge change without restarting the saver.
+   On a short display (a laptop scaled to about 800x500 points, HS2-D9F3CA) with two projects needing
+   attention, confirm both amber callouts, both rows, and the freshness line are fully visible.
 6. Quit Hot Sheet. Within about three minutes the freshness line reads "connection lost".
 7. Press a key. Confirm macOS asks for the account password when the delay has passed, and that the saver
    ends after a correct one.

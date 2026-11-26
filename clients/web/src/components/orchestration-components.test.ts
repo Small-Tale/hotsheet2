@@ -92,6 +92,15 @@ describe('OrchestrationTimelineView (HS2-J89JC7)', () => {
       OrchestrationTimelineView({ timeline: demoTimeline('no_plan'), propose: { available: true } }),
     );
     expect(ready).not.toMatch(/data-action="propose-orchestration-plan"[^>]*disabled/);
+    // HS2-GSRFG0: explicit goals are planned from; with none open, goal tickets are optional.
+    expect(ready).toContain('Propose a plan from the open goal tickets in this project.');
+    expect(ready).toContain('title="Propose a plan from the goal tickets"');
+    const allOpen = String(
+      OrchestrationTimelineView({ timeline: demoTimeline('no_plan'), propose: { available: true }, defaultGoal: true }),
+    );
+    expect(allOpen).toContain('Propose a plan to work through all open tickets of the chosen projects');
+    expect(allOpen).toContain('title="Propose a plan that works through all open tickets"');
+    expect(allOpen).not.toContain('Write goal tickets');
     const failed = String(OrchestrationTimelineView({ timeline: demoTimeline('running'), error: 'Offline.' }));
     expect(failed).toContain('The Orchestration Timeline Could Not Be Read');
     expect(failed).toContain('data-column-id="orchestration-done"');
@@ -115,6 +124,33 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
     // HS2-FDS95D: a planner that finished its turn still reads as planning.
     expect(toolbar('no_plan', { planning: 'replannable' })).toContain('No Plan Yet · Planning');
     expect(toolbar('no_projects')).not.toContain('data-action=');
+    // HS2-2Z4M6M: a press on its way, a starting or working planner take Propose Plan's place, busy.
+    for (const [extra, label] of [
+      [{ busy: true, propose: { available: true } }, 'Starting Planner'],
+      [{ planning: 'planning', propose: { available: false, reason: 'A planning session is working' } }, 'Planning'],
+      [{ planning: 'waiting' }, 'Planner Waiting'],
+    ] as const) {
+      const markup = toolbar('no_plan', extra);
+      expect(markup).not.toContain('data-action="propose-orchestration-plan"');
+      expect(markup).toContain(`data-planner-state="${label}"`);
+      expect(markup).toContain('disabled');
+    }
+    expect(
+      toolbar('no_plan', { planning: 'planning', propose: { available: false, reason: 'Working now' } }),
+    ).toContain('title="Working now"');
+    // A planner that finished its turn keeps the button, so a press re-plans (HS2-FDS95D).
+    expect(toolbar('no_plan', { planning: 'replannable', propose: { available: true } })).toContain(
+      'data-action="propose-orchestration-plan"',
+    );
+    const working = String(
+      OrchestrationTimelineView({
+        timeline: demoTimeline('no_plan'),
+        planning: 'planning',
+        propose: { available: false },
+      }),
+    );
+    expect(working).toContain('data-planner-state="Planning"');
+    expect(working).not.toContain('data-action="propose-orchestration-plan"');
     const blocked = String(
       OrchestrationToolbar({
         timeline: {
@@ -123,9 +159,40 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
         },
       }),
     );
-    expect(blocked).toContain('Set the orchestration limits in Orchestration settings first');
+    expect(blocked).toContain('No policy is saved yet. Apply one in Orchestration settings first');
     expect(blocked).toMatch(
       /data-action="start-orchestration"[^>]*disabled|disabled[^>]*data-action="start-orchestration"/,
+    );
+    // HS2-1DC8X1: the dry-run banner offers the way to the setting.
+    expect(blocked).toContain('data-action="open-orchestration-settings"');
+    expect(blocked).toContain('Open Orchestration Settings');
+  });
+
+  it('HS2-1DC8X1 says why a paused plan cannot start, with the way to the setting', () => {
+    const paused = (start_blocked?: 'policy_absent' | 'project_software') =>
+      String(
+        OrchestrationToolbar({
+          timeline: {
+            ...demoTimeline('paused'),
+            kick_off: { can_start: start_blocked === undefined, can_pause: false, start_blocked },
+          },
+        }),
+      );
+    const absent = paused('policy_absent');
+    expect(absent).toContain('Start Orchestration Is Unavailable');
+    expect(absent).toContain(
+      'No policy is saved yet. Apply one in Orchestration settings first. Work already running continues.',
+    );
+    expect(absent).toContain('data-orchestration-start-blocked="policy_absent"');
+    expect(absent).toContain('data-action="open-orchestration-settings"');
+    // A reason changed elsewhere names it, with no Settings action.
+    const software = paused('project_software');
+    expect(software).toContain('Start Orchestration Is Unavailable');
+    expect(software).not.toContain('open-orchestration-settings');
+    // Nothing blocks: no banner, and a proposed plan with a policy has no settings action.
+    expect(paused()).not.toContain('Start Orchestration Is Unavailable');
+    expect(String(OrchestrationToolbar({ timeline: demoTimeline('proposed') }))).not.toContain(
+      'open-orchestration-settings',
     );
   });
 });
@@ -269,6 +336,33 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
       }),
     );
     expect(paused).toContain('data-control="resume"');
+    // HS2-FXY5QM: the run's state in words, and what a person can do when no worker holds it.
+    expect(paused).toContain('Dispatched to a worker, paused');
+    const gone = String(
+      OrchestrationInspector({
+        item: { ...item('step-3'), run: { ...item('step-3').run!, state: 'intervened' } },
+        timeline: demoTimeline('running'),
+      }),
+    );
+    expect(gone).toContain('No worker holds it');
+    expect(gone).toContain('Hand it off, record what happened with Correct…, or cancel the run.');
+    expect(gone).not.toContain('Intervened');
+  });
+
+  it('HS2-PR984R Where It Runs names the site the scheduler chose and its machine', () => {
+    const own = item('step-3');
+    const other = demoTimeline('running').targets.find((target) => target.target_id !== (own.site_id ?? ''))!;
+    const markup = inspector('step-3', {
+      details: { loading: false, explanation: { standing: 'start', reason: 'ready_work', site: other.target_id } },
+    });
+    const where = markup.slice(
+      markup.indexOf('data-orchestration-section="Where It Runs"'),
+      markup.indexOf('data-orchestration-section=', markup.indexOf('data-orchestration-section="Where It Runs"') + 1),
+    );
+    expect(where).toContain(`${other.label} (${other.location})`);
+    expect(where).toContain("Step's site");
+    expect(where).toContain(`${own.project_label} (${own.location})`);
+    expect(inspector('step-3')).not.toContain("Step's site");
   });
 
   it('links a waiting card to its request or its goal decision, and names prerequisites', () => {
@@ -502,12 +596,70 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
       }),
     );
     const order = [...markup.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
-    expect(order).toEqual(['Progress', 'Projects', 'Scheduler', 'Resources', 'Latest Decisions']);
+    expect(order).toEqual([
+      'Progress',
+      'Projects',
+      'Scheduler',
+      'Coordination Sessions',
+      'Resources',
+      'Latest Decisions',
+    ]);
     expect(markup).toContain('2 of 10');
     expect(markup).toContain('5 (2 for you)');
     expect(markup).toContain('$12.40 so far · partial: 1 work item has no cost (no usage recorded)');
     expect(markup).toContain('cost unknown (no usage recorded)');
     expect(markup).not.toContain('$0.00');
+  });
+
+  it('HS2-65AD6J says whether a running card’s integrator runs and lists each project’s coordination sessions', () => {
+    const now = demoTimeline('running').now_ms;
+    // A card with a run: Integration after Run, with the home site when the card's site is another one.
+    const running = inspector('step-3', {
+      details: {
+        loading: false,
+        integrator: {
+          target_id: 'web',
+          role: 'integrator',
+          standing: 'not_started',
+          reason: 'integrator_not_started',
+          detail: 'policy_opt_out',
+        },
+      },
+    });
+    const order = [...running.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
+    expect(order.indexOf('Integration')).toBe(order.indexOf('Run') + 1);
+    expect(running).toContain('Not started');
+    expect(running).toContain('integrates by hand');
+    expect(running).toContain('Home Site');
+    // Not read, or a card without a run: no Integration section.
+    expect(inspector('step-3', { details: { loading: false } })).not.toContain('"Integration"');
+    expect(
+      inspector('step-8', {
+        details: { loading: false, integrator: { target_id: 'web', role: 'integrator', standing: 'none' } },
+      }),
+    ).not.toContain('"Integration"');
+    const overview = (roles?: object[]) =>
+      String(
+        OrchestrationInspector({ timeline: demoTimeline('running'), clock: demoClock, overview: { roles } as never }),
+      );
+    const listed = overview([
+      { target_id: 'api', role: 'integrator', standing: 'keep', reason: 'integrator_kept', detail: 'ci_pending' },
+      {
+        target_id: 'web',
+        role: 'dispatcher',
+        standing: 'not_started',
+        reason: 'dispatcher_unavailable',
+        detail: 'replacements_exhausted',
+        retry_at_ms: now,
+      },
+    ]);
+    expect(listed).toContain('API Integrator');
+    expect(listed).toContain('Running: an integrated commit waits on its CI gate');
+    expect(listed).toContain('Web Dispatcher');
+    expect(listed).toContain('Unavailable: the dispatchers the scheduler started did not take up their role');
+    expect(listed).toContain('looked at again by 14:00');
+    expect(overview([])).toContain('No integrator runs now, and no coordination session waits to start.');
+    expect(overview()).toContain('Reading whether each project’s integrator runs…');
   });
 
   it('HS2-77SRHC lists the whole log newest first with Load Earlier while older decisions remain', () => {

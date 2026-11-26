@@ -198,6 +198,7 @@ impl<A: GithubApi> GitlabCiSource<A> {
             method: ApiMethod::Get,
             path,
             if_none_match: etag,
+            body: None,
         };
         self.api
             .send(&request)
@@ -425,6 +426,7 @@ impl<A: GithubApi> WatchSource for GitlabCiSource<A> {
             method: ApiMethod::Post,
             path: format!("projects/{}/pipelines/{pipeline}/cancel", project(&target)),
             if_none_match: None,
+            body: None,
         };
         match self.api.send(&request) {
             Ok(response) if (200..300).contains(&response.status) => CancelReply::Requested,

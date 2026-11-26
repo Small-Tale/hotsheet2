@@ -14,7 +14,7 @@ import {
   AIConversationSettings,
   resetAIConversationDemo,
 } from './ai-conversation-demo';
-import { AppShellSettings, appShellSettings, resetAppShellDemo } from './app-shell-demo';
+import { AppShellDemo, AppShellSettings, appShellSettings, resetAppShellDemo } from './app-shell-demo';
 import { demoCatalog, demoKind, demosUsing, findDemo, flattenCatalog, kerfCatalogSections } from './catalog';
 import {
   connectionDetailsAssessment,
@@ -162,6 +162,7 @@ describe('UX demo catalog', () => {
       'attachment-filename-editor',
       'notification-card',
       'halted-session-popup',
+      'note-delivery-popup',
       'permission-request',
       'notification-center',
       'terminal-drawer',
@@ -699,6 +700,30 @@ describe('UX demo catalog', () => {
     appShellSettings.overlayOpen.value = true;
     resetAppShellDemo();
     expect([appShellSettings.presentation.value, appShellSettings.overlayOpen.value]).toEqual(['framed', false]);
+  });
+
+  it('HS2-H0QGK7 stages the unavailable-project shell with empty regions and disabled controls', () => {
+    expect(String(AppShellSettings())).toContain('name="project-unavailable"');
+    appShellSettings.projectUnavailable.value = true;
+    try {
+      const html = String(AppShellDemo());
+      for (const region of ['sidebar', 'inspector', 'drawer'])
+        expect(html).toContain(`data-project-unavailable-region="${region}"`);
+      // The main panel explains the cause plainly; the raw error stays behind Technical Details (HS2-ZKAVZZ).
+      expect(html).toContain('Project Folder Not Found');
+      expect(html).toContain('data-project-unavailable-cause="folder-missing"');
+      expect(html).toContain('title="Unavailable because Hot Sheet 2 could not be opened"');
+      expect(html).not.toContain('data-action="expand-ticket-composer"');
+      expect(String(AppShellSettings())).toContain('name="unavailable-cause"');
+      appShellSettings.unavailableCause.value = 'server-unreachable';
+      expect(String(AppShellDemo())).toContain('data-project-unavailable-cause="server-unreachable"');
+      appShellSettings.unavailableCause.value = 'unknown';
+      expect(String(AppShellDemo())).toContain('The older server only supports schema 2.');
+    } finally {
+      resetAppShellDemo();
+    }
+    expect(appShellSettings.projectUnavailable.value).toBe(false);
+    expect(appShellSettings.unavailableCause.value).toBe('folder-missing');
   });
 
   it('projects the reader demo title-editing state into TicketReader (HS2-0VFPD5)', () => {

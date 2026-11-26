@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  browserBudgetLine,
   browserStages,
   importCiTimings,
   inspectTimings,
@@ -15,6 +16,10 @@ import {
   prepare,
   runGate,
   smokeStages,
+  watcherStages,
+  WATCHER_CONTRACT_COMMAND,
+  linuxWatcherCoverage,
+  LINUX_WATCHER_COMMAND,
 } from './local-gate.mjs';
 import {
   catalogSpecimenCount,
@@ -32,6 +37,7 @@ import {
   withSpecimenInventory,
 } from './gate-browser-exercise.mjs';
 import { bestEffortProfile, profileFromTags } from './gate-ticket-profile.mjs';
+import { BROWSER_RANK } from './gate-browser-budget.mjs';
 import {
   changedLines,
   parentModuleFiles,
@@ -114,6 +120,58 @@ test('HS2-PDNJA0 router and OpenAPI edits run the real-server browser contract l
     );
     assert.ok(!p.deferred.some((stage) => stage.command.includes('tests/contracts.spec.ts')), changed);
     assert.ok(!p.checks.some((stage) => stage.command.includes('tests/shell-composition.spec.ts')), changed);
+  }
+});
+
+test('HS2-K1WG2E watcher source edits run the HTTP watcher contract first, retries off', (t) => {
+  assert.deepEqual(watcherStages(['crates/hotsheet-server/src/routes/tickets.rs', 'clients/web/src/app.ts']), []);
+  for (const changed of [
+    'crates/hotsheet-server/src/watcher.rs',
+    'crates/hotsheet-server/src/store_watch_scope.rs',
+    'crates/hotsheet-server/src/target_store_watch.rs',
+  ]) {
+    const [stage] = watcherStages([changed]);
+    assert.equal(stage.command, WATCHER_CONTRACT_COMMAND, changed);
+    assert.equal(stage.force, true, changed);
+    assert.match(stage.command, /--retries 0/);
+    const f = fixture(t);
+    f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    f.put(changed, 'synthetic watcher change\n');
+    f.git('add', changed);
+    f.git('commit', '--quiet', '-m', 'synthetic watcher change');
+    const p = prepare(f.repo, undefined, false, f.options.versions);
+    const index = p.checks.findIndex((check) => check.command === WATCHER_CONTRACT_COMMAND);
+    assert.ok(index >= 0, `${changed}: ${p.checks.map((check) => check.command).join(', ')}`);
+    assert.equal(p.checks[index].floor, true, changed);
+    const fullRust = p.checks.findIndex((check) => check.command.startsWith('cargo nextest run --all-features'));
+    // Under CI First an unstarted stage is deferred once the budget is spent: run the contract first.
+    assert.ok(fullRust === -1 || index < fullRust, `${changed}: contract must precede the full Rust suite`);
+    assert.ok(!p.deferred.some((check) => check.command === WATCHER_CONTRACT_COMMAND), changed);
+  }
+});
+
+test('HS2-E13GV2 Linux-only watcher cases run on Linux and are named as deferred elsewhere', (t) => {
+  const changes = ['crates/hotsheet-server/src/watcher.rs'];
+  assert.equal(linuxWatcherCoverage(['crates/hotsheet-server/src/routes/tickets.rs'], 'darwin'), null);
+  const mac = linuxWatcherCoverage(changes, 'darwin');
+  assert.equal(mac.runsHere, false);
+  assert.match(mac.summary, /hs2_c3req1_linux_\*/);
+  assert.match(mac.summary, /green Linux CI Rust job/);
+  assert.ok(!watcherStages(changes, 'darwin').some((stage) => stage.command === LINUX_WATCHER_COMMAND));
+  const linux = watcherStages(changes, 'linux').find((stage) => stage.command === LINUX_WATCHER_COMMAND);
+  assert.equal(linux?.force, true);
+  assert.match(LINUX_WATCHER_COMMAND, /--retries 0/);
+  assert.equal(linuxWatcherCoverage(changes, 'linux').runsHere, true);
+  // The real plan on this (non-Linux) CI/dev host carries the deferral for the log and receipt.
+  if (process.platform !== 'linux') {
+    const f = fixture(t);
+    f.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    f.put(changes[0], 'synthetic watcher change\n');
+    f.git('add', changes[0]);
+    f.git('commit', '--quiet', '-m', 'synthetic watcher change');
+    const p = prepare(f.repo, undefined, false, f.options.versions);
+    assert.deepEqual(p.linuxWatcher?.files, changes);
+    assert.equal(p.linuxWatcher?.runsHere, false);
   }
 });
 
@@ -1832,6 +1890,73 @@ test('HS2-664XN4 an interrupted nextest report forces the next attempt to run th
   assert.deepEqual(attempts, [command, command]);
 });
 
+test('HS2-7KCRKQ interrupted full and narrowed Playwright runs force a full-stage rerun', (t) => {
+  const f = fixture(t);
+  const root = join(f.repo, 'clients/web');
+  const path = join(f.repo, '.git', 'synthetic-playwright.json');
+  const report = (cases) =>
+    JSON.stringify({
+      suites: [
+        {
+          title: 'contracts.spec.ts',
+          file: 'contracts.spec.ts',
+          specs: cases.map(([line, title, status, attempt]) => ({
+            title,
+            file: 'contracts.spec.ts',
+            line,
+            tests: [
+              {
+                projectName: 'chromium',
+                status,
+                expectedStatus: 'passed',
+                results: attempt ? [{ status: attempt, duration: 1 }] : [],
+              },
+            ],
+          })),
+        },
+      ],
+    });
+  const failed = [9, 'fails', 'unexpected', 'failed'];
+  const commands = [];
+  let status;
+  let cases;
+  const options = {
+    ...f.options,
+    reportFor: (stage) =>
+      stage.command.startsWith("npx playwright test 'tests/contracts.spec.ts'")
+        ? { kind: 'playwright', path, root }
+        : null,
+    runner: (stage, stageReport) => {
+      if (!stageReport) return { status: 0 };
+      commands.push(stage.command);
+      writeFileSync(path, report(cases));
+      return { status };
+    },
+  };
+
+  // The runner reports a real failure alongside work that was stopped or never started.
+  cases = [failed, [20, 'stopped', 'skipped', 'interrupted'], [21, 'unrun', 'skipped']];
+  status = 1;
+  assert.equal(runGate(options), 1);
+  const full = commands.at(-1);
+  assert.match(full, /^npx playwright test 'tests\/contracts\.spec\.ts'/);
+
+  // An ordinary complete failure still narrows the next attempt.
+  cases = [failed];
+  assert.equal(runGate(options), 1);
+  assert.equal(commands.at(-1), full);
+
+  // A shell can report the interruption as a numeric exit even with a complete-looking report.
+  status = 130;
+  assert.equal(runGate(options), 130);
+  assert.equal(commands.at(-1), "npx playwright test '/contracts.spec.ts:9'");
+
+  status = 0;
+  cases = [[9, 'fails', 'expected', 'passed']];
+  assert.equal(runGate(options), 0);
+  assert.equal(commands.at(-1), full);
+});
+
 test('HS2-5340N1 an unprovable failure or changed inputs rerun the whole suite stage', (t) => {
   const f = fixture(t);
   const reportPath = join(f.repo, '.git', 'synthetic-playwright.json');
@@ -2042,4 +2167,108 @@ test('HS2-ZGS7JP a failing best-effort stage still fails the gate and records no
   assert.equal(runGate({ ...f.options, profile, runner: () => ({ status: 1 }) }), 1);
   assert.equal(existsSync(join(plan.cache, `${plan.key}.json`)), false);
   assert.throws(() => runGate({ ...f.options, profile, verify: true }), /No valid/);
+});
+
+test('HS2-FXY4M2 browser stages rank changed specs, named regressions, exercised and heuristic cases', () => {
+  const changedSpec = 'clients/web/tests/drawer-tab-order.spec.ts';
+  const stages = browserStages(
+    [changedSpec, 'clients/web/src/components/app-shell.css', 'clients/web/src/terminal-view.ts'],
+    false,
+    [],
+    { [changedSpec]: ['closes a range'] },
+    { files: ['tests/ticket-reader-stack.spec.ts'], demoTitles: ['opens the demo'], reasons: [] },
+  );
+  const byFile = (file) => stages.find((stage) => stage.browser?.file === file);
+  assert.deepEqual(byFile('tests/drawer-tab-order.spec.ts').browser.alternatives, [
+    { pattern: 'closes a range', rank: BROWSER_RANK.changed },
+  ]);
+  assert.deepEqual(byFile('tests/mobile-layout.spec.ts').browser.alternatives.map((entry) => entry.rank), [
+    BROWSER_RANK.regression,
+    BROWSER_RANK.regression,
+  ]);
+  assert.equal(byFile('tests/ux-demo.spec.ts').browser.alternatives[0].rank, BROWSER_RANK.exercised);
+  const provider = byFile('tests/providers.spec.ts');
+  assert.equal(
+    provider.command,
+    `npx playwright test tests/providers.spec.ts --grep '${provider.browser.alternatives.map((entry) => entry.pattern).join('|')}'`,
+    'the grep alternatives reproduce the unchanged provider command',
+  );
+  const whole = stages.find((stage) => stage.browser?.files);
+  assert.deepEqual(whole.browser.files, [
+    { file: 'tests/contracts.spec.ts', rank: BROWSER_RANK.baseline },
+    { file: 'tests/shell-composition.spec.ts', rank: BROWSER_RANK.baseline },
+    { file: 'tests/terminal-feedback.spec.ts', rank: BROWSER_RANK.heuristic },
+    { file: 'tests/ticket-reader-stack.spec.ts', rank: BROWSER_RANK.exercised },
+  ]);
+  // A changed spec without identified titles, and a contract change, raise their file ranks.
+  const ranks = (changes) => browserStages(changes, false).find((stage) => stage.browser?.files).browser.files;
+  assert.deepEqual(ranks(['clients/web/tests/new-flow.spec.ts']).find((entry) => entry.file.includes('new-flow')), {
+    file: 'tests/new-flow.spec.ts',
+    rank: BROWSER_RANK.changed,
+  });
+  assert.deepEqual(ranks(['docs/contracts/v1/openapi.yaml']), [
+    { file: 'tests/contracts.spec.ts', rank: BROWSER_RANK.regression },
+  ]);
+});
+
+test('HS2-FXY4M2 CI First caps browser files after the floor and names the deferrals in log and receipt', (t) => {
+  const f = fixture(t);
+  f.put('clients/web/tests/example.spec.ts', "import { test } from '@playwright/test';\ntest('example', async () => {});\n");
+  f.put('clients/web/src/terminal-view.ts', 'export const terminal = 1;\n');
+  f.git('add', '.');
+  f.git('commit', '--quiet', '-m', 'synthetic spec and terminal change');
+  // Synthetic per-file timings: contracts fits the one-minute budget; the rest do not.
+  writeFileSync(
+    join(f.repo, '.git', 'hotsheet-gate-timings.json'),
+    JSON.stringify({
+      version: 1,
+      stages: {},
+      files: {
+        'playwright:contracts.spec.ts': [{ ms: 30_000, host: 'local' }],
+        'playwright:shell-composition.spec.ts': [{ ms: 30_000, host: 'local' }],
+        'playwright:terminal-feedback.spec.ts': [{ ms: 200_000, host: 'local' }],
+      },
+      imports: {},
+      attempts: [],
+    }),
+  );
+  const profile = ciFirstProfile(1);
+  const plan = prepare(f.repo, undefined, false, f.options.versions, { profile });
+  const browser = plan.checks.filter((stage) => stage.command.startsWith('npx playwright test '));
+  assert.deepEqual(
+    browser.map((stage) => [stage.command, stage.budgetReason]),
+    [
+      ["npx playwright test 'tests/example.spec.ts'", 'HS2-FXY4M2: changed spec tests always run first'],
+      ["npx playwright test 'tests/contracts.spec.ts'", 'HS2-FXY4M2: browser cases within the best-effort budget'],
+    ],
+  );
+  const deferredBrowser = plan.deferred.filter((stage) => stage.command.startsWith('npx playwright test '));
+  assert.deepEqual(
+    deferredBrowser.map((stage) => stage.command),
+    ["npx playwright test 'tests/shell-composition.spec.ts' 'tests/terminal-feedback.spec.ts'"],
+  );
+  assert.deepEqual(plan.browserBudget.deferredCases, ['tests/shell-composition.spec.ts', 'tests/terminal-feedback.spec.ts']);
+
+  const lines = [];
+  assert.equal(runGate({ ...f.options, profile, runner: () => ({ status: 0 }), clock: () => 0, log: (line) => lines.push(line) }), 0);
+  const log = lines.join('\n');
+  assert.match(log, /Browser cases \(HS2-FXY4M2\): 1 changed-spec, 0 changed-module and 1 budgeted case\(s\) planned/);
+  assert.match(log, /2 deferred to CI:\n {2}tests\/shell-composition\.spec\.ts\n {2}tests\/terminal-feedback\.spec\.ts/);
+  const receipt = JSON.parse(readFileSync(join(plan.cache, `${plan.key}.json`), 'utf8'));
+  assert.ok(receipt.deferred.includes(deferredBrowser[0].command));
+  assert.deepEqual(receipt.bestEffort.browser.deferredCases, plan.browserBudget.deferredCases);
+  assert.equal(
+    browserBudgetLine({
+      mandatory: 0,
+      kept: 1,
+      selected: 2,
+      deferred: 0,
+      plannedMs: 10,
+      remainingMs: -5,
+      keptOverBudgetMs: 10,
+      keptOverBudgetCases: ['tests/x.spec.ts --grep one'],
+      deferredCases: [],
+    }),
+    'Browser cases (HS2-FXY4M2): 0 changed-spec, 1 changed-module and 2 budgeted case(s) planned in 10ms of the 0ms left after the floor; 1 kept over budget by 10ms:\n  tests/x.spec.ts --grep one; 0 deferred to CI',
+  );
 });

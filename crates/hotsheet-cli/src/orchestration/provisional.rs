@@ -534,11 +534,36 @@ impl OrchestrationRuntime {
                 .and_then(|entry| entry.actor_id.clone())
                 .and_then(|id| MutationActor::parse("ai", Some(id)).ok());
             let request = match session {
-                Some(session) => ActionRequest {
-                    session: Some(Self::session_request(session, true, 0)),
-                    ..ActionRequest::new(TargetAction::SessionsManage)
-                        .operation(operation_id.clone())
-                },
+                Some(session) => {
+                    // HS2-DBCN9N: a start is checked against the policy's caps with the
+                    // load it would run under; the replacement takes the slot of the
+                    // session it replaces, so that one is not counted. Without a load
+                    // the policy refuses the start, and the person is asked instead.
+                    let load = self
+                        .session_load(
+                            owner_id,
+                            &run.target.target_id,
+                            &session.tool,
+                            session.account.as_deref(),
+                        )
+                        .ok()
+                        .map(|mut load| {
+                            load.target_sessions = load.target_sessions.saturating_sub(1);
+                            load.machine_sessions = load.machine_sessions.saturating_sub(1);
+                            load.tool_sessions = load.tool_sessions.saturating_sub(1);
+                            if load.account.is_some() {
+                                load.account_sessions = load.account_sessions.saturating_sub(1);
+                            }
+                            load
+                        });
+                    let running = load.as_ref().map_or(0, |load| load.target_sessions);
+                    ActionRequest {
+                        session: Some(Self::session_request(session, true, running)),
+                        load,
+                        ..ActionRequest::new(TargetAction::SessionsManage)
+                            .operation(operation_id.clone())
+                    }
+                }
                 None => ActionRequest::new(TargetAction::WorkStart).operation(operation_id.clone()),
             };
             let answer = Self::target_ref(owner_id, &run.target.target_id)

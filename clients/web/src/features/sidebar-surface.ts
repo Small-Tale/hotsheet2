@@ -10,6 +10,7 @@ import type {
   ToolConnection,
 } from '../api';
 import type { createClientNotifications } from '../client-notifications';
+import { commandClickActionLabel } from '../command-schedules';
 import type { AiToolDescriptor } from '../components/drive-options-menu';
 import type { NotificationView } from '../components/notification-navigation';
 import type { SettingsCategory } from '../components/settings-navigation';
@@ -283,6 +284,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
             icon: commandIcon(command),
             kind: command.kind,
             group: command.group,
+            ...(command.kind === 'ai' ? { actionLabel: commandClickActionLabel(command.action) } : {}),
             running: latest?.state === 'running',
             lastRun: latest
               ? `${latest.state}${latest.exit_code === undefined ? '' : ` (exit ${latest.exit_code})`}`

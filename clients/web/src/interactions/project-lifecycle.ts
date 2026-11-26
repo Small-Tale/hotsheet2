@@ -1,4 +1,4 @@
-import { delegate, type Signal } from 'kerfjs';
+import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { dismissClientUpdateNotice } from '../client-update-notice';
@@ -276,8 +276,22 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
   lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.migrationJobDetails.selector, () => {
       const root = project()?.root;
-      if (root) migrationJobDetails.value = { ...migrationJobDetails.value, [root]: !migrationJobDetails.value[root] };
+      if (root) migrationJobDetails.value = { ...migrationJobDetails.value, [root]: true };
     }),
+  );
+  // The details dialog's close button, Close, and Escape clear the open state in the same turn, so the
+  // next render does not reopen it (HS2-EEBM4W, controlled-open.ts).
+  lifetime.add(
+    delegateCapture(
+      document.body,
+      'kui-request-close',
+      PROJECT_LIFECYCLE_TARGETS.hs1JobDetailsDialog.selector,
+      (event, target) => {
+        if (event.target !== target) return;
+        const root = project()?.root;
+        if (root) migrationJobDetails.value = { ...migrationJobDetails.value, [root]: false };
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.reconnectMigrationJob.selector, () => {

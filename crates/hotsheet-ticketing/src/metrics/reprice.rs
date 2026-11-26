@@ -180,8 +180,8 @@ pub(super) fn lock(store: &FsStore) -> io::Result<FileLock> {
             .write(true)
             .open(raw_dir.join(".usage.lock"))?,
     )?;
-    ensure_gitignored(store, "metrics/raw/")?;
-    ensure_gitignored(store, "metrics/local/")?;
+    ensure_gitignored(store, crate::store::METRICS_RAW_IGNORE)?;
+    ensure_gitignored(store, crate::store::METRICS_LOCAL_IGNORE)?;
     fs::create_dir_all(metrics_dir(store).join("local"))?;
     Ok(lock)
 }

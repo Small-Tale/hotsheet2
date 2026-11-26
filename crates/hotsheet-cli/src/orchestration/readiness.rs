@@ -1328,3 +1328,123 @@ impl OrchestrationRuntime {
         Ok(None)
     }
 }
+
+impl OrchestrationRuntime {
+    /// HS2-061YTB: the requirement guard of a manual dispatch. Work on a planned
+    /// target ticket whose step names requirements (§26.15) starts only on a machine
+    /// that meets every one: the target's capacity snapshot is read through the gate
+    /// (an observation, which never asks), and a machine that misses one, or did not
+    /// report it, refuses the dispatch with `requirement_unmet` or
+    /// `requirement_unknown` naming the requirement. A ticket no step names, a step
+    /// without requirements, a repeat of an admitted dispatch and a dispatch the
+    /// scheduler already placed against the same snapshot (`checked`) are not read.
+    ///
+    /// With `override_requirements` a person's own override goes ahead; the
+    /// orchestrator's (an AI session or the scheduling loop) is a judgment call on
+    /// the orchestration ticket, as for `override_readiness`. The override is audited.
+    pub(super) fn requirement_guard(
+        &self,
+        owner_id: &str,
+        dispatch: &RequirementDispatch<'_>,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(), OrchestrationError> {
+        let RequirementDispatch {
+            target,
+            operation_id,
+            override_requirements,
+            checked,
+        } = *dispatch;
+        if checked {
+            return Ok(());
+        }
+        let Some(step) = self.plan().find_target(owner_id, target)? else {
+            return Ok(());
+        };
+        if step.requirements.is_empty()
+            || self
+                .runs()
+                .list(owner_id, false)?
+                .iter()
+                .any(|run| run.operation_id == operation_id)
+        {
+            return Ok(());
+        }
+        let reference = Self::target_ref(owner_id, &target.target_id)?;
+        let snapshot = self.target_capacity(&reference, &[], actor, tx)?;
+        let Some(miss) =
+            hotsheet_ticketing::orchestration::requirement_misses(&step.requirements, &snapshot)
+                .into_iter()
+                .next()
+        else {
+            return Ok(());
+        };
+        let refused = OrchestrationError::Requirement {
+            state: miss.state,
+            requirement: miss.requirement.clone(),
+        };
+        if !override_requirements {
+            return Err(refused);
+        }
+        let code = refused.code();
+        let audit = |outcome, reason: &str, tx: &mut Transaction<'_>| {
+            self.readiness_audit(
+                owner_id,
+                &target.target_id,
+                actor,
+                Audited {
+                    action: "requirement_override",
+                    outcome,
+                    reason: Some(reason),
+                    operation_id: Some(operation_id),
+                },
+                tx,
+            )
+        };
+        if !access::is_person(actor) {
+            match self.judgment(
+                owner_id,
+                &super::decisions::Judgment {
+                    kind: "requirement_override",
+                    target: &reference,
+                    operation_id,
+                    ticket: &step.ticket,
+                    context: format!(
+                        "The orchestrator wants to dispatch plan step `{}` to target `{}`, \
+                         whose machine misses its requirement `{}` ({code}, operation \
+                         `{operation_id}`).",
+                        step.step_id, target.target_id, miss.requirement
+                    ),
+                    question: format!(
+                        "Should plan step `{}` start on target `{}` anyway?",
+                        step.step_id, target.target_id
+                    ),
+                    options: &OVERRIDE_OPTIONS,
+                },
+                actor,
+                tx,
+            )? {
+                super::decisions::Decided::Chosen { option: 0, .. } => {}
+                super::decisions::Decided::Chosen { .. } => {
+                    audit(AuditOutcome::Denied, "decision_wait", tx)?;
+                    return Err(refused);
+                }
+                super::decisions::Decided::Waiting { note_id } => {
+                    audit(AuditOutcome::Denied, "decision_required", tx)?;
+                    return Err(OrchestrationError::DecisionRequired { note_id });
+                }
+            }
+        }
+        // What was overridden is the audit reason.
+        audit(AuditOutcome::Allowed, code, tx)
+    }
+}
+
+/// HS2-061YTB: the dispatch a requirement guard decides about.
+pub(super) struct RequirementDispatch<'a> {
+    pub(super) target: &'a RunTarget,
+    pub(super) operation_id: &'a str,
+    pub(super) override_requirements: bool,
+    /// The scheduler placed it against the same machine's snapshot just now.
+    pub(super) checked: bool,
+}

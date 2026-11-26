@@ -1,5 +1,6 @@
 // HS2-GN06JT: stage-level budget selection over the conservative affected-gate plan.
 import { stageTimingKey, timingEstimate } from './gate-timings.mjs';
+import { budgetedBrowserStage, planBrowserBudget } from './gate-browser-budget.mjs';
 
 export const stageId = (stage) => `${stage.cwd}::${stage.command}`;
 
@@ -54,6 +55,11 @@ function rank(stage) {
  * HS2-ZGS7JP: `bestEffort` (CI First) budgets every tier, T2 included, the same way. Analyzed
  * stages are then additive requests, not a required selection, and what does not fit is deferred
  * to CI. The gate also stops starting stages once the budget has elapsed.
+ *
+ * HS2-FXY4M2: under `bestEffort`, an unforced Playwright stage that `browserStages` described is
+ * not an uncapped floor. Its changed-spec units are mandatory and run first; its other files and
+ * grep alternatives fill what the budget leaves after the floor in relevance order, and the rest
+ * are named as deferred commands. `browserCaseCounts` maps a spec file to its declared cases.
  */
 export function selectBudget({
   stages,
@@ -66,6 +72,7 @@ export function selectBudget({
   full = false,
   fullReason = 'full fallback',
   bestEffort = false,
+  browserCaseCounts = {},
 }) {
   if (!['T0', 'T1', 'T2', 'unresolved'].includes(tier)) throw new Error(`Unknown risk tier: ${tier}`);
   if (tier === 'unresolved' && !full) throw new Error('Unresolved tier must preserve the full affected selection.');
@@ -82,10 +89,17 @@ export function selectBudget({
   if (analyzedT2 && budgetMs !== null) throw new Error('T2 analyzed selection has no time budget.');
   if (budgeted && !full && (!Number.isSafeInteger(budgetMs) || budgetMs <= 0))
     throw new Error('T0/T1 need a positive budget.');
-  const candidates = stages.filter((stage) => stage.selected);
-  const candidateIds = new Set(candidates.map(stageId));
+  const allCandidates = stages.filter((stage) => stage.selected);
+  const candidateIds = new Set(allCandidates.map(stageId));
   for (const id of analyzed) if (!candidateIds.has(id)) throw new Error(`Unknown or unaffected T2 stage: ${id}`);
   for (const id of proposed) if (!candidateIds.has(id)) throw new Error(`Unknown or unaffected proposed stage: ${id}`);
+  // HS2-FXY4M2: an explicitly proposed browser stage runs whole; the rest are capped by case.
+  const cappedBrowser =
+    bestEffort && !full
+      ? allCandidates.filter((stage) => budgetedBrowserStage(stage) && !proposed.includes(stageId(stage)))
+      : [];
+  const cappedIds = new Set(cappedBrowser.map(stageId));
+  const candidates = allCandidates.filter((stage) => !cappedIds.has(stageId(stage)));
   const selectedIds = new Set();
   const estimated = candidates.map((stage) => {
     const timing = timingEstimate(history.stages[stageTimingKey(stage)]);
@@ -137,6 +151,22 @@ export function selectBudget({
       plannedMs += needed.estimateMs ?? 0;
     }
   }
+  let browserPlan = null;
+  if (cappedBrowser.length) {
+    // An unknown floor cost counts as zero here; the run-time budget cut still bounds the gate.
+    const fixtureSelected = browserFixture !== undefined && selectedIds.has(stageId(browserFixture));
+    browserPlan = planBrowserBudget({
+      stages: cappedBrowser,
+      history,
+      caseCounts: browserCaseCounts,
+      remainingMs: budgetMs - plannedMs,
+      fixtureMs: browserFixture?.estimateMs ?? 0,
+      fixtureSelected,
+    });
+    if (browserPlan.fixtureNeeded && browserFixture) selectedIds.add(stageId(browserFixture));
+    plannedMs += browserPlan.plannedMs;
+    floorEstimateMs += browserPlan.mandatoryMs;
+  }
   if (full) for (const stage of estimated) selectedIds.add(stageId(stage));
   else if (analyzedT2) {
     for (const stage of estimated.filter((stage) => analyzed.includes(stageId(stage))))
@@ -157,7 +187,9 @@ export function selectBudget({
       }
     }
   }
-  const output = stages.map((stage) => {
+  const output = stages.flatMap((stage) => {
+    if (cappedIds.has(stageId(stage)))
+      return stageId(stage) === stageId(cappedBrowser[0]) ? browserPlan.stages : [];
     if (!stage.selected)
       return { ...stage, estimateMs: null, estimateHost: 'unknown', floor: false, budgetReason: 'unaffected' };
     const item = estimated.find((entry) => stageId(entry) === stageId(stage));
@@ -201,5 +233,6 @@ export function selectBudget({
     floorOverBudget: budgeted && !full && !floorUnknown && floorEstimateMs > budgetMs,
     tier,
     bestEffort,
+    browserBudget: browserPlan?.summary ?? null,
   };
 }

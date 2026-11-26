@@ -21,7 +21,7 @@
 //!   instead made every queued caller rescan in turn, about 10 s each with two tools at the
 //!   probe deadline, so each project activation postponed the next (HS2-XZ3TTH).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -31,12 +31,12 @@ use hotsheet_plugins::AiToolDescriptor;
 /// How long a discovery result is reused before the next caller rescans.
 const AI_TOOL_DISCOVERY_TTL: Duration = Duration::from_secs(10);
 
-/// The scan a cache miss runs: plugin search dirs, project root, the model catalogs, and
-/// whether to refresh them. Production uses
-/// [`hotsheet_aitools::discover_ai_tool_descriptors`]; tests inject a hermetic scan.
-pub type AiToolScanner = Arc<
-    dyn Fn(&[PathBuf], &Path, &mut ModelCatalogCache, bool) -> Vec<AiToolDescriptor> + Send + Sync,
->;
+/// The scan a cache miss runs: plugin search dirs, the model catalogs, and whether to
+/// refresh them. Production uses [`hotsheet_aitools::discover_ai_tool_descriptors`];
+/// tests inject a hermetic scan. It takes no project directory: probes run in a private
+/// probe workspace, never in the hosted store (HS2-BNDRYP).
+pub type AiToolScanner =
+    Arc<dyn Fn(&[PathBuf], &mut ModelCatalogCache, bool) -> Vec<AiToolDescriptor> + Send + Sync>;
 
 /// How discovery runs: the memo lifetime and the scan behind it. Injectable per
 /// `AppState` so wall-clock-sensitive tests never depend on how long the real AI tools

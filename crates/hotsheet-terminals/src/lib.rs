@@ -38,7 +38,8 @@ pub use bootstrap::BootstrapHealth;
 pub use broker::{
     BrokerClient, BrokerIdentity, BrokerPushState, BrokerStream, BrokerStreamReader,
     BrokerStreamWriter, BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest,
-    Response as BrokerResponse, SocketCleanup, StreamIn, StreamOut, run_broker_process,
+    Response as BrokerResponse, STARTUP_STDERR_ENV, SocketCleanup, StreamIn, StreamOut,
+    run_broker_process,
 };
 #[cfg(unix)]
 pub use broker::{serve_broker, serve_broker_with_idle};

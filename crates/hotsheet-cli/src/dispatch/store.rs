@@ -1176,10 +1176,17 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
         }
         CheckoutCmd::List => println!("{}", serde_json::to_string_pretty(&registry.list()?)?),
         CheckoutCmd::Resolve { reference } => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&registry.describe(&reference)?)?
-            );
+            // HS2-86ES0B: a vanished root a `checkout relocate` moved resolves to the
+            // checkout at its current root, as a restored client tab does.
+            let checkout = match registry.describe(&reference) {
+                Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(missing)) => {
+                    registry.follow_relocation(Path::new(&reference))?.ok_or(
+                        hotsheet_ticketing::checkouts::CheckoutError::NotFound(missing),
+                    )?
+                }
+                other => other?,
+            };
+            println!("{}", serde_json::to_string_pretty(&checkout)?);
         }
         CheckoutCmd::Relocate {
             reference,
@@ -1579,9 +1586,11 @@ pub(crate) enum CheckoutCmd {
     },
     /// List registered checkouts as JSON.
     List,
-    /// Resolve an id, id prefix, alias, or path and print its JSON record.
+    /// Resolve an id, id prefix, alias, or path and print its JSON record. A vanished path that
+    /// `checkout relocate` moved resolves to the checkout at its current root (HS2-86ES0B).
     Resolve { reference: String },
-    /// Move a registered checkout while preserving its durable project id.
+    /// Move a registered checkout while preserving its durable project id. The former root is
+    /// remembered, so clients that reopen it follow the checkout to its new root (HS2-86ES0B).
     Relocate {
         reference: String,
         root: PathBuf,

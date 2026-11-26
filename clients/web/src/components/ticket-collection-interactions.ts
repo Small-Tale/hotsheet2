@@ -4,7 +4,14 @@ import { createScope } from 'kerfjs/scope';
 import { viewportSafePointerPosition } from '../context-menu-position';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { insideOrchestrationView } from './orchestration-timeline-interactions';
-import { adjacentTicketSlug, type TicketSelectionIntent } from './ticket-selection';
+import {
+  adjacentTicketSlug,
+  collectionTicketSlugs,
+  decodeHiddenTicketSlugs,
+  type DrawnTicketEntry,
+  HIDDEN_TICKET_SLUGS_ATTRIBUTE,
+  type TicketSelectionIntent,
+} from './ticket-selection';
 
 /** The ticket a row context menu was opened for, and where. */
 export interface TicketCollectionMenu {
@@ -35,8 +42,11 @@ export interface TicketCollectionBindings {
   /** Whether a row keydown is the select-all shortcut. */
   readonly isSelectAll: (event: KeyboardEvent) => boolean;
   readonly selectAll: (row: HTMLElement) => void;
-  /** Select every ticket in one board column. */
-  readonly selectColumn: (slugs: string[]) => void;
+  /**
+   * Select every ticket in one board column, including the members of its collapsed groups
+   * (HS2-3SJ5G8). `reachable` holds the drawn rows among them.
+   */
+  readonly selectColumn: (slugs: string[], reachable: string[]) => void;
   readonly openReader: (slug: string, ordered: string[], row: HTMLElement) => void;
   readonly contextMenu: () => TicketCollectionMenu | undefined;
   readonly setContextMenu: (menu: TicketCollectionMenu | undefined) => void;
@@ -50,6 +60,32 @@ export interface TicketCollectionBindings {
 
 const rowSelector = TICKET_SELECTION_ACTIONS.selectTicketRow.selector;
 const slugOf = (element: Element) => (element as HTMLElement).dataset.ticketSlug!;
+
+/** The tickets a Select All takes from a drawn collection, and the drawn rows among them. */
+export interface CollectionSelectAll {
+  /** Every ticket in drawn order, with each collapsed group's members where the group sits. */
+  readonly slugs: string[];
+  /** The drawn rows a person can reach; a range selection anchors on one of these. */
+  readonly reachable: string[];
+}
+
+/**
+ * Read every ticket a board column or board holds, collapsed groups included (HS2-3SJ5G8): a
+ * collapsed group draws no rows, so it carries its members' slugs for Select All to find.
+ */
+export function collectionSelectAll(container: ParentNode): CollectionSelectAll {
+  const entries: DrawnTicketEntry[] = [],
+    reachable: string[] = [];
+  for (const element of container.querySelectorAll(`${rowSelector}, [${HIDDEN_TICKET_SLUGS_ATTRIBUTE}]`)) {
+    if (element.matches(rowSelector)) {
+      const slug = slugOf(element);
+      entries.push({ slug });
+      reachable.push(slug);
+    } else
+      entries.push({ hiddenSlugs: decodeHiddenTicketSlugs(element.getAttribute(HIDDEN_TICKET_SLUGS_ATTRIBUTE) ?? '') });
+  }
+  return { slugs: collectionTicketSlugs(entries), reachable };
+}
 
 /** Wire ticket row selection, keyboard navigation, column selection, reader, and context menu under `root`. */
 export function wireTicketCollection(root: HTMLElement, bindings: TicketCollectionBindings): () => void {
@@ -80,7 +116,8 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
       if (insideOrchestrationView(target)) return;
       const column = target.closest<HTMLElement>('[data-component="ticket-board-column"]');
       if (!column?.dataset.columnId) return;
-      bindings.selectColumn([...column.querySelectorAll<HTMLElement>(rowSelector)].map(slugOf));
+      const { slugs, reachable } = collectionSelectAll(column);
+      bindings.selectColumn(slugs, reachable);
     }),
   );
   lifetime.add(

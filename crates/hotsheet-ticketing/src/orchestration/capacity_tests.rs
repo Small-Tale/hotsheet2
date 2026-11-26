@@ -11,6 +11,7 @@ fn tool(name: &str, installed: bool, configured: bool) -> ToolAvailability {
         tool: name.into(),
         installed,
         configured,
+        models: None,
     }
 }
 fn session(id: &str, tool: Option<&str>, resident_mb: Option<u64>) -> SessionFootprint {
@@ -752,4 +753,107 @@ fn hs2_awb7bx_admission_limits_change_the_capacity_version() {
     assert_ne!(with(&closed), plain);
     assert_ne!(with(&closed), with(&open));
     assert_eq!(with(&closed), with(&closed));
+}
+
+/// HS2-8Z9VHH: every refusal names the limit behind its reason and what the machine
+/// observed, so a person reads what to change instead of a bare code.
+#[test]
+fn hs2_8z9vhh_a_refusal_names_its_limit_and_observed_value() {
+    let decide = |change: fn(&mut CapacitySnapshot), tool: &str| {
+        let mut snapshot = healthy();
+        change(&mut snapshot);
+        decide_admission(&snapshot, &AdmissionConfig::default(), &ask(tool, 1))
+            .refusal
+            .expect("a refusal")
+    };
+    let cap = decide(
+        |s| s.sessions = Some(vec![session("a", None, None), session("b", None, None)]),
+        "codex",
+    );
+    assert_eq!(cap, AdmissionRefusal::session_cap(2, 2));
+    assert_eq!(
+        cap.describe(),
+        "this machine already runs 2 AI sessions; its limit (max_sessions) is 2"
+    );
+    let cpu = decide(|s| s.cpu.load_percent = Some(97), "codex");
+    assert_eq!(
+        (cpu.setting.as_deref(), cpu.limit, cpu.observed),
+        (Some("max_cpu_percent"), Some(90), Some(97))
+    );
+    let disk = decide(|s| s.disk.free_mb = Some(10), "codex");
+    assert_eq!(
+        (disk.setting.as_deref(), disk.limit, disk.observed),
+        (Some("min_free_disk_mb"), Some(5120), Some(10))
+    );
+    let ram = decide(|s| s.memory.free_mb = Some(100), "codex");
+    assert_eq!(
+        (ram.setting.as_deref(), ram.limit, ram.observed),
+        (Some("min_free_ram_mb"), Some(2048), Some(100))
+    );
+    let missing = decide(|_| {}, "gemini");
+    assert_eq!(missing.reason, "tool_not_installed");
+    assert_eq!(missing.tool.as_deref(), Some("gemini"));
+    assert!(missing.describe().contains("gemini is not installed"));
+    let unknown = decide(|s| s.cpu.load_percent = None, "codex");
+    assert_eq!(unknown, AdmissionRefusal::bare("capacity_unknown"));
+    // Accepted: no refusal. The wire shape round-trips with and without one.
+    let accepted = decide_admission(&healthy(), &AdmissionConfig::default(), &ask("codex", 1));
+    assert_eq!(accepted.refusal, None);
+    assert!(
+        serde_json::to_value(&accepted)
+            .unwrap()
+            .get("refusal")
+            .is_none()
+    );
+    let wire = serde_json::to_value(&cap).unwrap();
+    assert_eq!(wire["setting"], "max_sessions");
+    assert_eq!(
+        serde_json::from_value::<AdmissionRefusal>(wire).unwrap(),
+        cap
+    );
+    // A code a newer host sends reads as itself.
+    assert_eq!(
+        AdmissionRefusal::bare("new_reason").describe(),
+        "new_reason"
+    );
+}
+
+/// HS2-0VTQFF: a tool's reported models are part of the version only when reported,
+/// so a snapshot without them keeps its version; a new model changes it. They read
+/// back by tool, and a snapshot from an older peer without the field parses.
+#[test]
+fn hs2_0vtqff_reported_models_change_the_version_and_read_by_tool() {
+    let base = healthy();
+    let version = capacity_version(&base);
+    let mut reported = base.clone();
+    reported.tools.as_mut().unwrap()[0].models = Some(vec!["syn-2".into()]);
+    let with_models = capacity_version(&reported);
+    assert_ne!(with_models, version);
+    let tool = reported.tools.as_ref().unwrap()[0].tool.clone();
+    assert_eq!(
+        reported.reported_models(&tool),
+        Some(&["syn-2".to_owned()][..])
+    );
+    assert_eq!(base.reported_models(&tool), None);
+    assert_eq!(reported.reported_models("not-a-tool"), None);
+    let mut unknown = reported.clone();
+    unknown.tools = None;
+    assert_eq!(unknown.reported_models(&tool), None);
+
+    let mut newer = reported.clone();
+    newer.tools.as_mut().unwrap()[0].models = Some(vec!["syn-3".into(), "syn-2".into()]);
+    assert_ne!(capacity_version(&newer), with_models);
+    // Reported empty differs from unreported.
+    let mut empty = base.clone();
+    empty.tools.as_mut().unwrap()[0].models = Some(Vec::new());
+    assert_ne!(capacity_version(&empty), version);
+
+    // Unreported models are not written; an older peer's tool entry parses.
+    let json = serde_json::to_value(&base).unwrap();
+    assert!(json["tools"][0].get("models").is_none());
+    let parsed: CapacitySnapshot = serde_json::from_value(json).unwrap();
+    assert_eq!(parsed, base);
+    let round: CapacitySnapshot =
+        serde_json::from_value(serde_json::to_value(&reported).unwrap()).unwrap();
+    assert_eq!(round, reported);
 }

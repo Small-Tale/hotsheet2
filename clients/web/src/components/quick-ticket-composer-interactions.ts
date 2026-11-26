@@ -20,6 +20,8 @@ export interface QuickTicketComposerBindings {
   /** Open the composer from its collapsed trigger (or a drop on a collapsed composer). */
   readonly expand: (trigger: HTMLElement) => void;
   readonly expanded: () => boolean;
+  /** Minimize the open composer, keeping its draft (HS2-3JR0ZH); absent where nothing minimizes. */
+  readonly minimize?: () => void;
   /** False while a submission is in flight, so the popup refuses to hide. */
   readonly canHide: () => boolean;
   /** The composer popup finished hiding while expanded: reset the draft. */
@@ -30,6 +32,9 @@ export interface QuickTicketComposerBindings {
   /** The destination source pick; an empty pick is undefined. */
   readonly setSource: (source: string | undefined) => void;
   readonly toggleUpNext: () => void;
+  readonly setPriority: (priority: string) => void;
+  /** The Add to Backlog checkbox changed (HS2-V72HCC). */
+  readonly setBacklog: (backlog: boolean) => void;
   /** Stage picked or dropped files on the new ticket. */
   readonly addFiles: (files: FileList | File[]) => void;
   readonly removeAttachment: (id: string | undefined) => void;
@@ -46,6 +51,17 @@ export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicket
   lifetime.add(
     delegate(root, 'click', SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.selector, (_event, target) => {
       bindings.expand(target as HTMLElement);
+    }),
+  );
+  // Like the reader's Minimize, a press keeps focus where it was so no field commits on its way out.
+  lifetime.add(
+    delegate(root, 'mousedown', SEARCH_AND_COMPOSER_ACTIONS.minimizeTicketComposer.selector, (event) => {
+      event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', SEARCH_AND_COMPOSER_ACTIONS.minimizeTicketComposer.selector, () => {
+      bindings.minimize?.();
     }),
   );
   let dismissAfterHide = false;
@@ -83,6 +99,16 @@ export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicket
   lifetime.add(
     delegate(root, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketCategoryField.selector, (_event, target) => {
       bindings.setCategory((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketPriorityField.selector, (_event, target) => {
+      bindings.setPriority((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketBacklogField.selector, (_event, target) => {
+      bindings.setBacklog((target as HTMLElement & { checked: boolean }).checked);
     }),
   );
   lifetime.add(
