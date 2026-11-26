@@ -379,8 +379,148 @@ describe('the selected run’s details (HS2-XM692S)', () => {
       'unknown: the CI provider kept ending the watch; check the provider’s credentials and repository, then link the gate again',
     );
     expect(ci('watch_ended')).toBe('unknown: the CI provider ended the watch; it is linked again automatically');
-    expect(ci('not_watched')).toBe('unknown');
+    expect(ci('not_watched')).toBe('unknown: nothing watches it yet; link the gate again to start its watch');
+    expect(ci('watch_lost')).toBe('unknown: the watch was interrupted; it resumes when the job monitor runs again');
+    expect(ci('evidence_missing')).toBe('unknown');
     expect(ci()).toBe('unknown');
+  });
+
+  it('carries the Link Again request of an unknown CI gate whose watch a link starts again (HS2-A7YCB2)', () => {
+    const commit = 'b'.repeat(40);
+    const read = parseOrchestrationDetails(
+      {
+        gates: [
+          {
+            gate_id: 'gone',
+            kind: 'ci',
+            provider: 'github-actions',
+            commit,
+            ci: { repository: 'acme/synthetic', workflow: 'CI', branch: 'main' },
+            state: 'unknown',
+            reason: 'watch_gone',
+          },
+          { gate_id: 'watched', kind: 'ci', provider: 'github-actions', commit, state: 'pending' },
+        ],
+      },
+      undefined,
+      undefined,
+      'api',
+    );
+    expect(read.gates?.map((row) => [row.gate_id, row.relink])).toEqual([
+      ['gone', { commit, provider: 'github-actions', repository: 'acme/synthetic', workflow: 'CI', branch: 'main' }],
+      ['watched', undefined],
+    ]);
+  });
+});
+
+describe('Link Again through the view (HS2-A7YCB2)', () => {
+  const commit = 'c'.repeat(40);
+  function setup(link: (body: Record<string, unknown>) => Promise<unknown>) {
+    const project = { id: 'orch', name: 'orch', root: '/synthetic/orch', apiPath: '/api/orch' } as Project;
+    const toasts: string[] = [],
+      linked: Array<{ checkout: string; run: string; body: Record<string, unknown>; actor: string }> = [];
+    let state = 'unknown';
+    const known: Record<string, unknown> = {
+      orchestrationTimeline: (_owner: string, after?: string) =>
+        after ? new Promise<never>(() => undefined) : Promise.resolve(demoTimeline('running')),
+      orchestrationRunGates: () =>
+        Promise.resolve({
+          gates: [
+            {
+              gate_id: 'gate-9',
+              kind: 'ci',
+              provider: 'github-actions',
+              commit,
+              ci: { repository: 'acme/synthetic', workflow: 'CI', branch: 'main' },
+              state,
+              ...(state === 'unknown' ? { reason: 'watch_gone' } : {}),
+            },
+          ],
+        }),
+      orchestrationRunEvents: () => Promise.resolve({ entries: [] }),
+      orchestrationRun: () => Promise.resolve({ run_id: 'run-3' }),
+      orchestrationValidations: () => Promise.resolve([]),
+      orchestrationReadiness: () => Promise.resolve({}),
+      orchestrationSchedulerExplain: () => Promise.resolve({}),
+      orchestrationGateLink: (checkout: string, run: string, body: Record<string, unknown>, actor: string) => {
+        linked.push({ checkout, run, body, actor });
+        return link(body).then((answer) => {
+          state = 'pending';
+          return answer;
+        });
+      },
+    };
+    const client = new Proxy(known, {
+      get: (target, key: string) => target[key] ?? (() => new Promise<never>(() => undefined)),
+    }) as unknown as Api;
+    const controller = createOrchestrationViewController({
+      project: () => project,
+      viewMode: signal<WorkspaceViewMode>('orchestration'),
+      fallbackViewMode: () => 'list',
+      orchestrationViewMode: signal<OrchestrationProjectViewMode>('orchestration'),
+      mobile: () => false,
+      confirm: () => Promise.resolve(false),
+      showToast: (message) => void toasts.push(message),
+      openTicket: () => Promise.resolve(),
+      showPermissionRequest: () => Promise.resolve(),
+      openOrchestrationSettings: () => undefined,
+      persistWorkspacePreferences: () => undefined,
+      planner: { propose: () => Promise.resolve({ ok: false, reason: 'synthetic' }) } as never,
+      personId: () => 'person-1',
+      createClient: () => client,
+      orchestrationProject: () => true,
+    });
+    return { controller, toasts, linked };
+  }
+
+  it('links the selected run’s gate with its own scope as the person, then reads the gate again', async () => {
+    const t = setup(() => Promise.resolve({ gate: { state: 'pending' } }));
+    await vi.waitFor(() => {
+      expect(t.controller.timeline.value).toBeDefined();
+    });
+    t.controller.select('step-3');
+    await vi.waitFor(() => {
+      expect(t.controller.details.value?.gates?.[0].relink).toBeDefined();
+    });
+    // An unknown gate id, or a second press while the first is on its way, sends nothing more.
+    await t.controller.linkGate('gate-unknown');
+    expect(t.linked).toEqual([]);
+    const first = t.controller.linkGate('gate-9');
+    expect(t.controller.busy.value).toBe(true);
+    await t.controller.linkGate('gate-9');
+    await first;
+    expect(t.linked).toEqual([
+      {
+        checkout: 'orch',
+        run: 'run-3',
+        body: { commit, provider: 'github-actions', repository: 'acme/synthetic', workflow: 'CI', branch: 'main' },
+        actor: 'person-1',
+      },
+    ]);
+    expect(t.controller.busy.value).toBe(false);
+    // The gate watched again reads pending, and Link Again is gone.
+    expect(t.controller.details.value?.gates?.[0]).toMatchObject({ state: 'pending', relink: undefined });
+    await t.controller.linkGate('gate-9');
+    expect(t.linked).toHaveLength(1);
+    expect(t.toasts).toEqual([]);
+    t.controller.dispose();
+  });
+
+  it('says why when the link is refused, and leaves the gate to be linked again', async () => {
+    const t = setup(() => Promise.reject(new ApiHttpError('repository mismatch', 422, 'gate_repository_mismatch')));
+    await vi.waitFor(() => {
+      expect(t.controller.timeline.value).toBeDefined();
+    });
+    t.controller.select('step-3');
+    await vi.waitFor(() => {
+      expect(t.controller.details.value?.gates?.[0].relink).toBeDefined();
+    });
+    await t.controller.linkGate('gate-9');
+    expect(t.toasts).toHaveLength(1);
+    expect(t.toasts[0]).toMatch(/^The gate could not be linked again: /);
+    expect(t.controller.busy.value).toBe(false);
+    expect(t.controller.details.value?.gates?.[0].relink).toBeDefined();
+    t.controller.dispose();
   });
 });
 

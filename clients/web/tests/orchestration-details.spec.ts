@@ -345,6 +345,114 @@ test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens
   }
 });
 
+test('HS2-A7YCB2 Link Again watches a CI gate the provider kept ending, and words why it is not watched', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  // A real gate on a real server: the server's Job monitor watches it through the real GitHub Actions client
+  // against a loopback fake that cannot read the repository (404), so the provider ends each watch. The
+  // gate follower links it again on its back-off (shortened by the test-build switch) until the gate
+  // reads `watch_gone`. Link Again in the inspector then goes through the real gate link route.
+  const provider = await fakeGithubActions();
+  provider.readable(REPO, false);
+  const server = await realTicketServer({
+    env: { ...provider.env(), HOTSHEET_JOB_MONITOR_AUTOSTART: 'on', HOTSHEET_TEST_GATE_RELINK_RETRY_MS: '150' },
+    seed: async ({ root, env: inherited }) => {
+      const env = withoutGitRepositoryEnv(inherited);
+      await execute('git', ['init', '-q', '-b', 'main'], { cwd: root, env });
+      await execute('git', ['commit', '-q', '--allow-empty', '-m', 'Synthetic base'], { cwd: root, env });
+    },
+  });
+  try {
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const run = (await plan.dispatch()) as { run_id: string };
+    const commit = '7a1e5c3b00aa7a1e5c3b00aa7a1e5c3b00aa7a1e';
+    const linked = await send(server, 'POST', `${base}/runs/${run.run_id}/gates`, {
+      commit,
+      repository: REPO,
+      actor: scheduler,
+    });
+    const gateId = (linked.gate as { gate_id: string }).gate_id;
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const gates = page.locator('[data-orchestration-inspector] [data-orchestration-section="Gates"]');
+    const runSection = page.locator('[data-orchestration-inspector] [data-orchestration-section="Run"]');
+    const linkAgain = gates.getByRole('button', { name: 'Link Again' });
+    await card.click();
+    // The follower's three re-links end too; the gate is given up and the inspector follows the events.
+    await expect(gates).toContainText('kept ending the watch', { timeout: 90_000 });
+    await expect(gates).toContainText(
+      'Unknown: the CI provider kept ending the watch; check the provider’s credentials and repository, then link the gate again',
+    );
+    await expect(linkAgain).toBeVisible();
+    await expect(linkAgain).toHaveAttribute('data-gate-id', gateId);
+    // Reconciliation holds the run for attention and says the same in its Not verified row.
+    await send(server, 'POST', `${base}/runs/${run.run_id}/reconcile`, { actor: scheduler });
+    await expect(runSection).toContainText('Not verified', { timeout: 30_000 });
+    await expect(runSection).toContainText('CI (the CI provider kept ending the watch');
+    await visualPass(page, 'hs2-a7ycb2', 'watch-gone', {
+      show: gates,
+      check: () => expect(linkAgain).toBeVisible(),
+      atPhone: () => card.click(),
+    });
+
+    // The credentials are fixed and the run is in flight: Link Again watches the same gate again.
+    provider.readable(REPO, true);
+    provider.run(REPO, { id: 11, sha: commit, status: 'in_progress' });
+    await linkAgain.click();
+    await expect(gates).toContainText('Pending', { timeout: 30_000 });
+    await expect(gates).not.toContainText('kept ending the watch');
+    await expect(linkAgain).toHaveCount(0);
+    // The same gate, watched again: Link Again made no second gate.
+    const read = await send(server, 'GET', `${base}/gates?run=${run.run_id}`);
+    expect((read.gates as Array<{ gate_id: string; state: string }>).map((gate) => [gate.gate_id, gate.state])).toEqual(
+      [[gateId, 'pending']],
+    );
+    // The watch reaches its verdict with nobody linking again.
+    provider.run(REPO, { id: 11, sha: commit, status: 'completed', conclusion: 'success' });
+    await expect(gates).toContainText('Passed', { timeout: 60_000 });
+    await capture(page, 'hs2-a7ycb2', 'linked-again-passed-1440');
+    expect(provider.requests.every((request) => request.startsWith('GET '))).toBe(true);
+  } finally {
+    await execute(server.cli, ['job', 'watch', 'stop'], { cwd: server.root, env: server.env }).catch(() => undefined);
+    await server.stop(page);
+    await provider.close();
+  }
+});
+
+test('HS2-A7YCB2 the inspector demo shows each CI gate state, with Link Again only where a link watches again', async ({
+  page,
+}) => {
+  await page.goto('/ux-demo?component=orchestration-inspector');
+  const gates = page.locator('[data-orchestration-section="Gates"]').first();
+  const choose = (value: string) =>
+    page
+      .locator('[data-settings="orchestration"] [name="ci-gate"]')
+      .evaluate((node: HTMLElement & { value: string }, next) => {
+        node.value = next;
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+  await expect(gates).toContainText('Pending');
+  await expect(gates.getByRole('button', { name: 'Link Again' })).toHaveCount(0);
+  for (const [reason, words] of [
+    ['not_watched', 'nothing watches it yet'],
+    ['watch_ended', 'it is linked again automatically'],
+    ['watch_gone', 'then link the gate again'],
+  ] as const) {
+    await choose(reason);
+    await expect(gates).toContainText(words);
+    await expect(gates.getByRole('button', { name: 'Link Again' })).toBeEnabled();
+  }
+  // Reset returns the pending gate.
+  await page.locator('[data-settings="orchestration"] [data-action="reset-settings"]').dispatchEvent('click');
+  await expect(gates.getByRole('button', { name: 'Link Again' })).toHaveCount(0);
+});
+
 test('HS2-77SRHC a ready card says why it is not running and the overview lists the scheduler’s decisions', async ({
   page,
 }) => {

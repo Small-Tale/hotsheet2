@@ -13,6 +13,7 @@ import {
   CircleX,
   ExternalLink,
   Hand,
+  Link,
   Pause,
   PencilLine,
   Play,
@@ -22,7 +23,12 @@ import {
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { BuiltAheadView } from '../orchestration-built-ahead';
-import { reconciliationRows, runEventText, type RunReconciliation } from '../orchestration-run-checks';
+import {
+  type GateLinkRequest,
+  reconciliationRows,
+  runEventText,
+  type RunReconciliation,
+} from '../orchestration-run-checks';
 import {
   chosenSite,
   integratorRows,
@@ -55,7 +61,15 @@ export interface OrchestrationInspectorDetails {
   loading: boolean;
   error?: string;
   ci?: string;
-  gates?: ReadonlyArray<{ kind: string; state: string; provider?: string; commit?: string }>;
+  gates?: ReadonlyArray<{
+    kind: string;
+    state: string;
+    provider?: string;
+    commit?: string;
+    gate_id?: string;
+    /** HS2-A7YCB2: the request that links this unknown CI gate again; absent when Link Again does not apply. */
+    relink?: GateLinkRequest;
+  }>;
   /** HS2-0D60T8: the step was read; its work built ahead of a pending gate, absent when none is recorded. */
   readinessRead?: boolean;
   builtAhead?: BuiltAheadView;
@@ -380,6 +394,31 @@ function stateDetail(
   }
 }
 
+/**
+ * HS2-A7YCB2: Link Again on each unknown CI gate whose watch a link starts again (`not_watched`,
+ * `watch_ended`, `watch_gone`), through the existing gate link route. With more than one, each names its
+ * commit.
+ */
+function GateRelinks({ gates, busy }: { gates: NonNullable<OrchestrationInspectorDetails['gates']>; busy: boolean }) {
+  const relinkable = gates.filter((gate) => gate.relink && gate.gate_id);
+  if (relinkable.length === 0) return null;
+  return (
+    <Row gap="xs" wrap controlInsets="rl">
+      {relinkable.map((gate) => (
+        <Button
+          size="compact"
+          action={ORCHESTRATION_ACTIONS.linkOrchestrationGate.value}
+          disabled={busy}
+          icon={<LucideIcon size="s" icon={Link} name="link" />}
+          rootAttributes={{ 'data-gate-id': gate.gate_id ?? '' }}
+        >
+          {relinkable.length > 1 && gate.commit ? `Link ${gate.commit.slice(0, 7)} Again` : 'Link Again'}
+        </Button>
+      ))}
+    </Row>
+  );
+}
+
 function Evidence({
   details,
   clock,
@@ -407,6 +446,7 @@ function Evidence({
         ) : (
           <Note text="No gate is linked to this run yet." />
         )}
+        <GateRelinks gates={details.gates ?? []} busy={busy} />
       </OrchestrationInspectorSection>
       {details.validations && details.validations.length > 0 && (
         <OrchestrationValidationSection

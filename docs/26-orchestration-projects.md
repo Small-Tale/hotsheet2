@@ -2339,9 +2339,19 @@ a run never waits silently on a watch that will not come back:
   source `unverifiable` with `watch_gone` (so the run is held for attention, not left
   waiting), and the Orchestration view says what to do: check the provider's
   credentials and the repository, then link the gate again (`gate link` through the CLI,
-  the server or MCP; the view has no link action yet). The gate stays `watch_gone` while its adapter still reads the
+  the server or MCP, or Link Again in the run inspector). The gate stays `watch_gone` while its adapter still reads the
   same ended watch. A later link watches again and clears it; if that watch ends too,
   the follower re-links it with a fresh budget.
+- The run inspector's Gates section offers **Link Again** on each unknown CI gate whose
+  watch a link starts again: `not_watched`, `watch_ended` and `watch_gone` (HS2-A7YCB2).
+  It sends the gate's own commit and CI scope (provider, repository, workflow, branch,
+  artifact) as the person through the same gate link route, so it returns the same gate
+  and watches it again; it is disabled while another change of the run is on its way, and
+  a refusal is said in a toast. With several such gates each button names its commit. The
+  Gates row and the reconciliation's Not verified row word every such reason, and a gate
+  event's reason reads in words too (`the CI provider kept ending its watch`). A test build
+  shortens the follower's re-link back-off with `HOTSHEET_TEST_GATE_RELINK_RETRY_MS` so a
+  browser test reaches `watch_gone`; a shipped server ignores it.
 
 The attempts are counted in the follower's memory, so a server restarted during the
 back-off starts the count again from when its follower first sees the ended watch; the

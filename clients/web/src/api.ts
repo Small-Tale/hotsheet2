@@ -2501,6 +2501,16 @@ export class Api {
       {},
       false,
     );
+  /**
+   * HS2-A7YCB2: link a run's CI gate (HS2-5JBYPV), as Link Again does for a gate whose watch ended: the
+   * same commit and scope return the same gate and watch it again.
+   */
+  orchestrationGateLink = (checkout: string, run: string, request: Record<string, unknown>, actorId: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/runs/${encodeURIComponent(run)}/gates`,
+      { method: 'POST', body: JSON.stringify({ ...request, actor: { role: 'human', id: actorId } }) },
+    );
   /** One run record (HS2-EBHDSB) with its last reconciliation (HS2-WBREDM), from this machine's records. */
   orchestrationRun = (checkout: string, run: string) =>
     this.parsed(

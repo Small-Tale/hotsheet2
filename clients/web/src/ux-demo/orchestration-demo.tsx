@@ -11,6 +11,7 @@ import { wireOrchestrationTimeline } from '../components/orchestration-timeline-
 import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { TicketRow } from '../components/ticket-row';
+import { CI_WATCH_REASONS } from '../orchestration-run-checks';
 import type { TimelineItem, TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
 import type { DemoModule, FormControl } from './demo-module';
@@ -49,6 +50,8 @@ export const orchestrationDemoSettings = {
   integrator: signal('keep'),
   /** HS2-747WQA: what the ready DOC-9 waits for: a held resource, or a Models pattern that resolves to no model. */
   docWait: signal('resource_held'),
+  /** HS2-A7YCB2: API-12's CI gate: '' is pending; an unknown reason offers Link Again. */
+  ciGate: signal(''),
   collapsed: signal<string[]>([]),
 };
 
@@ -121,6 +124,28 @@ const DOC_WAITS = [
   { value: 'no_matching_model', label: 'No Matching Model' },
 ];
 
+const CI_GATES = [
+  { value: '', label: 'Pending' },
+  { value: 'not_watched', label: 'Not Watched' },
+  { value: 'watch_ended', label: 'Watch Ended' },
+  { value: 'watch_gone', label: 'Watch Gone' },
+];
+
+/** HS2-A7YCB2: API-12's CI gate in the chosen state, as the view parses it. */
+function demoCiGate() {
+  const reason = orchestrationDemoSettings.ciGate.value,
+    commit = '3f9c2a1d00';
+  if (!reason) return { kind: 'ci', state: 'pending', provider: 'github-actions', commit, gate_id: 'gate-ci' };
+  return {
+    kind: 'ci',
+    state: `unknown: ${CI_WATCH_REASONS[reason]}`,
+    provider: 'github-actions',
+    commit,
+    gate_id: 'gate-ci',
+    relink: { commit, provider: 'github-actions', repository: 'acme/synthetic-api', workflow: 'CI', branch: 'main' },
+  };
+}
+
 const SELECTIONS = [
   { value: 'step-3', label: 'API-12 Running' },
   { value: 'step-5', label: 'DOC-7 Provisional' },
@@ -145,6 +170,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.runCondition.value = '';
   settings.integrator.value = 'keep';
   settings.docWait.value = 'resource_held';
+  settings.ciGate.value = '';
   settings.collapsed.value = [];
   if (root)
     syncSettingsControls(root, 'orchestration', {
@@ -154,6 +180,7 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
         planning: settings.planning.value,
         integrator: settings.integrator.value,
         'doc-wait': settings.docWait.value,
+        'ci-gate': settings.ciGate.value,
         'run-condition': settings.runCondition.value,
       },
       checked: {
@@ -289,7 +316,7 @@ export function OrchestrationInspectorDemo() {
             loading: false,
             ci: 'pending',
             gates: [
-              { kind: 'ci', state: 'pending', provider: 'github-actions', commit: '3f9c2a1d00' },
+              demoCiGate(),
               // HS2-GD3NNK: a requested code review, in the review's own words.
               { kind: 'review', state: 'requested', provider: 'review', commit: '3f9c2a1d00' },
             ],
@@ -414,6 +441,7 @@ export function OrchestrationDemoSettings() {
       <Select name="planning" label="Planning Session" value={settings.planning.value} choices={PLANNING} />
       <Select name="integrator" label="Integrator" value={settings.integrator.value} choices={INTEGRATOR} />
       <Select name="doc-wait" label="DOC-9 Waits For" value={settings.docWait.value} choices={DOC_WAITS} />
+      <Select name="ci-gate" label="API-12’s CI Gate" value={settings.ciGate.value} choices={CI_GATES} />
       <Select name="run-condition" label="API-12’s Run" value={settings.runCondition.value} choices={RUN_CONDITIONS} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Checkbox name="default-goal" checked={settings.defaultGoal.value} label="No Goal Ticket Open" />
@@ -441,6 +469,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'planning') settings.planning.value = control.value;
       if (name === 'integrator') settings.integrator.value = control.value;
       if (name === 'doc-wait') settings.docWait.value = control.value;
+      if (name === 'ci-gate') settings.ciGate.value = control.value;
       if (name === 'run-condition') settings.runCondition.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
       if (name === 'default-goal') settings.defaultGoal.value = control.checked;
@@ -482,6 +511,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       showRequest: () => undefined,
       openGoal: () => undefined,
       runValidation: () => undefined,
+      linkGate: () => undefined,
       reopen: () => undefined,
       showDecisions: () => undefined,
       loadEarlierDecisions: () => undefined,

@@ -59,13 +59,38 @@ pub(super) fn runtime(
         state.provider_config(),
     )
     .map(|runtime| {
-        runtime
+        let runtime = runtime
             .with_target_events(target_events(state))
             .with_capacity_probe(probe)
             .with_session_host(sessions)
-            .with_permission_prompt(prompt)
+            .with_permission_prompt(prompt);
+        match test_gate_relink_retry() {
+            Some(first) => runtime.with_gate_relink_retry(first),
+            None => runtime,
+        }
     })
     .map(Arc::new)
+}
+
+/// HS2-A7YCB2: the environment switch a real-server browser test sets so the gate
+/// follower's re-links of an ended CI watch (30 seconds, then 60, then 120) come in
+/// milliseconds, and a gate reaches `watch_gone` within the test. Honored only by a
+/// build with the test permission vault
+/// (`hotsheet_aitools::test_permission_vault_available`), never by a shipped server.
+pub const GATE_RELINK_RETRY_MS_ENV: &str = "HOTSHEET_TEST_GATE_RELINK_RETRY_MS";
+
+fn test_gate_relink_retry() -> Option<std::time::Duration> {
+    static FIRST: std::sync::OnceLock<Option<std::time::Duration>> = std::sync::OnceLock::new();
+    *FIRST.get_or_init(|| {
+        if !hotsheet_aitools::test_permission_vault_available() {
+            return None;
+        }
+        std::env::var(GATE_RELINK_RETRY_MS_ENV)
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|ms| *ms > 0)
+            .map(std::time::Duration::from_millis)
+    })
 }
 
 /// HS2-7QHWHJ: this server's ticket changes as a cursor feed for orchestration

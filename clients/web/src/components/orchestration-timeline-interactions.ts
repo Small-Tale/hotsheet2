@@ -33,6 +33,8 @@ export interface OrchestrationTimelineBindings {
   /** `pause`, `resume`, `handoff`, `correct` (with the state to record) or `cancel`. */
   readonly runControl: (control: string, state?: string) => void;
   readonly showRequest: (requestId: string) => void;
+  /** HS2-A7YCB2: Link Again on the selected run's unknown CI gate. */
+  readonly linkGate: (gateId: string) => void;
   readonly openGoal: () => void;
   /** HS2-9XJEZC: Run Validation on the selected card. */
   readonly runValidation: () => void;
@@ -194,6 +196,12 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
     delegate(root, 'click', ORCHESTRATION_ACTIONS.orchestrationRunControl.selector, (_event, target) => {
       const { control, runState } = (target as HTMLElement).dataset;
       if (control) bindings.runControl(control, runState);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.linkOrchestrationGate.selector, (_event, target) => {
+      const gateId = (target as HTMLElement).dataset.gateId;
+      if (gateId) bindings.linkGate(gateId);
     }),
   );
   lifetime.add(
