@@ -359,8 +359,12 @@ test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens
     // The card itself on a phone, with the inspector sheet closed.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.keyboard.press('Escape');
-    await cardLine.scrollIntoViewIfNeeded();
-    await expect(cardLine).toBeInViewport();
+    // HS2-3KHE7R: the narrower board re-renders its cards, so a scroll begun on the old card can find it
+    // detached; retry the scroll until the re-rendered card is in view.
+    await expect(async () => {
+      await cardLine.scrollIntoViewIfNeeded({ timeout: 2_000 });
+      await expect(cardLine).toBeInViewport({ timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
     await capture(page, 'hs2-h5h9qp', 'timeline-card-reopened-390');
     await page.setViewportSize({ width: 1440, height: 900 });
     await capture(page, 'hs2-h5h9qp', 'timeline-card-reopened-1440');
