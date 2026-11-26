@@ -775,6 +775,17 @@ opencode_live_acp_turn -- --ignored --nocapture` with a configured OpenCode prov
 This verifies initialization, session creation, a streamed prompt, and completion against
 the installed executable. Last verified successfully on 2026-08-25 with OpenCode 1.17.18.
 
+### OpenCode ACP permission popup (HS2-K6HH96)
+
+Fake ACP peers cover allow, deny, timeout, cancel, concurrent asks and session end, but
+not OpenCode's own decision to ask. In a disposable project whose `opencode.json` sets
+`"permission": {"bash": "ask"}`, start a driven OpenCode chat from Hot Sheet and send
+"Run `git status` and report the branch". Confirm the permission popup names OpenCode
+and `git status`. Allow it and confirm the command runs. Send the prompt again, Deny it,
+and confirm OpenCode reports the refusal and the popup closes. Send it a third time and
+press Stop while the popup shows. Confirm the popup is withdrawn and the turn ends as
+stopped. Not yet verified live.
+
 ### OpenCode session push in a real TUI (HS2-PEJ962)
 
 Open an OpenCode AI terminal from Hot Sheet (Connect, or `POST /terminals {"connect":"opencode"}`),

@@ -1,17 +1,27 @@
 //! Agent Client Protocol drive + standard usage mapper (HS2-DEK94W/HS2-96BZEF).
+//!
+//! `session/request_permission` is the ACP permission adapter (`docs/05` §5.7,
+//! HS2-K6HH96): each ask is routed to the host's [`SharedPermissionBridge`] and answered
+//! with the peer's own option id once a human (or a remembered rule, or the unattended
+//! timeout) decides. The client never picks an option on its own, and without a bridge it
+//! never selects an allow option.
+//!
+//! [`SharedPermissionBridge`]: crate::permission::SharedPermissionBridge
 
 use hotsheet_sync::LockExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::mpsc::{Sender, channel};
+use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::codex::PermissionPolicy;
 use crate::drive::{DoneReason, PermReq, TurnEvent};
 use crate::drive::{Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle, Usage};
 use crate::model_catalog::{CommandModelCatalog, RuntimeModelCatalogSource};
+use crate::permission::{Decision, PermissionAsk};
 use crate::ports::{AcpClient, RpcReader, RpcTransport, RpcWriter};
 use crate::procio::StreamChild;
 
@@ -19,6 +29,26 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 // OpenCode has emitted the final session/update immediately after session/prompt's
 // response in released builds. Let the reader drain that small race before Done.
 const PROMPT_DRAIN_GRACE: Duration = Duration::from_millis(100);
+/// How often a prompt wait re-checks whether its session is waiting on a human.
+const PROMPT_WAIT_SLICE: Duration = Duration::from_millis(200);
+
+/// How the session routes permission asks (HS2-K6HH96).
+#[derive(Clone)]
+struct AcpPermission {
+    policy: PermissionPolicy,
+    /// The asking agent named on each request (the plugin id, e.g. `opencode`).
+    agent: String,
+}
+
+/// A `session/request_permission` the peer is still waiting on. Removing its entry from
+/// [`Inner::asks`] is the single token that entitles the remover to send the one reply.
+struct PendingAsk {
+    /// The peer's JSON-RPC request id, echoed on the reply.
+    rpc_id: Value,
+    session: String,
+    /// The bridge request id once the ask is queued for a human.
+    bridge_id: Option<u64>,
+}
 
 struct Inner {
     writer: Mutex<Box<dyn RpcWriter>>,
@@ -27,9 +57,29 @@ struct Inner {
     notes: Mutex<Vec<Value>>,
     cvar: Condvar,
     closed: AtomicBool,
+    /// How long a turn may go without progress before it is failed. Time a session spends
+    /// waiting on a human permission answer does not count (HS2-K6HH96).
+    turn_timeout: Duration,
+    permission: Mutex<Option<AcpPermission>>,
+    /// Unanswered permission asks, keyed by the serialized peer request id.
+    asks: Mutex<HashMap<String, PendingAsk>>,
+    /// When the last ask settled, so a turn's stall clock restarts after a human answers.
+    ask_settled_at: Mutex<Option<Instant>>,
 }
 impl Inner {
     fn request(&self, method: &str, params: Value) -> Result<Value, DriveError> {
+        self.request_for(method, params, None)
+    }
+
+    /// Send a request and wait for its response. With `session`, the deadline restarts
+    /// while that session has a permission ask waiting on a human, so a slow answer never
+    /// fails the turn it pauses.
+    fn request_for(
+        &self,
+        method: &str,
+        params: Value,
+        session: Option<&str>,
+    ) -> Result<Value, DriveError> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = channel();
         self.pending.lock_or_recover().insert(id, tx);
@@ -37,9 +87,29 @@ impl Inner {
             .lock_or_recover()
             .send(&json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}).to_string())
             .map_err(|e| DriveError::NotConnected(e.to_string()))?;
-        let response = rx
-            .recv_timeout(REQUEST_TIMEOUT)
-            .map_err(|_| DriveError::Protocol(format!("timeout waiting for ACP {method}")))?;
+        let timeout = || DriveError::Protocol(format!("timeout waiting for ACP {method}"));
+        let mut deadline = Instant::now() + self.turn_timeout;
+        let response = loop {
+            let now = Instant::now();
+            if now >= deadline {
+                self.pending.lock_or_recover().remove(&id);
+                return Err(timeout());
+            }
+            match rx.recv_timeout(PROMPT_WAIT_SLICE.min(deadline - now)) {
+                Ok(response) => break response,
+                Err(RecvTimeoutError::Disconnected) => {
+                    return Err(DriveError::NotConnected(format!(
+                        "ACP connection closed while waiting for {method}"
+                    )));
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    if let Some(session) = session {
+                        let since = deadline - self.turn_timeout;
+                        deadline = self.stall_clock(session, since) + self.turn_timeout;
+                    }
+                }
+            }
+        };
         if let Some(e) = response.get("error") {
             return Err(DriveError::Protocol(format!("ACP {method}: {e}")));
         }
@@ -51,14 +121,20 @@ impl Inner {
             .send(&json!({"jsonrpc":"2.0","method":method,"params":params}).to_string())
             .is_ok()
     }
-    fn on_message(&self, line: &str) {
+    fn reply(&self, id: &Value, result: Value) {
+        let _ = self
+            .writer
+            .lock_or_recover()
+            .send(&json!({"jsonrpc":"2.0","id":id,"result":result}).to_string());
+    }
+    fn on_message(self: &Arc<Self>, line: &str) {
         let Ok(v) = serde_json::from_str::<Value>(line) else {
             return;
         };
         let has_method = v.get("method").is_some();
         let has_id = v.get("id").is_some();
         if has_method && has_id {
-            self.answer_request(&v);
+            self.answer_request(v);
         } else if has_method {
             self.notes.lock_or_recover().push(v);
             self.cvar.notify_all();
@@ -68,37 +144,206 @@ impl Inner {
             }
         }
     }
-    fn answer_request(&self, v: &Value) {
+    fn answer_request(self: &Arc<Self>, v: Value) {
         let id = v.get("id").cloned().unwrap_or(Value::Null);
-        let method = v.get("method").and_then(Value::as_str).unwrap_or("");
-        let result = if method == "session/request_permission" {
-            let option = v
-                .pointer("/params/options")
-                .and_then(Value::as_array)
-                .and_then(|a| {
-                    a.iter()
-                        .find(|o| {
-                            o.get("kind")
-                                .and_then(Value::as_str)
-                                .is_some_and(|k| k.starts_with("reject"))
-                        })
-                        .or_else(|| a.last())
-                })
-                .and_then(|o| o.get("optionId"))
-                .cloned()
-                .unwrap_or(Value::Null);
-            json!({"outcome":{"outcome":"selected","optionId":option}})
+        if v.get("method").and_then(Value::as_str) == Some("session/request_permission") {
+            self.ask_permission(id, v.get("params").cloned().unwrap_or(Value::Null));
         } else {
-            json!({})
+            self.reply(&id, json!({}));
+        }
+    }
+
+    /// Route one permission ask to the bridge on its own thread, so the reader keeps
+    /// serving concurrent asks, updates and responses while a human decides.
+    fn ask_permission(self: &Arc<Self>, rpc_id: Value, params: Value) {
+        if self.closed.load(Ordering::SeqCst) {
+            return;
+        }
+        let options = params
+            .get("options")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let Some(permission) = self.permission.lock_or_recover().clone() else {
+            // No human can be asked (a bare headless run): never grant anything.
+            self.reply(&rpc_id, permission_outcome(&options, Decision::Deny));
+            return;
         };
-        let _ = self
-            .writer
+        let session = params
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let key = rpc_id.to_string();
+        self.asks.lock_or_recover().insert(
+            key.clone(),
+            PendingAsk {
+                rpc_id: rpc_id.clone(),
+                session,
+                bridge_id: None,
+            },
+        );
+        let (tool, action) = permission_subject(&params);
+        let inner = self.clone();
+        std::thread::spawn(move || {
+            let AcpPermission { policy, agent } = permission;
+            let bridge = policy.bridge.clone();
+            let decision = policy.bridge.request_blocking_timeout_with_pending(
+                PermissionAsk {
+                    project: policy.project,
+                    connection: policy.connection,
+                    tool,
+                    action,
+                    agent: Some(agent),
+                },
+                policy.timeout,
+                policy.default,
+                |bridge_id| {
+                    let mut asks = inner.asks.lock_or_recover();
+                    match asks.get_mut(&key) {
+                        Some(ask) => ask.bridge_id = Some(bridge_id),
+                        // Cancelled or closed before it was queued: withdraw it now.
+                        None => {
+                            drop(asks);
+                            bridge.cancel(bridge_id);
+                        }
+                    }
+                },
+                |_| {},
+            );
+            let owned = inner.asks.lock_or_recover().remove(&key).is_some();
+            inner.mark_ask_settled();
+            if owned && !inner.closed.load(Ordering::SeqCst) {
+                inner.reply(&rpc_id, permission_outcome(&options, decision));
+            }
+            inner.cvar.notify_all();
+        });
+    }
+
+    fn mark_ask_settled(&self) {
+        *self.ask_settled_at.lock_or_recover() = Some(Instant::now());
+    }
+
+    /// Restart `since` past any time spent waiting on a human answer.
+    fn stall_clock(&self, session: &str, since: Instant) -> Instant {
+        if self.waiting_on_human(session) {
+            return Instant::now();
+        }
+        self.ask_settled_at
             .lock_or_recover()
-            .send(&json!({"jsonrpc":"2.0","id":id,"result":result}).to_string());
+            .map_or(since, |settled| settled.max(since))
+    }
+
+    fn waiting_on_human(&self, session: &str) -> bool {
+        self.asks
+            .lock_or_recover()
+            .values()
+            .any(|ask| ask.session == session)
+    }
+
+    /// Withdraw unanswered asks (all of them, or one session's) from the bridge. With
+    /// `reply`, each is answered `cancelled`, which ACP requires after `session/cancel`.
+    fn cancel_asks(&self, session: Option<&str>, reply: bool) {
+        let taken: Vec<PendingAsk> = {
+            let mut asks = self.asks.lock_or_recover();
+            let keys: Vec<String> = asks
+                .iter()
+                .filter(|(_, ask)| session.is_none_or(|s| ask.session == s))
+                .map(|(key, _)| key.clone())
+                .collect();
+            keys.iter().filter_map(|key| asks.remove(key)).collect()
+        };
+        if taken.is_empty() {
+            return;
+        }
+        self.mark_ask_settled();
+        let bridge = self
+            .permission
+            .lock_or_recover()
+            .as_ref()
+            .map(|p| p.policy.bridge.clone());
+        for ask in taken {
+            if reply {
+                self.reply(&ask.rpc_id, json!({"outcome":{"outcome":"cancelled"}}));
+            }
+            if let (Some(bridge), Some(id)) = (&bridge, ask.bridge_id) {
+                bridge.cancel(id);
+            }
+        }
+        self.cvar.notify_all();
     }
 }
 
-fn connect(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
+/// Map a decision onto one of the peer's own options (HS2-K6HH96). Allow selects only an
+/// `allow_once` option, so the peer never remembers a grant Hot Sheet did not record;
+/// Deny prefers `reject_once`. Without a matching option the ask is `cancelled`, which
+/// ACP defines as not granted.
+fn permission_outcome(options: &[Value], decision: Decision) -> Value {
+    let kinds: &[&str] = match decision {
+        Decision::Allow => &["allow_once"],
+        Decision::Deny => &["reject_once", "reject_always"],
+    };
+    kinds
+        .iter()
+        .find_map(|kind| {
+            options
+                .iter()
+                .find(|o| o.get("kind").and_then(Value::as_str) == Some(kind))
+                .and_then(|o| o.get("optionId"))
+        })
+        .map_or_else(
+            || json!({"outcome":{"outcome":"cancelled"}}),
+            |id| json!({"outcome":{"outcome":"selected","optionId":id}}),
+        )
+}
+
+/// The bridge's tool and rule-match action for an ACP `toolCall`: the ACP tool kind is
+/// named like the Claude/Codex tools where one corresponds, and the action is the raw
+/// command, path, or URL, falling back to the first location and then the title.
+fn permission_subject(params: &Value) -> (String, String) {
+    let call = params.get("toolCall").unwrap_or(&Value::Null);
+    let text = |key: &str| {
+        call.get(key)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+    };
+    let tool = match text("kind") {
+        Some("execute") => "Bash",
+        Some("edit") => "Edit",
+        Some("read") => "Read",
+        Some("fetch") => "WebFetch",
+        Some(kind) if kind != "other" => kind,
+        _ => text("title").unwrap_or("tool"),
+    }
+    .to_owned();
+    let raw = call.get("rawInput").unwrap_or(&Value::Null);
+    let action = match raw.get("command") {
+        Some(Value::Array(parts)) => Some(
+            parts
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(" "),
+        ),
+        Some(Value::String(command)) => Some(command.clone()),
+        _ => None,
+    }
+    .or_else(|| {
+        ["filePath", "path", "url", "pattern"]
+            .iter()
+            .find_map(|key| raw.get(*key).and_then(Value::as_str).map(str::to_owned))
+    })
+    .or_else(|| {
+        call.pointer("/locations/0/path")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    })
+    .or_else(|| text("title").map(str::to_owned))
+    .unwrap_or_default();
+    (tool, action)
+}
+
+fn connect(transport: Box<dyn RpcTransport>, turn_timeout: Duration) -> Arc<Inner> {
     let (writer, mut reader) = transport.split();
     let inner = Arc::new(Inner {
         writer: Mutex::new(writer),
@@ -107,6 +352,10 @@ fn connect(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
         notes: Default::default(),
         cvar: Condvar::new(),
         closed: AtomicBool::new(false),
+        turn_timeout,
+        permission: Mutex::new(None),
+        asks: Default::default(),
+        ask_settled_at: Mutex::new(None),
     });
     let r = inner.clone();
     std::thread::spawn(move || {
@@ -115,6 +364,9 @@ fn connect(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
                 Ok(Some(line)) => r.on_message(&line),
                 _ => {
                     r.closed.store(true, Ordering::SeqCst);
+                    // The peer is gone: its asks can no longer be answered.
+                    r.cancel_asks(None, false);
+                    r.pending.lock_or_recover().clear();
                     r.cvar.notify_all();
                     break;
                 }
@@ -130,9 +382,32 @@ pub struct AcpSession {
 }
 impl AcpSession {
     pub fn connect(transport: Box<dyn RpcTransport>) -> Result<Self, DriveError> {
-        let inner = connect(transport);
+        Self::connect_with_turn_timeout(transport, REQUEST_TIMEOUT)
+    }
+
+    fn connect_with_turn_timeout(
+        transport: Box<dyn RpcTransport>,
+        turn_timeout: Duration,
+    ) -> Result<Self, DriveError> {
+        let inner = connect(transport, turn_timeout);
         inner.request("initialize",json!({"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"hotsheet","version":env!("CARGO_PKG_VERSION")}}))?;
         Ok(Self { inner })
+    }
+
+    /// Route `session/request_permission` asks through `policy`'s bridge, naming `agent`
+    /// as the asker (HS2-K6HH96). Set it before running a turn. Without one, asks are
+    /// refused, never granted.
+    pub fn set_permission_policy(&self, policy: PermissionPolicy, agent: impl Into<String>) {
+        *self.inner.permission.lock_or_recover() = Some(AcpPermission {
+            policy,
+            agent: agent.into(),
+        });
+    }
+}
+impl Drop for AcpSession {
+    /// The session is ending: answer and withdraw any ask still on the bridge.
+    fn drop(&mut self) {
+        self.inner.cancel_asks(None, true);
     }
 }
 
@@ -214,7 +489,10 @@ impl AcpTurn {
                 }
                 return None;
             }
-            if self.inner.closed.load(Ordering::SeqCst) || self.started.elapsed() > REQUEST_TIMEOUT
+            // Time a human spends deciding a permission ask is not a stall.
+            self.started = self.inner.stall_clock(&self.session, self.started);
+            if self.inner.closed.load(Ordering::SeqCst)
+                || self.started.elapsed() > self.inner.turn_timeout
             {
                 finish_once(
                     &self.done,
@@ -258,8 +536,13 @@ impl TurnHandle for AcpTurn {
             })
     }
     fn interrupt(&mut self) -> bool {
-        self.inner
-            .notify("session/cancel", json!({"sessionId":self.session}))
+        let sent = self
+            .inner
+            .notify("session/cancel", json!({"sessionId":self.session}));
+        // ACP: after session/cancel the client answers every pending permission ask for
+        // the session with `cancelled`; the bridge withdraws the popup (HS2-K6HH96).
+        self.inner.cancel_asks(Some(&self.session), true);
+        sent
     }
     fn next_event(&mut self) -> Option<TurnEvent> {
         self.next()
@@ -320,9 +603,10 @@ impl AcpClient for AcpSession {
         let r = response.clone();
         let prompt = content.to_owned();
         std::thread::spawn(move || {
-            let result = i.request(
+            let result = i.request_for(
                 "session/prompt",
                 json!({"sessionId":s,"prompt":[{"type":"text","text":prompt}]}),
+                Some(&s),
             );
             match result {
                 Ok(v) => {
@@ -728,5 +1012,424 @@ mod tests {
             .start_turn(None, cwd.path(), "Reply with only pong")
             .unwrap();
         assert_eq!(turn.wait(), DoneReason::Completed);
+    }
+}
+
+/// HS2-K6HH96: `session/request_permission` reaches the permission bridge, and every
+/// outcome (allow, deny, timeout, cancel, concurrent asks, session end) answers the peer
+/// once with one of its own options, against a fake peer speaking OpenCode's wire shape.
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+    use crate::permission::{Request, Scope, SharedPermissionBridge};
+    use std::sync::mpsc::Receiver;
+
+    const WAIT: Duration = Duration::from_secs(10);
+    /// The reader returns end-of-stream when it reads this line (the peer exits).
+    const EOF: &str = "<eof>";
+
+    /// A fake ACP agent: answers `initialize`/`session/new` itself and hands every other
+    /// client message to the test, which injects peer messages through `to_client`.
+    struct FakePeer {
+        to_client: Sender<String>,
+        inbound: Receiver<String>,
+        from_client: Sender<Value>,
+    }
+    struct PeerWriter {
+        to_client: Sender<String>,
+        from_client: Sender<Value>,
+    }
+    impl RpcWriter for PeerWriter {
+        fn send(&mut self, message: &str) -> std::io::Result<()> {
+            let value: Value = serde_json::from_str(message).unwrap();
+            let id = value.get("id").cloned();
+            let result = match value.get("method").and_then(Value::as_str) {
+                Some("initialize") => json!({"protocolVersion":1,"agentCapabilities":{}}),
+                Some("session/new") => json!({"sessionId":"sess-1"}),
+                _ => {
+                    let _ = self.from_client.send(value);
+                    return Ok(());
+                }
+            };
+            let _ = self
+                .to_client
+                .send(json!({"jsonrpc":"2.0","id":id,"result":result}).to_string());
+            Ok(())
+        }
+    }
+    struct PeerReader(Receiver<String>);
+    impl RpcReader for PeerReader {
+        fn recv(&mut self) -> std::io::Result<Option<String>> {
+            Ok(self.0.recv().ok().filter(|line| line != EOF))
+        }
+    }
+    impl RpcTransport for FakePeer {
+        fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
+            (
+                Box::new(PeerWriter {
+                    to_client: self.to_client,
+                    from_client: self.from_client,
+                }),
+                Box::new(PeerReader(self.inbound)),
+            )
+        }
+    }
+
+    struct Harness {
+        session: AcpSession,
+        to_client: Sender<String>,
+        from_client: Receiver<Value>,
+        bridge: Arc<SharedPermissionBridge>,
+        asked: Receiver<Request>,
+        removed: Receiver<Request>,
+    }
+
+    fn harness(policy_timeout: Option<Duration>, turn_timeout: Duration) -> Harness {
+        let (to_client, inbound) = channel();
+        let (from_client_tx, from_client) = channel();
+        let session = AcpSession::connect_with_turn_timeout(
+            Box::new(FakePeer {
+                to_client: to_client.clone(),
+                inbound,
+                from_client: from_client_tx,
+            }),
+            turn_timeout,
+        )
+        .unwrap();
+        let bridge = Arc::new(SharedPermissionBridge::default());
+        let (asked_tx, asked) = channel();
+        let asked_tx = Mutex::new(asked_tx);
+        bridge.set_on_pending(move |r| {
+            let _ = asked_tx.lock_or_recover().send(r.clone());
+        });
+        let (removed_tx, removed) = channel();
+        let removed_tx = Mutex::new(removed_tx);
+        bridge.set_on_removed(move |r| {
+            let _ = removed_tx.lock_or_recover().send(r.clone());
+        });
+        if let Some(timeout) = policy_timeout {
+            session.set_permission_policy(
+                PermissionPolicy {
+                    bridge: bridge.clone(),
+                    project: "project-a".into(),
+                    connection: "conn-7".into(),
+                    default: Decision::Deny,
+                    timeout,
+                },
+                "opencode",
+            );
+        }
+        Harness {
+            session,
+            to_client,
+            from_client,
+            bridge,
+            asked,
+            removed,
+        }
+    }
+
+    /// OpenCode's `session/request_permission` shape (a bash permission).
+    fn ask(id: u64, command: &str) -> String {
+        json!({"jsonrpc":"2.0","id":id,"method":"session/request_permission","params":{
+        "sessionId":"sess-1",
+        "toolCall":{"toolCallId":format!("call_{id}"),"status":"pending","title":command,
+            "kind":"execute","rawInput":{"command":command},"locations":[]},
+        "options":[
+            {"optionId":"once","kind":"allow_once","name":"Allow once"},
+            {"optionId":"always","kind":"allow_always","name":"Always allow"},
+            {"optionId":"reject","kind":"reject_once","name":"Reject"}
+        ]}})
+        .to_string()
+    }
+
+    impl Harness {
+        fn start(&self) -> (Box<dyn TurnHandle>, Value) {
+            let turn = self
+                .session
+                .start_turn(None, Path::new("/project"), "work")
+                .unwrap();
+            let prompt = self.next_from_client();
+            assert_eq!(prompt["method"], "session/prompt");
+            (turn, prompt["id"].clone())
+        }
+        fn next_from_client(&self) -> Value {
+            self.from_client.recv_timeout(WAIT).expect("client message")
+        }
+        fn inject(&self, line: String) {
+            self.to_client.send(line).unwrap();
+        }
+        fn finish(&self, prompt_id: &Value) {
+            self.inject(
+                json!({"jsonrpc":"2.0","id":prompt_id,"result":{"stopReason":"end_turn"}})
+                    .to_string(),
+            );
+        }
+        fn asked(&self) -> Request {
+            self.asked.recv_timeout(WAIT).expect("bridge request")
+        }
+        fn reply_to(&self, id: u64) -> Value {
+            let reply = self.next_from_client();
+            assert_eq!(reply["id"], id, "reply {reply}");
+            assert!(reply.get("method").is_none());
+            reply["result"]["outcome"].clone()
+        }
+        fn quiet(&self) -> bool {
+            self.from_client
+                .recv_timeout(Duration::from_millis(150))
+                .is_err()
+        }
+    }
+
+    fn selected(option: &str) -> Value {
+        json!({"outcome":"selected","optionId":option})
+    }
+
+    #[test]
+    fn allow_and_deny_route_through_the_bridge_and_answer_with_the_peer_option() {
+        for (decision, option) in [(Decision::Allow, "once"), (Decision::Deny, "reject")] {
+            let h = harness(Some(WAIT), REQUEST_TIMEOUT);
+            let (mut turn, prompt) = h.start();
+            h.inject(ask(0, "git status"));
+            let request = h.asked();
+            assert_eq!(
+                (
+                    request.project.as_str(),
+                    request.connection.as_str(),
+                    request.tool.as_str(),
+                    request.action.as_str(),
+                    request.agent.as_deref()
+                ),
+                (
+                    "project-a",
+                    "conn-7",
+                    "Bash",
+                    "git status",
+                    Some("opencode")
+                )
+            );
+            assert!(h.quiet(), "nothing answers the ask before the human does");
+            assert!(
+                h.bridge
+                    .resolve(request.id, decision, Scope::Once)
+                    .is_some()
+            );
+            assert_eq!(h.reply_to(0), selected(option));
+            assert!(h.bridge.pending().is_empty());
+            h.finish(&prompt);
+            assert_eq!(turn.wait(), DoneReason::Completed);
+        }
+    }
+
+    #[test]
+    fn an_unanswered_ask_times_out_to_a_one_time_rejection() {
+        let h = harness(Some(Duration::from_millis(50)), REQUEST_TIMEOUT);
+        let (mut turn, prompt) = h.start();
+        h.inject(ask(3, "rm -rf build"));
+        let request = h.asked();
+        assert_eq!(h.reply_to(3), selected("reject"));
+        assert_eq!(h.removed.recv_timeout(WAIT).unwrap().id, request.id);
+        assert!(h.bridge.pending().is_empty());
+        assert!(h.bridge.rules().is_empty(), "a timeout remembers nothing");
+        h.finish(&prompt);
+        assert_eq!(turn.wait(), DoneReason::Completed);
+    }
+
+    #[test]
+    fn interrupt_cancels_pending_asks_and_withdraws_them_from_the_bridge() {
+        let h = harness(Some(WAIT), REQUEST_TIMEOUT);
+        let (mut turn, prompt) = h.start();
+        h.inject(ask(4, "npm test"));
+        let request = h.asked();
+        assert!(turn.interrupt());
+        let cancel = h.next_from_client();
+        assert_eq!(cancel["method"], "session/cancel");
+        assert_eq!(cancel["params"]["sessionId"], "sess-1");
+        assert_eq!(h.reply_to(4), json!({"outcome":"cancelled"}));
+        assert_eq!(h.removed.recv_timeout(WAIT).unwrap().id, request.id);
+        assert!(h.bridge.pending().is_empty());
+        // A late answer to the withdrawn request is refused and sends nothing more.
+        assert!(
+            h.bridge
+                .resolve(request.id, Decision::Allow, Scope::Once)
+                .is_none()
+        );
+        h.inject(
+            json!({"jsonrpc":"2.0","id":prompt,"result":{"stopReason":"cancelled"}}).to_string(),
+        );
+        assert_eq!(turn.wait(), DoneReason::Interrupted);
+        assert!(h.quiet());
+    }
+
+    #[test]
+    fn concurrent_asks_are_both_queued_and_answered_out_of_order_by_id() {
+        let h = harness(Some(WAIT), REQUEST_TIMEOUT);
+        let (mut turn, prompt) = h.start();
+        h.inject(ask(10, "git status"));
+        h.inject(ask(11, "git diff"));
+        let mut asked = [h.asked(), h.asked()];
+        asked.sort_by_key(|r| r.action.clone());
+        let [diff, status] = asked;
+        assert_eq!(
+            (diff.action.as_str(), status.action.as_str()),
+            ("git diff", "git status")
+        );
+        assert_eq!(h.bridge.pending().len(), 2);
+        h.bridge
+            .resolve(diff.id, Decision::Allow, Scope::Once)
+            .unwrap();
+        assert_eq!(h.reply_to(11), selected("once"));
+        assert_eq!(h.bridge.pending().len(), 1, "the other ask still waits");
+        h.bridge
+            .resolve(status.id, Decision::Deny, Scope::Once)
+            .unwrap();
+        assert_eq!(h.reply_to(10), selected("reject"));
+        h.finish(&prompt);
+        assert_eq!(turn.wait(), DoneReason::Completed);
+    }
+
+    #[test]
+    fn peer_exit_while_an_ask_is_pending_withdraws_it_and_fails_the_turn() {
+        let h = harness(Some(WAIT), REQUEST_TIMEOUT);
+        let (mut turn, _prompt) = h.start();
+        h.inject(ask(5, "git push"));
+        let request = h.asked();
+        h.inject(EOF.into());
+        assert_eq!(h.removed.recv_timeout(WAIT).unwrap().id, request.id);
+        assert!(h.bridge.pending().is_empty());
+        let reason = turn.wait();
+        assert!(reason.failure_message().is_some(), "{reason:?}");
+        assert!(h.quiet(), "no reply is written to a closed peer");
+    }
+
+    #[test]
+    fn dropping_the_session_answers_cancelled_and_withdraws_the_ask() {
+        let h = harness(Some(WAIT), REQUEST_TIMEOUT);
+        let (turn, _prompt) = h.start();
+        h.inject(ask(6, "git push"));
+        let request = h.asked();
+        drop(turn);
+        let Harness {
+            session,
+            from_client,
+            bridge,
+            removed,
+            ..
+        } = h;
+        drop(session);
+        let reply = from_client.recv_timeout(WAIT).unwrap();
+        assert_eq!(reply["id"], 6);
+        assert_eq!(reply["result"]["outcome"], json!({"outcome":"cancelled"}));
+        assert_eq!(removed.recv_timeout(WAIT).unwrap().id, request.id);
+        assert!(bridge.pending().is_empty());
+    }
+
+    #[test]
+    fn a_remembered_rule_answers_without_queueing_for_a_human() {
+        let h = harness(Some(WAIT), REQUEST_TIMEOUT);
+        let (mut turn, prompt) = h.start();
+        h.inject(ask(7, "git status"));
+        let first = h.asked();
+        h.bridge
+            .resolve(first.id, Decision::Allow, Scope::Session)
+            .unwrap();
+        assert_eq!(h.reply_to(7), selected("once"));
+        h.inject(ask(8, "git status"));
+        assert_eq!(h.reply_to(8), selected("once"));
+        assert!(h.asked.try_recv().is_err(), "the rule answered, no popup");
+        h.finish(&prompt);
+        assert_eq!(turn.wait(), DoneReason::Completed);
+    }
+
+    #[test]
+    fn without_a_bridge_asks_are_refused_and_never_granted() {
+        let h = harness(None, REQUEST_TIMEOUT);
+        let (mut turn, prompt) = h.start();
+        h.inject(ask(1, "git status"));
+        assert_eq!(h.reply_to(1), selected("reject"));
+        // Only allow options offered (the old code picked the last one): cancelled.
+        h.inject(
+            json!({"jsonrpc":"2.0","id":2,"method":"session/request_permission","params":{
+                "sessionId":"sess-1","toolCall":{"toolCallId":"c","title":"edit"},
+                "options":[{"optionId":"once","kind":"allow_once","name":"Allow"},
+                    {"optionId":"always","kind":"allow_always","name":"Always"}]}})
+            .to_string(),
+        );
+        assert_eq!(h.reply_to(2), json!({"outcome":"cancelled"}));
+        h.finish(&prompt);
+        assert_eq!(turn.wait(), DoneReason::Completed);
+    }
+
+    #[test]
+    fn waiting_on_a_human_does_not_count_toward_the_turn_timeout() {
+        let h = harness(Some(WAIT), Duration::from_millis(300));
+        let (mut turn, prompt) = h.start();
+        h.inject(ask(9, "cargo build"));
+        let request = h.asked();
+        // Three turn timeouts pass while the human decides; the turn stays alive.
+        assert!(h.quiet() && h.quiet() && h.quiet() && h.quiet() && h.quiet() && h.quiet());
+        assert!(turn.is_busy(), "a pending ask keeps the turn alive");
+        h.bridge
+            .resolve(request.id, Decision::Allow, Scope::Once)
+            .unwrap();
+        assert_eq!(h.reply_to(9), selected("once"));
+        h.finish(&prompt);
+        assert_eq!(turn.wait(), DoneReason::Completed);
+    }
+
+    #[test]
+    fn outcome_maps_decisions_onto_peer_options_only() {
+        let both = [
+            json!({"optionId":"a1","kind":"allow_always"}),
+            json!({"optionId":"a0","kind":"allow_once"}),
+            json!({"optionId":"r1","kind":"reject_always"}),
+            json!({"optionId":"r0","kind":"reject_once"}),
+        ];
+        assert_eq!(
+            permission_outcome(&both, Decision::Allow),
+            json!({"outcome":{"outcome":"selected","optionId":"a0"}})
+        );
+        assert_eq!(
+            permission_outcome(&both, Decision::Deny),
+            json!({"outcome":{"outcome":"selected","optionId":"r0"}})
+        );
+        assert_eq!(
+            permission_outcome(&both[2..3], Decision::Deny),
+            json!({"outcome":{"outcome":"selected","optionId":"r1"}})
+        );
+        let cancelled = json!({"outcome":{"outcome":"cancelled"}});
+        assert_eq!(permission_outcome(&both[..1], Decision::Allow), cancelled);
+        assert_eq!(permission_outcome(&both[..2], Decision::Deny), cancelled);
+        assert_eq!(permission_outcome(&[], Decision::Allow), cancelled);
+    }
+
+    #[test]
+    fn subject_names_the_tool_kind_and_the_raw_action() {
+        let subject = |call: Value| permission_subject(&json!({ "toolCall": call }));
+        assert_eq!(
+            subject(json!({"kind":"execute","rawInput":{"command":["git","status"]}})),
+            ("Bash".into(), "git status".into())
+        );
+        assert_eq!(
+            subject(json!({"kind":"edit","rawInput":{"filePath":"src/a.rs"}})),
+            ("Edit".into(), "src/a.rs".into())
+        );
+        assert_eq!(
+            subject(json!({"kind":"fetch","rawInput":{"url":"https://example.test"}})),
+            ("WebFetch".into(), "https://example.test".into())
+        );
+        assert_eq!(
+            subject(json!({"kind":"read","locations":[{"path":"README.md"}]})),
+            ("Read".into(), "README.md".into())
+        );
+        assert_eq!(
+            subject(json!({"kind":"search","title":"grep TODO"})),
+            ("search".into(), "grep TODO".into())
+        );
+        assert_eq!(
+            subject(json!({"kind":"other","title":"external_directory"})),
+            ("external_directory".into(), "external_directory".into())
+        );
+        assert_eq!(subject(Value::Null), ("tool".into(), String::new()));
     }
 }

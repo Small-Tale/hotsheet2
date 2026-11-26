@@ -1569,6 +1569,20 @@ refresh migrate older lifecycle handlers that inherited the permission timeout, 
 unrelated hooks, and issue the changed-hooks notice for a new `/hooks` trust review. Allow
 and deny use Codex's native result; retries remain independent.
 
+ACP tools (OpenCode) ask through `session/request_permission`. A driven ACP session
+routes every ask to the same bridge, popup, remembered rules, and route-back as Codex
+approvals, naming the plugin as the asking agent; the client never picks an option itself
+(HS2-K6HH96). The ACP tool kind is named like the matching Claude tool (`execute` is
+`Bash`, `edit` is `Edit`, `read` is `Read`, `fetch` is `WebFetch`) and the raw command,
+path, or URL is the rule-match action. Each ask waits on its own thread, so concurrent
+asks are all shown and can be answered in any order. Allow selects only the peer's
+`allow_once` option, so the tool never remembers a grant Hot Sheet did not record; deny
+and the unattended timeout select `reject_once` (or `reject_always`), and a missing option
+answers `cancelled`. Stopping the turn sends `session/cancel`, answers each pending ask
+`cancelled`, and withdraws its popup. A peer exit or session end withdraws pending popups
+too. Time spent waiting on a human does not count toward the turn's stall timeout. A bare
+headless run with no bridge refuses every ask and never selects an allow option.
+
 The client applies a user's decision optimistically: the popup and its clickable actions
 disappear in the same render that begins the network request, preventing latency from
 looking like a missed click or allowing duplicate answers. The presumed history entry is

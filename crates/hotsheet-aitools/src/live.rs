@@ -52,8 +52,8 @@ pub struct LiveTrigger {
     /// `app-server` process per connection (HS2-B7C66H). Requires `CODEX_HOME` in `env`.
     pub shared_daemon: bool,
     /// A live permission bridge to **block approvals on a human** (HS2-Q1F6HV). `None` =
-    /// auto-approve (the headless default; a bare CLI run has no human UI). Only the
-    /// app-server (codex) transport consults it today.
+    /// auto-approve for Codex (the headless default; a bare CLI run has no human UI) and
+    /// refuse for ACP. The app-server (codex) and ACP (OpenCode) transports consult it.
     pub permission_bridge: Option<std::sync::Arc<crate::permission::SharedPermissionBridge>>,
     /// Injected clock.
     pub now_ms: u64,
@@ -195,21 +195,8 @@ pub fn run_trigger_controlled(
             // The chat's selected approval policy (HS2-NHRDMW); the sandbox stays
             // workspace-write whatever the policy.
             app.set_approval_policy(t.permission_mode.as_deref());
-            if let Some(bridge) = &t.permission_bridge {
-                let permission_project = t
-                    .env
-                    .iter()
-                    .find_map(|(name, value)| {
-                        (name == "HOTSHEET_PERMISSION_PROJECT").then_some(value.as_str())
-                    })
-                    .unwrap_or_else(|| t.cwd.to_str().unwrap_or_default());
-                app.set_permission_policy(crate::codex::PermissionPolicy {
-                    bridge: bridge.clone(),
-                    project: permission_project.to_string(),
-                    connection: t.conn_id.clone(),
-                    default: crate::permission::Decision::Deny,
-                    timeout: crate::permission::DEFAULT_PERMISSION_TIMEOUT,
-                });
+            if let Some(policy) = permission_policy(t) {
+                app.set_permission_policy(policy);
             }
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
@@ -235,6 +222,11 @@ pub fn run_trigger_controlled(
                 source,
             })?;
             let acp = AcpSession::connect(transport).map_err(LiveError::Drive)?;
+            // ACP permission asks reach the same bridge and popup as Codex approvals
+            // (HS2-K6HH96); without a bridge they are refused, never granted.
+            if let Some(policy) = permission_policy(t) {
+                acp.set_permission_policy(policy, plugin.id().to_string());
+            }
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 model: t.model.clone(),
@@ -262,6 +254,24 @@ pub fn run_trigger_controlled(
         }
         _ => Err(LiveError::NotDrivable(plugin.id().to_string())),
     }
+}
+
+/// The live permission policy for a trigger that carries a bridge: unanswered asks block
+/// the turn for a human and fall back to a one-time denial (HS2-Q1F6HV, HS2-K6HH96).
+fn permission_policy(t: &LiveTrigger) -> Option<crate::codex::PermissionPolicy> {
+    let bridge = t.permission_bridge.as_ref()?;
+    let project = t
+        .env
+        .iter()
+        .find_map(|(name, value)| (name == "HOTSHEET_PERMISSION_PROJECT").then_some(value.as_str()))
+        .unwrap_or_else(|| t.cwd.to_str().unwrap_or_default());
+    Some(crate::codex::PermissionPolicy {
+        bridge: bridge.clone(),
+        project: project.to_string(),
+        connection: t.conn_id.clone(),
+        default: crate::permission::Decision::Deny,
+        timeout: crate::permission::DEFAULT_PERMISSION_TIMEOUT,
+    })
 }
 
 /// Attach to the shared codex daemon for the `CODEX_HOME` in `env`: start it (idempotent)
