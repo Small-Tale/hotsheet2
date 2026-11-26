@@ -2515,7 +2515,11 @@ repository, workflow, branch, again}` starts or finds the watch Job in the hosti
   machine's adapter, as before. A peer that cannot be reached or refuses leaves the
   gate as it stands: a sync returns it unchanged, and the follower spends the rest
   of its wait on this machine's records instead of asking again at once. A host that
-  answers a wait at once with nothing new is treated the same way.
+  answers a wait at once with nothing new is treated the same way. Such a host is read
+  once per back-off: the follower's step ends after the back-off (or after a long poll
+  that found nothing new) and the next step reads it, never a read at the end of one
+  step and another at the start of the next, including the first refusal of a host
+  that became reachable during a wait (HS2-CB5YEQ).
 - Deployment gates of the `target-script` provider are always run and read on the
   target's machine, local or remote (HS2-G3VAK4, below).
 
@@ -6176,6 +6180,13 @@ A read on the server also starts the target followers of §26.9.
   its Why It Is Not Running section says why. The inspector's Run section words the run
   state ("Dispatched to a worker", "No worker holds it") and adds a **Next** row with
   what a person can do, including when the scheduler starts a session again.
+  Finished work whose run's CI gate failed (its ticket was completed before the CI
+  went red, as an integrator that completes on push leaves it) stays in Done but reads
+  "CI failed" (warning) on its line, its inspector badge reads **Done · CI failed**
+  (warning) and the Run section's **Next** row says to repair it as the Gates section
+  says (HS2-89578K). The timeline item's `run.ci_gate` carries the run's CI verdict
+  (its standing CI gates rolled up as `gates` does; absent when no CI gate stands), so
+  a repair that is pending or passes reads plainly Done again.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
@@ -6840,7 +6851,8 @@ checks requirements and caps, not resources, which change from pass to pass.
 
 The placement is a `start` with reason `role_needed`, detail and `role` naming the
 role, and no steps. An integrator's start has reason `integrator_started` with detail
-`handoff_pending` instead (HS2-4JQ41V, below). It is applied under operation id `sched-role-<role>-<target>`
+`handoff_pending` instead (HS2-4JQ41V, below), or `ci_pending` when every pending handoff
+is already integrated and waits on its CI gate (HS2-GJ690N). It is applied under operation id `sched-role-<role>-<target>`
 (stable, so a repeated start is the same session), dispatches no run, passes the gate
 as a session start (`session_start` for its tool, §26.28), and launches in its role
 through the hosting machine's drawer like any orchestrator session (§26.16).
@@ -7236,8 +7248,11 @@ reads the run record (`GET /checkouts/{owner}/orchestration/runs/{run}`) with it
 gates, events and validations whenever the timeline's version changes; a new outcome
 is a `reconciled` run event, so it shows without polling. The Events rows word that
 event with the same disposition words ("Checked · Held: something it depends on could
-not be verified"), never the code (HS2-N9BFHW). Words live in
-`clients/web/src/orchestration-run-checks.ts`.
+not be verified"), never the code (HS2-N9BFHW). A `gate` event row says which gate and
+the state it entered, as the Gates section does ("CI gate: passed · learned from the
+project", a review gate in review words), from the event's `gate_state` and the kind of
+the gate its `gate_id` names; a gate the run no longer lists reads "Gate: …"
+(HS2-7NJN7S). Words live in `clients/web/src/orchestration-run-checks.ts`.
 
 ### Validation and Run Validation (HS2-9XJEZC)
 
@@ -7362,8 +7377,10 @@ answer carries `integrator`, the card's **Integration** section follows **Run**:
   started", "Unavailable" (`integrator_unavailable` after the replacements were used
   up) or "Not running" (`none`). In a dry run a start or wind-down reads "Would
   start on the next pass (dry run)" or "Would wind down (dry run)".
-- **Why**: the reason and detail in words: "Handoffs wait to be integrated"
-  (`queue`), "An integrated commit waits on its CI gate" (`ci_pending`), "A worker it
+- **Why**: the reason and detail in words: "A handoff waits to be integrated"
+  (`handoff_pending`), "Handoffs wait to be integrated"
+  (`queue`), "An integrated commit waits on its CI gate" (`ci_pending`, a kept integrator's
+  or, HS2-GJ690N, a start's), "A worker it
   serves still has a run", "Nothing has needed it for a while" (`idle`), the
   scheduler's own reasons for a detail such as `target_cap` or `cooldown`, "Its
   project is turned off in the policy" (`target_disabled`) and "The project's

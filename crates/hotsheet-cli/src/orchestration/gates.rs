@@ -1305,6 +1305,13 @@ impl OrchestrationRuntime {
                 }
             }
             if round == 1 || !step.changed.is_empty() || wait_ms == 0 {
+                // HS2-CB5YEQ: a host first refused in this second read (it became
+                // reachable during the wait) backs off too, so the next step does not
+                // read it again at once.
+                if round == 1 && hosted_failed && step.changed.is_empty() && wait_ms > 0 {
+                    let rest = Duration::from_millis(bounded(wait_ms.min(MAX_HOSTED_GATE_WAIT_MS)));
+                    self.gate_back_off(owner_id, waits_on.as_ref(), rest);
+                }
                 break;
             }
             // HS2-WDQZ37: a hosted gate waits on its host's long poll. A host that
@@ -1318,16 +1325,31 @@ impl OrchestrationRuntime {
                 });
                 match answer {
                     Ok(Ok(done)) if done.changed => step.changed.push(done.gate.gate_id),
+                    // Something moved on the host: read again in this step.
                     Ok(Ok(done)) if done.cursor != Some(cursor) => {}
-                    _ if hosted_did_not_wait(asked, wait) => {
-                        let rest = Duration::from_millis(wait).saturating_sub(asked.elapsed());
-                        self.gate_back_off(owner_id, waits_on.as_ref(), rest);
+                    // HS2-CB5YEQ: nothing new, or the host could not be read. The step ends
+                    // (after backing off when the host did not wait) and the next step
+                    // reads the host once, instead of a read here and another there.
+                    _ => {
+                        if hosted_did_not_wait(asked, wait) {
+                            let rest = Duration::from_millis(wait).saturating_sub(asked.elapsed());
+                            self.gate_back_off(owner_id, waits_on.as_ref(), rest);
+                        }
+                        break;
                     }
-                    _ => {}
                 }
                 continue;
             }
             match &waits_on {
+                // HS2-CB5YEQ: a host that could not be read gets one read per back-off.
+                // The wait on this machine's adapter records is that back-off (a local
+                // change still ends it); the step then ends instead of reading every
+                // gate, the refusing host's too, again, and the next step reads them.
+                Some(_) if hosted_failed => {
+                    let rest = Duration::from_millis(bounded(wait_ms.min(MAX_HOSTED_GATE_WAIT_MS)));
+                    self.gate_back_off(owner_id, waits_on.as_ref(), rest);
+                    break;
+                }
                 Some((provider, cursor)) => provider.wait(
                     owner_id,
                     *cursor,

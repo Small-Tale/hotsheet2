@@ -101,6 +101,39 @@ fn hs2_4jq41v_a_handoff_alone_starts_one_integrator_on_an_unlisted_project() {
 }
 
 #[test]
+fn hs2_gj690n_a_start_for_commits_waiting_on_ci_says_so() {
+    let mut world = World::new(&[(1, 3)]);
+    // Only an integrated commit waits on its CI gate: the start says CI, not a handoff.
+    pool(&mut world, 0, 1, false);
+    assert_eq!(
+        integrator_starts(&world.now()),
+        [("integrator_started", Some("ci_pending".into()), 1)]
+    );
+    // A handoff arrives beside it: the queue is the more pressing reason.
+    pool(&mut world, 1, 1, false);
+    assert_eq!(
+        integrator_starts(&world.now()),
+        [("integrator_started", Some("handoff_pending".into()), 1)]
+    );
+    // It is integrated in turn (out of order with the start): CI again, repeatedly.
+    pool(&mut world, 0, 2, false);
+    for _ in 0..2 {
+        assert_eq!(
+            integrator_starts(&world.now()),
+            [("integrator_started", Some("ci_pending".into()), 1)]
+        );
+    }
+    // The gates resolve: nothing to start; then a new handoff refills the queue.
+    pool(&mut world, 0, 0, false);
+    assert!(integrator_starts(&world.now()).is_empty());
+    pool(&mut world, 1, 0, false);
+    assert_eq!(
+        integrator_starts(&world.now()),
+        [("integrator_started", Some("handoff_pending".into()), 1)]
+    );
+}
+
+#[test]
 fn hs2_4jq41v_integrator_walks_live_ci_idle_wound_down_and_refills() {
     let mut world = World::new(&[(1, 3)]);
     world.sessions = vec![integrator("integrator")];

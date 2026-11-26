@@ -28,6 +28,7 @@ import {
   gateNextStep,
   reconciliationRows,
   runEventText,
+  type RunEventView,
   type RunReconciliation,
 } from '../orchestration-run-checks';
 import {
@@ -39,6 +40,7 @@ import {
 import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import {
   cardTime,
+  ciRepair,
   type ClockFormat,
   clockTime,
   itemSlug,
@@ -87,7 +89,7 @@ export interface OrchestrationInspectorDetails {
   validations?: readonly ValidationStepView[];
   /** HS2-9XJEZC: Run Validation requests that wait on a person's answer. */
   pendingValidations?: readonly PendingValidation[];
-  events?: ReadonlyArray<{ at_ms: number; kind: string; state?: string; reason?: string; source?: string }>;
+  events?: ReadonlyArray<RunEventView>;
   /** HS2-XM692S: the run record was read; its last reconciliation, absent when none is stored. */
   runRead?: boolean;
   reconciliation?: RunReconciliation;
@@ -256,7 +258,8 @@ function RunSection({
   details?: OrchestrationInspectorDetails;
 }) {
   const run = item.run!,
-    attention = runNotice(item, clock);
+    // HS2-89578K: done work whose CI failed says what to do next, as unfinished work in trouble does.
+    attention = runNotice(item, clock) ?? ciRepair(item);
   return (
     <OrchestrationInspectorSection label="Run">
       <ValueTable label="Run" density="compact" stackBelow="narrow">
