@@ -541,3 +541,231 @@ async fn hs2_k41m77_followers_started_while_the_host_is_offline_ask_again_when_i
     assert_eq!(verdicts, 1, "{events:#}");
     fleet.shut_down().await;
 }
+
+/// Finish a watch Job on `home` the way that machine's Job monitor does when the
+/// provider ended the watch (the repository is gone): failed, with no verdict.
+fn judge_gone(home: &std::path::Path, checkout: &str, job_id: &str) {
+    use hotsheet_jobs::{Acquire, ActiveStatus, FinalStatus, Outcome};
+    let store = JobStore::at(home);
+    let (_, token) = store
+        .acquire(
+            checkout,
+            job_id,
+            Acquire {
+                owner: "monitor:synthetic".into(),
+                status: ActiveStatus::Running,
+                launch_id: None,
+                external: None,
+            },
+        )
+        .unwrap();
+    store
+        .finish(
+            checkout,
+            job_id,
+            &token,
+            FinalStatus::Failed,
+            Outcome {
+                summary: Some("synthetic: the repository is gone".into()),
+                refs: std::collections::BTreeMap::new(),
+            },
+        )
+        .unwrap();
+}
+
+/// The peer's watch Jobs, oldest first, once there are `count`: woken by the peer's
+/// machine home (where its Job store lives) changing.
+async fn peer_jobs_until(fleet: &Fleet, count: usize) -> Vec<hotsheet_jobs::Job> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    loop {
+        let waiter = hotsheet_jobs::ChangeWaiter::starting(&[fleet.peer_home.as_path()]).unwrap();
+        let mut jobs = JobStore::at(&fleet.peer_home)
+            .list(&fleet.b_checkout.id)
+            .unwrap()
+            .jobs;
+        if jobs.len() >= count {
+            jobs.sort_by(|a, b| a.id.cmp(&b.id));
+            return jobs;
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(
+            !remaining.is_zero(),
+            "the host never had {count} watch Jobs: {jobs:?}"
+        );
+        tokio::task::block_in_place(|| {
+            waiter.wait(remaining.min(std::time::Duration::from_secs(5)));
+        });
+    }
+}
+
+/// The cursor after the controller recorded `gate_id` as `unknown` for `reason`,
+/// woken by the owner's run event stream.
+async fn gate_reason_after(fleet: &Fleet, gate_id: &str, reason: &str, mut cursor: u64) -> u64 {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    loop {
+        let page = fleet
+            .ok(
+                "GET",
+                &format!("/run-events?after={cursor}&wait_ms=5000"),
+                Value::Null,
+            )
+            .await;
+        let found = page["entries"].as_array().unwrap().iter().any(|entry| {
+            let record = entry.get("record").unwrap_or(entry);
+            record["kind"] == "gate"
+                && record["gate_id"] == gate_id
+                && record["gate_state"] == "unknown"
+                && record["reason"] == reason
+        });
+        cursor = page["cursor"].as_u64().unwrap_or(cursor);
+        if found {
+            return cursor;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "gate {gate_id} never read {reason}"
+        );
+    }
+}
+
+/// HS2-F7ZG0F: the hosted half of HS2-507DGZ on two real servers. A remote target's CI
+/// gate is watched on its host (HS2-WDQZ37); the host's watch ends without a verdict
+/// (the provider no longer has the repository). The controller's gate reads
+/// `watch_ended`, never a verdict, and its follower asks the host to watch again by
+/// itself: a new Job on the host, whose green verdict passes the gate with no link by
+/// hand. For another commit whose watches keep ending, three re-links later the gate
+/// reads `watch_gone`, the host starts no more Jobs for it, and a link by hand watches
+/// it again. Waits on the run event stream and the host's Job store, never on a fixed
+/// delay.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_f7zg0f_a_hosted_ci_watch_that_ends_is_linked_again_on_its_host_until_gone() {
+    let mut fleet = Fleet::new().await;
+    // Re-links after 150, 300 and 600 ms rather than the server's 30 s back-off.
+    fleet
+        .relink_after(std::time::Duration::from_millis(150))
+        .await;
+    git(
+        &fleet.b_project,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/acme/widgets.git",
+        ],
+    );
+    let orchestration = fleet.orchestration_ticket("Gate the remote work again");
+    let ticket = fleet.target_ticket(Side::Peer, "Remote work whose watch ends");
+    let run = fleet
+        .ok(
+            "POST",
+            "/runs",
+            json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration.slug},
+                "target_id":TARGET_B,"connection_id":fleet.connection(Side::Peer),
+                "native_id":ticket.slug,"operation_id":"relinked-gated-run",
+                "mode":"dispatcher"}),
+        )
+        .await;
+    let run_id = run["run_id"].as_str().unwrap().to_owned();
+    let link = |commit: &str| {
+        let body = json!({"commit":commit,"repository":"acme/widgets","actor":Fleet::ai()});
+        let path = format!("/runs/{run_id}/gates");
+        let fleet = &fleet;
+        async move { fleet.ok("POST", &path, body).await }
+    };
+
+    // 1. The host's watch ends without a verdict: the gate reads `watch_ended`, and the
+    // follower asks the host to watch again. That watch's green verdict passes the gate.
+    let first = "1".repeat(40);
+    let linked = link(&first).await;
+    assert_eq!(linked["gate"]["state"], "pending", "{linked}");
+    let gate_id = linked["gate"]["gate_id"].as_str().unwrap().to_owned();
+    let jobs = peer_jobs_until(&fleet, 1).await;
+    assert_eq!(jobs.len(), 1, "the watch runs on the host");
+    assert_eq!(linked["gate"]["watch_ref"], jobs[0].id.as_str());
+    assert!(
+        JobStore::at(&fleet.home)
+            .list(&fleet.b_checkout.id)
+            .map(|listing| listing.jobs.is_empty())
+            .unwrap_or(true),
+        "nothing is watched on the controller"
+    );
+    judge_gone(&fleet.peer_home, &fleet.b_checkout.id, &jobs[0].id);
+    let cursor = gate_reason_after(&fleet, &gate_id, "watch_ended", 0).await;
+    let jobs = peer_jobs_until(&fleet, 2).await;
+    assert_eq!(jobs.len(), 2, "one re-link: {jobs:?}");
+    let relinked = &jobs[1];
+    assert!(!relinked.status.is_finished(), "{relinked:?}");
+    judge_green(
+        &fleet.peer_home,
+        &fleet.b_checkout.id,
+        &relinked.id,
+        &first,
+        31,
+    );
+    let passed = fleet.gate_until(&gate_id, "passed").await;
+    assert_eq!(passed["evidence"]["reference"], "31", "{passed}");
+    assert_eq!(passed["watch_ref"], relinked.id.as_str(), "{passed}");
+    let history: Vec<(&str, &str)> = passed["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["to"].as_str().unwrap(),
+                entry["reason"].as_str().unwrap_or_default(),
+            )
+        })
+        .collect();
+    assert!(
+        history.contains(&("unknown", "watch_ended")) && history.last() == Some(&("passed", "")),
+        "{history:?}"
+    );
+    // A passed gate is never linked again.
+    assert_eq!(peer_jobs_until(&fleet, 2).await.len(), 2);
+
+    // 2. Another commit, and every watch the host starts for it ends as well: the linked
+    // watch and three re-links, then `watch_gone`, which waits on nothing.
+    let second = "2".repeat(40);
+    let linked = link(&second).await;
+    let gone_id = linked["gate"]["gate_id"].as_str().unwrap().to_owned();
+    assert_ne!(gone_id, gate_id);
+    for count in 3..=6 {
+        let jobs = peer_jobs_until(&fleet, count).await;
+        assert_eq!(jobs.len(), count, "{jobs:?}");
+        let newest = jobs.last().unwrap();
+        assert!(!newest.status.is_finished(), "{newest:?}");
+        judge_gone(&fleet.peer_home, &fleet.b_checkout.id, &newest.id);
+    }
+    gate_reason_after(&fleet, &gone_id, "watch_gone", cursor).await;
+    let gone = fleet
+        .ok("GET", &format!("/gates/{gone_id}"), Value::Null)
+        .await;
+    assert_eq!(gone["state"], "unknown", "{gone}");
+    assert_eq!(gone["reason"], "watch_gone", "{gone}");
+    let jobs = JobStore::at(&fleet.peer_home)
+        .list(&fleet.b_checkout.id)
+        .unwrap()
+        .jobs;
+    assert_eq!(jobs.len(), 6, "no re-link after the budget: {jobs:?}");
+    assert!(jobs.iter().all(|job| job.status.is_finished()), "{jobs:?}");
+    // A sync reads the given-up gate as it stands and starts nothing on the host.
+    fleet
+        .ok(
+            "POST",
+            &format!("/runs/{run_id}/gate-sync"),
+            json!({"actor":Fleet::ai()}),
+        )
+        .await;
+    let still = fleet
+        .ok("GET", &format!("/gates/{gone_id}"), Value::Null)
+        .await;
+    assert_eq!(still["reason"], "watch_gone", "{still}");
+
+    // 3. Linking by hand is the same gate, watched again on the host.
+    let again = link(&second).await;
+    assert_eq!(again["gate"]["gate_id"], gone_id.as_str(), "{again}");
+    assert_eq!(again["gate"]["state"], "pending", "{again}");
+    let jobs = peer_jobs_until(&fleet, 7).await;
+    assert_eq!(again["gate"]["watch_ref"], jobs[6].id.as_str(), "{again}");
+    fleet.shut_down().await;
+}
