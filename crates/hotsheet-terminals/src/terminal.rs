@@ -1055,12 +1055,25 @@ impl Terminal {
     /// them. Blocks the calling thread; async callers use [`write_async`](Self::write_async) or
     /// [`queue_input`](Self::queue_input). All three share one FIFO, so input stays ordered.
     pub fn write(&self, bytes: &[u8]) -> Result<(), TermError> {
+        self.refuse_input_after_exit()?;
         Ok(self.input.write(bytes.to_vec())?)
     }
 
     /// Write input and wait for the PTY's result without holding any thread (HS2-FERD7N).
     pub async fn write_async(&self, bytes: Vec<u8>) -> Result<(), TermError> {
+        self.refuse_input_after_exit()?;
         Ok(self.input.write_async(bytes).await?)
+    }
+
+    /// Input to a terminal whose child has exited is refused on every platform (HS2-582G8R).
+    /// macOS fails such a write once the PTY closes, but Linux keeps accepting it into a
+    /// buffer nobody reads while the parent still holds the slave open (HS2-BCE5XG).
+    fn refuse_input_after_exit(&self) -> Result<(), TermError> {
+        if self.is_alive() {
+            Ok(())
+        } else {
+            Err(TermError::Pty("the terminal has exited".to_string()))
+        }
     }
 
     /// Queue a viewer's input behind earlier input and return without waiting for the PTY, so
