@@ -86,7 +86,7 @@ function ghostCard(document: Document, rect: MotionRect, kind: 'minimize' | 'res
 
 /** Play the keyframes; the card stays at its last frame until the caller removes it. */
 async function run(ghost: HTMLElement, keyframes: Keyframe[]) {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Older WebViews and the DOM test environment lack the Web Animations API.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Older WebViews and the DOM test environment lack the Web Animations API. (HS2-Q8WF64)
   if (!ghost.animate) return;
   const animation = ghost.animate(keyframes, {
     duration: READER_MINIMIZE_DURATION_MS,

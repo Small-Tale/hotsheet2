@@ -183,6 +183,14 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   `reason = "HS2-XXXXXX: why"` (preferred for new code) or a same-line
   `// HS2-XXXXXX: why` comment. The same policy test enforces this and caps suppressions at
   10 per file, the current maximum; the cap only decreases (HS2-FXF07C).
+- ESLint disables (`eslint-disable`, `eslint-disable-line`, `eslint-disable-next-line`, in
+  line, block and JSX comment forms) end with `-- why (HS2-XXXXXX)` on the same comment; the
+  slug names the ticket that justifies the exception. The same root policy test enforces this
+  for every tracked `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs` file and
+  caps disables at 21 per file, the current maximum (`clients/web/src/app/runtime.tsx`); the
+  cap only decreases. Unused directives fail web lint through `reportUnusedDisableDirectives`.
+  The test also rejects a `prettier-ignore` directive in any tracked text file, in every
+  comment syntax, extending the web-only `no-warning-comments` rule (HS2-DJ4BX5).
 - The web lint command ends with `npm run ui:doctor` (`kerf-ui-doctor --full`, run through `node --max-old-space-size=4096` since HS2-TY5JHN), which enforces
   component CSS ownership between the app's own components. A stylesheet may style only the class
   blocks its component renders, plus the native and raw Web Awesome elements it authors, and a

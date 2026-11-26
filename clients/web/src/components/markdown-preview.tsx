@@ -180,7 +180,7 @@ export function MarkdownPreview({
   const rendered = format === 'plain' ? renderPlainText(source) : renderMarkdown(source, attachmentContext);
   return (
     <div class="markdown-preview" {...presentation}>
-      {/* eslint-disable-next-line kerfjs/no-raw-with-dynamic-arg -- sanitized upstream by renderMarkdown */}
+      {/* eslint-disable-next-line kerfjs/no-raw-with-dynamic-arg -- renderMarkdown sanitizes this HTML upstream (HS2-W0DHRP) */}
       {raw(rendered)}
     </div>
   );

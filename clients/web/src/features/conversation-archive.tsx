@@ -83,7 +83,7 @@ export function createConversationArchiveController(dependencies: ConversationAr
     messageId: string,
     modifiers: ConversationSelectionModifiers = { toggle: false, extend: false },
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     const messages = conversationStates.peek()[connectionId]?.messages ?? [],
       current = conversationSelections.value[connectionId] ?? EMPTY_CONVERSATION_SELECTION,
       next = conversationSelectionAfterPick(messages, current, messageId, modifiers);

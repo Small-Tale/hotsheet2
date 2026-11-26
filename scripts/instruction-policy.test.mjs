@@ -396,3 +396,86 @@ test('HS2-FXF07C the Rust suppression scan reads every accepted reason form', ()
   assert.deepEqual(reasoned('#[cfg_attr(unix, allow(dead_code))] // HS2-ABC123: Unix only'), [true]);
   assert.deepEqual(reasoned('#[derive(Debug)]\n#[serde(rename_all = "camelCase")]'), []);
 });
+
+// HS2-DJ4BX5: the same rule for ESLint. Every `eslint-disable`, `eslint-disable-line` and
+// `eslint-disable-next-line` directive (line, block and JSX comment forms) carries a `-- reason`
+// naming a ticket slug on the same comment; `eslint-enable` needs none. The cap is the current
+// per-file maximum (clients/web/src/app/runtime.tsx); it only decreases. Unused directives already
+// fail lint through `reportUnusedDisableDirectives`.
+const ESLINT_DISABLES_PER_FILE = 21;
+const ESLINT_SOURCES = ['*.ts', '*.tsx', '*.mts', '*.cts', '*.js', '*.jsx', '*.mjs', '*.cjs'];
+const ESLINT_DIRECTIVE = /(?:\/\/|\/\*)[ \t]*(eslint-disable(?:-next-line|-line)?)(?=[\s*]|$)([^\n]*)/g;
+
+function eslintDisables(text) {
+  const found = [];
+  for (const match of text.matchAll(ESLINT_DIRECTIVE)) {
+    // A block comment ends at `*/`; a line comment at the line end.
+    const comment = match[0].startsWith('/*') ? match[2].split('*/')[0] : match[2];
+    const separator = comment.indexOf(' -- ');
+    const reason = separator === -1 ? '' : comment.slice(separator + 4);
+    found.push({
+      line: text.slice(0, match.index).split('\n').length,
+      reasoned: SLUG.test(reason) && reason.replace(SLUG, '').replace(/[\s:().-]/g, '').length > 0,
+    });
+  }
+  return found;
+}
+
+test('HS2-DJ4BX5 ESLint disables carry a reason with a ticket slug and stay capped per file', () => {
+  const unreasoned = [];
+  const overCap = [];
+  for (const file of trackedFiles(...ESLINT_SOURCES)) {
+    const text = trackedText(file);
+    if (text === null) continue;
+    const disables = eslintDisables(text);
+    for (const { line, reasoned } of disables) {
+      if (!reasoned) unreasoned.push(`${file}:${line}`);
+    }
+    if (disables.length > ESLINT_DISABLES_PER_FILE) overCap.push(`${file}: ${disables.length}`);
+  }
+  assert.deepEqual(unreasoned, [], 'end the directive with `-- why (HS2-XXXXXX)`');
+  assert.deepEqual(overCap, [], `at most ${ESLINT_DISABLES_PER_FILE} ESLint disables per file`);
+});
+
+test('HS2-DJ4BX5 the ESLint disable scan reads every directive form', () => {
+  // Probes are assembled at run time so this file never holds a directive it would reject.
+  const d = ['eslint', 'disable'].join('-');
+  const reasoned = (source) => eslintDisables(source).map((entry) => entry.reasoned);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert\nalert(1);`), [false]);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert -- HS2-ABC123`), [false]);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert -- no slug here`), [false]);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert HS2-ABC123 shown to the user`), [false]);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert -- shown to the user (HS2-ABC123).`), [true]);
+  assert.deepEqual(reasoned(`x(); // ${d}-line no-alert -- HS2-ABC123: shown to the user`), [true]);
+  assert.deepEqual(reasoned(`/* ${d} no-alert -- fixture (HS2-ABC123) */`), [true]);
+  assert.deepEqual(reasoned(`/* ${d} no-alert */ // -- fixture (HS2-ABC123)`), [false]);
+  assert.deepEqual(reasoned(`{/* ${d}-next-line no-alert -- fixture (HS2-ABC123) */}`), [true]);
+  assert.deepEqual(reasoned(`/* ${d} */`), [false]);
+  // Prose and string mentions are not directives; neither is eslint-enable.
+  assert.deepEqual(reasoned(`// use an \`${d}\` pair\nconst s = '${d}';\n/${d}/.test(s);`), []);
+  assert.deepEqual(reasoned(`/* ${['eslint', 'enable'].join('-')} no-alert */`), []);
+});
+
+// HS2-DJ4BX5: "Formatter-ignore comments are banned" (AGENTS.md Conventions as Code). The web lint
+// config rejects them in web source; this covers every tracked text file, in each comment syntax.
+const PRETTIER_IGNORE = /^[ \t]*(?:\/\/|\/\*|\{\/\*|<!--|#)[ \t]*prettier-ignore\b/gm;
+
+test('HS2-DJ4BX5 no tracked file carries a prettier-ignore directive', () => {
+  const found = [];
+  for (const file of trackedFiles()) {
+    const text = trackedText(file);
+    if (text === null) continue;
+    for (const match of text.matchAll(PRETTIER_IGNORE)) {
+      found.push(`${file}:${text.slice(0, match.index).split('\n').length}`);
+    }
+  }
+  assert.deepEqual(found, [], 'let the formatter own layout; restructure the code instead');
+});
+
+test('HS2-DJ4BX5 the prettier-ignore scan finds directives but not prose', () => {
+  const p = ['prettier', 'ignore'].join('-');
+  const hits = (source) => (source.match(PRETTIER_IGNORE) ?? []).length;
+  assert.equal(hits(`// ${p}\nconst a = [1,2];`), 1);
+  assert.equal(hits(`  /* ${p} */\n{/* ${p} */}\n<!-- ${p} -->\n# ${p}`), 4);
+  assert.equal(hits(`// no \`${p}\` escapes\nText about \`// ${p}\` in docs.`), 0);
+});

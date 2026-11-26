@@ -315,7 +315,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     if (visible) {
       const current = project(),
         chat = current
-          ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
             terminalDrawerChatsByProject.value[current.id]?.find((item) => item.id === terminalDrawerSelected.value)
           : undefined;
       if (current) requestDrawerInputFocus(current.id, terminalDrawerSelected.value, chat);
@@ -343,7 +343,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   function selectDrawerItem(id: string, focusInput = true) {
     if (id !== terminalDrawerSelected.value) exitMobileTerminalFocus();
     const current = project(),
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       chat = current ? terminalDrawerChatsByProject.value[current.id]?.find((item) => item.id === id) : undefined;
     if (chat) conversationConnectionId.value = chat.connectionId;
     terminalDrawerSelected.value = id;
@@ -368,7 +368,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   }
   function openGridAIChat(projectId: string, chatId: string) {
     const target = projects.value.find((item) => item.id === projectId),
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       chat = terminalDrawerChatsByProject.value[projectId]?.find((item) => item.id === chatId);
     if (!target || !chat) return;
     const activated = projectId === selectedProjectId.value ? undefined : activateOpenProject(projectId);

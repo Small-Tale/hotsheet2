@@ -741,7 +741,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             publishOptimisticTicketRows(current.id);
             if (!responseAppend && selectedTicket.value?.slug === slug) reconcileRefreshedSelected(base, remote);
             const conflict = reconciled.conflicts[0];
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
             if (conflict) {
               showFieldConflict(conflict);
               reportMutationTiming({
@@ -1700,7 +1700,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     // Plain-HTTP LAN origins (a remote device) have no async Clipboard API, and the full-text write
     // below runs after a fetch, outside the shortcut's user gesture. Copy what is already known
     // synchronously so the local pasteboard still receives the ticket ids (HS2-B68KPQ).
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Absent on insecure origins despite its static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Absent on insecure origins despite its static type. (HS2-B68KPQ)
     if (!navigator.clipboard) copyWithSelection(ticketClipboardText(snapshot.tickets));
     void Promise.all(
       rows.map((ticket) =>
@@ -1713,7 +1713,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         if (state.clipboard !== snapshot) return;
         snapshot.tickets = full.map((ticket) => clipboardTicket(ticket));
         const text = ticketClipboardText(full);
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         void navigator.clipboard?.writeText(text).catch(() => undefined);
       })
       .catch((reason: unknown) => {
@@ -2038,14 +2038,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             : row.id === ticket.duplicate_of || row.native_id === ticket.duplicate_of,
         ),
       target = match ? duplicateTarget(match.project, match.row) : resolvedDuplicateTargets.value[ticket.duplicate_of];
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     return target
       ? { id: ticket.duplicate_of, projectName: target.projectName, slug: target.slug, title: target.title }
       : undefined;
   }
   async function resolveDuplicateTargetFor(ticket: FullTicket) {
     const value = ticket.duplicate_of;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     if (!value || resolvedDuplicateTargets.value[value]) return;
     const target = await resolveDuplicateReferenceTarget(value, projects.value, (item, id) =>
       new Api((item as Project).apiPath).checkoutTicket(item.id, id).then((result) => result.ticket),
@@ -2525,7 +2525,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       );
     } catch (reason) {
       const active = ticketCloseDialog.value;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       if (active)
         ticketCloseDialog.value = {
           ...active,

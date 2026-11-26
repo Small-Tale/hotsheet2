@@ -101,9 +101,9 @@ export function adjustTerminalFit(value: number, basis: TerminalGridBasis, direc
 export function terminalPreviewText(scrollback: string, maximumLines = 18): string {
   const plain = scrollback
     // Terminal control bytes are data here: strip OSC and CSI sequences from the preview.
-    // eslint-disable-next-line no-control-regex
+    // eslint-disable-next-line no-control-regex -- Strips terminal OSC and CSI escape bytes from the preview (HS2-2ZCN7K).
     .replaceAll(/\u001B\][^\u0007]*(?:\u0007|\u001B\\)/g, '')
-    // eslint-disable-next-line no-control-regex
+    // eslint-disable-next-line no-control-regex -- Strips terminal OSC and CSI escape bytes from the preview (HS2-2ZCN7K).
     .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/g, '')
     .replaceAll('\r', '');
   const lines = plain.split('\n');

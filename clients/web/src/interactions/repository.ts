@@ -109,7 +109,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       dependencies.repositoryFileSelectionAnchor = undefined;
       repositoryComparison.value = { active: false, side: 'a' };
       expandedCodeReviewCommits.value = [];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       (document.querySelector('#repository-status-popover') as Control).showPopover?.();
       if (status?.initialized !== false) void loadRepositoryDetail(view, true);
     }),
@@ -229,7 +229,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       changeEvidenceReader.value = target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset
         .readerFrameId;
       requestAnimationFrame(() =>
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         requestAnimationFrame(() => document.querySelector<Control>('#change-evidence-dialog')?.showPopover?.()),
       );
     }),

@@ -16930,7 +16930,7 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Saves the real animate to restore and call it from the wrapper (HS2-29T4D8).
     const original = Element.prototype.animate;
     const records: Array<{
       slug: string;

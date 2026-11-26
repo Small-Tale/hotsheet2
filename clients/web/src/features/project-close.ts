@@ -141,7 +141,7 @@ export function createProjectCloseController(dependencies: ProjectCloseDependenc
             : new Api(target.apiPath).deleteToolConnection(target.id, resource.id),
         ),
       );
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       if (projectCloseDialog.value?.projectId !== state.projectId) return;
       closeProjectIds([state.projectId]);
       pendingProjectCloseIds = pendingProjectCloseIds.filter((id) => id !== state.projectId);

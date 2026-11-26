@@ -201,7 +201,7 @@ export function createCommandsController({
     scheduleCommandAutosave(projectId);
     if (commandSettingsEditingId.value === id) {
       commandSettingsEditingId.value = undefined;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();
     }
   }

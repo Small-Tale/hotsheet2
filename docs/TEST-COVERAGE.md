@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-DJ4BX5: `scripts/instruction-policy.test.mjs` requires every tracked ESLint disable
+directive to carry a `-- reason` with an HS2 slug, caps disables per file at the current
+maximum, and rejects `prettier-ignore` directives in every tracked text file. Run-time
+assembled probes cover each directive and comment form, prose and string mentions, and
+`eslint-enable`. Existing web and script disables gained the slug of their originating ticket.
+
 HS2-FXF07C: `scripts/instruction-policy.test.mjs` rejects tracked machine-local home and
 volume paths outside reasoned synthetic name lists, rejects stale list entries, and
 requires every Rust lint suppression to carry a reason with an HS2 slug, capped per file.

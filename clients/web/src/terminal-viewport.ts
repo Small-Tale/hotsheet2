@@ -274,7 +274,7 @@ export function terminalUsesMobile80xM(
   return mobile && !scaledPreview && (fixedDashboardGrid || dedicatedDrawer);
 }
 // ANSI ESC is the external terminal protocol byte intentionally recognized here.
-// eslint-disable-next-line no-control-regex
+// eslint-disable-next-line no-control-regex -- Matches the zsh reverse-video EOL mark by its ESC bytes (HS2-BPYP2X).
 const ZSH_PROMPT_EOL_MARK = /^(?:\u001b\[(?:0|1)m)*\u001b\[7m%\u001b\[27m(?:\u001b\[(?:0|1|27)m)*(?:\r?\n)?/;
 
 /** A late zsh attachment can begin at its reverse-video partial-line marker. The marker

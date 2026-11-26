@@ -761,7 +761,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
           // Compatibility boundary (as in copy-text.ts): plain-HTTP LAN origins have no async Clipboard
           // API. The shared off-screen copyWithSelection helper cannot select text outside this modal
           // dialog (the rest of the page is inert), so select within the sheet's own field instead.
-          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          // eslint-disable-next-line @typescript-eslint/no-deprecated -- Plain-HTTP origins lack the Clipboard API; copy from the sheet field (HS2-FRB545).
           return document.execCommand('copy');
         }).then((copied) => {
           if (!copied) {

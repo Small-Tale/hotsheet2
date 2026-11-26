@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/unbound-method -- DOM method spies are intentionally extracted for assertions. */
+/* eslint-disable @typescript-eslint/unbound-method -- DOM method spies are intentionally extracted for assertions. (HS2-FP6MS6) */
 import { describe, expect, it, vi } from 'vitest';
 
 import {

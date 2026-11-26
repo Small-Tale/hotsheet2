@@ -1012,13 +1012,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       caretDocument = document as Document & {
         caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
       },
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       position = caretDocument.caretPositionFromPoint?.(event.clientX, event.clientY);
     if (!position || !target.contains(position.offsetNode)) return end;
     const range = document.createRange();
     range.selectNodeContents(target);
     range.setEnd(position.offsetNode, position.offset);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     return start + sourceOffsetForVisibleOffset(source, target.textContent ?? '', range.toString().length);
   }
   lifetime.add(
