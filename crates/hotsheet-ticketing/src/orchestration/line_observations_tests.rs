@@ -327,7 +327,6 @@ fn hs2_kb2y51_the_registry_keeps_one_private_file_per_checkout() {
         .unwrap();
     assert_eq!(registry.live("api-0123456789ab", 0).len(), 1);
     assert!(registry.live("other-0123456789", 0).is_empty());
-    assert!(registry.live("api-0123456789ab", 60_000).is_empty());
     // A stale push writes nothing.
     let file = registry.directory().join("api-0123456789ab.json");
     let before = std::fs::read(&file).unwrap();
@@ -336,6 +335,19 @@ fn hs2_kb2y51_the_registry_keeps_one_private_file_per_checkout() {
         .unwrap();
     assert_eq!(stale.outcome, "stale");
     assert_eq!(std::fs::read(&file).unwrap(), before);
+    assert!(registry.live("api-0123456789ab", 60_000).is_empty());
+    registry
+        .put(
+            "api-0123456789ab",
+            post(
+                OWNER_A,
+                2,
+                vec![line("launch", "s1", "t1", "ready", SOURCE)],
+            ),
+            &sources(),
+            60_000,
+        )
+        .unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -352,4 +364,152 @@ fn hs2_kb2y51_the_registry_keeps_one_private_file_per_checkout() {
     );
     std::fs::write(&file, b"not json").unwrap();
     assert!(registry.live("api-0123456789ab", 0).is_empty());
+}
+
+const CHECKOUT: &str = "api-0123456789ab";
+
+fn stored(registry: &LineObservations) -> Option<ObservationFile> {
+    let path = registry.directory().join(format!("{CHECKOUT}.json"));
+    std::fs::read(path)
+        .ok()
+        .map(|bytes| serde_json::from_slice(&bytes).unwrap())
+}
+
+fn stored_owners(registry: &LineObservations) -> Option<Vec<String>> {
+    stored(registry).map(|file| {
+        file.entries
+            .into_iter()
+            .map(|entry| entry.owner_server_id)
+            .collect()
+    })
+}
+
+fn push(registry: &LineObservations, owner: &str, sequence: u64, at: u64) -> String {
+    registry
+        .put(
+            CHECKOUT,
+            post(
+                owner,
+                sequence,
+                vec![line("launch", "s1", "t1", "ready", SOURCE)],
+            ),
+            &sources(),
+            at,
+        )
+        .unwrap()
+        .outcome
+}
+
+/// HS2-2WMQER: a read that finds an expired entry prunes it under the lock, keeps the
+/// live owners, and removes the file once no entry is left; reads that find nothing
+/// expired write nothing, however often they repeat.
+#[test]
+fn hs2_2wmqer_a_read_prunes_expired_entries_and_removes_the_empty_file() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = LineObservations::new(home.path());
+    // Owner A expires at 60 000, owner B (pushed later) at 90 000.
+    assert_eq!(push(&registry, OWNER_A, 1, 0), "stored");
+    assert_eq!(push(&registry, OWNER_B, 1, 30_000), "stored");
+    let path = registry.directory().join(format!("{CHECKOUT}.json"));
+    // Repeated reads with nothing expired leave the file byte for byte.
+    let before = std::fs::read(&path).unwrap();
+    for _ in 0..3 {
+        assert_eq!(registry.live(CHECKOUT, 59_999).len(), 2);
+    }
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    // A's expiry is pruned by the read itself, not left for the next push.
+    assert_eq!(registry.live(CHECKOUT, 60_000).len(), 1);
+    assert_eq!(stored_owners(&registry), Some(vec![OWNER_B.to_owned()]));
+    let pruned = std::fs::read(&path).unwrap();
+    assert_eq!(registry.live(CHECKOUT, 60_001).len(), 1);
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        pruned,
+        "nothing more to prune"
+    );
+    // B expires too: the read shows nothing and the file is gone.
+    assert!(registry.live(CHECKOUT, 90_000).is_empty());
+    assert!(!path.exists());
+    // Reading again finds no file and creates none.
+    assert!(registry.live(CHECKOUT, 90_001).is_empty());
+    assert!(!path.exists());
+    // Empty, then refilled: a push after the removal stores again, and the sequence
+    // an expired owner used is forgotten with its entry (as a push's prune does).
+    assert_eq!(push(&registry, OWNER_A, 1, 100_000), "stored");
+    assert_eq!(stored_owners(&registry), Some(vec![OWNER_A.to_owned()]));
+    assert_eq!(registry.live(CHECKOUT, 100_000).len(), 1);
+}
+
+/// HS2-2WMQER: withdrawing the last entry removes the file; withdrawing one of two keeps
+/// the other; a withdrawal for an owner with no entry leaves no file behind.
+#[test]
+fn hs2_2wmqer_withdrawing_the_last_entry_removes_the_file() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = LineObservations::new(home.path());
+    let path = registry.directory().join(format!("{CHECKOUT}.json"));
+    let withdraw = |owner: &str, sequence: u64, at: u64| {
+        registry
+            .put(CHECKOUT, post(owner, sequence, vec![]), &sources(), at)
+            .unwrap()
+            .outcome
+    };
+    // A withdrawal with nothing stored writes no empty file.
+    assert_eq!(withdraw(OWNER_A, 1, 0), "withdrawn");
+    assert!(!path.exists());
+    assert_eq!(push(&registry, OWNER_A, 2, 0), "stored");
+    assert_eq!(push(&registry, OWNER_B, 1, 0), "stored");
+    assert_eq!(withdraw(OWNER_A, 3, 1), "withdrawn");
+    assert_eq!(stored_owners(&registry), Some(vec![OWNER_B.to_owned()]));
+    assert_eq!(withdraw(OWNER_B, 2, 2), "withdrawn");
+    assert!(!path.exists());
+    // Repeated withdrawal of an owner already gone, then a refill.
+    assert_eq!(withdraw(OWNER_B, 3, 3), "withdrawn");
+    assert!(!path.exists());
+    assert_eq!(push(&registry, OWNER_B, 4, 4), "stored");
+    assert_eq!(registry.live(CHECKOUT, 4).len(), 1);
+}
+
+/// HS2-2WMQER: expiry and pushes interleaved, in both orders. A push that lands
+/// between a read's expiry and its prune is kept (the prune reads again under the
+/// lock), a push prunes an expired owner just as a read does, and a file left empty
+/// by an older version is removed by the next read.
+#[test]
+fn hs2_2wmqer_interleaved_expiry_and_pushes_keep_every_live_entry() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = LineObservations::new(home.path());
+    let path = registry.directory().join(format!("{CHECKOUT}.json"));
+    assert_eq!(push(&registry, OWNER_A, 1, 0), "stored");
+    // A expired at 60 000, but the owner refreshes at 70 000 before anyone reads: the
+    // read at 70 000 finds it live and prunes nothing.
+    assert_eq!(push(&registry, OWNER_A, 2, 70_000), "stored");
+    assert_eq!(registry.live(CHECKOUT, 70_000).len(), 1);
+    assert_eq!(stored(&registry).unwrap().entries[0].sequence, 2);
+    // B pushes after A expired again: the push itself prunes A.
+    assert_eq!(push(&registry, OWNER_B, 1, 130_000), "stored");
+    assert_eq!(stored_owners(&registry), Some(vec![OWNER_B.to_owned()]));
+    // The prune works on the file as it is under the lock: a refresh stored after a
+    // read saw the old, expired copy survives the prune that read started.
+    let seen = LineObservations::read_file(&registry.storage(CHECKOUT).unwrap())
+        .unwrap()
+        .unwrap();
+    assert!(seen.needs_pruning(190_000));
+    assert_eq!(push(&registry, OWNER_B, 2, 190_000), "stored");
+    LineObservations::prune_stored(&registry.storage(CHECKOUT).unwrap(), 190_000).unwrap();
+    assert_eq!(stored_owners(&registry), Some(vec![OWNER_B.to_owned()]));
+    assert_eq!(registry.live(CHECKOUT, 190_000).len(), 1);
+    // Interleaved owners expiring one after the other, read between each.
+    assert_eq!(push(&registry, OWNER_A, 1, 200_000), "stored");
+    assert_eq!(
+        registry.live(CHECKOUT, 250_000).len(),
+        1,
+        "B expired at 250 000"
+    );
+    assert_eq!(stored_owners(&registry), Some(vec![OWNER_A.to_owned()]));
+    assert!(registry.live(CHECKOUT, 260_000).is_empty());
+    assert!(!path.exists());
+    // An empty file an older version left behind is removed by a read.
+    std::fs::create_dir_all(registry.directory()).unwrap();
+    std::fs::write(&path, br#"{"schema_version":1,"entries":[]}"#).unwrap();
+    assert!(registry.live(CHECKOUT, 0).is_empty());
+    assert!(!path.exists());
 }

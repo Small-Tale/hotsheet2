@@ -137,6 +137,16 @@ impl ObservationFile {
         }
     }
 
+    /// HS2-2WMQER: whether a read should prune the stored file: an entry expired, or
+    /// nothing is left in it (a file written before empty files were removed).
+    pub(super) fn needs_pruning(&self, now_ms: u64) -> bool {
+        self.entries.is_empty()
+            || self
+                .entries
+                .iter()
+                .any(|entry| entry.expires_at_ms <= now_ms)
+    }
+
     /// The live entries, in the order their owners first pushed.
     pub fn live(&self, now_ms: u64) -> Vec<&ObservationEntry> {
         self.entries
@@ -273,7 +283,7 @@ impl LineObservations {
         self.home.join(LINE_OBSERVATION_DIRECTORY)
     }
 
-    fn storage(&self, checkout_id: &str) -> Result<Storage, OrchestrationError> {
+    pub(super) fn storage(&self, checkout_id: &str) -> Result<Storage, OrchestrationError> {
         valid_identifier(checkout_id)?;
         Ok(Storage::machine_named(
             &self.home,
@@ -281,9 +291,11 @@ impl LineObservations {
         ))
     }
 
-    fn read_file(storage: &Storage) -> Result<ObservationFile, OrchestrationError> {
+    pub(super) fn read_file(
+        storage: &Storage,
+    ) -> Result<Option<ObservationFile>, OrchestrationError> {
         let Some(bytes) = storage.read(MAX_FILE_BYTES)? else {
-            return Ok(ObservationFile::default());
+            return Ok(None);
         };
         let file: ObservationFile = decode(&bytes)?;
         if file.schema_version != OBSERVATION_VERSION {
@@ -291,7 +303,36 @@ impl LineObservations {
                 found: u64::from(file.schema_version),
             });
         }
-        Ok(file)
+        Ok(Some(file))
+    }
+
+    /// Store `file` under the held lock; a file with no entry left is removed
+    /// (HS2-2WMQER), so a checkout nobody observes keeps nothing on disk.
+    fn store(storage: &Storage, file: &ObservationFile) -> Result<(), OrchestrationError> {
+        if file.entries.is_empty() {
+            return match std::fs::remove_file(&storage.path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error.into()),
+            };
+        }
+        let bytes = serde_json::to_vec(file).map_err(|_| OrchestrationError::Corrupt)?;
+        storage.write(&bytes, MAX_FILE_BYTES)
+    }
+
+    /// HS2-2WMQER: drop the expired entries a read found, under the checkout's lock.
+    /// The file is read again under the lock, so a push that landed since the
+    /// unlocked read is kept; nothing is written when nothing expired after all.
+    pub(super) fn prune_stored(storage: &Storage, now_ms: u64) -> Result<(), OrchestrationError> {
+        let _lock = storage.lock()?;
+        let Some(mut file) = Self::read_file(storage)? else {
+            return Ok(());
+        };
+        if !file.needs_pruning(now_ms) {
+            return Ok(());
+        }
+        file.prune(now_ms);
+        Self::store(storage, &file)
     }
 
     /// Apply one push under the checkout's lock.
@@ -304,24 +345,32 @@ impl LineObservations {
     ) -> Result<ObservationOutcome, OrchestrationError> {
         let storage = self.storage(checkout_id)?;
         let _lock = storage.lock()?;
-        let mut file = Self::read_file(&storage)?;
+        let mut file = Self::read_file(&storage)?.unwrap_or_default();
         let outcome = file.apply(post, sources, now_ms)?;
         if outcome.outcome != "stale" {
-            let bytes = serde_json::to_vec(&file).map_err(|_| OrchestrationError::Corrupt)?;
-            storage.write(&bytes, MAX_FILE_BYTES)?;
+            Self::store(&storage, &file)?;
         }
         Ok(outcome)
     }
 
-    /// The live entries for a checkout, owner by owner. Never creates anything, and
-    /// a file that cannot be read shows no observations rather than failing the read
-    /// of this machine's own lines.
+    /// The live entries for a checkout, owner by owner. Never creates a file for a
+    /// checkout without observations, and a file that cannot be read shows no
+    /// observations rather than failing the read of this machine's own lines.
+    ///
+    /// HS2-2WMQER: a read that finds an expired entry prunes it under the lock (and
+    /// removes the file once no entry is left), so the entries of owner machines that
+    /// stopped pushing do not stay on disk until the next push. Pruning is best
+    /// effort: a failure leaves the file for the next read or push.
     pub fn live(&self, checkout_id: &str, now_ms: u64) -> Vec<ObservationEntry> {
         let Ok(storage) = self.storage(checkout_id) else {
             return Vec::new();
         };
-        Self::read_file(&storage)
-            .map(|file| file.live(now_ms).into_iter().cloned().collect())
-            .unwrap_or_default()
+        let Ok(Some(file)) = Self::read_file(&storage) else {
+            return Vec::new();
+        };
+        if file.needs_pruning(now_ms) {
+            let _ = Self::prune_stored(&storage, now_ms);
+        }
+        file.live(now_ms).into_iter().cloned().collect()
     }
 }

@@ -6718,9 +6718,13 @@ tickets. A read-only device is refused by the existing write fence. Bounds: 256 
 `HOTSHEET_HOME/orchestration-line-observations/` (`LineObservations`). The target-lines
 read merges the live entries, and its long poll also watches that directory, so a push
 ends a waiting read at once; an expiry is seen at the one-second safety re-check. A read
-skips expired entries; the next push for the checkout drops them from the file, so it
-stays within its bounds. A checkout no owner pushes to any more keeps its expired
-entries until then (HS2-2WMQER).
+that finds an expired entry prunes it under the checkout's lock (reading the file again
+there, so a push that landed meanwhile is kept), and a push prunes too, so the file stays
+within its bounds even when no owner pushes to the checkout any more. Once no entry is
+left, whether by expiry or by the last owner's withdrawal, the file is removed; only the
+empty lock file stays. A read that prunes changes the watched directory, so a waiting read
+wakes once and the next read finds nothing to prune; reads that find nothing expired
+write nothing (HS2-2WMQER).
 
 **When the owner pushes.** The server's follower (`AppState::spawn_target_line_push`)
 recomputes each remote destination's lines on a run event, a scheduler wake or the
