@@ -625,6 +625,43 @@ pub struct ImageCrop {
     pub height: u32,
 }
 
+/// Longest attachment filename, in bytes, that fits one path component on every
+/// supported filesystem.
+pub const MAX_ATTACHMENT_FILENAME_BYTES: usize = 255;
+
+/// Validate that an attachment filename is exactly one normal path component, so
+/// joining it onto a ticket's attachment directory can never leave that directory
+/// (HS2-SY15VS). Ticket files arrive by git sync from other clones, so the stored
+/// [`Attachment::filename`] is untrusted: the parser rejects unsafe names and every
+/// filesystem join asserts this again.
+///
+/// Rejects empty names, names over [`MAX_ATTACHMENT_FILENAME_BYTES`], `.` and `..`,
+/// either path separator (`/` or `\`, which Windows also treats as a separator),
+/// NUL, and anything the platform path parser does not read as a single normal
+/// component (absolute paths, Windows drive or UNC prefixes).
+pub fn safe_attachment_component(name: &str) -> Result<&str, &'static str> {
+    if name.is_empty() {
+        return Err("attachment filename is empty");
+    }
+    if name.len() > MAX_ATTACHMENT_FILENAME_BYTES {
+        return Err("attachment filename is longer than 255 bytes");
+    }
+    if name == "." || name == ".." {
+        return Err("attachment filename is a relative directory reference");
+    }
+    if name.contains(['/', '\\']) {
+        return Err("attachment filename contains a path separator");
+    }
+    if name.contains('\0') {
+        return Err("attachment filename contains NUL");
+    }
+    let mut components = std::path::Path::new(name).components();
+    match (components.next(), components.next()) {
+        (Some(std::path::Component::Normal(component)), None) if component == name => Ok(name),
+        _ => Err("attachment filename is not a single path component"),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attachment {
     pub id: Ulid,
@@ -1865,5 +1902,40 @@ mod tests {
             };
             assert!(validate_media_annotations(&[invalid]).is_err());
         }
+    }
+
+    #[test]
+    fn hs2_sy15vs_safe_attachment_component_accepts_only_one_normal_component() {
+        for ok in [
+            "proof.png",
+            "trace log.txt",
+            "proof (2).png",
+            ".hidden",
+            "a..b",
+            "...",
+            "\u{e9}t\u{e9}.png",
+        ] {
+            assert_eq!(safe_attachment_component(ok), Ok(ok), "{ok:?}");
+        }
+        let long = "a".repeat(MAX_ATTACHMENT_FILENAME_BYTES + 1);
+        for bad in [
+            "",
+            ".",
+            "..",
+            "../escape.txt",
+            "../../../../etc/hosts",
+            "sub/file.txt",
+            "/etc/hosts",
+            "/",
+            "dir\\file.txt",
+            "..\\escape.txt",
+            "C:\\Windows\\win.ini",
+            "nul\0byte",
+            long.as_str(),
+        ] {
+            assert!(safe_attachment_component(bad).is_err(), "{bad:?}");
+        }
+        let max = "a".repeat(MAX_ATTACHMENT_FILENAME_BYTES);
+        assert!(safe_attachment_component(&max).is_ok());
     }
 }

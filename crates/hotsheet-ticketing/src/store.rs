@@ -262,6 +262,13 @@ pub enum StoreError {
     GroupRegistryRequired(String),
     #[error(transparent)]
     ImageCrop(#[from] crate::image_crop::ImageCropError),
+    /// An attachment filename is not one safe path component, so it cannot be joined
+    /// onto the ticket's attachment directory (HS2-SY15VS).
+    #[error("attachment {attachment_id} has an unsafe filename: {reason}")]
+    UnsafeAttachmentFilename {
+        attachment_id: Ulid,
+        reason: &'static str,
+    },
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("{operation} {path}: {source}")]
@@ -369,20 +376,16 @@ pub struct AtomicAttachment {
 
 impl AtomicAttachment {
     pub fn sanitized_filename(&self) -> String {
-        Path::new(&self.filename)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .filter(|name| !name.is_empty())
-            .unwrap_or("attachment")
-            .to_string()
+        attachment_filename(&self.filename)
     }
 }
 
+/// Reduce a caller-supplied name to the one safe path component the ticket file
+/// stores: the text after the last `/` or `\`, or `attachment` when nothing safe
+/// remains, so a writer can never persist a name the parser refuses (HS2-SY15VS).
 fn attachment_filename(filename: &str) -> String {
-    Path::new(filename)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
+    let base = filename.rsplit(['/', '\\']).next().unwrap_or_default();
+    hotsheet_model::safe_attachment_component(base)
         .unwrap_or("attachment")
         .to_string()
 }
@@ -1253,6 +1256,33 @@ impl FsStore {
         self.root.join("attachments").join(id.to_string())
     }
 
+    /// The on-disk payload path for one attachment: the nested
+    /// `attachments/<ticket>/<attachment>/<filename>` file when it exists, otherwise
+    /// the legacy `attachments/<ticket>/<filename>` path. The filename comes from
+    /// synced ticket frontmatter, so it is asserted to be one safe path component
+    /// before any join; every attachment read, remove, rename and host action
+    /// resolves its path here (HS2-SY15VS).
+    pub fn attachment_payload_path(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: &Ulid,
+        filename: &str,
+    ) -> Result<PathBuf, StoreError> {
+        let filename = hotsheet_model::safe_attachment_component(filename).map_err(|reason| {
+            StoreError::UnsafeAttachmentFilename {
+                attachment_id: *attachment_id,
+                reason,
+            }
+        })?;
+        let dir = self.attachment_dir(ticket_id);
+        let nested = dir.join(attachment_id.to_string()).join(filename);
+        Ok(if nested.is_file() {
+            nested
+        } else {
+            dir.join(filename)
+        })
+    }
+
     /// Deterministic identity for a pre-metadata attachment.
     pub fn legacy_attachment_id(ticket_id: &Ulid, filename: &str) -> Ulid {
         let mut hash = Sha256::new();
@@ -1622,16 +1652,12 @@ impl FsStore {
                     ));
                 }
             }
+            let source =
+                self.attachment_payload_path(ticket_id, attachment_id, &attachment.filename)?;
             let dir = self
                 .attachment_dir(ticket_id)
                 .join(attachment_id.to_string());
             fs::create_dir_all(&dir)?;
-            let nested_source = dir.join(&attachment.filename);
-            let source = if nested_source.is_file() {
-                nested_source
-            } else {
-                self.attachment_dir(ticket_id).join(&attachment.filename)
-            };
             fs::rename(source, dir.join(&name))?;
             attachment.filename = name;
             ticket.updated_at = now;
@@ -1658,12 +1684,8 @@ impl FsStore {
                     format!("attachment {attachment_id}"),
                 ))
             })?;
-        let nested = self
-            .attachment_dir(ticket_id)
-            .join(attachment_id.to_string())
-            .join(&attachment.filename);
-        let legacy = self.attachment_dir(ticket_id).join(&attachment.filename);
-        let bytes = fs::read(if nested.is_file() { nested } else { legacy })?;
+        let path = self.attachment_payload_path(ticket_id, attachment_id, &attachment.filename)?;
+        let bytes = fs::read(path)?;
         Ok((attachment, bytes))
     }
 
@@ -1687,16 +1709,15 @@ impl FsStore {
                     ))
                 })?;
             let attachment = ticket.attachments.remove(index);
+            let legacy =
+                self.attachment_payload_path(ticket_id, attachment_id, &attachment.filename)?;
             let nested = self
                 .attachment_dir(ticket_id)
                 .join(attachment_id.to_string());
             if nested.exists() {
                 fs::remove_dir_all(nested)?;
-            } else {
-                let legacy = self.attachment_dir(ticket_id).join(attachment.filename);
-                if legacy.exists() {
-                    fs::remove_file(legacy)?;
-                }
+            } else if legacy.exists() {
+                fs::remove_file(legacy)?;
             }
             ticket.updated_at = now;
             self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
@@ -1871,7 +1892,11 @@ impl FsStore {
                 continue;
             }
             let filename = entry.file_name().to_string_lossy().to_string();
-            if filename == FINDER_METADATA_FILE {
+            // A name the ticket parser would refuse (e.g. a backslash) is never
+            // adopted as metadata, so a rewrite cannot make the ticket unreadable.
+            if filename == FINDER_METADATA_FILE
+                || hotsheet_model::safe_attachment_component(&filename).is_err()
+            {
                 continue;
             }
             let id = Self::legacy_attachment_id(&ticket.id, &filename);
@@ -2595,6 +2620,10 @@ fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
         .success()
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
+
+#[cfg(test)]
+#[path = "store_attachment_containment_tests.rs"]
+mod attachment_containment_tests;
 
 #[cfg(test)]
 mod tests {

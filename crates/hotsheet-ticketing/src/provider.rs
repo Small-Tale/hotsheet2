@@ -2232,13 +2232,10 @@ impl TicketProvider for GitProvider {
                 connection_id: self.connection_id.clone(),
                 native_id: attachment_id.to_string(),
             })?;
-        Ok(std::fs::read(
+        let path =
             self.store
-                .attachment_dir(&ticket.id)
-                .join(attachment.id.to_string())
-                .join(&attachment.filename),
-        )
-        .map_err(StoreError::Io)?)
+                .attachment_payload_path(&ticket.id, &attachment.id, &attachment.filename)?;
+        Ok(std::fs::read(path).map_err(StoreError::Io)?)
     }
 
     fn delete_attachment(
@@ -2872,6 +2869,63 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
         (dir, GitProvider::new("local", store).with_default(true))
+    }
+
+    /// HS2-SY15VS: a synced ticket whose attachment filename escapes the attachment
+    /// directory cannot make the GitProvider read the outside file.
+    #[test]
+    fn hs2_sy15vs_git_provider_refuses_unsafe_synced_attachment_filename() {
+        let (dir, provider) = git_provider();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        let attachment_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        let outside = dir.path().join("outside.txt");
+        std::fs::write(&outside, b"outside secret").unwrap();
+        for name in [
+            "../../outside.txt".to_string(),
+            "01ARZ3NDEKTSV4RRFFQ69G5FB0/../../../outside.txt".to_string(),
+            outside.display().to_string(),
+            "..\\..\\outside.txt".to_string(),
+        ] {
+            let mut ticket = hotsheet_model::Ticket::new(
+                id,
+                hotsheet_model::derive_slug(&id, "HS"),
+                "Synced",
+                "bug",
+                "2026-08-19T00:00:00Z",
+                "2026-08-19T00:00:00Z",
+            );
+            ticket.attachments.push(hotsheet_model::Attachment {
+                id: attachment_id,
+                filename: name.clone(),
+                created_at: Timestamp::new("2026-08-19T00:00:00Z"),
+                batch_id: None,
+                batch_label: None,
+                actor: None,
+                purpose: None,
+                annotations: Vec::new(),
+                crop: None,
+            });
+            let path = provider.store.ticket_path(&id);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, hotsheet_model::to_file_string(&ticket)).unwrap();
+            let result = provider.attachment_bytes(&id.to_string(), &attachment_id.to_string());
+            assert!(
+                result.as_ref().is_err(),
+                "{name:?} served {:?}",
+                result.map(|bytes| bytes.len())
+            );
+            assert!(
+                provider
+                    .delete_attachment(
+                        &id.to_string(),
+                        &attachment_id.to_string(),
+                        Timestamp::new("2026-08-20T00:00:00Z"),
+                    )
+                    .is_err(),
+                "{name:?} delete"
+            );
+            assert_eq!(std::fs::read(&outside).unwrap(), b"outside secret");
+        }
     }
 
     fn ctx(id: Ulid, at: &str) -> MutationContext {

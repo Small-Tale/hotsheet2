@@ -32,7 +32,8 @@ pub use ticket::{
     AiFeedback, AiFeedbackRating, AnnotationArrowHead, AnnotationPoint, AnnotationShape,
     Attachment, AttachmentActor, AttachmentActorRole, AttachmentMetadata, AttachmentPurpose,
     ClaimEvent, ClaimEventKind, Confidence, ConfidenceError, ExternalLink, ImageCrop,
-    MediaAnnotation, Note, NoteActor, ReviewRequest, Ticket, validate_media_annotations,
+    MAX_ATTACHMENT_FILENAME_BYTES, MediaAnnotation, Note, NoteActor, ReviewRequest, Ticket,
+    safe_attachment_component, validate_media_annotations,
 };
 pub use ticket_ref::ProjectTicketRef;
 pub use timestamp::Timestamp;

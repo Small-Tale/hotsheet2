@@ -11305,6 +11305,112 @@ async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
     assert!(requested["next_cursor"].is_null());
 }
 
+/// HS2-SY15VS: a synced ticket file whose attachment filename escapes the attachment
+/// directory must not let the checkout attachment routes serve or delete the outside
+/// file, whether the ticket comes back from disk (parse refuses it) or from a cache
+/// (the store's payload-path join refuses it).
+#[tokio::test]
+async fn hs2_sy15vs_synced_unsafe_attachment_filename_cannot_escape_through_routes() {
+    let (primary, state) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let registration = serde_json::json!({
+        "root": checkout.path(), "alias": "contain", "stores": [primary.path()]
+    });
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts",
+                Some(&registration.to_string())
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/contain/tickets",
+                Some(r#"{"title":"Containment"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["qualified_id"].as_str().unwrap().to_string();
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/checkouts/contain/tickets/{id}/attachments"))
+                .header("x-hotsheet-secret", SECRET)
+                .header("x-hotsheet-filename", "proof.txt")
+                .body(Body::from("proof"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::CREATED);
+    let attached = body_json(uploaded).await;
+    let attachment_id = attached["attachments"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // The legacy join `attachments/<ticket>/<filename>` lands on the store root here.
+    let outside = primary.path().join("outside.txt");
+    std::fs::write(&outside, b"outside secret").unwrap();
+    let ticket_file = walk_markdown(&primary.path().join("tickets"));
+    assert_eq!(ticket_file.len(), 1);
+    let text = std::fs::read_to_string(&ticket_file[0]).unwrap();
+    assert!(text.contains("filename: proof.txt"));
+    std::fs::write(
+        &ticket_file[0],
+        text.replace("filename: proof.txt", "filename: ../../outside.txt"),
+    )
+    .unwrap();
+
+    let url = format!("/checkouts/contain/tickets/{id}/attachments/{attachment_id}");
+    for path in [url.clone(), format!("{url}/original")] {
+        let response = app
+            .clone()
+            .oneshot(authed("GET", &path, None))
+            .await
+            .unwrap();
+        assert_ne!(response.status(), StatusCode::OK, "{path}");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert!(
+            !body.windows(14).any(|window| window == b"outside secret"),
+            "{path} served the outside file"
+        );
+    }
+    let deleted = app
+        .clone()
+        .oneshot(authed("DELETE", &url, None))
+        .await
+        .unwrap();
+    assert!(!deleted.status().is_success());
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside secret");
+}
+
+fn walk_markdown(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            found.extend(walk_markdown(&path));
+        } else if path.extension().is_some_and(|extension| extension == "md") {
+            found.push(path);
+        }
+    }
+    found
+}
+
 #[tokio::test]
 async fn image_crop_serves_rendition_and_preserves_original_through_restore() {
     let (primary, state) = state();

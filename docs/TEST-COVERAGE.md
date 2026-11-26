@@ -3128,6 +3128,12 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/features/terminal-drawer-geometry.test.ts # restores a manually max-height drawer to its default before the next maximize`.
 - End to end and visual: `clients/web/tests/providers.spec.ts # restores a manually dragged maximum-height drawer to its default at 1440px and 390px`.
 
+### Attachment filename containment (HS2-SY15VS)
+
+- Behavior: a synced ticket whose attachment filename names a parent directory, an absolute path, or a separator is refused by the parser and listed as corrupt; no store, GitProvider or server route reads, removes or renames a file outside the ticket's attachment directory, and writers only store names the parser accepts.
+- Unit: `crates/hotsheet-model/src/ticket.rs # hs2_sy15vs_safe_attachment_component_accepts_only_one_normal_component`; `crates/hotsheet-model/src/format.rs # hs2_sy15vs_parse_rejects_ticket_with_unsafe_attachment_filename`; `crates/hotsheet-ticketing/src/store_attachment_containment_tests.rs` (read/remove/rename refusal with outside sentinels, corrupt listing, payload-path assertion, writer sanitizing, legacy discovery); `crates/hotsheet-ticketing/src/provider.rs # hs2_sy15vs_git_provider_refuses_unsafe_synced_attachment_filename`.
+- End to end: `crates/hotsheet-server/tests/http.rs # hs2_sy15vs_synced_unsafe_attachment_filename_cannot_escape_through_routes` rewrites a hosted ticket file and checks GET, original GET and DELETE leave the outside file unserved and intact.
+
 ### Checkout identity for remembered permissions (HS2-G1SG1P)
 
 - Behavior: Registered checkout ids, independent of ticket sources, select separate encrypted rule vaults across terminal, CLI, and driven launches. Unregistered launches have no durable rule location. Legacy store rules remain in their original namespace.

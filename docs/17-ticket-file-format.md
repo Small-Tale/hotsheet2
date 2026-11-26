@@ -250,6 +250,18 @@ ambiguous ids stay byte-for-byte literal so documentation of storage identities 
 Filenames containing backticks use a CommonMark code-span delimiter longer than any backtick run
 in the filename, so every valid attachment filename has a canonical note reference.
 
+An attachment `filename` must be exactly one path component (HS2-SY15VS): non-empty, at
+most 255 bytes, not `.` or `..`, and free of `/`, `\`, NUL, absolute paths and drive
+prefixes. Ticket files arrive by Git sync from other clones, so the parser refuses a ticket
+whose attachment names anything else, and the store asserts the same rule again before
+every payload read, removal, rename and host open/reveal. The whole ticket is refused
+rather than the entry dropped: a later rewrite can then never silently lose that
+attachment, the file stays byte-for-byte on disk, and the ticket appears in the
+corrupt-ticket listing with the attachment id and reason for repair. Writers reduce a
+requested name to the text after its last `/` or `\` and fall back to `attachment` when
+nothing safe remains, so they never store a name the parser refuses; legacy payload
+discovery skips any directory entry the rule rejects.
+
 HS2-6FP1KT adds four optional, backward-compatible provenance fields: opaque `batch_id`,
 human-authored `batch_label`, `actor` (`identity`, `display_name`, and
 `role: human|ai|system|unknown`), and `purpose: problem_evidence|correctness_evidence|reference|other`.
