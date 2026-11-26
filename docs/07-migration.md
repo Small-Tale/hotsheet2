@@ -175,6 +175,16 @@ For each ticket:
   (each note gets a ULID id, §2.6); map HS1 `completed`/`verified` to a `completed`
   close outcome and `archive`/soft-delete to `obsolete`, carrying the best available
   close timestamp and clearing `up_next` for every inactive status ([02](02-ticket-storage.md) §2.6a).
+- Never write an empty or unparseable timestamp (HS2-K7JG39). A ticket whose
+  `created_at` is null, absent (a schema without the column), or not RFC 3339 is
+  still imported rather than refused: its creation time becomes the earliest valid
+  time recorded on it (`updated_at`, `completed_at`, `verified_at`, `deleted_at`, or
+  a note's `created_at`), since creation precedes every other event, or the import
+  time when it records none. A missing `updated_at` takes the resolved creation
+  time. Other malformed timestamps are dropped (a note then keeps its id-derived
+  time). Each substitution prints a warning naming the HS1 ticket number and field
+  and emits it as a `warning` progress event, so the migration job lists it. The
+  stable ULID still derives from the raw `created_at`, so retries stay idempotent.
 - Before writing a ticket with attachments, atomically record its expected attachment
   list in `hotsheet-hs1-import-pending/<ticket-ulid>.json` in the destination store.
   A checkout marked for compaction recovery rejects import before any checkpoint,

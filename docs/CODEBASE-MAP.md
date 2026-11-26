@@ -816,6 +816,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent); compaction-aware admission for checkpoints and settings (HS2-YCEQNT)
       src/import_recovery.rs #   Read-only legacy attachment diagnostics, explicit selected restoration, and source-bound omission evidence
+      src/import_timestamps.rs # Valid HS2 timestamps for HS1 tickets; missing created_at -> earliest recorded time or import time, with warnings (HS2-K7JG39)
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       src/dispatch/terminal_relay.rs # HS2-HYF56Y `terminal-relay install|status|uninstall [--server] [--json]`: headless macOS relay LaunchAgent workflow (the desktop app runs the same install)
       tests/terminal_relay.rs # HS2-HYF56Y headless install/idempotent reinstall/status/uninstall against a fake launchctl that starts the real relay; no-desktop-session refusal writes nothing

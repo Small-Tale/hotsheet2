@@ -192,6 +192,34 @@ describe('exportFromDb', () => {
     expect(out.tickets[0].blocked_by).toEqual([]);
     await bare.close();
   });
+
+  // HS2-K7JG39: the importer derives a creation time when this is null, so the
+  // exporter must emit JSON null (never "" or "null") for a null or absent column.
+  it('exports a null or absent created_at as JSON null', async () => {
+    const nullable = new PGlite();
+    await nullable.exec(`create table tickets (
+      id serial primary key, ticket_number text, title text not null,
+      created_at timestamptz, updated_at timestamptz
+    );
+    insert into tickets (ticket_number, title, updated_at)
+      values ('HS2-8', 'no creation time', '2026-08-05T00:00:00Z');`);
+    const columnless = new PGlite();
+    await columnless.exec(`create table tickets (
+      id serial primary key, ticket_number text, title text not null
+    );
+    insert into tickets (ticket_number, title) values ('HS2-9', 'no timestamp columns');`);
+    try {
+      const [withNull] = (await exportFromDb(nullable, {})).tickets;
+      expect(withNull.created_at).toBeNull();
+      expect(withNull.updated_at).toBe('2026-08-05T00:00:00.000Z');
+      const [withoutColumn] = (await exportFromDb(columnless, {})).tickets;
+      expect(withoutColumn.created_at).toBeNull();
+      expect(withoutColumn.updated_at).toBeNull();
+    } finally {
+      await nullable.close();
+      await columnless.close();
+    }
+  });
 });
 
 describe('HS1 row and timestamp shape checks (HS2-D0V2NB)', () => {

@@ -474,6 +474,17 @@ and refuses a dangling or permission-denied metadata entry without rewriting it;
 hs2_d0xkzs_import_exits_nonzero_instead_of_re_initializing_an_unopenable_store`
 checks the CLI exit status.
 
+HS2-K7JG39: `crates/hotsheet-cli/src/import_timestamps.rs` `hs2_k7jg39_*` unit
+tests pin timestamp resolution with synthetic tickets: valid values pass through
+verbatim, a null/absent/unusable `created_at` takes the earliest recorded instant
+(compared as instants, not text) or else the import time, and empty or malformed
+values are never written. `import.rs`
+`hs2_k7jg39_null_created_at_imports_a_real_timestamp_and_warns_once` and
+`hs2_k7jg39_ticket_without_any_recorded_time_uses_the_import_time` check the stored
+ticket, its close time, the `warning` progress events, and a warning-free idempotent
+reimport. `migrator/test/export.test.mjs # exports a null or absent created_at as
+JSON null` pins the exporter side of the contract.
+
 HS2-WE1AW4: `migrator/test/export.test.mjs # direct entry detection` pins the
 exporter's direct-entry check against a synthetic Windows drive path, an npm-style
 bin symlink, a path with spaces, and a missing entry, and runs the exporter through
