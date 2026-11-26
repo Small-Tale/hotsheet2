@@ -638,6 +638,11 @@ JSON supplies catalog, ESLint, analyzer, and optional browser stage
 outcomes. The doctor report does not provide per-stage wall time, so that duration
 remains unknown. The entrypoint and its static policy assertions passed the real
 lint command and exact-tree gate; covering main CI supplies full browser regression.
+When the doctor step fails, the helper prints each diagnostic of its report as
+`<severity> <id> <file>:<line>:<column> <message>` (or says the report is missing
+or empty) to standard error, so a local or CI failure names its cause without
+opening `target/lint-web-doctor-report.json`; a passing run prints nothing more
+(HS2-52W4TK). These lines go to the terminal only, never to the timing history.
 
 ### lint:web cost (HS2-N3XBS3)
 

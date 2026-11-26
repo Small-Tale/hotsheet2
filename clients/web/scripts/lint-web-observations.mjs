@@ -156,6 +156,22 @@ export function doctorStageObservations(report) {
   });
 }
 
+/**
+ * HS2-52W4TK: one line per diagnostic that can fail the doctor, as
+ * `<severity> <id> <file>:<line>:<column> <message>`. lint:web prints these only when the doctor step
+ * fails, so a failing run names what failed instead of leaving it in the JSON report alone.
+ */
+export function doctorFailureLines(report) {
+  // The report's `diagnostics` are the active (unsuppressed) error, warning and review entries.
+  return (report?.diagnostics ?? []).map((item) => {
+    const { file, line, column } = item.location ?? {};
+    const where = file
+      ? [file, line, column].filter((part) => part !== undefined && part !== null).join(':')
+      : '(no location)';
+    return `${item.severity ?? 'unknown'} ${item.id ?? 'unknown'} ${where} ${item.message ?? ''}`.trimEnd();
+  });
+}
+
 const readStamp = (path) => {
   try {
     return readFileSync(path, 'utf8').trim();
@@ -190,6 +206,7 @@ export async function runLintWeb({
   now = Date.now,
   flags = process.env,
   eslintIgnores = () => loadEslintIgnores(root),
+  report = (line) => console.error(line),
 } = {}) {
   const steps = lintWebCommands(root, reportPath, node, doctorConfigPath);
   const attempt = {
@@ -254,10 +271,26 @@ export async function runLintWeb({
       else rmSync(stampPath, { force: true });
     }
     if (step.id === 'web-lint:doctor') {
+      let doctorReport = null;
       try {
-        attempt.checks.push(...doctorStageObservations(JSON.parse(readFileSync(reportPath, 'utf8'))));
+        doctorReport = JSON.parse(readFileSync(reportPath, 'utf8'));
+        attempt.checks.push(...doctorStageObservations(doctorReport));
       } catch {
         /* Doctor may fail before writing a report; keep its command outcome. */
+      }
+      // HS2-52W4TK: a failed doctor says why; a passing one stays quiet.
+      if (check.outcome === 'fail') {
+        const lines = doctorFailureLines(doctorReport);
+        if (lines.length > 0) {
+          report(`Kerf UI doctor failed with ${lines.length} diagnostic${lines.length === 1 ? '' : 's'}:`);
+          for (const line of lines) report(`  ${line}`);
+        } else {
+          report(
+            doctorReport
+              ? `Kerf UI doctor failed without a failing diagnostic in ${relative(root, reportPath)}.`
+              : `Kerf UI doctor failed before writing ${relative(root, reportPath)}.`,
+          );
+        }
       }
     }
     remember();
