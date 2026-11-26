@@ -1331,3 +1331,63 @@ impl PolicyStore {
         })
     }
 }
+
+/// HS2-38R8J2: when placement was first on for each owner on this machine, so a plan
+/// whose work was started by hand reads Not Started rather than Paused until a person
+/// ever started orchestration. Machine-local and kept for good; only the first time is
+/// recorded.
+#[derive(Clone)]
+pub struct PlacementStartedStore {
+    storage: Storage,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PlacementStartedDocument {
+    schema_version: u32,
+    owners: std::collections::BTreeMap<String, u64>,
+}
+
+impl Default for PlacementStartedDocument {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            owners: std::collections::BTreeMap::new(),
+        }
+    }
+}
+
+const MAX_PLACEMENT_STARTED_BYTES: usize = 256 * 1024;
+
+impl PlacementStartedStore {
+    pub fn new(home: &Path) -> Self {
+        Self {
+            storage: Storage::machine_named(home, "orchestration-placement-started.json"),
+        }
+    }
+
+    fn document(&self) -> Result<PlacementStartedDocument, OrchestrationError> {
+        match self.storage.read(MAX_PLACEMENT_STARTED_BYTES)? {
+            Some(bytes) => decode(&bytes),
+            None => Ok(PlacementStartedDocument::default()),
+        }
+    }
+
+    /// When placement was first on for the owner, if ever.
+    pub fn started_at(&self, owner_id: &str) -> Result<Option<u64>, OrchestrationError> {
+        Ok(self.document()?.owners.get(owner_id).copied())
+    }
+
+    /// Record that placement is on now; a recorded time is kept. Writes only the first time.
+    pub fn record(&self, owner_id: &str, at_ms: u64) -> Result<(), OrchestrationError> {
+        valid_identifier(owner_id)?;
+        let _lock = self.storage.lock()?;
+        let mut document = self.document()?;
+        if document.owners.contains_key(owner_id) {
+            return Ok(());
+        }
+        document.owners.insert(owner_id.to_owned(), at_ms);
+        let bytes = serde_json::to_vec(&document).map_err(|_| OrchestrationError::Corrupt)?;
+        self.storage.write(&bytes, MAX_PLACEMENT_STARTED_BYTES)
+    }
+}

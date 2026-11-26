@@ -137,6 +137,11 @@ export interface OrchestrationTimeline {
    * person pressed Start Orchestration. The header says sessions will start and offers Pause.
    */
   automatic_by_default?: boolean;
+  /**
+   * HS2-38R8J2: placement was never turned on for this project, so work started by hand under the plan reads
+   * Not Started rather than Paused. Absent once placement was ever on.
+   */
+  never_started?: boolean;
   kick_off: {
     can_start: boolean;
     start_blocked?: StartBlocked;
@@ -273,6 +278,7 @@ export function parseOrchestrationTimeline(value: unknown): OrchestrationTimelin
   count(view.now_ms);
   if (typeof view.declared !== 'boolean' || typeof view.automatic !== 'boolean') fail();
   if (view.automatic_by_default !== undefined && typeof view.automatic_by_default !== 'boolean') fail();
+  if (view.never_started !== undefined && typeof view.never_started !== 'boolean') fail();
   one(view.phase, PHASES);
   if (typeof kickOff.can_start !== 'boolean' || typeof kickOff.can_pause !== 'boolean') fail();
   if (kickOff.default_policy !== undefined && typeof kickOff.default_policy !== 'boolean') fail();

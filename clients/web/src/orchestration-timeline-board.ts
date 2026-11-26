@@ -334,6 +334,21 @@ export function findTimelineItem(timeline: OrchestrationTimeline | undefined, st
   return undefined;
 }
 
+/** HS2-38R8J2: how many items work now. */
+function workingNow(timeline: OrchestrationTimeline): number {
+  return timeline.waves
+    .filter((wave) => wave.kind === 'working_now')
+    .reduce((total, wave) => total + wave.items.length, 0);
+}
+
+/**
+ * HS2-38R8J2: orchestration places nothing and never did: a proposed plan, or one whose work was started by
+ * hand. The header labels it a dry run.
+ */
+export function dryRunPlan(timeline: OrchestrationTimeline): boolean {
+  return timeline.phase === 'proposed' || (timeline.phase === 'paused' && timeline.never_started === true);
+}
+
 /** The toolbar's account of where orchestration stands. */
 export function timelineStatus(timeline: OrchestrationTimeline, clock: ClockFormat = clockTime): string {
   const sessions = `${timeline.sessions} ${timeline.sessions === 1 ? 'Session' : 'Sessions'}`;
@@ -349,7 +364,8 @@ export function timelineStatus(timeline: OrchestrationTimeline, clock: ClockForm
         ? `Running · ${sessions}`
         : `Running Since ${clock(timeline.running_since_ms)} · ${sessions}`;
     case 'paused':
-      return `Paused · ${sessions}`;
+      // HS2-38R8J2: work started by hand under a plan nobody ever started is not a pause.
+      return timeline.never_started ? `Not Started · ${workingNow(timeline)} Working` : `Paused · ${sessions}`;
     default:
       return timeline.phase satisfies never;
   }

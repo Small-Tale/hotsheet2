@@ -211,6 +211,11 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
     await expect(view).toHaveAttribute('data-phase', 'paused', { timeout: 30_000 });
     await expect(page.locator('[data-orchestration-start-blocked]')).toHaveCount(0);
     await expect(start).toBeEnabled();
+    // Nobody started orchestration, so it is Not Started with the work counted, not Paused (HS2-38R8J2).
+    await expect(toolbar).toContainText('Not Started · 1 Working');
+    await expect(toolbar).not.toContainText('Paused');
+    await expect(dryRun).toBeVisible();
+    await widths(page, 'not-started', 'hs2-38r8j2');
     await expect(view.locator('[aria-label="Working Now Column"]')).toContainText(first.slug);
     await firstCard.click();
     const runSection = inspector.locator('[data-orchestration-section="Run"]');
@@ -253,12 +258,22 @@ test('HS2-1DDXNS a new orchestration project goes from Software to a started pla
       max_cpu_percent: 90,
       min_free_disk_mb: 5120,
     });
+    // Running asks a person before the first session starts; the request shows over the header.
+    const ignore = page.getByRole('button', { name: 'Ignore', exact: true });
+    await expect(ignore).toBeVisible({ timeout: 30_000 });
     await widths(page, 'started-default', 'hs2-d9kp86');
+    await ignore.click();
+    await expect(ignore).toHaveCount(0);
 
     // 8. Pause, then Apply Policy with placement on: the save starts placing sessions and says so.
     await pause.click();
     await expect(page.locator('.app-toast').filter({ hasText: 'Orchestration paused.' })).toBeVisible();
     await expect(view).toHaveAttribute('data-phase', 'paused', { timeout: 30_000 });
+    // Started once, so a pause is Paused (HS2-38R8J2).
+    await expect(toolbar).toContainText('Paused · ');
+    await expect(toolbar).not.toContainText('Not Started');
+    await expect(dryRun).toHaveCount(0);
+    await widths(page, 'paused-after-start', 'hs2-38r8j2');
     await page.getByLabel('Settings View').click();
     await settingsNav.getByRole('button', { name: 'Orchestration', exact: true }).click();
     const policy = page.locator('[data-component="orchestration-policy-settings"]');

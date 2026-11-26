@@ -12,6 +12,7 @@ import type { OrchestrationTimeline } from '../orchestration-timeline';
 import {
   type ClockFormat,
   clockTime,
+  dryRunPlan,
   plannerWorkingLabel,
   startBlockedInSettings,
   startBlockedReason,
@@ -88,6 +89,7 @@ export function OrchestrationToolbar({
         Open Orchestration Settings
       </Button>
     ) : undefined;
+  const dryRun = dryRunPlan(timeline);
   const updating = planning === 'updating';
   const answer =
     planning === 'asked' && question ? (
@@ -221,7 +223,7 @@ export function OrchestrationToolbar({
           />
         </List>
       )}
-      {timeline.phase === 'proposed' && (
+      {dryRun && (
         <List controlInsets="trl">
           <StateBanner
             copyLayout="stacked"
@@ -235,7 +237,7 @@ export function OrchestrationToolbar({
           />
         </List>
       )}
-      {timeline.phase === 'paused' && blocked !== undefined && (
+      {timeline.phase === 'paused' && !dryRun && blocked !== undefined && (
         <List controlInsets="trl">
           <StateBanner
             copyLayout="stacked"

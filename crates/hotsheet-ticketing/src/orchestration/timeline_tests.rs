@@ -188,6 +188,7 @@ impl Fixture {
                 automatic: true,
                 auto: false,
                 software: false,
+                ever_started: true,
             },
             now_ms: NOW,
             ..Self::default()
@@ -1041,4 +1042,27 @@ fn hs2_cq0pnt_a_step_keeps_its_run_label_and_dependents_through_any_site() {
     other.target.target_id = "web".into();
     fixture.runs = vec![other];
     assert!(item(&fixture.view(), "step-3").run.is_none());
+}
+
+/// HS2-38R8J2: a plan whose work was started by hand while placement was never on
+/// reports `never_started`; once placement was ever on it is Paused, and a running
+/// plan never reports it.
+#[test]
+fn hs2_38r8j2_never_started_until_placement_was_ever_on() {
+    let one = || vec![step(2, L::Confirmed, &[])];
+    for (ever, proposed_never) in [(false, true), (true, false)] {
+        let mut proposed = Fixture::new(one()).proposed();
+        proposed.policy.ever_started = ever;
+        let view = proposed.view();
+        assert_eq!(view.phase, TimelinePhase::Proposed);
+        assert_eq!(view.never_started, proposed_never, "ever {ever}");
+        let mut running = Fixture::new(one());
+        running.policy.ever_started = ever;
+        let view = running.view();
+        assert_eq!(view.phase, TimelinePhase::Running);
+        assert!(!view.never_started, "ever {ever}");
+        // Serialized only when set, so an older reader keeps Paused.
+        let json = serde_json::to_value(&view).unwrap();
+        assert!(json.get("never_started").is_none());
+    }
 }

@@ -26540,6 +26540,11 @@ components:
         automatic:
           description: The policy places sessions automatically.
           type: boolean
+        never_started:
+          description:
+            HS2-38R8J2 - placement was never turned on for the owner on this machine, so a paused plan reads Not
+            Started. Absent while running and once placement was ever on.
+          type: boolean
         kick_off:
           $ref: '#/components/schemas/OrchestrationKickOff'
         running_since_ms:

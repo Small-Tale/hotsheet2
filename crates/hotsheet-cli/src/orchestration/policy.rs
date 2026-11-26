@@ -7,9 +7,9 @@ use std::collections::BTreeSet;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AccessRequest, AuditOutcome, AuditRecord, DeclarationState, IgnoredField, PermissionAction,
-    PermissionKey, PolicyBody, PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore,
-    PolicyVerdict, PolicyView, PolicyWarning, ProjectSites, RetiredAuthority, SchedulerStore,
-    SessionLoad, SessionRequest, SetPolicy, TargetAction, retired_authority,
+    PermissionKey, PlacementStartedStore, PolicyBody, PolicyDenial, PolicyProblem, PolicyQuestion,
+    PolicyStore, PolicyVerdict, PolicyView, PolicyWarning, ProjectSites, RetiredAuthority,
+    SchedulerStore, SessionLoad, SessionRequest, SetPolicy, TargetAction, retired_authority,
 };
 use serde::{Deserialize, Serialize};
 
@@ -134,9 +134,21 @@ impl OrchestrationRuntime {
     ) -> Result<PolicyView, OrchestrationError> {
         access::person(actor)?;
         let store = self.policy_store(owner_id)?;
-        let before = store.read()?.revision;
+        let stored = store.read()?;
+        let before = stored.revision;
+        let orchestrating = self.orchestrating(owner_id)?;
+        let placing = |body: Option<&PolicyBody>| {
+            orchestrating && body.is_some_and(|body| self.placement_on(owner_id, &body.placement))
+        };
+        let was_on = placing(stored.policy.as_ref());
         let view = store.set(request, Some(&self.declared(owner_id)?), tx)?;
         if view.revision != before {
+            // HS2-38R8J2: placement on before or after this change means orchestration
+            // was started, so a later pause reads Paused rather than Not Started. Only
+            // what the view says depends on it, so a failed write leaves the policy set.
+            if was_on || placing(view.policy.as_ref()) {
+                let _ = PlacementStartedStore::new(&self.home).record(owner_id, tx.clock.now_ms());
+            }
             // HS2-ECWG50: a scheduler following this machine plans under the new policy.
             // HS2-AWB7BX: new limits may give a machine room, so its capacity refusals
             // are asked again rather than waited out.

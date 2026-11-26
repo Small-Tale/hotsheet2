@@ -186,6 +186,23 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
           },
         }),
       );
+    // HS2-38R8J2: a plan nobody ever started keeps its dry-run banner, with the reason, and its header
+    // says Not Started instead of Paused; once started a pause reads Paused, with no dry-run banner.
+    const never = String(
+      OrchestrationToolbar({
+        timeline: {
+          ...demoTimeline('paused'),
+          never_started: true,
+          kick_off: { can_start: false, can_pause: false, start_blocked: 'project_software' },
+        },
+      }),
+    );
+    expect(never).toContain('This Plan Is a Dry Run');
+    expect(never).toMatch(/Not Started · \d+ Working/);
+    expect(never).toContain('Change the Project Type to Orchestration in General settings first.');
+    expect(never).not.toContain('Start Orchestration Is Unavailable');
+    expect(paused()).not.toContain('This Plan Is a Dry Run');
+    expect(paused()).toContain('Paused · ');
     // A reason changed elsewhere names it, with no Settings action.
     const software = paused('project_software');
     expect(software).toContain('Start Orchestration Is Unavailable');
