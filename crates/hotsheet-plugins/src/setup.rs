@@ -1611,29 +1611,26 @@ fn remove_mcp_entry(
             }
         }
         "codex-toml" => {
-            let Ok(mut root) = toml::from_str::<toml::Table>(&contents) else {
+            let Ok(root) = toml::from_str::<toml::Table>(&contents) else {
                 return Ok(None);
             };
-            let Some(servers) = root
-                .get_mut("mcp_servers")
-                .and_then(toml::Value::as_table_mut)
-            else {
-                return Ok(None);
-            };
-            let command = servers
-                .get(name)
-                .and_then(|entry| entry.get("command")?.as_str());
+            let command = root
+                .get("mcp_servers")
+                .and_then(|servers| servers.get(name)?.get("command")?.as_str());
             if !owned(command) {
                 return Ok(None);
             }
-            servers.remove(name);
-            if servers.is_empty() {
-                root.remove("mcp_servers");
-            }
-            if root.is_empty() {
+            // Remove only Hot Sheet's table, keeping the user's comments and layout
+            // (HS2-3MH5FH); a file the edit cannot preserve is left untouched.
+            let Ok(Some(rest)) = crate::toml_config::remove_table(&contents, "mcp_servers", name)
+            else {
+                return Ok(None);
+            };
+            // Delete the file only when nothing of the user's (not even a comment) is left.
+            if rest.trim().is_empty() {
                 None
             } else {
-                Some(toml::to_string_pretty(&root).unwrap())
+                Some(rest)
             }
         }
         _ => return Ok(None),
@@ -3896,19 +3893,36 @@ fn write_mcp_toml(
     command: &str,
     args: &[String],
 ) -> Result<(), SetupError> {
-    let target = config.path;
-    let mut root: toml::Table = match config.read(fs)? {
-        Some(existing) => config.parse_toml(&existing)?,
-        None => toml::Table::new(),
+    let entry = codex_mcp_entry(command, args);
+    let Some(existing) = config.read(fs)? else {
+        let mut servers = toml::Table::new();
+        servers.insert(name.to_string(), toml::Value::Table(entry));
+        let mut root = toml::Table::new();
+        root.insert("mcp_servers".into(), toml::Value::Table(servers));
+        fs.write(
+            config.path,
+            toml::to_string_pretty(&root).unwrap().as_bytes(),
+        );
+        return Ok(());
     };
-
-    let servers = root
-        .entry("mcp_servers".to_string())
-        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
-    if !servers.is_table() {
-        *servers = toml::Value::Table(toml::Table::new());
+    let root = config.parse_toml(&existing)?;
+    let current = root
+        .get("mcp_servers")
+        .and_then(|servers| servers.get(name))
+        .and_then(toml::Value::as_table);
+    if current == Some(&entry) {
+        return Ok(());
     }
+    // Only Hot Sheet's table changes; the user's comments, order and spacing stay
+    // (HS2-3MH5FH).
+    let edited = crate::toml_config::set_table(&existing, "mcp_servers", name, &entry)
+        .map_err(|reason| config.unreadable(format!("Hot Sheet could not edit it ({reason})")))?;
+    fs.write(config.path, edited.as_bytes());
+    Ok(())
+}
 
+/// Hot Sheet's Codex MCP server table.
+fn codex_mcp_entry(command: &str, args: &[String]) -> toml::Table {
     let mut entry = toml::Table::new();
     entry.insert("command".into(), toml::Value::String(command.to_string()));
     entry.insert(
@@ -3937,13 +3951,7 @@ fn write_mcp_toml(
                 .collect(),
         ),
     );
-    servers
-        .as_table_mut()
-        .unwrap()
-        .insert(name.to_string(), toml::Value::Table(entry));
-
-    fs.write(target, toml::to_string_pretty(&root).unwrap().as_bytes());
-    Ok(())
+    entry
 }
 
 /// Create `dir`, but never recreate a missing `project` root (HS2-4YEA4M). A background
@@ -6911,6 +6919,63 @@ args = ["--path", "{store}"]
         fixture.write("opencode.json", &first);
         fixture.refresh(&[]);
         assert_eq!(fixture.read("opencode.json").unwrap(), first);
+    }
+
+    /// HS2-3MH5FH: a valid Codex `config.toml` is edited in place. Only Hot Sheet's
+    /// `[mcp_servers.hotsheet]` table changes; the user's comments, key order and blank
+    /// lines survive setup, refresh, a stale-entry replacement, and disabling the tool.
+    #[test]
+    fn hs2_3mh5fh_codex_toml_keeps_comments_and_layout() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        let user = "# Codex settings for this project\nmodel = \"synthetic-model\"  # keep inline\napproval_policy = \"on-request\"\n\n# Their server\n[mcp_servers.other]\ncommand = \"other-mcp\"\nargs = [ \"--quiet\" ]   # spacing kept\n\n[profiles.fast]\nmodel = \"small\"\n";
+        fixture.write(".toby/config.toml", user);
+        fixture.setup("toby");
+        let first = fixture.read(".toby/config.toml").unwrap();
+        let split = user.find("[profiles.fast]").unwrap();
+        assert!(first.starts_with(&user[..split]), "{first}");
+        assert!(first.ends_with(&user[split..]), "{first}");
+        let codex: toml::Table = toml::from_str(&first).unwrap();
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["env"]["HOTSHEET_ACTOR_ROLE"].as_str(),
+            Some("ai")
+        );
+
+        // Repeated setup and refresh are byte-identical no-ops.
+        fixture.setup("toby");
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), first);
+        fixture.refresh(&["toby"]);
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), first);
+
+        // A stale Hot Sheet table is replaced where it stands, with its header comment.
+        let stale = "# top\n[mcp_servers.hotsheet]  # ours\ncommand = \"hotsheet-mcp\"\nargs = [\"--path\", \".\"]\nstale_key = true\n\n[mcp_servers.hotsheet.env]\nHOTSHEET_STALE = \"1\"\n\n# after\n[tui]\nnotifications = true\n";
+        fixture.write(".toby/config.toml", stale);
+        fixture.setup("toby");
+        let replaced = fixture.read(".toby/config.toml").unwrap();
+        assert!(
+            replaced.starts_with("# top\n[mcp_servers.hotsheet]"),
+            "{replaced}"
+        );
+        assert!(
+            replaced.ends_with("\n# after\n[tui]\nnotifications = true\n"),
+            "{replaced}"
+        );
+        assert!(!replaced.contains("stale_key") && !replaced.contains("HOTSHEET_STALE"));
+        let codex: toml::Table = toml::from_str(&replaced).unwrap();
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["env_vars"]
+                .as_array()
+                .map(Vec::len),
+            Some(CODEX_MCP_ENV_VARS.len())
+        );
+
+        // Disabling removes only Hot Sheet's table, restoring the user's file exactly.
+        fixture.write(".toby/config.toml", &first);
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), user);
+        // Re-enabling puts the same entry back in the same place.
+        fixture.setup("toby");
+        assert_eq!(fixture.read(".toby/config.toml").unwrap(), first);
     }
 
     #[test]

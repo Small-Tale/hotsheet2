@@ -71,7 +71,13 @@ next step: fix the file or move it aside, then rerun `hotsheet-cli setup <tool>`
 OpenCode reads JSONC, so `opencode.json` may contain comments and trailing commas:
 setup edits only Hot Sheet's `mcp` member in place, keeps every other byte including
 the comments, verifies the edited text parses to the intended value, and leaves a
-current file untouched. Disabling OpenCode leaves its entry in a commented
+current file untouched. Codex's `config.toml` is edited the same way (HS2-3MH5FH):
+setup replaces only the `[mcp_servers.hotsheet]` table where it stands, keeping the
+comments above its header and every other comment, key order and blank line; a
+current entry leaves the file byte-identical, and an edit whose result would not
+re-parse to exactly the intended config is refused rather than rewritten. Disabling
+Codex removes only that table (and an emptied `mcp_servers`); the file is deleted
+only when nothing of the user's, not even a comment, remains. Disabling OpenCode leaves its entry in a commented
 `opencode.json` in place rather than rewriting the file (lossless removal: HS2-DWS3NS).
 
 **Unreadable instruction files are never rewritten (HS2-HXMGN8).** The same rule covers

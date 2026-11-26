@@ -4146,6 +4146,43 @@ fn hs2_rmq5xx_headless_setup_keeps_jsonc_opencode_config_and_refuses_broken_ones
     assert_eq!(std::fs::read_to_string(&config).unwrap(), broken);
 }
 
+/// HS2-3MH5FH: headless setup edits only Hot Sheet's table in a commented Codex
+/// `config.toml`; the user's comments, order and spacing stay, and a rerun is
+/// byte-identical.
+#[test]
+fn hs2_3mh5fh_headless_setup_keeps_codex_toml_comments() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(project.join(".codex")).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let setup = || {
+        let mut cmd = hs(&store);
+        cmd.env("HOTSHEET_HOME", &home)
+            .args(["setup", "codex", "--project"])
+            .arg(&project);
+        cmd
+    };
+    let config = project.join(".codex/config.toml");
+    let user = "# synthetic user config\nmodel = \"synthetic-model\"  # keep\n\n[mcp_servers.other]\ncommand = \"other-mcp\"\n\n[tui]\nnotifications = true\n";
+    std::fs::write(&config, user).unwrap();
+    setup().assert().success();
+    let first = std::fs::read_to_string(&config).unwrap();
+    let split = user.find("[tui]").unwrap();
+    assert!(first.starts_with(&user[..split]), "{first}");
+    assert!(first.ends_with(&user[split..]), "{first}");
+    assert!(first.contains("[mcp_servers.hotsheet]"), "{first}");
+    setup().assert().success();
+    assert_eq!(std::fs::read_to_string(&config).unwrap(), first);
+}
+
 #[test]
 fn hs2_hxmgn8_headless_setup_refuses_an_unreadable_agents_md_and_creates_a_missing_one() {
     let root = tempfile::tempdir().unwrap();
