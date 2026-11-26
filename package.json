@@ -7,7 +7,8 @@
   "author": "Small Tale Inc.",
   "scripts": {
     "commit:msg": "gitgist --staged --commit-message",
-    "commit:msg:offline": "gitgist --staged --no-ai"
+    "commit:msg:offline": "gitgist --staged --no-ai",
+    "view-architecture-docs": "node scripts/view-architecture-docs.mjs"
   },
   "devDependencies": {
     "gitgist": "1.2.0",

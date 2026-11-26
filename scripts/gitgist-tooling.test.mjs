@@ -60,6 +60,8 @@ test('HS2-VA97HW pins gitgist exactly and declares the commit drafting entry poi
   assert.deepEqual(manifest.scripts, {
     'commit:msg': 'gitgist --staged --commit-message',
     'commit:msg:offline': 'gitgist --staged --no-ai',
+    // HS2-38CA53: opens the docs/architecture Structurizr workspace in the local viewer.
+    'view-architecture-docs': 'node scripts/view-architecture-docs.mjs',
   });
   assert.equal(manifest.gitgist, undefined, 'settings live only in gitgist.config.json');
 

@@ -46,6 +46,14 @@ The [codebase map](../CODEBASE-MAP.md) locates modules.
 
 ## Open or validate the workspace
 
+Run `npm run view-architecture-docs` from the repository root. It finds a JDK
+21 or newer (`JAVA_HOME`, Homebrew's keg-only `openjdk`, or `java` on `PATH`),
+builds `structurizr.war` from the pinned tag once into
+`~/.cache/hotsheet2/structurizr/`, validates the workspace, and serves a
+scratch copy at http://localhost:8080 (set `PORT` to change it). Flags:
+`--validate-only`, `--no-validate`, `--rebuild` (HS2-38CA53). The manual
+steps it automates are below.
+
 Use the consolidated [Structurizr application release v2026.10.26](https://github.com/structurizr/structurizr/releases/tag/v2026.10.26).
 The release publishes no prebuilt archive; build `structurizr.war` from that
 tag with its Maven wrapper and a JDK 21 or newer. Then run from the
