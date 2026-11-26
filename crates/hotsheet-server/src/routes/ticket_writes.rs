@@ -353,6 +353,10 @@ pub(crate) fn do_update_with_ticket(
     response
         .warnings
         .extend(remote.warning().map(str::to_owned));
+    // HS2-K6KG1T: an edit that ends a claim says so.
+    response
+        .warnings
+        .extend(ops::claim_released_by_edit_notice(&ticket, &latest));
     Ok((response, latest))
 }
 

@@ -623,9 +623,18 @@ active state.
 `started_phase` is optional progress within `status: started`: `analyzing`,
 `planning`, `working`, `initial_testing`, `integrating`, or `final_testing`.
 It records the current kind of work, while a live claim records who is working now.
-New claims from Not Started begin at `analyzing`; existing Started tickets retain
-their phase across release, renewal, and exact reclaim. Leaving Started clears it.
-Legacy Started tickets may have no phase.
+A claim starts the work it leases: an exact claim or claim-next on a Not Started or
+Backlog ticket moves it to Started at `analyzing` in the claim's own write (HS2-K6KG1T);
+existing Started tickets retain their phase across release, renewal, and exact reclaim.
+Leaving Started clears it. Legacy Started tickets may have no phase.
+A phase belongs only to Started: an edit that sets a phase on a ticket whose resulting
+status is not Started is refused (HTTP and MCP 400) and writes nothing, instead of
+dropping the phase while reporting success. Setting `status: started` in the same edit
+starts the ticket at that phase; clearing the phase stays a no-op.
+An edit that ends a claim because the ticket left the active statuses says so: CLI
+`edit` prints a `Released <worker>'s claim on <slug>` warning, and the HTTP and MCP update
+results carry it in `warnings`. Starting a Backlog ticket keeps its holder's claim;
+reopening a closed ticket still ends a stale one.
 Each actual phase change while Started appends a durable activity note, including
 the initial phase on claim. Repeating the same phase adds no note; leaving Started
 records the status transition and clears the current phase.

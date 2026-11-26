@@ -1111,6 +1111,8 @@ pub(crate) fn cmd_edit(
         .as_deref()
         .map(|text| ops::attachment_reference_warnings(&store, &updated, text))
         .unwrap_or_default();
+    // HS2-K6KG1T: an edit that ends a claim says so instead of a bare "Updated".
+    warnings.extend(ops::claim_released_by_edit_notice(&ticket, &updated));
     let mut written_note = None;
     if let Some(note_id) = edit_note {
         let edit = ops::NoteEditInput {

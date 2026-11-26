@@ -248,6 +248,11 @@ pub enum StoreError {
     InvalidAnnotations(&'static str),
     #[error("{0}")]
     InvalidFeedbackResponse(&'static str),
+    /// HS2-K6KG1T: a started phase was requested for a ticket that is not Started.
+    #[error(
+        "{slug} is {status}, not Started, so it has no started phase. Set the status to started in the same edit, or claim it, which starts it."
+    )]
+    StartedPhaseRequiresStarted { slug: String, status: &'static str },
     /// A requested ticket group name failed validation (HS2-PDSHNN).
     #[error(transparent)]
     InvalidGroupName(#[from] hotsheet_model::GroupNameError),
