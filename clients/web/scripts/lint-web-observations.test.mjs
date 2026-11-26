@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, it } from 'vitest';
 
 import {
+  doctorFailureLines,
   doctorStageObservations,
   eslintInputKey,
   eslintReuseEnabled,
@@ -197,6 +198,60 @@ it('HS2-5RDMEV doctor stage statuses are retained without raw diagnostics or inv
   assert.deepEqual(
     doctorStageObservations({ stages: [{ id: 'browser', status: 'skipped' }] }).map((row) => row.outcome),
     ['skip'],
+  );
+});
+
+it('HS2-52W4TK a failed doctor prints each diagnostic; a passing or report-less run says only what it must', async () => {
+  const diagnostic = {
+    id: 'KUI-L017',
+    severity: 'review',
+    stage: 'merged',
+    message: '`s` is an exceptional shorthand for `List.gap`.',
+    location: { file: 'src/components/synthetic.tsx', line: 38, column: 21 },
+  };
+  const unlocated = { id: 'KUI-D001', severity: 'error', message: 'Synthetic stage failure.' };
+  const runDoctor = async (doctorStatus, doctorReport) => {
+    const paths = fixture();
+    const printed = [];
+    const status = await runLintWeb({
+      ...paths,
+      flags: { CI: 'true' },
+      now: () => 1,
+      report: (line) => printed.push(line),
+      run(command) {
+        if (command.args.includes('--full') && doctorReport)
+          writeFileSync(paths.reportPath, JSON.stringify(doctorReport));
+        return { status: command.args.includes('--full') ? doctorStatus : 0 };
+      },
+    });
+    return { status, printed };
+  };
+  const stages = [{ id: 'eslint', status: 'ran' }];
+
+  const failed = await runDoctor(1, { stages, diagnostics: [diagnostic, unlocated] });
+  assert.equal(failed.status, 1);
+  assert.deepEqual(failed.printed, [
+    'Kerf UI doctor failed with 2 diagnostics:',
+    '  review KUI-L017 src/components/synthetic.tsx:38:21 `s` is an exceptional shorthand for `List.gap`.',
+    '  error KUI-D001 (no location) Synthetic stage failure.',
+  ]);
+
+  // A passing doctor stays quiet even when its report carries diagnostics below its threshold.
+  const passed = await runDoctor(0, { stages, diagnostics: [diagnostic] });
+  assert.deepEqual(passed, { status: 0, printed: [] });
+
+  // A failure with no report, or with nothing listed, still names where to look.
+  const crashed = await runDoctor(2, null);
+  assert.equal(crashed.status, 2);
+  assert.deepEqual(crashed.printed, ['Kerf UI doctor failed before writing target/doctor.json.']);
+  const bare = await runDoctor(1, { stages, diagnostics: [] });
+  assert.deepEqual(bare.printed, ['Kerf UI doctor failed without a failing diagnostic in target/doctor.json.']);
+
+  // Earlier failing steps never reach the doctor, so they print nothing from it.
+  assert.deepEqual(doctorFailureLines(null), []);
+  assert.deepEqual(
+    doctorFailureLines({ diagnostics: [{ id: 'KUI-X', severity: 'warning', location: { file: 'a.ts' } }] }),
+    ['warning KUI-X a.ts'],
   );
 });
 

@@ -1766,6 +1766,170 @@ fn hs2_t16sk0_a_dry_run_claims_nothing_a_taken_ticket_is_learned_and_a_restart_a
     );
 }
 
+/// HS2-S5RH57: the worker id another machine's dispatcher gives the ticket to.
+const ELSEWHERE: &str = "home-worker-synthetic";
+
+/// HS2-S5RH57: a step's session waits on the bounded wait; meanwhile a worker that
+/// is none of this machine's takes the ticket (a project's home assigned it on its
+/// side). The session's claim is refused and its run learns the other worker. Returns
+/// the session, its terminal, and the run.
+fn taken_elsewhere(
+    f: &Placed,
+    clock: &At,
+    tx: &mut Transaction<'_>,
+) -> (
+    OrchestratedSession,
+    String,
+    hotsheet_ticketing::orchestration::Run,
+) {
+    let step = f.ready("First", tx);
+    assert_eq!(outcomes(&f.tick(tx)), [("started", None)]);
+    let session = f.record(&format!("sched-start-{step}"));
+    let terminal = f.terminal(&session);
+    let run = f.run_of(&step);
+    let ticket = ops::resolve(&f.m.target_store, &run.target.native_id)
+        .unwrap()
+        .unwrap();
+    ops::claim_with_eta(
+        &f.m.target_store,
+        &ticket.id,
+        &hotsheet_model::Timestamp::from(NOW),
+        hotsheet_model::Timestamp::from("2030-01-01T00:00:00Z"),
+        ELSEWHERE,
+        None,
+        None,
+    )
+    .unwrap();
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    f.pool(|state| {
+        state
+            .workers
+            .insert(worker_id.clone(), role(&worker_id, 4_000_000_000));
+    });
+    f.at(clock, START + 2 * MINUTE);
+    let tick = f.tick(tx);
+    assert_eq!(tick.view.assignments[0].outcome.as_deref(), Some("refused"));
+    assert_eq!(
+        tick.view.assignments[0].outcome_detail.as_deref(),
+        Some("target_conflict")
+    );
+    // The pass listed the session before the refusal: it was busy with its run then.
+    assert_eq!(
+        placement(&tick, &session.session_id),
+        (PlacementAction::Keep, "busy")
+    );
+    let run = f.m.runtime.run(&f.owner(), &run.run_id).unwrap();
+    assert_eq!(
+        (run.state, run.worker_id.as_deref()),
+        (RunState::Dispatched, Some(ELSEWHERE))
+    );
+    (session, terminal, run)
+}
+
+/// HS2-S5RH57: with nothing else ready, the session is free and idle, kept for the
+/// idle time, never stopped mid-turn, then wound down at its host's safe point. Its
+/// run is the other worker's: no session starts for it, then or later, and the other
+/// worker's claim is left alone.
+#[test]
+fn hs2_s5rh57_a_session_whose_ticket_another_worker_was_given_is_wound_down_at_a_safe_point() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let (session, terminal, run) = taken_elsewhere(&f, &clock, &mut tx);
+    let sid = session.session_id.as_str();
+    let listed = f.listed(&mut tx);
+    assert_eq!(
+        (listed[0].run_id.as_ref(), listed[0].activity),
+        (None, SessionActivity::Idle)
+    );
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+    assert_eq!(placement(&tick, sid), (PlacementAction::Keep, "idle_grace"));
+
+    // Past the idle time, in the middle of a turn: kept, nothing is asked.
+    f.at(&clock, START + 4 * MINUTE);
+    f.host.set_busy(&terminal, true);
+    let tick = f.tick(&mut tx);
+    assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+    assert_eq!(placement(&tick, sid), (PlacementAction::Keep, "busy"));
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+
+    // Between turns again: the idle time starts afresh, then it is wound down once.
+    f.host.set_busy(&terminal, false);
+    let tick = f.tick(&mut tx);
+    assert_eq!(placement(&tick, sid), (PlacementAction::Keep, "idle_grace"));
+    f.at(&clock, START + 6 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);
+    assert_eq!(placement(&tick, sid), (PlacementAction::WindDown, "idle"));
+    let stopped = f.record(&session.operation_id);
+    assert_eq!(stopped.state, SessionState::Stopped);
+    assert_eq!(
+        stopped.history.last().unwrap().reason.as_deref(),
+        Some("wound_down")
+    );
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+
+    // Repeated passes start nothing for the run the other worker holds.
+    for _ in 0..2 {
+        let tick = f.tick(&mut tx);
+        assert!(tick.outcomes.is_empty(), "{:?}", tick.outcomes);
+        assert!(tick.view.schedule.placements.is_empty());
+    }
+    assert_eq!(f.host.launches().len(), 1);
+    let after = f.m.runtime.run(&f.owner(), &run.run_id).unwrap();
+    assert_eq!(
+        (after.state, after.worker_id.as_deref()),
+        (RunState::Dispatched, Some(ELSEWHERE))
+    );
+    let ticket = ops::resolve(&f.m.target_store, &run.target.native_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ticket.claimed_by.as_deref(), Some(ELSEWHERE));
+}
+
+/// HS2-S5RH57: with other work ready, the freed session takes it (a refill, not a
+/// second launch); the other worker's run is never placed again.
+#[test]
+fn hs2_s5rh57_a_session_whose_ticket_another_worker_was_given_is_refilled_with_ready_work() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let (session, _, run) = taken_elsewhere(&f, &clock, &mut tx);
+    let second = f.ready("Second", &mut tx);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("assigned", None)]);
+    let second_run = f.run_of(&second);
+    assert_eq!(
+        (
+            tick.outcomes[0].session_id.as_deref(),
+            tick.outcomes[0].run_id.as_deref()
+        ),
+        (
+            Some(session.session_id.as_str()),
+            Some(second_run.run_id.as_str())
+        )
+    );
+    assert_eq!(
+        f.record(&session.operation_id).run_id.as_deref(),
+        Some(second_run.run_id.as_str())
+    );
+    assert_eq!(f.host.launches().len(), 1);
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
+    // Busy with its new run; the first run stays the other worker's.
+    assert_eq!(
+        placement(&f.tick(&mut tx), &session.session_id),
+        (PlacementAction::Keep, "busy")
+    );
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 2);
+    assert_eq!(
+        f.m.runtime
+            .run(&f.owner(), &run.run_id)
+            .unwrap()
+            .worker_id
+            .as_deref(),
+        Some(ELSEWHERE)
+    );
+}
+
 /// `(action, reason, detail)` of the placement that names the session.
 fn placed(view: &TickView, session_id: &str) -> (PlacementAction, &'static str, Option<String>) {
     let found = view

@@ -8,6 +8,8 @@
 //!   its end is announced once the home is back, with no pass anyone asked for.
 //! - HS2-5DF941: the home cut off from the site keeps running; its dispatcher and the
 //!   site's run both try to claim one ticket, and exactly one claim holds.
+//! - HS2-S5RH57: when the home's worker won, the site's session placed for that run
+//!   is wound down at its safe point (nothing else is ready) and never replaced.
 //!
 //! Synthetic tickets and identifiers only. Nothing is waited for by time: every wait is
 //! woken by an event stream or a file change, with a deadline.
@@ -356,6 +358,44 @@ async fn partitioned_claim(first: First) {
             .filter(|event| event.kind == ClaimEventKind::Claim)
             .count();
         assert_eq!(claims, 1, "{read:?}");
+    }
+
+    // HS2-S5RH57: the site's session placed for the run has no work left in it once
+    // the home's worker holds the ticket. Nothing else is ready, so it is wound down
+    // by the idle rule at its host's safe point: stopped on purpose, not lost. The
+    // winner's session keeps the ticket in the site-first case.
+    if first == First::Home {
+        let stop = fleet
+            .decided(
+                "the idle site session wound down",
+                |entry| {
+                    entry["kind"] == "wind_down"
+                        && entry["outcome"] == "wind_down_requested"
+                        && entry["session_id"] == worker.session_id.as_str()
+                },
+                3 * MINUTE,
+            )
+            .await;
+        assert_eq!(stop["reason"], "idle", "{stop:#}");
+        let ended = session_until(&fleet, &worker.session_id, "stopped").await;
+        let last = ended["history"].as_array().unwrap().last().unwrap().clone();
+        assert_eq!(last["reason"], "wound_down", "{ended:#}");
+        assert!(
+            !fleet
+                .drawer(Side::Controller)
+                .await
+                .iter()
+                .any(|tab| tab["id"] == worker.terminal.as_str() && tab["alive"] == true)
+        );
+        // The run is still the home worker's, and nothing was taken from it.
+        let run = fleet
+            .ok("GET", &format!("/runs/{run_id}"), Value::Null)
+            .await;
+        assert_eq!(
+            (&run["state"], &run["worker_id"]),
+            (&json!("dispatched"), &json!(HOME_WORKER)),
+            "{run:#}"
+        );
     }
 
     // More passes start no second session for the step, and no role session.

@@ -25,7 +25,7 @@
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     DispatchMode, OrchestratedSession, Run, RunState, SafePoint, ScheduledSession, SessionActivity,
-    SessionError, SessionIdleStore, SessionOwner, SessionRole, SessionState,
+    SessionError, SessionIdleStore, SessionOwner, SessionRole, SessionState, run_worked_elsewhere,
 };
 
 use super::sessions::PlacedGate;
@@ -162,11 +162,19 @@ impl OrchestrationRuntime {
     ) -> Result<Vec<ScheduledSession>, OrchestrationError> {
         let reader = self.placement_reader(owner_id);
         let now_ms = tx.clock.now_ms();
-        let finished_runs: std::collections::BTreeSet<String> = self
-            .run_list(owner_id, false)?
-            .into_iter()
+        let runs = self.run_list(owner_id, false)?;
+        let finished_runs: std::collections::BTreeSet<String> = runs
+            .iter()
             .filter(|run| run.state.is_terminal())
-            .map(|run| run.run_id)
+            .map(|run| run.run_id.clone())
+            .collect();
+        // HS2-S5RH57: runs dispatched to a worker none of this machine's sessions ran
+        // as (a project's home assigned the ticket to its own worker meanwhile).
+        let every_session = self.session_list(owner_id, false)?;
+        let worked_elsewhere: std::collections::BTreeSet<String> = runs
+            .iter()
+            .filter(|run| run_worked_elsewhere(&every_session, run))
+            .map(|run| run.run_id.clone())
             .collect();
         let cancelled = self.withdrawn_runs(owner_id);
         let mut listed = Vec::new();
@@ -217,10 +225,13 @@ impl OrchestrationRuntime {
             // HS2-HV9ED3: a session whose run a person cancelled stays busy with it
             // until it is wound down, so it is never refilled meanwhile. So does one
             // whose run's step was removed (HS2-YFPZFP).
-            let run_id = session
-                .run_id
-                .clone()
-                .filter(|run_id| !finished_runs.contains(run_id) || cancelled.contains(run_id));
+            // HS2-S5RH57: one whose run another worker was given has no work in it:
+            // it is free, so it is refilled with other ready work, or wound down by
+            // the idle rule at its host's safe point.
+            let run_id = session.run_id.clone().filter(|run_id| {
+                cancelled.contains(run_id)
+                    || !(finished_runs.contains(run_id) || worked_elsewhere.contains(run_id))
+            });
             let working = run_id.is_some() || idle != Some(true);
             listed.push(ScheduledSession {
                 started_at_ms: session

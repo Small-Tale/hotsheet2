@@ -828,6 +828,28 @@ pub fn run_holder<'a>(
         .last()
 }
 
+/// HS2-S5RH57: whether a run is worked by a worker none of `sessions` ran as: it is
+/// `dispatched` to a worker id that no session record of this owner (finished ones
+/// included) carries, as when a project's home assigned the ticket to one of its own
+/// workers while a site's session waited for it. A session placed for such a run has
+/// no work in it, and the run needs no session from this machine. A run dispatched to
+/// a worker of a session that ended (a crash) is still this machine's to work.
+pub fn run_worked_elsewhere<'a>(
+    sessions: impl IntoIterator<Item = &'a OrchestratedSession>,
+    run: &Run,
+) -> bool {
+    let Some(worker) = run.worker_id.as_deref() else {
+        return false;
+    };
+    run.state == RunState::Dispatched
+        && !sessions.into_iter().any(|session| {
+            session
+                .hosted
+                .as_ref()
+                .is_some_and(|hosted| hosted.worker_id == worker)
+        })
+}
+
 fn candidate(
     owner_checkout_id: &str,
     new: NewSession,
