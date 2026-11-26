@@ -1339,6 +1339,26 @@ secret-named plain-string field anywhere under `crates/`. Its only exemption lis
 fields that are not secrets, and every entry must still match a real field. There is no
 baseline: HS2-9ZMC7N retyped the nine secrets the scan found when it landed.
 
+HS2-CQNE4E covers credentials in HTTP header collections:
+
+- The policy file's `hs2_cqne4e_*` tests reject a derived `Debug` over a `*header*` field
+  typed as plain strings (`Vec<(String, String)>`, a `String` map, or `HeaderMap`).
+- `crates/hotsheet-sync/src/secret.rs # hs2_cqne4e_*` checks `sensitive_header`, and checks
+  that `RedactedHeaders` keeps header names and redacts credential values.
+- `crates/hotsheet-notify/src/http.rs # hs2_cqne4e_*` checks that `HttpRequest` `Debug`
+  redacts credential headers, URL paths, queries, and userinfo, and that it leaves the
+  request fields unchanged. It also checks that a live transport error to a refused
+  loopback port omits the URL.
+- Each HTTP notifier's request test asserts the sent credential and the redacted `Debug`
+  side by side:
+  - Twilio: `Authorization: Basic`
+  - ntfy: `Authorization: Bearer`
+  - webhook: `X-Hotsheet-Signature` and the URL path
+  - Slack and Teams: the webhook URL path
+- extsync's GitHub `HttpResponse` and `BinaryResponse` have hand-written `Debug`, checked
+  by `hs2_cqne4e_response_debug_redacts_credential_headers`.
+- The CLI notify loopback fixture `Received` no longer derives `Debug`.
+
 HS2-9ZMC7N retypes those nine fields to `SecretString`. Each struct has an `hs2_9zmc7n_*`
 test that checks `Debug` redacts the field and that its stored or wire format is
 byte-identical to the old plain string:

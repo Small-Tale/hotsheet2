@@ -142,7 +142,16 @@ mod tests {
                 ),
             )
             .unwrap();
-        let body: Value = serde_json::from_slice(&http.requests()[0].body).unwrap();
+        let request = http.requests().remove(0);
+        assert_eq!(request.url, "https://prod.workflows.test/x");
+        // HS2-CQNE4E: the workflow URL is the credential, so Debug keeps only the origin.
+        let printed = format!("{request:?}");
+        assert!(
+            printed.contains(r#""https://prod.workflows.test/<redacted>""#),
+            "{printed}"
+        );
+        assert!(!printed.contains("/x\""), "{printed}");
+        let body: Value = serde_json::from_slice(&request.body).unwrap();
         assert_eq!(body["type"], "message");
         let card = &body["attachments"][0]["content"];
         assert_eq!(

@@ -1,5 +1,5 @@
 use hotsheet_sync::LockExt;
-use hotsheet_sync::secret::SecretString;
+use hotsheet_sync::secret::{RedactedHeaders, SecretString};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -126,7 +126,8 @@ impl GitHubConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+/// `Debug` is hand-written so a `set-cookie` or token header never prints (HS2-CQNE4E).
+#[derive(Clone)]
 pub struct HttpResponse {
     pub status: u16,
     pub headers: HashMap<String, String>,
@@ -134,11 +135,39 @@ pub struct HttpResponse {
 }
 
 /// A response whose body is kept as raw bytes (provider attachment downloads).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BinaryResponse {
     pub status: u16,
     pub headers: HashMap<String, String>,
     pub body: Vec<u8>,
+}
+
+fn redacted_headers(headers: &HashMap<String, String>) -> RedactedHeaders<'_> {
+    RedactedHeaders::sorted(
+        headers
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str())),
+    )
+}
+
+impl std::fmt::Debug for HttpResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpResponse")
+            .field("status", &self.status)
+            .field("headers", &redacted_headers(&self.headers))
+            .field("body", &self.body)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for BinaryResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BinaryResponse")
+            .field("status", &self.status)
+            .field("headers", &redacted_headers(&self.headers))
+            .field("body", &format_args!("<{} bytes>", self.body.len()))
+            .finish()
+    }
 }
 
 /// A raw request body with its content type (multipart attachment uploads).
@@ -2500,6 +2529,39 @@ fn github_state_reason(reason: CloseReason) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_cqne4e_response_debug_redacts_credential_headers() {
+        let headers: HashMap<String, String> = [
+            ("set-cookie", "session=synthetic-cookie"),
+            ("x-ratelimit-remaining", "42"),
+        ]
+        .into_iter()
+        .map(|(n, v)| (n.to_owned(), v.to_owned()))
+        .collect();
+        let text = HttpResponse {
+            status: 200,
+            headers: headers.clone(),
+            body: "{}".into(),
+        };
+        let binary = BinaryResponse {
+            status: 200,
+            headers,
+            body: vec![1, 2, 3],
+        };
+        for printed in [format!("{text:?}"), format!("{binary:?}")] {
+            assert!(!printed.contains("synthetic"), "{printed}");
+            assert!(
+                printed.contains(r#"("set-cookie", <redacted>)"#),
+                "{printed}"
+            );
+            assert!(
+                printed.contains(r#"("x-ratelimit-remaining", "42")"#),
+                "{printed}"
+            );
+        }
+        assert!(format!("{binary:?}").contains("<3 bytes>"));
+    }
 
     #[test]
     fn a_non_numeric_id_is_rejected_as_a_github_id_shape_mismatch() {

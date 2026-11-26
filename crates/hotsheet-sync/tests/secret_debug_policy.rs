@@ -4,6 +4,12 @@
 //! `Debug` prints `<redacted>`. Otherwise the next `dbg!`, `{:?}` in an error, or failing
 //! `assert_eq!` prints the credential. A hand-written `Debug` that redacts is also allowed,
 //! since this lint only inspects derived `Debug`.
+//!
+//! HS2-CQNE4E extends it to header collections: a `derive(Debug)` struct may not hold a
+//! `*header*` field typed as plain strings (`Vec<(String, String)>`, a `String` map, or
+//! `HeaderMap`), because `Authorization`, cookie and signature values print with it. Such a
+//! struct writes its `Debug` by hand with `hotsheet_sync::secret::RedactedHeaders`, or holds
+//! the values as `SecretString`.
 
 use std::path::{Path, PathBuf};
 
@@ -163,6 +169,16 @@ fn secret_named(field: &str) -> bool {
         .any(|word| field == *word || field.ends_with(&format!("_{word}")))
 }
 
+/// A header collection of plain strings: `Vec<(String, String)>`, `HashMap<String, String>`,
+/// `HeaderMap`, ... in a field named `*header*` (HS2-CQNE4E). `SecretString` values pass.
+fn plain_header_collection(field: &str, ty: &str) -> bool {
+    field.to_ascii_lowercase().contains("header")
+        && !ty.contains("SecretString")
+        && (ty.contains("HeaderMap")
+            || ((ty.contains("Vec<(") || ty.contains("Map<"))
+                && (ty.contains("String") || ty.contains("str"))))
+}
+
 /// A plain string type: `String`, `Option<String>`, `&str`, ... but not `SecretString`.
 fn plain_string(ty: &str) -> bool {
     !ty.contains("SecretString") && (ty.contains("String") || ty.contains("str"))
@@ -191,6 +207,18 @@ fn strip_visibility(text: &str) -> &str {
 
 /// Every secret-named plain-string field of a `derive(Debug)` struct in `source`.
 fn scan(file: &str, source: &str) -> Vec<Finding> {
+    scan_fields(file, source, |name, ty| {
+        secret_named(name) && plain_string(ty)
+    })
+}
+
+/// Every plain-string header-collection field of a `derive(Debug)` struct in `source`.
+fn scan_headers(file: &str, source: &str) -> Vec<Finding> {
+    scan_fields(file, source, plain_header_collection)
+}
+
+/// Every field of a `derive(Debug)` struct in `source` that `flagged(name, type)` matches.
+fn scan_fields(file: &str, source: &str, flagged: impl Fn(&str, &str) -> bool) -> Vec<Finding> {
     let lines: Vec<&str> = source.lines().collect();
     let mut findings = Vec::new();
     let mut i = 0;
@@ -238,7 +266,7 @@ fn scan(file: &str, source: &str) -> Vec<Finding> {
             if let Some((name, ty)) = line.split_once(':') {
                 let name = name.trim();
                 let ty = ty.trim().trim_end_matches(',');
-                if identifier(name) == name && secret_named(name) && plain_string(ty) {
+                if identifier(name) == name && flagged(name, ty) {
                     findings.push(Finding {
                         file: file.to_owned(),
                         line: i + 1,
@@ -254,8 +282,8 @@ fn scan(file: &str, source: &str) -> Vec<Finding> {
     findings
 }
 
-#[test]
-fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
+/// Run `scanner` over every crate source except this file (its fixtures are leaky).
+fn scan_workspace(scanner: fn(&str, &str) -> Vec<Finding>) -> Vec<Finding> {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let mut files = Vec::new();
     rust_sources(crates, &mut files);
@@ -269,11 +297,65 @@ fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
             .to_string_lossy()
             .replace('\\', "/");
         if rel == SELF {
-            continue; // its scanner fixture is deliberately leaky
+            continue;
         }
         let source = std::fs::read_to_string(&path).unwrap();
-        findings.extend(scan(&rel, &source));
+        findings.extend(scanner(&rel, &source));
     }
+    findings
+}
+
+#[test]
+fn hs2_cqne4e_no_derived_debug_over_plain_string_headers() {
+    let offenders: Vec<String> = scan_workspace(scan_headers)
+        .iter()
+        .map(|f| format!("{}:{} {}.{}: {}", f.file, f.line, f.strukt, f.field, f.ty))
+        .collect();
+    assert!(
+        offenders.is_empty(),
+        "derive(Debug) over a plain-string header collection; write Debug by hand with \
+         hotsheet_sync::secret::RedactedHeaders:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn hs2_cqne4e_header_scanner_flags_plain_collections_only() {
+    let source = r#"
+#[derive(Debug, Clone)]
+pub struct Leaky {
+    pub headers: Vec<(String, String)>,
+    pub(crate) response_headers: HashMap<String, String>,
+    extra_headers: BTreeMap<&'static str, String>,
+    raw_headers: HeaderMap,
+    pub safe_headers: Vec<(String, SecretString)>,
+    pub header_count: usize,
+    pub url: String,
+}
+
+#[derive(Clone)]
+struct HandWritten {
+    headers: Vec<(String, String)>,
+}
+"#;
+    let found: Vec<String> = scan_headers("x.rs", source)
+        .into_iter()
+        .map(|f| f.field)
+        .collect();
+    assert_eq!(
+        found,
+        [
+            "headers",
+            "response_headers",
+            "extra_headers",
+            "raw_headers"
+        ]
+    );
+}
+
+#[test]
+fn hs2_a8t481_no_derived_debug_over_a_plain_string_secret() {
+    let findings = scan_workspace(scan);
 
     let exempt = |f: &Finding| {
         NOT_SECRET

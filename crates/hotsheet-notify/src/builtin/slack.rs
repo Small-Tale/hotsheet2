@@ -222,6 +222,13 @@ mod tests {
             .unwrap();
         let request = http.requests().remove(0);
         assert_eq!(request.url, "https://hooks.slack.test/T/B/x");
+        // HS2-CQNE4E: the webhook URL path is the credential, so Debug keeps only the origin.
+        let printed = format!("{request:?}");
+        assert!(
+            printed.contains(r#""https://hooks.slack.test/<redacted>""#),
+            "{printed}"
+        );
+        assert!(!printed.contains("/T/B/x"), "{printed}");
         let body: Value = serde_json::from_slice(&request.body).unwrap();
         assert_eq!(body["text"], "HS2-7 needs your feedback");
         assert_eq!(
