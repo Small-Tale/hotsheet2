@@ -313,6 +313,7 @@ fn with_os_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::
 
 #[cfg(any(test, feature = "test-permission-vault"))]
 fn with_test_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io::Result<T> {
+    use hotsheet_sync::LockExt;
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
 
@@ -323,17 +324,19 @@ fn with_test_secrets<T>(f: impl FnOnce(&dyn SecretStore) -> io::Result<T>) -> io
             account: &str,
             value: &str,
         ) -> Result<(), hotsheet_ticketing::secrets::SecretError> {
-            self.0.lock().unwrap().insert(account.into(), value.into());
+            self.0
+                .lock_or_recover()
+                .insert(account.into(), value.into());
             Ok(())
         }
         fn get(
             &self,
             account: &str,
         ) -> Result<Option<String>, hotsheet_ticketing::secrets::SecretError> {
-            Ok(self.0.lock().unwrap().get(account).cloned())
+            Ok(self.0.lock_or_recover().get(account).cloned())
         }
         fn delete(&self, account: &str) -> Result<bool, hotsheet_ticketing::secrets::SecretError> {
-            Ok(self.0.lock().unwrap().remove(account).is_some())
+            Ok(self.0.lock_or_recover().remove(account).is_some())
         }
     }
     static TEST_KEYS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();

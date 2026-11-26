@@ -10,6 +10,7 @@ mod ai_tool_discovery;
 mod api_error;
 pub mod auto_group;
 mod blocking_offload;
+mod catch_panic;
 pub mod ci_follow;
 pub mod ci_status;
 pub mod claim_conflict_push;
@@ -2988,6 +2989,10 @@ pub fn app(state: AppState) -> Router {
         // Run every non-streaming handler on the blocking pool so sync store work (file I/O,
         // flock and mutex waits, SQLite) never occupies an async worker (HS2-9Z0Q8N).
         .layer(middleware::from_fn(blocking_offload::offload))
+        // Answer 500 instead of dropping the connection when a handler panics, including on
+        // the streaming and long-wait routes the offload leaves on the async workers
+        // (HS2-GSW2AA). Inside the timing layer, so a panicking request is still timed.
+        .layer(middleware::from_fn(catch_panic::catch_panic))
         // Warn on any request over its local latency budget (HS2-0DH8ZS).
         .layer(middleware::from_fn(request_timing::time_request))
         .with_state(state)

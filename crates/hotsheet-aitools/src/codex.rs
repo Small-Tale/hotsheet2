@@ -14,7 +14,7 @@
 //! [`CodexAppServer`], [`CodexTurn`]) is exercised with no live `codex` (`docs/05` §5.10,
 //! the load-bearing testability rule).
 
-use hotsheet_sync::LockExt;
+use hotsheet_sync::{CondvarExt, LockExt};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -993,7 +993,7 @@ impl AppServerTurn for CodexTurn {
             if self.cursor < notes.len() {
                 continue;
             }
-            let _ = self.inner.cvar.wait_timeout(notes, remaining).unwrap();
+            let _ = self.inner.cvar.wait_timeout_or_recover(notes, remaining);
         }
     }
 

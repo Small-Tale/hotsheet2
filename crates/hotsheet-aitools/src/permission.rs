@@ -18,7 +18,7 @@
 //! file — HS2-9R9YZW). The WebSocket push to clients and the per-plugin transport adapters
 //! are the server/plugin wiring on top (HS2-113 / HS2-0QGW07).
 
-use hotsheet_sync::LockExt;
+use hotsheet_sync::{CondvarExt, LockExt};
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::path::Path;
@@ -1202,7 +1202,7 @@ impl SharedPermissionBridge {
             if let Some(d) = results.remove(&id) {
                 return d;
             }
-            results = self.cvar.wait(results).unwrap();
+            results = self.cvar.wait_or_recover(results);
         }
     }
 
@@ -1270,7 +1270,7 @@ impl SharedPermissionBridge {
                 drop(results);
                 return self.expire(&request, on_timeout, on_expired);
             }
-            let (guard, _) = self.cvar.wait_timeout(results, deadline - now).unwrap();
+            let (guard, _) = self.cvar.wait_timeout_or_recover(results, deadline - now);
             results = guard;
         }
     }

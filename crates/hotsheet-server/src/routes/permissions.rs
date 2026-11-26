@@ -114,11 +114,19 @@ pub(crate) async fn probe_checkout_legacy_permission_host(
     legacy_permission_host(&state, &reference, &query.source, false)
 }
 
+/// A verified Git source's checkout, legacy vault path and source locator. The locator is
+/// resolved here once, with the checkout, so callers never re-resolve it (HS2-GSW2AA).
+struct LegacyPermissionSource {
+    checkout: hotsheet_ticketing::checkouts::Checkout,
+    vault: std::path::PathBuf,
+    locator: String,
+}
+
 fn legacy_permission_source(
     state: &AppState,
     reference: &str,
     source_id: &str,
-) -> Result<(hotsheet_ticketing::checkouts::Checkout, std::path::PathBuf), ApiError> {
+) -> Result<LegacyPermissionSource, ApiError> {
     let checkout = state
         .checkout_registry
         .resolve(reference)
@@ -126,6 +134,15 @@ fn legacy_permission_source(
     let store = checkout
         .verified_git_source(source_id)
         .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
+    let locator = checkout
+        .source(source_id)
+        .map(|source| source.locator.clone())
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                "ticket source is not linked to this project",
+            )
+        })?;
     let paths = state.permission_rule_paths.lock_or_recover();
     let source = crate::watcher::same_path(store.root(), state.store.root())
         .then(|| paths.get("").cloned())
@@ -153,7 +170,11 @@ fn legacy_permission_source(
             "legacy permission vault missing",
         ));
     }
-    Ok((checkout, source))
+    Ok(LegacyPermissionSource {
+        checkout,
+        vault: source,
+        locator,
+    })
 }
 
 /// Withdraw source-scoped cached grants before a headless caller deletes the vault.
@@ -312,8 +333,11 @@ pub(crate) async fn preview_checkout_legacy_permissions(
     Path(reference): Path<String>,
     Query(query): Query<LegacyPermissionQuery>,
 ) -> Result<Json<LegacyPermissionPreview>, ApiError> {
-    let (checkout, source) = legacy_permission_source(&state, &reference, &query.source)?;
-    let legacy_project = checkout.source(&query.source).unwrap().locator.clone();
+    let LegacyPermissionSource {
+        checkout,
+        vault: source,
+        locator: legacy_project,
+    } = legacy_permission_source(&state, &reference, &query.source)?;
     let count = tokio::task::spawn_blocking(move || {
         hotsheet_aitools::count_legacy_permission_rules(&source, &legacy_project)
     })
@@ -352,8 +376,11 @@ pub(crate) async fn discard_checkout_legacy_permissions(
             "permission rules still loading",
         ));
     }
-    let (checkout, source) = legacy_permission_source(&state, &reference, &body.source)?;
-    let legacy_project = checkout.source(&body.source).unwrap().locator.clone();
+    let LegacyPermissionSource {
+        checkout,
+        vault: source,
+        locator: legacy_project,
+    } = legacy_permission_source(&state, &reference, &body.source)?;
     let state_for_peers = state.clone();
     let checkout_id = checkout.id.to_string();
     let source_id = body.source.clone();

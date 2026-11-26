@@ -594,6 +594,8 @@ pub fn watch_rollout(
     let append_wake = wake.clone();
     // Starting a native stream (FSEventStreamStart) can take seconds under load, so even the
     // first subscription happens on the watcher's own thread, off the hook's request path.
+    // Detached on purpose (HS2-GSW2AA): it returns on `Wake::Stop`, the `stopped` flag, or its
+    // wake channel disconnecting.
     std::thread::spawn(move || {
         let mut watcher: Option<BackgroundWatcher> = None;
         let mut current = None;

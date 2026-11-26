@@ -15,6 +15,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use hotsheet_sync::{CondvarExt, LockExt};
 use hotsheet_ticketing::secrets::SecretStore;
 
 use super::model::{AdapterError, ChangeAdapter, ChangeHint, ConnectionContext, Event, Health};
@@ -263,7 +264,7 @@ struct Stop {
 impl Stop {
     fn set(&self) {
         self.flag.store(true, Ordering::SeqCst);
-        let _held = self.gate.lock().unwrap();
+        let _held = self.gate.lock_or_recover();
         self.wake.notify_all();
     }
 
@@ -273,11 +274,10 @@ impl Stop {
 
     /// Sleep up to `duration`, waking early when stopped. Returns whether stopped.
     fn sleep(&self, duration: Duration) -> bool {
-        let guard = self.gate.lock().unwrap();
+        let guard = self.gate.lock_or_recover();
         let _ = self
             .wake
-            .wait_timeout_while(guard, duration, |_| !self.is_set())
-            .unwrap();
+            .wait_timeout_while_or_recover(guard, duration, |_| !self.is_set());
         self.is_set()
     }
 }
@@ -316,7 +316,7 @@ pub struct Hub {
 impl Shared {
     fn publish(&self, connection: &str, health: Health) {
         {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.lock_or_recover();
             if state.health.get(connection) == Some(&health) {
                 return;
             }
@@ -326,7 +326,7 @@ impl Shared {
     }
 
     fn sources_of(&self, connection: &str) -> Vec<String> {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock_or_recover();
         let mut sources: Vec<String> = state
             .registry
             .bindings_of(connection)
@@ -341,7 +341,7 @@ impl Shared {
     fn hint(&self, connection: &str, channel: &str, hint: &ChangeHint) {
         let now = (self.now_ms)();
         let deliveries = {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.lock_or_recover();
             let out = state.router.offer(connection, channel, hint, now);
             if state.router.next_due().is_some() {
                 self.wake.notify_all();
@@ -442,7 +442,7 @@ impl Shared {
     fn dispatch(self: &Arc<Self>) {
         loop {
             let (deliveries, wait) = {
-                let mut state = self.state.lock().unwrap();
+                let mut state = self.state.lock_or_recover();
                 if state.shutting_down {
                     return;
                 }
@@ -455,8 +455,8 @@ impl Shared {
                 if due.is_empty() {
                     // Nothing due: sleep to the next deadline, or until something is pending.
                     let state = match wait {
-                        Some(wait) => self.wake.wait_timeout(state, wait).unwrap().0,
-                        None => self.wake.wait(state).unwrap(),
+                        Some(wait) => self.wake.wait_timeout_or_recover(state, wait).0,
+                        None => self.wake.wait_or_recover(state),
                     };
                     drop(state);
                     continue;
@@ -544,7 +544,7 @@ impl Hub {
         let mut stopped = Vec::new();
         let mut start = Vec::new();
         {
-            let mut state = self.shared.state.lock().unwrap();
+            let mut state = self.shared.state.lock_or_recover();
             let sources_before: Vec<String> = state
                 .registry
                 .bindings
@@ -602,7 +602,7 @@ impl Hub {
             let thread_stop = Arc::clone(&stop);
             let handle =
                 std::thread::spawn(move || shared.supervise(connection, channels, thread_stop));
-            self.shared.state.lock().unwrap().running.insert(
+            self.shared.state.lock_or_recover().running.insert(
                 name,
                 Running {
                     signature,
@@ -616,7 +616,7 @@ impl Hub {
 
     /// Every connection's health, by id. A connection nothing is bound to reads `idle`.
     pub fn health(&self) -> BTreeMap<String, Health> {
-        let state = self.shared.state.lock().unwrap();
+        let state = self.shared.state.lock_or_recover();
         let mut out: BTreeMap<String, Health> = state
             .registry
             .connections
@@ -629,13 +629,26 @@ impl Hub {
 
     /// How many hints the router has ignored, by reason.
     pub fn ignored(&self) -> HashMap<&'static str, u64> {
-        self.shared.state.lock().unwrap().router.ignored.clone()
+        self.shared.state.lock_or_recover().router.ignored.clone()
+    }
+
+    /// Poison the shared state lock the way a panicking connection or dispatcher thread
+    /// would, so a test can prove the hub keeps serving (HS2-GSW2AA).
+    #[cfg(test)]
+    pub(super) fn poison_state_for_test(&self) {
+        let shared = Arc::clone(&self.shared);
+        let _ = std::thread::spawn(move || {
+            let _guard = shared.state.lock();
+            panic!("poison the hub state");
+        })
+        .join();
+        assert!(self.shared.state.is_poisoned());
     }
 
     /// Stop every connection and the dispatcher, waiting for their threads.
     pub fn shutdown(&self) {
         let running: Vec<Running> = {
-            let mut state = self.shared.state.lock().unwrap();
+            let mut state = self.shared.state.lock_or_recover();
             state.shutting_down = true;
             self.shared.wake.notify_all();
             std::mem::take(&mut state.running).into_values().collect()
@@ -646,7 +659,7 @@ impl Hub {
         for running in running {
             let _ = running.handle.join();
         }
-        if let Some(handle) = self.dispatcher.lock().unwrap().take() {
+        if let Some(handle) = self.dispatcher.lock_or_recover().take() {
             let _ = handle.join();
         }
     }
