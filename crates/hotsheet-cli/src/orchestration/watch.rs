@@ -77,6 +77,10 @@ pub struct TargetEventPage {
     /// push made from it does. Absent (false) from an older host, which cannot say.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub remote_refs_changed: bool,
+    /// HS2-ESVYQH: the hosted checkout's coordination pool changed after `since`, as an
+    /// integrator's review return does. Absent (false) from an older host.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pool_changed: bool,
 }
 
 /// HS2-FJ6MDW: a hosted project's own speculation setting, alone.
@@ -439,6 +443,23 @@ fn wakes_scheduler(
     runs: &[Run],
     caught_up: bool,
 ) -> bool {
+    // HS2-ESVYQH: a run its worker released may have had its handoff returned for
+    // corrections, which the next pass places again. The return changes the pool (and
+    // adds a `## Review return` note before it), and the run's sync reports nothing
+    // new, so either wakes the loop, whether or not a session of the owner is still
+    // there: a lost session's step is placed again too.
+    let released =
+        |run: &&Run| run.state == hotsheet_ticketing::orchestration::RunState::Intervened;
+    if page.pool_changed && runs.iter().any(|run| released(&run)) {
+        return true;
+    }
+    if page.events.iter().any(|event| {
+        runs.iter()
+            .filter(released)
+            .any(|run| affects_ticket(event, &run.target.connection_id, &run.target.native_id))
+    }) {
+        return true;
+    }
     if sessions.is_empty() {
         return false;
     }

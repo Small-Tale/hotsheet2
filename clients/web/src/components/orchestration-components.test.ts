@@ -298,6 +298,26 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(paused).toContain('data-control="resume"');
   });
 
+  it('says a released run is in review or back for corrections, in its State and its events (HS2-ESVYQH)', () => {
+    const released = String(
+      OrchestrationInspector({
+        item: { ...item('step-3'), run: { ...item('step-3').run!, state: 'intervened' } },
+        timeline: demoTimeline('running'),
+        clock: demoClock,
+        details: {
+          loading: false,
+          events: [{ at_ms: 0, kind: 'state', state: 'intervened', reason: 'claim_released', source: 'target' }],
+        },
+      }),
+    );
+    expect(released).toContain('in review or back for corrections, not done until its ticket is completed');
+    expect(released).toContain(
+      'released by its worker (its worker let the ticket go: a handoff, or a return for corrections)',
+    );
+    expect(released).not.toContain('claim_released');
+    expect(released).not.toContain('claim released');
+  });
+
   it('HS2-PR984R Where It Runs names the site the scheduler chose and its machine', () => {
     const own = item('step-3');
     const other = demoTimeline('running').targets.find((target) => target.target_id !== (own.site_id ?? ''))!;

@@ -1071,6 +1071,11 @@ pub enum RequestKind {
     /// this session on another site: claim it, work it, push a branch and hand off by
     /// note; Hot Sheet relays the handoff to the home's integrator.
     SiteAssigned,
+    /// HS2-ESVYQH: the integrator returned the handoff of the session's run for
+    /// corrections and nobody else assigns them, so the ticket is claimed for it again.
+    /// The request's `commit` holds the `## Review return` note's id, so each return
+    /// is pushed once.
+    Returned,
 }
 
 impl RequestKind {
@@ -1081,6 +1086,7 @@ impl RequestKind {
             Self::Cancelled => "cancelled",
             Self::Rebase => "rebase",
             Self::SiteAssigned => "site_assigned",
+            Self::Returned => "returned",
         }
     }
 }
@@ -1094,7 +1100,8 @@ pub struct HostedRequest {
     /// The ticket's canonical id.
     pub ticket: String,
     pub kind: RequestKind,
-    /// HS2-2K0DM8: the commit a `rebase` request names.
+    /// HS2-2K0DM8: the commit a `rebase` request names. HS2-ESVYQH: for a `returned`
+    /// request, the id of the `## Review return` note it is for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
     pub requested_at_ms: u64,

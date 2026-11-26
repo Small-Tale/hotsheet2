@@ -88,3 +88,42 @@ export function parseRunReconciliation(run: Record<string, unknown> | undefined)
       })),
   };
 }
+
+/**
+ * HS2-ESVYQH: a run's state in words. `intervened` after its worker let the ticket go is a handoff in
+ * review or one returned for corrections (docs/26 §26.24), never finished work, so it says so.
+ */
+const RUN_STATES: Readonly<Record<string, string>> = {
+  intervened: 'Released by its worker: in review or back for corrections, not done until its ticket is completed',
+};
+
+/** HS2-ESVYQH: why a run changed, in words; codes it does not know read as words. */
+const RUN_REASONS: Readonly<Record<string, string>> = {
+  claim_released: 'its worker let the ticket go: a handoff, or a return for corrections',
+  claim_taken: 'someone else took the ticket',
+  claim_confirmed: 'its claim was confirmed',
+  claimed_for_session: 'claimed for its session, with no dispatcher to assign it',
+  assigned_by_dispatcher: 'assigned by the project’s dispatcher',
+  target_completed: 'its ticket was completed',
+};
+
+/** The Run section's State value. */
+export function runStateText(state: string): string {
+  const known = RUN_STATES[state];
+  if (known) return known;
+  const text = words(state);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function runReasonText(reason: string): string {
+  return RUN_REASONS[reason] ?? words(reason);
+}
+
+/** One row of the Run section's events: its kind, the state it reached and why. */
+export function runEventText(event: { kind: string; state?: string; reason?: string; source?: string }): string {
+  const kind = words(event.kind);
+  const state = event.state === 'intervened' ? 'released by its worker' : event.state && words(event.state);
+  return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}${state ? `: ${state}` : ''}${
+    event.reason ? ` (${runReasonText(event.reason)})` : ''
+  }${event.source === 'target' ? ' · learned from the project' : ''}`;
+}

@@ -153,6 +153,10 @@ impl TargetEvents for ServerEvents {
         let refs_change = |event: &crate::ChangeEvent| {
             event.kind == crate::code_ref_watch::CODE_REFS_CHANGE_KIND && event.store == checkout.id
         };
+        // HS2-ESVYQH: the checkout's coordination pool changed (a review return).
+        let pool_change = |event: &crate::ChangeEvent| {
+            event.kind == crate::code_ref_watch::POOL_CHANGE_KIND && event.store == checkout.id
+        };
         // HS2-257Q2Z: a session an orchestrator started in this checkout ended or
         // finished a turn.
         let session_change = |event: &crate::ChangeEvent| {
@@ -167,6 +171,7 @@ impl TargetEvents for ServerEvents {
             // HS2-FJ6MDW: filled by the shared runtime after the wait.
             speculation: None,
             remote_refs_changed: false,
+            pool_changed: false,
         };
         // Whether the event was one this checkout's followers want.
         let take = |page: &mut TargetEventPage, event: &crate::ChangeEvent| {
@@ -186,6 +191,8 @@ impl TargetEvents for ServerEvents {
                 });
             } else if refs_change(event) {
                 page.remote_refs_changed = true;
+            } else if pool_change(event) {
+                page.pool_changed = true;
             } else {
                 return false;
             }
@@ -224,6 +231,7 @@ impl TargetEvents for ServerEvents {
                                 if ticket_change(&event)
                                     || session_change(&event)
                                     || refs_change(&event)
+                                    || pool_change(&event)
                                 {
                                     return Some(Ok(event));
                                 }

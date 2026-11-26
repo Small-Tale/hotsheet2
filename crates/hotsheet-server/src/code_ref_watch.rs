@@ -33,11 +33,23 @@ use hotsheet_sync::LockExt;
 /// The change kind the target feed reads for a followed checkout's remote-tracking refs.
 pub(crate) const CODE_REFS_CHANGE_KIND: &str = "code_refs_changed";
 
+/// HS2-ESVYQH: the change kind for a followed checkout's coordination pool
+/// (`<git-common-dir>/hotsheet-coordination/state.json`), which an integrator's review
+/// return changes without any ticket change after it.
+pub(crate) const POOL_CHANGE_KIND: &str = "coordination_pool_changed";
+
+/// HS2-ESVYQH: the directory of the coordination pool under the git common directory.
+const POOL_DIRECTORY: &str = "hotsheet-coordination";
+
 /// A watch nobody's feed asked for in this long is dropped at the next request.
 const IDLE: Duration = Duration::from_secs(10 * 60);
 
 struct Watch {
-    _watcher: BackgroundWatcher,
+    watcher: BackgroundWatcher,
+    /// HS2-ESVYQH: the coordination pool's directory, once it is watched. A pool
+    /// created after the watch started is added at the next request.
+    pool: Option<PathBuf>,
+    common: PathBuf,
     /// The pending re-check ends once this is dropped.
     _pending: Arc<()>,
     asked: Instant,
@@ -83,19 +95,27 @@ impl CodeRefWatches {
             watches.retain(|_, watch| now.duration_since(watch.asked) < IDLE);
             if let Some(watch) = watches.get_mut(checkout_id) {
                 watch.asked = now;
+                let pool = watch.common.join(POOL_DIRECTORY);
+                if watch.pool.is_none() && pool.is_dir() {
+                    watch.watcher.add(&pool, RecursiveMode::NonRecursive);
+                    watch.pool = Some(pool);
+                }
                 return;
             }
         }
         let Some(common) = git_common_dir(root) else {
             return;
         };
+        let pool = Some(common.join(POOL_DIRECTORY)).filter(|pool| pool.is_dir());
         let (watcher, pending) = watch_refs(checkout_id, &common, event_log, events, start);
         // A concurrent request may have started the same watch; keep the first.
         self.watches
             .lock_or_recover()
             .entry(checkout_id.to_owned())
             .or_insert(Watch {
-                _watcher: watcher,
+                watcher,
+                pool,
+                common,
                 _pending: pending,
                 asked: now,
             });
@@ -147,7 +167,7 @@ fn watch_refs(
     start: StartStream,
 ) -> (BackgroundWatcher, Arc<()>) {
     let (log, sender, checkout) = (event_log.clone(), events.clone(), checkout_id.to_owned());
-    let emit = Arc::new(move || {
+    let emit_kind = Arc::new(move |kind: &'static str| {
         emit_change(
             &log,
             &sender,
@@ -155,7 +175,7 @@ fn watch_refs(
                 live: None,
                 cursor: None,
                 store: checkout.clone(),
-                kind: CODE_REFS_CHANGE_KIND.into(),
+                kind: kind.into(),
                 id: checkout.clone(),
                 slug: String::new(),
                 message: None,
@@ -165,19 +185,23 @@ fn watch_refs(
             },
         );
     });
-    let seen = Arc::new(Mutex::new(fingerprint(common)));
+    let seen = Arc::new(Mutex::new((fingerprint(common), pool_fingerprint(common))));
     let read = {
-        let (seen, common, emit) = (seen.clone(), common.to_path_buf(), emit.clone());
+        let (seen, common, emit_kind) = (seen.clone(), common.to_path_buf(), emit_kind.clone());
         move || {
-            let now = fingerprint(&common);
+            let now = (fingerprint(&common), pool_fingerprint(&common));
             let mut last = seen.lock_or_recover();
-            if *last != now {
-                *last = now;
-                emit();
+            let (refs_moved, pool_moved) = (last.0 != now.0, last.1 != now.1);
+            *last = now;
+            drop(last);
+            if refs_moved {
+                emit_kind(CODE_REFS_CHANGE_KIND);
+            }
+            if pool_moved {
+                emit_kind(POOL_CHANGE_KIND);
             }
         }
     };
-    let on_event = emit;
     let root = common.to_path_buf();
     let handler = move |delivery: Delivery| {
         let Ok(event) = delivery else { return };
@@ -189,7 +213,10 @@ fn watch_refs(
             .iter()
             .any(|path| is_remote_tracking(&root, path))
         {
-            on_event();
+            emit_kind(CODE_REFS_CHANGE_KIND);
+        }
+        if event.paths.iter().any(|path| is_pool(&root, path)) {
+            emit_kind(POOL_CHANGE_KIND);
         }
     };
     let live = Arc::new(AtomicBool::new(false));
@@ -202,15 +229,17 @@ fn watch_refs(
         on_status();
     };
     let refs = common.join("refs");
-    let watcher = BackgroundWatcher::start_with(
-        &[
-            (refs.as_path(), RecursiveMode::Recursive),
-            (common, RecursiveMode::NonRecursive),
-        ],
-        handler,
-        status,
-        start,
-    );
+    // HS2-ESVYQH: the pool's directory when it exists; the common directory's own
+    // watch sees it created.
+    let pool = common.join(POOL_DIRECTORY);
+    let mut paths = vec![
+        (refs.as_path(), RecursiveMode::Recursive),
+        (common, RecursiveMode::NonRecursive),
+    ];
+    if pool.is_dir() {
+        paths.push((pool.as_path(), RecursiveMode::NonRecursive));
+    }
+    let watcher = BackgroundWatcher::start_with(&paths, handler, status, start);
     let pending = Arc::new(());
     let owner = Arc::downgrade(&pending);
     let spawned = std::thread::Builder::new()
@@ -257,6 +286,33 @@ fn fingerprint(common: &Path) -> Vec<(PathBuf, u64, Option<std::time::SystemTime
     }
     found.sort();
     found
+}
+
+/// HS2-ESVYQH: the coordination pool's state file, with its size and modification time.
+fn pool_fingerprint(common: &Path) -> Option<(u64, Option<std::time::SystemTime>)> {
+    let meta = std::fs::metadata(common.join(POOL_DIRECTORY).join("state.json")).ok()?;
+    Some((meta.len(), meta.modified().ok()))
+}
+
+/// HS2-ESVYQH: whether a changed path under `common` is the coordination pool: its
+/// directory (created), or its state file (a write renames a temporary file onto it).
+/// Its lock and temporary files are not.
+fn is_pool(common: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(common) else {
+        return false;
+    };
+    let parts: Vec<&std::ffi::OsStr> = relative
+        .components()
+        .filter_map(|part| match part {
+            Component::Normal(name) => Some(name),
+            _ => None,
+        })
+        .collect();
+    match parts.as_slice() {
+        [directory] => *directory == POOL_DIRECTORY,
+        [directory, file] => *directory == POOL_DIRECTORY && *file == "state.json",
+        _ => false,
+    }
 }
 
 /// Whether a changed path under the common directory `common` is remote-tracking state:
@@ -343,6 +399,86 @@ mod tests {
         ] {
             assert!(!is_remote_tracking(common, Path::new(path)), "{path}");
         }
+    }
+
+    /// HS2-ESVYQH: only the coordination pool's directory and state file count as the
+    /// pool; its lock and temporary files, and anything else, do not.
+    #[test]
+    fn hs2_esvyqh_only_the_pool_state_counts_as_a_pool_change() {
+        let common = Path::new("/repo/.git");
+        for path in [
+            "/repo/.git/hotsheet-coordination",
+            "/repo/.git/hotsheet-coordination/state.json",
+        ] {
+            assert!(is_pool(common, Path::new(path)), "{path}");
+        }
+        for path in [
+            "/repo/.git/hotsheet-coordination/.tmpA1b2C3",
+            "/repo/.git/hotsheet-coordination/state.lock",
+            "/repo/.git/hotsheet-coordination/nested/state.json",
+            "/repo/.git/refs/remotes/origin/main",
+            "/repo/.git/state.json",
+            "/elsewhere/hotsheet-coordination/state.json",
+        ] {
+            assert!(!is_pool(common, Path::new(path)), "{path}");
+        }
+    }
+
+    fn pool_changes(log: &Arc<Mutex<EventLog>>) -> usize {
+        log.lock_or_recover()
+            .since(0)
+            .0
+            .iter()
+            .filter(|event| event.kind == POOL_CHANGE_KIND && event.store == "checkout")
+            .count()
+    }
+
+    /// HS2-ESVYQH: a followed checkout's pool state written (as a review return writes
+    /// it, a temporary file renamed onto it) is recorded as a pool change, and again on
+    /// a later write; it is never taken for a push.
+    #[test]
+    fn hs2_esvyqh_a_pool_write_in_the_followed_checkout_is_recorded() {
+        let dir = tempfile::tempdir().unwrap();
+        let clone = repository(dir.path());
+        let log = Arc::new(Mutex::new(EventLog::default()));
+        let (events, _keep) = broadcast::channel(64);
+        let watches = CodeRefWatches::default();
+        // Followed before the checkout has a pool: the next request after the pool is
+        // created watches it too.
+        watches.follow("checkout", &clone, &log, &events);
+        let pool = clone.join(".git").join(POOL_DIRECTORY);
+        std::fs::create_dir_all(&pool).unwrap();
+        std::fs::write(pool.join("state.json"), b"{}").unwrap();
+        watches.follow("checkout", &clone, &log, &events);
+        let write = |text: &[u8]| {
+            let mut temporary = tempfile::NamedTempFile::new_in(&pool).unwrap();
+            std::io::Write::write_all(&mut temporary, text).unwrap();
+            temporary.persist(pool.join("state.json")).unwrap();
+        };
+        let deadline = Instant::now() + Duration::from_secs(30);
+        // The stream may start after the first write; the re-check covers that.
+        write(br#"{"revision":1}"#);
+        while pool_changes(&log) < 1 {
+            assert!(
+                Instant::now() < deadline,
+                "the pool write was never recorded"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        // A later write is recorded too, once the added watch applies; each write is
+        // a change of its own, so the test writes until one is seen.
+        let first = pool_changes(&log);
+        let mut revision = 2;
+        while pool_changes(&log) <= first {
+            assert!(
+                Instant::now() < deadline,
+                "a later pool write was never recorded"
+            );
+            write(format!("{{\"revision\":{revision}}}").as_bytes());
+            revision += 1;
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        assert_eq!(recorded(&log), 0, "a pool write is no push");
     }
 
     /// A main checkout and a linked worktree resolve to one common directory; a plain

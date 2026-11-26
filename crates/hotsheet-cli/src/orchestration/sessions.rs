@@ -307,6 +307,10 @@ pub fn request_prompt_text(
         RequestKind::SiteAssigned => format!(
             "The dispatcher of this project's home site assigned you the ticket `{ticket}`. Claim it as the worker `{worker_id}` and work it with the `hotsheet-worker` skill in a worktree of this checkout, but do not run `coordination worker` for it: this checkout's pool is not the one that assigned it. To hand off, push your branch to `origin`, add a regular note that starts with `## Integration handoff` and has the lines `Branch: <the branch you pushed>` and `Commit: <its full commit SHA>`, and only then release your claim. Hot Sheet relays that handoff to the home site's integrator."
         ),
+        RequestKind::Returned => format!(
+            "The integrator returned your handoff of the ticket `{ticket}` for corrections, and no dispatcher is live to assign them, so the ticket is claimed for you again under your worker id `{worker_id}`. Read its `## Review return` note `{}`, make the corrections with the `hotsheet-worker` skill, renewing that claim, and hand the corrected work off again.",
+            commit.unwrap_or("unknown")
+        ),
         RequestKind::Rebase => format!(
             "Your work on the ticket `{ticket}` was started ahead of a prerequisite's CI gate, which failed. Its fix is the commit `{}`. Rebase your work onto that commit, rerun the gates the change affects, and keep the work off the shipping branch until they pass. Continue as the worker `{worker_id}`.",
             commit.unwrap_or("unknown")
@@ -767,6 +771,15 @@ pub struct HostedRoles {
 pub struct HostedSessionList {
     pub sessions: Vec<HostedSessionView>,
     pub roles: HostedRoles,
+    /// HS2-ESVYQH: handoffs the pool's integrator returned for corrections that no
+    /// correction assignment has taken up. Absent from an older host.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub returned: Vec<super::review_returns::ReturnedHandoff>,
+    /// HS2-ESVYQH: the pool's assigning role (its dispatcher, or a legacy pool's
+    /// integrator) holds a live lease. Absent when the pool could not be read or from
+    /// an older host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assigner_live: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1155,6 +1168,22 @@ impl OrchestrationRuntime {
         u32::try_from(pending).ok()
     }
 
+    /// HS2-ESVYQH: the pool's returned handoffs and whether its assigning role is live.
+    fn hosted_returns(
+        checkout: &Checkout,
+        now_ms: u64,
+    ) -> (Vec<super::review_returns::ReturnedHandoff>, Option<bool>) {
+        let now = i64::try_from(now_ms / 1000).unwrap_or(i64::MAX);
+        match coordination_state(Path::new(&checkout.root)) {
+            Ok(Some(state)) => (
+                super::review_returns::returned_handoffs(&state),
+                Some(super::review_returns::assigner_live(&state, now)),
+            ),
+            Ok(None) => (Vec::new(), Some(false)),
+            Err(()) => (Vec::new(), None),
+        }
+    }
+
     fn hosted_roles(checkout: &Checkout, now_ms: u64) -> HostedRoles {
         let now = i64::try_from(now_ms / 1000).unwrap_or(i64::MAX);
         match coordination_state(Path::new(&checkout.root)) {
@@ -1311,9 +1340,12 @@ impl OrchestrationRuntime {
                 tx,
             ));
         }
+        let (returned, assigner_live) = Self::hosted_returns(&checkout, now_ms);
         Ok(HostedSessionList {
             sessions,
             roles: Self::hosted_roles(&checkout, now_ms),
+            returned,
+            assigner_live,
         })
     }
 
@@ -2737,6 +2769,8 @@ impl OrchestrationRuntime {
             RequestKind::Rebase
         } else if cancelled == Some(RequestKind::SiteAssigned) {
             RequestKind::SiteAssigned
+        } else if cancelled == Some(RequestKind::Returned) {
+            RequestKind::Returned
         } else if run.state == hotsheet_ticketing::orchestration::RunState::Dispatched
             && run.worker_id.as_deref() == worker
         {
@@ -2750,7 +2784,9 @@ impl OrchestrationRuntime {
                 operation_id: session.operation_id.clone(),
                 ticket: run.target.native_id.clone(),
                 kind,
-                commit: commit.clone().filter(|_| kind == RequestKind::Rebase),
+                commit: commit
+                    .clone()
+                    .filter(|_| matches!(kind, RequestKind::Rebase | RequestKind::Returned)),
                 actor: actor.cloned(),
             })
             .map_err(|_| OrchestrationError::Corrupt)?;

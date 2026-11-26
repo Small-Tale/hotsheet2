@@ -22,7 +22,7 @@ import {
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { BuiltAheadView } from '../orchestration-built-ahead';
-import { reconciliationRows, type RunReconciliation } from '../orchestration-run-checks';
+import { reconciliationRows, runEventText, type RunReconciliation, runStateText } from '../orchestration-run-checks';
 import {
   chosenSite,
   integratorRows,
@@ -237,7 +237,7 @@ function RunSection({
   return (
     <OrchestrationInspectorSection label="Run">
       <ValueTable label="Run" density="compact" stackBelow="narrow">
-        <ValueTableRow label="State" value={`${sentence(run.state)}${run.paused ? ', paused' : ''}`} />
+        <ValueTableRow label="State" value={`${runStateText(run.state)}${run.paused ? ', paused' : ''}`} />
         <ValueTableRow
           label="Ticket"
           value={`${itemSlug(item)}: ${item.status ? words(item.status) : 'not read yet'}`}
@@ -416,12 +416,7 @@ function Evidence({
         {details.events && details.events.length > 0 ? (
           <ValueTable label="Run events" density="compact" stackBelow="narrow">
             {details.events.map((event) => (
-              <ValueTableRow
-                label={clock(event.at_ms)}
-                value={`${sentence(event.kind)}${event.state ? `: ${words(event.state)}` : ''}${
-                  event.reason ? ` (${words(event.reason)})` : ''
-                }${event.source === 'target' ? ' · learned from the project' : ''}`}
-              />
+              <ValueTableRow label={clock(event.at_ms)} value={runEventText(event)} />
             ))}
           </ValueTable>
         ) : (

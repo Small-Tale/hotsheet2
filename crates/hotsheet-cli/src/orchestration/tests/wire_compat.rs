@@ -182,6 +182,7 @@ fn hs2_t2ks8g_an_older_reader_parses_a_newer_answer_with_an_extra_field() {
             speculation: Some(speculation),
         }),
         remote_refs_changed: true,
+        pool_changed: true,
     });
     let digest = "a".repeat(64);
     reads_newer(HostedValidation {
