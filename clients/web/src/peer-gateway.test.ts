@@ -19,7 +19,7 @@ import {
 const SERVER = 'http://127.0.0.1:9';
 const SERVER_SOURCE = resolve(__dirname, '../../../crates/hotsheet-server/src');
 // Routes that only exist inside `#[cfg(test)]` modules of non-test source files.
-const TEST_FIXTURE_ROUTES = new Set(['api', 'busy', 'fast']);
+const TEST_FIXTURE_ROUTES = new Set(['api', 'busy', 'fast', 'ok', 'panics']);
 
 afterEach(() => vi.unstubAllEnvs());
 
