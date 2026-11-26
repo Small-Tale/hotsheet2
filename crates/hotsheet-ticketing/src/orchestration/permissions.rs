@@ -868,15 +868,36 @@ fn current(mut request: PermissionRequest, now_ms: u64) -> PermissionRequest {
     request
 }
 
-/// At capacity, drop the oldest finished requests; waiting or usable ones stay.
+/// At capacity, drop the oldest used or lapsed requests first. HS2-8GE9HM: then the
+/// oldest settled answers that no longer need their record: a Deny or an Always Allow
+/// answered at least a day ago (a Deny stays final for its operation that long; an
+/// Always Allow's rule answers on its own). Waiting requests and an unused Allow Once
+/// are never dropped, so a ledger full of them still refuses.
 fn prune(file: &mut PermissionFile, now_ms: u64) {
+    let finished = |request: &PermissionRequest| {
+        matches!(
+            current(request.clone(), now_ms).state,
+            PermissionState::Used | PermissionState::Lapsed
+        )
+    };
+    let settled = |request: &PermissionRequest| {
+        let answered_long_ago = request
+            .answered_at_ms
+            .is_some_and(|at| now_ms.saturating_sub(at) >= PERMISSION_PENDING_MS);
+        answered_long_ago
+            && match current(request.clone(), now_ms).state {
+                PermissionState::Denied => true,
+                PermissionState::Allowed => request.rule_id.is_some(),
+                _ => false,
+            }
+    };
     while file.requests.len() >= MAX_PERMISSION_REQUESTS {
-        let Some(index) = file.requests.iter().position(|request| {
-            !matches!(
-                current(request.clone(), now_ms).state,
-                PermissionState::Pending | PermissionState::Allowed | PermissionState::Denied
-            )
-        }) else {
+        let Some(index) = file
+            .requests
+            .iter()
+            .position(finished)
+            .or_else(|| file.requests.iter().position(settled))
+        else {
             return;
         };
         file.requests.remove(index);

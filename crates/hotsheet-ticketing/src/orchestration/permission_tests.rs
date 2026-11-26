@@ -817,3 +817,208 @@ fn hs2_jwv5s1_removing_retired_files_reports_what_was_there() {
     assert!(removed.approvals_file && removed.approvals.is_none());
     assert!(ledger.exists());
 }
+
+/// HS2-8GE9HM: a full ledger written directly, so capacity tests need no 512 round
+/// trips through the locked file. Each request was asked at 1,000 and is in `state`
+/// since `answered_at_ms` 1,000 unless still pending.
+fn seed(
+    f: &Fixture,
+    requests: &[(PermissionKey, &str, PermissionState)],
+    rules: &[PermissionRule],
+) {
+    let requests: Vec<PermissionRequest> = requests
+        .iter()
+        .zip(0u128..)
+        .map(|((key, operation, state), index)| PermissionRequest {
+            request_id: ulid::Ulid::from((1u128 << 100) + index).to_string(),
+            key: key.clone(),
+            model: None,
+            operation_id: (*operation).into(),
+            actor_id: "scheduler".into(),
+            each_time: false,
+            state: *state,
+            requested_at_ms: 1_000,
+            answered_at_ms: (*state != PermissionState::Pending).then_some(1_000),
+            answered_by: (*state != PermissionState::Pending).then(|| "maintainer".into()),
+            rule_id: (*state == PermissionState::Allowed)
+                .then(|| rules.first().map(|rule| rule.rule_id.clone()))
+                .flatten(),
+            used_at_ms: (*state == PermissionState::Used).then_some(1_000),
+        })
+        .collect();
+    let file = serde_json::json!({
+        "schema_version": ORCHESTRATION_VERSION,
+        "requests": requests,
+        "rules": rules,
+    });
+    std::fs::write(
+        f._home.path().join("orchestration-permissions.json"),
+        serde_json::to_vec(&file).unwrap(),
+    )
+    .unwrap();
+}
+
+fn operations(f: &Fixture) -> Vec<String> {
+    f.ledger
+        .list(OWNER, f.clock.0.get())
+        .unwrap()
+        .into_iter()
+        .map(|request| request.operation_id)
+        .collect()
+}
+
+#[test]
+fn hs2_8ge9hm_a_ledger_full_of_denials_drops_the_oldest_after_a_day() {
+    let mut f = Fixture::new();
+    let work = key(1, PermissionAction::WorkStart, None);
+    let other = key(2, PermissionAction::WorkStart, None);
+    let names: Vec<String> = (0..MAX_PERMISSION_REQUESTS)
+        .map(|index| format!("op-{index}"))
+        .collect();
+    let denied: Vec<_> = names
+        .iter()
+        .map(|name| (work.clone(), name.as_str(), PermissionState::Denied))
+        .collect();
+    seed(&f, &denied, &[]);
+    // Within a day every Deny stays final for its operation: a new ask refuses.
+    f.clock.0.set(1_000 + PERMISSION_PENDING_MS - 1);
+    let ledger = f.ledger.clone();
+    assert!(matches!(
+        ledger.ask(&ask(&other, "op-new"), &mut f.tx()),
+        Err(OrchestrationError::Capacity)
+    ));
+    assert!(matches!(f.ask(&ask(&work, "op-0")), Asked::Denied(_)));
+    // A day after the answers the oldest Deny makes room, one per new request.
+    f.clock.0.set(1_000 + PERMISSION_PENDING_MS);
+    assert!(matches!(
+        f.ask(&ask(&other, "op-new")),
+        Asked::Pending { filed: true, .. }
+    ));
+    let now = f.clock.0.get();
+    assert_eq!(operations(&f).len(), MAX_PERMISSION_REQUESTS);
+    assert!(f.ledger.peek(&ask(&work, "op-0"), now).unwrap().is_none());
+    assert!(matches!(
+        f.ledger.peek(&ask(&work, "op-1"), now).unwrap(),
+        Some(Asked::Denied(_))
+    ));
+    // Repeating the new ask files nothing more; asking the dropped operation again
+    // files a fresh request in the next oldest Deny's place (empty then refill).
+    assert!(matches!(
+        f.ask(&ask(&other, "op-new")),
+        Asked::Pending { filed: false, .. }
+    ));
+    assert!(matches!(
+        f.ask(&ask(&work, "op-0")),
+        Asked::Pending { filed: true, .. }
+    ));
+    assert!(f.ledger.peek(&ask(&work, "op-1"), now).unwrap().is_none());
+    let kept = operations(&f);
+    assert_eq!(kept.len(), MAX_PERMISSION_REQUESTS);
+    assert_eq!(&kept[kept.len() - 2..], ["op-new", "op-0"]);
+}
+
+#[test]
+fn hs2_8ge9hm_used_requests_go_before_settled_answers_and_waiting_ones_stay() {
+    let mut f = Fixture::new();
+    let work = key(1, PermissionAction::WorkStart, None);
+    let other = key(2, PermissionAction::WorkStart, None);
+    // Oldest first: a Deny, a waiting request, an unused Allow Once, then used ones.
+    let names: Vec<String> = (0..MAX_PERMISSION_REQUESTS)
+        .map(|index| format!("op-{index}"))
+        .collect();
+    let mut seeded: Vec<_> = names
+        .iter()
+        .map(|name| (work.clone(), name.as_str(), PermissionState::Used))
+        .collect();
+    seeded[0].2 = PermissionState::Denied;
+    seeded[1].2 = PermissionState::Pending;
+    seeded[2].2 = PermissionState::Allowed;
+    seed(&f, &seeded, &[]);
+    // A day on, the waiting one has lapsed and the Allow Once too: they go first,
+    // oldest first, before the day-old Deny.
+    f.clock.0.set(1_000 + PERMISSION_PENDING_MS);
+    f.ask(&ask(&other, "new-1"));
+    f.ask(&ask(&other, "new-2"));
+    let kept = operations(&f);
+    assert!(kept.contains(&"op-0".to_owned()));
+    assert!(!kept.contains(&"op-1".to_owned()));
+    assert!(!kept.contains(&"op-2".to_owned()));
+    // Then the used ones, still before the Deny.
+    f.ask(&ask(&other, "new-3"));
+    let kept = operations(&f);
+    assert!(kept.contains(&"op-0".to_owned()));
+    assert!(!kept.contains(&"op-3".to_owned()));
+    assert_eq!(kept.len(), MAX_PERMISSION_REQUESTS);
+}
+
+#[test]
+fn hs2_8ge9hm_waiting_and_unused_allow_once_requests_are_never_dropped() {
+    let mut f = Fixture::new();
+    let work = key(1, PermissionAction::WorkStart, None);
+    let other = key(2, PermissionAction::WorkStart, None);
+    let names: Vec<String> = (0..MAX_PERMISSION_REQUESTS)
+        .map(|index| format!("op-{index}"))
+        .collect();
+    let mut seeded: Vec<_> = names
+        .iter()
+        .map(|name| (work.clone(), name.as_str(), PermissionState::Pending))
+        .collect();
+    seeded[0].2 = PermissionState::Allowed;
+    seed(&f, &seeded, &[]);
+    // Inside the Allow Once hour and the pending day nothing is dropped.
+    f.clock.0.set(1_000 + PERMISSION_ALLOWED_MS - 1);
+    let ledger = f.ledger.clone();
+    assert!(matches!(
+        ledger.ask(&ask(&other, "op-new"), &mut f.tx()),
+        Err(OrchestrationError::Capacity)
+    ));
+    assert!(matches!(f.ask(&ask(&work, "op-0")), Asked::AllowedOnce(_)));
+    // Once the Allow Once lapses unused it makes room; waiting ones still stay.
+    f.clock.0.set(1_000 + PERMISSION_ALLOWED_MS);
+    assert!(matches!(
+        f.ask(&ask(&other, "op-new")),
+        Asked::Pending { filed: true, .. }
+    ));
+    let ledger = f.ledger.clone();
+    assert!(matches!(
+        ledger.ask(&ask(&other, "op-next"), &mut f.tx()),
+        Err(OrchestrationError::Capacity)
+    ));
+}
+
+#[test]
+fn hs2_8ge9hm_requests_an_always_allow_answered_make_room_after_a_day() {
+    let mut f = Fixture::new();
+    let work = key(1, PermissionAction::WorkStart, None);
+    let other = key(2, PermissionAction::WorkStart, None);
+    let rule = PermissionRule {
+        rule_id: ulid::Ulid::from(1u128 << 101).to_string(),
+        key: work.clone(),
+        created_at_ms: 1_000,
+        created_by: Some("maintainer".into()),
+        request_id: None,
+    };
+    let names: Vec<String> = (0..MAX_PERMISSION_REQUESTS)
+        .map(|index| format!("op-{index}"))
+        .collect();
+    let allowed: Vec<_> = names
+        .iter()
+        .map(|name| (work.clone(), name.as_str(), PermissionState::Allowed))
+        .collect();
+    seed(&f, &allowed, std::slice::from_ref(&rule));
+    f.clock.0.set(1_000 + PERMISSION_PENDING_MS - 1);
+    let ledger = f.ledger.clone();
+    assert!(matches!(
+        ledger.ask(&ask(&other, "op-new"), &mut f.tx()),
+        Err(OrchestrationError::Capacity)
+    ));
+    f.clock.0.set(1_000 + PERMISSION_PENDING_MS);
+    assert!(matches!(
+        f.ask(&ask(&other, "op-new")),
+        Asked::Pending { filed: true, .. }
+    ));
+    assert!(!operations(&f).contains(&"op-0".to_owned()));
+    // The rule still answers the key, including the operation whose record went.
+    assert!(matches!(f.ask(&ask(&work, "op-0")), Asked::Remembered(_)));
+    assert_eq!(operations(&f).len(), MAX_PERMISSION_REQUESTS);
+}
