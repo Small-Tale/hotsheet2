@@ -12,6 +12,7 @@ use super::sessions::{drawer, git_project};
 use super::*;
 use hotsheet_server::AppState;
 use hotsheet_ticketing::checkouts::{Checkout, CheckoutRegistry};
+use hotsheet_ticketing::orchestration::ReplanMemoryStore;
 use hotsheet_ticketing::{NewTicket, StoreMetadata, TicketPatch, ops};
 use std::path::PathBuf;
 
@@ -223,6 +224,29 @@ impl TwoProjects {
         }
     }
 
+    /// HS2-H41MBC: waits, woken by the machine home changing, until the follower's first
+    /// step listed the target's open tickets as the re-plan's baseline (HS2-04WW8B).
+    /// Every ticket open at that listing counts as already seen, so a ticket written
+    /// before it ends would be seeded rather than re-planned. The follower authorizes
+    /// its reads (the first audited read) before that step's page and listing, so the
+    /// audit alone does not say the seed was taken.
+    async fn seeded(&self) {
+        let store = ReplanMemoryStore::new(&self.home, &self.owner.id).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let waiter = hotsheet_jobs::ChangeWaiter::starting(&[self.home.as_path()]).unwrap();
+            if store.read().is_ok_and(|memory| memory.seeded(TARGET)) {
+                return;
+            }
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            assert!(
+                !remaining.is_zero(),
+                "the follower never seeded the target's baseline"
+            );
+            tokio::task::block_in_place(|| waiter.wait(remaining));
+        }
+    }
+
     /// `plan show` once the server sees the planner idle in its open tab.
     async fn replannable(&self) -> Value {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
@@ -311,6 +335,7 @@ async fn hs2_tzccbj_a_new_target_ticket_replans_the_default_goal_on_a_real_serve
         })
         .await;
     world.replannable().await;
+    world.seeded().await;
     assert!(count(&world.audit().await, is_auto) == 0);
 
     // A new ticket in the target, written outside the server: one automatic update,
