@@ -163,6 +163,18 @@ export function terminalInputNeedsProbe(input: {
   return input.probing || input.now - input.lastInboundAt > TERMINAL_QUIET_INPUT_AFTER_MS;
 }
 
+/**
+ * The close code a server sends when the terminal itself ended: its child exited and its output drained,
+ * or it was killed (HS2-QWT94V). There is nothing to reattach to, so the viewer keeps what it shows and
+ * stops reconnecting. Any other close (a server restart, a dropped network) stays reconnectable.
+ */
+export const TERMINAL_ENDED_CLOSE_CODE = 4000;
+
+/** Whether a socket's close event says its terminal ended (HS2-QWT94V). */
+export function terminalSocketEnded(event: { code?: number }): boolean {
+  return event.code === TERMINAL_ENDED_CLOSE_CODE;
+}
+
 export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 * 2 ** Math.max(0, attempt));
 /** Most input a reconnecting terminal holds for its next socket; the oldest keystrokes give way. */
 export const TERMINAL_PENDING_INPUT_LIMIT = 64 * 1024;

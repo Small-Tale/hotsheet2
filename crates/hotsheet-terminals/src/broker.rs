@@ -150,8 +150,10 @@ pub enum Request {
 }
 
 /// A frame the broker streams to an attached client (one JSON line each), after an
-/// [`Request::Attach`]. The stream ends when the connection closes (terminal exited or the
-/// viewer went away).
+/// [`Request::Attach`]. The stream ends when the connection closes: once, after the last
+/// output, when the terminal's output ends (its child exited and the PTY drained, or `kill`
+/// removed it; HS2-QWT94V), or when the viewer went away. Attaching to an exited terminal still
+/// replays it and reports its size, then ends.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "frame", rename_all = "snake_case")]
 pub enum StreamOut {
@@ -696,6 +698,9 @@ async fn stream_terminal(
             // The writer ends when the terminal ended (its queue closed) or the client is gone.
             _ = &mut writer => break,
             line = lines.next_line() => match line {
+                // Once the terminal's output ended its stream is ending too: a late claim or
+                // keystroke reaches nothing (HS2-QWT94V).
+                Ok(Some(_)) if term.output_ended() => {}
                 Ok(Some(l)) if !l.trim().is_empty() => {
                     if let Ok(inbound) = serde_json::from_str::<StreamIn>(&l) {
                         match inbound {

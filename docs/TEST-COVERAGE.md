@@ -3128,8 +3128,14 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 
 ### Broker kill and exiting-terminal transitions (HS2-582G8R)
 
-- Behavior: After `kill`, a second `kill`, `input`, `clear_replay` and `attach` all answer not found, in any order, and the id reopens as a fresh PTY. A terminal whose child exited stays tracked until killed: `input` is refused with an error and never echoed, `clear_replay` succeeds and sends attached viewers a replacement replay, a size claim is applied and reported, and the first `kill` forgets it.
-- Unit: `crates/hotsheet-terminals/src/broker_transition_tests.rs` drives each transition over a real broker socket, waiting on broker state and stream frames. `hs2_582g8r_attached_stream_ends_once_on_kill` is quarantined under HS2-QWT94V: an attached stream does not end today when its terminal is killed.
+- Behavior: After `kill`, a second `kill`, `input`, `clear_replay` and `attach` all answer not found, in any order, and the id reopens as a fresh PTY. A terminal whose child exited stays tracked until killed: `input` is refused with an error and never echoed, `clear_replay` succeeds and the next attach replays the kept line, each attach replays and reports the size and then ends, and the first `kill` forgets it.
+- Unit: `crates/hotsheet-terminals/src/broker_transition_tests.rs` drives each transition over a real broker socket, waiting on broker state and stream frames.
+
+### Attached terminal streams end with their terminal (HS2-QWT94V)
+
+- Behavior: A viewer attached to a terminal sees its stream end exactly once, after the last output, when the child exits and its output drains or `kill` removes the terminal (also while a grandchild still holds the PTY). A size claim or keystroke after the end is never applied or answered. Attaching to an exited terminal replays it and reports its size, then ends. The server WebSocket closes once with code 4000 (`terminal ended`), in-process and through the broker; other closes stay reconnectable. The web viewer marks `data-connection="ended"`, keeps the output shown, and never reattaches from its backoff, a click, focus, the page showing, the network returning or typing. The Vite bridge and peer gateway pass 4000-4999 close codes through.
+- Unit: `crates/hotsheet-terminals/src/terminal.rs # hs2_qwt94v_ended_output_closes_each_subscriber_once_after_its_pending_chunks`; `crates/hotsheet-terminals/src/broker_transition_tests.rs # hs2_582g8r_attached_stream_ends_once_on_kill`, `hs2_qwt94v_child_exit_ends_every_attached_stream_after_its_last_output`, `hs2_qwt94v_kill_reattach_and_size_claims_interleave_across_reopens`, `hs2_qwt94v_kill_ends_the_stream_while_a_grandchild_holds_the_pty`; `clients/web/src/terminal-viewport-runtime.test.ts # a terminal that ended stays ended and never reattaches (HS2-QWT94V)`; `clients/web/src/ws-close-relay.test.ts`; `clients/web/src/terminal-ws-bridge.test.ts # passes a terminal-ended close code to the browser`.
+- End to end: `crates/hotsheet-server/tests/terminal_ws.rs # hs2_qwt94v_*` (kill and child exit, in-process and broker, repeated attaches and reopens); `clients/web/tests/terminal-replay.spec.ts # an exited terminal stays ended and never reattaches (HS2-QWT94V)` against a real server.
 
 ### Bounded live ticket refreshes (HS2-B5SJMJ)
 

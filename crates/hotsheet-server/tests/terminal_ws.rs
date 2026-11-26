@@ -1356,3 +1356,256 @@ async fn one_viewer_answers_terminal_queries(addr: std::net::SocketAddr, id: &st
         assert_eq!(next_answerer_frame(&mut preview).await, expected);
     }
 }
+
+/// HS2-QWT94V: the close code that tells a viewer its terminal ended.
+const TERMINAL_ENDED_CLOSE_CODE: u16 = 4000;
+
+/// A server whose terminals live in-process (`None`) or in a detached broker (`Some`); the
+/// guards keep its directories alive.
+struct EndServer {
+    _dirs: Vec<tempfile::TempDir>,
+    addr: std::net::SocketAddr,
+}
+
+async fn boot_for_ends(broker: bool) -> EndServer {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let mut state = AppState::new(store, SECRET.into()).unwrap();
+    let mut dirs = vec![dir];
+    if broker {
+        let bdir = tempfile::tempdir().unwrap();
+        let sock = bdir.path().join("b.sock");
+        let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+        tokio::spawn(hotsheet_terminals::serve_broker(
+            listener,
+            "proj".into(),
+            std::sync::Arc::new(hotsheet_terminals::TerminalManager::new()),
+        ));
+        state = state.with_terminal_broker_at(TerminalBroker::at(&sock, "proj"));
+        dirs.push(bdir);
+    }
+    let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = tcp.local_addr().unwrap();
+    let app = app(state);
+    tokio::spawn(async move {
+        axum::serve(tcp, app).await.unwrap();
+    });
+    EndServer { _dirs: dirs, addr }
+}
+
+impl EndServer {
+    async fn open(&self, body: serde_json::Value) {
+        let base = format!("http://{}", self.addr);
+        tokio::task::spawn_blocking(move || {
+            let resp = ureq::post(&format!("{base}/terminals"))
+                .set("x-hotsheet-secret", SECRET)
+                .set("content-type", "application/json")
+                .send_string(&body.to_string())
+                .unwrap();
+            assert_eq!(resp.status(), 200);
+        })
+        .await
+        .unwrap();
+    }
+
+    async fn kill(&self, id: &str) -> u16 {
+        let url = format!("http://{}/terminals/{id}", self.addr);
+        tokio::task::spawn_blocking(move || {
+            match ureq::delete(&url).set("x-hotsheet-secret", SECRET).call() {
+                Ok(resp) => resp.status(),
+                Err(ureq::Error::Status(code, _)) => code,
+                Err(other) => panic!("kill failed: {other}"),
+            }
+        })
+        .await
+        .unwrap()
+    }
+
+    /// Wait until the terminal reports its child exited and its replay holds `needle`.
+    async fn wait_exited(&self, id: &str, needle: &'static str) {
+        let url = format!("http://{}/terminals/{id}", self.addr);
+        tokio::task::spawn_blocking(move || {
+            for _ in 0..500 {
+                let value: serde_json::Value = serde_json::from_str(
+                    &ureq::get(&url)
+                        .set("x-hotsheet-secret", SECRET)
+                        .call()
+                        .unwrap()
+                        .into_string()
+                        .unwrap(),
+                )
+                .unwrap();
+                if value["alive"] == false
+                    && value["scrollback"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .contains(needle)
+                {
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            panic!("terminal never exited with {needle}");
+        })
+        .await
+        .unwrap();
+    }
+
+    async fn attach(&self, id: &str) -> TestWs {
+        let url = format!("ws://{}/terminals/{id}/attach?secret={SECRET}", self.addr);
+        tokio_tungstenite::connect_async(url).await.unwrap().0
+    }
+}
+
+/// Read a viewer's socket until it closes: the output it carried, the size frames, and the
+/// close code (`None` for a close without one). Panics past the deadline.
+async fn read_until_closed(ws: &mut TestWs) -> (String, Vec<u64>, Option<u16>) {
+    let (mut output, mut sizes) = (String::new(), Vec::new());
+    let code = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while let Some(message) = ws.next().await {
+            match message {
+                Ok(WsMessage::Binary(bytes)) => output.push_str(&String::from_utf8_lossy(&bytes)),
+                Ok(WsMessage::Text(text)) => {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if let Some(cols) = value["pty_size"]["cols"].as_u64() {
+                            sizes.push(cols);
+                        }
+                    }
+                }
+                Ok(WsMessage::Close(frame)) => return frame.map(|frame| u16::from(frame.code)),
+                Ok(_) => {}
+                Err(_) => return None,
+            }
+        }
+        None
+    })
+    .await
+    .expect("the socket never closed");
+    (output, sizes, code)
+}
+
+/// After the close, nothing more arrives and a late claim is never answered.
+async fn assert_stays_closed(ws: &mut TestWs) {
+    let _ = ws.send(claim_frame("late", 120, 40, true)).await;
+    let next = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+        .await
+        .expect("the closed socket ends");
+    assert!(
+        !matches!(next, Some(Ok(WsMessage::Text(_) | WsMessage::Binary(_)))),
+        "nothing follows the ended close: {next:?}"
+    );
+}
+
+/// HS2-QWT94V, in-process and through the broker: killing a terminal closes every attached
+/// socket once, after its pending output, with the ended code; a claim before the kill is
+/// applied and reported to both viewers, a claim after it reaches nothing, and reopening the
+/// id gives a fresh live terminal.
+async fn kill_closes_attached_viewers_once(broker: bool) {
+    let server = boot_for_ends(broker).await;
+    for round in 0..2u16 {
+        server
+            .open(serde_json::json!({"command": "cat", "id": "kill-end"}))
+            .await;
+        let mut driver = server.attach("kill-end").await;
+        let mut watcher = server.attach("kill-end").await;
+        expect_replay_then_size(&mut driver).await;
+        expect_replay_then_size(&mut watcher).await;
+        let cols = 100 + round;
+        driver
+            .send(claim_frame("driver", cols, 30, true))
+            .await
+            .unwrap();
+        driver
+            .send(WsMessage::Text("echo-before-kill\n".into()))
+            .await
+            .unwrap();
+        for viewer in [&mut driver, &mut watcher] {
+            assert_eq!(
+                next_size_frame(viewer).await.map(|(cols, ..)| cols),
+                Some(u64::from(cols)),
+                "round {round}: the claim before the kill is applied and reported"
+            );
+        }
+        wait_for_terminal_text(
+            format!("http://{}", server.addr),
+            "kill-end".into(),
+            "echo-before-kill",
+        )
+        .await;
+
+        assert_eq!(server.kill("kill-end").await, 204, "round {round}");
+        for viewer in [&mut driver, &mut watcher] {
+            let (_, sizes, code) = read_until_closed(viewer).await;
+            assert_eq!(code, Some(TERMINAL_ENDED_CLOSE_CODE), "round {round}");
+            assert!(
+                sizes.iter().all(|&c| c == u64::from(cols)),
+                "round {round}: {sizes:?}"
+            );
+            assert_stays_closed(viewer).await;
+        }
+        // A repeated kill is harmless and closes nothing twice (each socket already ended).
+        assert!(
+            matches!(server.kill("kill-end").await, 204 | 404),
+            "round {round}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn hs2_qwt94v_kill_closes_each_attached_socket_once_with_the_ended_code() {
+    kill_closes_attached_viewers_once(false).await;
+}
+
+#[tokio::test]
+async fn hs2_qwt94v_broker_kill_closes_each_attached_socket_once_with_the_ended_code() {
+    kill_closes_attached_viewers_once(true).await;
+}
+
+/// HS2-QWT94V, in-process and through the broker: a child that exits on its own closes the
+/// attached socket after its last output with the ended code; the exited terminal stays
+/// inspectable, and every later attach replays it, reports its size, then closes the same way
+/// instead of staying open forever.
+async fn exit_closes_attached_and_later_viewers(broker: bool) {
+    let server = boot_for_ends(broker).await;
+    server
+        .open(serde_json::json!({
+            "command": "/bin/sh",
+            "args": ["-c", "read line; printf 'got-%s-done' \"$line\""],
+            "id": "exit-end",
+        }))
+        .await;
+    let mut viewer = server.attach("exit-end").await;
+    expect_replay_then_size(&mut viewer).await;
+    viewer.send(WsMessage::Text("bye\n".into())).await.unwrap();
+    let (output, _, code) = read_until_closed(&mut viewer).await;
+    assert!(
+        output.contains("got-bye-done"),
+        "the last output precedes the close: {output:?}"
+    );
+    assert_eq!(code, Some(TERMINAL_ENDED_CLOSE_CODE));
+    assert_stays_closed(&mut viewer).await;
+    server.wait_exited("exit-end", "got-bye-done").await;
+
+    for attempt in 0..3 {
+        let mut late = server.attach("exit-end").await;
+        let (replay, sizes, code) = read_until_closed(&mut late).await;
+        assert!(
+            replay.contains("got-bye-done"),
+            "attempt {attempt}: {replay:?}"
+        );
+        assert_eq!(sizes.len(), 1, "attempt {attempt}: the applied size, once");
+        assert_eq!(code, Some(TERMINAL_ENDED_CLOSE_CODE), "attempt {attempt}");
+    }
+    assert_eq!(server.kill("exit-end").await, 204);
+}
+
+#[tokio::test]
+async fn hs2_qwt94v_child_exit_closes_attached_and_later_viewers_with_the_ended_code() {
+    exit_closes_attached_and_later_viewers(false).await;
+}
+
+#[tokio::test]
+async fn hs2_qwt94v_broker_child_exit_closes_attached_and_later_viewers_with_the_ended_code() {
+    exit_closes_attached_and_later_viewers(true).await;
+}

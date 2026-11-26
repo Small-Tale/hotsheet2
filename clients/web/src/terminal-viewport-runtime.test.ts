@@ -14,6 +14,7 @@ import {
 } from './terminal-search';
 import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
+  TERMINAL_ENDED_CLOSE_CODE,
   TERMINAL_VIEWPORT_PARK_EVENT,
   TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
   TERMINAL_VIEWPORT_PRESENTATION_EVENT,
@@ -1843,6 +1844,90 @@ describe('a closed socket reconnects on user activity instead of waiting out its
     view.fireWindow('focus');
     view.fire('pointerdown');
     expect(sockets).toHaveLength(1);
+    view.dispose();
+  });
+});
+
+describe('a terminal that ended stays ended and never reattaches (HS2-QWT94V)', () => {
+  function mountDedicated() {
+    const { viewport, listeners } = element();
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' });
+    const open = () => {
+      const socket = sockets.at(-1)!;
+      socket.readyState = 1;
+      socket.dispatchEvent(new Event('open'));
+    };
+    const close = (code?: number) => {
+      const socket = sockets.at(-1)!;
+      socket.readyState = 3;
+      socket.dispatchEvent(Object.assign(new Event('close'), code === undefined ? {} : { code }));
+    };
+    const fire = (type: string) => {
+      for (const [name, handler] of listeners.mock.calls as Array<[string, (event: Event) => void]>)
+        if (name === type) handler(new CustomEvent(type));
+    };
+    const fireWindow = (type: string) => {
+      for (const [name, handler] of windowMock.addEventListener.mock.calls as Array<[string, () => void]>)
+        if (name === type) handler();
+    };
+    return { viewport, dispose, open, close, fire, fireWindow };
+  }
+  const everyReattachTrigger = (view: ReturnType<typeof mountDedicated>) => {
+    for (const type of ['focus', 'pageshow', 'online']) view.fireWindow(type);
+    view.fire('pointerdown');
+    view.fire('focusin');
+    allocated.terminals.at(-1)!.dataHandler!('typed after the end');
+  };
+
+  it('keeps the output, schedules no reconnect, and ignores every reattach trigger and keystroke', () => {
+    const view = mountDedicated();
+    view.open();
+    const sent: string[] = [];
+    (sockets[0] as unknown as { send: (value: string) => void }).send = (value: string) => sent.push(value);
+    scheduledTimeouts.length = 0;
+    view.close(TERMINAL_ENDED_CLOSE_CODE);
+    expect(view.viewport.dataset.connection).toBe('ended');
+    expect(scheduledTimeouts, 'no backoff reconnect').toHaveLength(0);
+    // Repeated triggers, interleaved, never open a second socket or queue input for one.
+    for (let round = 0; round < 3; round += 1) everyReattachTrigger(view);
+    for (const timer of scheduledTimeouts.splice(0)) timer();
+    expect(sockets).toHaveLength(1);
+    expect(view.viewport.dataset.connection).toBe('ended');
+    expect(sent.filter((value) => !value.startsWith('{'))).toEqual([]);
+    view.dispose();
+  });
+
+  it('ends after a reconnect too, and a parked viewport keeps its output instead of being evicted', () => {
+    const view = mountDedicated();
+    view.open();
+    // A drop without the ended code still reconnects: the server restarted, the network dropped.
+    view.close(1006);
+    expect(view.viewport.dataset.connection).toBe('reconnecting');
+    view.fire('pointerdown');
+    expect(sockets).toHaveLength(2);
+    view.open();
+    // Parked when the terminal ends: no eviction, no reattach once it is shown again.
+    view.fire(TERMINAL_VIEWPORT_PARK_EVENT);
+    view.close(TERMINAL_ENDED_CLOSE_CODE);
+    expect(view.viewport.dataset.connection).toBe('ended');
+    view.fire(TERMINAL_VIEWPORT_RESUME_EVENT);
+    everyReattachTrigger(view);
+    expect(sockets).toHaveLength(2);
+    view.dispose();
+  });
+
+  it('keeps the backoff for a refused attach, and ends an attach to an already exited terminal', () => {
+    // A refused upgrade closes without the code and keeps the ordinary backoff; an exited terminal's
+    // attach opens, replays, then closes with the code.
+    const view = mountDedicated();
+    view.close(1006);
+    expect(view.viewport.dataset.connection).toBe('reconnecting');
+    expect(scheduledTimeouts.length).toBeGreaterThan(0);
+    scheduledTimeouts.at(-1)!();
+    expect(sockets).toHaveLength(2);
+    view.open();
+    view.close(TERMINAL_ENDED_CLOSE_CODE);
+    expect(view.viewport.dataset.connection).toBe('ended');
     view.dispose();
   });
 });

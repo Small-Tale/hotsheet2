@@ -16,6 +16,7 @@ import type { MiddlewareHandler } from 'hono';
 import { WebSocket, WebSocketServer } from 'ws';
 
 import { bootstrapServerUrl, remoteBrowserAuthRequired } from './project-bridge';
+import { closeLikeUpstream } from './ws-close-relay';
 
 /** The machine server's top-level routes (`crates/hotsheet-server`). The app routes by query
  * string, so none collides with an application route; a policy test pins this list to the router. */
@@ -186,8 +187,9 @@ function pipeSockets(caller: WebSocket, target: URL, request: IncomingMessage): 
   upstream.on('message', (data, binary) => {
     if (caller.readyState === WebSocket.OPEN) caller.send(data, { binary });
   });
-  const closeCaller = () => {
-    if (caller.readyState === WebSocket.OPEN) caller.close();
+  // A terminal's ended close code reaches the caller, so it stops reattaching (HS2-QWT94V).
+  const closeCaller = (code?: unknown, reason?: unknown) => {
+    if (caller.readyState === WebSocket.OPEN) closeLikeUpstream(caller, code, reason);
   };
   const closeUpstream = () => {
     if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) upstream.close();

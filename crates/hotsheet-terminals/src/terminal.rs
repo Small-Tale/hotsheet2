@@ -366,7 +366,9 @@ pub fn is_replay_rewritten(chunk: &[u8]) -> bool {
 /// the receiver created with it, never both and never neither (HS2-5W0V9M).
 struct OutputReplay {
     ring: Mutex<Ring>,
-    tx: broadcast::Sender<Vec<u8>>,
+    /// The live fan-out, taken when output ends (HS2-QWT94V). Locked only while the ring lock
+    /// is held, so publishing, ending and subscribing stay one sequence.
+    tx: Mutex<Option<broadcast::Sender<Vec<u8>>>>,
     /// The output-stream id of the retained replay (HS2-K93QHA). A shared clear starts a new
     /// one (HS2-HA0Z3A), so no viewer resumes across it. Only changed under the ring lock.
     stream: std::sync::atomic::AtomicU64,
@@ -376,7 +378,7 @@ impl OutputReplay {
     fn new(bytes: usize, chunks: usize) -> Self {
         Self {
             ring: Mutex::new(Ring::new(bytes)),
-            tx: broadcast::channel(chunks).0,
+            tx: Mutex::new(Some(broadcast::channel(chunks).0)),
             stream: std::sync::atomic::AtomicU64::new(new_stream_id()),
         }
     }
@@ -389,8 +391,23 @@ impl OutputReplay {
         let mut ring = self.ring.lock_or_recover();
         ring.push(bytes);
         // Broadcast while the ring lock is held. `subscribe_with_snapshot` takes the same
-        // lock before subscribing, which makes the handoff sequence-exact.
-        let _ = self.tx.send(bytes.to_vec());
+        // lock before subscribing, which makes the handoff sequence-exact. Output after the end
+        // (a killed child's last bytes) is kept in the replay only.
+        if let Some(tx) = &*self.tx.lock_or_recover() {
+            let _ = tx.send(bytes.to_vec());
+        }
+        drop(ring);
+    }
+
+    /// End the live fan-out (HS2-QWT94V): each subscriber receives what was already published,
+    /// then `Closed`, so every attached viewer's stream ends exactly once. Idempotent.
+    fn end(&self) {
+        let _ring = self.ring.lock_or_recover();
+        self.tx.lock_or_recover().take();
+    }
+
+    fn ended(&self) -> bool {
+        self.tx.lock_or_recover().is_none()
     }
 
     /// Clear the retained replay back to the cursor's line, start a new stream id, and tell
@@ -401,7 +418,9 @@ impl OutputReplay {
         let stream = new_stream_id();
         self.stream
             .store(stream, std::sync::atomic::Ordering::Relaxed);
-        let _ = self.tx.send(Vec::new());
+        if let Some(tx) = &*self.tx.lock_or_recover() {
+            let _ = tx.send(Vec::new());
+        }
         StreamPosition {
             stream,
             end_offset: ring.end,
@@ -425,7 +444,11 @@ impl OutputReplay {
 
     fn subscribe_with_replay(&self) -> (Replay, broadcast::Receiver<Vec<u8>>) {
         let ring = self.ring.lock_or_recover();
-        let receiver = self.tx.subscribe();
+        // After the end a subscriber still gets the replay, then an immediate `Closed`.
+        let receiver = match &*self.tx.lock_or_recover() {
+            Some(tx) => tx.subscribe(),
+            None => broadcast::channel(1).1,
+        };
         let stream = self.stream.load(std::sync::atomic::Ordering::Relaxed);
         (ring.replay(stream), receiver)
     }
@@ -837,6 +860,8 @@ impl Terminal {
                     }
                 }
             }
+            // The child's output is complete: end every attached viewer's stream (HS2-QWT94V).
+            out.end();
         });
 
         // Seed the arbiter with the spawn size so a lone viewer's first claim has a baseline.
@@ -1193,6 +1218,21 @@ impl Terminal {
     pub fn startup_failure_code(&self) -> Option<u32> {
         self.is_alive();
         *self.startup_failure_code.lock_or_recover()
+    }
+
+    /// End the live output stream now (HS2-QWT94V): attached viewers receive what was already
+    /// published and then their stream ends; a later subscriber gets the replay and an
+    /// immediate end. The drain does this itself at EOF. A removal does it at once, because a
+    /// grandchild that keeps the PTY open must not keep a removed terminal's viewers attached.
+    /// Idempotent.
+    pub fn end_output(&self) {
+        self.output.end();
+    }
+
+    /// Whether the live output stream has ended (EOF or [`Self::end_output`]). An attach stops
+    /// applying size claims and input once it has.
+    pub fn output_ended(&self) -> bool {
+        self.output.ended()
     }
 
     /// Kill the child process.
@@ -2235,5 +2275,38 @@ mod tests {
             "a killed terminal's writer thread drains its queue"
         );
         other.kill().unwrap();
+    }
+
+    /// HS2-QWT94V: ending the output delivers what was published, then `Closed`, once, to every
+    /// subscriber; a subscriber after the end gets the replay and an immediate `Closed`; later
+    /// output and clears only touch the replay; ending again changes nothing.
+    #[test]
+    fn hs2_qwt94v_ended_output_closes_each_subscriber_once_after_its_pending_chunks() {
+        use broadcast::error::TryRecvError;
+        let replay = OutputReplay::new(1024, 16);
+        let (_, mut early) = replay.subscribe_with_replay();
+        replay.publish(b"one");
+        let (_, mut late) = replay.subscribe_with_replay();
+        replay.publish(b"two");
+        assert!(!replay.ended());
+        replay.end();
+        assert!(replay.ended());
+        assert_eq!(early.try_recv().unwrap(), b"one".to_vec());
+        assert_eq!(early.try_recv().unwrap(), b"two".to_vec());
+        assert_eq!(late.try_recv().unwrap(), b"two".to_vec());
+        for receiver in [&mut early, &mut late] {
+            assert_eq!(receiver.try_recv(), Err(TryRecvError::Closed));
+            assert_eq!(receiver.try_recv(), Err(TryRecvError::Closed));
+        }
+
+        replay.publish(b"-after");
+        replay.end();
+        let (snapshot, mut after) = replay.subscribe_with_replay();
+        assert_eq!(snapshot.data, b"onetwo-after".to_vec());
+        assert_eq!(after.try_recv(), Err(TryRecvError::Closed));
+        let cleared = replay.clear();
+        let (snapshot, mut cleared_rx) = replay.subscribe_with_replay();
+        assert_eq!(snapshot.position.stream, cleared.stream);
+        assert_eq!(cleared_rx.try_recv(), Err(TryRecvError::Closed));
     }
 }

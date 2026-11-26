@@ -11,8 +11,13 @@
 //! | ------------- | -------------------------- | ----------------------------------------- |
 //! | `kill` again  | `not_found`, nothing else  | first `ok` (forgets it), then `not_found` |
 //! | `input`       | `not_found`                | `err` once the PTY closed; never written  |
-//! | `clear_replay`| `not_found`                | `ok`, attached viewers get a new replay   |
-//! | size claim    | `attach` answers not found | applied and reported; the child is gone   |
+//! | `clear_replay`| `not_found`                | `ok`; the next attach replays the kept line |
+//! | `attach`      | `not_found`, then the end  | replay and size, then the end             |
+//! | size claim    | `attach` answers not found | never applied: the stream already ended   |
+//!
+//! A viewer attached while the terminal is live sees its stream end exactly once, after the
+//! last output, when the child exits or `kill` removes it (HS2-QWT94V); a size claim it sends
+//! afterwards reaches nothing.
 //!
 //! Every wait is on broker state or a stream frame with a deadline, never a fixed delay.
 use super::*;
@@ -275,59 +280,57 @@ async fn hs2_582g8r_input_while_exiting_is_refused_and_never_written() {
     broker.assert_serving().await;
 }
 
+/// The applied size an attach reports right after the replay, then the end of an exited
+/// terminal's stream.
+async fn attach_exited(sock: &Path, id: &str) -> (Vec<u8>, Option<u64>, (u16, u16)) {
+    let mut stream = BrokerStream::open(sock, id).await.unwrap();
+    let (replay, stream_id) = match next_frame(&mut stream).await {
+        Some(StreamOut::Scrollback { data, stream, .. }) => (data.into_vec(), stream),
+        other => panic!("expected the replay of {id}, got {other:?}"),
+    };
+    let size = match next_frame(&mut stream).await {
+        Some(StreamOut::Size { cols, rows, .. }) => (cols, rows),
+        other => panic!("expected the applied size after the replay, got {other:?}"),
+    };
+    // HS2-QWT94V: an exited terminal's attach ends after its preamble, exactly once, and a
+    // claim sent on the ended stream is never applied or answered.
+    assert!(next_frame(&mut stream).await.is_none(), "the attach ends");
+    let _ = stream.send(&resize("late", 100, 30)).await;
+    assert!(
+        next_frame(&mut stream).await.is_none(),
+        "one end, nothing after it"
+    );
+    (replay, stream_id, size)
+}
+
 #[tokio::test]
-async fn hs2_582g8r_clear_and_size_claim_while_exiting_reach_attached_viewers() {
+async fn hs2_582g8r_exited_attach_replays_then_ends_and_a_clear_is_replayed() {
     let mut broker = start().await;
     broker.open_exited("e", "exit-marker").await;
     let sock = broker.sock.clone();
-    let (mut viewer, replay, first_stream) = attach(&sock, "e").await;
+    // An exited terminal stays inspectable: each attach replays it and reports its size, then
+    // ends (HS2-QWT94V). The late claim each attach sends never changes the size.
+    let (replay, first_stream, size) = attach_exited(&sock, "e").await;
     assert!(String::from_utf8_lossy(&replay).contains("exit-marker"));
+    let (_, again_stream, again_size) = attach_exited(&sock, "e").await;
+    assert_eq!(
+        again_size, size,
+        "a claim on an ended stream is never applied"
+    );
+    assert_eq!(again_stream, first_stream);
 
-    // A size claim on an exited terminal is accepted and reported; there is no child left to
-    // tell, and the terminal stays exited.
-    viewer.send(&resize("v", 100, 30)).await.unwrap();
-    match next_frame(&mut viewer).await {
-        Some(StreamOut::Size {
-            cols: 100,
-            rows: 30,
-            driven_by,
-            ..
-        }) => assert_eq!(driven_by.as_deref(), Some("v")),
-        other => panic!("expected the claimed size, got {other:?}"),
-    }
-
-    // Clearing is accepted, repeatedly, and each clear gives the viewer a replacement replay
-    // under a new stream id. The cursor's line (the marker, unterminated) is kept.
+    // Clearing is accepted, repeatedly, and each clear starts a new stream id that the next
+    // attach replays. The cursor's line (the marker, unterminated) is kept.
     let mut seen = vec![first_stream];
     for _ in 0..2 {
         assert!(matches!(broker.clear("e").await, Response::Ok));
-        match next_frame(&mut viewer).await {
-            Some(StreamOut::Scrollback { data, stream, .. }) => {
-                assert!(!seen.contains(&stream), "a clear starts a new stream id");
-                seen.push(stream);
-                assert_eq!(String::from_utf8_lossy(&data), "exit-marker");
-            }
-            other => panic!("expected the cleared replay, got {other:?}"),
-        }
+        let (replay, stream, after) = attach_exited(&sock, "e").await;
+        assert!(!seen.contains(&stream), "a clear starts a new stream id");
+        seen.push(stream);
+        assert_eq!(String::from_utf8_lossy(&replay), "exit-marker");
+        assert_eq!(after, size);
     }
     assert!(!broker.alive("e").await);
-
-    // After the clears, a second viewer replays the kept line, and the driver's next claim
-    // reaches both viewers (a deferred resize lands on the arbiter's trailing edge).
-    let (mut second, replay, _) = attach(&sock, "e").await;
-    assert_eq!(String::from_utf8_lossy(&replay), "exit-marker");
-    viewer.send(&resize("v", 90, 20)).await.unwrap();
-    for stream in [&mut viewer, &mut second] {
-        match next_frame(stream).await {
-            Some(StreamOut::Size {
-                cols: 90,
-                rows: 20,
-                driven_by,
-                ..
-            }) => assert_eq!(driven_by.as_deref(), Some("v")),
-            other => panic!("expected the driver's new size, got {other:?}"),
-        }
-    }
 
     // Killing it then forgets it once; a later clear names nothing.
     assert!(matches!(broker.kill("e").await, Response::Ok));
@@ -337,10 +340,9 @@ async fn hs2_582g8r_clear_and_size_claim_while_exiting_reach_attached_viewers() 
 }
 
 /// A viewer attached when the terminal is killed sees its stream end exactly once, and a size
-/// claim it sends afterwards reaches nothing. Today the stream never ends: the attach holds the
-/// terminal, whose output channel stays open after the kill.
+/// claim it sends afterwards reaches nothing (HS2-QWT94V: the attach held the terminal, whose
+/// output channel stayed open after the kill).
 #[tokio::test]
-#[ignore = "quarantine HS2-QWT94V: an attached stream never ends after kill"]
 async fn hs2_582g8r_attached_stream_ends_once_on_kill() {
     let mut broker = start().await;
     broker.ask(open("t", "cat", &[])).await;
@@ -359,5 +361,154 @@ async fn hs2_582g8r_attached_stream_ends_once_on_kill() {
     // A late size claim on the ended stream is never applied or reported.
     let _ = viewer.send(&resize("v", 100, 30)).await;
     assert!(next_frame(&mut viewer).await.is_none());
+    broker.assert_serving().await;
+}
+
+/// Read `stream` to its end, returning the output it carried (size frames are skipped). Panics
+/// if the stream does not end before the deadline.
+async fn read_to_end(stream: &mut BrokerStream) -> Vec<u8> {
+    let mut out = Vec::new();
+    while let Some(frame) = next_frame(stream).await {
+        match frame {
+            StreamOut::Output { data } | StreamOut::Scrollback { data, .. } => {
+                out.extend_from_slice(&data.into_vec());
+            }
+            StreamOut::Size { .. } => {}
+            other => panic!("unexpected frame before the end: {other:?}"),
+        }
+    }
+    out
+}
+
+/// HS2-QWT94V: a child that exits on its own ends every attached stream once, after its last
+/// output, while the broker keeps it tracked and inspectable until it is killed or reaped.
+#[tokio::test]
+async fn hs2_qwt94v_child_exit_ends_every_attached_stream_after_its_last_output() {
+    let mut broker = start().await;
+    let opened = broker
+        .ask(open(
+            "x",
+            "sh",
+            &["-c", "read line; printf 'got-%s-done' \"$line\""],
+        ))
+        .await;
+    assert!(matches!(opened, Response::Terminal { .. }), "{opened:?}");
+    let sock = broker.sock.clone();
+    let (mut first, _, _) = attach(&sock, "x").await;
+    let (mut second, _, _) = attach(&sock, "x").await;
+
+    assert!(matches!(broker.input("x", b"bye\n").await, Response::Ok));
+    for viewer in [&mut first, &mut second] {
+        let out = read_to_end(viewer).await;
+        assert!(
+            String::from_utf8_lossy(&out).contains("got-bye-done"),
+            "the last output arrives before the end: {:?}",
+            String::from_utf8_lossy(&out)
+        );
+        // Ended once: no second end, and a late claim is never applied or answered.
+        assert!(next_frame(viewer).await.is_none());
+        let _ = viewer.send(&resize("late", 100, 30)).await;
+        assert!(next_frame(viewer).await.is_none());
+    }
+    assert!(!broker.alive("x").await);
+    assert_eq!(broker.ids().await, vec!["x".to_string()]);
+    // Still inspectable: a fresh attach replays the output, then ends.
+    let (replay, _, _) = attach_exited(&sock, "x").await;
+    assert!(String::from_utf8_lossy(&replay).contains("got-bye-done"));
+    assert!(matches!(broker.kill("x").await, Response::Ok));
+    assert!(matches!(broker.kill("x").await, Response::NotFound));
+    broker.assert_serving().await;
+}
+
+/// HS2-QWT94V: attach, claim, kill, reattach and reopen, repeated and interleaved with two
+/// viewers. A claim before the kill is applied and reported to both; the kill ends both once;
+/// a claim after it reaches nothing; reopening the id never revives an ended stream.
+#[tokio::test]
+async fn hs2_qwt94v_kill_reattach_and_size_claims_interleave_across_reopens() {
+    let mut broker = start().await;
+    let sock = broker.sock.clone();
+    let mut ended: Vec<BrokerStream> = Vec::new();
+    for round in 0..3u16 {
+        let opened = broker.ask(open("t", "cat", &[])).await;
+        assert!(
+            matches!(opened, Response::Terminal { ref info } if info.spawned == Some(true) && info.alive),
+            "round {round}: {opened:?}"
+        );
+        let (mut driver, _, _) = attach(&sock, "t").await;
+        let (mut watcher, _, _) = attach(&sock, "t").await;
+        let cols = 90 + round;
+        driver.send(&resize("driver", cols, 30)).await.unwrap();
+        for viewer in [&mut driver, &mut watcher] {
+            match next_frame(viewer).await {
+                Some(StreamOut::Size {
+                    cols: got,
+                    rows: 30,
+                    ..
+                }) => assert_eq!(got, cols, "round {round}"),
+                other => panic!("round {round}: expected the claimed size, got {other:?}"),
+            }
+        }
+        // Streams ended in earlier rounds stay ended across this reopen.
+        for old in &mut ended {
+            assert!(next_frame(old).await.is_none(), "round {round}");
+        }
+
+        assert!(matches!(broker.kill("t").await, Response::Ok));
+        for viewer in [&mut driver, &mut watcher] {
+            read_to_end(viewer).await;
+            let _ = viewer.send(&resize("driver", 120, 40)).await;
+            assert!(next_frame(viewer).await.is_none(), "round {round}");
+        }
+        assert!(matches!(broker.kill("t").await, Response::NotFound));
+        // Reattaching to the killed id is refused, then ends.
+        let mut refused = BrokerStream::open(&sock, "t").await.unwrap();
+        assert!(matches!(
+            next_frame(&mut refused).await,
+            Some(StreamOut::NotFound)
+        ));
+        assert!(next_frame(&mut refused).await.is_none());
+        ended.push(driver);
+        ended.push(watcher);
+    }
+    assert!(broker.ids().await.is_empty());
+    broker.assert_serving().await;
+}
+
+/// HS2-QWT94V: `kill` ends attached streams even while a grandchild that ignores SIGHUP keeps
+/// the PTY open. On Linux the drain then never reaches EOF on its own, so only the kill's
+/// explicit end ends the stream; macOS revokes the terminal when its session leader dies, so
+/// there the drain's EOF ends it too.
+#[tokio::test]
+async fn hs2_qwt94v_kill_ends_the_stream_while_a_grandchild_holds_the_pty() {
+    let mut broker = start().await;
+    let script = "(trap '' HUP; exec sleep 60) & printf 'holder=%s;' \"$!\"; wait";
+    broker.ask(open("g", "sh", &["-c", script])).await;
+    let sock = broker.sock.clone();
+    let (mut viewer, replay, _) = attach(&sock, "g").await;
+    let mut seen = String::from_utf8_lossy(&replay).into_owned();
+    while !seen.contains(';') {
+        match next_frame(&mut viewer).await {
+            Some(StreamOut::Output { data }) => {
+                seen.push_str(&String::from_utf8_lossy(&data.into_vec()));
+            }
+            Some(StreamOut::Size { .. }) => {}
+            other => panic!("expected the holder's pid, got {other:?}"),
+        }
+    }
+    let pid: libc::pid_t = seen
+        .split("holder=")
+        .nth(1)
+        .and_then(|rest| rest.split(';').next())
+        .and_then(|pid| pid.trim().parse().ok())
+        .expect("the holder's pid");
+
+    assert!(matches!(broker.kill("g").await, Response::Ok));
+    read_to_end(&mut viewer).await;
+    let _ = viewer.send(&resize("late", 100, 30)).await;
+    assert!(next_frame(&mut viewer).await.is_none());
+    // SAFETY: signals the test's own grandchild by the pid it printed.
+    unsafe {
+        libc::kill(pid, libc::SIGKILL);
+    }
     broker.assert_serving().await;
 }

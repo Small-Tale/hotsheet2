@@ -28,7 +28,10 @@ pub(crate) struct AttachParams {
 /// `GET /terminals/{id}/attach?secret=…` — the **live** terminal attach (HS2-XTTTMV): a
 /// WebSocket that first replays the scrollback (one binary frame), then streams each new PTY
 /// output chunk as a binary frame and forwards any binary/text the viewer sends as PTY input.
-/// The socket closes when the terminal's child exits or the viewer disconnects.
+/// The socket closes when the terminal's child exits or the viewer disconnects. A terminal that
+/// ended (its child exited and its output drained, or it was killed) closes it once, after the
+/// last output, with [`TERMINAL_ENDED_CLOSE_CODE`], so the viewer stops reconnecting
+/// (HS2-QWT94V); attaching to an exited terminal replays it and then closes the same way.
 pub(crate) async fn attach_terminal(
     State(state): State<AppState>,
     peer: Option<Extension<ConnectInfo<std::net::SocketAddr>>>,
@@ -255,6 +258,19 @@ fn term_now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// The WebSocket close code that tells a viewer its terminal ended (HS2-QWT94V): there is
+/// nothing to reconnect to, so the viewer keeps what it shows and stops reattaching. Any other
+/// close (a server restart, a dropped network) stays reconnectable.
+pub(crate) const TERMINAL_ENDED_CLOSE_CODE: u16 = 4000;
+
+/// The close frame for a terminal that ended.
+fn terminal_ended_close() -> Message {
+    Message::Close(Some(axum::extract::ws::CloseFrame {
+        code: TERMINAL_ENDED_CLOSE_CODE,
+        reason: "terminal ended".into(),
+    }))
+}
+
 /// Pongs waiting for the writer. Probes arrive at most every few seconds, so this only fills
 /// when the writer is stuck, and then a dropped pong is exactly the right signal.
 const CONTROL_QUEUE: usize = 8;
@@ -270,6 +286,9 @@ enum Outbound {
     },
     /// The liveness hello, which the broker path sends after its replay-then-size preamble.
     LivenessHello,
+    /// The terminal ended after everything queued before it (HS2-QWT94V): the writer closes
+    /// the socket with [`TERMINAL_ENDED_CLOSE_CODE`].
+    Ended,
 }
 
 impl From<ViewerFrame> for Outbound {
@@ -290,6 +309,7 @@ async fn outbound_messages(outbound: Outbound, replay: ReplayOptions) -> Vec<Mes
         }
         Outbound::Frame(ViewerFrame::Size(d)) => vec![terminal_size_message(&d)],
         Outbound::LivenessHello => vec![terminal_liveness_hello()],
+        Outbound::Ended => vec![terminal_ended_close()],
     }
 }
 
@@ -307,6 +327,11 @@ async fn write_viewer(
             biased;
             Some(message) = control.recv() => vec![message],
             frame = frames.recv() => match frame {
+                // The terminal ended: one close with the ended code, and nothing after it.
+                Some(Outbound::Ended) => {
+                    let _ = sink.send(terminal_ended_close()).await;
+                    return;
+                }
                 Some(frame) => outbound_messages(frame, replay).await,
                 None => break,
             },
@@ -385,12 +410,15 @@ async fn terminal_attach_loop(
     let (sink, mut inbound) = socket.split();
     let (frames_tx, frames_rx) = mpsc::channel(VIEWER_QUEUE_FRAMES);
     let (control_tx, control_rx) = mpsc::channel(CONTROL_QUEUE);
-    let pump = AttachTask(tokio::spawn(pump_viewer_output::<Outbound>(
-        term.clone(),
-        rx,
-        size_rx,
-        frames_tx,
-    )));
+    // The pump returns when the terminal's output ended (or the viewer is gone). Its frames go
+    // first, then the end, so the viewer gets every last byte before the ended close
+    // (HS2-QWT94V).
+    let ended_tx = frames_tx.clone();
+    let pump_term = term.clone();
+    let pump = AttachTask(tokio::spawn(async move {
+        pump_viewer_output::<Outbound>(pump_term, rx, size_rx, frames_tx).await;
+        let _ = ended_tx.send(Outbound::Ended).await;
+    }));
     let notification_pump = AttachTask(tokio::spawn(async move {
         let mut scanner = hotsheet_terminals::OscScanner::new();
         loop {
@@ -415,6 +443,9 @@ async fn terminal_attach_loop(
         tokio::select! {
             _ = &mut writer.0 => break, // the terminal ended or the viewer stopped accepting output
             message = inbound.next() => match message {
+                // An ended terminal's stream is closing: a late claim or keystroke reaches
+                // nothing and is never answered (HS2-QWT94V).
+                Some(Ok(Message::Binary(_) | Message::Text(_))) if term.output_ended() => {}
                 // Input is queued for the terminal's writer thread, so a child that is not
                 // reading stdin never parks this worker or stops control frames (HS2-FERD7N).
                 // A write to an exited PTY is dropped; the exit is reported separately.
@@ -526,8 +557,17 @@ async fn pump_broker_output(
                         }
                     }
                 }
-                // The terminal's gone (or the attach failed) — end the viewer session.
-                Ok(Some(S::NotFound | S::Err { .. })) | Ok(None) | Err(_) => break,
+                // The broker ended the stream because the terminal ended (or was already gone):
+                // deliver what is pending, then the ended close (HS2-QWT94V).
+                Ok(Some(S::NotFound)) | Ok(None) => {
+                    if pending.flush(&frames).await.is_ok() {
+                        let _ = frames.send(Outbound::Ended).await;
+                    }
+                    return;
+                }
+                // The attach failed or the broker connection broke: close without the ended
+                // code, so the viewer reconnects.
+                Ok(Some(S::Err { .. })) | Err(_) => break,
             },
         }
     }

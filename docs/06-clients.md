@@ -4980,6 +4980,13 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
   (**HS2-KRQRWH**). Keystrokes typed while the socket is closed or still reopening are kept
   (bounded to the newest 64 KiB) and sent once it opens, so recovering never loses input
   (**HS2-A1R38J**).
+- A terminal that ended closes its socket once, after its last output, with WebSocket close
+  code 4000 (`terminal ended`): its child exited and its output drained, or it was killed.
+  Attaching to an exited terminal that is still tracked replays it and reports its size, then
+  closes the same way. The viewport keeps the output shown (`data-connection="ended"`), drops
+  typing, and never reattaches, from its backoff or any of the triggers above, parked or not.
+  Any other close stays reconnectable. The Vite bridge and peer gateway pass 4000-4999 close
+  codes through (**HS2-QWT94V**).
 - A socket that stays OPEN but stops carrying traffic is treated as dead too. After its attach
   preamble (replay, then size), the server sends `{"terminal_liveness":1}` and answers each
   `{"terminal_ping":n}` with `{"terminal_pong":n}`; both the direct and broker paths answer

@@ -141,6 +141,36 @@ describe('terminal WebSocket bridge', () => {
     await once(client, 'close');
   });
 
+  it('passes a terminal-ended close code to the browser, and a plain close stays plain (HS2-QWT94V)', async () => {
+    const upstreamHttp = createServer(),
+      upstream = new WebSocketServer({ server: upstreamHttp });
+    servers.push(upstream, upstreamHttp);
+    upstream.on('connection', (socket) => {
+      socket.on('message', (data) => {
+        if (webSocketRawText(data) === 'end') socket.close(4000, 'terminal ended');
+        else socket.terminate();
+      });
+    });
+    const upstreamPort = await listen(upstreamHttp),
+      bridgeHttp = createServer();
+    servers.push(bridgeHttp);
+    installTerminalWebSocketBridge(
+      { httpServer: bridgeHttp },
+      () => `ws://127.0.0.1:${upstreamPort}/terminals/test/attach?secret=server-only`,
+    );
+    const bridgePort = await listen(bridgeHttp);
+    const closeAfter = async (message: string) => {
+      const client = new WebSocket(`ws://127.0.0.1:${bridgePort}/__hotsheet/project-api/project/terminals/test/attach`);
+      await once(client, 'open');
+      client.send(message);
+      const [code, reason] = (await once(client, 'close')) as [number, Buffer];
+      return { code, reason: reason.toString() };
+    };
+    expect(await closeAfter('end')).toEqual({ code: 4000, reason: 'terminal ended' });
+    // A dropped upstream (no close frame) reaches the browser as a plain close it reconnects after.
+    expect((await closeAfter('drop')).code).toBe(1005);
+  });
+
   it('refuses an unresolvable project socket at once and leaves other upgrade paths alone (HS2-CNWHW3)', async () => {
     const bridgeHttp = createServer();
     servers.push(bridgeHttp);

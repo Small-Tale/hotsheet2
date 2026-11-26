@@ -218,7 +218,8 @@
 }
 .terminal-preview:has(
     .terminal-viewport[data-connection='connected'],
-    .terminal-viewport[data-connection='reconnecting']
+    .terminal-viewport[data-connection='reconnecting'],
+    .terminal-viewport[data-connection='ended']
   )
   .terminal-preview__fallback {
   display: none;
@@ -250,9 +251,11 @@
 [data-fixed-aspect-terminal-card='magnified'] .terminal-viewport[data-geometry-ready='false'] .terminal {
   visibility: hidden;
 }
-/* Connection states: show a live viewport, center the error copy over the frame. */
+/* Connection states: show a live viewport, and an ended terminal's last output (HS2-QWT94V); center
+   the error copy over the frame. */
 .terminal-viewport[data-connection='connected'],
-.terminal-viewport[data-connection='reconnecting'] {
+.terminal-viewport[data-connection='reconnecting'],
+.terminal-viewport[data-connection='ended'] {
   display: block;
 }
 .terminal-viewport[data-connection='error'] {
@@ -266,6 +269,7 @@
 .terminal-tile__preview:has(
     .terminal-viewport[data-connection='connected'],
     .terminal-viewport[data-connection='reconnecting'],
+    .terminal-viewport[data-connection='ended'],
     .terminal-viewport[data-connection='error'],
     .terminal-tile__preview-placeholder
   )

@@ -427,3 +427,59 @@ test('on a slow host the whole replay still reaches far older history (HS2-J6B4M
   // bursts: two bursts, then a timeout at line 3225.
   await paintTailThenWholeReplay(page, 20);
 });
+
+// HS2-QWT94V: a terminal whose child exits closes its socket once with the ended code. The viewer
+// keeps the last output shown and never reattaches, after a live exit or an attach after the exit,
+// whatever reconnect trigger follows (a click, focus, the page showing, the network returning, typing).
+test('an exited terminal stays ended and never reattaches (HS2-QWT94V)', async ({ page }) => {
+  test.setTimeout(60_000);
+  const server = await realTicketServer();
+  try {
+    const terminal = await server.request<{ id: string }>('/terminals', 'POST', {
+      command: 'python3',
+      args: ['-u', '-c', "import sys; print('EXIT-READY'); sys.stdin.readline(); print('EXIT-MARKER')"],
+      cwd: server.root,
+    });
+    await expect
+      .poll(async () => (await server.request<{ scrollback?: string }>(`/terminals/${terminal.id}`)).scrollback ?? '')
+      .toContain('EXIT-READY');
+    await recordSockets(page);
+    await page.goto('/');
+    const socketUrl = `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(terminal.id)}/attach?secret=${encodeURIComponent(server.secret)}`;
+    const attaches = () => page.evaluate(() => (window.__replayUrls ?? []).length);
+    // Every trigger that reattaches a dropped socket at once (HS2-KRQRWH) runs synchronously.
+    const tryToReattach = async (surface: ReturnType<Page['locator']>) => {
+      await surface.click();
+      await page.evaluate(() => {
+        for (const type of ['focus', 'pageshow', 'online']) window.dispatchEvent(new Event(type));
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await surface.locator('.xterm-helper-textarea').focus();
+      await page.keyboard.type('ignored');
+    };
+
+    const live = await mountViewport(page, socketUrl);
+    await expect(live).toHaveAttribute('data-connection', 'connected');
+    await live.locator('.xterm-helper-textarea').focus();
+    await page.keyboard.press('Enter');
+    await expect(live).toHaveAttribute('data-connection', 'ended');
+    await expect(live.locator('.xterm-rows')).toContainText('EXIT-MARKER');
+    await tryToReattach(live);
+    expect(await attaches()).toBe(1);
+    await expect(live).toHaveAttribute('data-connection', 'ended');
+    await expect(live).toBeVisible();
+
+    // Attaching after the exit replays the output, then ends the same way.
+    await expect
+      .poll(async () => (await server.request<{ alive?: boolean }>(`/terminals/${terminal.id}`)).alive)
+      .toBe(false);
+    const late = await mountViewport(page, socketUrl);
+    await expect(late).toHaveAttribute('data-connection', 'ended');
+    await expect(late.locator('.xterm-rows')).toContainText('EXIT-MARKER');
+    await tryToReattach(late);
+    expect(await attaches()).toBe(2);
+    await expect(late).toBeVisible();
+  } finally {
+    await server.stop();
+  }
+});
