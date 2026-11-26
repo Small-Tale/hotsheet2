@@ -123,6 +123,16 @@ impl OrchestrationRuntime {
         self.policy_store(owner_id)?.read()
     }
 
+    /// HS2-ZF5H5M: when placement was first on for the owner, if ever: the shared policy
+    /// file's record, which every machine sharing the file reads alike, or else the
+    /// machine-local record HS2-38R8J2 kept before the shared one existed.
+    pub fn placement_started_at(&self, owner_id: &str) -> Result<Option<u64>, OrchestrationError> {
+        if let Some(at) = self.policy_store(owner_id)?.started_at()? {
+            return Ok(Some(at));
+        }
+        PlacementStartedStore::new(&self.home).started_at(owner_id)
+    }
+
     /// Replace the policy. The session a policy governs must not loosen its own
     /// bounds, so an AI actor is refused.
     pub fn set_policy(
@@ -141,14 +151,18 @@ impl OrchestrationRuntime {
             orchestrating && body.is_some_and(|body| self.placement_on(owner_id, &body.placement))
         };
         let was_on = placing(stored.policy.as_ref());
-        let view = store.set(request, Some(&self.declared(owner_id)?), tx)?;
+        // HS2-38R8J2: placement on before or after this change means orchestration was
+        // started, so a later pause reads Paused rather than Not Started. HS2-ZF5H5M: the
+        // time is kept in the shared policy file, in the same write, so every machine
+        // sharing it agrees; a time this machine recorded before is carried over.
+        let earlier = PlacementStartedStore::new(&self.home)
+            .started_at(owner_id)
+            .ok()
+            .flatten();
+        let started = (was_on || placing(Some(&request.policy)) || earlier.is_some())
+            .then(|| earlier.unwrap_or_else(|| tx.clock.now_ms()));
+        let view = store.set_started(request, Some(&self.declared(owner_id)?), started, tx)?;
         if view.revision != before {
-            // HS2-38R8J2: placement on before or after this change means orchestration
-            // was started, so a later pause reads Paused rather than Not Started. Only
-            // what the view says depends on it, so a failed write leaves the policy set.
-            if was_on || placing(view.policy.as_ref()) {
-                let _ = PlacementStartedStore::new(&self.home).record(owner_id, tx.clock.now_ms());
-            }
             // HS2-ECWG50: a scheduler following this machine plans under the new policy.
             // HS2-AWB7BX: new limits may give a machine room, so its capacity refusals
             // are asked again rather than waited out.

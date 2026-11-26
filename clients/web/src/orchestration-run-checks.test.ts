@@ -4,6 +4,8 @@ import {
   dispositionText,
   parseRunReconciliation,
   reconciliationRows,
+  RELINKABLE_WATCH_REASONS,
+  relinkRequest,
   runEventText,
   runReasonText,
 } from './orchestration-run-checks';
@@ -96,6 +98,80 @@ describe('a run’s last reconciliation in words (HS2-XM692S)', () => {
       }),
     ).toEqual({ at_ms: 3, disposition: 'continue', findings: [{ source: 'ci_run', verification: 'verified' }] });
     expect(parseRunReconciliation({ reconciliation: { at_ms: 3, disposition: 'paused' } })?.findings).toEqual([]);
+  });
+});
+
+describe('Link Again on an unknown CI gate (HS2-A7YCB2)', () => {
+  const commit = 'a'.repeat(40);
+  const gate = (extra: Record<string, unknown> = {}) => ({
+    gate_id: 'gate-1',
+    kind: 'ci',
+    provider: 'github-actions',
+    commit,
+    ci: { repository: 'acme/synthetic', workflow: 'CI', branch: 'main' },
+    state: 'unknown',
+    reason: 'watch_gone',
+    ...extra,
+  });
+
+  it('links the same commit and scope again for each reason a link starts the watch again', () => {
+    expect([...RELINKABLE_WATCH_REASONS].sort()).toEqual(['not_watched', 'watch_ended', 'watch_gone']);
+    for (const reason of RELINKABLE_WATCH_REASONS)
+      expect(relinkRequest(gate({ reason }))).toEqual({
+        commit,
+        provider: 'github-actions',
+        repository: 'acme/synthetic',
+        workflow: 'CI',
+        branch: 'main',
+      });
+    // The artifact a passed verdict records is kept too.
+    expect(
+      relinkRequest(gate({ ci: { repository: 'acme/synthetic', workflow: '*', branch: 'trunk', artifact: 'app' } })),
+    ).toEqual({
+      commit,
+      provider: 'github-actions',
+      repository: 'acme/synthetic',
+      workflow: '*',
+      branch: 'trunk',
+      artifact: 'app',
+    });
+    // A gate read without its scope still links its commit; the route fills in the defaults.
+    expect(relinkRequest({ kind: 'ci', state: 'unknown', reason: 'not_watched', commit })).toEqual({ commit });
+  });
+
+  it('offers nothing for a watched, settled, superseded or other gate, or another unknown reason', () => {
+    for (const other of [
+      { state: 'pending', reason: undefined },
+      { state: 'passed', reason: undefined },
+      { state: 'failed', reason: undefined },
+      { reason: 'watch_lost' },
+      { reason: 'evidence_missing' },
+      { reason: undefined },
+      { kind: 'deployment' },
+      { kind: 'review' },
+      { superseded_by: 'gate-2' },
+      { commit: undefined },
+      { commit: '' },
+    ])
+      expect(relinkRequest(gate(other)), JSON.stringify(other)).toBeUndefined();
+  });
+
+  it('words every reason Link Again answers, so no row reads as a code', () => {
+    expect(runEventText({ kind: 'gate', reason: 'watch_gone', source: 'target' })).toBe(
+      'Gate (the CI provider kept ending its watch) · learned from the project',
+    );
+    for (const reason of [...RELINKABLE_WATCH_REASONS, 'watch_lost']) expect(runReasonText(reason)).not.toContain('_');
+    for (const reason of RELINKABLE_WATCH_REASONS) {
+      const [, row] = reconciliationRows(
+        {
+          at_ms: 1,
+          disposition: 'hold_unverified',
+          findings: [{ source: 'ci_run', verification: 'unverifiable', reason }],
+        },
+        clock,
+      );
+      expect(row.value).not.toContain('_');
+    }
   });
 });
 

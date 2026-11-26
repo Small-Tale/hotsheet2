@@ -20,7 +20,7 @@ import { parseProgressSummary, type ProgressSummaryView } from '../orchestration
 import { describeRefusal } from '../orchestration-refusals';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseContention, type ResourceContentionView } from '../orchestration-resources';
-import { CI_WATCH_REASONS, parseRunReconciliation } from '../orchestration-run-checks';
+import { CI_WATCH_REASONS, parseRunReconciliation, relinkRequest } from '../orchestration-run-checks';
 import {
   parseDecisionPage,
   parseExplanation,
@@ -330,6 +330,9 @@ export function parseOrchestrationDetails(
         state: gateState(text(gate.kind), text(gate.state) ?? 'unknown', text(gate.reason)),
         provider: text(gate.provider),
         commit: text(gate.commit),
+        gate_id: text(gate.gate_id),
+        // HS2-A7YCB2: an unknown CI gate whose watch a link starts again offers Link Again.
+        relink: relinkRequest(gate),
       })),
     // HS2-9XJEZC: a step's name and target are in its `definition`.
     validations: (validations ?? []).flatMap((evidence) => parseValidationStep(evidence, targetId) ?? []),
@@ -1090,6 +1093,26 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
   }
 
+  /**
+   * HS2-A7YCB2: a person links the selected run's unknown CI gate again through the gate link route, with
+   * the gate's own commit and scope. The gate event that follows reads the details again.
+   */
+  async function linkGate(gateId: string) {
+    const current = dependencies.project(),
+      run = selected()?.run,
+      request = details.value?.gates?.find((gate) => gate.gate_id === gateId)?.relink;
+    if (!current || !run || !request || busy.value) return;
+    busy.value = true;
+    try {
+      await clientFor(current).orchestrationGateLink(current.id, run.run_id, { ...request }, dependencies.personId());
+      await refreshDetails();
+    } catch (reason) {
+      dependencies.showToast(`The gate could not be linked again: ${describeRefusal(reason)}`);
+    } finally {
+      busy.value = false;
+    }
+  }
+
   /** HS2-0D60T8: a person reopens the selected card's built-ahead work; the record and note follow. */
   async function reopen(reason: string) {
     const current = dependencies.project(),
@@ -1293,6 +1316,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     pause: () => setAutomatic(false),
     runControl,
     runValidation,
+    linkGate,
     reopen,
     planHealth,
     keepCheckedInPlan,

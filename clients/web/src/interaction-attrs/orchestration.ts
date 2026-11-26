@@ -22,6 +22,8 @@ export const ORCHESTRATION_ACTIONS = {
   openOrchestrationSettings: action('open-orchestration-settings'),
   orchestrationRunControl: action('orchestration-run-control'),
   showOrchestrationRequest: action('show-orchestration-request'),
+  /** HS2-A7YCB2: Link Again on an unknown CI gate, with the gate's `data-gate-id`. */
+  linkOrchestrationGate: action('link-orchestration-gate'),
   openOrchestrationGoal: action('open-orchestration-goal'),
   /** HS2-9XJEZC: run every validation step of the selected card that has not passed. */
   runOrchestrationValidation: action('run-orchestration-validation'),

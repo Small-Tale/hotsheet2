@@ -1072,3 +1072,94 @@ fn hs2_0vtqff_a_pattern_only_list_resolves_to_the_newest_reported_model() {
     let resolved = family.resolve_start_model(Some(&catalog)).unwrap();
     assert!(family.allows(resolved.as_deref()));
 }
+
+/// HS2-ZF5H5M: the first start is metadata beside the shared policy: absent until a
+/// change records it, written in the same write as that change, kept by every later
+/// change (with or without a time, from any writer), left out of what the policy
+/// answers, and absent from a file written before it existed.
+#[test]
+fn hs2_zf5h5m_the_first_start_is_kept_beside_the_policy() {
+    let root = tempfile::tempdir().unwrap();
+    let store = PolicyStore::new(root.path());
+    let clock = Clock(100);
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let path = root.path().join(".hotsheet2/orchestration-policy.json");
+    let on_disk =
+        || -> serde_json::Value { serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap() };
+    // Absent file: nothing recorded, and a read creates nothing.
+    assert_eq!(store.started_at().unwrap(), None);
+    let set = |store: &PolicyStore,
+               revision: Option<String>,
+               body: PolicyBody,
+               at: Option<u64>,
+               tx: &mut Transaction<'_>| {
+        store
+            .set_started(
+                SetPolicy {
+                    expected_revision: revision,
+                    policy: body,
+                },
+                None,
+                at,
+                tx,
+            )
+            .unwrap()
+    };
+    let first = set(&store, None, policy(), None, &mut tx);
+    assert_eq!(store.started_at().unwrap(), None);
+    assert!(on_disk().get("placement_started_at_ms").is_none());
+    // A change that records it, in the same write that rotates the revision.
+    let mut changed = policy();
+    changed.speculation.allowed = !changed.speculation.allowed;
+    let second = set(
+        &store,
+        first.revision.clone(),
+        changed.clone(),
+        Some(500),
+        &mut tx,
+    );
+    assert_ne!(second.revision, first.revision);
+    assert_eq!(store.started_at().unwrap(), Some(500));
+    assert_eq!(on_disk()["placement_started_at_ms"], 500);
+    // Kept by later changes: with no time, with a later time, and by plain `set`.
+    let third = set(&store, second.revision.clone(), policy(), None, &mut tx);
+    let fourth = set(
+        &store,
+        third.revision.clone(),
+        changed.clone(),
+        Some(900),
+        &mut tx,
+    );
+    let fifth = store
+        .set(
+            SetPolicy {
+                expected_revision: fourth.revision.clone(),
+                policy: policy(),
+            },
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(store.started_at().unwrap(), Some(500));
+    // An identical policy is still a no-op that writes nothing.
+    let bytes = std::fs::read(&path).unwrap();
+    let same = set(&store, fifth.revision.clone(), policy(), Some(1), &mut tx);
+    assert_eq!(same.revision, fifth.revision);
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    // Not part of what the policy answers.
+    let answered = serde_json::to_value(store.read().unwrap()).unwrap();
+    assert!(!answered.to_string().contains("placement_started_at_ms"));
+    // A file written before the record existed reads, with nothing recorded.
+    let mut older = on_disk();
+    older
+        .as_object_mut()
+        .unwrap()
+        .remove("placement_started_at_ms");
+    std::fs::write(&path, serde_json::to_vec(&older).unwrap()).unwrap();
+    assert!(store.read().unwrap().enabled);
+    assert_eq!(store.started_at().unwrap(), None);
+}

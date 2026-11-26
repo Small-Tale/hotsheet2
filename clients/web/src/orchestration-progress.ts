@@ -92,10 +92,38 @@ export function moneyText(usd: number): string {
   }).format(usd);
 }
 
+/**
+ * HS2-RNFEYR: each reason code of `UnknownReason` (crates/hotsheet-ticketing/src/orchestration/summary.rs) in
+ * plain words, as it reads inside the parentheses of "Unknown (…)" or "2 work items have no cost (…)". A
+ * policy test keeps this in step with the Rust enum; a code it does not know yet reads as words.
+ */
+export const UNKNOWN_REASONS: Readonly<Record<string, string>> = {
+  run_unfinished: 'run not finished yet',
+  never_dispatched: 'never claimed in its project',
+  history_truncated: 'older run history no longer kept',
+  events_trimmed: 'older run events removed',
+  clock_inconsistent: 'recorded times run backwards',
+  no_gate_linked: 'no CI gate linked',
+  no_deployment_requested: 'no deployment requested',
+  no_review_requested: 'no review requested',
+  gate_unverified: 'no trustworthy gate verdict yet',
+  target_unbound: 'project not set up on this machine',
+  target_remote: 'project on another machine that does not share its cost',
+  usage_source_unsupported: 'tickets not in a Git store, where usage is kept',
+  usage_store_unavailable: 'usage records could not be read',
+  no_usage_recorded: 'no usage recorded',
+  cost_not_read: 'cost could not be read',
+  target_unreachable: 'project’s machine did not answer',
+  decisions_trimmed: 'older scheduler decisions removed',
+  cap_not_configured: 'no cap configured',
+};
+
+export const unknownReasonText = (code: string) => UNKNOWN_REASONS[code] ?? words(code);
+
 const why = (codes: Record<string, number>) => {
   const listed = Object.entries(codes)
     .filter(([, n]) => n > 0)
-    .map(([code]) => words(code));
+    .map(([code]) => unknownReasonText(code));
   return listed.length > 0 ? listed.join(', ') : 'not reported';
 };
 

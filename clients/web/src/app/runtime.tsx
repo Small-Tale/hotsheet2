@@ -7366,6 +7366,7 @@ export async function startHotSheetWebClient() {
       },
       openGoal: () => void orchestrationView.openGoal(),
       runValidation: () => void orchestrationView.runValidation(),
+      linkGate: (gateId) => void orchestrationView.linkGate(gateId),
       reopen: (reason) => void orchestrationView.reopen(reason),
       showDecisions: () => {
         orchestrationView.showDecisions();

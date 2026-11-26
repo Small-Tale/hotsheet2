@@ -370,6 +370,38 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(gone).not.toContain('Intervened');
   });
 
+  it('offers Link Again on each unknown CI gate a link watches again, and nowhere else (HS2-A7YCB2)', () => {
+    const commit = '3f9c2a1d00aa3f9c2a1d00aa3f9c2a1d00aa3f9c';
+    const gone = {
+      kind: 'ci',
+      state:
+        'unknown: the CI provider kept ending the watch; check the provider’s credentials and repository, then link the gate again',
+      commit,
+      gate_id: 'gate-gone',
+      relink: { commit },
+    };
+    const markup = (gates: unknown[], busy = false) =>
+      inspector('step-3', { busy, details: { loading: false, gates } });
+    const one = markup([gone, { kind: 'ci', state: 'pending', commit: 'b'.repeat(40), gate_id: 'gate-ok' }]);
+    expect(one.match(/data-action="link-orchestration-gate"/g)).toHaveLength(1);
+    expect(one).toContain('data-gate-id="gate-gone"');
+    expect(one).not.toContain('data-gate-id="gate-ok"');
+    expect(one).toContain('Link Again');
+    expect(one).toContain('then link the gate again');
+    // Two such gates: each button names its commit.
+    const two = markup([gone, { ...gone, commit: 'd'.repeat(40), gate_id: 'gate-ended' }]);
+    expect(two).toContain('Link 3f9c2a1 Again');
+    expect(two).toContain('Link ddddddd Again');
+    // While a change is on its way it is disabled; a gate without the request or its id offers nothing.
+    expect(markup([gone], true)).toMatch(
+      /data-action="link-orchestration-gate"[^>]*disabled|disabled[^>]*data-action="link-orchestration-gate"/,
+    );
+    expect(markup([{ ...gone, relink: undefined }])).not.toContain('link-orchestration-gate');
+    expect(markup([{ ...gone, gate_id: undefined }])).not.toContain('link-orchestration-gate');
+    expect(markup([])).not.toContain('link-orchestration-gate');
+    expect(markup([])).toContain('No gate is linked to this run yet.');
+  });
+
   it('says a released run is in review or back for corrections, in its Next and its events (HS2-ESVYQH)', () => {
     const released = String(
       OrchestrationInspector({
@@ -761,6 +793,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       showRequest: (id: string) => calls.push(`request ${id}`),
       openGoal: () => calls.push('goal'),
       runValidation: () => calls.push('validate'),
+      linkGate: (gate: string) => calls.push(`link ${gate}`),
       reopen: (reason: string) => calls.push(`reopen ${reason}`),
       showDecisions: () => calls.push('decisions'),
       loadEarlierDecisions: () => calls.push('earlier'),
@@ -796,6 +829,8 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'show-orchestration-request', target({ requestId: 'request-6' }));
     run('click', 'open-orchestration-goal', target({}));
     run('click', 'run-orchestration-validation', target({}));
+    run('click', 'link-orchestration-gate', target({ gateId: 'gate-7' }));
+    run('click', 'link-orchestration-gate', target({}));
     run('click', 'reopen-orchestration-work', target({ reopenReason: 'fix_changed_contract' }));
     run('click', 'reopen-orchestration-work', target({}));
     run('click', 'show-orchestration-decisions', target({}));
@@ -824,6 +859,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'request request-6',
       'goal',
       'validate',
+      'link gate-7',
       'reopen fix_changed_contract',
       'decisions',
       'earlier',
@@ -894,6 +930,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       showRequest: noop,
       openGoal: noop,
       runValidation: noop,
+      linkGate: noop,
       reopen: noop,
       showDecisions: noop,
       loadEarlierDecisions: noop,

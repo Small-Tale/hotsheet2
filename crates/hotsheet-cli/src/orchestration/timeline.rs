@@ -15,10 +15,9 @@ use hotsheet_model::{NoteKind, Ticket};
 use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
     BindingRegistry, DecisionJournal, DecisionKind, DecisionRecord, DecisionWait, DeclarationState,
-    MAX_AUDIT_PAGE, PermissionState, PermissionWait, PlacementHint, PlacementStartedStore,
-    ReadinessLevel, RunEventJournal, SessionRegistry, TargetDestination, TargetLocation, TicketKey,
-    TicketLabel, Timeline, TimelineInput, TimelinePolicy, TimelineStep, TimelineTarget, ticket_key,
-    timeline,
+    MAX_AUDIT_PAGE, PermissionState, PermissionWait, PlacementHint, ReadinessLevel,
+    RunEventJournal, SessionRegistry, TargetDestination, TargetLocation, TicketKey, TicketLabel,
+    Timeline, TimelineInput, TimelinePolicy, TimelineStep, TimelineTarget, ticket_key, timeline,
 };
 
 use super::scheduler::WAKE_DIRECTORY;
@@ -366,9 +365,9 @@ impl OrchestrationRuntime {
                 auto: body.is_some_and(|body| body.placement.automatic.is_none()),
                 software: !orchestrating,
                 // HS2-38R8J2: a plan never started reads Not Started, not Paused.
-                ever_started: PlacementStartedStore::new(&self.home)
-                    .started_at(owner_id)?
-                    .is_some(),
+                // HS2-ZF5H5M: started from any machine sharing the policy file, or
+                // (before that file recorded it) from this one.
+                ever_started: self.placement_started_at(owner_id)?.is_some(),
             },
         };
         Ok((timeline(&input), watched))

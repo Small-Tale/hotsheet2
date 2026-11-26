@@ -872,7 +872,9 @@ orchestration prompt-driven; the reversal and its reason are recorded there.
 ### Policy file
 
 `.hotsheet2/orchestration-policy.json` is checked in beside the target manifest:
-`schema_version: 1`, an opaque ULID `revision`, and a `policy` object. A missing
+`schema_version: 1`, an opaque ULID `revision`, a `policy` object and, once
+placement was first on, `placement_started_at_ms` (HS2-ZF5H5M: metadata beside the
+policy, written once and kept by every later change; see Not Started or Paused). A missing
 file reads as disabled and is never created by a read. Every omitted section takes
 its default, a newer version is an explicit unsupported-version error and is never
 overwritten, and a stored policy that no longer validates is treated as corrupt
@@ -2339,9 +2341,19 @@ a run never waits silently on a watch that will not come back:
   source `unverifiable` with `watch_gone` (so the run is held for attention, not left
   waiting), and the Orchestration view says what to do: check the provider's
   credentials and the repository, then link the gate again (`gate link` through the CLI,
-  the server or MCP; the view has no link action yet). The gate stays `watch_gone` while its adapter still reads the
+  the server or MCP, or Link Again in the run inspector). The gate stays `watch_gone` while its adapter still reads the
   same ended watch. A later link watches again and clears it; if that watch ends too,
   the follower re-links it with a fresh budget.
+- The run inspector's Gates section offers **Link Again** on each unknown CI gate whose
+  watch a link starts again: `not_watched`, `watch_ended` and `watch_gone` (HS2-A7YCB2).
+  It sends the gate's own commit and CI scope (provider, repository, workflow, branch,
+  artifact) as the person through the same gate link route, so it returns the same gate
+  and watches it again; it is disabled while another change of the run is on its way, and
+  a refusal is said in a toast. With several such gates each button names its commit. The
+  Gates row and the reconciliation's Not verified row word every such reason, and a gate
+  event's reason reads in words too (`the CI provider kept ending its watch`). A test build
+  shortens the follower's re-link back-off with `HOTSHEET_TEST_GATE_RELINK_RETRY_MS` so a
+  browser test reaches `watch_gone`; a shipped server ignores it.
 
 The attempts are counted in the follower's memory, so a server restarted during the
 back-off starts the count again from when its follower first sees the ended watch; the
@@ -5981,15 +5993,15 @@ readiness (§26.15), the runs (§26.9), the sessions this owner's orchestrator s
 (§26.16), the latest logged scheduler decision per step (§26.17), pending permission
 requests (§26.7), the bindings and the policy. It contacts no target, passes no gate and writes nothing.
 
-| Field           | Meaning                                                                                                          |
-| --------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `declared`      | The owner has a target declaration: it is an orchestration project, even with no target yet                      |
-| `phase`         | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`          |
-| `kick_off`      | `can_start`, `can_pause`, the policy revision, why Start is refused (`start_blocked`), and `default_policy`      |
-| `never_started` | HS2-38R8J2: placement was never turned on for the owner on this machine; absent while running and once it was on |
-| `waves`         | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on       |
-| `version`       | Changes exactly when what the timeline shows changes; time alone does not change it                              |
-| `wave_minutes`  | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes           |
+| Field           | Meaning                                                                                                                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `declared`      | The owner has a target declaration: it is an orchestration project, even with no target yet                                                           |
+| `phase`         | `no_projects`, `no_plan`, `proposed` (nothing ever ran), `running` (`placement.automatic`), or `paused`                                               |
+| `kick_off`      | `can_start`, `can_pause`, the policy revision, why Start is refused (`start_blocked`), and `default_policy`                                           |
+| `never_started` | HS2-38R8J2: placement was never turned on for the owner (HS2-ZF5H5M: on any machine sharing its policy file); absent while running and once it was on |
+| `waves`         | Oldest first; each wave has a `kind`, an `ordinal`, an `estimated_start_ms` and what the estimate rests on                                            |
+| `version`       | Changes exactly when what the timeline shows changes; time alone does not change it                                                                   |
+| `wave_minutes`  | The wave length estimates use: the median lead time of finished runs, or 60 minutes until one finishes                                                |
 
 **Waves.** Finished steps are **Done**. Once orchestration was kicked off, a step with an
 unfinished run is **Working Now**; every other step's wave is its depth over the
@@ -6122,11 +6134,20 @@ A read on the server also starts the target followers of §26.9.
   started by hand (or by a worker taking the Up Next mark) while placement was never on is
   phase `paused` with `never_started: true`: the header reads _Not Started · N Working_ (N
   the Working Now items) and keeps the dry-run banner. Once placement was ever on, a plan
-  with placement off reads _Paused · N Sessions_. The record is this machine's
-  `orchestration-placement-started.json` (`PlacementStartedStore`), kept for good with the
-  first time placement was on; the policy route writes it when a change turns placement
-  on (Start Orchestration, `policy start`, Apply Policy with placement on or Auto while a
-  plan exists) or changes a policy under which placement was on (Pause of an Auto plan).
+  with placement off reads _Paused · N Sessions_. HS2-ZF5H5M: the record is
+  `placement_started_at_ms` in the shared `.hotsheet2/orchestration-policy.json`, beside
+  the policy rather than in it, so every machine sharing the file agrees: a plan started
+  and paused on machine A reads Paused on machine B too. It holds the first time
+  placement was on, is written in the same write as the policy change that turns
+  placement on (Start Orchestration, `policy start`, Apply Policy with placement on or
+  Auto while a plan exists) or changes a policy under which placement was on (Pause of
+  an Auto plan), and is kept by every later change from any machine; the policy route's
+  answer does not include it. Before it existed the record was this machine's
+  `orchestration-placement-started.json` (`PlacementStartedStore`, HS2-38R8J2): that file
+  is no longer written, is still read when the shared file has no record, and its time
+  is carried into the shared file at the machine's next policy change. An older Hot Sheet
+  that refuses unknown fields reads a policy file with the record as corrupt, as it does
+  any newer policy field.
 - **Kick-off.** With no plan, **Propose Plan** starts the planning session of §26.25 in
   the tool the person drives with in this project. A proposed or paused plan has
   **Start Orchestration**, which turns `placement.automatic` on through the policy route
@@ -7289,7 +7310,11 @@ its done and working steps and its cost. Counts come from the timeline. Lead tim
 cost come from the summary of §26.21 (`GET .../orchestration/summary`), read with the
 overview on each change of the timeline's version. Lead time is the average over the
 runs whose lead time is known, with the unknown ones counted beside it and their
-reason ("About 52 min on average over 3 runs · 2 unknown (run unfinished)"). An
+reason ("About 52 min on average over 3 runs · 2 unknown (run not finished yet)"). Each
+reason code of the summary reads in plain words, never as its code: for example
+`cost_not_read` reads "cost could not be read" and `target_remote` "project on another
+machine that does not share its cost"; a policy test keeps the words in step with every
+`UnknownReason` code (HS2-RNFEYR). An
 unknown measure is never shown as zero: with nothing known the row reads
 "Unknown (<reason>)". A cost total is labelled partial unless `cost.complete` is
 true ("$12.40 so far · partial: 1 work item has no cost (no usage recorded)"), reads

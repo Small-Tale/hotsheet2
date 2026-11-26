@@ -22,6 +22,8 @@ export async function fakeGithubActions() {
   const runs = new Map<string, FakeRun[]>();
   const versions = new Map<string, number>();
   const requests: string[] = [];
+  /** HS2-A7YCB2: repositories the provider does not let the token read: every request answers 404. */
+  const unreadable = new Set<string>();
   const answer = (request: IncomingMessage, response: ServerResponse, key: string, body: unknown) => {
     const etag = `W/"${key}-v${versions.get(key) ?? 0}"`;
     if (request.headers['if-none-match'] === etag) {
@@ -37,6 +39,12 @@ export async function fakeGithubActions() {
     requests.push(`${request.method ?? 'GET'} ${url.pathname}`);
     const list = /^\/repos\/([^/]+\/[^/]+)\/actions\/runs$/.exec(url.pathname);
     const jobs = /^\/repos\/([^/]+\/[^/]+)\/actions\/runs\/(\d+)\/jobs$/.exec(url.pathname);
+    const repository = (list ?? jobs)?.[1];
+    if (repository && unreadable.has(repository)) {
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ message: 'Not Found' }));
+      return;
+    }
     if (request.method === 'GET' && list) {
       const repo = list[1];
       const branch = url.searchParams.get('branch') ?? 'main';
@@ -92,6 +100,11 @@ export async function fakeGithubActions() {
     run(repo: string, run: FakeRun) {
       runs.set(repo, [...(runs.get(repo) ?? []).filter((existing) => existing.id !== run.id), run]);
       versions.set(repo, (versions.get(repo) ?? 0) + 1);
+    },
+    /** HS2-A7YCB2: `repo` answers 404 (unreadable) or is readable again, as with credentials fixed. */
+    readable(repo: string, readable: boolean) {
+      if (readable) unreadable.delete(repo);
+      else unreadable.add(repo);
     },
     close: () =>
       new Promise<void>((resolve) => {

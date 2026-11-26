@@ -867,3 +867,218 @@ fn hs2_38r8j2_pausing_an_auto_plan_reads_paused() {
     assert_eq!(paused.phase, TimelinePhase::Proposed);
     assert!(!paused.never_started);
 }
+
+/// A copy of `from` (a machine's home) at `to`, files and directories alike.
+fn copy_home(from: &std::path::Path, to: &std::path::Path) {
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            std::fs::create_dir_all(&target).unwrap();
+            copy_home(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).unwrap();
+        }
+    }
+}
+
+/// The same project on a second machine: its own home holding what machine A's home
+/// held when it was copied (bindings, plan reads, runs), and the same checkouts, so the
+/// checked-in `.hotsheet2/orchestration-policy.json` is the one both machines share.
+fn second_machine(m: &Machine) -> (tempfile::TempDir, OrchestrationRuntime) {
+    let other = tempfile::tempdir().unwrap();
+    copy_home(&m.home, other.path());
+    let runtime = OrchestrationRuntime::new(
+        other.path().to_path_buf(),
+        CheckoutRegistry::new(other.path().join("checkouts.json")),
+        ProviderConfigRegistry::new(other.path().join("providers.json")),
+        Arc::new(Memory::default()),
+        Arc::new(Peer::default()),
+        id(11),
+    )
+    .unwrap();
+    (other, runtime)
+}
+
+fn read_on(runtime: &OrchestrationRuntime, owner: &str) -> Timeline {
+    let mut rng = Rng(600);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    runtime
+        .orchestration_timeline(owner, None, 0, &mut tx)
+        .unwrap()
+}
+
+/// HS2-ZF5H5M: whether orchestration was ever started is kept beside the shared policy,
+/// so every machine sharing the project's `orchestration-policy.json` agrees. A plan
+/// started on machine A and paused there reads Paused on machine B, where work was
+/// started by hand and nobody changed the policy, not Not Started. The record is written
+/// once, kept by every later policy change, never in a machine-local file again; a time
+/// a machine recorded before (HS2-38R8J2) is still read, and carried into the shared
+/// file at that machine's next policy change.
+#[test]
+fn hs2_zf5h5m_a_plan_started_on_one_machine_reads_paused_on_another() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[
+            TargetAction::TicketsRead,
+            TargetAction::WorkStart,
+            TargetAction::SessionsManage,
+        ],
+        &mut tx,
+    );
+    let goal = m.orchestration_ticket("Ship single sign-on");
+    let (first, second) = (
+        target_ticket(&m, "Add the token endpoint"),
+        target_ticket(&m, "Add the login page"),
+    );
+    define(&m, &goal, &first, None);
+    define(&m, &goal, &second, Some(&first));
+    set_policy(&m, false, None);
+    // Work started by hand, with placement off: Not Started on every machine.
+    let dispatch: DispatchRun = serde_json::from_value(json!({
+        "ticket": {"connection_id": m.owner_connection(), "native_id": goal.id.to_string()},
+        "target_id": id(1), "connection_id": m.target_connection(),
+        "native_id": first.id.to_string(), "operation_id": "op-1", "worker_id": "worker-1",
+    }))
+    .unwrap();
+    m.runtime
+        .run_dispatch(&m.owner.id, dispatch, Some(&worker()), &mut tx)
+        .unwrap();
+    let (_b_home, b) = second_machine(&m);
+    let owner = m.owner.id.clone();
+    let policy_file =
+        std::path::Path::new(&m.owner.root).join(".hotsheet2/orchestration-policy.json");
+    let shared = || -> serde_json::Value {
+        serde_json::from_slice(&std::fs::read(&policy_file).unwrap()).unwrap()
+    };
+    for view in [read(&m), read_on(&b, &owner)] {
+        assert_eq!(view.phase, TimelinePhase::Paused);
+        assert!(view.never_started);
+    }
+    assert!(shared().get("placement_started_at_ms").is_none());
+
+    // Machine A starts orchestration: the first start lands in the shared file, beside
+    // the policy, and nothing machine-local is written.
+    set_policy(&m, true, None);
+    assert_eq!(read(&m).phase, TimelinePhase::Running);
+    let started_at = shared()["placement_started_at_ms"].as_u64().unwrap();
+    assert!(
+        !m.home.join("orchestration-placement-started.json").exists(),
+        "the first start is not machine-local any more"
+    );
+    // Machine B never changed the policy and runs nothing itself; it reads the shared
+    // file and the same running plan.
+    assert_eq!(read_on(&b, &owner).phase, TimelinePhase::Running);
+    // Paused on A: Paused on both machines, never Not Started again.
+    set_policy(&m, false, None);
+    for view in [read(&m), read_on(&b, &owner)] {
+        assert_eq!(view.phase, TimelinePhase::Paused);
+        assert!(
+            !view.never_started,
+            "a started plan reads Paused everywhere"
+        );
+    }
+    // Later policy changes from either machine keep the first start: repeated, with an
+    // actor, and from machine B.
+    set_policy(&m, false, Some("worker-1"));
+    set_policy(&m, false, Some("worker-1"));
+    let mut rng = Rng(700);
+    let mut btx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let current = b.policy(&owner).unwrap();
+    let request = serde_json::from_value(json!({
+        "expected_revision": current.revision,
+        "policy": {
+            "tools": [{"tool": "claude", "max_sessions": 1}],
+            "targets": [{"target_id": id(1), "actions": ["tickets_read", "work_start", "sessions_manage"],
+                "tools": [{"tool": "claude"}]}],
+            "placement": {"automatic": false},
+        },
+    }))
+    .unwrap();
+    let changed = b
+        .set_policy(&owner, request, Some(&human()), &mut btx)
+        .unwrap();
+    assert_ne!(changed.revision, current.revision);
+    assert_eq!(
+        shared()["placement_started_at_ms"].as_u64(),
+        Some(started_at)
+    );
+    assert!(!read(&m).never_started && !read_on(&b, &owner).never_started);
+    // The record is metadata beside the policy, not part of what the policy answers.
+    let answered = serde_json::to_value(b.policy(&owner).unwrap()).unwrap();
+    assert!(answered.get("placement_started_at_ms").is_none());
+    assert!(answered["policy"].get("placement_started_at_ms").is_none());
+}
+
+/// HS2-ZF5H5M: a project started before the shared record existed keeps reading as
+/// started from the machine-local file (HS2-38R8J2), and that time moves into the
+/// shared file at the machine's next policy change, where the other machine reads it.
+#[test]
+fn hs2_zf5h5m_an_earlier_machine_local_start_is_read_and_carried_into_the_shared_file() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[
+            TargetAction::TicketsRead,
+            TargetAction::WorkStart,
+            TargetAction::SessionsManage,
+        ],
+        &mut tx,
+    );
+    let goal = m.orchestration_ticket("Ship single sign-on");
+    let first = target_ticket(&m, "Add the token endpoint");
+    define(&m, &goal, &first, None);
+    set_policy(&m, false, None);
+    let dispatch: DispatchRun = serde_json::from_value(json!({
+        "ticket": {"connection_id": m.owner_connection(), "native_id": goal.id.to_string()},
+        "target_id": id(1), "connection_id": m.target_connection(),
+        "native_id": first.id.to_string(), "operation_id": "op-1", "worker_id": "worker-1",
+    }))
+    .unwrap();
+    m.runtime
+        .run_dispatch(&m.owner.id, dispatch, Some(&worker()), &mut tx)
+        .unwrap();
+    let owner = m.owner.id.clone();
+    let (_b_home, b) = second_machine(&m);
+    // Machine A recorded its start the old way, in its own home only.
+    hotsheet_ticketing::orchestration::PlacementStartedStore::new(&m.home)
+        .record(&owner, 42)
+        .unwrap();
+    assert!(
+        !read(&m).never_started,
+        "the machine-local record is still read"
+    );
+    assert!(read_on(&b, &owner).never_started, "B has no record yet");
+    assert_eq!(m.runtime.placement_started_at(&owner).unwrap(), Some(42));
+    // A's next policy change, even one that leaves placement off, carries its time
+    // into the shared file; B then reads it.
+    set_policy(&m, false, Some("worker-1"));
+    let policy_file =
+        std::path::Path::new(&m.owner.root).join(".hotsheet2/orchestration-policy.json");
+    let shared: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&policy_file).unwrap()).unwrap();
+    assert_eq!(shared["placement_started_at_ms"], 42);
+    assert_eq!(b.placement_started_at(&owner).unwrap(), Some(42));
+    let on_b = read_on(&b, &owner);
+    assert_eq!(on_b.phase, TimelinePhase::Paused);
+    assert!(!on_b.never_started);
+}

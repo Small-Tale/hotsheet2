@@ -45,11 +45,54 @@ const words = (code: string) => code.replaceAll('_', ' ');
  * where a person or an agent must act.
  */
 export const CI_WATCH_REASONS: Readonly<Record<string, string>> = {
+  not_watched: 'nothing watches it yet; link the gate again to start its watch',
   watch_lost: 'the watch was interrupted; it resumes when the job monitor runs again',
   watch_ended: 'the CI provider ended the watch; it is linked again automatically',
   watch_gone:
     'the CI provider kept ending the watch; check the provider’s credentials and repository, then link the gate again',
 };
+
+/**
+ * HS2-A7YCB2: the unknown CI gate reasons a person may answer with Link Again: nothing watches the gate
+ * (`not_watched`), the provider ended its watch (`watch_ended`) or kept ending it (`watch_gone`).
+ */
+export const RELINKABLE_WATCH_REASONS: ReadonlySet<string> = new Set(['not_watched', 'watch_ended', 'watch_gone']);
+
+/** The body of `POST .../runs/{run}/gates` that links a gate again: the same commit and CI scope. */
+export interface GateLinkRequest {
+  commit: string;
+  provider?: string;
+  repository?: string;
+  workflow?: string;
+  branch?: string;
+  artifact?: string;
+}
+
+/**
+ * HS2-A7YCB2: the request that links a standing CI gate again, as `GET .../gates` answers the gate, or
+ * undefined when the gate is not an unknown CI gate whose watch a link starts again (docs/26 §26.13).
+ * Linking the same commit and scope returns the same gate and watches it again.
+ */
+export function relinkRequest(gate: Record<string, unknown>): GateLinkRequest | undefined {
+  const text = (value: unknown) => (typeof value === 'string' && value !== '' ? value : undefined);
+  if (gate.kind !== 'ci' || gate.state !== 'unknown' || gate.superseded_by !== undefined) return undefined;
+  const reason = text(gate.reason),
+    commit = text(gate.commit);
+  if (!reason || !RELINKABLE_WATCH_REASONS.has(reason) || !commit) return undefined;
+  const scope = (typeof gate.ci === 'object' && gate.ci !== null ? gate.ci : {}) as Record<string, unknown>;
+  const request: GateLinkRequest = { commit };
+  const provider = text(gate.provider),
+    repository = text(scope.repository),
+    workflow = text(scope.workflow),
+    branch = text(scope.branch),
+    artifact = text(scope.artifact);
+  if (provider) request.provider = provider;
+  if (repository) request.repository = repository;
+  if (workflow) request.workflow = workflow;
+  if (branch) request.branch = branch;
+  if (artifact) request.artifact = artifact;
+  return request;
+}
 
 export function dispositionText(disposition: string): string {
   const known = DISPOSITIONS[disposition];
@@ -108,6 +151,11 @@ const RUN_REASONS: Readonly<Record<string, string>> = {
   claimed_for_session: 'claimed for its session, with no dispatcher to assign it',
   assigned_by_dispatcher: 'assigned by the project’s dispatcher',
   target_completed: 'its ticket was completed',
+  // HS2-A7YCB2: a gate event's reason, shorter than the Gates row that says what to do.
+  not_watched: 'not watched yet',
+  watch_lost: 'its watch was interrupted',
+  watch_ended: 'the CI provider ended its watch',
+  watch_gone: 'the CI provider kept ending its watch',
 };
 
 export function runReasonText(reason: string): string {
