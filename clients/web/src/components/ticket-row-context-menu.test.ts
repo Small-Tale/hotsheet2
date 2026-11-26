@@ -158,6 +158,17 @@ describe('TicketRowContextMenu', () => {
     expect(disabled.indexOf(upNext)).toBeLessThan(disabled.indexOf(copy));
   });
 
+  it('keeps Up Next mounted but disabled with the provider reason (HS2-Y32T8A)', () => {
+    const upNext = 'data-context-action="Toggle Up Next"',
+      reason = 'Jira PROJ tickets do not support Up Next.',
+      markup = String(TicketRowContextMenu({ x: 0, y: 0, status: 'started', upNextDisabledReason: reason }));
+    expect(disabledItem(markup, upNext)).toBe(true);
+    expect(itemTag(markup, upNext)).toContain(`title="${reason}"`);
+    // Other updates stay available: only Up Next is unsupported.
+    expect(disabledItem(markup, 'data-context-action="Add tag"')).toBe(false);
+    expect(disabledItem(String(TicketRowContextMenu({ x: 0, y: 0, status: 'started' })), upNext)).toBe(false);
+  });
+
   it('omits Up Next when a colocated toolbar button already owns that action', () => {
     expect(String(TicketRowContextMenu({ x: 0, y: 0, upNextEligible: true, hideUpNext: true }))).not.toContain(
       'data-context-action="Toggle Up Next"',

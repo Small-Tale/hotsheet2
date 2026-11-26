@@ -436,6 +436,19 @@ describe('TicketInspector', () => {
     expect(reader).toContain('data-component="live-claim-notice"');
   });
 
+  it('keeps the Up Next star mounted but disabled with its provider reason (HS2-Y32T8A)', () => {
+    const reason = 'Jira PROJ tickets do not support Up Next.',
+      star = (props: Partial<Parameters<typeof TicketInspector>[0]>) =>
+        /<button[^>]*data-action="toggle-inspector-up-next"[^>]*>/u.exec(
+          String(TicketInspector({ ...base, upNextEligible: true, ...props })),
+        )?.[0] ?? '';
+    for (const presentation of ['sidebar', 'reader'] as const) {
+      expect(star({ presentation, upNextDisabledReason: reason })).toContain(' disabled');
+      expect(star({ presentation, upNextDisabledReason: reason })).toContain(`title="${reason}"`);
+      expect(star({ presentation })).not.toContain(' disabled');
+    }
+  });
+
   it('fills the Up Next star through LucideIcon appearance only while active (HS2-ZFFCHW)', () => {
     const star = (upNext: boolean) =>
       /<svg[^>]*data-lucide="star"[^>]*>/u.exec(

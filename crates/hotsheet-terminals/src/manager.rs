@@ -52,7 +52,10 @@ impl TerminalManager {
         }
         let term = Arc::new(Terminal::spawn(spec)?);
         self.exited_ai_at.lock_or_recover().remove(&key);
-        map.insert(key, term.clone());
+        // An exited terminal this replaces ends its viewers' streams (HS2-QWT94V).
+        if let Some(replaced) = map.insert(key, term.clone()) {
+            replaced.end_output();
+        }
         Ok((term, true))
     }
 
@@ -86,6 +89,9 @@ impl TerminalManager {
         match removed {
             Some(t) => {
                 let _ = t.kill(); // best-effort; a dead child's kill is harmless
+                // Attached viewers' streams end now, even while a grandchild still holds the
+                // PTY (HS2-QWT94V).
+                t.end_output();
                 Ok(true)
             }
             None => Ok(false),
@@ -111,6 +117,7 @@ impl TerminalManager {
                 }
             }
             exited.remove(key);
+            term.end_output();
             false
         });
         // A burst of broken launches cannot pin unlimited PTY replay buffers.
@@ -122,7 +129,9 @@ impl TerminalManager {
                 .take(exited.len() - MAX_FAILED_AI_DIAGNOSTICS)
             {
                 exited.remove(&key);
-                map.remove(&key);
+                if let Some(term) = map.remove(&key) {
+                    term.end_output();
+                }
             }
         }
         before - map.len()

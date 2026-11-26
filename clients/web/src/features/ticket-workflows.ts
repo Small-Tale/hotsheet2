@@ -60,6 +60,7 @@ import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes'
 import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from '../new-ticket-attachments';
 import {
   newTicketCreationSourceId,
+  newTicketUpNextDisabledReason,
   type ProjectTicketSources,
   rememberNewTicketSource,
   type TicketSourceChoice,
@@ -77,6 +78,7 @@ import {
   canAtomicallyBulkUpdate,
   canBulkUpdate,
   projectBulkTicketCounts,
+  ticketUpNextDisabledReason,
 } from '../ticket-bulk-operations';
 import {
   duplicateReference,
@@ -93,8 +95,8 @@ import {
   captureTicketDraft,
   clearTicketDraft,
   loadTicketDraft,
+  planTicketDraftRestore,
   prepareCommittedDraftCleanup,
-  reconcileStoredTicketDraft,
   saveTicketDraft,
   type TicketDraftField,
   ticketDraftKey,
@@ -739,7 +741,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             publishOptimisticTicketRows(current.id);
             if (!responseAppend && selectedTicket.value?.slug === slug) reconcileRefreshedSelected(base, remote);
             const conflict = reconciled.conflicts[0];
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
             if (conflict) {
               showFieldConflict(conflict);
               reportMutationTiming({
@@ -911,9 +913,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   /**
    * The recovery copy for a field the user is about to edit, rebased onto the field's current value:
-   * the stored draft continues on the same base when nothing changed, merges when the remote change
-   * is disjoint, and is dropped (the current value wins) when it cannot be merged. `undefined` when
-   * there is nothing to restore.
+   * the stored draft continues on the same base when nothing changed and merges when the remote
+   * change is disjoint. When it cannot be merged, the field-conflict card offers both versions and
+   * the copy stays until the card is resolved (HS2-7D3MPP); the editor opens on the current value.
+   * `undefined` when there is nothing to restore into the editor.
    */
   function restoreTicketDraft(
     field: TicketDraftField,
@@ -923,19 +926,32 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     const storage = draftStorage(),
       key = selectedDraftKey(field, noteId);
     if (!storage || !key) return undefined;
-    const stored = loadTicketDraft(storage, key);
-    if (!stored || (stored.draft === stored.base && !stored.pendingIntent) || stored.draft === current) {
-      if (stored) clearTicketDraft(storage, key);
+    const plan = planTicketDraftRestore(loadTicketDraft(storage, key), current);
+    if (plan.kind === 'none') {
+      if (plan.clear) clearTicketDraft(storage, key);
       return undefined;
     }
-    const next = reconcileStoredTicketDraft(stored, current);
-    if (next.kind === 'conflict') {
-      clearTicketDraft(storage, key);
-      showToast('An unsaved edit could not be merged with a newer version of this ticket and was discarded.');
+    if (plan.kind === 'conflict') {
+      showFieldConflict({
+        key: field === 'note' ? `note:${noteId ?? ''}` : field,
+        field,
+        label: ticketFieldLabel(field),
+        base: plan.base,
+        mine: plan.mine,
+        theirs: plan.theirs,
+      });
       return undefined;
     }
     showToast('Restored an unsaved edit.');
-    return { draft: next.draft, base: next.base };
+    return { draft: plan.draft, base: plan.base };
+  }
+  /** A resolved field conflict settles the field's recovery copy: the user chose what to keep (HS2-7D3MPP). */
+  function clearConflictRecoveryCopy(conflict: TicketFieldConflict) {
+    const field = DRAFT_FIELDS.find((item) => item === conflict.field);
+    if (!field) return;
+    const storage = draftStorage(),
+      key = selectedDraftKey(field, field === 'note' ? conflict.key.slice('note:'.length) : undefined);
+    if (storage && key) clearTicketDraft(storage, key);
   }
   const savingDraft =
     <T>(
@@ -1529,6 +1545,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         reportBulkFailure(requestedProject, 'One or more selected ticket providers do not support ticket updates.');
         return false;
       }
+      // The Up Next controls are disabled for such providers; this covers any other route (HS2-Y32T8A).
+      const upNextRefusal =
+        action.kind === 'up-next' ? ticketUpNextDisabledReason(selected, capabilitiesFor) : undefined;
+      if (upNextRefusal) {
+        reportBulkFailure(requestedProject, upNextRefusal);
+        return false;
+      }
       const operations: BulkOperation[] = selected.flatMap((ticket) => {
         const patch = bulkTicketPatch(ticket, action);
         return patch ? [{ slug: ticket.slug, id: ticket.id, patch }] : [];
@@ -1677,7 +1700,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     // Plain-HTTP LAN origins (a remote device) have no async Clipboard API, and the full-text write
     // below runs after a fetch, outside the shortcut's user gesture. Copy what is already known
     // synchronously so the local pasteboard still receives the ticket ids (HS2-B68KPQ).
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Absent on insecure origins despite its static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Absent on insecure origins despite its static type. (HS2-B68KPQ)
     if (!navigator.clipboard) copyWithSelection(ticketClipboardText(snapshot.tickets));
     void Promise.all(
       rows.map((ticket) =>
@@ -1690,7 +1713,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         if (state.clipboard !== snapshot) return;
         snapshot.tickets = full.map((ticket) => clipboardTicket(ticket));
         const text = ticketClipboardText(full);
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
         void navigator.clipboard?.writeText(text).catch(() => undefined);
       })
       .catch((reason: unknown) => {
@@ -2015,14 +2038,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             : row.id === ticket.duplicate_of || row.native_id === ticket.duplicate_of,
         ),
       target = match ? duplicateTarget(match.project, match.row) : resolvedDuplicateTargets.value[ticket.duplicate_of];
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     return target
       ? { id: ticket.duplicate_of, projectName: target.projectName, slug: target.slug, title: target.title }
       : undefined;
   }
   async function resolveDuplicateTargetFor(ticket: FullTicket) {
     const value = ticket.duplicate_of;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     if (!value || resolvedDuplicateTargets.value[value]) return;
     const target = await resolveDuplicateReferenceTarget(value, projects.value, (item, id) =>
       new Api((item as Project).apiPath).checkoutTicket(item.id, id).then((result) => result.ticket),
@@ -2327,7 +2350,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         if (!cached || shown?.qualified_id !== result.ticket.qualified_id) presentTicket(result.ticket);
         else if (!sameTicketRevision(shown, result.ticket)) {
           // Replace stale cached content; keep an edit the user already began against the shown copy.
-          if (ticketEditInProgress()) selectedTicket.value = result.ticket;
+          // Reconciling (not a bare swap) also moves the committed base, so the blur save sends the
+          // refreshed token instead of the cached one and an untouched open editor adopts the
+          // refreshed text (HS2-7D3MPP).
+          if (ticketEditInProgress()) reconcileRefreshedSelected(shown, result.ticket);
           else presentTicket(result.ticket);
         }
         return result.ticket;
@@ -2499,7 +2525,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       );
     } catch (reason) {
       const active = ticketCloseDialog.value;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
       if (active)
         ticketCloseDialog.value = {
           ...active,
@@ -2790,7 +2816,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     const client = new Api(origin.apiPath),
       files = submitted.map((item) => item.file),
       batch_id = browserRandomId(),
-      placement = newTicketCreationPlacement(composerUpNext.value, composerBacklog.value),
+      // A source without Up Next creates the ticket outside it, as its disabled star shows (HS2-Y32T8A).
+      placement = newTicketCreationPlacement(
+        composerUpNext.value && !newTicketUpNextDisabledReason(target),
+        composerBacklog.value,
+      ),
       finishLocalCreation = beginLocalTicketCreation();
     let completedEpoch: number | undefined;
     composerSubmitting.value = true;
@@ -3015,6 +3045,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     attachmentEpochs: () => ({ composer: composerAttachmentEpoch, notWorking: notWorkingAttachmentEpoch }),
     applyTicketPatch,
     restoreTicketDraft,
+    clearConflictRecoveryCopy,
     flushTicketDrafts,
     flushSelectedTicketEdits,
     captureTicketDraftRecovery,

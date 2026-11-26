@@ -163,9 +163,9 @@ use routes::notifiers::{
 use routes::permissions::{
     ask_permission, create_drive_connection, delete_drive_connection,
     discard_checkout_legacy_permissions, discovered_ai_tools_off_runtime, get_ai_settings,
-    get_checkout_ai_settings, get_checkout_permission_automation, interrupt_drive_turn,
-    invalidate_checkout_legacy_permissions, list_ai_tools, list_connections, list_drive_sessions,
-    list_permissions, migrate_checkout_permission_automation, now_ms,
+    get_checkout_ai_settings, get_checkout_permission_automation, get_plugin_status,
+    interrupt_drive_turn, invalidate_checkout_legacy_permissions, list_ai_tools, list_connections,
+    list_drive_sessions, list_permissions, migrate_checkout_permission_automation, now_ms,
     preview_checkout_legacy_permissions, probe_checkout_legacy_permission_host,
     probe_permission_bridge, put_ai_settings, put_checkout_ai_settings,
     put_checkout_permission_automation, send_drive_turn,
@@ -286,7 +286,7 @@ pub struct AppState {
     /// Identity of the primary store at startup. An unscoped route must never silently
     /// switch to a different store placed at the same path (HS2-34XE8B).
     primary_instance_id: Result<String, String>,
-    secret: String,
+    secret: hotsheet_sync::secret::SecretString,
     remote_listener: bool,
     /// HS2-JFEMAR: bounds the failed attempts a peer may make on the unauthenticated
     /// renewal-token route.
@@ -549,7 +549,8 @@ struct QuiescenceReport {
 #[derive(Clone)]
 struct InstanceMeta {
     url: String,
-    secret: String,
+    /// HS2-DGMK06: redacting, so a future `derive(Debug)` or log line cannot print it.
+    secret: hotsheet_sync::secret::SecretString,
     started_at: String,
     /// Registration identity shared by every hosted store's discovery file (HS2-GWFEAA).
     build_revision: Option<String>,
@@ -666,7 +667,7 @@ impl AppState {
             orchestration_runtime: None,
             orchestration_tasks: Arc::default(),
             primary_instance_id,
-            secret,
+            secret: secret.into(),
             remote_listener: false,
             token_failures: Arc::default(),
             remote_auth: None,
@@ -2750,6 +2751,8 @@ pub fn app(state: AppState) -> Router {
             post(routes::session_messages::message_connection),
         )
         .route("/ai-tools", get(list_ai_tools))
+        // Plugin dirs discovery skipped, with their load errors (HS2-YJCPD5).
+        .route("/plugins/status", get(get_plugin_status))
         .route("/ai-settings", get(get_ai_settings).put(put_ai_settings))
         .route("/drive/connections", post(create_drive_connection))
         .route("/drive/sessions", get(list_drive_sessions))

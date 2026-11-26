@@ -152,7 +152,7 @@ impl AiReach for ServerReach {
         // Lets a driven tool's permission hook reach the route-back (HS2-XCTAHM).
         if let Some(url) = state.terminal_server_url.lock_or_recover().clone() {
             envs.push(format!("HOTSHEET_SERVER={url}"));
-            envs.push(format!("HOTSHEET_SECRET={}", state.secret));
+            envs.push(format!("HOTSHEET_SECRET={}", state.secret.expose()));
         }
         let trigger = hotsheet_aitools::prepare_trigger_with_home(
             &self.store_root,

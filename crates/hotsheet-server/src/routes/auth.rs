@@ -154,7 +154,7 @@ pub(crate) async fn require_secret(
             .get::<crate::tls::CertificateFingerprint>()
             .map_or_else(|| "cert".to_owned(), |device| format!("cert-{}", device.0));
         (Caller::Certificate, device)
-    } else if presented == Some(state.secret.as_str()) && state.local_bearer_allowed(peer) {
+    } else if presented == Some(state.secret.expose()) && state.local_bearer_allowed(peer) {
         (Caller::LocalBearer, "local".to_owned())
     } else {
         let device =

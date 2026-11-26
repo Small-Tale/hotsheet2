@@ -206,14 +206,16 @@ pub fn scan(project: &Path) -> Result<RecommendationReport, RecommendationError>
                 &state,
                 &source.id,
                 &source.commit,
-                "rule",
-                &rule.name,
-                rule.version,
-                &rule.sha256,
-                &rule.description,
-                evidence,
-                source.selected_rules.contains(&rule.name),
-                sources::installed_version(project, &rule.name),
+                CandidateFacts {
+                    kind: "rule",
+                    name: &rule.name,
+                    version: rule.version,
+                    digest: &rule.sha256,
+                    description: &rule.description,
+                    evidence,
+                    selected: source.selected_rules.contains(&rule.name),
+                    installed_version: sources::installed_version(project, &rule.name),
+                },
             ));
         }
         for skill in &source.skills {
@@ -231,14 +233,16 @@ pub fn scan(project: &Path) -> Result<RecommendationReport, RecommendationError>
                 &state,
                 &source.id,
                 &source.commit,
-                "skill",
-                &skill.name,
-                0,
-                &sources::skill_digest(skill),
-                &format!("{} skill from {}", skill.name, source.id),
-                evidence,
-                source.selected_skills.contains(&skill.name),
-                None,
+                CandidateFacts {
+                    kind: "skill",
+                    name: &skill.name,
+                    version: 0,
+                    digest: &sources::skill_digest(skill),
+                    description: &format!("{} skill from {}", skill.name, source.id),
+                    evidence,
+                    selected: source.selected_skills.contains(&skill.name),
+                    installed_version: None,
+                },
             ));
         }
     }
@@ -318,20 +322,35 @@ pub fn scan(project: &Path) -> Result<RecommendationReport, RecommendationError>
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+/// One rule or skill's reviewed facts, grouped so [`candidate`] keeps a short signature
+/// (HS2-FXF07C).
+struct CandidateFacts<'a> {
+    kind: &'a str,
+    name: &'a str,
+    version: u64,
+    digest: &'a str,
+    description: &'a str,
+    evidence: Vec<String>,
+    selected: bool,
+    installed_version: Option<u64>,
+}
+
 fn candidate(
     state: &ReviewState,
     source: &str,
     commit: &str,
-    kind: &str,
-    name: &str,
-    version: u64,
-    digest: &str,
-    description: &str,
-    evidence: Vec<String>,
-    selected: bool,
-    installed_version: Option<u64>,
+    facts: CandidateFacts<'_>,
 ) -> Recommendation {
+    let CandidateFacts {
+        kind,
+        name,
+        version,
+        digest,
+        description,
+        evidence,
+        selected,
+        installed_version,
+    } = facts;
     let version_text = version.to_string();
     let fingerprint = hash(&[
         source,

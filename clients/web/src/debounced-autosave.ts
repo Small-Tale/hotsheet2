@@ -112,8 +112,12 @@ export function createFocusLossAutosave<T>(
   };
   const flush = async (): Promise<boolean> => {
     if (active) {
+      // Only an edit that was waiting when this flush began is its to send. Text typed while the
+      // earlier save was in flight belongs to the next focus loss, so a blur whose save is still
+      // running never writes the user's newer typing behind their back (HS2-7D3MPP).
+      const requested = hasQueuedValue;
       const saved = await active;
-      return hasQueuedValue ? flush() : saved;
+      return requested && hasQueuedValue ? flush() : saved;
     }
     if (!hasQueuedValue) return true;
     persistNow();

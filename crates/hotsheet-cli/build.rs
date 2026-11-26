@@ -1,5 +1,8 @@
 #[path = "../hotsheet-server/src/source_revision.rs"]
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    reason = "HS2-VT3VGW: shared source_revision module; build scripts use a subset"
+)]
 mod source_revision;
 
 use std::path::PathBuf;

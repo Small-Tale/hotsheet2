@@ -83,7 +83,7 @@ fn hs2_w4jjje_remote_session_uses_cookie_without_forwarding_machine_bearer() {
         "hs2_remote_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     );
     let mut paired = credentials();
-    paired.bearer_secret = format!("session:{}", "A".repeat(43));
+    paired.bearer_secret = format!("session:{}", "A".repeat(43)).into();
     let agent = ureq::AgentBuilder::new().redirects(0).build();
     assert_eq!(
         get::<Value>(&agent, &origin, "/synthetic", &paired).unwrap(),
@@ -126,7 +126,7 @@ fn hs2_w4jjje_https_client_verifies_server_without_device_certificate() {
     let paths = hotsheet_tls::Paths::at(dir.path().join("tls"));
     hotsheet_tls::init_ca(&paths, &[]).unwrap();
     let mut paired = credentials();
-    paired.bearer_secret = format!("session:{}", "A".repeat(43));
+    paired.bearer_secret = format!("session:{}", "A".repeat(43)).into();
     paired.ca_pem = Some(std::fs::read_to_string(paths.ca_cert()).unwrap());
     assert!(
         paired
@@ -141,7 +141,7 @@ fn hs2_w4jjje_https_client_verifies_server_without_device_certificate() {
 #[test]
 fn hs2_h4rebs_https_without_a_reviewed_ca_trusts_only_public_roots() {
     let mut paired = credentials();
-    paired.bearer_secret = format!("session:{}", "A".repeat(43));
+    paired.bearer_secret = format!("session:{}", "A".repeat(43)).into();
     // A Tailscale Serve name carries a publicly trusted certificate and no reviewed CA.
     assert_eq!(
         paired
@@ -516,9 +516,9 @@ fn hs2_fzxxtg_a_pairing_bundle_supplies_identity_and_origin_for_the_same_reader(
 
 fn paired_session() -> RemoteCredentials {
     RemoteCredentials {
-        bearer_secret: format!("session:{}", "s".repeat(43)),
+        bearer_secret: format!("session:{}", "s".repeat(43)).into(),
         session_origin: Some("http://localhost:4175".into()),
-        session_csrf: Some("c".repeat(43)),
+        session_csrf: Some("c".repeat(43).into()),
         ..credentials()
     }
 }

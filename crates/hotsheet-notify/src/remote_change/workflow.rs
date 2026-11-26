@@ -297,7 +297,7 @@ impl Workflow<'_> {
         let context = ConnectionContext {
             connection: id.to_owned(),
             settings: connection.settings.clone(),
-            credential,
+            credential: credential.map(hotsheet_sync::secret::SecretString::from),
         };
         match adapter.test(&context) {
             Ok(()) => report.ok = true,

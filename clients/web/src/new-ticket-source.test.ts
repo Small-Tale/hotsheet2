@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { type Capabilities, type ProviderDescriptor } from './api';
 import {
   newTicketCreationSourceId,
+  newTicketUpNextDisabledReason,
   projectTicketSources,
   rememberNewTicketSource,
   resolveNewTicketSource,
@@ -108,5 +109,16 @@ describe('new ticket source selection (HS2-NZMJBJ)', () => {
     const twoWritable = projectTicketSources([descriptor('git-a', true, true), descriptor('github-b', true)]);
     expect(newTicketCreationSourceId(twoWritable, resolveNewTicketSource(twoWritable))).toBe('git-a');
     expect(newTicketCreationSourceId(twoWritable, resolveNewTicketSource(twoWritable, 'github-b'))).toBe('github-b');
+  });
+
+  it('disables a new ticket Up Next only for a source whose capability refuses it (HS2-Y32T8A)', () => {
+    const source = (up_next: boolean | undefined) => ({
+      name: 'Jira PROJ',
+      capabilities: { create: true, up_next } as unknown as Capabilities,
+    });
+    expect(newTicketUpNextDisabledReason(undefined)).toBeUndefined();
+    expect(newTicketUpNextDisabledReason(source(true))).toBeUndefined();
+    expect(newTicketUpNextDisabledReason(source(undefined))).toBeUndefined();
+    expect(newTicketUpNextDisabledReason(source(false))).toBe('Jira PROJ tickets do not support Up Next.');
   });
 });

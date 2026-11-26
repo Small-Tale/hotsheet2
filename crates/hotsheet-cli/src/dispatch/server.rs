@@ -597,36 +597,42 @@ pub(crate) struct ServerInventoryEntry {
 pub(crate) fn cmd_list_servers() -> Result<()> {
     let directory = hotsheet_plugins::hotsheet_home().join("instances");
     let records = read_registry_records(&directory)?;
-    let agent = ureq::AgentBuilder::new()
-        .user_agent("hotsheet2-server-inventory")
-        .timeout_connect(std::time::Duration::from_millis(300))
-        .timeout_read(std::time::Duration::from_millis(500))
-        .build();
+    let agent = inventory_probe_agent();
     let inventory = server_inventory(records, process_is_alive, |url| {
-        match agent
-            .get(&format!("{}/health", url.trim_end_matches('/')))
-            .call()
-        {
-            Ok(response) => {
-                response
-                    .into_string()
-                    .ok()
-                    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-                    .and_then(|value| {
-                        value
-                            .get("status")
-                            .and_then(|status| status.as_str())
-                            .map(str::to_owned)
-                    })
-                    .as_deref()
-                    == Some("ok")
-            }
-            Err(_) => false,
-        }
+        inventory_health_ok(&agent, url)
     });
     let pruned = prune_stale_records(&inventory.stale_records);
     print!("{}", render_server_inventory(&inventory, pruned));
     Ok(())
+}
+
+/// Connect budget for the `serve --list` health probe.
+pub(crate) const INVENTORY_PROBE_CONNECT: std::time::Duration = std::time::Duration::from_secs(1);
+/// Whole-request budget for the `serve --list` health probe (HS2-H4CBZ5).
+///
+/// `/health` may itself wait up to 250 ms for its ticket scan, and a loaded host adds
+/// scheduling delay on top, so the earlier 500 ms read window labeled live servers
+/// `unhealthy` on busy machines. This matches the web bridge's patient first probe
+/// (HS2-TANE0V); a genuinely hung server still resolves within it.
+pub(crate) const INVENTORY_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+pub(crate) fn inventory_probe_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .user_agent("hotsheet2-server-inventory")
+        .timeout_connect(INVENTORY_PROBE_CONNECT)
+        .timeout(INVENTORY_PROBE_TIMEOUT)
+        .build()
+}
+
+/// One health probe: `GET /health` answered with `"status": "ok"`.
+pub(crate) fn inventory_health_ok(agent: &ureq::Agent, url: &str) -> bool {
+    agent
+        .get(&format!("{}/health", url.trim_end_matches('/')))
+        .call()
+        .ok()
+        .and_then(|response| response.into_string().ok())
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .is_some_and(|value| value.get("status").and_then(|status| status.as_str()) == Some("ok"))
 }
 
 pub(crate) fn read_registry_records(directory: &Path) -> Result<Vec<RegistryRecord>> {
@@ -1270,6 +1276,43 @@ mod tests {
             ]
             .map(std::ffi::OsString::from)
         );
+    }
+
+    /// Serves one `/health` request after `delay`, answering `body`.
+    fn slow_health_stub(delay: std::time::Duration, body: &'static str) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request);
+            // The stub models a slow server: a busy host or a /health scan that waits out
+            // its own budget, not the test waiting for state.
+            std::thread::sleep(delay);
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        });
+        url
+    }
+
+    #[test]
+    fn hs2_h4cbz5_inventory_probe_waits_out_a_slow_but_live_server() {
+        // The old 500 ms read window labeled a live server answering in ~0.8 s unhealthy.
+        assert!(INVENTORY_PROBE_TIMEOUT >= std::time::Duration::from_secs(3));
+        assert!(INVENTORY_PROBE_CONNECT >= std::time::Duration::from_secs(1));
+        let agent = inventory_probe_agent();
+        let slow = slow_health_stub(std::time::Duration::from_millis(800), r#"{"status":"ok"}"#);
+        assert!(inventory_health_ok(&agent, &format!("{slow}/")));
+        let wrong = slow_health_stub(std::time::Duration::ZERO, r#"{"status":"starting"}"#);
+        assert!(!inventory_health_ok(&agent, &wrong));
+        let refused = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let closed = format!("http://{}", refused.local_addr().unwrap());
+        drop(refused);
+        assert!(!inventory_health_ok(&agent, &closed));
     }
 
     #[test]

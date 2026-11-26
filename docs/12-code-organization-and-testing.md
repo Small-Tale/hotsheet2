@@ -172,6 +172,25 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   `core.autocrlf` is enabled, and preserves the migrator executable's shebang.
   Git still detects binary files as binary. The synthetic checkout regression in
   `scripts/windows-line-endings.test.mjs` verifies both text and binary behavior.
+- Tracked files carry no machine-local paths (HS2-FXF07C). A root policy test in
+  `scripts/instruction-policy.test.mjs` scans every tracked text file for `/Users/<name>`,
+  `/home/<name>`, `C:\Users\<name>` (any separator spelling), the `-Users-<name>-`
+  scratch-directory spelling and `/Volumes/<disk>`. Only names in its reasoned synthetic
+  lists pass, and an unused name fails, so the lists shrink with the fixtures. New fixtures
+  use `/Users/synthetic/...`; Playwright captures use `test.info().outputPath(...)`.
+- Rust lint suppressions (`#[allow(..)]`, `#[expect(..)]`, the inner `#![..]` forms and
+  `#[cfg_attr(.., allow(..))]`) carry a reason with an HS2 slug, either as
+  `reason = "HS2-XXXXXX: why"` (preferred for new code) or a same-line
+  `// HS2-XXXXXX: why` comment. The same policy test enforces this and caps suppressions at
+  10 per file, the current maximum; the cap only decreases (HS2-FXF07C).
+- ESLint disables (`eslint-disable`, `eslint-disable-line`, `eslint-disable-next-line`, in
+  line, block and JSX comment forms) end with `-- why (HS2-XXXXXX)` on the same comment; the
+  slug names the ticket that justifies the exception. The same root policy test enforces this
+  for every tracked `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs` file and
+  caps disables at 21 per file, the current maximum (`clients/web/src/app/runtime.tsx`); the
+  cap only decreases. Unused directives fail web lint through `reportUnusedDisableDirectives`.
+  The test also rejects a `prettier-ignore` directive in any tracked text file, in every
+  comment syntax, extending the web-only `no-warning-comments` rule (HS2-DJ4BX5).
 - The web lint command ends with `npm run ui:doctor` (`kerf-ui-doctor --full`, run through `node --max-old-space-size=4096` since HS2-TY5JHN), which enforces
   component CSS ownership between the app's own components. A stylesheet may style only the class
   blocks its component renders, plus the native and raw Web Awesome elements it authors, and a
@@ -1505,6 +1524,9 @@ example `node scripts/test-quiet.mjs rust -- -p hotsheet-cli -E 'test(claim)'`.
   exit code or become failure excerpts; `LEAK-FAIL` remains a failure. Test payloads are
   not included with these named statuses. A classification alone does not establish
   a surviving process or explain historical unnamed reports (HS2-JH6KV5, HS2-ET5FF1).
+  `.config/nextest.toml` sets `leak-timeout = "500ms"`: with nextest's 100ms default,
+  tests that start no thread or child were marked `LEAK` under machine load, while a
+  real leaked child holds the output pipes for seconds (HS2-FXF07C).
 - On a red run it prints each distinct failure block, capped at `--max-failures` (8)
   blocks of `--max-lines` (30) lines. A nextest block keeps its first third and its end,
   where the panic message sits. A failure with no recognizable test block, such as a

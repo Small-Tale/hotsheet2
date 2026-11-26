@@ -241,7 +241,7 @@ pub const fn detection_supported() -> bool {
 #[cfg_attr(
     not(any(target_os = "macos", target_os = "linux", windows)),
     allow(dead_code)
-)] // HS2-NHK8V8
+)] // HS2-NHK8V8: only platforms that detect volumes call it.
 fn volume_at(
     mount: PathBuf,
     ids: &mut VolumeIds,

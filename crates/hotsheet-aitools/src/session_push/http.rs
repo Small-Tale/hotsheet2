@@ -4,14 +4,17 @@
 
 use std::time::Duration;
 
+use hotsheet_sync::secret::SecretString;
+
 /// One HTTP request an adapter makes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HttpRequest {
     /// `GET` or `POST`.
     pub method: &'static str,
     pub url: String,
-    /// The full `Authorization` header value, when the endpoint needs one.
-    pub authorization: Option<String>,
+    /// The full `Authorization` header value, when the endpoint needs one. Redacted under
+    /// `Debug` (HS2-DGMK06).
+    pub authorization: Option<SecretString>,
     /// A JSON body (`POST` only).
     pub body: Option<serde_json::Value>,
 }
@@ -58,7 +61,7 @@ impl HttpPort for UreqHttp {
     fn send(&self, request: &HttpRequest) -> Result<HttpResponse, String> {
         let mut call = self.agent.request(request.method, &request.url);
         if let Some(authorization) = &request.authorization {
-            call = call.set("Authorization", authorization);
+            call = call.set("Authorization", authorization.expose());
         }
         let result = match &request.body {
             Some(body) => call

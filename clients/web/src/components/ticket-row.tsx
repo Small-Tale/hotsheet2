@@ -50,6 +50,11 @@ export interface TicketRowProps {
   tags: string[];
   upNext?: boolean;
   upNextEligible?: boolean;
+  /**
+   * Why the ticket's provider cannot change Up Next (HS2-Y32T8A): the star stays mounted, disabled,
+   * with this reason as its tooltip. Absent means the star works.
+   */
+  upNextDisabledReason?: string;
   blocked?: boolean;
   needsReview?: boolean;
   /** The ticket has an unresolved `feedback_needed` note — it is waiting on the user. */
@@ -335,8 +340,9 @@ export function TicketRow(raw: TicketRowProps) {
                 type="button"
                 class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`}
                 {...SEARCH_AND_COMPOSER_ACTIONS.toggleRowUpNext.attrs}
+                disabled={Boolean(props.upNextDisabledReason)}
                 aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
-                title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
+                title={props.upNextDisabledReason ?? (props.upNext ? 'Remove from Up Next' : 'Add to Up Next')}
               >
                 <LucideIcon icon={Star} name="star" size="s" appearance={props.upNext ? 'solid' : 'outline'} />
               </button>

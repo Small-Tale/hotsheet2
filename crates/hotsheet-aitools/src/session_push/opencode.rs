@@ -16,6 +16,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use hotsheet_sync::secret::SecretString;
 use serde_json::{Value, json};
 
 use super::http::{HttpPort, HttpRequest, HttpResponse, basic_auth_header, query_escape};
@@ -37,7 +38,7 @@ const CREATED_SESSION_TITLE: &str = "Hot Sheet";
 /// Push adapter for one launched OpenCode TUI.
 pub struct OpenCodeHttpPush {
     base_url: String,
-    authorization: String,
+    authorization: SecretString,
     directory: String,
     model: Option<(String, String)>,
     launched_at_ms: u64,
@@ -55,7 +56,7 @@ impl OpenCodeHttpPush {
         });
         Self {
             base_url: format!("http://127.0.0.1:{}", launch.port),
-            authorization: basic_auth_header(USER, launch.password.expose()),
+            authorization: basic_auth_header(USER, launch.password.expose()).into(),
             directory: launch.directory,
             model,
             launched_at_ms: launch.launched_at_ms,

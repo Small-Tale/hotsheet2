@@ -552,8 +552,9 @@ describe('TerminalDashboard', () => {
     expect(css).toMatchSource(
       /\.terminal-preview__frame \{[^}]*inset: var\(--terminal-preview-inset, var\(--kui-space-l\)\);[^}]*border-radius: var\(--terminal-preview-radius, var\(--wa-border-radius-m\)\)/,
     );
+    // The fallback shows only while connecting; an ended stream keeps its last frame (HS2-QWT94V).
     expect(css).toMatchSource(
-      /\.terminal-preview:has\( \.terminal-viewport\[data-connection='connected'\], \.terminal-viewport\[data-connection='reconnecting'\] \) \.terminal-preview__fallback \{ display: none; \}/,
+      /\.terminal-preview:has\( \.terminal-viewport\[data-connection='connected'\], \.terminal-viewport\[data-connection='reconnecting'\], \.terminal-viewport\[data-connection='ended'\] \) \.terminal-preview__fallback \{ display: none; \}/,
     );
     expect(css).toMatchSource(
       /\.terminal-viewport\.terminal-viewport--scaled-preview \{[^}]*width: 1280px;[^}]*height: 768px;/,

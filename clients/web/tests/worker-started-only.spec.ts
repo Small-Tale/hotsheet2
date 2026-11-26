@@ -106,7 +106,7 @@ test('HS2-D5KXBA removes completed worker cards and counts, fades them out (HS2-
     // ticket motion instead of vanishing; reduced motion removes it directly.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- HS2-PM42ZM records the real animate call
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- Records the real animate call to wrap it (HS2-PM42ZM).
       const original = Element.prototype.animate;
       const records: Array<{ ghost: string; slug: string; fades: boolean }> = [];
       (window as typeof window & { __workerMotion?: typeof records }).__workerMotion = records;

@@ -14,6 +14,7 @@ import {
   remoteBrowserAuthRequired,
 } from './project-bridge';
 import { isRemoteProjectId } from './remote-projects/identity';
+import { closeLikeUpstream } from './ws-close-relay';
 
 const browserAttach = /^\/__hotsheet\/project-api\/([^/]+)\/terminals\/([^/]+)\/attach$/;
 const browserSync = /^\/__hotsheet\/project-api\/([^/]+)\/ws\/sync$/;
@@ -520,8 +521,9 @@ export function installProjectWebSocketBridge(
             upstream.on('message', (data, binary) => {
               if (browser.readyState === WebSocket.OPEN) browser.send(data, { binary });
             });
-            const closeBrowser = () => {
-              if (browser.readyState === WebSocket.OPEN) browser.close();
+            // A terminal's ended close code reaches the browser, so it stops reattaching (HS2-QWT94V).
+            const closeBrowser = (code?: unknown, reason?: unknown) => {
+              if (browser.readyState === WebSocket.OPEN) closeLikeUpstream(browser, code, reason);
             };
             const closeUpstream = () => {
               if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING)

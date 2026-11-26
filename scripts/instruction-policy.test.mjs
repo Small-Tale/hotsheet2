@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const read = (name) => readFileSync(new URL(`../${name}`, import.meta.url), 'utf8');
 
@@ -213,4 +218,264 @@ test('HS2-M0ANR4 role skills keep completed side-branch work on merge-pending/<S
     assert.match(text, /completes only from a pushed `merge-pending\/<SLUG>` branch/, skill);
     assert.match(text, /merge-pending-prune --apply/, skill);
   }
+});
+
+// HS2-FXF07C: "Never commit ... machine-local paths" and "a lint disable carries a reason and a
+// ticket slug on the same line, and a policy test caps disables per file" (AGENTS.md Conventions as
+// Code, Git Commit and Push). Both scan every tracked file from the repository root.
+const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
+const trackedFiles = (...patterns) =>
+  execFileSync('git', ['ls-files', '-z', '--', ...patterns], {
+    cwd: repositoryRoot,
+    env: withoutGitRepositoryEnv(process.env),
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+  })
+    .split('\0')
+    .filter(Boolean);
+const trackedText = (file) => {
+  let bytes;
+  try {
+    bytes = readFileSync(join(repositoryRoot, file));
+  } catch {
+    return null; // A tracked file deleted in the working tree has no content to check.
+  }
+  return bytes.includes(0) ? null : bytes.toString('utf8');
+};
+
+// Home-directory segments that name no real person or machine. Every entry needs a reason; a name
+// that is no longer used fails below, so the list shrinks with the fixtures.
+const SYNTHETIC_HOME_NAMES = new Map([
+  ['synthetic', 'the preferred synthetic home for new fixtures'],
+  ['someone', 'redaction and journal fixtures'],
+  ['me', 'short synthetic home in terminal, export and respelling fixtures'],
+  ['x', 'Windows path-shape fixtures'],
+  ['u', 'synthetic Claude install path'],
+  ['user', 'Git path conversion fixtures'],
+  ['dev', 'stable-dev home fixtures'],
+  ['example', 'Vite /@fs URL fixture'],
+  ['alice', 'feedback redaction fixture'],
+  ['private', 'redaction fixtures that must never reach output'],
+  ['runner', 'the GitHub-hosted Linux runner home in CI log fixtures'],
+  ['runneradmin', 'the GitHub-hosted Windows runner home in path fixtures'],
+  ['RUNNER~1', 'the GitHub-hosted Windows runner home as an 8.3 short name'],
+  ['LONGNA~12.TXT', '8.3 short-name respelling fixture'],
+  ['...', 'elided example path in prose and messages'],
+  ['server-bootstrap.hs2', 'synthetic store path under /home'],
+  ['.claude.json', 'synthetic Claude user config path under /home'],
+]);
+// Disk names under /Volumes that name no real machine's volumes: host-disk fixtures and the macOS
+// system mounts the disk sampler filters.
+const SYNTHETIC_VOLUME_NAMES = new Map([
+  ['Synthetic', 'registered-project fixtures'],
+  ['Backup', 'host-disk and registered-project fixtures'],
+  ['Scratch', 'host-disk fixtures'],
+  ['Share', 'host-disk fixtures'],
+  ['Archive', 'host-disk fixtures'],
+  ['Camera', 'host-disk fixtures'],
+  ['Installer', 'disk sampler filter fixture for mounted installer images'],
+  ['com.apple.TimeMachine.localsnapshots', 'disk sampler filter for the macOS system mount'],
+]);
+// `/Users/<name>`, `/home/<name>`, `C:\Users\<name>` (any separator spelling), `/Volumes/<disk>`,
+// and the `-Users-<name>-` spelling AI tools use for per-project scratch directories.
+const MACHINE_PATH =
+  /(?:(?:\/Users\/|(?<![A-Za-z0-9_.-])\/home\/|[A-Za-z]:(?:\\\\|\\|\/)Users(?:\\\\|\\|\/))([A-Za-z0-9._~-]+)|-Users-([A-Za-z0-9._~]+)-|\/Volumes\/([A-Za-z0-9._~-]+))/g;
+const machinePathName = (raw) => (raw === '...' ? raw : raw.replace(/[.]+$/, ''));
+// The home (or encoded home) or volume name a match names.
+const machinePath = ([, home, encoded, volume]) => ({
+  kind: volume === undefined ? 'home' : 'volume',
+  name: machinePathName(home ?? encoded ?? volume),
+});
+
+test('HS2-FXF07C tracked files carry no machine-local home or volume paths', () => {
+  const violations = [];
+  const used = new Set();
+  for (const file of trackedFiles()) {
+    const text = trackedText(file);
+    if (text === null) continue;
+    for (const match of text.matchAll(MACHINE_PATH)) {
+      const { kind, name } = machinePath(match);
+      if ((kind === 'home' ? SYNTHETIC_HOME_NAMES : SYNTHETIC_VOLUME_NAMES).has(name)) {
+        used.add(`${kind}:${name}`);
+        continue;
+      }
+      const line = text.slice(0, match.index).split('\n').length;
+      violations.push(`${file}:${line}: ${match[0]}`);
+    }
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    'use a synthetic path (/Users/synthetic/...) or a test output path, or add a reasoned synthetic name',
+  );
+  for (const [names, kind] of [
+    [SYNTHETIC_HOME_NAMES, 'home'],
+    [SYNTHETIC_VOLUME_NAMES, 'volume'],
+  ]) {
+    for (const [name, reason] of names) {
+      assert.ok(reason.length > 0, `${kind} ${name} needs a reason`);
+      assert.ok(used.has(`${kind}:${name}`), `remove the unused synthetic ${kind} name ${name}`);
+    }
+  }
+});
+
+test('HS2-FXF07C the machine-path scan rejects real-looking paths and accepts synthetic ones', () => {
+  // The probes are assembled at run time so this file never holds the paths it rejects.
+  const who = ['j', 'doe'].join('');
+  const disk = ['Work', 'Disk'].join('');
+  const paths = (text) => [...text.matchAll(MACHINE_PATH)].map(machinePath);
+  const home = { kind: 'home', name: who };
+  assert.deepEqual(
+    paths(`/Users/${who}/src C:\\Users\\${who}\\x C:\\\\Users\\\\${who} D:/Users/${who} /home/${who}/x`),
+    [home, home, home, home, home],
+  );
+  assert.deepEqual(paths(`scratch/-Users-${who}-Projects-app/x`), [home]);
+  assert.deepEqual(paths(`file:///Volumes/${disk}/Projects and /Volumes/Scratch.`), [
+    { kind: 'volume', name: disk },
+    { kind: 'volume', name: 'Scratch' },
+  ]);
+  assert.deepEqual(paths('per-user/home/project'), []);
+  assert.deepEqual(paths(`127.0.0.1:4175/@fs/Users/${who}/file.ts`), [home]);
+  assert.equal(SYNTHETIC_HOME_NAMES.has(who), false);
+});
+
+// Rust lint suppressions: `#[allow(..)]`, `#[expect(..)]`, their inner `#![..]` forms and
+// `#[cfg_attr(.., allow(..))]`. The reason and slug live in `reason = "..."` or a trailing
+// same-line comment. The cap is the current per-file maximum; it only decreases.
+const RUST_SUPPRESSIONS_PER_FILE = 10;
+const SLUG = /\bHS2-[0-9A-Z]{6}\b/;
+
+function rustSuppressions(text) {
+  const found = [];
+  for (const match of text.matchAll(/#!?\[/g)) {
+    let depth = 0;
+    let end = match.index + match[0].length - 1;
+    for (; end < text.length; end += 1) {
+      if (text[end] === '[') depth += 1;
+      else if (text[end] === ']' && --depth === 0) break;
+    }
+    const body = text.slice(match.index + match[0].length, end);
+    if (!/^\s*(?:allow|expect)\s*\(/.test(body) && !/^\s*cfg_attr\s*\([\s\S]*\b(?:allow|expect)\s*\(/.test(body)) {
+      continue;
+    }
+    const lineEnd = text.indexOf('\n', end);
+    const trailing = text.slice(end + 1, lineEnd === -1 ? text.length : lineEnd);
+    const reason = /\breason\s*=\s*"([^"]*)"/.exec(body)?.[1] ?? /^\s*\/\/(.*)$/.exec(trailing)?.[1] ?? '';
+    found.push({
+      line: text.slice(0, match.index).split('\n').length,
+      reasoned: SLUG.test(reason) && reason.replace(SLUG, '').replace(/[\s:()-]/g, '').length > 0,
+    });
+  }
+  return found;
+}
+
+test('HS2-FXF07C Rust lint suppressions carry a reason with a ticket slug and stay capped per file', () => {
+  const unreasoned = [];
+  const overCap = [];
+  for (const file of trackedFiles('*.rs')) {
+    const text = trackedText(file);
+    if (text === null) continue;
+    const suppressions = rustSuppressions(text);
+    for (const { line, reasoned } of suppressions) {
+      if (!reasoned) unreasoned.push(`${file}:${line}`);
+    }
+    if (suppressions.length > RUST_SUPPRESSIONS_PER_FILE) overCap.push(`${file}: ${suppressions.length}`);
+  }
+  assert.deepEqual(unreasoned, [], 'add `reason = "HS2-XXXXXX: why"` or a same-line `// HS2-XXXXXX: why`');
+  assert.deepEqual(overCap, [], `at most ${RUST_SUPPRESSIONS_PER_FILE} lint suppressions per Rust file`);
+});
+
+test('HS2-FXF07C the Rust suppression scan reads every accepted reason form', () => {
+  const reasoned = (source) => rustSuppressions(source).map((entry) => entry.reasoned);
+  assert.deepEqual(reasoned('#[allow(dead_code)]\nfn a() {}'), [false]);
+  assert.deepEqual(reasoned('#[allow(dead_code)] // HS2-ABC123\nfn a() {}'), [false]);
+  assert.deepEqual(reasoned('#[allow(dead_code)] // HS2-ABC123: fixture subset\nfn a() {}'), [true]);
+  assert.deepEqual(reasoned('#![allow(\n    dead_code,\n    reason = "HS2-ABC123: subset"\n)]'), [true]);
+  assert.deepEqual(reasoned('#[expect(unused, reason = "no slug here")]'), [false]);
+  assert.deepEqual(reasoned('#[cfg_attr(unix, allow(dead_code))]\n// HS2-ABC123: next line\n'), [false]);
+  assert.deepEqual(reasoned('#[cfg_attr(unix, allow(dead_code))] // HS2-ABC123: Unix only'), [true]);
+  assert.deepEqual(reasoned('#[derive(Debug)]\n#[serde(rename_all = "camelCase")]'), []);
+});
+
+// HS2-DJ4BX5: the same rule for ESLint. Every `eslint-disable`, `eslint-disable-line` and
+// `eslint-disable-next-line` directive (line, block and JSX comment forms) carries a `-- reason`
+// naming a ticket slug on the same comment; `eslint-enable` needs none. The cap is the current
+// per-file maximum (clients/web/src/app/runtime.tsx); it only decreases. Unused directives already
+// fail lint through `reportUnusedDisableDirectives`.
+const ESLINT_DISABLES_PER_FILE = 21;
+const ESLINT_SOURCES = ['*.ts', '*.tsx', '*.mts', '*.cts', '*.js', '*.jsx', '*.mjs', '*.cjs'];
+const ESLINT_DIRECTIVE = /(?:\/\/|\/\*)[ \t]*(eslint-disable(?:-next-line|-line)?)(?=[\s*]|$)([^\n]*)/g;
+
+function eslintDisables(text) {
+  const found = [];
+  for (const match of text.matchAll(ESLINT_DIRECTIVE)) {
+    // A block comment ends at `*/`; a line comment at the line end.
+    const comment = match[0].startsWith('/*') ? match[2].split('*/')[0] : match[2];
+    const separator = comment.indexOf(' -- ');
+    const reason = separator === -1 ? '' : comment.slice(separator + 4);
+    found.push({
+      line: text.slice(0, match.index).split('\n').length,
+      reasoned: SLUG.test(reason) && reason.replace(SLUG, '').replace(/[\s:().-]/g, '').length > 0,
+    });
+  }
+  return found;
+}
+
+test('HS2-DJ4BX5 ESLint disables carry a reason with a ticket slug and stay capped per file', () => {
+  const unreasoned = [];
+  const overCap = [];
+  for (const file of trackedFiles(...ESLINT_SOURCES)) {
+    const text = trackedText(file);
+    if (text === null) continue;
+    const disables = eslintDisables(text);
+    for (const { line, reasoned } of disables) {
+      if (!reasoned) unreasoned.push(`${file}:${line}`);
+    }
+    if (disables.length > ESLINT_DISABLES_PER_FILE) overCap.push(`${file}: ${disables.length}`);
+  }
+  assert.deepEqual(unreasoned, [], 'end the directive with `-- why (HS2-XXXXXX)`');
+  assert.deepEqual(overCap, [], `at most ${ESLINT_DISABLES_PER_FILE} ESLint disables per file`);
+});
+
+test('HS2-DJ4BX5 the ESLint disable scan reads every directive form', () => {
+  // Probes are assembled at run time so this file never holds a directive it would reject.
+  const d = ['eslint', 'disable'].join('-');
+  const reasoned = (source) => eslintDisables(source).map((entry) => entry.reasoned);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert\nalert(1);`), [false]);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert -- HS2-ABC123`), [false]);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert -- no slug here`), [false]);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert HS2-ABC123 shown to the user`), [false]);
+  assert.deepEqual(reasoned(`// ${d}-next-line no-alert -- shown to the user (HS2-ABC123).`), [true]);
+  assert.deepEqual(reasoned(`x(); // ${d}-line no-alert -- HS2-ABC123: shown to the user`), [true]);
+  assert.deepEqual(reasoned(`/* ${d} no-alert -- fixture (HS2-ABC123) */`), [true]);
+  assert.deepEqual(reasoned(`/* ${d} no-alert */ // -- fixture (HS2-ABC123)`), [false]);
+  assert.deepEqual(reasoned(`{/* ${d}-next-line no-alert -- fixture (HS2-ABC123) */}`), [true]);
+  assert.deepEqual(reasoned(`/* ${d} */`), [false]);
+  // Prose and string mentions are not directives; neither is eslint-enable.
+  assert.deepEqual(reasoned(`// use an \`${d}\` pair\nconst s = '${d}';\n/${d}/.test(s);`), []);
+  assert.deepEqual(reasoned(`/* ${['eslint', 'enable'].join('-')} no-alert */`), []);
+});
+
+// HS2-DJ4BX5: "Formatter-ignore comments are banned" (AGENTS.md Conventions as Code). The web lint
+// config rejects them in web source; this covers every tracked text file, in each comment syntax.
+const PRETTIER_IGNORE = /^[ \t]*(?:\/\/|\/\*|\{\/\*|<!--|#)[ \t]*prettier-ignore\b/gm;
+
+test('HS2-DJ4BX5 no tracked file carries a prettier-ignore directive', () => {
+  const found = [];
+  for (const file of trackedFiles()) {
+    const text = trackedText(file);
+    if (text === null) continue;
+    for (const match of text.matchAll(PRETTIER_IGNORE)) {
+      found.push(`${file}:${text.slice(0, match.index).split('\n').length}`);
+    }
+  }
+  assert.deepEqual(found, [], 'let the formatter own layout; restructure the code instead');
+});
+
+test('HS2-DJ4BX5 the prettier-ignore scan finds directives but not prose', () => {
+  const p = ['prettier', 'ignore'].join('-');
+  const hits = (source) => (source.match(PRETTIER_IGNORE) ?? []).length;
+  assert.equal(hits(`// ${p}\nconst a = [1,2];`), 1);
+  assert.equal(hits(`  /* ${p} */\n{/* ${p} */}\n<!-- ${p} -->\n# ${p}`), 4);
+  assert.equal(hits(`// no \`${p}\` escapes\nText about \`// ${p}\` in docs.`), 0);
 });

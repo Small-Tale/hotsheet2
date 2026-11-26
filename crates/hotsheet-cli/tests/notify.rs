@@ -368,8 +368,8 @@ fn headless_setup_send_test_and_removal_through_an_external_plugin() {
     assert_eq!(config["rules"], serde_json::json!([]));
 }
 
-/// One HTTP request the loopback listener received.
-#[derive(Debug)]
+/// One HTTP request the loopback listener received. No `Debug`: its headers carry the
+/// Basic credential the CLI sent (HS2-CQNE4E).
 struct Received {
     line: String,
     headers: Vec<(String, String)>,

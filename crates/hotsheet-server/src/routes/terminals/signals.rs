@@ -687,7 +687,7 @@ pub(crate) struct TerminalAiConnectionReq {
     pub(crate) messaging_socket: Option<String>,
     /// Claude's per-session `CLAUDE_CODE_MESSAGING_TOKEN`; kept in memory only.
     #[serde(default)]
-    pub(crate) messaging_token: Option<String>,
+    pub(crate) messaging_token: Option<hotsheet_sync::secret::SecretString>,
     /// The reporting tool's version, for the inbox adapter's version check.
     #[serde(default)]
     pub(crate) tool_version: Option<String>,

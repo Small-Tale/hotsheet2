@@ -2552,12 +2552,12 @@ async function mockProject(
           repositories: [
             'small-tale/hotsheet2',
             'small-tale/secondary',
-            ...(repositoryListings > 1 ? ['westphal/newly-granted'] : []),
+            ...(repositoryListings > 1 ? ['synthetic-user/newly-granted'] : []),
           ],
           installations: [
             { account: 'small-tale', selection: 'all', settings_url: null },
             {
-              account: 'westphal',
+              account: 'synthetic-user',
               selection: 'selected',
               settings_url: 'https://github.test/settings/installations/7',
             },
@@ -5041,8 +5041,8 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   // A Kerf Combobox lists them (HS2-EN1E76).
   await expect(providerForm.locator('#provider-setup-repository-listbox [data-value]')).toHaveCount(2);
   await expect(providerForm.getByText('2 repositories available.')).toBeVisible();
-  await expect(access).toContainText('can see only the repositories you chose on westphal');
-  await expect(access.getByRole('link', { name: 'Change access for westphal' })).toHaveAttribute(
+  await expect(access).toContainText('can see only the repositories you chose on synthetic-user');
+  await expect(access.getByRole('link', { name: 'Change access for synthetic-user' })).toHaveAttribute(
     'href',
     'https://github.test/settings/installations/7',
   );
@@ -16930,7 +16930,7 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   await page.evaluate(() => {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Saves the real animate to restore and call it from the wrapper (HS2-29T4D8).
     const original = Element.prototype.animate;
     const records: Array<{
       slug: string;

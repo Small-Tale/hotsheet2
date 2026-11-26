@@ -131,9 +131,14 @@
 .ticket-list-row__up-next:first-child {
   margin-inline-start: remify(-3px);
 }
-.ticket-list-row__up-next:hover,
+.ticket-list-row__up-next:not(:disabled):hover,
 .ticket-list-row__up-next:focus-visible {
   color: var(--hs-ticket-state-up-next);
+}
+/* A provider without Up Next keeps the star mounted but disabled, its reason in the tooltip (HS2-Y32T8A). */
+.ticket-list-row__up-next:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 .ticket-list-row__up-next:focus-visible {
   border-radius: remify(3.2px);

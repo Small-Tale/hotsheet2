@@ -667,7 +667,7 @@ pub struct TerminalAiConnection {
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct ClaudeInbox {
     pub(crate) socket: String,
-    pub(crate) token: Option<String>,
+    pub(crate) token: Option<hotsheet_sync::secret::SecretString>,
     pub(crate) tool_version: Option<String>,
 }
 
@@ -699,7 +699,7 @@ pub(crate) fn reported_session(
         };
         fields.insert(CLAUDE_SOCKET_FIELD.to_string(), inbox.socket.clone());
         if let Some(token) = &inbox.token {
-            fields.insert(CLAUDE_TOKEN_FIELD.to_string(), token.clone());
+            fields.insert(CLAUDE_TOKEN_FIELD.to_string(), token.expose().to_owned());
         }
         if let Some(version) = &inbox.tool_version {
             fields.insert(CLAUDE_VERSION_FIELD.to_string(), version.clone());

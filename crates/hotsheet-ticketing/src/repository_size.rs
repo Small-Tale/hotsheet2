@@ -495,7 +495,6 @@ pub fn format_bytes(bytes: u64) -> String {
     if bytes < 1000 {
         return format!("{bytes} B");
     }
-    #[allow(clippy::cast_precision_loss)]
     let mut value = bytes as f64;
     let mut unit = 0;
     while value >= 1000.0 && unit < UNITS.len() - 1 {

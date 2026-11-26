@@ -25,7 +25,7 @@ const GH_RETRY_MS: u64 = 15 * 60_000;
 pub(super) struct UreqGithubApi {
     home: PathBuf,
     base: Option<String>,
-    token: Option<String>,
+    token: Option<hotsheet_sync::secret::SecretString>,
     /// Do not launch `gh` again before this time.
     gh_not_before_ms: u64,
     transport: UreqGitHubTransport,
@@ -43,17 +43,20 @@ impl UreqGithubApi {
         }
     }
 
-    fn token(&mut self) -> Option<String> {
+    fn token(&mut self) -> Option<hotsheet_sync::secret::SecretString> {
         if self.token.is_none() {
             self.token = ["GH_TOKEN", "GITHUB_TOKEN"]
                 .into_iter()
                 .filter_map(|name| std::env::var(name).ok())
                 .map(|value| value.trim().to_owned())
-                .find(|value| !value.is_empty());
+                .find(|value| !value.is_empty())
+                .map(hotsheet_sync::secret::SecretString::from);
         }
         let now = SystemClock.now_ms();
         if self.token.is_none() && now >= self.gh_not_before_ms {
-            self.token = self.gh_token();
+            self.token = self
+                .gh_token()
+                .map(hotsheet_sync::secret::SecretString::from);
             if self.token.is_none() {
                 self.gh_not_before_ms = now.saturating_add(GH_RETRY_MS);
             }
@@ -123,7 +126,7 @@ impl GithubApi for UreqGithubApi {
         let base = self.base.clone().ok_or(unavailable)?;
         let token = self.token().ok_or(unavailable)?;
         let mut headers = vec![
-            ("Authorization", format!("Bearer {token}")),
+            ("Authorization", format!("Bearer {}", token.expose())),
             ("Accept", "application/vnd.github+json".to_owned()),
             ("X-GitHub-Api-Version", "2022-11-28".to_owned()),
             ("User-Agent", "hotsheet-cli".to_owned()),

@@ -103,6 +103,27 @@ export function reconcileStoredTicketDraft(stored: StoredTicketDraft, current: s
     : reconcileActiveDraft(stored.base, stored.draft, current);
 }
 
+/**
+ * What reopening an editor does with its stored recovery copy (HS2-7D3MPP): nothing to restore
+ * (`clear` says whether the copy is now redundant), continue the draft on its reconciled base, or
+ * offer both versions when the server changed the same text. A conflict keeps the copy, so the
+ * user's text is never discarded without a choice.
+ */
+export type TicketDraftRestore =
+  | { kind: 'none'; clear: boolean }
+  | { kind: 'restore'; base: string; draft: string }
+  | { kind: 'conflict'; base: string; mine: string; theirs: string };
+
+export function planTicketDraftRestore(stored: StoredTicketDraft | undefined, current: string): TicketDraftRestore {
+  if (!stored) return { kind: 'none', clear: false };
+  if ((stored.draft === stored.base && !stored.pendingIntent) || stored.draft === current)
+    return { kind: 'none', clear: true };
+  const next = reconcileStoredTicketDraft(stored, current);
+  return next.kind === 'conflict'
+    ? { kind: 'conflict', base: stored.base, mine: stored.draft, theirs: current }
+    : { kind: 'restore', base: next.base, draft: next.draft };
+}
+
 export function clearTicketDraft(storage: Pick<Storage, 'removeItem'>, key: string): void {
   try {
     storage.removeItem(key);

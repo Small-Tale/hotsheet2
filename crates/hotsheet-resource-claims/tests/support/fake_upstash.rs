@@ -9,7 +9,10 @@
 //! the contract that script documents on a small in-memory Redis (hashes, strings, sets, a
 //! clock, pub/sub). The scripts themselves are exercised only against a real database by the
 //! live test in `tests/upstash_live.rs`.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "HS2-K9J1RK: each test binary uses a different subset of the fake"
+)]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{BufRead, BufReader, Read, Write};

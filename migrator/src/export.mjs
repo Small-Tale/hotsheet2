@@ -32,6 +32,10 @@ export const EXPORT_VERSION = 1;
 /** The `--progress-json` event schema version `hotsheet-migrate` reads (`docs/07`). */
 export const PROGRESS_VERSION = 1;
 
+/** The Postgres major of the bundled `@electric-sql/pglite` 0.4.x engine. A test pins
+ * it to the installed engine's `server_version` (HS2-D0V2NB). */
+export const BUNDLED_PG_MAJOR = 17;
+
 /** Command-line usage, printed on every usage error and for `--help` (HS2-6JNDRY). */
 export const USAGE = 'usage: node src/export.mjs <path-to-.hotsheet> [--out hotsheet-export.json] [--progress-json]';
 
@@ -62,8 +66,9 @@ const TICKET_COLUMNS = [
 
 /**
  * Build the export object from an open PGLite/pg database + project metadata.
- * Column-tolerant: it reads only the ticket columns that exist in this schema.
- * @param {{query: (sql: string, params?: unknown[]) => Promise<{rows: any[]}>}} db
+ * Column-tolerant: it reads only the ticket columns that exist in this schema. Rows
+ * are untrusted: `checkTicketRow` and `iso` reject shapes the importer cannot store.
+ * @param {{query: (sql: string, params?: unknown[]) => Promise<{rows: Record<string, unknown>[]}>}} db
  * @param {{name?: string|null, ticketPrefix?: string|null}} project
  */
 export async function exportFromDb(db, project = {}, settings = {}, observe = () => {}) {
@@ -141,9 +146,13 @@ export async function exportFromDb(db, project = {}, settings = {}, observe = ()
     unit: 'tickets',
   });
   const tickets = ticketRows.map((r, index) => {
+    // HS2-D0V2NB: reject rows the importer cannot represent instead of guessing.
+    checkTicketRow(r);
+    const label = rowLabel(r);
+    const at = (column) => iso(r[column], `${label}: ${column}`);
     const ticket = {
-      ticket_number: r.ticket_number ?? null,
-      title: r.title ?? '',
+      ticket_number: r.ticket_number,
+      title: r.title,
       details: r.details ?? null,
       category: r.category ?? null,
       priority: r.priority ?? null,
@@ -151,18 +160,14 @@ export async function exportFromDb(db, project = {}, settings = {}, observe = ()
       status: r.deleted_at ? 'deleted' : (r.status ?? null),
       up_next: Boolean(r.up_next),
       tags: asArray(r.tags),
-      notes: asArray(r.notes).map((n) => ({
-        id: n.id ?? null,
-        text: n.text ?? '',
-        created_at: iso(n.created_at),
-      })),
+      notes: asArray(r.notes).map((note, noteIndex) => exportNote(note, noteIndex, label)),
       blocked_by: blockedBy.get(r.ticket_number) ?? [],
       attachments: attByTicket.get(r.ticket_number) ?? [],
-      created_at: iso(r.created_at),
-      updated_at: iso(r.updated_at),
-      completed_at: iso(r.completed_at),
-      verified_at: iso(r.verified_at),
-      deleted_at: iso(r.deleted_at),
+      created_at: at('created_at'),
+      updated_at: at('updated_at'),
+      completed_at: at('completed_at'),
+      verified_at: at('verified_at'),
+      deleted_at: at('deleted_at'),
     };
     observe({
       version: PROGRESS_VERSION,
@@ -469,8 +474,10 @@ function realpathOr(fs, file) {
  * engine first (it reads its own + older datadirs). If the datadir was written by a
  * newer PGLite than the bundle, the bundled engine can't initialize (a WASM abort),
  * so fall back to pglite-migrate, which fetches a matching engine on demand.
+ * `introspect.mjs` shares this probe (HS2-Q77A53). Returns `{ db, database }`; the
+ * caller closes `db`. `work` must be a disposable copy, never the live datadir.
  */
-async function openCluster(work) {
+export async function openCluster(work) {
   const bundled = await tryBundled(work);
   if (bundled.db) return bundled;
   if (bundled.tooNew) return openViaPgliteMigrate(work);
@@ -481,20 +488,31 @@ async function openCluster(work) {
  * Probe `postgres` then `template1` with the bundled engine. PGLite 0.4.0 moved the
  * default working database from `template1` to `postgres`, so an older (0.3.x)
  * cluster keeps its tables in `template1` where a plain open never looks. Returns
- * `{tooNew:true}` if the datadir was written by a PGLite newer than the bundle (the
- * engine can't even initialize).
+ * `{tooNew:true}` only when the bundled engine cannot initialize a datadir stamped
+ * with another Postgres major; a same-major failure is reported as damage
+ * (HS2-D0V2NB).
  */
 async function tryBundled(work) {
   const { PGlite } = await import('@electric-sql/pglite');
+  const major = readDatadirMajor(nodeFs, nodePath, work);
   for (const database of ['postgres', 'template1']) {
     const db = new PGlite(work, { database });
     try {
       if (await hasTicketsTable(db)) return { db, database };
     } catch (err) {
       await db.close().catch(() => {});
-      // A WASM "Aborted()"/"failed to initialize" means the datadir is from a newer
-      // PGLite; a second database would fail identically, so stop and hand off.
-      if (isEngineTooNew(err)) return { tooNew: true };
+      // A second database would fail identically, so stop: hand off a different
+      // major to pglite-migrate, and report anything else without a download.
+      if (shouldFetchEngine(err, major)) return { tooNew: true };
+      if (isBundledInitFailure(err)) {
+        const stamp = major === null ? 'no readable PG_VERSION' : `PG_VERSION ${major}`;
+        throw new Error(
+          `could not open the HS1 database (${stamp}) with the bundled PostgreSQL ${BUNDLED_PG_MAJOR} ` +
+            `engine: ${errorText(err)}. The database looks damaged; check that Hot Sheet 1 still opens ` +
+            'this project, or restore .hotsheet/db from a backup. No engine was downloaded.',
+          { cause: err },
+        );
+      }
       throw err;
     }
     await db.close().catch(() => {});
@@ -534,8 +552,37 @@ async function openViaPgliteMigrate(work) {
   );
 }
 
-function isEngineTooNew(err) {
-  return /abort|initialize|wasm|EngineMismatch/i.test(String(err && err.message));
+/**
+ * Whether `err` is one of the bundled engine's measured initialization failures
+ * (HS2-D0V2NB): `PGlite failed to initialize properly`, or a WASM `RuntimeError:
+ * Aborted()`. PGLite 0.4.x throws the same text for a datadir of another Postgres
+ * major as for a damaged one, so this alone never authorizes an engine download.
+ */
+export function isBundledInitFailure(err) {
+  const message = err && typeof err.message === 'string' ? err.message : '';
+  if (message.startsWith('PGlite failed to initialize')) return true;
+  return err?.name === 'RuntimeError' && message.startsWith('Aborted(');
+}
+
+/**
+ * Whether a bundled-engine failure should hand off to pglite-migrate's on-demand
+ * engine (HS2-D0V2NB): only an initialization failure on a datadir whose own
+ * `PG_VERSION` names a Postgres major other than the bundled one. A same-major or
+ * unstamped datadir that fails to open is damaged, and fetching an engine cannot help.
+ */
+export function shouldFetchEngine(err, datadirMajor) {
+  return isBundledInitFailure(err) && Number.isInteger(datadirMajor) && datadirMajor !== BUNDLED_PG_MAJOR;
+}
+
+/** The Postgres major stamped in `<datadir>/PG_VERSION`, or null when absent/unparseable. */
+export function readDatadirMajor(fs, path, datadir) {
+  let raw;
+  try {
+    raw = fs.readFileSync(path.join(datadir, 'PG_VERSION'), 'utf8').trim();
+  } catch {
+    return null;
+  }
+  return /^[1-9]\d{0,2}$/.test(raw) ? Number(raw) : null;
 }
 
 async function hasTicketsTable(db) {
@@ -563,11 +610,108 @@ function asArray(value) {
   return [];
 }
 
-/** Normalize a timestamp (JS Date from pg, or a string, or null) to RFC3339/null. */
-function iso(value) {
+/** A value's JSON-ish kind for shape errors; never echoes ticket content. */
+function kindOf(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (value instanceof Date) return 'Date';
+  return typeof value;
+}
+
+/** The label HS1 shape errors use for a row: its ticket number, else its row id. */
+function rowLabel(row) {
+  return typeof row.ticket_number === 'string' && row.ticket_number.trim()
+    ? `HS1 ticket ${row.ticket_number}`
+    : `HS1 ticket row id ${JSON.stringify(row.id ?? null)}`;
+}
+
+/**
+ * Reject an HS1 ticket row whose shape the importer cannot represent (HS2-D0V2NB):
+ * a missing/blank `ticket_number`, a non-text `title`, or a non-text optional text
+ * column. Messages name the row and the offending kind, never the content.
+ */
+export function checkTicketRow(row) {
+  if (typeof row.ticket_number !== 'string' || !row.ticket_number.trim()) {
+    throw new Error(`${rowLabel(row)}: ticket_number must be non-empty text, got ${kindOf(row.ticket_number)}`);
+  }
+  if (typeof row.title !== 'string') {
+    throw new Error(`${rowLabel(row)}: title must be text, got ${kindOf(row.title)}`);
+  }
+  for (const column of ['details', 'category', 'priority', 'status']) {
+    if (row[column] != null && typeof row[column] !== 'string') {
+      throw new Error(`${rowLabel(row)}: ${column} must be text or null, got ${kindOf(row[column])}`);
+    }
+  }
+}
+
+/** One HS1 note entry, shape-checked: an object whose text is text or absent. */
+function exportNote(note, index, label) {
+  const where = `${label}: note ${index + 1}`;
+  if (typeof note !== 'object' || note === null || Array.isArray(note)) {
+    throw new Error(`${where} must be an object, got ${kindOf(note)}`);
+  }
+  if (note.text != null && typeof note.text !== 'string') {
+    throw new Error(`${where} text must be text, got ${kindOf(note.text)}`);
+  }
+  return {
+    id: note.id ?? null,
+    text: note.text ?? '',
+    created_at: iso(note.created_at, `${where} created_at`),
+  };
+}
+
+// RFC 3339 / Postgres `timestamptz` text: a date, `T` or space, a time, and a zone.
+const TIMESTAMP_TEXT =
+  /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?(?:([Zz])|([+-])(\d{2})(?::?(\d{2}))?)$/;
+const RFC3339_TEXT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * Normalize an HS1 timestamp to RFC 3339 or null (HS2-D0V2NB). A valid `Date` (pg's
+ * `timestamptz`) becomes ISO; an RFC 3339 string (HS1 note `toISOString()`) stays
+ * verbatim; Postgres text form (`2026-08-01 00:00:00+00`) normalizes to ISO. Anything
+ * else — an invalid `Date`, a zone-less or out-of-range string, a number — rejects the
+ * export: the importer stores timestamp text verbatim, so passing it through would
+ * corrupt the ticket store.
+ * @param {unknown} value
+ * @param {string} [label] where the value came from, for the error
+ */
+export function iso(value, label = 'timestamp') {
   if (value == null) return null;
-  if (value instanceof Date) return value.toISOString();
-  return String(value);
+  if (value instanceof Date) {
+    if (!Number.isNaN(value.getTime())) return value.toISOString();
+    throw new Error(`${label} is an invalid date`);
+  }
+  if (typeof value === 'string') {
+    const text = value.trim();
+    const match = TIMESTAMP_TEXT.exec(text);
+    if (match && validTimestampFields(match)) {
+      if (RFC3339_TEXT.test(text)) return text;
+      const [, year, month, day, hh, mm, ss, fraction = '', z, sign, zh, zm = '00'] = match;
+      const zone = z ? 'Z' : `${sign}${zh}:${zm}`;
+      return new Date(`${year}-${month}-${day}T${hh}:${mm}:${ss}${fraction}${zone}`).toISOString();
+    }
+    throw new Error(`${label} is not an RFC 3339 timestamp: ${JSON.stringify(text.slice(0, 40))}`);
+  }
+  throw new Error(`${label} must be a timestamp, got ${kindOf(value)}`);
+}
+
+/** Calendar/clock range checks `Date.parse` skips (it accepts Feb 30 and 24:00). */
+function validTimestampFields(match) {
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  const zoneHour = match[10] === undefined ? 0 : Number(match[10]);
+  const zoneMinute = match[11] === undefined ? 0 : Number(match[11]);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return (
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= daysInMonth &&
+    hour <= 23 &&
+    minute <= 59 &&
+    second <= 59 &&
+    zoneHour <= 23 &&
+    zoneMinute <= 59
+  );
 }
 
 // ---- CLI -------------------------------------------------------------------------

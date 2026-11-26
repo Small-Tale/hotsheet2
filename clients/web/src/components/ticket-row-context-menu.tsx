@@ -253,6 +253,8 @@ export interface TicketRowContextMenuProps {
   priority?: TicketPriority;
   status?: TicketStatus;
   upNextEligible?: boolean;
+  /** Why the targets' providers cannot change Up Next (HS2-Y32T8A); the entry stays, disabled with it. */
+  upNextDisabledReason?: string;
   hideUpNext?: boolean;
   verifyAction?: boolean;
   notWorkingAction?: boolean;
@@ -286,6 +288,7 @@ export function TicketRowContextMenu({
   priority,
   status,
   upNextEligible = true,
+  upNextDisabledReason,
   hideUpNext = false,
   verifyAction = false,
   notWorkingAction = false,
@@ -312,7 +315,10 @@ export function TicketRowContextMenu({
     entries.push({ kind: 'divider' });
   }
   // Keep the Up Next toggle at the top of the first action section (HS2-R3ZS3V).
-  if (upNextEligible && !hideUpNext) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[4], !canBulkUpdate));
+  if (upNextEligible && !hideUpNext)
+    entries.push(
+      contextEntry(TICKET_CONTEXT_ACTIONS[4], !canBulkUpdate || Boolean(upNextDisabledReason), upNextDisabledReason),
+    );
   // "Open ticket" opens one ticket; the copy action follows the full selection (HS2-F0XZAX).
   if (selectionCount <= 1) entries.push(contextEntry(TICKET_CONTEXT_ACTIONS[0]));
   entries.push(

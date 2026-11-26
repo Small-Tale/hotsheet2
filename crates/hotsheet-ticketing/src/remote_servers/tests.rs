@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use hotsheet_sync::LockExt;
+use hotsheet_sync::secret::SecretString;
 
 use super::*;
 use crate::{SecretError, SecretStore};
@@ -393,7 +394,7 @@ fn hs2_w4jjje_remote_http_needs_a_paired_session_not_the_local_bearer() {
             .trust_fingerprint("http://remote.example.test:8787")
             .is_err()
     );
-    credentials.bearer_secret = format!("session:{}", "A".repeat(43));
+    credentials.bearer_secret = format!("session:{}", "A".repeat(43)).into();
     assert_eq!(
         credentials.session_token(),
         Some("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
@@ -404,7 +405,7 @@ fn hs2_w4jjje_remote_http_needs_a_paired_session_not_the_local_bearer() {
             .unwrap(),
         None
     );
-    credentials.bearer_secret.push('/');
+    credentials.bearer_secret = format!("{}/", credentials.bearer_secret.expose()).into();
     assert!(
         credentials
             .trust_fingerprint("http://remote.example.test:8787")
@@ -415,14 +416,14 @@ fn hs2_w4jjje_remote_http_needs_a_paired_session_not_the_local_bearer() {
 #[test]
 fn hs2_bt4kn6_paired_write_proof_is_complete_and_private() {
     let mut credentials = request().credentials;
-    credentials.bearer_secret = format!("session:{}", "A".repeat(43));
+    credentials.bearer_secret = format!("session:{}", "A".repeat(43)).into();
     credentials.session_origin = Some("http://127.0.0.1:5173".into());
     assert!(
         credentials
             .trust_fingerprint("http://remote.example.test:8787")
             .is_err()
     );
-    credentials.session_csrf = Some("B".repeat(43));
+    credentials.session_csrf = Some("B".repeat(43).into());
     assert_eq!(
         credentials
             .trust_fingerprint("http://remote.example.test:8787")
@@ -473,7 +474,7 @@ fn hs2_bt4kn6_selected_projects_are_machine_local_and_revocation_clears_them() {
     );
     let (view, credential) = reopened.bridge_connection(ID, &secrets).unwrap();
     assert_eq!(view.id, ID);
-    assert_eq!(credential.bearer_secret, "synthetic-bearer");
+    assert_eq!(credential.bearer_secret.expose(), "synthetic-bearer");
     reopened
         .revoke(ID, registered.remote.revision, &secrets)
         .unwrap();
@@ -599,7 +600,7 @@ fn hs2_1y45mz_failed_and_interrupted_review_preserves_the_prior_active_credentia
 #[test]
 fn hs2_h4rebs_publicly_trusted_https_pins_nothing_and_http_never_pins() {
     let mut credentials = request().credentials;
-    credentials.bearer_secret = format!("session:{}", "A".repeat(43));
+    credentials.bearer_secret = format!("session:{}", "A".repeat(43)).into();
     // A Tailscale Serve name: HTTPS with a paired session and no reviewed CA.
     assert_eq!(
         credentials
@@ -628,7 +629,7 @@ fn hs2_h4rebs_publicly_trusted_https_pins_nothing_and_http_never_pins() {
     let peer = Peer::default();
     let mut https = request();
     https.origin = "https://peer.example.ts.net".into();
-    https.credentials.bearer_secret = format!("session:{}", "A".repeat(43));
+    https.credentials.bearer_secret = format!("session:{}", "A".repeat(43)).into();
     let registered = registry.register(https, &secrets, &peer, 1).unwrap();
     assert_eq!(registered.remote.origin, "https://peer.example.ts.net");
     assert_eq!(registered.remote.identity.ca_fingerprint, None);
@@ -732,7 +733,7 @@ fn hs2_hgg426_stored_server_identity_never_carries_a_host_name() {
 fn hs2_fzxxtg_a_device_certificate_needs_no_bearer_but_every_other_shape_does() {
     // The device certificate is opaque here: only the CA is parsed.
     let device = RemoteCredentials {
-        bearer_secret: String::new(),
+        bearer_secret: SecretString::default(),
         session_origin: None,
         session_csrf: None,
         ca_pem: None,
@@ -768,10 +769,39 @@ fn hs2_fzxxtg_a_device_certificate_needs_no_bearer_but_every_other_shape_does() 
     }
     assert!(device.trust_fingerprint("http://127.0.0.1:8787").is_err());
     let mut session_proof = device.clone();
-    session_proof.session_csrf = Some("B".repeat(43));
+    session_proof.session_csrf = Some("B".repeat(43).into());
     assert!(
         session_proof
             .trust_fingerprint("https://peer.example.test:8787")
             .is_err()
     );
+}
+
+/// HS2-N1JXBZ: the stored credential record keeps its exact JSON after the bearer and CSRF
+/// proof became `SecretString`, including the defaulted empty bearer and absent proof.
+#[test]
+fn hs2_n1jxbz_remote_credentials_json_is_byte_identical() {
+    let session = format!(
+        r#"{{"bearer_secret":"session:{}","session_origin":"https://remote.example.test","session_csrf":"{}","ca_pem":null,"client_certificate_pem":null,"client_key_pem":null}}"#,
+        "A".repeat(43),
+        "B".repeat(43)
+    );
+    let decoded: RemoteCredentials = serde_json::from_str(&session).unwrap();
+    assert_eq!(decoded.session_token(), Some("A".repeat(43).as_str()));
+    assert_eq!(
+        decoded.session_csrf.as_ref().map(SecretString::expose),
+        Some("B".repeat(43).as_str())
+    );
+    assert_eq!(serde_json::to_string(&decoded).unwrap(), session);
+
+    let device = r#"{"bearer_secret":"","ca_pem":null,"client_certificate_pem":"cert","client_key_pem":"key"}"#;
+    let decoded: RemoteCredentials =
+        serde_json::from_str(r#"{"client_certificate_pem":"cert","client_key_pem":"key"}"#)
+            .unwrap();
+    assert!(decoded.bearer_secret.is_empty());
+    assert_eq!(decoded.session_csrf, None);
+    assert_eq!(serde_json::to_string(&decoded).unwrap(), device);
+
+    let printed = format!("{decoded:?} {:?}", request().credentials);
+    assert!(!printed.contains("synthetic-bearer"), "{printed}");
 }

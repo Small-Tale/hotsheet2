@@ -21,6 +21,7 @@ import {
   exportFromDb,
   exportDatadir,
   isDirectEntry,
+  iso,
   resolveAttachmentSource,
   resolveCustomCommands,
   stageAttachments,
@@ -190,6 +191,136 @@ describe('exportFromDb', () => {
     const out = await exportFromDb(bare, {});
     expect(out.tickets[0].blocked_by).toEqual([]);
     await bare.close();
+  });
+
+  // HS2-K7JG39: the importer derives a creation time when this is null, so the
+  // exporter must emit JSON null (never "" or "null") for a null or absent column.
+  it('exports a null or absent created_at as JSON null', async () => {
+    const nullable = new PGlite();
+    await nullable.exec(`create table tickets (
+      id serial primary key, ticket_number text, title text not null,
+      created_at timestamptz, updated_at timestamptz
+    );
+    insert into tickets (ticket_number, title, updated_at)
+      values ('HS2-8', 'no creation time', '2026-08-05T00:00:00Z');`);
+    const columnless = new PGlite();
+    await columnless.exec(`create table tickets (
+      id serial primary key, ticket_number text, title text not null
+    );
+    insert into tickets (ticket_number, title) values ('HS2-9', 'no timestamp columns');`);
+    try {
+      const [withNull] = (await exportFromDb(nullable, {})).tickets;
+      expect(withNull.created_at).toBeNull();
+      expect(withNull.updated_at).toBe('2026-08-05T00:00:00.000Z');
+      const [withoutColumn] = (await exportFromDb(columnless, {})).tickets;
+      expect(withoutColumn.created_at).toBeNull();
+      expect(withoutColumn.updated_at).toBeNull();
+    } finally {
+      await nullable.close();
+      await columnless.close();
+    }
+  });
+});
+
+describe('HS1 row and timestamp shape checks (HS2-D0V2NB)', () => {
+  /** A stand-in db answering the column probe and the ticket select with `rows`. */
+  function fakeDb(rows) {
+    const columns = ['id', 'ticket_number', 'title', 'details', 'status', 'notes', 'created_at', 'completed_at'];
+    return {
+      query: async (sql) => {
+        if (sql.includes('information_schema.columns') && sql.includes("'tickets'")) {
+          return { rows: columns.map((column_name) => ({ column_name })) };
+        }
+        if (sql.startsWith('select id')) return { rows };
+        return { rows: [] };
+      },
+    };
+  }
+  const row = (overrides) => ({
+    id: 1,
+    ticket_number: 'HS-1',
+    title: 'synthetic',
+    details: null,
+    status: 'started',
+    notes: [],
+    created_at: new Date('2026-08-01T00:00:00Z'),
+    completed_at: null,
+    ...overrides,
+  });
+
+  it('normalizes Dates, keeps RFC 3339 text, and converts Postgres timestamptz text', () => {
+    expect(iso(null)).toBeNull();
+    expect(iso(undefined)).toBeNull();
+    expect(iso(new Date('2026-08-01T00:00:00Z'))).toBe('2026-08-01T00:00:00.000Z');
+    expect(iso('2026-08-01T00:00:00Z')).toBe('2026-08-01T00:00:00Z');
+    expect(iso('2026-08-01T00:00:00.123456+05:30')).toBe('2026-08-01T00:00:00.123456+05:30');
+    expect(iso(' 2026-08-01T00:00:00Z ')).toBe('2026-08-01T00:00:00Z');
+    expect(iso('2026-08-01 00:00:00+00')).toBe('2026-08-01T00:00:00.000Z');
+    expect(iso('2026-08-01 05:30:00.25+05:30')).toBe('2026-08-01T00:00:00.250Z');
+    expect(iso('2026-08-01t00:00:00z')).toBe('2026-08-01T00:00:00.000Z');
+    expect(iso('2024-02-29 12:00:00-0700')).toBe('2024-02-29T19:00:00.000Z');
+  });
+
+  it.each([
+    ['an invalid Date', new Date('nonsense'), /invalid date/],
+    ['zone-less text', '2026-08-01 00:00:00', /not an RFC 3339/],
+    ['a calendar-invalid day', '2026-02-30T00:00:00Z', /not an RFC 3339/],
+    ['a non-leap Feb 29', '2026-02-29T00:00:00Z', /not an RFC 3339/],
+    ['hour 24', '2026-08-01T24:00:00Z', /not an RFC 3339/],
+    ['month 13', '2026-13-01T00:00:00Z', /not an RFC 3339/],
+    ['an out-of-range zone', '2026-08-01T00:00:00+24:00', /not an RFC 3339/],
+    ['free text', 'yesterday', /not an RFC 3339/],
+    ['empty text', '', /not an RFC 3339/],
+    ['an epoch number', 1785542400000, /must be a timestamp, got number/],
+    ['an object', { at: 'x' }, /must be a timestamp, got object/],
+  ])('rejects %s', (_name, value, message) => {
+    expect(() => iso(value, 'HS1 ticket HS-1: created_at')).toThrow(message);
+  });
+
+  it('exports a valid synthetic row with Postgres-text and RFC 3339 timestamps', async () => {
+    const out = await exportFromDb(
+      fakeDb([
+        row({
+          completed_at: '2026-08-02 00:00:00+00',
+          notes: [{ id: 'n_1', text: 'synthetic note', created_at: '2026-08-01T01:00:00Z' }, { id: 'n_2' }],
+        }),
+      ]),
+    );
+    expect(out.tickets[0]).toMatchObject({
+      ticket_number: 'HS-1',
+      title: 'synthetic',
+      created_at: '2026-08-01T00:00:00.000Z',
+      completed_at: '2026-08-02T00:00:00.000Z',
+      notes: [
+        { id: 'n_1', text: 'synthetic note', created_at: '2026-08-01T01:00:00Z' },
+        { id: 'n_2', text: '', created_at: null },
+      ],
+    });
+  });
+
+  it.each([
+    ['a null ticket_number', { ticket_number: null }, /row id 1: ticket_number must be non-empty text, got null/],
+    ['a blank ticket_number', { ticket_number: '  ' }, /row id 1: ticket_number must be non-empty text/],
+    ['a numeric ticket_number', { ticket_number: 7 }, /ticket_number must be non-empty text, got number/],
+    ['a null title', { title: null }, /HS1 ticket HS-1: title must be text, got null/],
+    ['a missing title', { title: undefined }, /title must be text, got undefined/],
+    ['a non-text details', { details: { body: 'x' } }, /details must be text or null, got object/],
+    ['a non-text status', { status: 3 }, /status must be text or null, got number/],
+    ['an unparseable created_at', { created_at: 'soon' }, /HS1 ticket HS-1: created_at is not an RFC 3339/],
+    ['a zone-less completed_at', { completed_at: '2026-08-02 00:00:00' }, /HS-1: completed_at is not an RFC 3339/],
+    ['a non-object note', { notes: ['plain text note'] }, /HS-1: note 1 must be an object, got string/],
+    ['a null note', { notes: [{ text: 'ok' }, null] }, /HS-1: note 2 must be an object, got null/],
+    ['a non-text note text', { notes: [{ text: 42 }] }, /HS-1: note 1 text must be text, got number/],
+    ['a bad note timestamp', { notes: [{ text: 'ok', created_at: 5 }] }, /note 1 created_at must be a timestamp/],
+  ])('rejects a row with %s, naming the row but not its content', async (_name, overrides, message) => {
+    const rejected = exportFromDb(fakeDb([row(overrides)]));
+    await expect(rejected).rejects.toThrow(message);
+    await expect(rejected).rejects.not.toThrow(/synthetic|plain text note/);
+  });
+
+  it('accepts an empty title and absent optional columns', async () => {
+    const out = await exportFromDb(fakeDb([row({ title: '', details: undefined, status: undefined })]));
+    expect(out.tickets[0]).toMatchObject({ title: '', details: null, status: null });
   });
 });
 

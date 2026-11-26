@@ -84,6 +84,16 @@ so a file setup merged into is restored byte for byte (HS2-DWS3NS). The result m
 re-parse to exactly the intended value or the file is left untouched, and the file
 is deleted only when nothing but `$schema` remains and no user comment survives.
 
+**Removal keeps the user's comments next to Hot Sheet's entry (HS2-SYBMFV).** A
+comment on another line is the user's; a comment on Hot Sheet's own lines or inside its
+entry is Hot Sheet content and goes with it. In Codex TOML, the comment lines directly
+above a removed header (Hot Sheet's table, or an emptied explicit `[mcp_servers]`) can
+be a file-header comment or a note on the table before, so they are kept verbatim: they
+move to the start of the next table's comments, or to the end of the file when no table
+follows. Blank lines alone there are dropped, so a merged file still restores exactly.
+In OpenCode JSONC, an `mcp` object that the removal empties stays, with no members, when
+a comment remains inside it; with no comment left it is removed as before.
+
 **Unreadable instruction files are never rewritten (HS2-HXMGN8).** The same rule covers
 the Markdown writers: the instruction target, the canonical target (`AGENTS.md` for
 tools that import it), refresh's reconciled instruction targets, and this checkout's
@@ -94,6 +104,14 @@ ends with "fix the file (or move it aside), then rerun `hotsheet-cli setup --ref
 Such a file can be shared by several tools, so the project-open refresh reports this as
 one warning and does not hold a single tool. Removing a disabled tool's section skips an
 unreadable file without writing it.
+
+**Unreadable skill files are never overwritten (HS2-ETJ4TB).** Skill files are Hot
+Sheet's artifacts, but a project may customize one (an equal-version skill with different
+bytes, or a newer one, is preserved), so an unreadable skill cannot be shown to be safe to
+replace. The worklist skill and every manifest `additional` skill follow the rule above:
+a missing skill is written, and one that exists but is not UTF-8 or cannot be opened
+stops setup, refresh, and diagnosis before the first write with the same error naming
+the file. Disabling the tool leaves such a skill in place instead of deleting it.
 
 **Project open reports each refused config (HS2-52X9PN).** The server's project-open
 refresh treats a refusal like this per tool rather than for the whole run. It holds the
@@ -3812,6 +3830,22 @@ a letter or digit (`[a-z0-9][a-z0-9-]{0,63}`). The loader also refuses any decla
 target that is absolute or climbs out with `..`. A plugin that breaks either rule fails
 to load: `plugin install` reports the error, and discovery skips it. `plugin remove <id>`
 checks the same id rule before touching the filesystem and exits non-zero on a bad id.
+
+**Skipped plugins are reported (HS2-YJCPD5).** Discovery never drops a plugin silently.
+Any directory with a `manifest.toml` that fails to load (a refused id or write target, a
+malformed manifest, a missing template file) is reported with its directory and load
+error. `hotsheet plugin list` keeps its stdout table and prints one
+`warning: skipped plugin <dir>: <reason>` line per skipped directory on stderr. The
+authenticated `GET /plugins/status` route returns `{ "skipped": [{ "path", "reason" }] }`
+for the server's search path, read fresh on every request. The web client does not show
+this list yet (HS2-WGAAF0).
+
+**Duplicate ids are reported (HS2-TVRJPB).** Only one plugin loads per id. Built-ins
+(`claude`, `codex`, `antigravity`, `opencode`) win first, then search directories in
+order, then the plugin directory path within one directory. Every losing plugin
+directory is reported through the same skipped list, with the reason
+`duplicate plugin id "<id>": the built-in plugin wins` or
+`duplicate plugin id "<id>": the plugin at <winning dir> wins`.
 
 **Trust gate (mandatory, not optional).** A manifest is inert data, but what it
 _writes_ is a supply-chain surface: a plugin's instruction template steers an agent,

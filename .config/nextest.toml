@@ -6,6 +6,12 @@
 # test's captured output is printed, so its progress markers show where it stopped.
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 10 }
+# HS2-FXF07C: nextest's 100ms default marked tests LEAKY under machine load when they start no
+# thread or child at all (`binding_tests::capacity::hs2_4j6v46_private_registry_versions_and_
+# byte_limits_preserve_original_bytes` and `binding_tests::ordering::hs2_4j6v46_late_success_...`
+# while another full gate ran). A real leak, such as a detached `git maintenance` child
+# (HS2-M269HC), holds the output pipes for seconds, so 500ms still reports it.
+leak-timeout = "500ms"
 
 # HS2-R6FZ54: native filesystem streams compete with process-heavy integration tests
 # on macOS. Reserve the full global runner for each native watcher test while its

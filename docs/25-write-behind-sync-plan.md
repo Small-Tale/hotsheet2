@@ -258,8 +258,8 @@ issues per page, so request counts are the same in both modes.
 
 When the same flag is set, the server starts a two-second dispatch loop. Each pass
 claims at most four ready operations, only the oldest unconfirmed operation for a
-ticket. Claims and states are persisted in the outbox; startup requeues a `sending`
-operation for readback before any new write. A Jira rate limit defers its connection
+ticket. Claims and states are persisted in the outbox; a `sending` operation returns
+to the queue for readback before any new write. A Jira rate limit defers its connection
 until `Retry-After` or a conservative fallback, while transient errors use bounded
 backoff and enter attention after eight attempts. A manual retry opens another
 eight-attempt window. Authentication, missing tickets, and unsupported writes
@@ -272,6 +272,27 @@ overwritten remote values are retained for review. A provider acknowledgement
 that does not contain the edit enters `needs_attention`. Unsupported status,
 claim, dependency, note, and attachment operations still use their synchronous
 paths and never enter this queue.
+
+#### Dispatch leases (HS2-NJQVQF)
+
+Any process may open the same outbox, and each open is a potential dispatcher with
+a random id (process id plus ULID). A claim records that id and a ten-minute
+wall-clock lease on the row (`dispatcher_id`, `lease_expires_at`). Opening the
+outbox and every dispatch pass return a `sending` row to the queue only when its
+lease has expired, so an overlapping server start or stop never re-sends another
+live dispatcher's write. The dispatcher renews its lease immediately before the
+Jira PUT and skips the write when the renewal fails. Confirm, defer, attention,
+and conflict transitions are fenced on the holder's id, so a stalled dispatcher
+whose row was taken over cannot settle the new owner's attempt.
+
+A graceful stop releases the rows that instance still holds when the outbox is
+dropped. The server shares one outbox through an `Arc` that each in-flight
+dispatch clones, so this happens only after sends finish. A crash releases nothing;
+another dispatcher recovers the row after the lease expires and reads Jira before
+any write. Outbox files written before leases gain the two nullable columns on
+open; a `sending` row without a lease counts as expired, which preserves the
+earlier restart recovery. An older binary ignores the lease columns, so a
+mixed-version overlap retains the old requeue behavior.
 
 The operation-status route lists recent results and supports retry from attention
 and discard while no write is in flight. Discard reads Jira after any attempted

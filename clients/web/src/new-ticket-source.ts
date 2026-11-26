@@ -97,6 +97,16 @@ export function newTicketCreationSourceId(
   return target && (writableTicketSources(project).length > 1 || !target.default) ? target.connectionId : undefined;
 }
 
+/**
+ * Why a new ticket in `source` cannot start in Up Next, or undefined when it can (HS2-Y32T8A). Only the
+ * descriptor's `up_next` capability decides, never the provider name.
+ */
+export function newTicketUpNextDisabledReason(
+  source: Pick<TicketSourceChoice, 'name' | 'capabilities'> | undefined,
+): string | undefined {
+  return source?.capabilities.up_next === false ? `${source.name} tickets do not support Up Next.` : undefined;
+}
+
 /** Remember the source a ticket was just created in, per project, in memory only. */
 export function rememberNewTicketSource(
   remembered: Readonly<Record<string, string>>,

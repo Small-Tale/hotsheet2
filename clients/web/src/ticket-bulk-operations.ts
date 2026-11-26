@@ -107,6 +107,32 @@ export function ticketGroupDisabledReason(
 }
 
 /**
+ * Why the tickets cannot be added to or removed from Up Next, or undefined when they can (HS2-Y32T8A).
+ * Support comes only from the descriptor's `up_next` (and `update`) capability, never a provider name,
+ * so a provider that later gains Up Next (HS2-13R2AS) enables the controls without a client change. A
+ * provider whose capabilities are not loaded yet is not known to refuse, so its controls stay enabled;
+ * the server still refuses an unsupported write.
+ */
+export function ticketUpNextDisabledReason(
+  tickets: readonly Pick<TicketRow, 'connection_id'>[],
+  capabilitiesFor: (connectionId: string) => Capabilities | undefined,
+  sourceName?: (connectionId: string) => string | undefined,
+): string | undefined {
+  const single = tickets.length === 1;
+  if (tickets.some((ticket) => capabilitiesFor(ticket.connection_id)?.update === false))
+    return single ? 'This ticket cannot be edited.' : 'One or more selected ticket providers do not support updates.';
+  const unsupported = tickets.filter((ticket) => capabilitiesFor(ticket.connection_id)?.up_next === false);
+  if (unsupported.length === 0) return undefined;
+  const names = new Set(unsupported.map((ticket) => sourceName?.(ticket.connection_id)));
+  const [name] = names;
+  if (names.size === 1 && name && unsupported.length === tickets.length)
+    return `${name} tickets do not support Up Next.`;
+  return single
+    ? "This ticket's provider does not support Up Next."
+    : 'One or more selected ticket providers do not support Up Next.';
+}
+
+/**
  * The ticket menu's group entries for the target tickets, given every known group (HS2-TX17CM).
  * A duplicate display name shows its id so same-named groups stay distinguishable (HS2-9KZSD4).
  */

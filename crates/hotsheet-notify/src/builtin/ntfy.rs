@@ -238,6 +238,17 @@ mod tests {
         assert_eq!(header(&request, "Click"), Some("https://hs.test/HS2-7"));
         assert_eq!(header(&request, "Markdown"), Some("yes"));
         assert_eq!(header(&request, "Authorization"), Some("Bearer tk"));
+        // HS2-CQNE4E: Debug keeps the header name but never the bearer token.
+        let printed = format!("{request:?}");
+        assert!(
+            printed.contains(r#"("Authorization", <redacted>)"#),
+            "{printed}"
+        );
+        assert!(!printed.contains("Bearer tk"), "{printed}");
+        assert!(
+            printed.contains(r#"("Title", "HS2-7 needs feedback")"#),
+            "{printed}"
+        );
     }
 
     #[test]

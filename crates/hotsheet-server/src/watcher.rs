@@ -259,7 +259,10 @@ fn spawn_watcher_in_scope_with_startup_hook(
 ) -> anyhow::Result<WatchHandle> {
     use notify::{RecursiveMode, Watcher};
 
-    let tickets_dir = target.entry.store.root().join("tickets");
+    // The tickets directory is derived from the store root, so the root needs no `parent()`
+    // lookup that could fail at runtime (HS2-FXF07C).
+    let store_root = target.entry.store.root().to_path_buf();
+    let tickets_dir = store_root.join("tickets");
     std::fs::create_dir_all(&tickets_dir)?;
 
     let freshness = target.entry.freshness.clone();
@@ -280,10 +283,6 @@ fn spawn_watcher_in_scope_with_startup_hook(
             // writes made before either watcher took its first look.
             let slot: NativeWatcherSlot = Arc::default();
             let started = slot.clone();
-            let store_root = tickets_dir
-                .parent()
-                .expect("tickets directory has a store root")
-                .to_path_buf();
             std::thread::spawn(move || {
                 let resync = tx.clone();
                 let request_resync = |dir: &FsPath, info: &str| {
@@ -321,7 +320,7 @@ fn spawn_watcher_in_scope_with_startup_hook(
                 // canonical path because the store root may no longer exist.
                 let canonical_signal_root = hotsheet_sync::paths::canonicalize(&parent)
                     .ok()
-                    .map(|canonical| canonical.join(store_root.file_name().expect("store name")));
+                    .and_then(|canonical| store_root.file_name().map(|name| canonical.join(name)));
                 let canonical_signal_tickets = canonical_signal_root
                     .as_ref()
                     .map(|root| root.join("tickets"));

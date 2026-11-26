@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { LEASE_HOLD_MAX_MS } from './change-poll-slot-leases';
 import { DirectPollSlots, type SlotContentionChannel, type SlotGrant } from './change-poll-slots';
 
 afterEach(() => {
@@ -190,21 +191,46 @@ describe('direct change-poll slots', () => {
     expect(fake.queued.size).toBe(0);
   });
 
-  it('paces short fallback polls and lets a queued poll abort', async () => {
+  // HS2-QS2P6B: no Web Locks, or a refusing implementation, still long polls under leases.
+  it.each([
+    ['absent', {}],
+    [
+      'refused',
+      {
+        locks: {
+          request: () => Promise.reject(new DOMException('refused', 'SecurityError')),
+        },
+      },
+    ],
+  ])('with Web Locks %s, grants a leased long poll and lets a queued poll abort', async (_label, host) => {
     vi.useFakeTimers();
-    vi.stubGlobal('navigator', {});
-    const slots = new DirectPollSlots({ channel: null });
-    const first = vi.fn(async (grant: SlotGrant) => grant);
+    vi.stubGlobal('navigator', host);
+    const slots = new DirectPollSlots({ channel: null, leaseBus: null });
+    const contention = vi.fn();
+    slots.onContention(contention);
+    let finish: () => void = () => undefined;
+    const first = vi.fn(
+      (grant: SlotGrant) =>
+        new Promise<SlotGrant>((resolve) => {
+          finish = () => {
+            resolve(grant);
+          };
+        }),
+    );
     const second = vi.fn(async (grant: SlotGrant) => grant);
     const canceled = new AbortController();
     const one = slots.run(new AbortController().signal, first);
+    await vi.advanceTimersByTimeAsync(0);
     const two = slots.run(canceled.signal, second);
-    expect(await one).toEqual({ contended: true, maxTimeoutMs: 0 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    // A lone context without any bus holds one slot; the second poll waits without requests.
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
+    expect(contention).toHaveBeenCalledTimes(1);
     canceled.abort();
     await expect(two).rejects.toHaveProperty('name', 'AbortError');
-    await vi.advanceTimersByTimeAsync(250);
+    finish();
+    expect(await one).toEqual({ contended: false, maxTimeoutMs: LEASE_HOLD_MAX_MS });
     expect(second).not.toHaveBeenCalled();
   });
 

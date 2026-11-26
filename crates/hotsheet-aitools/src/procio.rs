@@ -351,7 +351,7 @@ fn macos_descendants(root: u32) -> Option<Vec<u32>> {
 }
 
 /// The descendants of `root` in `table`, parents before children.
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(not(unix), allow(dead_code))] // HS2-M08WMC: only Unix process-tree walks call it.
 fn descendants_of(root: u32, table: &[(u32, u32)]) -> Vec<u32> {
     let mut found = Vec::new();
     let mut frontier = vec![root];

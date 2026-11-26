@@ -58,6 +58,8 @@ export const ticketRowSettings = {
   category: signal('feature'),
   tags: signal('client, ux'),
   upNext: signal(true),
+  /** HS2-Y32T8A: the ticket's provider does not support Up Next, so the star is disabled with a reason. */
+  upNextUnsupported: signal(false),
   blocked: signal(false),
   needsReview: signal(false),
   feedbackNeeded: signal(false),
@@ -87,6 +89,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.category.value = 'feature';
   ticketRowSettings.tags.value = 'client, ux';
   ticketRowSettings.upNext.value = true;
+  ticketRowSettings.upNextUnsupported.value = false;
   ticketRowSettings.blocked.value = false;
   ticketRowSettings.needsReview.value = false;
   ticketRowSettings.feedbackNeeded.value = false;
@@ -124,6 +127,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
       },
       checked: {
         'up-next': ticketRowSettings.upNext.value,
+        'up-next-unsupported': ticketRowSettings.upNextUnsupported.value,
         blocked: ticketRowSettings.blocked.value,
         'needs-review': ticketRowSettings.needsReview.value,
         'feedback-needed': ticketRowSettings.feedbackNeeded.value,
@@ -136,6 +140,8 @@ export function resetTicketRowDemo(root?: ParentNode): void {
 }
 
 export const TICKET_ROW_DEMO_SLUG = 'Small-Tale/hotsheet2#5';
+/** The disabled star's reason for a provider without the `up_next` capability (HS2-Y32T8A). */
+export const TICKET_ROW_DEMO_UP_NEXT_UNSUPPORTED = 'Product issues tickets do not support Up Next.';
 
 /** The danger (diagnostic) presentation of the shared row shell, as CorruptTicketRow renders it. */
 const TICKET_ROW_DEMO_CORRUPT = {
@@ -167,6 +173,9 @@ export function TicketRowDemo() {
             showSourceIcon: ticketRowSettings.showSourceIcon.value,
             tags: ticketRowSettings.tags.value.split(','),
             upNext: ticketRowSettings.upNext.value,
+            upNextDisabledReason: ticketRowSettings.upNextUnsupported.value
+              ? TICKET_ROW_DEMO_UP_NEXT_UNSUPPORTED
+              : undefined,
             blocked: ticketRowSettings.blocked.value,
             needsReview: ticketRowSettings.needsReview.value,
             feedbackNeeded: ticketRowSettings.feedbackNeeded.value,
@@ -260,6 +269,11 @@ export function TicketRowSettings() {
       <TextField name="tags" label="Tags (Comma Separated)" value={ticketRowSettings.tags.value} />
       <TextField name="agent" label="Active Agent" value={ticketRowSettings.agentName.value} />
       <Checkbox name="up-next" checked={ticketRowSettings.upNext.value} label="Up Next" />
+      <Checkbox
+        name="up-next-unsupported"
+        checked={ticketRowSettings.upNextUnsupported.value}
+        label="Provider Without Up Next"
+      />
       <Checkbox name="blocked" checked={ticketRowSettings.blocked.value} label="Blocked" />
       <Checkbox name="needs-review" checked={ticketRowSettings.needsReview.value} label="Needs review" />
       <Checkbox name="feedback-needed" checked={ticketRowSettings.feedbackNeeded.value} label="Feedback needed" />
@@ -378,6 +392,9 @@ function wireTicketRowDemo(root: HTMLElement): () => void {
           break;
         case 'up-next':
           ticketRowSettings.upNext.value = control.checked;
+          break;
+        case 'up-next-unsupported':
+          ticketRowSettings.upNextUnsupported.value = control.checked;
           break;
         case 'blocked':
           ticketRowSettings.blocked.value = control.checked;

@@ -897,6 +897,7 @@ describe('UX demo catalog', () => {
     ticketRowSettings.category.value = 'bug';
     ticketRowSettings.tags.value = 'one';
     ticketRowSettings.upNext.value = false;
+    ticketRowSettings.upNextUnsupported.value = true;
     ticketRowSettings.blocked.value = true;
     ticketRowSettings.needsReview.value = true;
     ticketRowSettings.selected.value = true;
@@ -915,6 +916,7 @@ describe('UX demo catalog', () => {
       category: ticketRowSettings.category.value,
       tags: ticketRowSettings.tags.value,
       upNext: ticketRowSettings.upNext.value,
+      upNextUnsupported: ticketRowSettings.upNextUnsupported.value,
       blocked: ticketRowSettings.blocked.value,
       needsReview: ticketRowSettings.needsReview.value,
       selected: ticketRowSettings.selected.value,
@@ -932,6 +934,7 @@ describe('UX demo catalog', () => {
       category: 'feature',
       tags: 'client, ux',
       upNext: true,
+      upNextUnsupported: false,
       selected: false,
       blocked: false,
       needsReview: false,

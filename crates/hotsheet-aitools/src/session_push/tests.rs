@@ -233,8 +233,18 @@ fn the_first_prompt_uses_the_users_session_from_this_launch_and_caches_it() {
         first.url
     );
     assert_eq!(
-        first.authorization.as_deref(),
+        first.authorization.as_ref().map(SecretString::expose),
         Some(basic_auth_header("opencode", "pw-1").as_str())
+    );
+    // HS2-DGMK06: a recorded or logged request never prints the header value.
+    let printed = format!("{first:?}");
+    assert!(
+        !printed.contains(&basic_auth_header("opencode", "pw-1")),
+        "{printed}"
+    );
+    assert!(
+        printed.contains("authorization: Some(<redacted>)"),
+        "{printed}"
     );
     assert_eq!(push.session_id().as_deref(), Some("ses_users"));
 }

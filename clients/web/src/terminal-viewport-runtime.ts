@@ -102,6 +102,7 @@ import {
   terminalResizeClaim,
   terminalScrollbackLimit,
   terminalShouldUseWebgl,
+  terminalSocketEnded,
   terminalSocketStale,
   terminalTileLayout,
   terminalTileSizing,
@@ -511,6 +512,9 @@ function initializeTerminalViewport(
     attempt = 0,
     visible = false,
     disposed = false,
+    // The server closed the socket because the terminal ended (HS2-QWT94V): keep the output shown and
+    // never reattach.
+    ended = false,
     focusRequested = autoFocus,
     initialReplay = true,
     connectedOnce = false,
@@ -911,7 +915,7 @@ function initializeTerminalViewport(
     }
   };
   const reconnectNow = () => {
-    if (disposed || parked || scaledPreview) return;
+    if (disposed || ended || parked || scaledPreview) return;
     if (socketStale()) abandonSocket();
     if (socket && socket.readyState !== WebSocket.CLOSED) return;
     if (reconnect !== undefined) window.clearTimeout(reconnect);
@@ -920,7 +924,7 @@ function initializeTerminalViewport(
     connect();
   };
   const connect = () => {
-    if (disposed) return;
+    if (disposed || ended) return;
     initialReplay = true;
     livenessSupported = false;
     element.dataset.connection = 'connecting';
@@ -1057,11 +1061,19 @@ function initializeTerminalViewport(
         terminal.scrollToLine(Math.max(0, terminal.buffer.active.baseY - keepFromBottom));
       });
     };
-    const disconnected = () => {
+    const disconnected = (event: Event) => {
       if (socket !== current || disposed) return;
       if (heartbeat !== undefined) window.clearInterval(heartbeat);
       heartbeat = undefined;
       endInputProbe();
+      // The terminal ended (HS2-QWT94V): its output stays shown, parked or not, and nothing
+      // reattaches. A reattach would only replay the exited terminal and close again, in a loop.
+      if (terminalSocketEnded(event as CloseEvent)) {
+        ended = true;
+        pendingInput = '';
+        element.dataset.connection = 'ended';
+        return;
+      }
       // A parked viewport does not reconnect in the background: its owner evicts it, and the
       // terminal remounts fresh if it is shown again (HS2-WGTQ6X).
       if (parked) {
@@ -1511,7 +1523,8 @@ function initializeTerminalViewport(
     }, TERMINAL_INPUT_PROBE_TIMEOUT_MS);
   };
   const sendInput = (value: string) => {
-    if (scaledPreview || tiled) return;
+    // An ended terminal has no program left to type into (HS2-QWT94V).
+    if (scaledPreview || tiled || ended) return;
     const current = socket;
     if (current?.readyState === WebSocket.OPEN && !socketStale()) {
       if (

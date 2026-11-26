@@ -197,4 +197,15 @@ describe('wireTicketRowUpNextToggle (HS2-NRW5ZR)', () => {
     expect(tab.preventDefault).not.toHaveBeenCalled();
     expect(toggle.mock.calls).toEqual([[row], [row], [row]]);
   });
+
+  it('never toggles a star its provider disabled, yet keeps the row from seeing it (HS2-Y32T8A)', () => {
+    const toggle = vi.fn();
+    wireTicketRowUpNextToggle({} as HTMLElement, toggle);
+    const star = { disabled: true, closest: () => ({ dataset: { ticketSlug: 'HS2-1' } }) },
+      click = cancelable();
+    handler('capture:click', 'toggle-row-up-next')(click, star);
+    handler('capture:keydown', 'toggle-row-up-next')(cancelable({ key: 'Enter' }), star);
+    expect(click.stopPropagation).toHaveBeenCalled();
+    expect(toggle).not.toHaveBeenCalled();
+  });
 });

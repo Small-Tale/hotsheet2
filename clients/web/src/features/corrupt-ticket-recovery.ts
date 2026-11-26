@@ -27,7 +27,7 @@ export function createCorruptTicketRecoveryController(dependencies: CorruptTicke
   async function revealCorruptTicket(key: string) {
     const current = project(),
       ticket = corruptTickets.value.find((item) => corruptTicketKey(item) === key);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     if (!current || !ticket || corruptRecovery.value[key]?.pending) return;
     setCorruptRecovery(key, { pending: 'reveal' });
     try {
@@ -41,7 +41,7 @@ export function createCorruptTicketRecoveryController(dependencies: CorruptTicke
   async function queueCorruptTicketRepair(key: string) {
     const current = project(),
       ticket = corruptTickets.value.find((item) => corruptTicketKey(item) === key);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type. (HS2-W3RDCB)
     if (!current || !ticket || ticket.error_code === 'upgrade_required' || corruptRecovery.value[key]?.pending) return;
     setCorruptRecovery(key, { pending: 'repair' });
     try {
