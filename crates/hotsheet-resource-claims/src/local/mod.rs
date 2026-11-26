@@ -291,7 +291,7 @@ impl ClaimBackend for LocalBackend {
             Ok((
                 Grant {
                     claim,
-                    renewal_token,
+                    renewal_token: renewal_token.into(),
                 },
                 false,
             ))

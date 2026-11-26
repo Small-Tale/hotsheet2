@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use hotsheet_sync::secret::SecretString;
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -297,7 +298,7 @@ impl BrokerIdentity {
 pub struct BrokerPushState {
     pub mechanism: String,
     pub port: u16,
-    pub password: String,
+    pub password: SecretString,
     pub directory: String,
     pub launched_at_ms: u64,
     pub model: Option<String>,
@@ -1227,6 +1228,24 @@ mod journal_home_tests {
     }
 }
 
+#[cfg(test)]
+mod hs2_9zmc7n_tests {
+    use super::BrokerPushState;
+
+    /// HS2-9ZMC7N: the launched tool's password is redacted under `Debug`, and the broker
+    /// socket protocol still carries it as the same plain JSON string.
+    #[test]
+    fn hs2_9zmc7n_push_password_is_redacted_and_the_socket_json_is_unchanged() {
+        let json = r#"{"mechanism":"opencode-http","port":4096,"password":"synthetic-pw","directory":"/work","launched_at_ms":1,"model":null,"session_id":"ses_1"}"#;
+        let state: BrokerPushState = serde_json::from_str(json).unwrap();
+        assert_eq!(state.password.expose(), "synthetic-pw");
+        assert_eq!(serde_json::to_string(&state).unwrap(), json);
+        let printed = format!("{state:?} {state:#?}");
+        assert!(!printed.contains("synthetic-pw"), "{printed}");
+        assert!(printed.contains("password: <redacted>"), "{printed}");
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -1305,7 +1324,7 @@ mod tests {
         else {
             panic!("missing push state")
         };
-        assert_eq!(push.password, "secret");
+        assert_eq!(push.password.expose(), "secret");
         assert_eq!(push.session_id.as_deref(), Some("ses_one"));
         assert!(matches!(
             handle_request("p", &manager, &pushes, Request::Kill { id: "ai".into() }).await,

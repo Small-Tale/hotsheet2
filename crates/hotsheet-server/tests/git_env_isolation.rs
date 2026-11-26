@@ -248,7 +248,7 @@ fn server_ticket_writes_ignore_an_inherited_git_repository_environment() {
     let server_log = || std::fs::read_to_string(&log).unwrap_or_default();
 
     let response = ureq::post(&format!("{}/tickets", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .set("content-type", "application/json")
         .send_string(r#"{"title":"isolated server ticket"}"#)
         .unwrap();
@@ -287,7 +287,7 @@ fn poll_json(
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
         let body: serde_json::Value = ureq::get(&format!("{}{path}", info.url))
-            .set("x-hotsheet-secret", &info.secret)
+            .set("x-hotsheet-secret", info.secret.expose())
             .call()
             .unwrap()
             .into_string()
@@ -335,7 +335,7 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
         "cwd": checkout,
     }]);
     let saved = ureq::put(&format!("{}/commands", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .set("if-match", "*")
         .set("content-type", "application/json")
         .send_string(&definitions.to_string())
@@ -343,7 +343,7 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
     assert!(saved.status() < 300);
     assert_sentinel_unchanged(&before, &sentinel, "command setup");
     let run: serde_json::Value = ureq::post(&format!("{}/commands/probe/run", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap()
         .into_string()
@@ -366,7 +366,7 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
     assert_sentinel_unchanged(&before, &sentinel, "command run");
 
     let terminal: serde_json::Value = ureq::post(&format!("{}/terminals", info.url))
-        .set("x-hotsheet-secret", &info.secret)
+        .set("x-hotsheet-secret", info.secret.expose())
         .set("content-type", "application/json")
         .send_string(
             &serde_json::json!({

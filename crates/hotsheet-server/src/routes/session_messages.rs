@@ -453,7 +453,7 @@ pub(crate) fn prepare_session_push(
     let broker_state = hotsheet_terminals::BrokerPushState {
         mechanism: spec.mechanism.clone(),
         port: launch.port,
-        password: launch.password.expose().to_owned(),
+        password: launch.password.clone(),
         directory: launch.directory.clone(),
         launched_at_ms: launch.launched_at_ms,
         model: launch.model.clone(),
@@ -480,7 +480,7 @@ pub(crate) fn prepare_opencode_v2(push: &mut PreparedSessionPush) -> String {
     push.broker_state.session_id = Some(session_id.clone());
     push.adapter = Arc::new(session_push::OpenCodeV2Push::new(
         push.broker_state.port,
-        &push.broker_state.password,
+        push.broker_state.password.expose(),
         session_id.clone(),
         Arc::new(UreqHttp::default()),
     ));
@@ -502,7 +502,7 @@ pub(crate) fn restore_broker_push(
             id,
             Arc::new(session_push::OpenCodeV2Push::new(
                 push.port,
-                &push.password,
+                push.password.expose(),
                 session_id,
                 Arc::new(UreqHttp::default()),
             )),
@@ -514,7 +514,7 @@ pub(crate) fn restore_broker_push(
     }
     let launch = PushLaunch {
         port: push.port,
-        password: push.password.into(),
+        password: push.password,
         directory: push.directory,
         model: push.model,
         launched_at_ms: push.launched_at_ms,

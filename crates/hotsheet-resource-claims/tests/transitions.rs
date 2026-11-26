@@ -78,14 +78,14 @@ fn hs2_h3wppy_acquire_renew_release_walks_the_held_state() {
     f.clock.advance_ms(30_000);
     let renewed = f
         .backend
-        .renew(&grant.renewal_token, Duration::from_secs(60))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(60))
         .unwrap();
     assert_eq!(renewed.claim_id, grant.claim.claim_id);
     assert_eq!(renewed.fencing_token, 1, "renewal keeps the fencing token");
     assert_eq!(renewed.expires_at_ms, START_MS + 90_000);
     assert_eq!(renewed.acquired_at_ms, START_MS);
 
-    let released = f.backend.release(&grant.renewal_token).unwrap();
+    let released = f.backend.release(grant.renewal_token.expose()).unwrap();
     assert_eq!(released.claim_id, grant.claim.claim_id);
     assert_eq!(f.backend.get(&vm).unwrap(), None);
     assert!(f.backend.list(vm.namespace()).unwrap().is_empty());
@@ -127,7 +127,7 @@ fn hs2_h3wppy_try_now_conflict_names_the_holder_and_its_metadata() {
     );
     assert!(codecs.hmac_matches(&holder.metadata["worker"], "w-1"));
     // The refused acquire changed nothing: the counter did not move.
-    f.backend.release(&held.renewal_token).unwrap();
+    f.backend.release(held.renewal_token.expose()).unwrap();
     assert_eq!(
         f.backend
             .acquire(&vm, &lease(60))
@@ -177,10 +177,13 @@ fn hs2_h3wppy_expiry_frees_the_resource_and_fences_the_old_holder() {
     );
     let renew = f
         .backend
-        .renew(&first.renewal_token, Duration::from_secs(10));
+        .renew(first.renewal_token.expose(), Duration::from_secs(10));
     assert_eq!(renew.unwrap_err().code(), "not_holder");
     assert_eq!(
-        f.backend.release(&first.renewal_token).unwrap_err().code(),
+        f.backend
+            .release(first.renewal_token.expose())
+            .unwrap_err()
+            .code(),
         "not_holder"
     );
     // The stale holder's attempts did not disturb the live claim.
@@ -197,21 +200,27 @@ fn hs2_h3wppy_renew_and_release_after_expiry_report_expired() {
     // Nobody has taken the resource, but a lapsed lease cannot be revived.
     let renew = f
         .backend
-        .renew(&grant.renewal_token, Duration::from_secs(10));
+        .renew(grant.renewal_token.expose(), Duration::from_secs(10));
     assert_eq!(renew.unwrap_err().code(), "expired");
     assert_eq!(f.backend.get(&vm).unwrap(), None);
     let renew = f
         .backend
-        .renew(&grant.renewal_token, Duration::from_secs(10));
+        .renew(grant.renewal_token.expose(), Duration::from_secs(10));
     assert_eq!(renew.unwrap_err().code(), "expired", "repeatable");
 
     assert_eq!(
-        f.backend.release(&grant.renewal_token).unwrap_err().code(),
+        f.backend
+            .release(grant.renewal_token.expose())
+            .unwrap_err()
+            .code(),
         "expired"
     );
     // That release cleared the slot, so the token is now simply revoked.
     assert_eq!(
-        f.backend.release(&grant.renewal_token).unwrap_err().code(),
+        f.backend
+            .release(grant.renewal_token.expose())
+            .unwrap_err()
+            .code(),
         "token_invalid"
     );
     assert_eq!(
@@ -229,15 +238,18 @@ fn hs2_h3wppy_release_twice_revokes_the_token() {
     let f = fixture();
     let vm = target("vms/mac-1");
     let grant = f.backend.acquire(&vm, &lease(10)).unwrap();
-    f.backend.release(&grant.renewal_token).unwrap();
+    f.backend.release(grant.renewal_token.expose()).unwrap();
 
     assert_eq!(
-        f.backend.release(&grant.renewal_token).unwrap_err().code(),
+        f.backend
+            .release(grant.renewal_token.expose())
+            .unwrap_err()
+            .code(),
         "token_invalid"
     );
     let renew = f
         .backend
-        .renew(&grant.renewal_token, Duration::from_secs(10));
+        .renew(grant.renewal_token.expose(), Duration::from_secs(10));
     assert_eq!(renew.unwrap_err().code(), "token_invalid");
     assert_eq!(
         f.backend.verify_fencing(&vm, 1).unwrap_err().code(),
@@ -254,13 +266,13 @@ fn hs2_h3wppy_a_token_only_works_for_its_own_claim() {
     let grant_one = f.backend.acquire(&one, &lease(60)).unwrap();
     let grant_two = f.backend.acquire(&two, &lease(60)).unwrap();
 
-    let parsed = parse_renewal_token(&grant_one.renewal_token).unwrap();
+    let parsed = parse_renewal_token(grant_one.renewal_token.expose()).unwrap();
     assert_eq!(parsed.target, one);
     assert_eq!(parsed.claim_id, grant_one.claim.claim_id);
 
     // Re-address claim one's secret at claim two: the keyed digest no longer matches.
-    let parts_one: Vec<&str> = grant_one.renewal_token.split('.').collect();
-    let parts_two: Vec<&str> = grant_two.renewal_token.split('.').collect();
+    let parts_one: Vec<&str> = grant_one.renewal_token.expose().split('.').collect();
+    let parts_two: Vec<&str> = grant_two.renewal_token.expose().split('.').collect();
     let forged = [parts_two[0], parts_two[1], parts_two[2], parts_one[3]].join(".");
     assert_eq!(parse_renewal_token(&forged).unwrap().target, two);
     for attempt in [
@@ -268,7 +280,7 @@ fn hs2_h3wppy_a_token_only_works_for_its_own_claim() {
         "",
         "not-a-token",
         "hsrc1.a.b.c",
-        &format!("{}x", grant_one.renewal_token),
+        &format!("{}x", grant_one.renewal_token.expose()),
         &"h".repeat(2_000),
     ] {
         let renew = f.backend.renew(attempt, Duration::from_secs(60));
@@ -280,7 +292,7 @@ fn hs2_h3wppy_a_token_only_works_for_its_own_claim() {
     }
     // A well-formed token for a namespace that was never written is invalid, and does
     // not create that namespace.
-    let ghost = grant_one.renewal_token.replace(
+    let ghost = grant_one.renewal_token.expose().replace(
         parts_one[1],
         "Z2hvc3RzL21hYy0x", // "ghosts/mac-1"
     );
@@ -297,9 +309,9 @@ fn hs2_h3wppy_a_token_only_works_for_its_own_claim() {
 
     // Both real claims survived every attempt, and each token still works for its own.
     assert_eq!(f.backend.list(one.namespace()).unwrap().len(), 2);
-    f.backend.release(&grant_two.renewal_token).unwrap();
+    f.backend.release(grant_two.renewal_token.expose()).unwrap();
     assert_eq!(f.backend.get(&one).unwrap(), Some(grant_one.claim.clone()));
-    f.backend.release(&grant_one.renewal_token).unwrap();
+    f.backend.release(grant_one.renewal_token.expose()).unwrap();
 }
 
 #[test]
@@ -308,8 +320,8 @@ fn hs2_h3wppy_only_a_keyed_digest_of_the_token_is_stored() {
     let vm = target("vms/mac-1");
     let grant = f.backend.acquire(&vm, &lease(60)).unwrap();
     let stored = state_text(&f, "vms");
-    let secret = grant.renewal_token.rsplit('.').next().unwrap();
-    assert!(!stored.contains(&grant.renewal_token));
+    let secret = grant.renewal_token.expose().rsplit('.').next().unwrap();
+    assert!(!stored.contains(grant.renewal_token.expose()));
     assert!(!stored.contains(secret));
     assert!(stored.contains("token_digest"));
 
@@ -319,10 +331,10 @@ fn hs2_h3wppy_only_a_keyed_digest_of_the_token_is_stored() {
         f.clock.clone(),
         key(8),
     );
-    let renew = other.renew(&grant.renewal_token, Duration::from_secs(60));
+    let renew = other.renew(grant.renewal_token.expose(), Duration::from_secs(60));
     assert_eq!(renew.unwrap_err().code(), "token_invalid");
     f.backend
-        .renew(&grant.renewal_token, Duration::from_secs(60))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(60))
         .unwrap();
 }
 
@@ -334,8 +346,8 @@ fn hs2_h3wppy_empty_then_refill_keeps_the_fencing_counter_across_instances() {
     for round in 1..=4u64 {
         let grant = f.backend.acquire(&vm, &lease(60)).unwrap();
         assert_eq!(grant.claim.fencing_token, round);
-        tokens.push(grant.renewal_token.clone());
-        f.backend.release(&grant.renewal_token).unwrap();
+        tokens.push(grant.renewal_token.expose().to_owned());
+        f.backend.release(grant.renewal_token.expose()).unwrap();
         assert!(f.backend.list(vm.namespace()).unwrap().is_empty());
     }
     // A fresh process (a new backend over the same files) continues the counter, through
@@ -390,7 +402,7 @@ fn hs2_h3wppy_resources_and_namespaces_are_independent() {
         ["mac-1"],
         "only the lapsed lease left the list"
     );
-    f.backend.release(&a.renewal_token).unwrap();
+    f.backend.release(a.renewal_token.expose()).unwrap();
     assert!(names("vms").is_empty());
     assert_eq!(names("gpus"), ["mac-1"]);
 }
@@ -403,19 +415,19 @@ fn hs2_h3wppy_renew_sets_the_lease_from_the_backend_clock() {
     f.clock.advance_ms(1_000);
     let shorter = f
         .backend
-        .renew(&grant.renewal_token, Duration::from_secs(5))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(5))
         .unwrap();
     assert_eq!(shorter.expires_at_ms, START_MS + 6_000);
     f.clock.advance_ms(4_999);
     let longer = f
         .backend
-        .renew(&grant.renewal_token, Duration::from_millis(1))
+        .renew(grant.renewal_token.expose(), Duration::from_millis(1))
         .unwrap();
     assert_eq!(longer.expires_at_ms, START_MS + 6_000);
     f.clock.advance_ms(1);
     let renew = f
         .backend
-        .renew(&grant.renewal_token, Duration::from_secs(5));
+        .renew(grant.renewal_token.expose(), Duration::from_secs(5));
     assert_eq!(renew.unwrap_err().code(), "expired");
 }
 
@@ -474,7 +486,7 @@ fn hs2_h3wppy_corrupt_or_interrupted_state_is_never_overwritten() {
     std::fs::write(dir.join(".state-crashed.tmp"), b"{\"schema_version\":1,").unwrap();
     assert_eq!(f.backend.get(&vm).unwrap(), Some(grant.claim.clone()));
     f.backend
-        .renew(&grant.renewal_token, Duration::from_secs(60))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(60))
         .unwrap();
 
     let good = std::fs::read(dir.join("state.json")).unwrap();
@@ -490,13 +502,16 @@ fn hs2_h3wppy_corrupt_or_interrupted_state_is_never_overwritten() {
             "corrupt"
         );
         assert_eq!(
-            f.backend.release(&grant.renewal_token).unwrap_err().code(),
+            f.backend
+                .release(grant.renewal_token.expose())
+                .unwrap_err()
+                .code(),
             "corrupt"
         );
         assert_eq!(std::fs::read(dir.join("state.json")).unwrap(), bad);
     }
     std::fs::write(dir.join("state.json"), good).unwrap();
-    f.backend.release(&grant.renewal_token).unwrap();
+    f.backend.release(grant.renewal_token.expose()).unwrap();
 }
 
 #[test]
@@ -525,7 +540,7 @@ fn hs2_h3wppy_a_full_namespace_refuses_new_resources_only() {
             .fencing_token,
         4
     );
-    f.backend.release(&first.renewal_token).unwrap();
+    f.backend.release(first.renewal_token.expose()).unwrap();
     assert_eq!(
         f.backend
             .list(&Namespace::parse("pool").unwrap())
@@ -593,7 +608,7 @@ fn hs2_h3wppy_the_machine_key_file_is_private_and_stable() {
     // Another process on the machine derives the same key and accepts the token.
     let again = LocalBackend::machine(dir.path());
     again
-        .renew(&grant.renewal_token, Duration::from_secs(60))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(60))
         .unwrap();
     let sealed = backend
         .codecs()
@@ -655,7 +670,7 @@ fn hs2_ydzafh_the_backend_enumerates_its_namespaces() {
     std::fs::write(root.join("namespaces/stray.txt"), b"x").unwrap();
     assert_eq!(names(&f), ["gpu", "vms"]);
     // Released and expired: still a namespace, now without live claims.
-    f.backend.release(&vm.renewal_token).unwrap();
+    f.backend.release(vm.renewal_token.expose()).unwrap();
     f.clock.advance_ms(61_000);
     assert_eq!(names(&f), ["gpu", "vms"]);
     for namespace in f.backend.namespaces().unwrap() {

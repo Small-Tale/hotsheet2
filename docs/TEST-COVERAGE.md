@@ -1335,11 +1335,23 @@ redaction test, also named `hs2_a8t481_*`:
 - mcp's `PresenceTarget`.
 
 `crates/hotsheet-sync/tests/secret_debug_policy.rs` rejects any derived `Debug` over a
-secret-named plain-string field anywhere under `crates/`. The scan has two exemption lists,
-and both must still match real fields:
+secret-named plain-string field anywhere under `crates/`. Its only exemption list names
+fields that are not secrets, and every entry must still match a real field. There is no
+baseline: HS2-9ZMC7N retyped the nine secrets the scan found when it landed.
 
-- an exact list of fields that are not secrets;
-- a baseline that can only shrink, owned by HS2-9ZMC7N.
+HS2-9ZMC7N retypes those nine fields to `SecretString`. Each struct has an `hs2_9zmc7n_*`
+test that checks `Debug` redacts the field and that its stored or wire format is
+byte-identical to the old plain string:
+
+- server: the `InstanceInfo` record (`lifecycle.rs`) and `IssuedSession` (`remote_auth.rs`);
+- server: the `WsParams` query (`dto.rs`), the same query flattened into `AttachParams`
+  (`routes/terminals/attach.rs`), and the `PollParams` query (`routes/store_scoped.rs`).
+  These decode through axum `Query`, including percent-encoding and an absent secret;
+- the CLI's `ServerInstance` (`external_launch.rs`);
+- the terminals broker's `BrokerPushState` socket JSON (`broker.rs`);
+- the resource-claims `Grant`, whose JSON is flattened (`model.rs`);
+- the extsync GitLab attachment marker's `secret` and `rendition_secret`
+  (`gitlab/attachments.rs`), including the hidden-comment marker round trip.
 
 HS2-HWC0FS adds Unix tests in
 `secrets/metadata_owner/unix/tests.rs`: unchanged-map set/delete publication versus

@@ -3046,14 +3046,14 @@ fn hs2_7yskxe_a_started_session_is_told_its_resources_and_claims_them_itself() {
     assert_eq!(claims(&f.m.home), 1);
     let renewed = service
         .renew(
-            &grant.renewal_token,
+            grant.renewal_token.expose(),
             std::time::Duration::from_secs(90 * 60),
             Some(&target),
         )
         .unwrap();
     assert!(renewed.expires_at_ms >= grant.claim.expires_at_ms);
     service
-        .release(&grant.renewal_token, Some(&target))
+        .release(grant.renewal_token.expose(), Some(&target))
         .unwrap();
     assert_eq!(claims(&f.m.home), 0);
     // A start of the same operation with other resources conflicts at the host.
@@ -3353,7 +3353,7 @@ fn hs2_6nqkp9_a_step_on_another_site_needs_that_sites_own_policy_resources() {
     assert!(prompt.contains("`vm/windows-vm`"), "{prompt}");
     assert!(!prompt.contains("macos-vm"), "{prompt}");
     ClaimService::new(&f.m.home)
-        .release(&grant.renewal_token, None)
+        .release(grant.renewal_token.expose(), None)
         .unwrap();
 }
 

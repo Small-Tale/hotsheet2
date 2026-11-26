@@ -22,6 +22,7 @@
 
 use std::path::{Path, PathBuf};
 
+use hotsheet_sync::secret::SecretString;
 use serde::{Deserialize, Serialize};
 
 /// A running server's coordinates — written on start, removed on graceful shutdown.
@@ -30,7 +31,7 @@ pub struct InstanceInfo {
     pub pid: u32,
     /// The base URL a client attaches to, e.g. `http://127.0.0.1:8787`.
     pub url: String,
-    pub secret: String,
+    pub secret: SecretString,
     pub store_path: String,
     pub index_path: String,
     pub started_at: String,
@@ -573,6 +574,25 @@ mod tests {
             anchor: None,
             remote_url: None,
         }
+    }
+
+    /// HS2-9ZMC7N: the bearer secret is redacted under `Debug`, and the instance record keeps
+    /// the exact plain-string JSON shape it had before the field was retyped.
+    #[test]
+    fn hs2_9zmc7n_instance_secret_is_redacted_and_the_record_format_is_unchanged() {
+        let record = InstanceInfo {
+            secret: "synthetic-bearer".into(),
+            ..info(42, Path::new("/store.hs2"))
+        };
+        let printed = format!("{record:?} {record:#?}");
+        assert!(!printed.contains("synthetic-bearer"), "{printed}");
+        assert!(printed.contains("secret: <redacted>"), "{printed}");
+
+        let json = r#"{"pid":42,"url":"http://127.0.0.1:8787","secret":"synthetic-bearer","store_path":"/store.hs2","index_path":"/idx","started_at":"2026-01-01T00:00:00Z"}"#;
+        assert_eq!(serde_json::to_string(&record).unwrap(), json);
+        let parsed: InstanceInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.secret.expose(), "synthetic-bearer");
+        assert_eq!(parsed, record);
     }
 
     /// HS2-GWFEAA: a registration records who launched the server and which build it is,

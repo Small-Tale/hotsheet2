@@ -102,12 +102,12 @@ fn hs2_wjf0d8_one_grant_across_two_clones_with_token_scoped_renew_and_release() 
 
     // Another machine renews with the token alone; a tampered token is refused.
     let renewed = b
-        .renew(&grant.renewal_token, Duration::from_secs(600))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(600))
         .unwrap();
     assert!(renewed.expires_at_ms > grant.claim.expires_at_ms);
-    let mut tampered = grant.renewal_token.clone();
+    let mut tampered = grant.renewal_token.expose().to_owned();
     tampered.pop();
-    tampered.push(if grant.renewal_token.ends_with('A') {
+    tampered.push(if grant.renewal_token.expose().ends_with('A') {
         'B'
     } else {
         'A'
@@ -117,10 +117,10 @@ fn hs2_wjf0d8_one_grant_across_two_clones_with_token_scoped_renew_and_release() 
         Err(ClaimError::TokenInvalid)
     ));
 
-    a.release(&grant.renewal_token).unwrap();
+    a.release(grant.renewal_token.expose()).unwrap();
     assert!(b.get(&target()).unwrap().is_none());
     assert!(matches!(
-        a.release(&grant.renewal_token),
+        a.release(grant.renewal_token.expose()),
         Err(ClaimError::TokenInvalid)
     ));
     let next = b.acquire(&target(), &request()).unwrap();
@@ -130,7 +130,7 @@ fn hs2_wjf0d8_one_grant_across_two_clones_with_token_scoped_renew_and_release() 
         Err(ClaimError::NotHolder)
     ));
     assert!(matches!(
-        a.renew(&grant.renewal_token, Duration::from_secs(60)),
+        a.renew(grant.renewal_token.expose(), Duration::from_secs(60)),
         Err(ClaimError::NotHolder)
     ));
 }
@@ -161,10 +161,10 @@ fn hs2_wjf0d8_offline_fail_closed_and_provisional_modes() {
         Guarantee::AdvisoryOnly
     );
     let renewed = open
-        .renew(&grant.renewal_token, Duration::from_secs(120))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(120))
         .unwrap();
     assert_eq!(renewed.guarantee, Guarantee::AdvisoryOnly);
-    open.release(&grant.renewal_token).unwrap();
+    open.release(grant.renewal_token.expose()).unwrap();
 }
 
 #[test]

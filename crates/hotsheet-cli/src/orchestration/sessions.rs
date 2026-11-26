@@ -385,7 +385,7 @@ impl LocalServerSessions {
                 method,
                 &format!("{}{path}", server.url.trim_end_matches('/')),
             )
-            .set("X-Hotsheet-Secret", &server.secret);
+            .set("X-Hotsheet-Secret", server.secret.expose());
         let response = match body {
             Some(body) => request
                 .set("Content-Type", "application/json")

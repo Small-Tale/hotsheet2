@@ -99,13 +99,13 @@ pub fn acquire_grants_a_claim_and_a_scoped_token(f: &Fixture<'_>) {
             "an exclusive backend grants a fencing token above 0",
         );
     }
-    let named = parse_renewal_token(&grant.renewal_token)
+    let named = parse_renewal_token(grant.renewal_token.expose())
         .unwrap_or_else(|e| fail("token", format!("the token must name its claim: {e}")));
     if named.target != target || named.claim_id != grant.claim.claim_id {
         fail("token", "the token names a different claim than the grant");
     }
     f.backend
-        .release(&grant.renewal_token)
+        .release(grant.renewal_token.expose())
         .unwrap_or_else(|e| fail("release", e));
 }
 
@@ -126,7 +126,7 @@ pub fn a_held_resource_refuses_a_second_acquire(f: &Fixture<'_>) {
         }
         other => fail("held_by", format!("expected held_by, got {other:?}")),
     }
-    f.backend.release(&first.renewal_token).unwrap();
+    f.backend.release(first.renewal_token.expose()).unwrap();
 }
 
 pub fn readers_see_the_claim_without_its_token(f: &Fixture<'_>) {
@@ -164,7 +164,7 @@ pub fn readers_see_the_claim_without_its_token(f: &Fixture<'_>) {
     if !namespaces.contains(&f.namespace) {
         fail("namespaces", "a namespace holding a live claim is listed");
     }
-    f.backend.release(&grant.renewal_token).unwrap();
+    f.backend.release(grant.renewal_token.expose()).unwrap();
     if f.backend.get(&target).unwrap().is_some() {
         fail("get", "a released resource reads as free");
     }
@@ -189,7 +189,7 @@ pub fn metadata_round_trips(f: &Fixture<'_>) {
             "stored metadata must come back exactly as written",
         );
     }
-    f.backend.release(&grant.renewal_token).unwrap();
+    f.backend.release(grant.renewal_token.expose()).unwrap();
 }
 
 pub fn renew_extends_and_rejects_foreign_tokens(f: &Fixture<'_>) {
@@ -200,7 +200,7 @@ pub fn renew_extends_and_rejects_foreign_tokens(f: &Fixture<'_>) {
         .unwrap();
     let renewed = f
         .backend
-        .renew(&grant.renewal_token, Duration::from_secs(300))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(300))
         .unwrap_or_else(|e| fail("renew", e));
     if renewed.claim_id != grant.claim.claim_id
         || renewed.expires_at_ms <= grant.claim.expires_at_ms
@@ -224,22 +224,22 @@ pub fn renew_extends_and_rejects_foreign_tokens(f: &Fixture<'_>) {
         &["token_invalid"],
     );
     // A token of an earlier claim never renews a later one on the same resource.
-    f.backend.release(&grant.renewal_token).unwrap();
+    f.backend.release(grant.renewal_token.expose()).unwrap();
     let later = f
         .backend
         .acquire(&target, &AcquireRequest::new(LEASE))
         .unwrap();
     expect_code(
         "foreign token",
-        f.backend.renew(&grant.renewal_token, LEASE),
+        f.backend.renew(grant.renewal_token.expose(), LEASE),
         &["not_holder", "token_invalid"],
     );
     expect_code(
         "foreign token",
-        f.backend.release(&grant.renewal_token),
+        f.backend.release(grant.renewal_token.expose()),
         &["not_holder", "token_invalid"],
     );
-    f.backend.release(&later.renewal_token).unwrap();
+    f.backend.release(later.renewal_token.expose()).unwrap();
 }
 
 pub fn release_frees_the_resource_and_revokes_the_token(f: &Fixture<'_>) {
@@ -250,26 +250,26 @@ pub fn release_frees_the_resource_and_revokes_the_token(f: &Fixture<'_>) {
         .unwrap();
     let ended = f
         .backend
-        .release(&grant.renewal_token)
+        .release(grant.renewal_token.expose())
         .unwrap_or_else(|e| fail("release", e));
     if ended.claim_id != grant.claim.claim_id {
         fail("release", "release reports the claim it ended");
     }
     expect_code(
         "revoked token",
-        f.backend.renew(&grant.renewal_token, LEASE),
+        f.backend.renew(grant.renewal_token.expose(), LEASE),
         &["token_invalid", "not_holder", "expired"],
     );
     expect_code(
         "release twice",
-        f.backend.release(&grant.renewal_token),
+        f.backend.release(grant.renewal_token.expose()),
         &["token_invalid", "not_holder", "expired"],
     );
     let again = f
         .backend
         .acquire(&target, &AcquireRequest::new(LEASE))
         .unwrap_or_else(|e| fail("reacquire", e));
-    f.backend.release(&again.renewal_token).unwrap();
+    f.backend.release(again.renewal_token.expose()).unwrap();
 }
 
 pub fn fencing_tokens_only_grow(f: &Fixture<'_>) {
@@ -293,7 +293,7 @@ pub fn fencing_tokens_only_grow(f: &Fixture<'_>) {
             );
         }
         last = grant.claim.fencing_token;
-        f.backend.release(&grant.renewal_token).unwrap();
+        f.backend.release(grant.renewal_token.expose()).unwrap();
     }
     // And across an expiry, not only a release.
     let short = f
@@ -311,7 +311,7 @@ pub fn fencing_tokens_only_grow(f: &Fixture<'_>) {
             "a grant after an expiry still carries a larger token",
         );
     }
-    f.backend.release(&after.renewal_token).unwrap();
+    f.backend.release(after.renewal_token.expose()).unwrap();
 }
 
 pub fn a_lapsed_claim_expires_for_every_reader(f: &Fixture<'_>) {
@@ -326,14 +326,14 @@ pub fn a_lapsed_claim_expires_for_every_reader(f: &Fixture<'_>) {
     }
     expect_code(
         "expiry",
-        f.backend.renew(&grant.renewal_token, LEASE),
+        f.backend.renew(grant.renewal_token.expose(), LEASE),
         &["expired"],
     );
     let taken = f
         .backend
         .acquire(&target, &AcquireRequest::new(LEASE))
         .unwrap_or_else(|e| fail("expiry", format!("a lapsed resource is acquirable: {e}")));
-    f.backend.release(&taken.renewal_token).unwrap();
+    f.backend.release(taken.renewal_token.expose()).unwrap();
 }
 
 pub fn verify_fencing_follows_the_live_claim(f: &Fixture<'_>) {
@@ -348,7 +348,7 @@ pub fn verify_fencing_follows_the_live_claim(f: &Fixture<'_>) {
     f.backend
         .verify_fencing(&target, first.claim.fencing_token)
         .unwrap_or_else(|e| fail("verify_fencing", e));
-    f.backend.release(&first.renewal_token).unwrap();
+    f.backend.release(first.renewal_token.expose()).unwrap();
     let second = f
         .backend
         .acquire(&target, &AcquireRequest::new(LEASE))
@@ -361,7 +361,7 @@ pub fn verify_fencing_follows_the_live_claim(f: &Fixture<'_>) {
     f.backend
         .verify_fencing(&target, second.claim.fencing_token)
         .unwrap_or_else(|e| fail("verify_fencing", e));
-    f.backend.release(&second.renewal_token).unwrap();
+    f.backend.release(second.renewal_token.expose()).unwrap();
 }
 
 pub fn malformed_requests_are_refused(f: &Fixture<'_>) {
@@ -428,7 +428,9 @@ pub fn concurrent_acquirers_have_one_winner(f: &Fixture<'_>) {
             );
         }
     }
-    f.backend.release(&winners[0].renewal_token).unwrap();
+    f.backend
+        .release(winners[0].renewal_token.expose())
+        .unwrap();
 }
 
 pub fn waiting_follows_the_advertised_mechanism(f: &Fixture<'_>) {
@@ -455,7 +457,7 @@ pub fn waiting_follows_the_advertised_mechanism(f: &Fixture<'_>) {
         ),
     }
     if !f.exclusive() {
-        f.backend.release(&holder.renewal_token).ok();
+        f.backend.release(holder.renewal_token.expose()).ok();
         return;
     }
     match f.backend.capabilities().wait {
@@ -469,7 +471,7 @@ pub fn waiting_follows_the_advertised_mechanism(f: &Fixture<'_>) {
                 ),
                 &["unsupported"],
             );
-            f.backend.release(&holder.renewal_token).unwrap();
+            f.backend.release(holder.renewal_token.expose()).unwrap();
         }
         WaitMechanism::PushSignal | WaitMechanism::LongPoll => {
             // Held: the wait times out naming the holder.
@@ -495,7 +497,7 @@ pub fn waiting_follows_the_advertised_mechanism(f: &Fixture<'_>) {
                     )
                 });
                 std::thread::sleep(Duration::from_millis(250));
-                f.backend.release(&holder.renewal_token).unwrap();
+                f.backend.release(holder.renewal_token.expose()).unwrap();
                 handle.join().unwrap()
             });
             let grant =
@@ -503,7 +505,7 @@ pub fn waiting_follows_the_advertised_mechanism(f: &Fixture<'_>) {
             if grant.claim.fencing_token <= holder.claim.fencing_token {
                 fail("wait", "the waiter's grant carries a larger fencing token");
             }
-            f.backend.release(&grant.renewal_token).unwrap();
+            f.backend.release(grant.renewal_token.expose()).unwrap();
         }
     }
 }

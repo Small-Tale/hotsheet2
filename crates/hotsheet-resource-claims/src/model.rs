@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
+use hotsheet_sync::secret::SecretString;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -187,7 +188,7 @@ pub struct Grant {
     #[serde(flatten)]
     pub claim: Claim,
     /// Bearer capability for renewing and releasing this claim only. Shown once.
-    pub renewal_token: String,
+    pub renewal_token: SecretString,
 }
 
 /// What an acquirer asks for.
@@ -288,4 +289,23 @@ pub fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(), Clai
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod hs2_9zmc7n_tests {
+    use super::Grant;
+
+    /// HS2-9ZMC7N: the renewal token is a bearer capability, so `Debug` redacts it while the
+    /// flattened grant JSON every backend and the service return keeps its exact shape.
+    #[test]
+    fn hs2_9zmc7n_grant_renewal_token_is_redacted_and_the_wire_json_is_unchanged() {
+        let json = r#"{"namespace":"vm","resource":"macos","claim_id":"c1","fencing_token":3,"guarantee":"exclusive_with_fencing","acquired_at_ms":1,"expires_at_ms":2,"expires_at":"1970-01-01T00:00:00.002Z","metadata":{},"renewal_token":"hsrc1.synthetic"}"#;
+        let grant: Grant = serde_json::from_str(json).unwrap();
+        assert_eq!(grant.renewal_token.expose(), "hsrc1.synthetic");
+        assert_eq!(grant.claim.fencing_token, 3);
+        assert_eq!(serde_json::to_string(&grant).unwrap(), json);
+        let printed = format!("{grant:?} {grant:#?}");
+        assert!(!printed.contains("synthetic"), "{printed}");
+        assert!(printed.contains("renewal_token: <redacted>"), "{printed}");
+    }
 }

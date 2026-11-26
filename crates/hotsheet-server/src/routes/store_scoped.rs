@@ -17,6 +17,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use hotsheet_model::Ulid;
 use hotsheet_sync::LockExt;
+use hotsheet_sync::secret::SecretString;
 use hotsheet_ticketing::{ApiTicket, ops};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -443,7 +444,7 @@ const POLL_MAX_MS: u64 = 55_000;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct PollParams {
-    secret: Option<String>,
+    secret: Option<SecretString>,
     /// Return events with `seq > since`. Omit to just fetch the current cursor (no backlog),
     /// the way a fresh WebSocket only sees future events.
     since: Option<u64>,
@@ -479,7 +480,7 @@ pub(crate) async fn poll_events(
         .get("x-hotsheet-secret")
         .and_then(|value| value.to_str().ok());
     let local = certificate.is_some()
-        || ((params.secret.as_deref() == Some(state.secret.as_str())
+        || ((params.secret.as_ref().map(SecretString::expose) == Some(state.secret.as_str())
             || header_secret == Some(state.secret.as_str()))
             && state.local_bearer_allowed(peer.map(|info| info.0.0)));
     if !local && crate::routes::remote_auth::session(&state, &headers, false, false).is_err() {
@@ -564,4 +565,34 @@ pub(crate) async fn poll_events(
         overflow,
     })
     .into_response()
+}
+
+#[cfg(test)]
+mod hs2_9zmc7n_tests {
+    use super::PollParams;
+    use axum::extract::Query;
+    use axum::http::Uri;
+
+    /// HS2-9ZMC7N: the long-poll query secret decodes exactly as the plain string did beside
+    /// the cursor parameters and never appears in `Debug`.
+    #[test]
+    fn hs2_9zmc7n_poll_params_secret_decodes_and_is_redacted() {
+        let uri: Uri = "/poll?secret=synthetic-poll&since=7&timeout_ms=100&client=c1"
+            .parse()
+            .unwrap();
+        let Query(params) = Query::<PollParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(
+            params.secret.as_ref().map(|s| s.expose()),
+            Some("synthetic-poll")
+        );
+        assert_eq!((params.since, params.timeout_ms), (Some(7), Some(100)));
+        assert_eq!(params.client.as_deref(), Some("c1"));
+        let printed = format!("{params:?} {params:#?}");
+        assert!(!printed.contains("synthetic-poll"), "{printed}");
+        assert!(printed.contains("secret: Some(<redacted>)"), "{printed}");
+
+        let uri: Uri = "/poll?since=3".parse().unwrap();
+        let Query(params) = Query::<PollParams>::try_from_uri(&uri).unwrap();
+        assert!(params.secret.is_none());
+    }
 }

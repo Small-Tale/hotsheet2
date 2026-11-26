@@ -275,7 +275,7 @@ fn live_permission_hosts(state: &AppState) -> Result<Vec<PermissionHost>, ApiErr
         {
             return Err(peer_discard_unavailable());
         }
-        let host = (record.pid, record.url, record.secret);
+        let host = (record.pid, record.url, record.secret.into_inner());
         if !hosts.contains(&host) {
             hosts.push(host);
         }

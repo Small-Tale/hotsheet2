@@ -56,7 +56,7 @@ fn hs2_h3wppy_waiter_wakes_on_release_with_one_reinspection() {
         done.send(grant).unwrap();
     });
     until_inspected(&waiter, 1);
-    holder.release(&held.renewal_token).unwrap();
+    holder.release(held.renewal_token.expose()).unwrap();
 
     let grant = result.recv_timeout(PROMPT).unwrap().unwrap();
     assert!(
@@ -88,7 +88,7 @@ fn hs2_h3wppy_waiter_wakes_on_expiry_with_one_sleep() {
     // No release ever signalled: one refused attempt, one sleep to the known expiry
     // instant, one successful attempt. A polling waiter would inspect many more times.
     assert_eq!(waiter.inspections(), 2);
-    let renew = holder.renew(&held.renewal_token, lease);
+    let renew = holder.renew(held.renewal_token.expose(), lease);
     assert_eq!(renew.unwrap_err().code(), "not_holder");
 }
 
@@ -163,7 +163,7 @@ fn hs2_h3wppy_wait_free_reports_free_or_the_holder_without_acquiring() {
             .unwrap()
     });
     until_inspected(&watcher, before + 2);
-    holder.release(&held.renewal_token).unwrap();
+    holder.release(held.renewal_token.expose()).unwrap();
     assert_eq!(
         result.recv_timeout(PROMPT).unwrap().unwrap(),
         WaitOutcome::Free
@@ -174,7 +174,7 @@ fn hs2_h3wppy_wait_free_reports_free_or_the_holder_without_acquiring() {
     assert_eq!(next.claim.fencing_token, 2);
 
     // Free by expiry as well as by release.
-    holder.release(&next.renewal_token).unwrap();
+    holder.release(next.renewal_token.expose()).unwrap();
     holder
         .acquire(&vm, &AcquireRequest::new(Duration::from_millis(300)))
         .unwrap();
@@ -202,14 +202,14 @@ fn hs2_h3wppy_queued_waiters_each_get_a_turn_with_rising_fencing_tokens() {
             // Holding the resource: nobody else may be live on it right now.
             let seen = waiter.get(&vm).unwrap().unwrap();
             assert_eq!(seen.claim_id, grant.claim.claim_id);
-            waiter.release(&grant.renewal_token).unwrap();
+            waiter.release(grant.renewal_token.expose()).unwrap();
             done.send(grant.claim.fencing_token).unwrap();
         });
     }
     for waiter in &waiters {
         until_inspected(waiter, 1);
     }
-    holder.release(&held.renewal_token).unwrap();
+    holder.release(held.renewal_token.expose()).unwrap();
 
     let mut tokens: Vec<u64> = (0..4)
         .map(|_| results.recv_timeout(PROMPT).unwrap())
@@ -237,7 +237,7 @@ fn hs2_h3wppy_shortening_a_lease_wakes_its_waiter() {
     until_inspected(&waiter, 1);
     // The waiter planned to sleep for two minutes; the shorter lease must reach it.
     holder
-        .renew(&held.renewal_token, Duration::from_millis(300))
+        .renew(held.renewal_token.expose(), Duration::from_millis(300))
         .unwrap();
     let grant = result.recv_timeout(PROMPT).unwrap().unwrap();
     assert_eq!(grant.claim.fencing_token, 2);

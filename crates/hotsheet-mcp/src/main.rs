@@ -73,7 +73,7 @@ fn main() -> Result<()> {
                 let bootstrap = home.join("server-bootstrap.hs2");
                 let server =
                     hotsheet_cli::external_launch::ensure_running_server(&bootstrap, &home)?;
-                (server.url, server.secret)
+                (server.url, server.secret.into_inner())
             }
         };
         let id = open_project(root, &url, &secret)?;
@@ -244,7 +244,9 @@ fn launched_route(
 fn recorded_here(route: &(String, String), home: &Path) -> bool {
     hotsheet_cli::external_launch::running_servers(home)
         .iter()
-        .any(|server| server.url.trim_end_matches('/') == route.0 && server.secret == route.1)
+        .any(|server| {
+            server.url.trim_end_matches('/') == route.0 && server.secret.expose() == route.1
+        })
 }
 
 /// HS2-JFE7JJ: the server a launched session's shim uses. The launching server while it
@@ -266,7 +268,7 @@ fn attach_route(launched: &(String, String), home: &Path) -> Result<(String, Str
                 launched.0
             )
         })?;
-    Ok((server.url, server.secret))
+    Ok((server.url, server.secret.into_inner()))
 }
 
 /// A project shim follows a restarted machine server without changing checkout identity.
@@ -326,8 +328,8 @@ impl ProjectBackend {
             message: error.to_string(),
         })?;
         let registry = std::fs::read(self.home.join("checkouts.json")).unwrap_or_default();
-        if route.0 != server.url || route.1 != server.secret || route.2 != registry {
-            open_project(&self.root, &server.url, &server.secret).map_err(|error| {
+        if route.0 != server.url || route.1 != server.secret.expose() || route.2 != registry {
+            open_project(&self.root, &server.url, server.secret.expose()).map_err(|error| {
                 BackendError {
                     status: None,
                     message: error.to_string(),
@@ -335,7 +337,7 @@ impl ProjectBackend {
             })?;
             *route = (
                 server.url,
-                server.secret,
+                server.secret.into_inner(),
                 std::fs::read(self.home.join("checkouts.json")).unwrap_or_default(),
             );
         }

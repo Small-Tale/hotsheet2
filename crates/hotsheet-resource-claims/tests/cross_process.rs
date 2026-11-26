@@ -61,7 +61,7 @@ fn helper_process() {
                 .unwrap();
             let seen = backend.get(&target()).unwrap().unwrap();
             assert_eq!(seen.claim_id, grant.claim.claim_id);
-            backend.release(&grant.renewal_token).unwrap();
+            backend.release(grant.renewal_token.expose()).unwrap();
             say(format!("granted {}", grant.claim.fencing_token));
         }
         // Hold until the parent closes stdin, then release.
@@ -69,9 +69,9 @@ fn helper_process() {
             let grant = backend
                 .acquire(&target(), &AcquireRequest::new(LONG))
                 .unwrap();
-            say(format!("holding {}", grant.renewal_token));
+            say(format!("holding {}", grant.renewal_token.expose()));
             block_on_stdin();
-            backend.release(&grant.renewal_token).unwrap();
+            backend.release(grant.renewal_token.expose()).unwrap();
             say("released".into());
         }
         // Take a short lease and die without releasing it.
@@ -80,7 +80,7 @@ fn helper_process() {
             let grant = backend
                 .acquire(&target(), &AcquireRequest::new(lease))
                 .unwrap();
-            say(format!("holding {}", grant.renewal_token));
+            say(format!("holding {}", grant.renewal_token.expose()));
             std::process::exit(3);
         }
         other => panic!("unknown helper role {other}"),

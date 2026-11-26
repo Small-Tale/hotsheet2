@@ -1089,7 +1089,7 @@ pub(crate) fn server_json_with_body(
 ) -> Result<serde_json::Value> {
     let endpoint = format!("{}/{}", server.url.trim_end_matches('/'), route);
     let request = ureq::request(method, &endpoint)
-        .set("X-Hotsheet-Secret", &server.secret)
+        .set("X-Hotsheet-Secret", server.secret.expose())
         .timeout(std::time::Duration::from_secs(10));
     let result = match body {
         Some(body) => request

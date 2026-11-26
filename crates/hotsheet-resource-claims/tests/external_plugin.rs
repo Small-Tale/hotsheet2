@@ -421,14 +421,14 @@ fn hs2_322zsz_the_renewal_token_never_reaches_the_plugin_only_its_digest() {
     let backend = plugin.approved_backend("fake");
     let grant = backend.acquire(&target("vms/one"), &lease(60)).unwrap();
     backend
-        .renew(&grant.renewal_token, Duration::from_secs(90))
+        .renew(grant.renewal_token.expose(), Duration::from_secs(90))
         .unwrap();
-    backend.release(&grant.renewal_token).unwrap();
+    backend.release(grant.renewal_token.expose()).unwrap();
     let runs = plugin.runs();
     assert_eq!(runs.len(), 3);
     for run in &runs {
         let stdin = run["stdin"].as_str().unwrap();
-        assert!(!stdin.contains(&grant.renewal_token), "{stdin}");
+        assert!(!stdin.contains(grant.renewal_token.expose()), "{stdin}");
         assert!(!stdin.contains("hsrc1."), "no token of any shape: {stdin}");
         let envelope: Value = serde_json::from_str(stdin).unwrap();
         assert_eq!(envelope["protocol"], 1);
@@ -486,12 +486,12 @@ fn hs2_322zsz_a_wait_is_one_blocking_invocation_not_a_loop_of_requests() {
             backend.acquire_wait(&target("vms/one"), &lease(60), Duration::from_secs(20))
         });
         std::thread::sleep(Duration::from_millis(800));
-        backend.release(&held.renewal_token).unwrap();
+        backend.release(held.renewal_token.expose()).unwrap();
         waiter.join().unwrap()
     })
     .unwrap();
     assert!(started.elapsed() < Duration::from_secs(15));
-    backend.release(&grant.renewal_token).unwrap();
+    backend.release(grant.renewal_token.expose()).unwrap();
     let ops: Vec<String> = plugin.runs()[before..]
         .iter()
         .map(|run| {

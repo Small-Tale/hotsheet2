@@ -56,7 +56,7 @@ impl CapacityProbe for LocalServerCapacity {
                     checkout.id
                 );
                 let response = ureq::get(&url)
-                    .set("X-Hotsheet-Secret", &server.secret)
+                    .set("X-Hotsheet-Secret", server.secret.expose())
                     .timeout(std::time::Duration::from_secs(10))
                     .call()
                     .ok()?;
