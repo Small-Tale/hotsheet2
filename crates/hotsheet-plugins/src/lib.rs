@@ -26,6 +26,7 @@ pub mod guidance_interview;
 pub mod guidance_recommendations;
 pub mod guidance_sources;
 pub mod guidance_updates;
+mod jsonc;
 pub mod mcp_local_layer;
 pub mod rulesync_consolidation;
 pub mod rulesync_updates;

@@ -478,6 +478,16 @@ pub enum SetupError {
         path: String,
         source: std::io::Error,
     },
+    /// HS2-RMQ5XX: an existing tool config that setup cannot read or parse is never
+    /// replaced; the whole plan stops before any write, so the file stays byte-identical.
+    #[error(
+        "cannot add Hot Sheet's settings to {path} for {tool}: {reason}. Hot Sheet left the file unchanged. Fix the file (or move it aside), then rerun `hotsheet-cli setup {tool}`"
+    )]
+    UnreadableConfig {
+        tool: String,
+        path: String,
+        reason: String,
+    },
 }
 
 impl SetupError {
@@ -1301,7 +1311,7 @@ fn installed_mcp_command_args(
             ))
         }
         "opencode-json" => {
-            let root: serde_json::Value = serde_json::from_str(&contents).ok()?;
+            let root = crate::jsonc::parse(&contents).ok()?;
             let command = root["mcp"][&spec.server_name]["command"].as_array()?;
             let (first, rest) = command.split_first()?;
             Some((
@@ -1904,6 +1914,9 @@ fn setup_plugins_with_fs(
                 targets: bad.join(", "),
             });
         }
+        // HS2-RMQ5XX: refuse an unreadable tool config before the first write, so the
+        // refusal leaves the whole checkout unchanged rather than half set up.
+        check_existing_configs(fs, project_dir, p)?;
     }
 
     let policy = ensure_push_policy(fs, project_dir)?;
@@ -3067,10 +3080,15 @@ fn write_mcp(
     let (command, args, locally_owned) = mcp_entry(fs, project, store_abs, p);
     let (absolute_command, absolute_args) = absolute_mcp_launch(project, store_abs, p);
 
+    let config = ConfigFile {
+        tool: p.id(),
+        rel,
+        path: &target,
+    };
     match p.manifest.mcp.format.as_str() {
-        "claude-json" => write_mcp_json(fs, &target, name, &command, &args)?,
-        "codex-toml" => write_mcp_toml(fs, &target, name, &command, &args)?,
-        "opencode-json" => write_mcp_opencode_json(fs, &target, name, &command, &args)?,
+        "claude-json" => write_mcp_json(fs, &config, name, &command, &args)?,
+        "codex-toml" => write_mcp_toml(fs, &config, name, &command, &args)?,
+        "opencode-json" => write_mcp_opencode_json(fs, &config, name, &command, &args)?,
         other => {
             return Err(SetupError::UnknownMcpFormat {
                 id: p.id().to_string(),
@@ -3246,7 +3264,7 @@ fn is_hotsheet_only_mcp_config(fs: &PlanFs, target: &Path, format: &str, name: &
                 Some(object.len() == 1 && servers.len() == 1 && servers.contains_key(name))
             })
             .unwrap_or(false),
-        "opencode-json" => serde_json::from_str::<serde_json::Value>(&contents)
+        "opencode-json" => crate::jsonc::parse(&contents)
             .ok()
             .and_then(|root| {
                 let object = root.as_object()?;
@@ -3342,6 +3360,105 @@ fn remove_local_git_exclude(fs: &mut PlanFs, project: &Path, rel: &str) -> Resul
     Ok(())
 }
 
+/// An existing tool config that setup merges Hot Sheet's keys into (HS2-RMQ5XX). Only a
+/// missing file starts empty: an unreadable or unparsable file stops setup with an error
+/// naming the file, so the user's settings are never replaced by Hot Sheet's alone.
+struct ConfigFile<'a> {
+    tool: &'a str,
+    rel: &'a str,
+    path: &'a Path,
+}
+
+impl ConfigFile<'_> {
+    fn unreadable(&self, reason: String) -> SetupError {
+        SetupError::UnreadableConfig {
+            tool: self.tool.to_string(),
+            path: self.rel.to_string(),
+            reason,
+        }
+    }
+
+    /// The current contents, or `None` when the file does not exist.
+    fn read(&self, fs: &PlanFs) -> Result<Option<String>, SetupError> {
+        match fs.read_to_string(self.path) {
+            Ok(contents) => Ok(Some(contents)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+                Err(self.unreadable("it is not UTF-8 text".into()))
+            }
+            Err(error) => Err(self.unreadable(format!("it could not be read ({error})"))),
+        }
+    }
+
+    /// Parse a JSON (or, for formats that allow it, JSONC) config whose root is an object.
+    fn parse_json_object(
+        &self,
+        contents: &str,
+        jsonc: bool,
+    ) -> Result<serde_json::Value, SetupError> {
+        let parsed = if jsonc {
+            crate::jsonc::parse(contents)
+        } else {
+            serde_json::from_str::<serde_json::Value>(contents).map_err(|error| error.to_string())
+        };
+        let format = if jsonc { "JSONC" } else { "JSON" };
+        match parsed {
+            Ok(value) if value.is_object() => Ok(value),
+            Ok(_) => Err(self.unreadable(format!("its top level is not a {format} object"))),
+            Err(error) => Err(self.unreadable(format!("it is not valid {format} ({error})"))),
+        }
+    }
+
+    fn parse_toml(&self, contents: &str) -> Result<toml::Table, SetupError> {
+        toml::from_str(contents).map_err(|error| {
+            self.unreadable(format!(
+                "it is not valid TOML ({})",
+                error.message().trim_end()
+            ))
+        })
+    }
+
+    /// Refuse an existing file in `format` that its writer could not merge into.
+    fn check(&self, fs: &PlanFs, format: &str) -> Result<(), SetupError> {
+        let Some(contents) = self.read(fs)? else {
+            return Ok(());
+        };
+        match format {
+            "claude-json" | "lifecycle-json" => {
+                self.parse_json_object(&contents, false)?;
+            }
+            "opencode-json" => {
+                self.parse_json_object(&contents, true)?;
+            }
+            "codex-toml" => {
+                self.parse_toml(&contents)?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+/// Every existing MCP and hook config `plugin` merges into must be readable (HS2-RMQ5XX).
+fn check_existing_configs(fs: &PlanFs, project: &Path, plugin: &Plugin) -> Result<(), SetupError> {
+    let mcp = &plugin.manifest.mcp;
+    ConfigFile {
+        tool: plugin.id(),
+        rel: &mcp.target,
+        path: &project.join(&mcp.target),
+    }
+    .check(fs, &mcp.format)?;
+    if let Some(hooks) = &plugin.manifest.hooks {
+        ConfigFile {
+            tool: plugin.id(),
+            rel: &hooks.target,
+            path: &project.join(&hooks.target),
+        }
+        .check(fs, &hooks.format)?;
+    }
+    Ok(())
+}
+
 /// Register the tool's permission hook (`docs/05` §5.7) in its config, if it declares one.
 /// Claude and Codex both currently document this lifecycle JSON shape:
 /// `{ "hooks": { "<event>": [ { "matcher": "*", "hooks": [ { "type": "command", "command": … } ] } ] } }`.
@@ -3366,12 +3483,15 @@ fn write_hooks(
         });
     }
 
-    let mut root: serde_json::Value = fs
-        .read_to_string(&target)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .filter(serde_json::Value::is_object)
-        .unwrap_or_else(|| serde_json::json!({}));
+    let config = ConfigFile {
+        tool: p.id(),
+        rel: &spec.target,
+        path: &target,
+    };
+    let mut root = match config.read(fs)? {
+        Some(existing) => config.parse_json_object(&existing, false)?,
+        None => serde_json::json!({}),
+    };
     let obj = root.as_object_mut().unwrap();
 
     let hooks = obj.entry("hooks").or_insert_with(|| serde_json::json!({}));
@@ -3573,17 +3693,16 @@ fn mcp_env_json() -> serde_json::Value {
 /// Claude-style `.mcp.json`: `{ "mcpServers": { "<name>": { command, args, env } } }`.
 fn write_mcp_json(
     fs: &mut PlanFs,
-    target: &Path,
+    config: &ConfigFile,
     name: &str,
     command: &str,
     args: &[String],
 ) -> Result<(), SetupError> {
-    let mut root: serde_json::Value = fs
-        .read_to_string(target)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .filter(serde_json::Value::is_object)
-        .unwrap_or_else(|| serde_json::json!({}));
+    let target = config.path;
+    let mut root = match config.read(fs)? {
+        Some(existing) => config.parse_json_object(&existing, false)?,
+        None => serde_json::json!({}),
+    };
 
     let servers = root
         .as_object_mut()
@@ -3608,17 +3727,20 @@ fn write_mcp_json(
 /// `{ "mcp": { "<name>": { type: "local", command: [...], environment } } }`.
 fn write_mcp_opencode_json(
     fs: &mut PlanFs,
-    target: &Path,
+    config: &ConfigFile,
     name: &str,
     command: &str,
     args: &[String],
 ) -> Result<(), SetupError> {
-    let mut root: serde_json::Value = fs
-        .read_to_string(target)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .filter(serde_json::Value::is_object)
-        .unwrap_or_else(|| serde_json::json!({ "$schema": "https://opencode.ai/config.json" }));
+    let mut command_line = vec![command.to_string()];
+    command_line.extend_from_slice(args);
+    let entry = serde_json::json!({ "type": "local", "command": command_line, "environment": mcp_env_json() });
+    let existing = config.read(fs)?;
+    let mut root = match &existing {
+        Some(existing) => config.parse_json_object(existing, true)?,
+        None => serde_json::json!({ "$schema": "https://opencode.ai/config.json" }),
+    };
+    let original = root.clone();
     let mcp = root
         .as_object_mut()
         .unwrap()
@@ -3627,32 +3749,43 @@ fn write_mcp_opencode_json(
     if !mcp.is_object() {
         *mcp = serde_json::json!({});
     }
-    let mut command_line = vec![command.to_string()];
-    command_line.extend_from_slice(args);
-    mcp.as_object_mut().unwrap().insert(
-        name.to_string(),
-        serde_json::json!({ "type": "local", "command": command_line, "environment": mcp_env_json() }),
-    );
-    fs.write(
-        target,
-        (serde_json::to_string_pretty(&root).unwrap() + "\n").as_bytes(),
-    );
+    mcp.as_object_mut()
+        .unwrap()
+        .insert(name.to_string(), entry.clone());
+    // OpenCode reads JSONC (HS2-RMQ5XX). A file with comments or trailing commas is edited
+    // in place so the user's comments survive, and is left byte-identical when current.
+    let rendered = match existing.filter(|existing| crate::jsonc::has_extensions(existing)) {
+        Some(_) if root == original => return Ok(()),
+        Some(existing) => {
+            let spliced = crate::jsonc::set_member(&existing, &["mcp", name], &entry)
+                .map_err(|reason| config.unreadable(format!("it is not valid JSONC ({reason})")))?;
+            if crate::jsonc::parse(&spliced).ok().as_ref() != Some(&root) {
+                return Err(config.unreadable(
+                    "Hot Sheet could not insert its entry without disturbing the file's comments"
+                        .into(),
+                ));
+            }
+            spliced
+        }
+        None => serde_json::to_string_pretty(&root).unwrap() + "\n",
+    };
+    fs.write(config.path, rendered.as_bytes());
     Ok(())
 }
 
 /// Codex-style TOML: `[mcp_servers.<name>]` with `command`, `args`, and `env`.
 fn write_mcp_toml(
     fs: &mut PlanFs,
-    target: &Path,
+    config: &ConfigFile,
     name: &str,
     command: &str,
     args: &[String],
 ) -> Result<(), SetupError> {
-    let mut root: toml::Table = fs
-        .read_to_string(target)
-        .ok()
-        .and_then(|s| toml::from_str(&s).ok())
-        .unwrap_or_default();
+    let target = config.path;
+    let mut root: toml::Table = match config.read(fs)? {
+        Some(existing) => config.parse_toml(&existing)?,
+        None => toml::Table::new(),
+    };
 
     let servers = root
         .entry("mcp_servers".to_string())
@@ -6288,6 +6421,215 @@ args = ["--path", "{store}"]
         );
         fixture.setup("toby");
         assert_eq!(fixture.read(".toby/config.toml").unwrap(), first);
+    }
+
+    /// HS2-RMQ5XX fixture tools: `ivy` (Claude-style MCP JSON plus lifecycle hooks), `oscar`
+    /// (OpenCode JSONC) and `toby` (Codex TOML).
+    fn config_writer_tools(fixture: &Sharing) {
+        std::fs::create_dir_all(fixture.path(".git/info")).unwrap();
+        for (id, tail) in [
+            (
+                "ivy",
+                "[mcp]\ntarget = \".ivy/mcp.json\"\nformat = \"claude-json\"\n[hooks]\ntarget = \".ivy/hooks.json\"\nformat = \"lifecycle-json\"\nevent = \"PermissionRequest\"\ncommand = \"hotsheet-cli permission-hook\"\n",
+            ),
+            (
+                "oscar",
+                "[mcp]\ntarget = \"opencode.json\"\nformat = \"opencode-json\"\n",
+            ),
+            (
+                "toby",
+                "[mcp]\ntarget = \".toby/config.toml\"\nformat = \"codex-toml\"\n",
+            ),
+        ] {
+            let tail = tail.replace(
+                "format = \"",
+                "server_name = \"hotsheet\"\ncommand = \"hotsheet-mcp\"\nargs = [\"--path\", \"{store}\"]\nformat = \"",
+            );
+            // The hooks table's format line must not gain MCP keys.
+            let tail = match tail.split_once("[hooks]") {
+                Some((mcp, hooks)) => format!(
+                    "{mcp}[hooks]{}",
+                    hooks.replace(
+                        "server_name = \"hotsheet\"\ncommand = \"hotsheet-mcp\"\nargs = [\"--path\", \"{store}\"]\n",
+                        ""
+                    )
+                ),
+                None => tail,
+            };
+            // Detected, so the project-open refresh sets them up too.
+            custom_tool(fixture.plugins.path(), id, true, &tail);
+        }
+    }
+
+    fn try_setup(fixture: &Sharing, tool: &str) -> Result<Vec<SetupReport>, SetupError> {
+        run_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(tool),
+            false,
+            None,
+            &[fixture.plugins.path().to_path_buf()],
+        )
+    }
+
+    /// HS2-RMQ5XX: every writer refuses an existing config it cannot read or parse, names
+    /// the file and the rerun command, and leaves the whole checkout byte-identical.
+    #[test]
+    fn hs2_rmq5xx_unparsable_tool_configs_are_never_replaced() {
+        let cases: [(&str, &str, &[u8], &str); 8] = [
+            (
+                "ivy",
+                ".ivy/hooks.json",
+                b"{ \"hooks\": { ,}",
+                "not valid JSON",
+            ),
+            (
+                "ivy",
+                ".ivy/hooks.json",
+                b"{\"theme\": \"dark\"\xff}",
+                "not UTF-8 text",
+            ),
+            (
+                "ivy",
+                ".ivy/mcp.json",
+                b"{\"mcpServers\": {\"other\": {}},}",
+                "not valid JSON",
+            ),
+            (
+                "ivy",
+                ".ivy/mcp.json",
+                b"[\"not\", \"an object\"]",
+                "top level is not a JSON object",
+            ),
+            (
+                "oscar",
+                "opencode.json",
+                b"{ \"mcp\": { \"other\": } }",
+                "not valid JSONC",
+            ),
+            (
+                "oscar",
+                "opencode.json",
+                b"// only a comment\n",
+                "not valid JSONC",
+            ),
+            ("oscar", "opencode.json", b"\"text\"", "not a JSONC object"),
+            (
+                "toby",
+                ".toby/config.toml",
+                b"model = \n[mcp_servers.other]\ncommand = \"other-mcp\"\n",
+                "not valid TOML",
+            ),
+        ];
+        for (tool, rel, contents, reason) in cases {
+            let fixture = Sharing::new();
+            config_writer_tools(&fixture);
+            let path = fixture.path(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, contents).unwrap();
+            let before = snapshot_files(fixture.project.path());
+
+            let error = try_setup(&fixture, tool).unwrap_err().to_string();
+            assert!(error.contains(rel), "{rel}: {error}");
+            assert!(error.contains(reason), "{rel}: {error}");
+            assert!(
+                error.contains("Hot Sheet left the file unchanged"),
+                "{error}"
+            );
+            assert!(
+                error.contains(&format!("rerun `hotsheet-cli setup {tool}`")),
+                "{error}"
+            );
+            assert_eq!(snapshot_files(fixture.project.path()), before, "{rel}");
+            // The project-open refresh shares the writers and refuses the same way.
+            let refreshed = refresh_setup_in(
+                fixture.store.path(),
+                fixture.project.path(),
+                Some(&HashSet::from([tool.to_string()])),
+                &[fixture.plugins.path().to_path_buf()],
+            );
+            assert!(refreshed.unwrap_err().to_string().contains(rel));
+            assert_eq!(snapshot_files(fixture.project.path()), before, "{rel}");
+        }
+    }
+
+    /// HS2-RMQ5XX: valid configs keep the user's keys, missing ones are created, and a
+    /// repeated setup is byte-identical for every writer.
+    #[test]
+    fn hs2_rmq5xx_valid_configs_keep_user_keys_and_missing_ones_are_created() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        fixture.write(".ivy/hooks.json", "{\n  \"theme\": \"dark\"\n}\n");
+        fixture.setup("ivy");
+        fixture.setup("oscar");
+        fixture.setup("toby");
+        let hooks: serde_json::Value =
+            serde_json::from_str(&fixture.read(".ivy/hooks.json").unwrap()).unwrap();
+        assert_eq!(hooks["theme"], "dark");
+        assert!(hooks["hooks"]["PermissionRequest"].is_array());
+        let created = [".ivy/mcp.json", "opencode.json", ".toby/config.toml"]
+            .map(|rel| fixture.read(rel).expect(rel));
+        let before = snapshot_files(fixture.project.path());
+        for tool in ["ivy", "oscar", "toby"] {
+            fixture.setup(tool);
+        }
+        assert_eq!(snapshot_files(fixture.project.path()), before);
+        assert!(created[1].contains("https://opencode.ai/config.json"));
+    }
+
+    /// HS2-RMQ5XX: OpenCode accepts JSONC, so its config is merged in place: the user's
+    /// comments and keys survive, a stale Hot Sheet entry is replaced, and repeated setup,
+    /// refresh, and disabling the tool leave the file byte-identical.
+    #[test]
+    fn hs2_rmq5xx_opencode_jsonc_is_merged_in_place_preserving_comments() {
+        let fixture = Sharing::new();
+        config_writer_tools(&fixture);
+        let user = "// Project OpenCode config\n{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  /* keep this model */\n  \"model\": \"synthetic/model-a\",\n  \"mcp\": {\n    \"other\": { \"type\": \"local\", \"command\": [\"other-mcp\"] }, // theirs\n  },\n}\n";
+        fixture.write("opencode.json", user);
+        fixture.setup("oscar");
+        let first = fixture.read("opencode.json").unwrap();
+        for comment in [
+            "// Project OpenCode config",
+            "/* keep this model */",
+            "// theirs",
+        ] {
+            assert!(first.contains(comment), "{first}");
+        }
+        assert!(
+            first.starts_with(&user[..user.find("  },").unwrap()]),
+            "{first}"
+        );
+        let parsed = crate::jsonc::parse(&first).unwrap();
+        assert_eq!(parsed["model"], "synthetic/model-a");
+        assert_eq!(parsed["mcp"]["other"]["command"][0], "other-mcp");
+        assert_eq!(parsed["mcp"]["hotsheet"]["type"], "local");
+        assert_eq!(
+            parsed["mcp"]["hotsheet"]["environment"]["HOTSHEET_ACTOR_ROLE"],
+            "ai"
+        );
+        let entry = parsed["mcp"]["hotsheet"].clone();
+
+        fixture.setup("oscar");
+        assert_eq!(fixture.read("opencode.json").unwrap(), first);
+        fixture.refresh(&["oscar"]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), first);
+
+        // A stale Hot Sheet entry is replaced in place, keeping its trailing comment.
+        let stale = "{\n  // shared\n  \"mcp\": {\n    \"hotsheet\": { \"type\": \"local\", \"command\": [\"stale-mcp\"] }, // ours\n  },\n}\n";
+        fixture.write("opencode.json", stale);
+        fixture.setup("oscar");
+        let refreshed = fixture.read("opencode.json").unwrap();
+        assert!(refreshed.contains("// shared") && refreshed.contains("// ours"));
+        assert!(!refreshed.contains("stale-mcp"));
+        let replaced = &crate::jsonc::parse(&refreshed).unwrap()["mcp"]["hotsheet"];
+        assert_eq!(replaced["type"], entry["type"]);
+        assert_eq!(replaced["environment"], entry["environment"]);
+        assert_eq!(replaced["command"][0], entry["command"][0]);
+
+        // Disabling the tool never rewrites a JSONC config it cannot edit losslessly.
+        fixture.write("opencode.json", &first);
+        fixture.refresh(&[]);
+        assert_eq!(fixture.read("opencode.json").unwrap(), first);
     }
 
     #[test]

@@ -4074,6 +4074,57 @@ fn setup_reports_changed_codex_hooks_for_review_and_omits_noop_notices() {
     );
 }
 
+/// HS2-RMQ5XX: headless setup merges into a commented `opencode.json` without losing the
+/// user's comments or keys, a second run is byte-identical, and an unparsable config is
+/// refused by name and left untouched.
+#[test]
+fn hs2_rmq5xx_headless_setup_keeps_jsonc_opencode_config_and_refuses_broken_ones() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let setup = || {
+        let mut cmd = hs(&store);
+        cmd.env("HOTSHEET_HOME", &home)
+            .args(["setup", "opencode", "--project"])
+            .arg(&project);
+        cmd
+    };
+    let config = project.join("opencode.json");
+    std::fs::write(
+        &config,
+        "{\n  // synthetic user config\n  \"model\": \"synthetic/model-b\", // keep\n}\n",
+    )
+    .unwrap();
+    setup().assert().success();
+    let first = std::fs::read_to_string(&config).unwrap();
+    assert!(first.contains("// synthetic user config") && first.contains("// keep"));
+    assert!(first.contains("\"model\": \"synthetic/model-b\""));
+    assert!(first.contains("\"hotsheet\""));
+    setup().assert().success();
+    assert_eq!(std::fs::read_to_string(&config).unwrap(), first);
+
+    let broken = "{ \"model\": \"synthetic/model-b\" \"mcp\": {} }\n";
+    std::fs::write(&config, broken).unwrap();
+    let output = setup().assert().failure().get_output().stderr.clone();
+    let stderr = String::from_utf8_lossy(&output);
+    assert!(stderr.contains("opencode.json"), "{stderr}");
+    assert!(
+        stderr.contains("Hot Sheet left the file unchanged"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("hotsheet-cli setup opencode"), "{stderr}");
+    assert_eq!(std::fs::read_to_string(&config).unwrap(), broken);
+}
+
 #[test]
 fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let root = tempfile::tempdir().unwrap();
