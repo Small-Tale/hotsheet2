@@ -809,19 +809,11 @@ test('HS2-65AD6J HS2-91AF8K role sessions that never take up their role leave th
         actor: person,
       });
     };
-    // The main checkout is clean, as in a project whose set-up for its AI tool and whose policy are committed: an
-    // integrator answers for uncommitted changes there even before it takes up its role, so it could not be wound down
-    // (HS2-KH41E3). The policy's change to automatic placement below is kept out of git's view for that reason.
-    await policy(false);
-    const env = withoutGitRepositoryEnv(server.env);
-    const git = (...args: string[]) => execute('git', args, { cwd: server.root, env });
-    await execute(server.cli, ['-C', server.store, 'setup', SYNTHETIC_TOOL, '--project', server.root], {
-      cwd: server.root,
-      env,
-    });
-    await git('add', '-A');
-    await git('commit', '-q', '-m', 'Set up the synthetic agent and its orchestration policy');
-    await git('update-index', '--assume-unchanged', '.hotsheet2/orchestration-policy.json');
+    // HS2-KH41E3: the main checkout keeps uncommitted changes throughout (the policy file a person changes, the AI
+    // tool's setup files a launch writes). An integrator that never took up its role owns no work there, so it is
+    // still wound down and replaced.
+    const git = (...args: string[]) =>
+      execute('git', args, { cwd: server.root, env: withoutGitRepositoryEnv(server.env) });
     type Decision = {
       kind: string;
       outcome?: string;
@@ -871,6 +863,7 @@ test('HS2-65AD6J HS2-91AF8K role sessions that never take up their role leave th
       )
       .toEqual({ reported: ['dispatcher_unavailable', 'integrator_unavailable'], running: 0 });
     await policy(false);
+    expect((await git('status', '--porcelain')).stdout, 'the main checkout has uncommitted changes').not.toBe('');
     // Three sessions of each role, each stopped by a wind-down because its role prompt failed; the last had used up
     // its replacements.
     const sessions = await roleSessions();

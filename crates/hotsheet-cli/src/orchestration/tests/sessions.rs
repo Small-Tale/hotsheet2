@@ -3052,8 +3052,9 @@ fn hs2_pfhrs9_a_start_for_an_account_carries_it_to_the_host() {
 
 /// HS2-TRP2MJ: each hosted session's `uncommitted_changes` counts only the worktrees it
 /// owns: a worker the ones its unfinished assignments name (or, recorded before the
-/// field, the one inferred from its branch), an integrator the main checkout, a
-/// dispatcher nothing. Real git worktrees; synthetic content.
+/// field, the one inferred from its branch), an integrator the main checkout once the
+/// pool names it in its role (HS2-KH41E3), a dispatcher nothing. Real git worktrees;
+/// synthetic content.
 #[test]
 fn hs2_trp2mj_each_session_is_held_only_by_its_own_worktrees() {
     use SafePointBlocker as B;
@@ -3107,9 +3108,15 @@ fn hs2_trp2mj_each_session_is_held_only_by_its_own_worktrees() {
         "other-work",
         tree_b.to_str().unwrap(),
     ]);
+    let worker_i = worker_of(&integrator);
+    // HS2-KH41E3: whether the pool names the integrator in its role.
+    let named = std::cell::Cell::new(false);
     // A's assignment predates the field (inferred from its branch); B's names its tree.
     let write_pool = |slug_a: &str, tree_of_a: Option<&Path>| {
         f.pool(|state| {
+            if named.get() {
+                state.integrator = Some(live_session(&worker_i, i64::MAX));
+            }
             let mut first = assignment(&worker_a, crate::coordination::Phase::Accepted);
             first.slug = slug_a.into();
             first.worktree = tree_of_a.map(|path| path.display().to_string());
@@ -3138,8 +3145,13 @@ fn hs2_trp2mj_each_session_is_held_only_by_its_own_worktrees() {
     // B is busy in its own tree: only B is held, not A, the integrator or the dispatcher.
     std::fs::write(tree_b.join("draft.txt"), "synthetic").unwrap();
     assert_eq!(points(&mut tx), [false, true, false, false]);
-    // A person edits the main checkout: only the integrator sees it.
+    // A person edits the main checkout. HS2-KH41E3: the integrator has not joined (the
+    // pool does not name it), so it owns no work there and nobody new is held.
     std::fs::write(Path::new(&f.m.target.root).join("person.txt"), "synthetic").unwrap();
+    assert_eq!(points(&mut tx), [false, true, false, false]);
+    // The pool names it as the integrator: only the integrator sees the edit.
+    named.set(true);
+    write_pool("TGT-1", None);
     assert_eq!(points(&mut tx), [false, true, true, false]);
     // A's untracked file in the tree its branch names: the fallback holds A.
     std::fs::write(tree_a.join("new.txt"), "synthetic").unwrap();
@@ -3157,6 +3169,72 @@ fn hs2_trp2mj_each_session_is_held_only_by_its_own_worktrees() {
     std::fs::remove_file(tree_b.join("draft.txt")).unwrap();
     std::fs::remove_file(Path::new(&f.m.target.root).join("person.txt")).unwrap();
     assert_eq!(points(&mut tx), [false, false, false, false]);
+}
+
+/// HS2-KH41E3: an integrator the pool never named reaches its safe point while the main
+/// checkout has uncommitted changes, so it can be wound down; one the pool names is
+/// held by them until they are committed. Joining, leaving and joining again are each
+/// read afresh. Real git checkout; synthetic content.
+#[test]
+fn hs2_kh41e3_only_a_joined_integrator_is_held_by_the_main_checkout() {
+    use SafePointBlocker as B;
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1], &mut tx);
+    f.git(&["init", "-q"]);
+    f.git(&[
+        "-c",
+        "user.name=Synthetic",
+        "-c",
+        "user.email=synthetic@example.test",
+        "commit",
+        "--allow-empty",
+        "-q",
+        "-m",
+        "Synthetic base",
+    ]);
+    let integrator = f
+        .start("op-i", 1, "codex", json!({"role": "integrator"}), &mut tx)
+        .unwrap();
+    let sid = integrator.session.session_id.clone();
+    let worker_i = integrator.session.hosted.clone().unwrap().worker_id;
+    let main = Path::new(&f.m.target.root).to_owned();
+    // A person's edit and an untracked setup file in the main checkout, no pool yet.
+    std::fs::write(main.join("person.txt"), "synthetic").unwrap();
+    assert_eq!(f.safe_point(&sid, &mut tx), []);
+    // A pool that names someone else as the integrator: still not this session's work.
+    f.pool(|state| state.integrator = Some(live_session("someone", i64::MAX)));
+    assert_eq!(f.safe_point(&sid, &mut tx), []);
+    // It joins: the main checkout's changes are its work, so it is not at a safe point.
+    f.pool(|state| state.integrator = Some(live_session(&worker_i, i64::MAX)));
+    assert_eq!(f.safe_point(&sid, &mut tx), [B::UncommittedChanges]);
+    assert_eq!(f.safe_point(&sid, &mut tx), [B::UncommittedChanges]);
+    // A tracked file changed as well: still one dirty checkout, still held.
+    f.git(&["add", "person.txt"]);
+    assert_eq!(f.safe_point(&sid, &mut tx), [B::UncommittedChanges]);
+    // Committed: the joined integrator reaches its safe point.
+    f.git(&[
+        "-c",
+        "user.name=Synthetic",
+        "-c",
+        "user.email=synthetic@example.test",
+        "commit",
+        "-q",
+        "-m",
+        "Synthetic edit",
+    ]);
+    assert_eq!(f.safe_point(&sid, &mut tx), []);
+    // Dirty again while joined, then the pool drops it: no longer held.
+    std::fs::write(main.join("again.txt"), "synthetic").unwrap();
+    assert_eq!(f.safe_point(&sid, &mut tx), [B::UncommittedChanges]);
+    f.pool(|_| {});
+    assert_eq!(f.safe_point(&sid, &mut tx), []);
+    // Named once more: held again.
+    f.pool(|state| state.integrator = Some(live_session(&worker_i, i64::MAX)));
+    assert_eq!(f.safe_point(&sid, &mut tx), [B::UncommittedChanges]);
 }
 
 /// HS2-CRBR8X: the hosting machine's journal of one checkout, as (event, outcome,

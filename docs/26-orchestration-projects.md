@@ -3270,7 +3270,7 @@ secret for permission routing, and `HOTSHEET_PROJECT` naming the checkout.
 Setup writes the instruction file and skills into the checkout as project files;
 the machine-local MCP and hook files are excluded from Git. The first setup in a
 checkout therefore leaves uncommitted files in the main checkout. They hold only an
-integrator there, never a worker (HS2-TRP2MJ). A terminal a person opens from the drawer in another checkout is still
+integrator the pool names in its role there, never a worker (HS2-TRP2MJ, HS2-KH41E3). A terminal a person opens from the drawer in another checkout is still
 set up against the serving store (HS2-MBDKWQ).
 
 **Label.** The host names the terminal tab `<orchestration project>: run <last eight
@@ -3423,7 +3423,9 @@ session owns, so one session's unfinished work no longer holds the others:
   worktree whose branch contains its slug (any case), or whose HEAD is its handoff
   commit. A worker never owns the main checkout unless an assignment names it, so a
   person's edits there and the tool setup files a launch writes there do not hold it.
-- An **integrator** owns the main checkout.
+- An **integrator** owns the main checkout once the pool names it in its role
+  (HS2-KH41E3). One whose role prompt failed or that never joined owns nothing, so a
+  person's edits there do not keep it from being wound down.
 - A **dispatcher** and a **planner** own nothing.
 
 Untracked files count inside an owned worktree. A worker whose pool cannot be read
@@ -6672,6 +6674,9 @@ its integrator when work waits to be integrated, without configuration.
   (`role_prompt_failed` or `never_joined`, detail `integrator`) and a new generation
   starts on a later pass. A role session the pool never named in its role answers for
   no pool assignment at its safe point, so it can be stopped while handoffs still wait.
+  It owns no work in the main checkout either: uncommitted changes there (a person's
+  edit, the AI tool's setup files, a changed policy file) count against an integrator
+  only once the pool names it (HS2-KH41E3).
   After `MAX_JOIN_REPLACEMENTS` (2) replacements failed in a row the last is wound
   down too, with detail `replacements_exhausted`, never kept in its slot, and the
   project reports `integrator_unavailable` (detail `replacements_exhausted`, with

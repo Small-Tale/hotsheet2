@@ -88,7 +88,9 @@ fn inferred(assignment: &Assignment, worktree: &Worktree) -> bool {
 }
 
 /// The worktrees whose uncommitted work is this session's. `assignments` is every
-/// assignment of the target's pool; only `worker`'s unfinished ones count.
+/// assignment of the target's pool; only `worker`'s unfinished ones count. An
+/// integrator's main checkout counts only once the pool names it (HS2-KH41E3), which
+/// the caller checks.
 pub(super) fn owned_worktrees<'a>(
     worktrees: &'a [Worktree],
     role: SessionRole,
