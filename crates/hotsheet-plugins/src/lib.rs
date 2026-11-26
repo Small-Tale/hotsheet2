@@ -1069,17 +1069,60 @@ fn embedded_setup_assets_match_the_source_plugin_tree() {
 /// dir. A first-party id wins a collision (a third party can't silently shadow it);
 /// an unreadable/malformed on-disk plugin is skipped, not fatal.
 pub fn all_plugins(search_dirs: &[PathBuf]) -> Vec<Plugin> {
+    discover(search_dirs).plugins
+}
+
+/// [`all_plugins`], also reporting every plugin directory under `search_dirs` that was
+/// left out: each load failure (HS2-YJCPD5) and each plugin whose id an earlier plugin
+/// already claimed (HS2-TVRJPB). The winner order is unchanged: built-ins first, then
+/// search dirs in order, then plugin directory path within one dir. Skipped entries are
+/// in search-dir order, sorted by path within each dir.
+pub fn discover(search_dirs: &[PathBuf]) -> PluginDiscovery {
     let mut plugins = builtin_plugins();
-    let mut seen: std::collections::HashSet<String> =
-        plugins.iter().map(|p| p.id().to_string()).collect();
+    let mut winners: std::collections::HashMap<String, String> = plugins
+        .iter()
+        .map(|p| (p.id().to_string(), "the built-in plugin".to_string()))
+        .collect();
+    let mut skipped = Vec::new();
+    let mut visited = std::collections::HashSet::new();
     for dir in search_dirs {
-        for p in load_dir(dir) {
-            if seen.insert(p.id().to_string()) {
-                plugins.push(p);
+        // A repeated search dir holds the same plugins, not duplicates of them.
+        if !visited.insert(dir) {
+            continue;
+        }
+        let found = load_dir_reporting(dir);
+        let mut dir_skipped = found.skipped;
+        for p in found.plugins {
+            let path = plugin_dir_path(&p);
+            match winners.entry(p.id().to_string()) {
+                std::collections::hash_map::Entry::Vacant(slot) => {
+                    slot.insert(format!("the plugin at {}", path.display()));
+                    plugins.push(p);
+                }
+                std::collections::hash_map::Entry::Occupied(winner) => {
+                    dir_skipped.push(SkippedPlugin {
+                        reason: format!(
+                            "duplicate plugin id \"{}\": {} wins",
+                            winner.key(),
+                            winner.get()
+                        ),
+                        path,
+                    });
+                }
             }
         }
+        dir_skipped.sort_by(|a, b| a.path.cmp(&b.path));
+        skipped.extend(dir_skipped);
     }
-    plugins
+    PluginDiscovery { plugins, skipped }
+}
+
+/// The directory a plugin was loaded from (empty for a built-in).
+fn plugin_dir_path(plugin: &Plugin) -> PathBuf {
+    match &plugin.source {
+        PluginSource::Disk(path) => path.clone(),
+        PluginSource::BuiltIn => PathBuf::new(),
+    }
 }
 
 /// A plugin directory that discovery skipped because it failed to load (HS2-YJCPD5):
@@ -1116,7 +1159,8 @@ pub fn load_dir(dir: &Path) -> Vec<Plugin> {
 }
 
 /// [`load_dir`], also reporting each plugin directory that failed to load (HS2-YJCPD5).
-/// Both lists are sorted (plugins by id, skipped entries by path) for stable output.
+/// Both lists are sorted (plugins by id then directory path, skipped entries by path) for
+/// stable output, so a same-id pair in one dir always resolves the same way (HS2-TVRJPB).
 pub fn load_dir_reporting(dir: &Path) -> PluginDiscovery {
     let Ok(entries) = fs::read_dir(dir) else {
         return PluginDiscovery::default();
@@ -1134,18 +1178,21 @@ pub fn load_dir_reporting(dir: &Path) -> PluginDiscovery {
             }
         }
     }
-    out.plugins.sort_by(|a, b| a.id().cmp(b.id()));
+    out.plugins.sort_by(|a, b| {
+        a.id()
+            .cmp(b.id())
+            .then_with(|| plugin_dir_path(a).cmp(&plugin_dir_path(b)))
+    });
     out.skipped.sort_by(|a, b| a.path.cmp(&b.path));
     out
 }
 
 /// Every plugin directory under `search_dirs` that discovery skipped, in search-dir
-/// order (HS2-YJCPD5). Built-ins never fail to load, so they never appear here.
+/// order: load failures (HS2-YJCPD5) and duplicate ids that lost to a built-in or an
+/// earlier plugin (HS2-TVRJPB). Built-ins never fail to load or lose, so they never
+/// appear here.
 pub fn skipped_plugins(search_dirs: &[PathBuf]) -> Vec<SkippedPlugin> {
-    search_dirs
-        .iter()
-        .flat_map(|dir| load_dir_reporting(dir).skipped)
-        .collect()
+    discover(search_dirs).skipped
 }
 
 /// Find a plugin by id across built-ins + the given search dirs.

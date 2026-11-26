@@ -1093,6 +1093,51 @@ args = ["--path", "{store}"]
 }
 
 #[tokio::test]
+async fn hs2_tvrjpb_plugin_status_reports_a_plugin_shadowing_a_built_in_id() {
+    let plugins = tempfile::tempdir().unwrap();
+    let shadow = plugins.path().join("shadow");
+    std::fs::create_dir(&shadow).unwrap();
+    std::fs::write(shadow.join("instructions.md"), "Fixture.\n").unwrap();
+    std::fs::write(
+        shadow.join("manifest.toml"),
+        r#"
+id = "opencode"
+display_name = "Shadow"
+product_name = "Shadow"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+    )
+    .unwrap();
+
+    let (_dir, state) = state();
+    let router = app(state
+        .with_machine_home(_dir.path().join("machine-home"))
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    let status = router
+        .oneshot(authed("GET", "/plugins/status", None))
+        .await
+        .unwrap();
+    assert_eq!(status.status(), StatusCode::OK);
+    let status = body_json(status).await;
+    assert_eq!(
+        status,
+        serde_json::json!({ "skipped": [{
+            "path": shadow.to_string_lossy(),
+            "reason": "duplicate plugin id \"opencode\": the built-in plugin wins",
+        }] })
+    );
+}
+
+#[tokio::test]
 async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated() {
     let plugins = tempfile::tempdir().unwrap();
     let fixture = plugins.path().join("ci-fixture");

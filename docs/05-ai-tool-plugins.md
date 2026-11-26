@@ -3840,6 +3840,13 @@ authenticated `GET /plugins/status` route returns `{ "skipped": [{ "path", "reas
 for the server's search path, read fresh on every request. The web client does not show
 this list yet (HS2-WGAAF0).
 
+**Duplicate ids are reported (HS2-TVRJPB).** Only one plugin loads per id. Built-ins
+(`claude`, `codex`, `antigravity`, `opencode`) win first, then search directories in
+order, then the plugin directory path within one directory. Every losing plugin
+directory is reported through the same skipped list, with the reason
+`duplicate plugin id "<id>": the built-in plugin wins` or
+`duplicate plugin id "<id>": the plugin at <winning dir> wins`.
+
 **Trust gate (mandatory, not optional).** A manifest is inert data, but what it
 _writes_ is a supply-chain surface: a plugin's instruction template steers an agent,
 and its launch command _executes_. So:

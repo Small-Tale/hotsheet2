@@ -1684,6 +1684,80 @@ fn hs2_yjcpd5_discovery_reports_each_skipped_plugin_with_its_reason() {
 }
 
 #[test]
+fn hs2_tvrjpb_discovery_reports_each_duplicate_id_and_its_winner() {
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    // A third party reusing a built-in id, a cross-dir duplicate, and a same-dir pair.
+    write_manifest_plugin(&first.path().join("fake-claude"), "claude", "AGENTS.md");
+    write_manifest_plugin(&first.path().join("acme"), "acme", "AGENTS.md");
+    write_manifest_plugin(&second.path().join("acme-again"), "acme", "AGENTS.md");
+    write_manifest_plugin(&second.path().join("twin-b"), "twin", "AGENTS.md");
+    write_manifest_plugin(&second.path().join("twin-a"), "twin", "AGENTS.md");
+    let dirs = vec![first.path().to_path_buf(), second.path().to_path_buf()];
+
+    let found = discover(&dirs);
+    // Winner semantics: built-in, then earlier search dir, then directory path.
+    let claude = found.plugins.iter().find(|p| p.id() == "claude").unwrap();
+    assert!(matches!(claude.source, PluginSource::BuiltIn));
+    let source_of = |id: &str| {
+        let matches: Vec<&Plugin> = found.plugins.iter().filter(|p| p.id() == id).collect();
+        assert_eq!(matches.len(), 1, "{id} must load exactly once");
+        plugin_dir_path(matches[0])
+    };
+    assert_eq!(source_of("acme"), first.path().join("acme"));
+    assert_eq!(source_of("twin"), second.path().join("twin-a"));
+    assert_eq!(found.plugins.len(), builtin_plugins().len() + 2);
+
+    let reported: Vec<(PathBuf, String)> = found
+        .skipped
+        .iter()
+        .map(|s| (s.path.clone(), s.reason.clone()))
+        .collect();
+    assert_eq!(
+        reported,
+        vec![
+            (
+                first.path().join("fake-claude"),
+                "duplicate plugin id \"claude\": the built-in plugin wins".to_string()
+            ),
+            (
+                second.path().join("acme-again"),
+                format!(
+                    "duplicate plugin id \"acme\": the plugin at {} wins",
+                    first.path().join("acme").display()
+                )
+            ),
+            (
+                second.path().join("twin-b"),
+                format!(
+                    "duplicate plugin id \"twin\": the plugin at {} wins",
+                    second.path().join("twin-a").display()
+                )
+            ),
+        ]
+    );
+    // Every consumer sees the same picture.
+    assert_eq!(skipped_plugins(&dirs), found.skipped);
+    assert_eq!(all_plugins(&dirs).len(), found.plugins.len());
+    assert_eq!(
+        find_in("claude", &dirs).unwrap().source,
+        PluginSource::BuiltIn
+    );
+    // A repeated search dir is the same plugins seen again, not duplicates of them.
+    let repeated = vec![first.path().to_path_buf(), first.path().to_path_buf()];
+    let again = discover(&repeated);
+    assert_eq!(
+        again.skipped.len(),
+        1,
+        "only fake-claude: {:?}",
+        again.skipped
+    );
+    assert_eq!(again.plugins.len(), builtin_plugins().len() + 1);
+    // Without the colliding dirs nothing is skipped.
+    assert!(skipped_plugins(&[]).is_empty());
+}
+
+#[test]
 fn hs2_80jhzd_a_plugin_with_an_unsafe_id_does_not_load() {
     let tmp = tempfile::tempdir().unwrap();
     for id in [

@@ -1,7 +1,7 @@
 //! HS2-80JHZD: `hotsheet-cli plugin remove <id>` validates the id before touching the
 //! filesystem, so a traversal argument fails loudly and deletes nothing outside the
 //! machine plugin root. HS2-YJCPD5: `plugin list` warns about a plugin dir discovery
-//! skipped.
+//! skipped. HS2-TVRJPB: that includes a plugin whose id a built-in already claims.
 
 #[path = "../../test-support/workspace_bin.rs"]
 mod workspace_bin;
@@ -109,5 +109,60 @@ args = ["--path", "{store}"]
     assert!(
         warning.contains("invalid plugin id \"Acme_Upper\""),
         "{warning}"
+    );
+}
+
+#[test]
+fn hs2_tvrjpb_plugin_list_warns_about_a_plugin_reusing_a_built_in_id() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let shadow = home.join("plugins").join("shadow-codex");
+    std::fs::create_dir_all(&shadow).unwrap();
+    std::fs::write(
+        shadow.join("manifest.toml"),
+        r#"id = "codex"
+display_name = "Shadow"
+product_name = "Shadow Agent"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+    )
+    .unwrap();
+    std::fs::write(shadow.join("instructions.md"), "## Hot Sheet\n").unwrap();
+
+    let out = Command::new(workspace_bin::path("hotsheet-cli"))
+        .env("HOTSHEET_HOME", &home)
+        .env("HOTSHEET_NATIVE_SECRETS", "deny")
+        .args(["plugin", "list"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{stderr}");
+    // The built-in keeps the id; the shadowing plugin is not listed.
+    let codex: Vec<&str> = stdout
+        .lines()
+        .filter(|line| line.starts_with("codex "))
+        .collect();
+    assert_eq!(codex.len(), 1, "{stdout}");
+    assert!(!stdout.contains("Shadow"), "{stdout}");
+    let warning = stderr
+        .lines()
+        .find(|line| line.starts_with("warning: skipped plugin "))
+        .unwrap_or_else(|| panic!("no skipped-plugin warning: {stderr}"));
+    assert_eq!(
+        warning,
+        format!(
+            "warning: skipped plugin {}: duplicate plugin id \"codex\": the built-in plugin wins",
+            shadow.display()
+        )
     );
 }
