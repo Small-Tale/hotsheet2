@@ -9,6 +9,10 @@
 //! changed level as a `readiness` event and arms the next deadline, if any. An attempt
 //! that finishes first makes the wake-up publish nothing. A timer lives as long as its
 //! process; after a restart the next evaluation of the plan arms it again.
+//!
+//! HS2-H1CSSN: the timer is a thread of the runtime's [`RuntimeTasks`] and waits on its
+//! stop token. A stopping owner wakes it at once; it then forgets its instant and
+//! evaluates nothing, so a closed server's home is not touched again.
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -17,7 +21,8 @@ use hotsheet_ticketing::orchestration::next_lapse_ms;
 
 use super::*;
 
-/// The instant each owner's timer waits for, per machine home.
+/// The instant each owner's timer waits for, per machine home. Global because runtimes
+/// are built per request and per command: one process arms one timer per owner.
 type Armed = BTreeMap<(PathBuf, String), u64>;
 static ARMED: OnceLock<Mutex<Armed>> = OnceLock::new();
 fn armed() -> std::sync::MutexGuard<'static, Armed> {
@@ -31,7 +36,7 @@ impl OrchestrationRuntime {
     /// Replace how a deadline timer waits for its instant (tests skip the wait).
     #[must_use]
     pub fn with_timer_sleep(mut self, sleep: Arc<dyn Fn(Duration) + Send + Sync>) -> Self {
-        self.timer_sleep = sleep;
+        self.timer_sleep = Some(sleep);
         self
     }
 
@@ -62,19 +67,28 @@ impl OrchestrationRuntime {
         }
         let runtime = self.clone();
         let owner = owner_id.to_owned();
-        let spawned = std::thread::Builder::new()
-            .name("orchestration-readiness-lapse".into())
-            .spawn(move || {
-                (runtime.timer_sleep)(Duration::from_millis(at.saturating_sub(now_ms)));
-                {
-                    let mut timers = armed();
-                    if timers.get(&key) == Some(&at) {
-                        timers.remove(&key);
-                    }
+        let tasks = self.tasks.clone();
+        let spawned = tasks.spawn("orchestration-readiness-lapse", move || {
+            let wait = Duration::from_millis(at.saturating_sub(now_ms));
+            let stopping = match &runtime.timer_sleep {
+                Some(sleep) => {
+                    sleep(wait);
+                    runtime.tasks.is_stopping()
                 }
-                // Evaluated at the instant the level changes; this also arms the next.
-                runtime.readiness_reevaluate(&owner, at);
-            });
+                None => runtime.tasks.wait_stop(wait),
+            };
+            {
+                let mut timers = armed();
+                if timers.get(&key) == Some(&at) {
+                    timers.remove(&key);
+                }
+            }
+            if stopping {
+                return;
+            }
+            // Evaluated at the instant the level changes; this also arms the next.
+            runtime.readiness_reevaluate(&owner, at);
+        });
         if spawned.is_err() {
             let mut timers = armed();
             if timers.get(&(self.home.clone(), owner_id.to_owned())) == Some(&at) {

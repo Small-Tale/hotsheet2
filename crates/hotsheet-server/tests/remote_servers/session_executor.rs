@@ -620,5 +620,37 @@ async fn hs2_km9ctg_a_stopped_server_places_nothing_and_its_successor_runs_the_l
         .collect();
     states.sort();
     assert_eq!(states, ["lost", "running"], "{sessions:#}");
-    second.begin_stopping();
+    // HS2-H1CSSN: every loop and thread a server starts is its own and ends with it,
+    // promptly: the successor's scheduling loop and target followers, and the followers
+    // a serving process starts at start-up.
+    second.spawn_hosted_session_follower();
+    second.spawn_target_line_push();
+    second.spawn_scheduler_wake_follower();
+    let tasks = second.orchestration_tasks().clone();
+    assert!(tasks.running_loops() > 0, "{tasks:?}");
+    assert!(tasks.threads().running() >= 3, "{tasks:?}");
+    let began = std::time::Instant::now();
+    let report = second
+        .shutdown_orchestration(std::time::Duration::from_secs(20))
+        .await;
+    assert!(report.is_complete(), "{report:?}");
+    assert!(
+        began.elapsed() < std::time::Duration::from_secs(5),
+        "{:?}",
+        began.elapsed()
+    );
+    assert_eq!((tasks.running_loops(), tasks.threads().running()), (0, 0));
+    // Nothing starts once it stopped: a request that would start a loop starts none.
+    second.spawn_scheduler_wake_follower();
+    assert_eq!(tasks.threads().running(), 0);
+    // The first server's loops ended when it stopped, without a shutdown call.
+    let first_tasks = first.orchestration_tasks().clone();
+    assert_eq!(first_tasks.running_loops(), 0, "{first_tasks:?}");
+    assert!(
+        first
+            .shutdown_orchestration(std::time::Duration::from_secs(20))
+            .await
+            .is_complete()
+    );
+    assert_eq!(first_tasks.threads().running(), 0);
 }

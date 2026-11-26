@@ -3238,7 +3238,11 @@ time, never an interval, and an earlier deadline replaces a later armed one. Whe
 fires the plan is evaluated at that instant, which publishes the changed level as a
 `readiness` event (with that instant as its time) and arms the next deadline, if any. An
 attempt that finishes first makes the wake-up publish nothing. A timer lives as long as
-its process; after a restart the next evaluation of the plan arms it again.
+its process; after a restart the next evaluation of the plan arms it again. The timer
+waits on its owner's stop signal rather than sleeping (HS2-H1CSSN). A stopping server
+wakes it at once. It then forgets its instant, evaluates nothing against the closing
+home, and is joined at shutdown, so a server started later over the same home arms it
+again.
 
 ### Reads for the scheduler
 
@@ -4126,7 +4130,14 @@ on a running server just as Start Orchestration does. The loop is ended when the
 policy no longer enables it or the server begins stopping. A stopping server's
 followers end the same way, it launches no session (the start stays requested), and
 it reports nothing about its terminals as they go down, so a server started after it
-over the same home runs its own loop and followers at once (HS2-KM9CTG). A loop step that
+over the same home runs its own loop and followers at once (HS2-KM9CTG). The server owns
+every orchestration loop and thread it starts (HS2-H1CSSN). This covers its target, gate
+and scheduler loops, its start-up followers, settings watches, and the timers, capacity
+and claim follows that each runtime it builds starts. At shutdown it stops them and
+joins them within `ORCHESTRATION_SHUTDOWN_GRACE` (2 s). A request already in flight
+ends within its own bounded wait and does nothing more. Every loop uses one backoff
+(`Backoff`: 1 s doubling to 60 s, reset by progress). A step that returns in under
+250 ms without learning anything counts as idle and backs off. A loop step that
 was already waiting when its server began stopping runs no pass either (HS2-VRC0CQ): the
 session host reports `stopping`, and the step ends before its pass. Woken by the
 successor's writes to the same home, it once placed a start that its own stopping host

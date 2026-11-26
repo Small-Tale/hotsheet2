@@ -33,6 +33,11 @@ use serde::{Deserialize, Serialize};
 use super::step_process::process_started;
 use super::*;
 
+/// HS2-H1CSSN: how often a runner whose platform file watcher could not start looks
+/// for its cancel marker (a local file check, never a request). The runner is its own
+/// process, so it has no runtime to stop it; the step's end does.
+const CANCEL_RECHECK: Duration = Duration::from_secs(1);
+
 /// The directory under a machine home that holds pending step launches.
 pub const VALIDATION_STEPS_DIRECTORY: &str = "orchestration-validation-steps";
 
@@ -358,6 +363,7 @@ pub(super) fn launch(home: &Path, spec: &StepSpec) -> std::io::Result<Launched> 
     let pid = child.id();
     let exited = Arc::new(AtomicBool::new(false));
     let reaped = exited.clone();
+    // HS2-H1CSSN: not a runtime task: it only reaps the runner, and ends with it.
     std::thread::spawn(move || {
         let _ = child.wait();
         reaped.store(true, Ordering::SeqCst);
@@ -460,8 +466,8 @@ fn run_claimed(home: &Path, registry: &HostedValidationRegistry, spec: &StepSpec
                     Some(waiter) => {
                         waiter.wait(Duration::from_secs(1));
                     }
-                    // A local file check each second; no request is made.
-                    None => std::thread::sleep(Duration::from_secs(1)),
+                    // A local file check each re-check; no request is made.
+                    None => std::thread::sleep(CANCEL_RECHECK),
                 }
             }
         })

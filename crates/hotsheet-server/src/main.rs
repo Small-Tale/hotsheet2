@@ -676,6 +676,17 @@ async fn main() -> Result<()> {
     let outcome = drain_on_shutdown(serve, &state, drain, force).await;
     // A probe started during the drain must not outlive the process either (HS2-BH3M53).
     hotsheet_aitools::probe::stop_probes();
+    // Orchestration loops, timers and followers end before the store is released
+    // (HS2-H1CSSN); a step still in flight after the grace does nothing more.
+    let orchestration = state
+        .shutdown_orchestration(hotsheet_server::orchestration_tasks::ORCHESTRATION_SHUTDOWN_GRACE)
+        .await;
+    if !orchestration.is_complete() {
+        shutdown_log(&format!(
+            "shutdown: orchestration work still running after the grace: {} loops, {} threads",
+            orchestration.loops_outstanding, orchestration.threads.outstanding
+        ));
+    }
     // Land every queued background autocommit before releasing the store (HS2-0DH8ZS).
     hotsheet_ticketing::flush_background_commits();
     // And every queued group registry commit (HS2-9EGWC4).

@@ -74,6 +74,7 @@ pub(super) fn record_step(
     execution_id: String,
     pid: u32,
 ) {
+    // HS2-H1CSSN: not a runtime task: bounded to ten seconds of local reads.
     std::thread::spawn(move || {
         let Some(started) = (0..1000).find_map(|_| {
             process_started(pid).or_else(|| {
@@ -134,7 +135,8 @@ pub(super) fn stop_orphan(process: &StepProcess) -> bool {
     }
 }
 
-/// Machine homes this process already reaped, so it happens once per home.
+/// Machine homes this process already reaped, so it happens once per home. Global
+/// because "once" is per process, across every runtime it builds (HS2-H1CSSN).
 static REAPED: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
 impl OrchestrationRuntime {

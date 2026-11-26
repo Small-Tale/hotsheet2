@@ -237,6 +237,7 @@ pub const FRESHEN_INTERVAL_MS: u64 = 2_000;
 fn freshen(root: &Path, now_ms: u64) -> bool {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
+    // Global because the bound is per store and process, whichever runtime pulls.
     static LAST: OnceLock<Mutex<HashMap<std::path::PathBuf, u64>>> = OnceLock::new();
     if !hotsheet_ticketing::sync::publishes_to_remote(root) {
         return false;

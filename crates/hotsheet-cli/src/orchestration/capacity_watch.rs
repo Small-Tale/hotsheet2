@@ -25,6 +25,8 @@ use super::*;
 pub const MAX_CAPACITY_WATCHES: usize = 16;
 /// A watch passes the gate again after this long.
 const REAUTHORIZE_MS: u64 = 10 * 60 * 1000;
+/// HS2-H1CSSN: why a follow ended when its owner stopped.
+pub const STOPPING: &str = "stopping";
 
 /// How a capacity follow ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +49,8 @@ struct Followed {
 }
 
 type Key = (PathBuf, String, String);
+/// Global because runtimes are built per request and per command: the follows one
+/// process holds, and its cap, span all of them (HS2-H1CSSN).
 static FOLLOWED: OnceLock<Mutex<BTreeMap<Key, Followed>>> = OnceLock::new();
 fn followed() -> std::sync::MutexGuard<'static, BTreeMap<Key, Followed>> {
     FOLLOWED
@@ -141,23 +145,22 @@ impl OrchestrationRuntime {
             let owner = owner_id.to_owned();
             let actor = actor.clone();
             let thread_key = key.clone();
-            let spawned = std::thread::Builder::new()
-                .name("orchestration-capacity-wait".into())
-                .spawn(move || {
-                    let mut rng = super::request::Rng;
-                    let outcome = runtime.follow_capacity_change(
-                        &target,
-                        &actor,
-                        &namespaces,
-                        &after,
-                        Instant::now() + MAX_WAIT,
-                        &mut Transaction {
-                            clock: &super::request::Clock,
-                            rng: &mut rng,
-                        },
-                    );
-                    runtime.capacity_followed(&owner, &target.target_id, &thread_key, &outcome);
-                });
+            // HS2-H1CSSN: owned by the runtime's tasks, and ended by its stop token.
+            let spawned = self.tasks.spawn("orchestration-capacity-wait", move || {
+                let mut rng = super::request::Rng;
+                let outcome = runtime.follow_capacity_change(
+                    &target,
+                    &actor,
+                    &namespaces,
+                    &after,
+                    Instant::now() + MAX_WAIT,
+                    &mut Transaction {
+                        clock: &super::request::Clock,
+                        rng: &mut rng,
+                    },
+                );
+                runtime.capacity_followed(&owner, &target.target_id, &thread_key, &outcome);
+            });
             if spawned.is_err()
                 && let Some(entry) = followed().get_mut(&key)
             {
@@ -179,8 +182,14 @@ impl OrchestrationRuntime {
             entry.watching = false;
             match outcome {
                 CapacityFollow::Changed(version) => entry.version = Some(version.clone()),
+                // A stop says nothing about the host's stream.
+                CapacityFollow::Ended(code) if code == STOPPING => {}
                 CapacityFollow::Ended(_) => entry.failed = true,
             }
+        }
+        // HS2-H1CSSN: a stopping owner wakes nothing more.
+        if self.tasks.is_stopping() {
+            return;
         }
         if matches!(outcome, CapacityFollow::Changed(_)) {
             let _ = SchedulerStore::new(&self.home).lift_capacity_refusal(owner_id, target_id);
@@ -205,6 +214,10 @@ impl OrchestrationRuntime {
         loop {
             if Instant::now() >= deadline {
                 return CapacityFollow::Ended("deadline".into());
+            }
+            // HS2-H1CSSN: checked between requests; one in flight ends within its wait.
+            if self.tasks.is_stopping() {
+                return CapacityFollow::Ended(STOPPING.into());
             }
             let now_ms = tx.clock.now_ms();
             if authorized

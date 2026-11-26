@@ -6,9 +6,9 @@ use axum::{
     http::{Method, StatusCode},
 };
 use hotsheet_cli::orchestration::{
-    GateFollowState, MAX_SCHEDULER_WAIT_MS, MAX_TARGET_EVENT_WAIT_MS, OrchestrationRuntime,
-    SchedulerFollowState, TargetEventPage, TargetEvents, TargetSessionEvent, TargetTicketEvent,
-    WatchState, error_status, request_cleanup_now,
+    Backoff, GateFollowState, MAX_SCHEDULER_WAIT_MS, MAX_TARGET_EVENT_WAIT_MS,
+    OrchestrationRuntime, SchedulerFollowState, TargetEventPage, TargetEvents, TargetSessionEvent,
+    TargetTicketEvent, WatchState, error_status, is_fast_step, request_cleanup_now,
 };
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::orchestration::OrchestrationError;
@@ -52,6 +52,7 @@ pub(super) fn runtime(
         // HS2-95SWQ4: an injected runtime keeps the executor it was given.
         return Ok(Arc::new(
             OrchestrationRuntime::clone(runtime)
+                .with_tasks(state.orchestration_tasks().threads().clone())
                 .with_capacity_probe(probe)
                 .with_session_host(sessions)
                 .with_permission_prompt(prompt)
@@ -65,6 +66,8 @@ pub(super) fn runtime(
     )
     .map(|runtime| {
         let runtime = runtime
+            // HS2-H1CSSN: its threads are this server's, stopped when it stops.
+            .with_tasks(state.orchestration_tasks().threads().clone())
             .with_target_events(target_events(state))
             .with_capacity_probe(probe)
             .with_session_host(sessions)
@@ -315,11 +318,6 @@ impl TargetEvents for ServerEvents {
     }
 }
 
-/// Followers of targets with unfinished runs, one per `(server, machine home, owner,
-/// target)` (HS2-KM9CTG).
-static WATCHERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
-    std::sync::OnceLock::new();
-
 /// Start a follower for every target of this owner that has an unfinished run, or an
 /// unfinished session (HS2-257Q2Z), a planned ticket (HS2-TMA4YA), or, while the
 /// default goal is re-planned automatically, every project target (HS2-BQN0M5), and
@@ -353,15 +351,17 @@ fn ensure_watchers(state: &AppState, owner: &str) {
     // goal automatically.
     targets.extend(shared.replan_targets(owner));
     for target in targets {
-        let key = format!("{}|{target}", loop_key(state, owner));
-        let registry = WATCHERS.get_or_init(Default::default);
-        if !registry.lock_or_recover().insert(key.clone()) {
+        // Followers of targets, one per `(machine home, owner, target)` of this server
+        // (HS2-KM9CTG), kept by its orchestration tasks (HS2-H1CSSN).
+        let key = format!("{}|{target}|watch", loop_key(state, owner));
+        if !state.orchestration_tasks().begin_loop(&key) {
             continue;
         }
-        let (state, owner) = (state.clone(), owner.to_owned());
-        tokio::spawn(async move {
+        let (task_key, state, owner) = (key.clone(), state.clone(), owner.to_owned());
+        let tasks = state.orchestration_tasks().clone();
+        tasks.spawn_keyed_loop(&key, async move {
             let mut watch = WatchState::default();
-            let mut backoff = std::time::Duration::from_secs(1);
+            let mut backoff = Backoff::default();
             // HS2-KM9CTG: a stopping server follows nothing more.
             while !state.is_stopping() {
                 let (task_state, task_owner, task_target) =
@@ -377,29 +377,44 @@ fn ensure_watchers(state: &AppState, owner: &str) {
                             )
                         });
                     (step, watch)
-                })
-                .await;
-                let Ok((Ok(step), returned)) = step else {
+                });
+                // HS2-H1CSSN: a stop ends the loop now; the step in flight ends within
+                // its bounded wait and its result is dropped.
+                let Some(Ok((Ok(step), returned))) = until_stopping(&state, step).await else {
                     break;
                 };
                 watch = returned;
                 if !step.active {
                     break;
                 }
-                if step.failed {
-                    // Bounded backoff; the watch keeps its cursor, so nothing is missed.
-                    tokio::time::sleep(backoff).await;
-                    backoff = (backoff * 2).min(std::time::Duration::from_secs(60));
-                } else {
-                    backoff = std::time::Duration::from_secs(1);
+                // Bounded backoff; the watch keeps its cursor, so nothing is missed.
+                if let Some(delay) = backoff.after_step(step.failed)
+                    && !pause(&state, delay).await
+                {
+                    break;
                 }
             }
-            WATCHERS
-                .get_or_init(Default::default)
-                .lock_or_recover()
-                .remove(&key);
+            state.orchestration_tasks().end_loop(&task_key);
         });
     }
+}
+
+/// HS2-H1CSSN: `work`, unless the server starts stopping first.
+async fn until_stopping<T>(
+    state: &AppState,
+    work: impl std::future::Future<Output = T>,
+) -> Option<T> {
+    tokio::select! {
+        done = work => Some(done),
+        () = state.stopping() => None,
+    }
+}
+
+/// HS2-H1CSSN: a follower's backoff delay, cut short by a stop. Whether it may go on.
+async fn pause(state: &AppState, delay: std::time::Duration) -> bool {
+    until_stopping(state, tokio::time::sleep(delay))
+        .await
+        .is_some()
 }
 
 /// HS2-KM9CTG: the registry key of one server's background task for an owner. It
@@ -414,27 +429,22 @@ pub(super) fn loop_key(state: &AppState, owner: &str) -> String {
     )
 }
 
-/// Gate followers, one per `(server, machine home, owner)` (HS2-KM9CTG).
-static GATE_FOLLOWERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
-    std::sync::OnceLock::new();
-
 /// HS2-5JBYPV: follow the owner's gates that still wait on a provider. The follower
 /// holds one bounded wait open on the provider adapter's own records (for GitHub
 /// Actions, the watch Job store), records each change as a run event, and ends when no
 /// gate waits any more. With no such gate nothing is started.
 fn ensure_gate_follower(state: &AppState, owner: &str) {
-    let key = loop_key(state, owner);
-    if !GATE_FOLLOWERS
-        .get_or_init(Default::default)
-        .lock_or_recover()
-        .insert(key.clone())
-    {
+    // Gate followers, one per `(machine home, owner)` of this server (HS2-KM9CTG).
+    let key = format!("{}|gates", loop_key(state, owner));
+    if !state.orchestration_tasks().begin_loop(&key) {
         return;
     }
-    let (state, owner) = (state.clone(), owner.to_owned());
-    tokio::spawn(async move {
+    let (task_key, state, owner) = (key.clone(), state.clone(), owner.to_owned());
+    let tasks = state.orchestration_tasks().clone();
+    tasks.spawn_keyed_loop(&key, async move {
+        let key = task_key;
         let mut follow = GateFollowState::default();
-        let mut backoff = std::time::Duration::from_secs(1);
+        let mut backoff = Backoff::default();
         // HS2-KM9CTG: a stopping server follows nothing more.
         while !state.is_stopping() {
             let (task_state, task_owner) = (state.clone(), owner.clone());
@@ -444,9 +454,8 @@ fn ensure_gate_follower(state: &AppState, owner: &str) {
                     runtime.gate_follow_step_now(&task_owner, &mut follow, MAX_TARGET_EVENT_WAIT_MS)
                 });
                 (step, follow)
-            })
-            .await;
-            let Ok((Ok(step), returned)) = step else {
+            });
+            let Some(Ok((Ok(step), returned))) = until_stopping(&state, step).await else {
                 break;
             };
             follow = returned;
@@ -455,24 +464,16 @@ fn ensure_gate_follower(state: &AppState, owner: &str) {
             }
             // A step that neither waited nor learned anything (a denied gate, an
             // adapter that cannot wait) backs off instead of spinning.
-            if step.changed.is_empty() && started.elapsed() < std::time::Duration::from_millis(250)
+            let idle = step.changed.is_empty() && is_fast_step(started.elapsed());
+            if let Some(delay) = backoff.after_step(idle)
+                && !pause(&state, delay).await
             {
-                tokio::time::sleep(backoff).await;
-                backoff = (backoff * 2).min(std::time::Duration::from_secs(60));
-            } else {
-                backoff = std::time::Duration::from_secs(1);
+                break;
             }
         }
-        GATE_FOLLOWERS
-            .get_or_init(Default::default)
-            .lock_or_recover()
-            .remove(&key);
+        state.orchestration_tasks().end_loop(&key);
     });
 }
-
-/// Scheduling loops, one per `(server, machine home, owner)` (HS2-KM9CTG).
-static SCHEDULERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
-    std::sync::OnceLock::new();
 
 /// HS2-ECWG50: run the owner's scheduling loop while its policy enables automatic
 /// placement. Each step waits on the owner's run event stream and the scheduler's
@@ -480,18 +481,17 @@ static SCHEDULERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSe
 /// longer enables it. A policy without automatic placement ends the task at its first
 /// step, having started nothing and contacted no target. Call inside the runtime.
 fn ensure_scheduler(state: &AppState, owner: &str) {
-    let key = loop_key(state, owner);
-    if !SCHEDULERS
-        .get_or_init(Default::default)
-        .lock_or_recover()
-        .insert(key.clone())
-    {
+    // Scheduling loops, one per `(machine home, owner)` of this server (HS2-KM9CTG).
+    let key = format!("{}|scheduler", loop_key(state, owner));
+    if !state.orchestration_tasks().begin_loop(&key) {
         return;
     }
-    let (state, owner) = (state.clone(), owner.to_owned());
-    tokio::spawn(async move {
+    let (task_key, state, owner) = (key.clone(), state.clone(), owner.to_owned());
+    let tasks = state.orchestration_tasks().clone();
+    tasks.spawn_keyed_loop(&key, async move {
+        let key = task_key;
         let mut follow = SchedulerFollowState::default();
-        let mut backoff = std::time::Duration::from_secs(1);
+        let mut backoff = Backoff::default();
         // HS2-KM9CTG: a stopping server places nothing more.
         while !state.is_stopping() {
             let (task_state, task_owner) = (state.clone(), owner.clone());
@@ -505,9 +505,8 @@ fn ensure_scheduler(state: &AppState, owner: &str) {
                     )
                 });
                 (step, follow)
-            })
-            .await;
-            let Ok((Ok(step), returned)) = step else {
+            });
+            let Some(Ok((Ok(step), returned))) = until_stopping(&state, step).await else {
                 break;
             };
             follow = returned;
@@ -530,19 +529,14 @@ fn ensure_scheduler(state: &AppState, owner: &str) {
             }
             // A failed pass, or a step that neither waited nor planned, backs off
             // instead of spinning. The follower keeps its cursor, so nothing is missed.
-            let idle =
-                step.trigger.is_none() && started.elapsed() < std::time::Duration::from_millis(250);
-            if step.failed || idle {
-                tokio::time::sleep(backoff).await;
-                backoff = (backoff * 2).min(std::time::Duration::from_secs(60));
-            } else {
-                backoff = std::time::Duration::from_secs(1);
+            let idle = step.trigger.is_none() && is_fast_step(started.elapsed());
+            if let Some(delay) = backoff.after_step(step.failed || idle)
+                && !pause(&state, delay).await
+            {
+                break;
             }
         }
-        SCHEDULERS
-            .get_or_init(Default::default)
-            .lock_or_recover()
-            .remove(&key);
+        state.orchestration_tasks().end_loop(&key);
     });
 }
 
@@ -577,7 +571,7 @@ impl AppState {
     /// after the runtime is up and this process is the serving instance.
     pub fn spawn_run_recovery(&self) {
         let state = self.clone();
-        tokio::spawn(async move {
+        self.orchestration_tasks().spawn_loop(async move {
             let _ = tokio::task::spawn_blocking(move || {
                 let Ok(handle) = tokio::runtime::Handle::try_current() else {
                     return;
@@ -847,20 +841,22 @@ impl AppState {
             .machine_home()
             .join(hotsheet_cli::orchestration::HOSTED_SESSION_SIGNAL_DIRECTORY);
         let seen = hotsheet_cli::orchestration::signal_token(&directory);
-        let _ = std::thread::Builder::new()
-            .name("orchestration-hosted-session-signal".into())
-            .spawn(move || {
+        // HS2-H1CSSN: kept by this server's orchestration tasks and joined at shutdown.
+        let _ = self.orchestration_tasks().threads().spawn(
+            "orchestration-hosted-session-signal",
+            move || {
                 let Ok(mut waiter) =
                     hotsheet_cli::orchestration::SignalWaiter::since(&directory, seen)
                 else {
                     return;
                 };
                 while !watcher.is_stopping() {
-                    if waiter.wait(std::time::Duration::from_secs(1)) {
+                    if waiter.wait(FOLLOWER_RECHECK) {
                         announce_terminal_orchestrator(&watcher, "");
                     }
                 }
-            });
+            },
+        );
     }
 }
 
@@ -875,9 +871,12 @@ impl AppState {
             return;
         };
         let state = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("orchestration-line-push".into())
-            .spawn(move || {
+        let tasks = self.orchestration_tasks().threads().clone();
+        // HS2-H1CSSN: kept by this server's orchestration tasks and joined at shutdown.
+        let _ = self
+            .orchestration_tasks()
+            .threads()
+            .spawn("orchestration-line-push", move || {
                 let Ok(shared) = runtime(&state, handle) else {
                     return;
                 };
@@ -909,9 +908,11 @@ impl AppState {
                     }
                     match &waiter {
                         Some(waiter) => {
-                            let _ = waiter.wait(std::time::Duration::from_secs(1));
+                            let _ = waiter.wait(FOLLOWER_RECHECK);
                         }
-                        None => std::thread::sleep(std::time::Duration::from_secs(1)),
+                        None => {
+                            tasks.wait_stop(FOLLOWER_RECHECK);
+                        }
                     }
                 }
             });
@@ -939,33 +940,43 @@ impl AppState {
         let token = directory.join("token");
         // Read before the thread starts, so a change made meanwhile is not taken as seen.
         let mut seen = std::fs::read_to_string(&token).ok();
-        let _ = std::thread::Builder::new()
-            .name("orchestration-scheduler-wake".into())
-            .spawn(move || {
-                let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok();
-                while !state.is_stopping() {
-                    match &waiter {
-                        Some(waiter) => {
-                            let _ = waiter.wait(std::time::Duration::from_secs(1));
+        let tasks = self.orchestration_tasks().threads().clone();
+        // HS2-H1CSSN: kept by this server's orchestration tasks and joined at shutdown.
+        let _ =
+            self.orchestration_tasks()
+                .threads()
+                .spawn("orchestration-scheduler-wake", move || {
+                    let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok();
+                    while !state.is_stopping() {
+                        match &waiter {
+                            Some(waiter) => {
+                                let _ = waiter.wait(FOLLOWER_RECHECK);
+                            }
+                            None => {
+                                tasks.wait_stop(FOLLOWER_RECHECK);
+                            }
                         }
-                        None => std::thread::sleep(std::time::Duration::from_secs(1)),
+                        let current = std::fs::read_to_string(&token).ok();
+                        if current == seen {
+                            continue;
+                        }
+                        seen = current;
+                        let Ok(shared) = runtime(&state, handle.clone()) else {
+                            continue;
+                        };
+                        let _guard = handle.enter();
+                        for owner in shared.scheduler_owners() {
+                            ensure_scheduler(&state, &owner);
+                        }
                     }
-                    let current = std::fs::read_to_string(&token).ok();
-                    if current == seen {
-                        continue;
-                    }
-                    seen = current;
-                    let Ok(shared) = runtime(&state, handle.clone()) else {
-                        continue;
-                    };
-                    let _guard = handle.enter();
-                    for owner in shared.scheduler_owners() {
-                        ensure_scheduler(&state, &owner);
-                    }
-                }
-            });
+                });
     }
 }
+
+/// HS2-H1CSSN: the longest a follower thread waits for a file event before it reads its
+/// local records again (the change waiters' own safety re-check) and sees a stop. Where
+/// the platform watcher could not start it waits this long on the stop token instead.
+const FOLLOWER_RECHECK: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// HS2-6MNMVB: a person took over, paused or stopped an orchestrator session hosted
 /// here; every client refetches its terminals so the drawer shows the new owner.
