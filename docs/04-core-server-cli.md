@@ -1641,7 +1641,14 @@ keeps the reason: CLI `claim` and `renew` print `Blocked: <reason>.` with the `e
 --blocked-reason` and `--clear-blocked-reason` commands, MCP `hotsheet_claim` and
 `hotsheet_renew` results carry `blocked_notice`, and the HTTP claim returns the ticket with its
 `blocked_reason`. "Skipped by auto-selection" and "refused by claim" are different: a claim is
-refused only for a closed ticket or another worker's live lease.
+refused only for a closed ticket or another worker's live lease. Automatic selection also
+skips Backlog tickets: Backlog is parked work, not ready work, even with a legacy Up Next
+flag, and moving a ticket back to Not Started makes it selectable again (HS2-K6Q8TW).
+Orchestration project plans name their tickets explicitly and are not automatic queue
+selection. Every claim surface (CLI, MCP, HTTP) starts a Not Started or Backlog ticket in
+the claim's write, and a
+started-phase edit on a ticket that is not Started is refused rather than ignored
+([02](02-ticket-storage.md) "Started phases", HS2-K6KG1T).
 Create requests may also carry an initial `status` of `not_started`, `started`, or
 `backlog`; omitting it remains backward-compatible and defaults to `not_started`.
 Backlog creation clears `up_next`, and terminal/archive statuses must be reached through

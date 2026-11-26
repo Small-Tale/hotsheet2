@@ -129,6 +129,7 @@ impl From<StoreError> for ApiError {
         let status = match &e {
             StoreError::InvalidAnnotations(_)
             | StoreError::InvalidFeedbackResponse(_)
+            | StoreError::StartedPhaseRequiresStarted { .. }
             | StoreError::InvalidNoteKindEdit
             | StoreError::InvalidTicketPrefix(_)
             | StoreError::InvalidGroupName(_)

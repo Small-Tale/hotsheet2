@@ -571,6 +571,13 @@ pub fn is_open(t: &Ticket) -> bool {
     )
 }
 
+/// Whether automatic selection (claim-next, the cross-source queue, distributed claim-next,
+/// and dispatcher assignment) may pick this ticket: open and not parked in Backlog
+/// (HS2-K6Q8TW). An exact claim still takes and starts a Backlog ticket (HS2-K6KG1T).
+pub fn auto_selectable(t: &Ticket) -> bool {
+    is_open(t) && t.status != Status::Backlog
+}
+
 /// A ticket whose work is finished (a `blocked_by` dependency is satisfied by this).
 pub fn is_done(t: &Ticket) -> bool {
     matches!(t.status, Status::Completed | Status::Verified)
@@ -912,13 +919,23 @@ pub fn update_if<E: From<StoreError>>(
                 t.closed_at = None;
                 t.duplicate_of = None;
             }
-            if s.is_active() && !previous_status.is_active() {
+            // Reopening a closed ticket ends any stale claim. Backlog is still open work, so
+            // starting it keeps its holder's claim (HS2-K6KG1T).
+            if s.is_active() && !previous_status.is_active() && previous_status != Status::Backlog {
                 end_claim(&mut t, &now);
             }
         }
         if let Some(phase) = patch.started_phase {
             if t.status == Status::Started {
                 t.started_phase = phase;
+            } else if phase.is_some() {
+                // HS2-K6KG1T: a phase is progress within Started. Refuse it on any other
+                // status instead of dropping it while reporting success.
+                return Err(StoreError::StartedPhaseRequiresStarted {
+                    slug: t.slug.clone(),
+                    status: status_label(t.status),
+                }
+                .into());
             }
         }
         if t.status == Status::Started && t.started_phase != previous_phase {
@@ -1029,6 +1046,26 @@ fn has_substantive_change(before: &Ticket, after: &Ticket) -> bool {
     before.group.clone_from(&after.group);
     before.updated_at = after.updated_at.clone();
     before != after
+}
+
+/// HS2-K6KG1T: the notice an edit gives when it ended a claim, because the ticket left the
+/// active statuses. An edit never drops a claim without saying so. `None` when `before` held
+/// no claim or `after` still does.
+pub fn claim_released_by_edit_notice(before: &Ticket, after: &Ticket) -> Option<String> {
+    let worker = before.claimed_by.as_deref()?;
+    if after.claimed_by.is_some() {
+        return None;
+    }
+    Some(released_claim_notice(worker, &after.slug, after.status))
+}
+
+/// The words of [`claim_released_by_edit_notice`], for callers that only see the ticket
+/// after the edit and find the release in its claim history (HS2-0R7XCR).
+pub fn released_claim_notice(worker: &str, slug: &str, status: Status) -> String {
+    format!(
+        "Released {worker}'s claim on {slug}: its status is {}, which is not active. Claim it again to resume work.",
+        status_label(status)
+    )
 }
 
 fn clear_claim_fields(ticket: &mut Ticket) {
@@ -2852,7 +2889,7 @@ pub fn claim_eta_expired(t: &Ticket, now: &Timestamp) -> bool {
 /// lease, and not waiting on remote CI in `final_testing`. Only automatic selection skips
 /// a blocked ticket; an exact claim may still take it (HS2-BAK4BC).
 fn claim_next_eligible(t: &Ticket, done: &HashSet<Ulid>, now: &Timestamp) -> bool {
-    is_open(t)
+    auto_selectable(t)
         && !is_blocked(t, done)
         && claim_available(t, now)
         && t.started_phase != Some(StartedPhase::FinalTesting)
@@ -3134,8 +3171,8 @@ fn held_elsewhere(
     })
 }
 
-/// Claim one exact ticket and transition a Not Started ticket to Started in the
-/// same durable write. This prevents callers from exposing a live worker claim
+/// Claim one exact ticket and transition a Not Started or Backlog ticket to Started in
+/// the same durable write. This prevents callers from exposing a live worker claim
 /// while the workflow status still says that nobody has begun the work.
 pub fn claim_and_start(
     store: &FsStore,
@@ -3148,13 +3185,17 @@ pub fn claim_and_start(
     claim(store, id, now, lease_expires, worker, label)
 }
 
+/// A claim starts the work it leases: a Not Started or Backlog ticket moves to Started at
+/// `analyzing` in the claim's own write (HS2-K6KG1T). Backlog was once left as it was,
+/// which exposed a live claim on an inactive ticket that the next edit silently released.
 pub(crate) fn start_claimed_ticket(ticket: &mut Ticket, now: &Timestamp) {
-    if ticket.status != Status::NotStarted {
+    let previous = ticket.status;
+    if !matches!(previous, Status::NotStarted | Status::Backlog) {
         return;
     }
     ticket.status = Status::Started;
     ticket.started_phase = Some(StartedPhase::Analyzing);
-    append_status_transition(ticket, Status::NotStarted, Status::Started, now);
+    append_status_transition(ticket, previous, Status::Started, now);
     append_started_phase_transition(ticket, None, now);
 }
 
@@ -5302,12 +5343,20 @@ mod tests {
             )
             .unwrap()
         };
-        // A phase patch outside Started has no effect.
-        assert!(
-            update_phase("2026-08-19T00:01:00Z", Some(StartedPhase::Planning))
-                .notes
-                .is_empty()
-        );
+        // HS2-K6KG1T: a phase patch outside Started is refused and writes nothing.
+        assert!(matches!(
+            update(
+                &store,
+                &id,
+                ts("2026-08-19T00:01:00Z"),
+                TicketPatch {
+                    started_phase: Some(Some(StartedPhase::Planning)),
+                    ..Default::default()
+                },
+            ),
+            Err(StoreError::StartedPhaseRequiresStarted { .. })
+        ));
+        assert!(store.read_ticket(&id).unwrap().notes.is_empty());
         let started = update(
             &store,
             &id,
@@ -8423,6 +8472,9 @@ mod claim_next_across_tests;
 #[cfg(test)]
 #[path = "ops/claim_blocked_tests.rs"]
 mod claim_blocked_tests;
+#[cfg(test)]
+#[path = "ops/claim_status_tests.rs"]
+mod claim_status_tests;
 
 #[cfg(test)]
 #[path = "ops/precondition_tests.rs"]

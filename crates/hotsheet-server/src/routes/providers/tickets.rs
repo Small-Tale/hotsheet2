@@ -465,6 +465,7 @@ pub(crate) fn do_provider_update(
         crate::routes::groups::validate_for_connection(provider.as_ref(), req.group.clone())?
     };
     let timestamp = now();
+    let edited_at = timestamp.clone();
     let note = req.note.clone();
     let note_id = req.note_id.clone();
     let note_kind = req.note_kind.unwrap_or(NoteKind::Regular);
@@ -494,7 +495,13 @@ pub(crate) fn do_provider_update(
                 blocked_reason: req.blocked_reason,
             },
         )
-        .map_err(provider_transfer_error)?;
+        .map_err(|error| match &error {
+            // HS2-0R7XCR: a refused phase is the caller's request, as on the other surfaces.
+            hotsheet_ticketing::ProviderError::Store(
+                hotsheet_ticketing::StoreError::StartedPhaseRequiresStarted { .. },
+            ) => ApiError::new(StatusCode::BAD_REQUEST, error.to_string()),
+            _ => provider_transfer_error(error),
+        })?;
     let edit = ops::NoteEditInput {
         kind: req.note_kind,
         text: note,
@@ -571,7 +578,17 @@ pub(crate) fn do_provider_update(
         }
         _ => {}
     }
-    let ticket = with_remote_outcome(provider.as_ref(), id, actor.as_ref(), &remote, ticket)?;
+    let mut ticket = with_remote_outcome(provider.as_ref(), id, actor.as_ref(), &remote, ticket)?;
+    // HS2-0R7XCR: an edit that ends a claim says so. This route only sees the ticket after the
+    // edit, so the release is the history's last event, stamped with this edit's time.
+    if ticket.claimed_by.is_none()
+        && let Some(released) = ticket.claim_history.last().filter(|event| {
+            event.kind == hotsheet_model::ClaimEventKind::Release && event.at == edited_at
+        })
+    {
+        let notice = ops::released_claim_notice(&released.worker, &ticket.slug, ticket.status);
+        ticket.warnings.push(notice);
+    }
     reindex_hosted_provider_write(state, connection_id, id);
     // A completed command ticket in an external provider is cleaned up now, and the caller
     // sees the archived or trashed result (HS2-27C161).

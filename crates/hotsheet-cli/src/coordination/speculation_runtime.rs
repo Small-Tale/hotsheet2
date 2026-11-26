@@ -358,7 +358,7 @@ impl Coordinator {
                     .any(|candidate| candidate.id == *dependency && !ops::is_open(candidate))
             });
             if ticket.up_next
-                && ops::is_open(ticket)
+                && ops::auto_selectable(ticket)
                 && waits
                 && ticket_readiness(policy, ticket, tickets, probe).level
                     == ReadinessLevel::Provisional

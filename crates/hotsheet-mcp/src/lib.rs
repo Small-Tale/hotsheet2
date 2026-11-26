@@ -3877,6 +3877,8 @@ mod core_backend {
                     warnings.extend(
                         written_note.and_then(|id| ops::note_feedback_marker_warning(&latest, &id)),
                     );
+                    // HS2-K6KG1T: an edit that ends a claim says so.
+                    warnings.extend(ops::claim_released_by_edit_notice(&t, &latest));
                     if !warnings.is_empty() {
                         response["warnings"] = serde_json::json!(warnings);
                     }
@@ -4538,6 +4540,7 @@ mod core_backend {
         let status = match &e {
             StoreError::InvalidAnnotations(_)
             | StoreError::InvalidFeedbackResponse(_)
+            | StoreError::StartedPhaseRequiresStarted { .. }
             | StoreError::InvalidGroupName(_)
             | StoreError::GroupRegistryRequired(_)
             | StoreError::InvalidNoteKindEdit => 400,
@@ -8681,6 +8684,77 @@ mod tests {
         let retry = call(&backend, "hotsheet_provider_copy", args);
         assert_eq!(first["destination"], retry["destination"]);
         assert_eq!(dest.list_tickets().unwrap().len(), 1);
+    }
+
+    /// HS2-K6Q8TW: serverless MCP claim-next skips a parked Backlog ticket; an exact claim
+    /// takes and starts it.
+    #[test]
+    fn hs2_k6q8tw_corebackend_claim_next_skips_backlog() {
+        let (_d, backend) = core();
+        let parked = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "parked", "status": "backlog", "priority": "highest" }),
+        );
+        let slug = parked["slug"].as_str().unwrap().to_string();
+        let next = call(&backend, "hotsheet_claim_next", json!({ "worker": "auto" }));
+        assert!(next.is_null(), "{next}");
+        let claimed = call(
+            &backend,
+            "hotsheet_claim",
+            json!({ "id": slug, "worker": "auto" }),
+        );
+        assert_eq!(claimed["status"], "started");
+    }
+
+    /// HS2-K6KG1T: over serverless MCP, a claim starts a Backlog ticket, a phase update keeps
+    /// the claim, a phase outside Started is refused, and an update that ends a claim says so.
+    #[test]
+    fn hs2_k6kg1t_corebackend_claim_starts_backlog_and_names_a_released_claim() {
+        let (_d, backend) = core();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "shelved work", "status": "backlog" }),
+        );
+        let slug = created["slug"].as_str().unwrap().to_string();
+        let refused = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": slug, "started_phase": "working" }),
+        );
+        assert!(
+            refused["error"].as_str().unwrap().contains("not Started"),
+            "{refused}"
+        );
+        let claimed = call(
+            &backend,
+            "hotsheet_claim",
+            json!({ "id": slug, "worker": "w1" }),
+        );
+        assert_eq!(claimed["status"], "started");
+        assert_eq!(claimed["started_phase"], "analyzing");
+        let working = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": slug, "started_phase": "working" }),
+        );
+        assert_eq!(working["claimed_by"], "w1");
+        assert_eq!(working["started_phase"], "working");
+        assert!(working.get("warnings").is_none(), "{working}");
+        let shelved = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": slug, "status": "backlog" }),
+        );
+        assert!(shelved["claimed_by"].is_null());
+        assert!(
+            shelved["warnings"][0]
+                .as_str()
+                .unwrap()
+                .starts_with(&format!("Released w1's claim on {slug}")),
+            "{shelved}"
+        );
     }
 
     #[test]

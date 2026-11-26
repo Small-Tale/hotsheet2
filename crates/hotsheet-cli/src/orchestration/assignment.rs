@@ -878,6 +878,11 @@ impl OrchestrationRuntime {
         actor: &MutationActor,
         tx: &mut Transaction<'_>,
     ) -> Result<Run, OrchestrationError> {
+        // HS2-G9A9DF: the target's claim and the run's `claimed_for_session` record change
+        // together, as a dispatch does (HS2-EZV83C). Without the run's operation lock, a
+        // sync between the two found the new claim on a still-queued run and recorded it
+        // as `assigned_by_dispatcher`.
+        let _operation = self.run_lock(owner_id, &assignment.run_id)?;
         let run = self.run(owner_id, &assignment.run_id)?;
         // HS2-ESVYQH: a returned run is intervened when its correction is claimed.
         let claimable = match assignment.returned_at_ms {
