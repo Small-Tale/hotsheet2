@@ -90,7 +90,7 @@ fn raw(config: &GitHubConfig, method: &str, url: &str, body: Option<&Value>) -> 
             url,
             &[
                 ("Accept", "application/vnd.github+json".into()),
-                ("Authorization", format!("Bearer {}", config.token)),
+                ("Authorization", format!("Bearer {}", config.token.expose())),
                 ("X-GitHub-Api-Version", API_VERSION.into()),
                 ("User-Agent", "hotsheet2-live-test".into()),
             ],

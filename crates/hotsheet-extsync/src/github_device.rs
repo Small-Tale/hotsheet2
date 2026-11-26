@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use hotsheet_sync::secret::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -17,11 +18,14 @@ pub struct DeviceAuthorization {
     pub interval: u64,
 }
 
+/// A device-flow token bundle. It is serialized only into the OS credential store
+/// (`store_device_authorization` and the refresh write-back in `github_credential`), never to a
+/// response or log; its secrets redact under `Debug` (HS2-A8T481).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GitHubTokenBundle {
-    pub access_token: String,
+    pub access_token: SecretString,
     #[serde(default)]
-    pub refresh_token: Option<String>,
+    pub refresh_token: Option<SecretString>,
     #[serde(default)]
     pub expires_in: Option<u64>,
     #[serde(default)]
@@ -432,8 +436,14 @@ mod tests {
         let DevicePoll::Authorized(bundle) = client.poll("device").unwrap() else {
             panic!()
         };
-        assert_eq!(bundle.refresh_token.as_deref(), Some("refresh"));
-        assert_eq!(client.refresh("refresh").unwrap().access_token, "next");
+        assert_eq!(
+            bundle.refresh_token.as_ref().map(SecretString::expose),
+            Some("refresh")
+        );
+        assert_eq!(
+            client.refresh("refresh").unwrap().access_token.expose(),
+            "next"
+        );
         assert_eq!(
             client.installed_repositories("access").unwrap(),
             vec!["small-tale/docs", "small-tale/hotsheet2"]
@@ -540,6 +550,46 @@ mod tests {
             GitHubDeviceClient::live("", "https://github.com").start(),
             Err(GitHubDeviceError::MissingClientId)
         ));
+    }
+
+    #[test]
+    fn hs2_a8t481_token_bundle_redacts_debug_and_keeps_its_keychain_json() {
+        let stored = json!({"access_token":"ghu_synthetic","refresh_token":"ghr_synthetic",
+            "expires_in":28800,"refresh_token_expires_in":null,"token_type":"bearer","scope":"repo"});
+        let bundle: GitHubTokenBundle = serde_json::from_value(stored.clone()).unwrap();
+        let printed = format!("{bundle:?} {:?}", DevicePoll::Authorized(bundle.clone()));
+        assert!(!printed.contains("synthetic"), "{printed}");
+        assert!(printed.contains("<redacted>"), "{printed}");
+        // The keychain record keeps its exact pre-HS2-A8T481 shape.
+        assert_eq!(serde_json::to_value(&bundle).unwrap(), stored);
+        let minimal: GitHubTokenBundle =
+            serde_json::from_value(json!({"access_token":"ghu_synthetic"})).unwrap();
+        assert_eq!(minimal.access_token.expose(), "ghu_synthetic");
+        assert_eq!(minimal.refresh_token, None);
+    }
+
+    #[test]
+    fn hs2_a8t481_provider_configs_redact_their_tokens() {
+        let github = crate::GitHubConfig::new("gh", "acme/repo", "ghp_synthetic");
+        let jira = crate::JiraConfig {
+            connection_id: "jira".into(),
+            project_key: "HS".into(),
+            base_url: "https://jira.example.test".into(),
+            email: "hs@example.test".into(),
+            token: "jira_synthetic".into(),
+            default: false,
+        };
+        let gitlab = crate::GitLabConfig {
+            connection_id: "gl".into(),
+            project: "acme/repo".into(),
+            api_base: "https://gitlab.example.test/api/v4".into(),
+            token: "glpat_synthetic".into(),
+            default: false,
+        };
+        let printed = format!("{github:?} {jira:?} {gitlab:?}");
+        assert!(!printed.contains("synthetic"), "{printed}");
+        assert_eq!(printed.matches("token: <redacted>").count(), 3, "{printed}");
+        assert_eq!(github.token.expose(), "ghp_synthetic");
     }
 }
 

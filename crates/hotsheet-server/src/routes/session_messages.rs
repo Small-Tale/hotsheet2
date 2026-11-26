@@ -443,7 +443,8 @@ pub(crate) fn prepare_session_push(
             "{}{}",
             hotsheet_model::Ulid::new(),
             hotsheet_model::Ulid::new()
-        ),
+        )
+        .into(),
         directory,
         model: model.map(str::to_string),
         launched_at_ms: crate::routes::permissions::now_ms(),
@@ -452,7 +453,7 @@ pub(crate) fn prepare_session_push(
     let broker_state = hotsheet_terminals::BrokerPushState {
         mechanism: spec.mechanism.clone(),
         port: launch.port,
-        password: launch.password.clone(),
+        password: launch.password.expose().to_owned(),
         directory: launch.directory.clone(),
         launched_at_ms: launch.launched_at_ms,
         model: launch.model.clone(),
@@ -513,7 +514,7 @@ pub(crate) fn restore_broker_push(
     }
     let launch = PushLaunch {
         port: push.port,
-        password: push.password,
+        password: push.password.into(),
         directory: push.directory,
         model: push.model,
         launched_at_ms: push.launched_at_ms,

@@ -1259,6 +1259,23 @@ exercises encrypted storage, backup, rotate, missing-root failure, and restore
 through the shipped commands. The OS-specific prompt count remains a manual check in
 `docs/manual-test-plan.md`.
 
+HS2-A8T481 adds `hotsheet_sync::secret::SecretString` and its tests:
+`crates/hotsheet-sync/src/secret.rs # hs2_a8t481_*` checks that `Debug` prints
+`<redacted>` and that serde matches a plain string field. Each retyped struct has its own
+redaction test, also named `hs2_a8t481_*`:
+
+- extsync's provider configs and `GitHubTokenBundle`; the bundle test also checks its keychain JSON;
+- notify's `SmtpConfig`;
+- aitools' `PushLaunch`;
+- mcp's `PresenceTarget`.
+
+`crates/hotsheet-sync/tests/secret_debug_policy.rs` rejects any derived `Debug` over a
+secret-named plain-string field anywhere under `crates/`. The scan has two exemption lists,
+and both must still match real fields:
+
+- an exact list of fields that are not secrets;
+- a baseline that can only shrink, owned by HS2-9ZMC7N.
+
 HS2-HWC0FS adds Unix tests in
 `secrets/metadata_owner/unix/tests.rs`: unchanged-map set/delete publication versus
 true backfill no-ops, malformed-input preflight, symlink/special/hardlink and replaced

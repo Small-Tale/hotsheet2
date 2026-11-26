@@ -117,7 +117,11 @@ fn hs2_k0d3tj_device_api_and_installation_urls_share_normalized_origins() {
             DevicePoll::Authorized(_)
         ));
         assert_eq!(
-            client.refresh("synthetic-refresh").unwrap().access_token,
+            client
+                .refresh("synthetic-refresh")
+                .unwrap()
+                .access_token
+                .expose(),
             "synthetic-token"
         );
         assert_eq!(

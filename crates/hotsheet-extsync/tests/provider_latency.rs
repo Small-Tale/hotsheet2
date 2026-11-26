@@ -378,7 +378,7 @@ fn opt_in_real_jira_mutation_latency() {
             .trim_end_matches('/')
             .into(),
         email: var("HOTSHEET_JIRA_LIVE_EMAIL"),
-        token: var("HOTSHEET_JIRA_LIVE_TOKEN"),
+        token: var("HOTSHEET_JIRA_LIVE_TOKEN").into(),
         default: false,
     });
     real_title_edit_latency(&provider, &issue, samples, "jira");
@@ -395,7 +395,7 @@ fn opt_in_real_gitlab_mutation_latency() {
         project: var("HOTSHEET_GITLAB_LIVE_PROJECT"),
         api_base: std::env::var("HOTSHEET_GITLAB_LIVE_API_BASE")
             .unwrap_or_else(|_| "https://gitlab.com/api/v4".into()),
-        token: var("HOTSHEET_GITLAB_LIVE_TOKEN"),
+        token: var("HOTSHEET_GITLAB_LIVE_TOKEN").into(),
         default: false,
     });
     real_title_edit_latency(&provider, &issue, samples, "gitlab");

@@ -101,7 +101,7 @@ pub(crate) async fn start_github_device_auth(
                     break;
                 }
                 Ok(hotsheet_extsync::DevicePoll::Authorized(bundle)) => {
-                    let login = client.current_login(&bundle.access_token).ok();
+                    let login = client.current_login(bundle.access_token.expose()).ok();
                     let result = hotsheet_extsync::store_device_authorization(
                         &keys,
                         &credential_reference,
@@ -226,7 +226,7 @@ pub(crate) async fn list_github_auth_repositories(
     github_repository_access(
         session.client_id.clone(),
         session.web_base.clone(),
-        token.access_token,
+        token.access_token.into_inner(),
     )
     .await
 }

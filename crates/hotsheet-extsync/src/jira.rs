@@ -1,3 +1,4 @@
+use hotsheet_sync::secret::SecretString;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -49,7 +50,7 @@ pub struct JiraConfig {
     pub project_key: String,
     pub base_url: String,
     pub email: String,
-    pub token: String,
+    pub token: SecretString,
     pub default: bool,
 }
 
@@ -95,7 +96,7 @@ impl JiraConfig {
             project_key: connection.locator.clone(),
             base_url: base_url.unwrap().trim_end_matches('/').into(),
             email: email.unwrap().into(),
-            token: token.into(),
+            token: SecretString::new(token),
             default: connection.default,
         })
     }
@@ -141,7 +142,11 @@ impl JiraProvider {
         url: &str,
         body: Option<&Value>,
     ) -> Result<HttpResponse, ProviderError> {
-        let credentials = base64(&format!("{}:{}", self.config.email, self.config.token));
+        let credentials = base64(&format!(
+            "{}:{}",
+            self.config.email,
+            self.config.token.expose()
+        ));
         let headers = [
             ("Authorization", format!("Basic {credentials}")),
             ("Accept", "application/json".into()),
@@ -3271,7 +3276,7 @@ mod tests {
                 project_key: env("HOTSHEET_JIRA_LIVE_PROJECT"),
                 base_url: env("HOTSHEET_JIRA_LIVE_BASE_URL"),
                 email: env("HOTSHEET_JIRA_LIVE_EMAIL"),
-                token: env("HOTSHEET_JIRA_LIVE_TOKEN"),
+                token: env("HOTSHEET_JIRA_LIVE_TOKEN").into(),
                 default: false,
             },
             transport.clone(),
@@ -3481,7 +3486,7 @@ mod tests {
             project_key: project.clone(),
             base_url: env("HOTSHEET_JIRA_LIVE_BASE_URL"),
             email: env("HOTSHEET_JIRA_LIVE_EMAIL"),
-            token: env("HOTSHEET_JIRA_LIVE_TOKEN"),
+            token: env("HOTSHEET_JIRA_LIVE_TOKEN").into(),
             default: false,
         });
         let found = provider

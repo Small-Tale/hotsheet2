@@ -1,6 +1,7 @@
 //! Shared persistence and refresh for GitHub App device credentials. Both the HTTP server and
 //! headless CLI keep the bundle in the OS keychain and pass only its access token to providers.
 
+use hotsheet_sync::secret::SecretString;
 use hotsheet_ticketing::connection_removal::MANAGED_CREDENTIAL_PREFIX;
 use hotsheet_ticketing::{
     KeyMetadata, KeyRegistry, ProviderConnection, ProviderError, SecretError, SecretStore,
@@ -244,7 +245,8 @@ fn resolve_token(
     if due {
         let refresh_token = token
             .refresh_token
-            .as_deref()
+            .as_ref()
+            .map(SecretString::expose)
             .ok_or(GitHubCredentialError::Expired)?;
         let client_id = stored
             .get("client_id")
@@ -264,7 +266,7 @@ fn resolve_token(
             .map_err(|error| GitHubCredentialError::Invalid(error.to_string()))?;
         save(&stored.to_string())?;
     }
-    Ok(token.access_token)
+    Ok(token.access_token.into_inner())
 }
 
 #[cfg(test)]
@@ -307,7 +309,7 @@ mod tests {
     fn bundle(access: &str, refresh: Option<&str>) -> GitHubTokenBundle {
         GitHubTokenBundle {
             access_token: access.into(),
-            refresh_token: refresh.map(str::to_owned),
+            refresh_token: refresh.map(SecretString::from),
             expires_in: Some(120),
             refresh_token_expires_in: None,
             token_type: None,

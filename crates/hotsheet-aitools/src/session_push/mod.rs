@@ -24,6 +24,7 @@ mod http;
 mod opencode;
 mod opencode_v2;
 
+use hotsheet_sync::secret::SecretString;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -113,7 +114,7 @@ pub struct PushLaunch {
     /// Loopback port allocated for the session (substituted for `{port}`).
     pub port: u16,
     /// Per-session random secret (exported through `password_env`).
-    pub password: String,
+    pub password: SecretString,
     /// The session's working directory (the terminal's cwd).
     pub directory: String,
     /// The model the launch selected (`provider/model` for OpenCode), if any.
@@ -202,7 +203,7 @@ pub fn launch_wiring(
     let env = spec
         .password_env
         .iter()
-        .map(|name| (name.clone(), launch.password.clone()))
+        .map(|name| (name.clone(), launch.password.expose().to_owned()))
         .collect();
     Some(LaunchWiring { args, env })
 }

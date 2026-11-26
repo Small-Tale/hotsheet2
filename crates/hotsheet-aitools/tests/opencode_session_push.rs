@@ -103,7 +103,7 @@ fn adapter(port: u16, password: &str, model: Option<&str>) -> OpenCodeHttpPush {
     OpenCodeHttpPush::new(
         PushLaunch {
             port,
-            password: password.to_string(),
+            password: password.into(),
             directory: fixture["directory"].as_str().unwrap().to_string(),
             model: model.map(str::to_string),
             launched_at_ms: fixture["launched_at_ms"].as_u64().unwrap(),

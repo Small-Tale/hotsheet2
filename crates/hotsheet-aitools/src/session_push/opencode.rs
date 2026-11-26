@@ -55,7 +55,7 @@ impl OpenCodeHttpPush {
         });
         Self {
             base_url: format!("http://127.0.0.1:{}", launch.port),
-            authorization: basic_auth_header(USER, &launch.password),
+            authorization: basic_auth_header(USER, launch.password.expose()),
             directory: launch.directory,
             model,
             launched_at_ms: launch.launched_at_ms,

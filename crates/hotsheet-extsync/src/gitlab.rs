@@ -1,3 +1,4 @@
+use hotsheet_sync::secret::SecretString;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -31,7 +32,7 @@ pub struct GitLabConfig {
     pub connection_id: String,
     pub project: String,
     pub api_base: String,
-    pub token: String,
+    pub token: SecretString,
     pub default: bool,
 }
 
@@ -73,7 +74,7 @@ impl GitLabConfig {
                 .and_then(Value::as_str)
                 .unwrap_or("https://gitlab.com/api/v4")
                 .into(),
-            token: token.into(),
+            token: SecretString::new(token),
             default: connection.default,
         })
     }
@@ -121,7 +122,7 @@ impl GitLabProvider {
         body: Option<&Value>,
     ) -> Result<HttpResponse, ProviderError> {
         let headers = [
-            ("PRIVATE-TOKEN", self.config.token.clone()),
+            ("PRIVATE-TOKEN", self.config.token.expose().to_owned()),
             ("User-Agent", "hotsheet2".into()),
         ];
         self.transport

@@ -431,7 +431,7 @@ pub(crate) fn cmd_github_sign_in(web_base: &str) -> Result<()> {
             }
             hotsheet_extsync::DevicePoll::Denied => bail!("GitHub sign-in was denied"),
             hotsheet_extsync::DevicePoll::Authorized(bundle) => {
-                let login = client.current_login(&bundle.access_token).ok();
+                let login = client.current_login(bundle.access_token.expose()).ok();
                 let reference = format!(
                     "github-app-{}",
                     Ulid::new().to_string().to_ascii_lowercase()
