@@ -246,7 +246,8 @@ live one. After every registration (startup, a startup replacement, and every re
 creates and deletes an empty probe file, `.hotsheet-watch-probe.<pid>.<n>.tmp`, in the watched
 directory and waits for the stream to report it. Native streams deliver in order, so a reported probe
 proves every later write will be reported and every re-arm signal raised before it has arrived.
-Only then is the bridge retired and the full reconcile requested that makes the index live. An
+Only then is the bridge retired and the store reconciled again (the index is already live through
+the start-up bridge, HS2-P702Y8). An
 unanswered probe is retried after 1 s, doubling to at most 30 s, and every second unanswered probe
 registers the directory again, since a dead registration may never recover. Under a deep
 `fseventsd` backlog no probe may arrive for minutes. The first unanswered probe therefore starts
@@ -261,6 +262,43 @@ the watch loop. Probe names match the store's `.*.tmp` staged-write ignore patte
 listing skips plain files directly under `tickets/`. A store that cannot take a probe (read-only)
 falls back to the former 1.5 s start-up wait. On Linux and Windows the probe is reported at once,
 so startup no longer waits a fixed delay there either.
+
+**A proven stream can still lag; it is verified on demand (HS2-P702Y8).** A probe proves a
+registration, not later timeliness: under a deep `fseventsd` backlog (four loops creating and deleting
+200 files each in a sibling temp directory) a proven macOS stream reported a ticket write more than
+two minutes late. No stream setting helps: notify's FSEvents backend and the repository watcher's own
+stream already use latency 0 with `NoDefer` and `FileEvents`, and the backlog sits in `fseventsd`,
+which serves every client in order. Nothing polls to detect lag; instead the watcher proves its
+stream current when something depends on it:
+
+- **Start-up and re-arm never wait on registration.** The start-up bridge's full reconcile makes the
+  index live at once, as the Poll backend's resync does, so a registration that blocks for minutes
+  no longer leaves misses walking. A re-arm starts the bridge (and its reconcile) before the
+  unwatch and watch calls that can block, and a root change reported while the bridge holds the
+  store queues a full reconcile itself, so the index recovers even while the supervisor is still
+  waiting for a probe.
+- **Verification.** A native watcher registers a verifier on the store's `IndexFreshness`. A request
+  writes a probe; native streams deliver in order, so once it is reported every earlier write is
+  queued, and a marker sent behind it tells the watch loop to record the verification once applied
+  (the batch closes at once rather than after its 150 ms quiet wait). If the probe is unanswered
+  after 1 s the stream is lagging: the bridge starts, a full reconcile brings the index current, and
+  the proof continues with its back-off until a probe arrives, when the bridge is retired and the
+  store is reconciled again. At most one request is outstanding.
+- **Who asks.** An in-sync miss is final only within 1 s (`VERIFIED_WINDOW`) of the last
+  verification (any applied full reconcile counts). Otherwise the lookup requests one, waits up to
+  250 ms (`MISS_VERIFY_WAIT`), and asks the index again once it lands; if it does not land, the
+  lookup walks. Every server ticket write and purge requests one too unless one landed within the
+  window, since the stream owes it an echo, so active use detects a lag within about a second and
+  bridges external writes. An idle store is never probed. A store without a verifier (the Poll
+  backend, or a stopped watcher) keeps the in-sync rule alone, and a read-only store, which cannot
+  take a probe, is treated as verified.
+
+Watcher tests that must survive a backlog drive an in-process stream (`StartupHooks::stream`) that
+reports events and probes in order and can be held and released like a backlogged `fseventsd`. The
+real-stream tests request a verification after an external write, so a lagging stream answers
+through the bridge within a bounded time. `store_root_scope_tests::hs2_vn96j5_root_scope_is_quiet_when_idle_and_ignores_git_churn`
+remains a real-FSEvents smoke test: it waits for the stream's own delivery, ordered after the churn
+it must reject.
 
 **The checkout's repository watcher leaves ignored build trees out at the source (HS2-2HZN2C).**
 Separate from the store watcher, each open checkout has a repository monitor (`docs/06-clients.md`,
@@ -419,9 +457,12 @@ been applied), no watcher event is queued or mid-debounce, and no failed index w
 waiting for repair. Any of those — and a store nobody watches, a watcher error or rescan
 request (until the full re-check it triggers is applied), or a stopped watcher — sends a
 miss back to the walk. Freshness is sampled before and after the candidate query, so an
-event queued meanwhile also walks. A stale candidate still walks. The one blind spot is
-the few milliseconds between an external write and the stream delivering its event; a
-lookup racing an external create can miss it, as one sent a moment earlier would. A
+event queued meanwhile also walks. A stale candidate still walks. Where the watcher can
+prove its stream current, the miss is also final only after a recent verification
+(HS2-P702Y8, above), so a lagging stream cannot make a stale index authoritative. The
+remaining blind spot is a write made after the last verification, at most about a second
+before the lookup, and not yet delivered; a lookup racing an external create can miss it,
+as one sent a moment earlier would. A
 corrupt ticket file is never indexed, so before trusting an in-sync miss `StoreEntry::resolve`
 consults the entry's stat-validated corrupt-file cache (only changed files are re-read);
 when a corrupt file still declares the slug, the walk runs and returns that file's parse

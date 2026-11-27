@@ -12,8 +12,11 @@
 //! watcher event, or a failed index write awaiting repair — sends a miss back to the walk.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 use hotsheet_model::{Ticket, Ulid};
+use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{FsStore, StoreError, ops};
 
 use crate::IndexError;
@@ -32,11 +35,53 @@ use crate::IndexError;
 /// The one window it cannot see is the few milliseconds between an external write and
 /// the stream delivering its event; a lookup racing an external create can miss it,
 /// exactly as one issued a moment earlier would.
-#[derive(Debug, Default)]
+///
+/// A stream can also deliver late: under an `fseventsd` backlog a macOS stream that has
+/// proven itself can report a write minutes after it landed (HS2-P702Y8). A watcher that
+/// can prove its stream current registers a **verifier**. An in-sync miss is then final
+/// only within [`VERIFIED_WINDOW`] of the last verification; otherwise the lookup asks for
+/// one, waits up to [`MISS_VERIFY_WAIT`], and walks if it has not landed. The watcher
+/// answers with a probe through its stream or, when that probe is overdue, by falling
+/// back to its polling bridge and a full reconcile.
+#[derive(Default)]
 pub struct IndexFreshness {
     live: AtomicBool,
     queued: AtomicUsize,
     repairs_pending: AtomicBool,
+    verification: Mutex<Verification>,
+    verified: Condvar,
+}
+
+/// Asks a store's watcher to prove its stream current; it must not block (HS2-P702Y8).
+pub type FreshnessVerifier = Arc<dyn Fn() + Send + Sync>;
+
+/// How long after a verification an in-sync miss is final without another (HS2-P702Y8).
+pub const VERIFIED_WINDOW: Duration = Duration::from_secs(1);
+/// How long a miss outside [`VERIFIED_WINDOW`] waits for a verification before walking.
+pub const MISS_VERIFY_WAIT: Duration = Duration::from_millis(250);
+
+#[derive(Default)]
+struct Verification {
+    verifier: Option<FreshnessVerifier>,
+    /// A request reached the verifier and has not been answered yet.
+    requested: bool,
+    /// Bumped by every verification, so a waiter sees one that lands after its request.
+    epoch: u64,
+    verified_at: Option<Instant>,
+}
+
+impl std::fmt::Debug for IndexFreshness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let verification = self.verification.lock_or_recover();
+        f.debug_struct("IndexFreshness")
+            .field("live", &self.live)
+            .field("queued", &self.queued)
+            .field("repairs_pending", &self.repairs_pending)
+            .field("verifier", &verification.verifier.is_some())
+            .field("requested", &verification.requested)
+            .field("epoch", &verification.epoch)
+            .finish()
+    }
 }
 
 impl IndexFreshness {
@@ -77,6 +122,104 @@ impl IndexFreshness {
     pub fn set_repairs_pending(&self, pending: bool) {
         self.repairs_pending.store(pending, Ordering::SeqCst);
     }
+
+    /// Registers the watcher that can prove its stream current (HS2-P702Y8), replacing
+    /// any earlier one. An outstanding request is handed to the new verifier.
+    pub fn set_verifier(&self, verifier: FreshnessVerifier) {
+        let outstanding = {
+            let mut verification = self.verification.lock_or_recover();
+            verification.verifier = Some(verifier.clone());
+            verification.requested
+        };
+        if outstanding {
+            verifier();
+        }
+    }
+
+    /// Unregisters `verifier` if it is still the registered one (its watcher stopped).
+    /// Misses then follow [`IndexFreshness::in_sync`] alone, as before any verifier.
+    pub fn clear_verifier(&self, verifier: &FreshnessVerifier) {
+        let mut verification = self.verification.lock_or_recover();
+        if verification
+            .verifier
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, verifier))
+        {
+            verification.verifier = None;
+            verification.requested = false;
+        }
+        self.verified.notify_all();
+    }
+
+    /// Asks the registered verifier to prove the stream current, unless a request is
+    /// already outstanding. Never blocks; without a verifier it does nothing.
+    pub fn request_verification(&self) {
+        let verifier = {
+            let mut verification = self.verification.lock_or_recover();
+            if verification.requested {
+                return;
+            }
+            let Some(verifier) = verification.verifier.clone() else {
+                return;
+            };
+            verification.requested = true;
+            verifier
+        };
+        verifier();
+    }
+
+    /// [`IndexFreshness::request_verification`] unless the stream was verified within
+    /// [`VERIFIED_WINDOW`]: a cheap hint from a writer that expects its own echo.
+    pub fn request_verification_if_stale(&self) {
+        if !self.verified_within(VERIFIED_WINDOW) {
+            self.request_verification();
+        }
+    }
+
+    /// The watcher applied a verification: every write made before the request is in the
+    /// index, or a full reconcile ran. Wakes waiting lookups.
+    pub fn mark_verified(&self) {
+        let mut verification = self.verification.lock_or_recover();
+        verification.requested = false;
+        verification.epoch = verification.epoch.wrapping_add(1);
+        verification.verified_at = Some(Instant::now());
+        self.verified.notify_all();
+    }
+
+    /// Whether a verifier is registered.
+    pub fn has_verifier(&self) -> bool {
+        self.verification.lock_or_recover().verifier.is_some()
+    }
+
+    /// Whether no verifier is registered or the last verification landed within `window`.
+    pub fn verified_within(&self, window: Duration) -> bool {
+        let verification = self.verification.lock_or_recover();
+        verification.verifier.is_none()
+            || verification
+                .verified_at
+                .is_some_and(|at| at.elapsed() <= window)
+    }
+
+    /// Requests a verification and waits up to `wait` for one to land after this call.
+    /// `true` when it did (or no verifier is registered), `false` on timeout.
+    pub fn verify(&self, wait: Duration) -> bool {
+        let start = {
+            let verification = self.verification.lock_or_recover();
+            if verification.verifier.is_none() {
+                return true;
+            }
+            verification.epoch
+        };
+        self.request_verification();
+        let verification = self.verification.lock_or_recover();
+        let (verification, _) = self
+            .verified
+            .wait_timeout_while(verification, wait, |verification| {
+                verification.epoch == start && verification.verifier.is_some()
+            })
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        verification.epoch != start || verification.verifier.is_none()
+    }
 }
 
 /// Resolve `needle` (an exact ULID or an ASCII case-insensitive slug) in `store`.
@@ -88,7 +231,7 @@ impl IndexFreshness {
 pub fn resolve_ticket(
     store: &FsStore,
     needle: &str,
-    candidates: impl FnOnce(&str) -> Result<Vec<Ulid>, IndexError>,
+    candidates: impl FnMut(&str) -> Result<Vec<Ulid>, IndexError>,
 ) -> Result<Option<Ticket>, StoreError> {
     resolve(store, needle, candidates, None)
 }
@@ -99,7 +242,7 @@ pub fn resolve_ticket(
 pub fn resolve_ticket_with_freshness(
     store: &FsStore,
     needle: &str,
-    candidates: impl FnOnce(&str) -> Result<Vec<Ulid>, IndexError>,
+    candidates: impl FnMut(&str) -> Result<Vec<Ulid>, IndexError>,
     freshness: &IndexFreshness,
 ) -> Result<Option<Ticket>, StoreError> {
     resolve(store, needle, candidates, Some(freshness))
@@ -108,12 +251,51 @@ pub fn resolve_ticket_with_freshness(
 fn resolve(
     store: &FsStore,
     needle: &str,
-    candidates: impl FnOnce(&str) -> Result<Vec<Ulid>, IndexError>,
+    mut candidates: impl FnMut(&str) -> Result<Vec<Ulid>, IndexError>,
     freshness: Option<&IndexFreshness>,
 ) -> Result<Option<Ticket>, StoreError> {
     if Ulid::from_string(needle).is_ok() {
         return ops::resolve(store, needle);
     }
+    match query(store, needle, &mut candidates, freshness) {
+        Queried::Found(ticket) => return Ok(Some(*ticket)),
+        Queried::Missed => {}
+        Queried::Unsettled => return ops::resolve(store, needle),
+    }
+    let Some(freshness) = freshness else {
+        return ops::resolve(store, needle);
+    };
+    if freshness.verified_within(VERIFIED_WINDOW) {
+        return Ok(None);
+    }
+    // HS2-P702Y8: the stream may lag. Once a verification lands, every write made before
+    // it is in the index, so asking again settles the miss; otherwise walk.
+    if freshness.verify(MISS_VERIFY_WAIT) {
+        match query(store, needle, &mut candidates, Some(freshness)) {
+            Queried::Found(ticket) => return Ok(Some(*ticket)),
+            Queried::Missed => return Ok(None),
+            Queried::Unsettled => {}
+        }
+    }
+    ops::resolve(store, needle)
+}
+
+/// One candidate query's verdict.
+enum Queried {
+    /// The lowest candidate's file still carries the slug.
+    Found(Box<Ticket>),
+    /// No candidate, and the index stayed in sync across the query.
+    Missed,
+    /// A stale candidate, an index error, or a miss the freshness cannot vouch for.
+    Unsettled,
+}
+
+fn query(
+    store: &FsStore,
+    needle: &str,
+    candidates: &mut impl FnMut(&str) -> Result<Vec<Ulid>, IndexError>,
+    freshness: Option<&IndexFreshness>,
+) -> Queried {
     // Sampled before the query: an event applied between the query and a later check
     // could otherwise vouch for a candidate list read before that event landed.
     let in_sync_before = freshness.is_some_and(IndexFreshness::in_sync);
@@ -126,15 +308,15 @@ fn resolve(
             if let Ok(ticket) = store.read_ticket(id)
                 && ticket.slug.eq_ignore_ascii_case(needle)
             {
-                return Ok(Some(ticket));
+                return Queried::Found(Box::new(ticket));
             }
+            Queried::Unsettled
         }
         Ok([]) if in_sync_before && freshness.is_some_and(IndexFreshness::in_sync) => {
-            return Ok(None);
+            Queried::Missed
         }
-        _ => {}
+        _ => Queried::Unsettled,
     }
-    ops::resolve(store, needle)
 }
 
 #[cfg(test)]
@@ -479,5 +661,162 @@ mod tests {
         assert!(!freshness.in_sync());
         freshness.events_applied(1);
         assert!(freshness.in_sync());
+    }
+
+    /// A verifier that counts requests and, when `answer` is set, verifies at once on its
+    /// own thread, as a prompt stream's probe would.
+    fn counting_verifier(
+        freshness: &Arc<IndexFreshness>,
+        answer: bool,
+    ) -> (FreshnessVerifier, Arc<AtomicUsize>) {
+        let requests = Arc::new(AtomicUsize::new(0));
+        let counted = requests.clone();
+        let answering = Arc::downgrade(freshness);
+        let verifier: FreshnessVerifier = Arc::new(move || {
+            counted.fetch_add(1, Ordering::SeqCst);
+            if answer && let Some(freshness) = answering.upgrade() {
+                std::thread::spawn(move || freshness.mark_verified());
+            }
+        });
+        (verifier, requests)
+    }
+
+    /// HS2-P702Y8: the verification transitions. No verifier keeps the old trust; a
+    /// registered one is asked once per outstanding request; a recent verification
+    /// suppresses the stale-only hint; an outstanding request is handed to a new
+    /// verifier; only the registered verifier can be cleared, which restores the old trust.
+    #[test]
+    fn hs2_p702y8_verification_requests_coalesce_and_expire() {
+        let freshness = Arc::new(IndexFreshness::default());
+        assert!(!freshness.has_verifier());
+        assert!(freshness.verified_within(Duration::ZERO));
+        assert!(freshness.verify(Duration::ZERO));
+        freshness.request_verification();
+
+        let (silent, requests) = counting_verifier(&freshness, false);
+        freshness.set_verifier(silent.clone());
+        assert!(freshness.has_verifier());
+        assert!(
+            !freshness.verified_within(VERIFIED_WINDOW),
+            "never verified"
+        );
+        assert!(!freshness.verify(Duration::from_millis(1)));
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+        // Outstanding: neither another request nor the stale-only hint asks again.
+        freshness.request_verification();
+        freshness.request_verification_if_stale();
+        assert!(!freshness.verify(Duration::from_millis(1)));
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+
+        freshness.mark_verified();
+        assert!(freshness.verified_within(VERIFIED_WINDOW));
+        freshness.request_verification_if_stale();
+        assert_eq!(requests.load(Ordering::SeqCst), 1, "verified just now");
+        freshness.request_verification();
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            2,
+            "an explicit request asks"
+        );
+
+        // Re-registration hands the outstanding request to the new verifier.
+        let (answering, answered) = counting_verifier(&freshness, true);
+        freshness.set_verifier(answering.clone());
+        assert_eq!(answered.load(Ordering::SeqCst), 1);
+        while freshness.verification.lock_or_recover().requested {
+            std::thread::yield_now();
+        }
+        assert!(freshness.verify(Duration::from_secs(10)));
+        assert_eq!(answered.load(Ordering::SeqCst), 2);
+
+        freshness.clear_verifier(&silent);
+        assert!(freshness.has_verifier(), "a replaced verifier cannot clear");
+        freshness.clear_verifier(&answering);
+        assert!(!freshness.has_verifier());
+        assert!(freshness.verified_within(Duration::ZERO));
+        assert!(freshness.verify(Duration::ZERO));
+    }
+
+    /// A lookup waiting on a verification is released when its verifier is unregistered.
+    #[test]
+    fn hs2_p702y8_clearing_the_verifier_releases_a_waiting_lookup() {
+        let freshness = Arc::new(IndexFreshness::default());
+        let (silent, requests) = counting_verifier(&freshness, false);
+        freshness.set_verifier(silent.clone());
+        let waiting = {
+            let freshness = freshness.clone();
+            std::thread::spawn(move || freshness.verify(Duration::from_secs(30)))
+        };
+        while requests.load(Ordering::SeqCst) == 0 {
+            std::thread::yield_now();
+        }
+        freshness.clear_verifier(&silent);
+        assert!(waiting.join().unwrap());
+    }
+
+    /// HS2-P702Y8: with a verifier registered, an in-sync miss is final only after a
+    /// verification. A lagging stream (no answer) sends it to the walk; a recent
+    /// verification skips the wait; a prompt one settles it by asking the index again,
+    /// which also finds a ticket the index learned of meanwhile; a verification landing
+    /// while out of sync still walks.
+    #[test]
+    fn hs2_p702y8_an_in_sync_miss_needs_a_recent_verification() {
+        let (_dir, store) = store();
+        let index = indexed(&store);
+        let late = create(&store, "late");
+        let freshness = Arc::new(live());
+
+        let (lagging, requests) = counting_verifier(&freshness, false);
+        freshness.set_verifier(lagging.clone());
+        assert!(found_unindexed(&store, &index, &late.slug, &freshness));
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+
+        freshness.mark_verified();
+        assert!(!found_unindexed(&store, &index, &late.slug, &freshness));
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            1,
+            "a recent verification is enough"
+        );
+        freshness.clear_verifier(&lagging);
+
+        let (prompt, answered) = counting_verifier(&freshness, true);
+        freshness.set_verifier(prompt);
+        std::thread::sleep(VERIFIED_WINDOW + Duration::from_millis(50));
+        let asked = Cell::new(0);
+        let missed = resolve_ticket_with_freshness(
+            &store,
+            &late.slug,
+            |slug| {
+                asked.set(asked.get() + 1);
+                index.slug_candidates(slug)
+            },
+            &freshness,
+        )
+        .unwrap();
+        assert!(missed.is_none(), "a verified miss is final");
+        assert_eq!(asked.get(), 2, "the index is asked again after verifying");
+        assert_eq!(answered.load(Ordering::SeqCst), 1);
+
+        std::thread::sleep(VERIFIED_WINDOW + Duration::from_millis(50));
+        let learned = Cell::new(false);
+        let found = resolve_ticket_with_freshness(
+            &store,
+            &late.slug,
+            |slug| {
+                if learned.replace(true) {
+                    Ok(vec![late.id])
+                } else {
+                    index.slug_candidates(slug)
+                }
+            },
+            &freshness,
+        )
+        .unwrap();
+        assert_eq!(found.unwrap().id, late.id);
+
+        std::thread::sleep(VERIFIED_WINDOW + Duration::from_millis(50));
+        freshness.set_live(false);
+        assert!(found_unindexed(&store, &index, &late.slug, &freshness));
     }
 }

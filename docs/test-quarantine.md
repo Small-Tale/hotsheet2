@@ -40,11 +40,9 @@ row has no marker.
 
 <!-- quarantine:begin -->
 
-| Ticket     | Tier       | File                                    | Test                                                                                                                   | Since      | Reason                                                                                           |
-| ---------- | ---------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| HS2-9PDWMK | Playwright | `clients/web/tests/providers.spec.ts`   | paints terminal dashboard transitions immediately and progressively mounts only visible previews at scale (HS2-XEGA6V) | 2026-10-16 | 100 ms transition budget exceeded (184 ms) on a 2-vCPU `browser-full` shard in one of two runs   |
-| HS2-WGZMQE | Playwright | `clients/web/tests/providers.spec.ts`   | keeps primary 138-ticket interactions within the painted UI budget                                                     | 2026-10-16 | 100 ms painted budget exceeded (107-227 ms) on a 2-vCPU `browser-full` shard in one of two runs  |
-| HS2-P702Y8 | Rust       | `crates/hotsheet-server/src/watcher.rs` | watcher::stream_proof_tests::hs2_190gdz_writes_around_an_unproven_registration_are_indexed                             | 2026-11-27 | timed out in three local gates in a row while fseventsd was backlogged; passes on a quiet host   |
-| HS2-P702Y8 | Rust       | `crates/hotsheet-server/src/watcher.rs` | watcher::stream_proof_tests::hs2_190gdz_an_unproven_stream_goes_live_through_the_bridge                                | 2026-11-27 | timed out in three local gates and alone (154-212 s) while fseventsd was backlogged, on main too |
+| Ticket     | Tier       | File                                  | Test                                                                                                                   | Since      | Reason                                                                                          |
+| ---------- | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------- |
+| HS2-9PDWMK | Playwright | `clients/web/tests/providers.spec.ts` | paints terminal dashboard transitions immediately and progressively mounts only visible previews at scale (HS2-XEGA6V) | 2026-10-16 | 100 ms transition budget exceeded (184 ms) on a 2-vCPU `browser-full` shard in one of two runs  |
+| HS2-WGZMQE | Playwright | `clients/web/tests/providers.spec.ts` | keeps primary 138-ticket interactions within the painted UI budget                                                     | 2026-10-16 | 100 ms painted budget exceeded (107-227 ms) on a 2-vCPU `browser-full` shard in one of two runs |
 
 <!-- quarantine:end -->

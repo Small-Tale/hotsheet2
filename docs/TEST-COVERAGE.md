@@ -5663,11 +5663,13 @@ that a subsequent external write reaches the rearmed index.
 - every unanswered probe is reported in order, and every second one unwatches and registers the
   directory again; a failed re-registration or a dropped handle ends the proof.
 
-The native tests run the real backend against a simulated busy stream:
+The watcher tests run the production supervisor, bridge and watch loop against the in-process
+stream of HS2-P702Y8 (below), so no `fseventsd` timing is involved:
 
-- With 0, 1 and 2 dropped probes (the last forces a re-registration), external writes landing
-  before registration, between registration and the identity sample, and before the proof are all
-  indexed once the index goes live, and a write after the proof is reported.
+- With 0, 1 and 2 dropped probes (only the last re-registers the directory), external writes the
+  stream never reports, landing before registration, between registration and the identity
+  sample, and before the proof, are all indexed once the index goes live, and a write after the
+  proof is reported.
 - A stream that never answers goes live through the bridge after a full reconcile, still
   indexes later writes, and keeps its bridge. A proven stream retires its bridge.
 - Moving that bridged store away marks the index out of sync without reporting any deletion.
@@ -5678,6 +5680,40 @@ temp directory failed 5 of 5 runs before the fix (each a 120 s timeout) and pass
 (about 9 s each). Under that sustained churn other native-latency tests (`hs2_vn96j5_*`, the
 native repository monitor) time out before and after the fix alike, because `fseventsd` itself
 falls minutes behind; that residual risk is tracked separately.
+
+### On-demand stream verification (HS2-P702Y8)
+
+`crates/hotsheet-index/src/resolve.rs` unit-tests `IndexFreshness` verification:
+
+- `hs2_p702y8_verification_requests_coalesce_and_expire`: without a verifier the old trust holds;
+  one request is outstanding at a time, the stale-only hint is suppressed within the window, an
+  outstanding request is handed to a re-registered verifier, and only the registered verifier can
+  be cleared, which restores the old trust;
+- `hs2_p702y8_clearing_the_verifier_releases_a_waiting_lookup`;
+- `hs2_p702y8_an_in_sync_miss_needs_a_recent_verification`: a lagging verifier sends an in-sync
+  miss to the walk, a recent verification makes it final, a prompt one settles it by asking the
+  index again (also finding a ticket the index learned meanwhile), and an out-of-sync index walks.
+
+`crates/hotsheet-server/src/watcher.rs` (`stream_proof_tests`) adds an in-process native stream
+(`StartupHooks::stream`) that reports events and probes in order for registered directories and can
+be held and released like a backlogged `fseventsd`:
+
+- `hs2_p702y8_a_lagging_proven_stream_falls_back_to_the_bridge_until_it_catches_up`: a prompt
+  stream verifies without a bridge; once held, a miss on an unreported write walks instead of
+  trusting the stale index; the overdue probe starts the bridge, whose reconcile indexes the write
+  and later writes; releasing the backlog proves the stream, retires the bridge, and later writes
+  arrive through the stream; dropping the watcher unregisters its verifier;
+- `hs2_p702y8_a_local_write_requests_a_verification_unless_one_is_recent`: server writes and
+  purges request a verification only when none is outstanding or recent.
+
+The real-FSEvents tests (`hs2_r6fz54_*`, `hs2_vn96j5_*`) request a verification after each
+external write, so a lagging stream answers through the bridge.
+`hs2_vn96j5_root_scope_is_quiet_when_idle_and_ignores_git_churn` remains the real-stream smoke
+test: it waits for the proven stream to deliver the ticket write, which is ordered after the churn
+it must reject.
+
+Repro evidence (2026-11-27, four sibling churn loops, retries off, the targeted watcher filter with
+ignored tests included): see the ticket's completion note for before and after counts.
 
 ### Store root watch without the parent stream (HS2-AZFCB6)
 
