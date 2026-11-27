@@ -62,15 +62,22 @@ fn kick(server: &ServerInstance, store: &Path) -> KickOutcome {
     let store = hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
     let endpoint = format!("{}/sync/kick", server.url.trim_end_matches('/'));
     let body = serde_json::json!({ "store": store }).to_string();
-    match ureq::post(&endpoint)
-        .set("X-Hotsheet-Secret", server.secret.expose())
-        .set("Content-Type", "application/json")
-        .timeout(KICK_TIMEOUT)
-        .send_string(&body)
+    // HS2-9ABVDW: an error status is read here, for the host's own message.
+    let agent = hotsheet_http::build(
+        hotsheet_http::config()
+            .http_status_as_error(false)
+            .timeout_global(Some(KICK_TIMEOUT)),
+    );
+    match agent
+        .post(&endpoint)
+        .header("X-Hotsheet-Secret", server.secret.expose())
+        .header("Content-Type", "application/json")
+        .send(&body)
     {
-        Ok(_) => KickOutcome::Accepted,
-        Err(ureq::Error::Status(status, response)) => {
-            let text = response.into_string().unwrap_or_default();
+        Ok(response) if response.status().as_u16() < 400 => KickOutcome::Accepted,
+        Ok(mut response) => {
+            let status = response.status().as_u16();
+            let text = response.body_mut().read_to_string().unwrap_or_default();
             let message = serde_json::from_str::<serde_json::Value>(&text)
                 .ok()
                 .and_then(|body| body["error"].as_str().map(str::to_owned))

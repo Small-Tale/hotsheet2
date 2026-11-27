@@ -42,8 +42,8 @@ sha2.workspace = true
 toml.workspace = true
 time.workspace = true
 tempfile.workspace = true
-# HS2-9ABVDW: still on ureq 2 until this crate moves to hotsheet-http.
-ureq = "2.12"
+ureq.workspace = true
+hotsheet-http.workspace = true
 rustls.workspace = true
 rustls-pemfile.workspace = true
 webpki-roots.workspace = true

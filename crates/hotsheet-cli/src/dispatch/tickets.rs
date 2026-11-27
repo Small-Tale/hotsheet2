@@ -482,15 +482,17 @@ pub(crate) fn cmd_people(path: &Path, cmd: PeopleCmd) -> Result<()> {
                 hotsheet_ticketing::OsKeychain,
             )
             .get("github")?;
-            let agent = ureq::AgentBuilder::new().user_agent("hotsheet2").build();
+            let agent = hotsheet_http::build(hotsheet_http::config().user_agent("hotsheet2"));
             let get = |url: &str| -> Result<serde_json::Value> {
-                let response = agent
+                let mut response = agent
                     .get(url)
-                    .set("Authorization", &format!("Bearer {token}"))
-                    .set("Accept", "application/vnd.github+json")
+                    .header("Authorization", &format!("Bearer {token}"))
+                    .header("Accept", "application/vnd.github+json")
                     .call()
                     .map_err(|e| anyhow::anyhow!("GitHub API: {e}"))?;
-                Ok(serde_json::from_str(&response.into_string()?)?)
+                Ok(serde_json::from_str(
+                    &response.body_mut().read_to_string()?,
+                )?)
             };
             let collaborators = get(&format!(
                 "{}/repos/{repo}/collaborators?per_page=100",

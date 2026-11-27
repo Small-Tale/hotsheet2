@@ -7073,7 +7073,7 @@ fn provider_new_uses_direct_github_api_without_writing_git_ticket() {
         let (mut stream, _) = listener.accept().unwrap();
         let request = read_http_request(&mut stream);
         assert!(request.starts_with("POST /repos/acme/repo/issues "));
-        assert!(request.contains("Authorization: Bearer fixture-token"));
+        assert!(request.contains("authorization: Bearer fixture-token"));
         let body = r#"{"number":31,"title":"remote from cli","body":"","state":"open","state_reason":null,"html_url":"https://github.test/acme/repo/issues/31","created_at":"2026-08-26T00:00:00Z","updated_at":"2026-08-26T00:00:00Z","closed_at":null,"labels":[],"assignees":[],"pull_request":null}"#;
         write!(stream,"HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
     });
@@ -13962,7 +13962,7 @@ fn hs2_0he7e4_saved_enterprise_origin_drives_the_real_cli_provider_read() {
             .unwrap();
         let request = read_http_request(&mut stream);
         assert!(request.starts_with("GET /api/v3/repos/synthetic/repo/issues?"));
-        assert!(request.contains("Authorization: Bearer synthetic-access"));
+        assert!(request.contains("authorization: Bearer synthetic-access"));
         write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n[]").unwrap();
     });
     let output = run(&["provider-ls", "github-synthetic-repo"])
@@ -14051,7 +14051,7 @@ fn provider_ls_unwraps_a_github_app_bundle_before_the_live_read() {
             "{request}"
         );
         assert!(
-            request.contains("Authorization: Bearer fixture-access"),
+            request.contains("authorization: Bearer fixture-access"),
             "{request}"
         );
         write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n[]").unwrap();

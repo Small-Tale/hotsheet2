@@ -376,28 +376,29 @@ impl LocalServerSessions {
         body: Option<Value>,
         answer: std::time::Duration,
     ) -> Result<Value, HostCall> {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(HOST_CONNECT)
-            .timeout(answer)
-            .build();
-        let request = agent
-            .request(
-                method,
-                &format!("{}{path}", server.url.trim_end_matches('/')),
-            )
-            .set("X-Hotsheet-Secret", server.secret.expose());
-        let response = match body {
-            Some(body) => request
-                .set("Content-Type", "application/json")
-                .send_string(&body.to_string()),
-            None => request.call(),
-        };
+        let agent = hotsheet_http::build(
+            hotsheet_http::config()
+                .timeout_connect(Some(HOST_CONNECT))
+                .timeout_global(Some(answer)),
+        );
+        let body = body.map(|body| body.to_string());
+        let mut headers = vec![("X-Hotsheet-Secret", server.secret.expose())];
+        if body.is_some() {
+            headers.push(("Content-Type", "application/json"));
+        }
+        let response = hotsheet_http::run(
+            &agent,
+            method,
+            &format!("{}{path}", server.url.trim_end_matches('/')),
+            &headers,
+            body.as_deref().map(str::as_bytes),
+        );
         match response {
             Ok(response) => {
-                Ok(serde_json::from_reader(response.into_reader()).unwrap_or(Value::Null))
+                Ok(serde_json::from_reader(response.into_body().into_reader())
+                    .unwrap_or(Value::Null))
             }
-            Err(ureq::Error::Status(status, _)) => Err(HostCall::Status(status)),
-            Err(ureq::Error::Transport(transport)) => Err(classify_transport(transport.kind())),
+            Err(error) => Err(classify_transport(hotsheet_http::failure_kind(&error))),
         }
     }
 
@@ -462,12 +463,16 @@ pub enum HostCall {
 
 /// HS2-YWN8JT: a transport failure before any connection is a host that is not
 /// there; anything later leaves what the host did unknown.
-pub fn classify_transport(kind: ureq::ErrorKind) -> HostCall {
+pub fn classify_transport(kind: hotsheet_http::FailureKind) -> HostCall {
+    use hotsheet_http::FailureKind;
     match kind {
-        ureq::ErrorKind::ConnectionFailed | ureq::ErrorKind::Dns | ureq::ErrorKind::InvalidUrl => {
+        FailureKind::ConnectionFailed | FailureKind::Dns | FailureKind::InvalidUrl => {
             HostCall::Unreached
         }
-        _ => HostCall::Unanswered,
+        FailureKind::Status(status) => HostCall::Status(status),
+        FailureKind::TooManyRedirects | FailureKind::Protocol | FailureKind::Io => {
+            HostCall::Unanswered
+        }
     }
 }
 
