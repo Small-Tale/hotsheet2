@@ -293,7 +293,35 @@ fn decode<T: DeserializeOwned>(body: &Value) -> Result<T, OrchestrationError> {
     if let Some(object) = body.as_object_mut() {
         object.remove("actor");
     }
-    serde_json::from_value(body).map_err(|_| OrchestrationError::Invalid("invalid target request"))
+    serde_path_to_error::deserialize(body).map_err(|error| decode_refusal(&error))
+}
+/// HS2-4F9VGQ: an unknown member is named by its path from the body's root, so a person
+/// learns which field of a policy (or any request) is not read; every other failure keeps
+/// the generic refusal, which never echoes a value from the request.
+fn decode_refusal(error: &serde_path_to_error::Error<serde_json::Error>) -> OrchestrationError {
+    let message = error.inner().to_string();
+    let Some(field) = message
+        .strip_prefix("unknown field `")
+        .and_then(|rest| rest.split_once('`'))
+        .map(|(field, _)| field)
+    else {
+        return OrchestrationError::Invalid("invalid target request");
+    };
+    let parent = error.path().to_string();
+    let path = if parent == "." || parent.is_empty() {
+        field.to_owned()
+    } else if parent.ends_with(&format!(".{field}")) || parent == field {
+        parent
+    } else {
+        format!("{parent}.{field}")
+    };
+    // A field name is the caller's own text: keep it short and printable.
+    let path: String = path
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '[' | ']'))
+        .take(120)
+        .collect();
+    OrchestrationError::UnknownField { path }
 }
 /// HS2-AZ15GA: hosted bodies keep their `actor`; it attributes the target's write.
 fn hosted<T: DeserializeOwned>(body: &Value) -> Result<T, OrchestrationError> {

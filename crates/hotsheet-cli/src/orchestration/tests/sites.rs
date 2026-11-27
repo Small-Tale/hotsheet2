@@ -344,7 +344,7 @@ fn hs2_d4g81q_sites_view_reads_each_bound_sites_machine_when_asked() {
     ] {
         assert!(matches!(
             m.runtime.request(method, &wrong, &body, &mut tx),
-            Err(OrchestrationError::Invalid(_))
+            Err(OrchestrationError::Invalid(_) | OrchestrationError::UnknownField { .. })
         ));
     }
 }

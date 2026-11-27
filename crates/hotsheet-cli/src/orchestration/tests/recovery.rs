@@ -1123,7 +1123,7 @@ fn hs2_wbredm_recovery_routes_reach_the_same_runtime() {
         assert!(
             matches!(
                 post(operation, body, &person),
-                Err(OrchestrationError::Invalid(_))
+                Err(OrchestrationError::Invalid(_) | OrchestrationError::UnknownField { .. })
             ),
             "{operation}"
         );

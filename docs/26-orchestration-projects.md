@@ -1068,6 +1068,10 @@ hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy
 ```
 
 `--file` takes a policy body or the output of `policy show`, and `-` reads stdin.
+A member the policy does not have (such as a stray `schema_version`) is refused with
+`invalid_request`, naming it by its path: "`policy.schema_version` is not a known
+field" (HS2-4F9VGQ). Every orchestration request names an unknown member the same way;
+other malformed bodies keep the generic refusal, which never echoes a value.
 `policy set` without `--expected-revision` reads the current revision first, so a
 repeated setup run changes nothing while a concurrent edit still conflicts.
 `policy start` and `policy pause` are Start Orchestration and Pause of §26.26 (HS2-D9KP86):
