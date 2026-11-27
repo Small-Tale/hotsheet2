@@ -101,6 +101,67 @@ pub fn compose_explicit_feedback_comment(
     body
 }
 
+/// Prefix of the metadata line naming the AI that wrote a note (HS2-Z3SBRQ).
+const ACTOR_PREFIX: &str = "<!-- hotsheet-note-actor:ai:";
+/// The longest AI actor id kept; a longer one is not written or read.
+const MAX_ACTOR_ID_BYTES: usize = 256;
+
+/// HS2-Z3SBRQ: append the AI author of a note to its comment's metadata, so an answer to
+/// its FEEDBACK NEEDED question can be routed back to it. Only an AI actor with an id is
+/// written (hex-encoded, like `response_to`, so no text can end the comment); a person's
+/// authorship comes from the write request, never from comment text.
+pub fn append_note_actor(body: &mut String, actor: Option<&hotsheet_model::NoteActor>) {
+    let Some(id) = actor
+        .filter(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai)
+        .and_then(|actor| actor.id.as_deref())
+        .filter(|id| valid_actor_id(id))
+    else {
+        return;
+    };
+    body.push('\n');
+    body.push_str(ACTOR_PREFIX);
+    body.push_str(
+        &id.bytes()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>(),
+    );
+    body.push_str(" -->");
+}
+
+/// HS2-Z3SBRQ: the AI author recorded after a valid Hot Sheet note marker, if any. Only an
+/// `ai` actor is ever read back.
+pub fn parse_note_actor(body: &str) -> Option<hotsheet_model::NoteActor> {
+    parse_note_id(body)?;
+    let (_, tail) = body.rsplit_once(SEPARATOR_MARKER)?;
+    let (_, metadata) = tail.split_once(" -->")?;
+    metadata.lines().find_map(|line| {
+        let encoded = line.strip_prefix(ACTOR_PREFIX)?.strip_suffix(" -->")?;
+        let id = decode_hex(encoded)?;
+        if !valid_actor_id(&id) {
+            return None;
+        }
+        Some(hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some(id),
+        })
+    })
+}
+
+fn valid_actor_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= MAX_ACTOR_ID_BYTES && !id.chars().any(char::is_control)
+}
+
+fn decode_hex(encoded: &str) -> Option<String> {
+    if encoded.len() % 2 != 0 {
+        return None;
+    }
+    let bytes = (0..encoded.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(encoded.get(at..at + 2)?, 16).ok())
+        .collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
+}
+
 /// Only valid metadata after a valid Hot Sheet note marker establishes explicit intent.
 pub fn parse_explicit_kind(body: &str) -> Option<NoteKind> {
     parse_note_id(body)?;
@@ -326,6 +387,66 @@ mod tests {
             None,
         );
         assert_eq!(parse_feedback_metadata(&quoted), (false, None));
+    }
+
+    /// HS2-Z3SBRQ: an AI author rides on the comment metadata and is read back only after a
+    /// valid note marker; a person, an id-less or unusable actor writes nothing; a
+    /// hand-written or damaged line names nobody; older metadata still reads.
+    #[test]
+    fn hs2_z3sbrq_the_ai_author_round_trips_and_nothing_else_reads_as_one() {
+        use hotsheet_model::{AttachmentActorRole, NoteActor};
+        let id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let ai = |name: &str| NoteActor {
+            role: AttachmentActorRole::Ai,
+            id: Some(name.into()),
+        };
+        let mut body =
+            compose_feedback_comment("Which one?", None, id, NoteKind::FeedbackNeeded, None);
+        let before = body.clone();
+        append_note_actor(&mut body, Some(&ai("claude-planner --> x")));
+        assert_eq!(parse_note_actor(&body), Some(ai("claude-planner --> x")));
+        // The rest of the metadata and the text are unchanged.
+        assert_eq!(parse_comment(&body), ("Which one?".into(), None));
+        assert_eq!(parse_feedback_metadata(&body), (true, None));
+        assert_eq!(parse_note_id(&body).as_deref(), Some(id));
+        // Older notes, people, and actors without a usable id write nothing.
+        assert_eq!(parse_note_actor(&before), None);
+        for actor in [
+            None,
+            Some(NoteActor {
+                role: AttachmentActorRole::Human,
+                id: Some("maintainer".into()),
+            }),
+            Some(NoteActor {
+                role: AttachmentActorRole::Ai,
+                id: None,
+            }),
+            Some(ai("")),
+            Some(ai("bad\nid")),
+            Some(ai(&"x".repeat(MAX_ACTOR_ID_BYTES + 1))),
+        ] {
+            let mut unchanged = before.clone();
+            append_note_actor(&mut unchanged, actor.as_ref());
+            assert_eq!(unchanged, before, "{actor:?}");
+        }
+        // Without a valid note marker, in the visible text, or damaged: nobody.
+        let line = format!("{ACTOR_PREFIX}{} -->", "6162");
+        for text in [
+            line.clone(),
+            format!("Quoted: {line}\n\n<!-- hotsheet-note-id:{id} -->"),
+            format!("Text\n\n<!-- hotsheet-note-id:invalid -->\n{line}"),
+            format!("Text\n\n<!-- hotsheet-note-id:{id} -->\n{ACTOR_PREFIX}616 -->"),
+            format!("Text\n\n<!-- hotsheet-note-id:{id} -->\n{ACTOR_PREFIX}zz -->"),
+            format!(
+                "Text\n\n<!-- hotsheet-note-id:{id} -->\n<!-- hotsheet-note-actor:human:6162 -->"
+            ),
+        ] {
+            assert_eq!(parse_note_actor(&text), None, "{text}");
+        }
+        assert_eq!(
+            parse_note_actor(&format!("Text\n\n<!-- hotsheet-note-id:{id} -->\n{line}")),
+            Some(ai("ab"))
+        );
     }
 
     #[test]

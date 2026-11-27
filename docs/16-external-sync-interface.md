@@ -921,6 +921,15 @@ idempotency marker; replies and `No response needed` acknowledgements append
 `<!-- hotsheet-response-to:<hex-encoded native comment id> -->`. Provider reads
 expose the request and response link using native note IDs and retain the older
 sequential rule for comments without these markers (HS2-W1ENZD).
+A note written by an AI with a worker id also appends
+`<!-- hotsheet-note-actor:ai:<hex-encoded worker id> -->` (HS2-Z3SBRQ), read back as the
+note's `actor` (`{"role":"ai","id":...}`) only after a valid note marker, so a person's
+answer to that AI's FEEDBACK NEEDED request can be pushed back to it. Only an AI author is
+written or read: a person's authorship still comes from the write request, so comment text
+can never make a note count as a person's. A hand-written AI marker can at most make a
+comment count as an AI's and point an answer's wake-up at that worker's live session in
+the same checkout. Older versions ignore the extra line; comments written before it have
+no actor.
 Reads also expose the generated note marker as `hotsheet_note_id` alongside the
 provider-native `id`, allowing ticket copy to remap a request and its response
 correctly after reload or an idempotent retry. An opt-in live test confirms the request

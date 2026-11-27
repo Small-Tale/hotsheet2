@@ -5973,6 +5973,10 @@ path, and the question is visible until the person answers:
   but only into the live session of the AI that asked: no other session, chooser or
   start action is offered, and nothing is pushed when that session is gone (the note
   stays for the AI's next read). A closed ticket never notifies.
+- **Goals on a provider ticket source (HS2-Z3SBRQ).** The same holds when the ticket is a
+  GitHub, GitLab or Jira issue: a comment an AI writes records its worker id in the
+  comment's Hot Sheet metadata, so a person's answer is pushed back to the planner that
+  asked (docs/05 "External-provider tickets").
 
 ### What the planner does
 

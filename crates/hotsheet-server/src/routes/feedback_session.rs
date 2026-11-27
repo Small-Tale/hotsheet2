@@ -166,21 +166,63 @@ pub(crate) fn asker_candidate(
     }
 }
 
-/// The provider-ticket form of [`note_to_notify`]: the newly appended regular note on a Started
-/// ticket, written by a human. Providers such as GitHub read comments back without an actor, so
-/// authorship comes from the write request (`request_human`) or a stored human actor. Not
-/// Working reports are a separate operation and never notify (HS2-25TP3N).
-pub(crate) fn api_note_to_notify(ticket: &ApiTicket, request_human: bool) -> Option<&ApiNote> {
-    (ticket.status == Status::Started)
-        .then(|| ticket.notes.last())
-        .flatten()
-        .filter(|note| {
-            note.kind == NoteKind::Regular
-                && match note.actor.as_ref() {
-                    Some(actor) => actor.role == AttachmentActorRole::Human,
-                    None => request_human,
-                }
+/// What a newly appended note on a provider ticket asks of delivery: the provider form of
+/// [`Notify`] (HS2-H9Z9KZ, HS2-Z3SBRQ).
+#[derive(Debug)]
+pub(crate) enum ApiNotify<'a> {
+    /// A human note on a Started ticket: the full routing (safe advisory claim, the AI that
+    /// asked, the project's primary, a chooser or a start action).
+    Route(&'a ApiNote),
+    /// HS2-Z3SBRQ: a human note answering an AI's question on a Not Started or Backlog
+    /// ticket. Only the live session of the AI that asked (`worker`) is told.
+    Asker { note: &'a ApiNote, worker: &'a str },
+}
+
+/// The provider-ticket form of [`note_to_notify`]: the newly appended regular note, written by
+/// a human, on a Started ticket, or on a Not Started or Backlog ticket when it answers an AI's
+/// question (HS2-Z3SBRQ, as HS2-A1M4KN for Git). Providers such as GitHub read comments back
+/// without a person's actor, so human authorship comes from the write request
+/// (`request_human`) or a stored human actor; an AI author is read from the comment's Hot
+/// Sheet metadata. Not Working reports are a separate operation and never notify (HS2-25TP3N).
+pub(crate) fn api_note_to_notify(ticket: &ApiTicket, request_human: bool) -> Option<ApiNotify<'_>> {
+    let note = ticket.notes.last().filter(|note| {
+        note.kind == NoteKind::Regular
+            && match note.actor.as_ref() {
+                Some(actor) => actor.role == AttachmentActorRole::Human,
+                None => request_human,
+            }
+    })?;
+    match ticket.status {
+        Status::Started => Some(ApiNotify::Route(note)),
+        Status::NotStarted | Status::Backlog => {
+            api_asker(ticket, note).map(|worker| ApiNotify::Asker { note, worker })
+        }
+        _ => None,
+    }
+}
+
+/// HS2-Z3SBRQ: the provider form of [`asker`]: the worker id of the AI that asked the
+/// question `note` answers: the request it replies to, else the newest unanswered one (by
+/// note order, since provider ids are native comment ids). Only an AI author with an id
+/// counts, which a provider records in the comment's Hot Sheet metadata; a request written
+/// before that, or by a person, names nobody.
+pub(crate) fn api_asker<'a>(ticket: &'a ApiTicket, note: &ApiNote) -> Option<&'a str> {
+    let answered = |request: &ApiNote| {
+        ticket.notes.iter().any(|reply| {
+            reply.id != note.id && reply.response_to.as_deref() == Some(request.id.as_str())
         })
+    };
+    let request = match note.response_to.as_deref() {
+        Some(id) => ticket.notes.iter().find(|request| request.id == id),
+        None => ticket.notes.iter().rev().find(|request| {
+            request.id != note.id && request.kind == NoteKind::FeedbackNeeded && !answered(request)
+        }),
+    }?;
+    request
+        .actor
+        .as_ref()
+        .filter(|actor| actor.role == AttachmentActorRole::Ai)
+        .and_then(|actor| actor.id.as_deref())
 }
 
 /// Live terminals whose reported AI session can receive a pushed message, as registry
@@ -762,8 +804,9 @@ pub(crate) async fn after_human_note(
 }
 
 /// HS2-H9Z9KZ: route a human note (including a FEEDBACK NEEDED answer) on a provider ticket. The claimed
-/// session comes from a safe advisory claim (Jira); otherwise one reachable session, a human
-/// choice, or Start, exactly as for Git. Nothing is persisted, and a failed send reports
+/// session comes from a safe advisory claim (Jira), else the AI that asked (HS2-Z3SBRQ);
+/// otherwise one reachable session, a human choice, or Start, exactly as for Git. On a Not
+/// Started or Backlog ticket only the asker's live session is told. Nothing is persisted, and a failed send reports
 /// [`Delivery::NotShared`] so the client can say the AI was not told immediately.
 pub(crate) async fn after_provider_note(
     state: &AppState,
@@ -772,10 +815,23 @@ pub(crate) async fn after_provider_note(
     ticket: &ApiTicket,
     request_human: bool,
 ) -> Option<Delivery> {
-    let note = api_note_to_notify(ticket, request_human)?;
+    let (note, asker_only) = match api_note_to_notify(ticket, request_human)? {
+        ApiNotify::Route(note) => (note, None),
+        ApiNotify::Asker { note, worker } => (note, Some(worker)),
+    };
     let note_id = note.id.clone();
     let text = message(&ticket.slug, note.response_to.is_some());
     let all = candidates(state, checkout, source).await;
+    // HS2-Z3SBRQ: an answer on a ticket that is not Started goes only to the AI that asked;
+    // with no live session of it nobody is told (the note reaches it at its next read).
+    if let Some(worker) = asker_only {
+        let candidate = asker_candidate(&checkout.root, source, worker, all)?;
+        return Some(
+            deliver(state, None, &note_id, candidate, text)
+                .await
+                .unwrap_or(Delivery::NotShared { note_id }),
+        );
+    }
     let chosen = chosen_primary(state, &checkout.root);
     let claim = {
         let (state, checkout_id, source, native_id) = (
@@ -795,6 +851,9 @@ pub(crate) async fn after_provider_note(
         .await
         .ok()
         .flatten()
+        // HS2-Z3SBRQ: without a safe claim, the answer goes back to the AI that asked, as
+        // HS2-N5BDE4 does for Git tickets.
+        .or_else(|| api_asker(ticket, note).map(str::to_owned))
     };
     Some(
         match route(
@@ -1337,7 +1396,7 @@ mod tests {
             ),
             HashSet::from(["a".to_string(), "q".to_string()])
         );
-        // Empty, then refilled.
+        // No notes at all: nothing.
         assert!(primary_terminals([], &no_choice).is_empty());
         assert_eq!(
             primary_terminals([("n", "/p", 1)], &no_choice),
@@ -1403,7 +1462,7 @@ mod tests {
             ),
             set(&["p-new", "q-old"])
         );
-        // Empty, then refilled with the chosen id: the choice applies again.
+        // No notes at all: nothing.with the chosen id: the choice applies again.
         assert!(primary_terminals([], &choices).is_empty());
         assert_eq!(
             primary_terminals([("p-new", "/p", 5)], &choices),
@@ -1480,6 +1539,196 @@ mod tests {
             text: "Synthetic note".into(),
         });
         ApiTicket::from(&model)
+    }
+
+    /// HS2-Z3SBRQ: one note of a test thread: its kind, its author (role and id), and the
+    /// earlier note it replies to.
+    type ThreadNote<'a> = (
+        NoteKind,
+        Option<(AttachmentActorRole, Option<&'a str>)>,
+        Option<usize>,
+    );
+
+    /// HS2-Z3SBRQ: a provider ticket whose notes are [`ThreadNote`]s.
+    fn provider_thread(status: Status, notes: &[ThreadNote<'_>]) -> ApiTicket {
+        let at = hotsheet_model::Timestamp::new("2026-11-03T00:00:00Z");
+        let mut model = Ticket::new(
+            Ulid::new(),
+            "ENG-9",
+            "Synthetic",
+            "task",
+            at.clone(),
+            at.clone(),
+        );
+        model.status = status;
+        let ids: Vec<Ulid> = (0..notes.len())
+            .map(|n| Ulid::from(n as u128 + 1))
+            .collect();
+        for (n, (kind, author, reply)) in notes.iter().enumerate() {
+            model.notes.push(hotsheet_model::Note {
+                id: ids[n],
+                kind: *kind,
+                kind_explicit: true,
+                created_at: at.clone(),
+                edited_at: at.clone(),
+                summary: None,
+                confidence: None,
+                feedback_for: None,
+                feedback_request: *kind == NoteKind::FeedbackNeeded,
+                response_to: reply.map(|reply| ids[reply]),
+                ai_feedback: None,
+                human_edited: false,
+                actor: author.map(|(role, id)| hotsheet_model::NoteActor {
+                    role,
+                    id: id.map(Into::into),
+                }),
+                text: "Synthetic note".into(),
+            });
+        }
+        ApiTicket::from(&model)
+    }
+
+    fn provider_routing(
+        ticket: &ApiTicket,
+        request_human: bool,
+    ) -> Option<(&'static str, Option<&str>)> {
+        api_note_to_notify(ticket, request_human).map(|notify| match notify {
+            ApiNotify::Route(note) => ("route", api_asker(ticket, note)),
+            ApiNotify::Asker { worker, .. } => ("asker", Some(worker)),
+        })
+    }
+
+    /// HS2-Z3SBRQ: a person's answer on a provider ticket goes back to the AI that asked, as
+    /// HS2-A1M4KN / HS2-N5BDE4 do for Git: across the status matrix, for a reply and a plain
+    /// note, repeated and interleaved questions, and requests that name nobody.
+    #[test]
+    fn hs2_z3sbrq_a_provider_answer_goes_to_the_ai_that_asked() {
+        use AttachmentActorRole::{Ai, Human};
+        let planner = Some((Ai, Some("claude-planner")));
+        let person = Some((Human, None));
+        // A reply to the planner's question, and a plain note after it, per status.
+        for (status, expected) in [
+            (Status::Started, Some("route")),
+            (Status::NotStarted, Some("asker")),
+            (Status::Backlog, Some("asker")),
+            (Status::Completed, None),
+            (Status::Verified, None),
+            (Status::Archive, None),
+            (Status::Deleted, None),
+            (Status::Moved, None),
+        ] {
+            for reply in [Some(0), None] {
+                let ticket = provider_thread(
+                    status,
+                    &[
+                        (NoteKind::FeedbackNeeded, planner, None),
+                        (NoteKind::Regular, person, reply),
+                    ],
+                );
+                let routed = provider_routing(&ticket, true);
+                assert_eq!(
+                    routed.map(|(kind, _)| kind),
+                    expected,
+                    "{status:?} {reply:?}"
+                );
+                if expected.is_some() {
+                    assert_eq!(routed.unwrap().1, Some("claude-planner"), "{status:?}");
+                }
+            }
+        }
+        // GitHub-style read-back: the answer has no stored actor; the request decides.
+        let actorless = provider_thread(
+            Status::NotStarted,
+            &[
+                (NoteKind::FeedbackNeeded, planner, None),
+                (NoteKind::Regular, None, Some(0)),
+            ],
+        );
+        assert_eq!(
+            provider_routing(&actorless, true),
+            Some(("asker", Some("claude-planner")))
+        );
+        assert_eq!(provider_routing(&actorless, false), None);
+        // An AI's own note, or an activity, never notifies.
+        for last in [
+            (NoteKind::Regular, planner, Some(0)),
+            (NoteKind::Activity, person, None),
+        ] {
+            let ticket = provider_thread(
+                Status::NotStarted,
+                &[(NoteKind::FeedbackNeeded, planner, None), last],
+            );
+            assert_eq!(provider_routing(&ticket, true), None);
+        }
+        // Requests that name nobody: a person's, an AI's without an id, or one written before
+        // the author was recorded (no actor). Not Started: nobody; Started: the usual route.
+        for request in [person, Some((Ai, None)), None] {
+            let ticket = provider_thread(
+                Status::NotStarted,
+                &[
+                    (NoteKind::FeedbackNeeded, request, None),
+                    (NoteKind::Regular, person, Some(0)),
+                ],
+            );
+            assert_eq!(provider_routing(&ticket, true), None, "{request:?}");
+            let started = provider_thread(
+                Status::Started,
+                &[
+                    (NoteKind::FeedbackNeeded, request, None),
+                    (NoteKind::Regular, person, Some(0)),
+                ],
+            );
+            assert_eq!(provider_routing(&started, true), Some(("route", None)));
+        }
+        // Repeated: once answered, a later plain note names nobody...
+        let answered = provider_thread(
+            Status::NotStarted,
+            &[
+                (NoteKind::FeedbackNeeded, planner, None),
+                (NoteKind::Regular, person, Some(0)),
+                (NoteKind::Regular, person, None),
+            ],
+        );
+        assert_eq!(provider_routing(&answered, true), None);
+        // ...until another AI asks again: the newest unanswered question wins, by order.
+        let interleaved = provider_thread(
+            Status::Backlog,
+            &[
+                (
+                    NoteKind::FeedbackNeeded,
+                    Some((Ai, Some("codex-old"))),
+                    None,
+                ),
+                (NoteKind::FeedbackNeeded, planner, None),
+                (NoteKind::Regular, person, None),
+            ],
+        );
+        assert_eq!(
+            provider_routing(&interleaved, true),
+            Some(("asker", Some("claude-planner")))
+        );
+        // A reply names its own request even when a newer one is open.
+        let named = provider_thread(
+            Status::Backlog,
+            &[
+                (
+                    NoteKind::FeedbackNeeded,
+                    Some((Ai, Some("codex-old"))),
+                    None,
+                ),
+                (NoteKind::FeedbackNeeded, planner, None),
+                (NoteKind::Regular, person, Some(0)),
+            ],
+        );
+        assert_eq!(
+            provider_routing(&named, true),
+            Some(("asker", Some("codex-old")))
+        );
+        // No notes at all: nothing.
+        assert_eq!(
+            provider_routing(&provider_thread(Status::NotStarted, &[]), true),
+            None
+        );
     }
 
     #[test]

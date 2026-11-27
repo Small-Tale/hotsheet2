@@ -1792,3 +1792,228 @@ password_env = "OPENCODE_SERVER_PASSWORD"
     );
     let _ = send(&restarted, "DELETE", "/terminals/journal-2", None).await;
 }
+
+/// HS2-Z3SBRQ: a synthetic GitHub issue whose status label a test sets, with comments that
+/// grow with each POST.
+#[derive(Default)]
+struct ProviderIssue {
+    comments: Mutex<Vec<serde_json::Value>>,
+    labels: Mutex<Vec<String>>,
+}
+
+impl hotsheet_extsync::GitHubTransport for ProviderIssue {
+    fn request(
+        &self,
+        method: &str,
+        url: &str,
+        _: &[(&str, String)],
+        body: Option<&serde_json::Value>,
+    ) -> Result<hotsheet_extsync::HttpResponse, String> {
+        let path = url.split('?').next().unwrap_or(url);
+        let ok = |status: u16, body: serde_json::Value| hotsheet_extsync::HttpResponse {
+            status,
+            headers: std::collections::HashMap::new(),
+            body: body.to_string(),
+        };
+        if path.ends_with("/repos/acme/repo/issues/42/comments") {
+            let mut comments = self.comments.lock().unwrap();
+            if method == "POST" {
+                let comment = serde_json::json!({
+                    "id": comments.len() + 1,
+                    "body": body.and_then(|body| body["body"].as_str()).unwrap_or_default(),
+                    "created_at": format!("2026-11-03T00:{:02}:00Z", comments.len() + 2),
+                });
+                comments.push(comment.clone());
+                return Ok(ok(201, comment));
+            }
+            return Ok(ok(200, serde_json::Value::Array(comments.clone())));
+        }
+        if path.ends_with("/repos/acme/repo/issues/42") {
+            let labels: Vec<serde_json::Value> = self
+                .labels
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|name| serde_json::json!({ "name": name }))
+                .collect();
+            return Ok(ok(
+                200,
+                serde_json::json!({
+                    "number": 42, "title": "Synthetic provider question", "body": "body",
+                    "state": "open", "state_reason": null,
+                    "html_url": "https://github.test/acme/repo/issues/42",
+                    "created_at": "2026-11-03T00:00:00Z", "updated_at": "2026-11-03T00:01:00Z",
+                    "closed_at": null, "labels": labels, "assignees": [], "pull_request": null
+                }),
+            ));
+        }
+        if path.ends_with("/events") || path.ends_with("/timeline") {
+            return Ok(ok(200, serde_json::json!([])));
+        }
+        Ok(ok(404, serde_json::json!({"message": "Not Found"})))
+    }
+}
+
+/// HS2-Z3SBRQ: on a GitHub ticket, through the real checkout write route and real push
+/// sessions, a person's answer goes back to the AI that asked (its author recorded in the
+/// comment): on a Not Started issue only to that AI's live session, never to the older
+/// primary; a plain note after the answer reaches nobody; with the asker's session gone
+/// nothing is sent; and on a Started issue the asker is preferred over the primary.
+/// Synthetic issue, notes and fake tools only.
+#[tokio::test]
+async fn hs2_z3sbrq_a_provider_answer_reaches_the_ai_that_asked() {
+    let store_dir = tempfile::tempdir().unwrap();
+    FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    write_plugin(
+        plugins.path(),
+        "fake-push",
+        r#"
+[session_push]
+mechanism = "opencode-http"
+port_args = ["--port", "{port}"]
+password_env = "OPENCODE_SERVER_PASSWORD"
+"#,
+    );
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let root = hotsheet_sync::paths::canonicalize(project.path()).unwrap();
+    let registry = home.path().join("checkouts.json");
+    let registered = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry)
+        .register_sources(&root, Some("provider"), None, vec![], None)
+        .unwrap();
+    let mut saved: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&registry).unwrap()).unwrap();
+    let entry = saved["checkouts"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|entry| entry["id"] == registered.id)
+        .unwrap();
+    entry["sources"] = serde_json::json!([
+        {"connection_id": "github-main", "provider": "github", "locator": "acme/repo"}
+    ]);
+    entry["default_source"] = serde_json::json!("github-main");
+    std::fs::write(&registry, serde_json::to_vec(&saved).unwrap()).unwrap();
+    let issue = Arc::new(ProviderIssue::default());
+    let provider = hotsheet_extsync::GitHubProvider::new(
+        hotsheet_extsync::GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        issue.clone(),
+    );
+    let router = app(
+        AppState::new(FsStore::open(store_dir.path()).unwrap(), SECRET.into())
+            .unwrap()
+            .with_machine_home(home.path())
+            .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+            .with_checkout_registry(&registry)
+            .with_ticket_provider(Arc::new(provider)),
+    );
+    let path = format!("/checkouts/{}/tickets/github-main:42", registered.id);
+    let prompts = |seen: &Arc<Mutex<Vec<Seen>>>| -> Vec<String> {
+        seen.lock()
+            .unwrap()
+            .iter()
+            .filter(|seen| seen.route.ends_with("/prompt_async"))
+            .filter_map(|seen| {
+                seen.body.as_ref()?["parts"][0]["text"]
+                    .as_str()
+                    .map(str::to_owned)
+            })
+            .collect()
+    };
+    let note = |body: serde_json::Value| {
+        let router = router.clone();
+        let path = path.clone();
+        async move {
+            let (status, ticket) = send(&router, "PATCH", &path, Some(&body.to_string())).await;
+            assert_eq!(status, StatusCode::OK, "{ticket}");
+            ticket
+        }
+    };
+    let ask = |worker: &'static str| {
+        note(serde_json::json!({
+            "note": "Reuse the found ticket or open a new one?",
+            "note_kind": "feedback_needed",
+            "actor": {"role": "ai", "id": worker}
+        }))
+    };
+
+    // The project's older push-capable session (its primary), then the planner's.
+    let (_, port, _) = launch_in(&router, "fake-push", "primary-1", Some(&root)).await;
+    let primary = fake_opencode(port.parse().unwrap());
+    let (_, port, _) = launch_in(&router, "fake-push", "asker-1", Some(&root)).await;
+    let asker = fake_opencode(port.parse().unwrap());
+
+    // The AI asks on the Not Started issue; its comment records it as the author.
+    let asked = ask("fake-push-asker-1").await;
+    assert_eq!(asked["status"], "not_started", "{asked}");
+    assert!(asked.get("feedback_delivery").is_none(), "{asked}");
+    let request = asked["notes"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(
+        request["actor"],
+        serde_json::json!({"role": "ai", "id": "fake-push-asker-1"}),
+        "{request}"
+    );
+    assert!(
+        issue.comments.lock().unwrap()[0]["body"]
+            .as_str()
+            .unwrap()
+            .contains("<!-- hotsheet-note-actor:ai:")
+    );
+
+    // A person answers: only the AI that asked is told.
+    let answered = note(serde_json::json!({
+        "note": "Reuse it.", "actor": {"role": "human"}, "response_to": request["id"]
+    }))
+    .await;
+    assert_eq!(
+        answered["feedback_delivery"]["status"], "sent",
+        "{answered}"
+    );
+    assert_eq!(
+        answered["feedback_delivery"]["connection_id"], "asker-1",
+        "{answered}"
+    );
+    let told = prompts(&asker);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(
+        told[0].starts_with("Hot Sheet notice: a person answered FEEDBACK NEEDED on"),
+        "{told:?}"
+    );
+    assert!(prompts(&primary).is_empty(), "the primary is not told");
+
+    // A plain note after the answer names no question: nobody is told.
+    let plain = note(serde_json::json!({"note": "Thanks.", "actor": {"role": "human"}})).await;
+    assert!(plain.get("feedback_delivery").is_none(), "{plain}");
+
+    // It asks again and its session ends: nothing is sent, and no other session is told.
+    ask("fake-push-asker-1").await;
+    let (status, _) = send(&router, "DELETE", "/terminals/asker-1", None).await;
+    assert!(status.is_success());
+    let unheard =
+        note(serde_json::json!({"note": "Open a new one.", "actor": {"role": "human"}})).await;
+    assert!(unheard.get("feedback_delivery").is_none(), "{unheard}");
+    assert_eq!(prompts(&asker).len(), 1);
+    assert!(prompts(&primary).is_empty());
+
+    // Started: with no claim, the AI that asked is preferred over the older primary.
+    issue.labels.lock().unwrap().push("status:started".into());
+    let (_, port, _) = launch_in(&router, "fake-push", "asker-2", Some(&root)).await;
+    let second = fake_opencode(port.parse().unwrap());
+    let asked = ask("fake-push-asker-2").await;
+    assert_eq!(asked["status"], "started", "{asked}");
+    let request = asked["notes"].as_array().unwrap().last().unwrap().clone();
+    let answered = note(serde_json::json!({
+        "note": "Open a new one.", "actor": {"role": "human"}, "response_to": request["id"]
+    }))
+    .await;
+    assert_eq!(
+        answered["feedback_delivery"]["connection_id"], "asker-2",
+        "{answered}"
+    );
+    assert_eq!(prompts(&second).len(), 1);
+    assert!(prompts(&primary).is_empty());
+    for id in ["primary-1", "asker-2"] {
+        let _ = send(&router, "DELETE", &format!("/terminals/{id}"), None).await;
+    }
+}
