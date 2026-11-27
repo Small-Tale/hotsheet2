@@ -2961,7 +2961,17 @@ test('switches the TicketInspector live-claim header through every claim state (
   await setLiveClaim('no-eta');
   await expect(notice).toContainText('Claude is working on this.');
   await expect(eta).toHaveCount(0);
-  await expect(notice.locator('[data-component="loading-spinner"]')).toBeVisible();
+  // Without an ETA the live-work symbol is Kerf's indeterminate ProgressRing, whose whole svg box spins,
+  // never a LoadingSpinner (HS2-GFZYCZ).
+  await expect(notice.locator('[data-component="loading-spinner"]')).toHaveCount(0);
+  const spinningRing = notice.locator('[data-component="progress-ring"][data-indeterminate]');
+  await expect(spinningRing).toBeVisible();
+  await expect(spinningRing).toHaveAttribute('aria-label', 'Claude is actively working on this ticket');
+  await expect(spinningRing).not.toHaveAttribute('aria-valuenow', /.*/);
+  await expect(spinningRing.locator(':scope > svg')).toHaveCSS('animation-iteration-count', 'infinite');
+  const spinningBox = await spinningRing.boundingBox();
+  expect(spinningBox!.width).toBeCloseTo(16, 1);
+  expect(spinningBox!.height).toBeCloseTo(16, 1);
   await setLiveClaim('none');
   await expect(notice).toHaveCount(0);
   await setLiveClaim('estimate');
@@ -3045,12 +3055,17 @@ test('uses the row claim slot for one compact ring or spinner at wide and phone 
     expect(ringBox!.height).toBeCloseTo(16, 1);
     await expect(row.locator('[data-claim-eta]')).toHaveText('~45m left');
     await setClaimEta('none');
-    const spinner = row.locator('[data-component="loading-spinner"]');
+    // Without an ETA the slot holds Kerf's indeterminate ProgressRing, whose whole svg box spins, never a
+    // LoadingSpinner (HS2-GFZYCZ).
+    const spinner = row.locator('.ticket-list-row__claim [data-component="progress-ring"][data-indeterminate]');
     await expect(spinner).toBeVisible();
-    await expect(spinner).toHaveAttribute('style', /color:var\(--hs-ticket-state-up-next\)/);
+    await expect(row.locator('.ticket-list-row__claim [data-component="progress-ring"]')).toHaveCount(1);
+    await expect(row.locator('[data-component="loading-spinner"]')).toHaveCount(0);
+    await expect(spinner).not.toHaveAttribute('aria-valuenow', /.*/);
+    await expect(spinner.locator(':scope > svg')).toHaveCSS('animation-iteration-count', 'infinite');
     const box = await spinner.boundingBox();
-    expect(box!.width).toBeCloseTo(16.8, 1);
-    expect(box!.height).toBeCloseTo(16.8, 1);
+    expect(box!.width).toBeCloseTo(16, 1);
+    expect(box!.height).toBeCloseTo(16, 1);
     await setClaimEta('estimate');
     await setDemoSettingsOpen(page, false);
     await page.screenshot({ path: test.info().outputPath(`live-claim-row-${width}.png`) });
@@ -7557,11 +7572,13 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
     '7 Up Next tickets, 12 active tickets',
   );
   await expect(cappedActive.locator('.project-tab__work-count')).toHaveText('7');
-  await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS(
-    'animation-name',
-    'project-tab-activity-rotate',
-  );
-  await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS('animation-duration', '1.7s');
+  // The whole svg box rotates, never the segments shape inside it: WebKit composites a box transform but
+  // repaints an animated SVG shape every frame (HS2-GFZYCZ).
+  const activeRing = activeWork.locator('svg.project-tab__activity-ring');
+  await expect(activeRing).toHaveCSS('animation-name', 'project-tab-activity-rotate');
+  await expect(activeRing).toHaveCSS('animation-duration', '1.7s');
+  await expect(activeRing).toHaveCSS('animation-iteration-count', 'infinite');
+  await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS('animation-name', 'none');
   await expect(tabStates.filter({ hasText: 'Needs attention' }).locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Disconnected' }).locator('[data-lucide="wifi-off"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Not closable' }).getByRole('button', { name: /Close/ })).toHaveCount(0);
