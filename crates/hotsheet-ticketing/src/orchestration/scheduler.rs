@@ -748,13 +748,20 @@ pub enum RoleBlocker {
     /// This pass could not start one; `detail` is a [`Blocker`] code (`target_cap`,
     /// `machine_refused`, `no_tool_available`, `cooldown`, `refusal_backoff`,
     /// `target_unavailable`), a model-resolution code (`model_unresolved`,
-    /// `no_matching_model`, HS2-0VTQFF), `target_disabled` or `policy_opt_out`.
+    /// `no_matching_model`, HS2-0VTQFF), `target_disabled`, `policy_opt_out`, or
+    /// `tool_signed_out:<tool>` when every AI tool it may run is signed out on the
+    /// home's machine (HS2-GK6HC8).
     IntegratorNotStarted,
     /// The scheduler's integrators failed to take up their role until their
     /// replacements were exhausted; none is started again before `retry_at_ms`.
     IntegratorUnavailable,
     /// HS2-TCXKEM: the same for the project's scheduler-started dispatchers.
     DispatcherUnavailable,
+    /// HS2-GK6HC8: the dispatcher the project needs could not start because every AI
+    /// tool it may run is signed out on the home's machine; `detail` is
+    /// `tool_signed_out:<tool>`, naming the first. No other dispatcher reason is
+    /// reported.
+    DispatcherNotStarted,
 }
 
 impl RoleBlocker {
@@ -763,6 +770,7 @@ impl RoleBlocker {
             Self::IntegratorNotStarted => "integrator_not_started",
             Self::IntegratorUnavailable => "integrator_unavailable",
             Self::DispatcherUnavailable => "dispatcher_unavailable",
+            Self::DispatcherNotStarted => "dispatcher_not_started",
         }
     }
 }
@@ -1923,19 +1931,26 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             && !sessions.iter().any(|session| {
                 session.target_id == target_id && session.role == Some(SessionRole::Integrator)
             });
-        let mut not_started = |detail: &str, retry: Option<u64>| {
-            if integrator_wanted {
-                roles_unplaced.push(RoleUnplaced {
-                    target_id: target_id.to_owned(),
-                    role: SessionRole::Integrator,
-                    reason: RoleBlocker::IntegratorNotStarted,
-                    detail: Some(detail.to_owned()),
-                    retry_at_ms: retry,
-                });
-            }
+        // HS2-GK6HC8: a dispatcher is reported only for a signed-out tool, which a person
+        // can fix; its other reasons are not recorded.
+        let mut not_started = |role: SessionRole, detail: &str, retry: Option<u64>| {
+            let reason = match role {
+                SessionRole::Integrator if integrator_wanted => RoleBlocker::IntegratorNotStarted,
+                SessionRole::Dispatcher if is_signed_out_detail(detail) => {
+                    RoleBlocker::DispatcherNotStarted
+                }
+                _ => return,
+            };
+            roles_unplaced.push(RoleUnplaced {
+                target_id: target_id.to_owned(),
+                role,
+                reason,
+                detail: Some(detail.to_owned()),
+                retry_at_ms: retry,
+            });
         };
         if !target.enabled {
-            not_started(INTEGRATOR_TARGET_DISABLED, None);
+            not_started(SessionRole::Integrator, INTEGRATOR_TARGET_DISABLED, None);
             continue;
         }
         let target_cap = policy.target_cap(&target);
@@ -1989,12 +2004,9 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         };
         for kind in RoleSessionKind::ALL {
             let integrator = kind == RoleSessionKind::Integrator;
-            // Reports only an integrator's reasons; a dispatcher's are not recorded.
-            let mut blocked = |detail: &str, retry: Option<u64>| {
-                if integrator {
-                    not_started(detail, retry);
-                }
-            };
+            // Reports an integrator's reasons, and a dispatcher's signed-out tool.
+            let mut blocked =
+                |detail: &str, retry: Option<u64>| not_started(kind.role(), detail, retry);
             if !entry.roles.contains(&kind) {
                 // HS2-4JQ41V: the person's entry leaves the integrator out.
                 blocked(INTEGRATOR_POLICY_OPT_OUT, None);
@@ -2087,6 +2099,8 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             // candidate reached the machine's admission.
             let mut unresolved = None;
             let mut admitted = false;
+            // HS2-GK6HC8: the first candidate its machine reports signed out.
+            let mut signed_out: Option<&str> = None;
             let placed = selection.candidates.iter().find_map(|candidate| {
                 if candidate.status.state == CapacityState::Degraded
                     && running(&load, &candidate.tool, candidate.account.as_deref()) > 0
@@ -2111,16 +2125,24 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                         limits: Some(limits),
                     },
                 );
+                if admission.reason == Some(AdmissionReason::ToolSignedOut) {
+                    signed_out.get_or_insert(candidate.tool.as_str());
+                }
                 (admission.outcome == AdmissionOutcome::Accepted)
                     .then_some((candidate, model, admission))
             });
             let Some((candidate, model, admission)) = placed else {
-                blocked(
-                    unresolved
-                        .filter(|_| !admitted)
-                        .map_or(Blocker::MachineRefused.code(), ModelUnresolved::code),
-                    None,
-                );
+                // HS2-GK6HC8: a signed-out tool is named over another refusal, as for
+                // a worker step: signing in is what a person can do.
+                match signed_out {
+                    Some(tool) => blocked(&signed_out_detail(tool), None),
+                    None => blocked(
+                        unresolved
+                            .filter(|_| !admitted)
+                            .map_or(Blocker::MachineRefused.code(), ModelUnresolved::code),
+                        None,
+                    ),
+                }
                 continue;
             };
             let account = candidate.account.as_deref();

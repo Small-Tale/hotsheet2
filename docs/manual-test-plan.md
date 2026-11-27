@@ -649,8 +649,15 @@ but sign Codex back in while its step is held and touch nothing: the card starts
 a session within about two minutes (the held re-check's step), not ten. Sign it
 out again until another step is held, sign in, and open Systems (or the held
 card's inspector): Codex reads Signed In and the step starts at once. With no
-step held, signing in or out changes Systems only when it opens or after the
-next detection.
+step held, a sign-in shows when Systems opens or at the next detection, and a
+sign-out only at the next detection.
+
+Signed-out role sessions (HS2-GK6HC8): with the same project's Coordination
+Sessions on and Codex its only allowed tool, sign Codex out on the home machine
+and make a step ready. The overview's Coordination Sessions reads "<Project>
+Dispatcher: Not started: Codex is signed out on <machine>" and the decision log
+"Did not start the dispatcher of <Project>: …", with no code shown. Sign in: the
+dispatcher starts within about two minutes.
 
 Admission by Project and Placement Limits (HS2-5H8R0N): with an orchestration
 project open whose sites run on this computer and on the paired remote, select

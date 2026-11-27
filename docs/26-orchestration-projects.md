@@ -7161,7 +7161,16 @@ its integrator when work waits to be integrated, without configuration.
 detail, retry_at_ms}` with reason `integrator_not_started` and detail `target_cap`,
   `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
   `machine_refused`, `target_disabled` or `policy_opt_out`, or reason
-  `integrator_unavailable`. The decision log records each as kind `role_unplaced`, and
+  `integrator_unavailable`. **A signed-out tool (HS2-GK6HC8):** a role session tries
+  each AI tool it may run, skipping one its machine reports signed out (HS2-ZRPZJJ);
+  when none is admitted and one was signed out, the detail is `tool_signed_out:<tool>`
+  naming the first, over any other refusal, with no retry time. The dispatcher, whose
+  other reasons are not recorded, is then listed as `{role: "dispatcher", reason:
+"dispatcher_not_started", detail: "tool_signed_out:<tool>"}`. The capacity watch
+  follows that home's machine (and asks it to re-check sign-in while the role is held,
+  HS2-P2TCQS), so a sign-in starts the role. The view reads "Not started: Claude is
+  signed out on Build Host", naming the home site's machine ("this machine", "its
+  machine" when not known). The decision log records each as kind `role_unplaced`, and
   `scheduler_explain` of a running step adds `integrator`: the project's integrator in
   a fresh pass (`standing` `start`, `keep`, `wind_down`, `not_started` or `none`, with
   reason, detail, session and retry time). An unknown pool reports nothing: nothing
@@ -7688,7 +7697,9 @@ answer carries `integrator`, the card's **Integration** section follows **Run**:
   scheduler's own reasons for a detail such as `target_cap` or `cooldown`, "Its
   project is turned off in the policy" (`target_disabled`) and "The project's
   Coordination Sessions leave the integrator out, so it integrates by hand"
-  (`policy_opt_out`). With no handoff waiting: "No handoff waits to be integrated".
+  (`policy_opt_out`). Every AI tool it may run signed out on the home's machine
+  (`tool_signed_out:<tool>`, HS2-GK6HC8): "Claude is signed out on Build Host". With no
+  handoff waiting: "No handoff waits to be integrated".
 - **Home Site** when the integrator's site is not the card's own, **Session** when
   one runs, and **Next** ("Looked at again by 15:40") when the pass gives a retry time.
 
@@ -7699,7 +7710,8 @@ Integrator: Not started: the project's session limit is reached", "Web Dispatche
 Unavailable: the dispatchers the scheduler started did not take up their role, so none
 starts for a while. Open the AI tool in a terminal of this project to check that it
 starts and is signed in, or assign ready work by hand until then; looked at again by
-15:40"). An unavailable role always ends with that next step; for the integrator it
+15:40"; HS2-GK6HC8: "API Dispatcher: Not started: Claude is signed out on Build
+Host"). An unavailable role always ends with that next step; for the integrator it
 is "integrate handoffs by hand" (HS2-91AF8K). With none it says "No integrator runs
 now, and no coordination session waits to start." Settings → Orchestration's project
 detail shows no scheduler status, so the overview is the project surface. A code the

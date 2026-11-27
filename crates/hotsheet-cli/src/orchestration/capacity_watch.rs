@@ -128,6 +128,10 @@ impl OrchestrationRuntime {
         // HS2-P2TCQS: where work is held because a tool is signed out, the watch also
         // asks that machine to re-check sign-in on its bounded backoff.
         let signed_out = signed_out_targets(schedule);
+        // HS2-GK6HC8: a role session held by a signed-out tool is followed too, so a
+        // sign-in starts it.
+        let roomless: std::collections::BTreeSet<&str> =
+            roomless.union(&signed_out).copied().collect();
         for ((home, owner, target), entry) in followed().iter_mut() {
             if home == &self.home && owner == owner_id {
                 entry.sign_in_held = signed_out.contains(target.as_str());
@@ -300,15 +304,21 @@ impl OrchestrationRuntime {
 
 /// HS2-P2TCQS: the targets where this schedule holds work because a tool is signed out
 /// on their machine. Only these ask for a sign-in re-check, so no machine re-checks
-/// while nothing is held there.
+/// while nothing is held there. HS2-GK6HC8: a role session a signed-out tool keeps from
+/// starting is held work too.
 pub(super) fn signed_out_targets(schedule: &Schedule) -> std::collections::BTreeSet<&str> {
-    schedule
+    let steps = schedule
         .unplaced
         .iter()
         .filter(|item| {
             item.reason == Blocker::NoTool
                 && item.detail.as_deref().is_some_and(is_signed_out_detail)
         })
-        .map(|item| item.target_id.as_str())
-        .collect()
+        .map(|item| item.target_id.as_str());
+    let roles = schedule
+        .roles_unplaced
+        .iter()
+        .filter(|item| item.detail.as_deref().is_some_and(is_signed_out_detail))
+        .map(|item| item.target_id.as_str());
+    steps.chain(roles).collect()
 }

@@ -536,3 +536,80 @@ async fn hs2_esvyqh_a_returned_handoff_is_claimed_again_for_its_session_each_rou
     assert_eq!(fleet.sessions().await.len(), 1);
     fleet.shut_down().await;
 }
+
+/// HS2-GK6HC8: a dispatcher that cannot start because every AI tool it may run is
+/// signed out on the home's machine (the peer) is reported with the tool named, as a
+/// worker step is; the watch of that machine asks it to re-check sign-in while the role
+/// is held (HS2-P2TCQS), so signing in there starts the dispatcher.
+#[tokio::test(flavor = "multi_thread", worker_threads = 6)]
+async fn hs2_gk6hc8_a_dispatcher_held_by_a_signed_out_tool_names_it_and_starts_at_sign_in() {
+    let mut fleet = Fleet::signed_out_rechecked(Side::Peer, Duration::from_secs(1)).await;
+    let earlier = now_s() - 7200;
+    let coordinator = pool(&fleet);
+    coordinator
+        .register(
+            Role::Integrator,
+            "person-root",
+            "root-1",
+            earlier,
+            60,
+            ReturnRoute::HumanRelay,
+        )
+        .unwrap();
+    coordinator
+        .set_authority(
+            "person-root",
+            "root-1",
+            earlier,
+            Authority::Dispatcher,
+            true,
+        )
+        .unwrap();
+    let orchestration = fleet.orchestration_ticket("Coordinate the synthetic sign-in");
+    let ticket = fleet.target_ticket(Side::Peer, "Synthetic change behind a sign-in");
+    fleet
+        .plan(&orchestration, Side::Peer, &ticket, json!([]))
+        .await;
+    fleet
+        .policy(json!({
+            "targets":[
+                {"target_id":TARGET_A,"tools":[{"tool":TOOL_A}],"max_sessions":1},
+                {"target_id":TARGET_B,"tools":[{"tool":TOOL_B}],"max_sessions":3}],
+            "placement":{"automatic":true,"actor":super::e2e::ACTOR,"cooldown_minutes":0,
+                "role_sessions":[{"target_id":TARGET_B,"roles":["dispatcher","integrator"]}]}
+        }))
+        .await;
+
+    let detail = format!("tool_signed_out:{TOOL_B}");
+    let held = fleet
+        .decided(
+            "the dispatcher held by the signed-out tool",
+            |entry| {
+                entry["kind"] == "role_unplaced"
+                    && entry["reason"] == "dispatcher_not_started"
+                    && entry["detail"] == detail.as_str()
+            },
+            2 * MINUTE,
+        )
+        .await;
+    assert_eq!(held["target_id"], TARGET_B, "{held}");
+    assert!(held.get("retry_at_ms").is_none_or(Value::is_null), "{held}");
+    let planned = fleet
+        .ok("POST", "/scheduler/plan", json!({"actor":Fleet::ai()}))
+        .await;
+    assert!(
+        planned["roles_unplaced"]
+            .as_array()
+            .is_some_and(|roles| roles.iter().any(|role| role["role"] == "dispatcher"
+                && role["reason"] == "dispatcher_not_started"
+                && role["detail"] == detail.as_str())),
+        "{planned}"
+    );
+    assert!(fleet.sessions().await.is_empty());
+
+    // Signed in on the peer: its next re-check sees it and the dispatcher starts.
+    fleet.sign_in(true);
+    let (dispatcher, _, _) = role_started(&fleet, "dispatcher").await;
+    assert_eq!(dispatcher["tool"], TOOL_B, "{dispatcher}");
+    fleet.shut_down().await;
+}

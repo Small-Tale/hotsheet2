@@ -1386,3 +1386,68 @@ fn hs2_ap8kpt_a_hosted_checkouts_project_bindings_choose_its_claim_backend() {
         [("gpu", OfflinePolicy::Provisional)]
     );
 }
+
+/// HS2-P2TCQS, HS2-GK6HC8: the targets whose capacity watch asks for a sign-in
+/// re-check: work held there because a tool is signed out, a worker step or a role
+/// session. Any other hold asks nothing.
+#[test]
+fn hs2_gk6hc8_signed_out_role_sessions_are_held_work_for_the_recheck() {
+    use hotsheet_ticketing::orchestration::{
+        Blocker, RoleBlocker, RoleUnplaced, Schedule, SessionRole, Unplaced, signed_out_detail,
+    };
+    let step = |target: &str, reason: Blocker, detail: Option<String>| Unplaced {
+        step_id: format!("step-{target}"),
+        target_id: target.into(),
+        reason,
+        detail,
+        retry_at_ms: None,
+        score: Default::default(),
+        sites: Vec::new(),
+    };
+    let role = |target: &str, role: SessionRole, reason: RoleBlocker, detail: &str| RoleUnplaced {
+        target_id: target.into(),
+        role,
+        reason,
+        detail: Some(detail.into()),
+        retry_at_ms: None,
+    };
+    let schedule = Schedule {
+        unplaced: vec![
+            step("worker", Blocker::NoTool, Some(signed_out_detail("claude"))),
+            step(
+                "missing",
+                Blocker::NoTool,
+                Some("tool_not_installed".into()),
+            ),
+            step("full", Blocker::MachineRefused, None),
+        ],
+        roles_unplaced: vec![
+            role(
+                "dispatcher",
+                SessionRole::Dispatcher,
+                RoleBlocker::DispatcherNotStarted,
+                &signed_out_detail("codex"),
+            ),
+            role(
+                "integrator",
+                SessionRole::Integrator,
+                RoleBlocker::IntegratorNotStarted,
+                &signed_out_detail("claude"),
+            ),
+            role(
+                "capped",
+                SessionRole::Integrator,
+                RoleBlocker::IntegratorNotStarted,
+                "target_cap",
+            ),
+        ],
+        ..Schedule::default()
+    };
+    assert_eq!(
+        super::super::capacity_watch::signed_out_targets(&schedule)
+            .into_iter()
+            .collect::<Vec<_>>(),
+        ["dispatcher", "integrator", "worker"]
+    );
+    assert!(super::super::capacity_watch::signed_out_targets(&Schedule::default()).is_empty());
+}

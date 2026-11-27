@@ -105,6 +105,8 @@ const INTEGRATOR = [
   { value: 'opt_out', label: 'Not Started: Integrates by Hand' },
   // HS2-747WQA: the project's Models pattern resolves to no model its machine reports.
   { value: 'no_model', label: 'Not Started: No Model Resolves' },
+  // HS2-GK6HC8: every AI tool it may run is signed out on the home's machine.
+  { value: 'signed_out', label: 'Not Started: AI Tool Signed Out' },
   { value: 'unavailable', label: 'Unavailable' },
   { value: 'none', label: 'Not Needed' },
 ];

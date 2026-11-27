@@ -648,6 +648,25 @@ describe('web ESLint policy', () => {
     expect(codes.filter((code) => schedulerReasonText(code) === code.replaceAll('_', ' '))).toEqual([]);
   });
 
+  it('HS2-GK6HC8 words every reason a role session is not started', async () => {
+    // `RoleBlocker::code()` reaches the overview's Coordination Sessions, a card's Integration rows and the log.
+    const { roleReasonPhrase } = await import('./orchestration-scheduler');
+    const source = readFileSync(
+      new URL('../../../crates/hotsheet-ticketing/src/orchestration/scheduler.rs', import.meta.url),
+      'utf8',
+    );
+    const start = source.indexOf('pub fn code(', source.indexOf('impl RoleBlocker {'));
+    const codes = [...source.slice(start, source.indexOf('\n    }\n', start)).matchAll(/"([a-z0-9_]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(codes).toContain('dispatcher_not_started');
+    const unworded = codes.filter((reason) => {
+      const phrase = roleReasonPhrase({ standing: 'not_started', reason });
+      return phrase === undefined || phrase === reason.replaceAll('_', ' ');
+    });
+    expect(unworded).toEqual([]);
+  });
+
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     expect(config).not.toContain("files: ['src/main.tsx']");

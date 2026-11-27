@@ -527,3 +527,214 @@ fn hs2_tk9adc_the_pool_is_part_of_the_capacity_version_only_when_reported() {
     let read: CapacitySnapshot = serde_json::from_value(json).unwrap();
     assert_eq!(read.pool, None);
 }
+
+/// HS2-GK6HC8: target 1's machine reports these sign-in states.
+fn sign_in(world: &mut World, states: &[(&str, Option<bool>)]) {
+    world.targets[0].capacity.as_mut().unwrap().capabilities = Some(HostCapabilities {
+        ai_tools: Some(
+            states
+                .iter()
+                .map(|(tool, signed_in)| ToolVersion {
+                    tool: (*tool).into(),
+                    version: None,
+                    signed_in: *signed_in,
+                })
+                .collect(),
+        ),
+        ..HostCapabilities::bare(OsFamily::Linux, "x86_64")
+    });
+}
+
+/// HS2-GK6HC8: why the pass started no session of `role` on target 1, as
+/// `(reason, detail, retry_at_ms)`.
+fn role_held(
+    schedule: &Schedule,
+    role: SessionRole,
+) -> Option<(&'static str, Option<String>, Option<u64>)> {
+    schedule
+        .roles_unplaced
+        .iter()
+        .find(|item| item.target_id == target(1) && item.role == role)
+        .map(|item| (item.reason.code(), item.detail.clone(), item.retry_at_ms))
+}
+
+/// HS2-GK6HC8: a dispatcher or integrator whose every allowed AI tool is signed out on
+/// the home's machine is not started, and the pass names the first signed-out tool, as
+/// for a worker step. Another tool that is signed in or unknown starts it instead.
+#[test]
+fn hs2_gk6hc8_a_role_session_held_by_signed_out_tools_names_the_tool() {
+    let out = Some(false);
+    type Case<'a> = (&'a [(&'a str, Option<bool>)], Option<&'a str>);
+    let cases: &[Case] = &[
+        (
+            &[("alpha", out), ("beta", out)],
+            Some("tool_signed_out:alpha"),
+        ),
+        (&[("alpha", out), ("beta", Some(true))], None),
+        (&[("alpha", out), ("beta", None)], None),
+        (&[("alpha", None), ("beta", out)], None),
+        (&[("alpha", Some(true)), ("beta", Some(true))], None),
+        (&[], None),
+    ];
+    for (states, detail) in cases {
+        // The dispatcher: ready work, an empty pool.
+        let mut world = World::new(&[(1, 3)]);
+        opted(&mut world, &[D, I]);
+        pool(&mut world, empty_pool());
+        sign_in(&mut world, states);
+        world.work = vec![work(1, 1)];
+        let schedule = world.now();
+        let expected = detail.map(|detail| ("dispatcher_not_started", Some(detail.into()), None));
+        assert_eq!(
+            role_held(&schedule, SessionRole::Dispatcher),
+            expected,
+            "{states:?}"
+        );
+        assert_eq!(
+            started(&schedule).first().map(String::as_str) == Some("role:dispatcher"),
+            detail.is_none(),
+            "{states:?}: {schedule:#?}"
+        );
+        // It waits for the machine to change, not for a time.
+        if detail.is_some() {
+            assert_eq!(schedule.retry_at_ms, None, "{states:?}");
+        }
+
+        // The integrator: a handoff waits and none is live.
+        let mut world = World::new(&[(1, 3)]);
+        opted(&mut world, &[D, I]);
+        pool(
+            &mut world,
+            Some(PoolState {
+                handoffs_pending: 1,
+                ..PoolState::default()
+            }),
+        );
+        sign_in(&mut world, states);
+        let schedule = world.now();
+        let expected = detail.map(|detail| ("integrator_not_started", Some(detail.into()), None));
+        assert_eq!(
+            role_held(&schedule, SessionRole::Integrator),
+            expected,
+            "{states:?}"
+        );
+        assert_eq!(
+            started(&schedule).contains(&"role:integrator".to_owned()),
+            detail.is_none(),
+            "{states:?}: {schedule:#?}"
+        );
+    }
+}
+
+/// HS2-GK6HC8: signing in starts the role; signed out again it is held again; a
+/// signed-out tool is named over a missing one; a dispatcher's other reasons stay
+/// unreported.
+#[test]
+fn hs2_gk6hc8_role_sessions_follow_sign_in_out_and_in() {
+    let mut world = World::new(&[(1, 3)]);
+    opted(&mut world, &[D, I]);
+    pool(&mut world, empty_pool());
+    world.work = vec![work(1, 1)];
+    let all_out = [("alpha", Some(false)), ("beta", Some(false))];
+    sign_in(&mut world, &all_out);
+    assert!(role_held(&world.now(), SessionRole::Dispatcher).is_some());
+    // Repeated: the same, once.
+    let schedule = world.now();
+    assert_eq!(
+        schedule
+            .roles_unplaced
+            .iter()
+            .filter(|item| item.role == SessionRole::Dispatcher)
+            .count(),
+        1
+    );
+    sign_in(&mut world, &[("alpha", Some(false)), ("beta", Some(true))]);
+    let schedule = world.now();
+    assert_eq!(role_held(&schedule, SessionRole::Dispatcher), None);
+    assert_eq!(started(&schedule)[0], "role:dispatcher");
+    let dispatcher = &schedule.placements[0];
+    assert_eq!(dispatcher.tool, "beta");
+    sign_in(&mut world, &all_out);
+    assert_eq!(
+        role_held(&world.now(), SessionRole::Dispatcher),
+        Some((
+            "dispatcher_not_started",
+            Some("tool_signed_out:alpha".into()),
+            None
+        ))
+    );
+
+    // A missing tool and a signed-out one: the signed-out one is named, whichever
+    // comes first.
+    for (missing, named) in [(0, "beta"), (1, "alpha")] {
+        let mut world = World::new(&[(1, 3)]);
+        opted(&mut world, &[D, I]);
+        pool(&mut world, empty_pool());
+        world.work = vec![work(1, 1)];
+        sign_in(&mut world, &all_out);
+        world.targets[0]
+            .capacity
+            .as_mut()
+            .unwrap()
+            .tools
+            .as_mut()
+            .unwrap()[missing]
+            .installed = false;
+        assert_eq!(
+            role_held(&world.now(), SessionRole::Dispatcher),
+            Some((
+                "dispatcher_not_started",
+                Some(format!("tool_signed_out:{named}")),
+                None
+            )),
+            "missing {missing}"
+        );
+    }
+
+    // A dispatcher held for another reason (no tool installed) is not reported; the
+    // integrator still says why.
+    let mut world = World::new(&[(1, 3)]);
+    opted(&mut world, &[D, I]);
+    pool(
+        &mut world,
+        Some(PoolState {
+            handoffs_pending: 1,
+            ..PoolState::default()
+        }),
+    );
+    world.work = vec![work(1, 1)];
+    for tool in world.targets[0]
+        .capacity
+        .as_mut()
+        .unwrap()
+        .tools
+        .as_mut()
+        .unwrap()
+    {
+        tool.installed = false;
+    }
+    let schedule = world.now();
+    assert_eq!(role_held(&schedule, SessionRole::Dispatcher), None);
+    let (reason, detail, _) = role_held(&schedule, SessionRole::Integrator).unwrap();
+    assert_eq!(reason, "integrator_not_started");
+    assert!(
+        !detail.as_deref().is_some_and(is_signed_out_detail),
+        "{detail:?}"
+    );
+}
+
+/// HS2-GK6HC8: the new reason's wire spelling, and its round trip.
+#[test]
+fn hs2_gk6hc8_dispatcher_not_started_reads_and_writes() {
+    let item = RoleUnplaced {
+        target_id: target(1),
+        role: SessionRole::Dispatcher,
+        reason: RoleBlocker::DispatcherNotStarted,
+        detail: Some(signed_out_detail("alpha")),
+        retry_at_ms: None,
+    };
+    let wire = serde_json::to_value(&item).unwrap();
+    assert_eq!(wire["reason"], "dispatcher_not_started");
+    assert_eq!(wire["reason"], RoleBlocker::DispatcherNotStarted.code());
+    assert_eq!(serde_json::from_value::<RoleUnplaced>(wire).unwrap(), item);
+}

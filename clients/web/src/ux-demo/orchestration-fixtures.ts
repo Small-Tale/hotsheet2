@@ -427,6 +427,9 @@ export function demoIntegrator(state: string): RoleStandingView | undefined {
       };
     case 'opt_out':
       return { ...api, standing: 'not_started', reason: 'integrator_not_started', detail: 'policy_opt_out' };
+    case 'signed_out':
+      // HS2-GK6HC8: every AI tool it may run is signed out on API's machine; it waits for the sign-in.
+      return { ...api, standing: 'not_started', reason: 'integrator_not_started', detail: 'tool_signed_out:claude' };
     case 'unavailable':
       return {
         ...api,
@@ -442,10 +445,20 @@ export function demoIntegrator(state: string): RoleStandingView | undefined {
   }
 }
 
-/** HS2-65AD6J: the overview's coordination sessions: API integrates, Web's dispatchers never joined. */
+/**
+ * HS2-65AD6J: the overview's coordination sessions: API integrates, Web's dispatchers never joined.
+ * HS2-GK6HC8: API's dispatcher waits for Claude to be signed in on its machine.
+ */
 export function demoRoles(): RoleStandingView[] {
   return [
     { target_id: 'api', role: 'integrator', standing: 'keep', reason: 'integrator_kept', detail: 'queue' },
+    {
+      target_id: 'api',
+      role: 'dispatcher',
+      standing: 'not_started',
+      reason: 'dispatcher_not_started',
+      detail: 'tool_signed_out:claude',
+    },
     {
       target_id: 'web',
       role: 'dispatcher',

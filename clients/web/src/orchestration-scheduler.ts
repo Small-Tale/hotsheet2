@@ -175,6 +175,11 @@ export function siteLabel(targetId: string, timeline: OrchestrationTimeline | un
   return timeline?.targets.find((target) => target.target_id === targetId)?.label ?? `site ${targetId.slice(-6)}`;
 }
 
+/** HS2-GK6HC8: the machine of a project's home site, where its role sessions start, as a phrase. */
+function homeMachine(targetId: string, timeline: OrchestrationTimeline | undefined): string {
+  return machinePhrase(timeline?.targets.find((target) => target.target_id === targetId));
+}
+
 const STANDINGS: Readonly<Record<string, string>> = {
   start: 'It would start on the next pass',
   keep: 'A session keeps it',
@@ -293,9 +298,12 @@ export function decisionText(decision: SchedulerDecision, timeline: Orchestratio
       return `Reconciled ${step}: ${words(decision.outcome ?? decision.reason ?? 'acted')}`;
     case 'role_unplaced': {
       // HS2-65AD6J: a project's integrator or dispatcher this pass does not start, and why.
-      const role = decision.reason === 'dispatcher_unavailable' ? 'dispatcher' : 'integrator';
+      const role = decision.reason?.startsWith('dispatcher_') ? 'dispatcher' : 'integrator';
       const site = decision.target_id ? siteLabel(decision.target_id, timeline) : 'a project';
-      const why = roleReasonPhrase({ standing: 'not_started', reason: decision.reason, detail: decision.detail });
+      const why = roleReasonPhrase(
+        { standing: 'not_started', reason: decision.reason, detail: decision.detail },
+        decision.target_id ? homeMachine(decision.target_id, timeline) : undefined,
+      );
       return `Did not start the ${role} of ${site}${why ? `: ${why}` : ''}`;
     }
     default:
@@ -533,10 +541,17 @@ const unavailable = (role: string) =>
   `the ${role}s the scheduler started did not take up their role, so none starts for a while. ` +
   `Open the AI tool in a terminal of this project to check that it starts and is signed in, or ${BY_HAND[role]} until then`;
 
-/** Why a role session stands as it does, as a phrase; undefined when the scheduler gives no reason. */
-export function roleReasonPhrase(standing: Pick<RoleStandingView, 'standing' | 'reason' | 'detail'>) {
+/**
+ * Why a role session stands as it does, as a phrase; undefined when the scheduler gives no reason.
+ * HS2-GK6HC8: a signed-out tool is named with the home site's machine (`machine`, "its machine" when not known).
+ */
+export function roleReasonPhrase(
+  standing: Pick<RoleStandingView, 'standing' | 'reason' | 'detail'>,
+  machine = 'its machine',
+) {
   const { reason, detail } = standing;
   if (standing.standing === 'none') return 'no handoff waits to be integrated';
+  const signedOut = signedOutTool(detail);
   switch (reason) {
     case undefined:
       return undefined;
@@ -549,7 +564,12 @@ export function roleReasonPhrase(standing: Pick<RoleStandingView, 'standing' | '
       if (!detail) return 'this pass could not start one';
       // HS2-747WQA: a model-resolution detail says why no AI tool can start it.
       if (MODEL_DETAILS[detail]) return MODEL_DETAILS[detail];
+      // HS2-GK6HC8: every AI tool it may run is signed out there; the first is named.
+      if (signedOut) return signedOutText(signedOut, machine);
       return NOT_STARTED[detail] ?? schedulerReasonText(detail);
+    case 'dispatcher_not_started':
+      // HS2-GK6HC8: reported only when a signed-out AI tool keeps the dispatcher from starting.
+      return signedOut ? signedOutText(signedOut, machine) : 'this pass could not start one';
     case 'integrator_unavailable':
       return unavailable('integrator');
     case 'dispatcher_unavailable':
@@ -575,7 +595,7 @@ export function integratorRows(
   cardSite?: string,
 ): Array<{ label: string; value: string }> {
   const rows = [{ label: 'Integrator', value: roleStatusText(standing) }];
-  const why = roleReasonPhrase(standing);
+  const why = roleReasonPhrase(standing, homeMachine(standing.target_id, timeline));
   if (why) rows.push({ label: 'Why', value: sentence(why) });
   if (cardSite !== undefined && standing.target_id !== cardSite)
     rows.push({ label: 'Home Site', value: siteLabel(standing.target_id, timeline) });
@@ -592,7 +612,7 @@ export function roleStandingRows(
   timeline?: OrchestrationTimeline,
 ): Array<{ label: string; value: string }> {
   return standings.map((standing) => {
-    const why = roleReasonPhrase(standing);
+    const why = roleReasonPhrase(standing, homeMachine(standing.target_id, timeline));
     const next = standing.retry_at_ms === undefined ? '' : `; looked at again by ${clock(standing.retry_at_ms)}`;
     return {
       label: `${siteLabel(standing.target_id, timeline)} ${sentence(words(standing.role))}`,

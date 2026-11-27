@@ -582,6 +582,83 @@ describe('why integration is or is not running (HS2-65AD6J)', () => {
   });
 });
 
+describe('a role session held by a signed-out AI tool names the tool and machine (HS2-GK6HC8)', () => {
+  const remote = {
+    ...timeline,
+    targets: timeline.targets.map((target) =>
+      target.target_id === 'api' ? { ...target, location: 'remote' as const, machine_label: 'Build Host' } : target,
+    ),
+  };
+  const local = {
+    ...timeline,
+    targets: timeline.targets.map((target) =>
+      target.target_id === 'api' ? { ...target, location: 'local' as const } : target,
+    ),
+  };
+  const unknown = {
+    ...timeline,
+    targets: timeline.targets.map((target) =>
+      target.target_id === 'api' ? { ...target, location: undefined, machine_label: undefined } : target,
+    ),
+  };
+  const held = (role: string, reason: string, detail?: string): RoleStandingView => ({
+    target_id: 'api',
+    role,
+    standing: 'not_started',
+    reason,
+    ...(detail === undefined ? {} : { detail }),
+  });
+
+  it('words both roles, with the machine or its machine', () => {
+    for (const reason of ['integrator_not_started', 'dispatcher_not_started']) {
+      expect(roleReasonPhrase(held('x', reason, 'tool_signed_out:claude'), 'Build Host')).toBe(
+        'Claude is signed out on Build Host',
+      );
+      expect(roleReasonPhrase(held('x', reason, 'tool_signed_out:claude'))).toBe('Claude is signed out on its machine');
+      // A tool the client does not know is named from its id.
+      expect(roleReasonPhrase(held('x', reason, 'tool_signed_out:fake-codex'))).toBe(
+        'Fake-codex is signed out on its machine',
+      );
+    }
+    // A dispatcher is reported only for a signed-out tool; anything else still reads in words.
+    expect(roleReasonPhrase(held('dispatcher', 'dispatcher_not_started'))).toBe('this pass could not start one');
+    expect(roleReasonPhrase(held('dispatcher', 'dispatcher_not_started', 'tool_signed_out:'))).toBe(
+      'this pass could not start one',
+    );
+    expect(roleStatusText(held('dispatcher', 'dispatcher_not_started'))).toBe('Not started');
+  });
+
+  it('names the home site’s machine in the overview rows, the Integration rows and the log', () => {
+    const dispatcher = held('dispatcher', 'dispatcher_not_started', 'tool_signed_out:claude');
+    const integrator = held('integrator', 'integrator_not_started', 'tool_signed_out:codex');
+    expect(roleStandingRows([dispatcher, integrator], clock, remote)).toEqual([
+      { label: 'API Dispatcher', value: 'Not started: Claude is signed out on Build Host' },
+      { label: 'API Integrator', value: 'Not started: Codex is signed out on Build Host' },
+    ]);
+    expect(roleStandingRows([dispatcher], clock, local)[0].value).toBe(
+      'Not started: Claude is signed out on this machine',
+    );
+    expect(roleStandingRows([dispatcher], clock, unknown)[0].value).toBe(
+      'Not started: Claude is signed out on its machine',
+    );
+    expect(roleStandingRows([{ ...dispatcher, target_id: 'gone' }], clock, remote)[0].value).toBe(
+      'Not started: Claude is signed out on its machine',
+    );
+    expect(integratorRows(integrator, clock, remote, 'api')).toEqual([
+      { label: 'Integrator', value: 'Not started' },
+      { label: 'Why', value: 'Codex is signed out on Build Host' },
+    ]);
+    const role = (rest: Partial<SchedulerDecision>) =>
+      decisionText(decision({ kind: 'role_unplaced', ...rest }), remote);
+    expect(role({ target_id: 'api', reason: 'dispatcher_not_started', detail: 'tool_signed_out:claude' })).toBe(
+      'Did not start the dispatcher of API: Claude is signed out on Build Host',
+    );
+    expect(role({ target_id: 'api', reason: 'integrator_not_started', detail: 'tool_signed_out:claude' })).toBe(
+      'Did not start the integrator of API: Claude is signed out on Build Host',
+    );
+  });
+});
+
 describe('a pattern-only Models list that resolves to no model, in words (HS2-747WQA)', () => {
   const unresolved = 'its machine has not reported the AI tool’s models, so no allowed model can be picked';
   const noMatch = 'no model its machine reports is an allowed model';

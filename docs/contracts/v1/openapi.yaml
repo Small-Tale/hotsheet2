@@ -25532,8 +25532,8 @@ components:
             $ref: '#/components/schemas/OrchestrationHomeOutage'
         roles_unplaced:
           description:
-            Each project home whose pending handoffs get no integrator in this pass, and why (HS2-4JQ41V). Left out when
-            there is none.
+            Each project home whose pending handoffs get no integrator in this pass, or whose dispatcher a signed-out AI
+            tool keeps from starting (HS2-GK6HC8), and why (HS2-4JQ41V). Left out when there is none.
           type: array
           items:
             type: object
@@ -25553,11 +25553,13 @@ components:
                   - integrator_not_started
                   - integrator_unavailable
                   - dispatcher_unavailable
+                  - dispatcher_not_started
               detail:
                 description:
-                  '`target_cap`, `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
+                  "`target_cap`, `refusal_backoff`, `cooldown`, `target_unavailable`, `no_tool_available`,
                   `machine_refused`, `model_unresolved`, `no_matching_model` (HS2-0VTQFF), `target_disabled`,
-                  `policy_opt_out` or `replacements_exhausted`.'
+                  `policy_opt_out`, `replacements_exhausted`, or `tool_signed_out:<tool>` when every AI tool the role
+                  may run is signed out on the home's machine (HS2-GK6HC8; the only detail of `dispatcher_not_started`)."
                 type: string
               retry_at_ms:
                 type: integer
