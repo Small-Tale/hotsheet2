@@ -6,6 +6,7 @@
 import type { TimelineHomeOutage } from '../orchestration-home-outage';
 import type { CostTotals, ProgressSummaryView } from '../orchestration-progress';
 import type { RoleStandingView, SchedulerDecisionPage } from '../orchestration-scheduler';
+import type { PlanTemplate, TemplateApply, TemplatePreview } from '../orchestration-templates';
 import type {
   OrchestrationTimeline,
   TimelineItem,
@@ -485,4 +486,159 @@ export function demoHomeOutages(): TimelineHomeOutage[] {
     },
     { home_target_id: 'docs', sites: ['web', 'api'], since_ms: DEMO_NOW - 3 * MINUTE, reason: 'disabled' },
   ];
+}
+
+/** HS2-A4RVYA: the design's templates, synthetic. */
+export function demoTemplates(): PlanTemplate[] {
+  return [
+    {
+      template_id: '01JTEMPLATE00000000000FEAT',
+      name: 'Feature across API and Web',
+      description: 'API change, then the Web change on top of its green CI, then a contract check.',
+      state: 'active',
+      version: 3,
+      inputs: [
+        { key: 'feature', label: 'Feature', kind: 'text', required: true, choices: [] },
+        { key: 'priority', label: 'Priority', kind: 'priority', required: false, default: 'high', choices: [] },
+        { key: 'api', label: 'API Project', kind: 'target', required: true, default: 'api', choices: [] },
+        { key: 'web', label: 'Web Project', kind: 'target', required: true, default: 'web', choices: [] },
+        {
+          key: 'contract',
+          label: 'Run the API Contract Check',
+          kind: 'boolean',
+          required: false,
+          default: true,
+          choices: [],
+          hint: 'Uses the API project’s own contract-check profile',
+        },
+      ],
+      goal_title: '{{feature}}: API and Web',
+      steps: [
+        {
+          key: 'api',
+          target: '{{api}}',
+          title: 'Add {{feature}} headers',
+          ticket: 'search',
+          after: [],
+          validation: [],
+        },
+        {
+          key: 'web',
+          target: '{{web}}',
+          title: 'Show {{feature}} errors',
+          ticket: 'search',
+          after: [{ step: 'api', gates: 'ci' }],
+          validation: [],
+        },
+        {
+          key: 'docs',
+          target: '{{web}}',
+          title: 'Document {{feature}}',
+          ticket: 'create',
+          after: [{ step: 'web' }],
+          validation: [],
+        },
+      ],
+    },
+    {
+      template_id: '01JTEMPLATE00000000000REPR',
+      name: 'Repair failing CI',
+      description: 'One repair ticket in the project whose CI failed, worked first.',
+      state: 'active',
+      version: 1,
+      inputs: [{ key: 'project', label: 'Project', kind: 'target', required: true, choices: [] }],
+      goal_title: 'Repair CI',
+      steps: [
+        {
+          key: 'fix',
+          target: '{{project}}',
+          title: 'Repair the failing CI',
+          ticket: 'search',
+          after: [],
+          validation: [],
+        },
+      ],
+    },
+    {
+      template_id: '01JTEMPLATE00000000000BUMP',
+      name: 'Dependency bump in every project',
+      description: 'One upgrade ticket per chosen project, each validated by its own test profile.',
+      state: 'active',
+      version: 2,
+      inputs: [],
+      goal_title: 'Bump dependencies',
+      steps: [
+        { key: 'bump', target: 'api', title: 'Bump dependencies', ticket: 'search', after: [], validation: ['unit'] },
+      ],
+    },
+  ];
+}
+
+/** HS2-A4RVYA: the pre-run summary of the first demo template with the inputs the design shows. */
+export function demoTemplatePreview(): TemplatePreview {
+  return {
+    template_id: '01JTEMPLATE00000000000FEAT',
+    problems: [],
+    goal_title: 'Rate limits: API and Web',
+    steps: [
+      {
+        key: 'api',
+        target_id: 'api',
+        title: 'Add rate-limit headers',
+        ticket: 'search',
+        after: [],
+        priority: 'high',
+        tool: 'claude',
+        validation: ['contract-check'],
+      },
+      {
+        key: 'web',
+        target_id: 'web',
+        title: 'Show rate-limit errors',
+        ticket: 'search',
+        after: [{ step: 'api', gates: 'ci' }],
+        validation: [],
+      },
+      {
+        key: 'docs',
+        target_id: 'web',
+        title: 'Document rate limits',
+        ticket: 'create',
+        after: [{ step: 'web' }],
+        validation: [],
+      },
+    ],
+    skipped: [],
+    targets: [
+      { target_id: 'api', label: 'API', declared: true, steps: ['api'], apply: 'person', ticket_writes: 'remembered' },
+      {
+        target_id: 'web',
+        label: 'Web',
+        declared: true,
+        steps: ['web', 'docs'],
+        apply: 'person',
+        ticket_writes: 'asks',
+      },
+    ],
+    planning: 'propose',
+    placement_automatic: true,
+  };
+}
+
+/** HS2-A4RVYA: an apply's outcome, in each state the dialog shows. */
+export function demoTemplateApply(state: TemplateApply['state']): TemplateApply {
+  return {
+    operation_id: 'tpl-4f1c09b2e7a5',
+    template_id: '01JTEMPLATE00000000000FEAT',
+    template_name: 'Feature across API and Web',
+    template_version: 3,
+    state,
+    ...(state === 'waiting_permission' || state === 'denied'
+      ? {}
+      : { goal: { connection_id: 'launch-tickets', native_id: 'ticket-LCH-7', slug: 'LCH-7', created: true } }),
+    ...(state === 'planning' ? { planning: 'propose' as const } : {}),
+    ...(state === 'waiting_planner' ? { reason: 'plan_update_planner_busy' } : {}),
+    permission_requests: state === 'waiting_permission' ? ['request-1'] : [],
+    outcome: 'applied',
+  };
 }

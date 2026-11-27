@@ -96,6 +96,7 @@ import { NoteRepairReview } from '../components/note-repair-review';
 import { type NotificationView } from '../components/notification-navigation';
 import { OrchestrationDecisionsDialog } from '../components/orchestration-decisions-dialog';
 import { orchestrationInspectorPanel } from '../components/orchestration-inspector';
+import { OrchestrationTemplateDialog } from '../components/orchestration-template-dialog';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { projectRestoreTabId } from '../components/project-restore-error';
@@ -6820,6 +6821,7 @@ export async function startHotSheetWebClient() {
       planning: orchestrationView.planning.value,
       defaultGoal: orchestrationView.defaultGoal.value,
       showPlanner: orchestrationView.plannerShowable(),
+      templates: true,
     }),
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
@@ -6911,6 +6913,7 @@ export async function startHotSheetWebClient() {
             busy={orchestrationView.busy.value}
             planning={orchestrationView.planning.value}
             showPlanner={orchestrationView.plannerShowable()}
+            templates
           />
         ) : undefined;
       },
@@ -7061,10 +7064,13 @@ export async function startHotSheetWebClient() {
     changeEvidenceSurface,
     commandDialogSurface,
     orchestrationDecisionsDialog: () => (
-      <OrchestrationDecisionsDialog
-        state={orchestrationView.decisionsDialog.value}
-        timeline={orchestrationView.timeline.value}
-      />
+      <>
+        <OrchestrationDecisionsDialog
+          state={orchestrationView.decisionsDialog.value}
+          timeline={orchestrationView.timeline.value}
+        />
+        <OrchestrationTemplateDialog state={orchestrationView.templateDialog.value} compact={viewportMobile.value} />
+      </>
     ),
     composerAttachmentError,
     composerAttachmentMessage,
@@ -7432,6 +7438,36 @@ export async function startHotSheetWebClient() {
         orchestrationView.closeDecisions();
       },
       keepCheckedInPlan: () => void orchestrationView.keepCheckedInPlan(),
+      templates: {
+        open: () => void orchestrationView.openTemplates(),
+        select: (templateId) => {
+          orchestrationView.selectTemplate(templateId);
+        },
+        editInput: (key, value, commit) => {
+          orchestrationView.editTemplateInput(key, value, commit);
+        },
+        chooseStep: (step, create) => {
+          orchestrationView.chooseTemplateStep(step, create);
+        },
+        apply: () => void orchestrationView.applyTemplate(),
+        openSave: () => {
+          orchestrationView.openSaveTemplate();
+        },
+        editSave: (change) => {
+          orchestrationView.editSaveTemplate(change);
+        },
+        cancelSave: () => {
+          orchestrationView.cancelSaveTemplate();
+        },
+        submitSave: () => void orchestrationView.submitSaveTemplate(),
+        openGoal: () => void orchestrationView.openTemplateGoal(),
+        back: () => {
+          orchestrationView.backToTemplates();
+        },
+        close: () => {
+          orchestrationView.closeTemplates();
+        },
+      },
     },
     runAutomaticTicketGroup: (slugs) => {
       void automaticTicketGrouping.run(slugs);

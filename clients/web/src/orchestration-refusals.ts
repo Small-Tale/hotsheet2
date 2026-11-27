@@ -248,6 +248,28 @@ export const ORCHESTRATION_REFUSALS: Readonly<Record<string, RefusalText>> = {
     message: 'The planning session is still working.',
     next: 'Try again when it finishes its turn.',
   },
+  // TemplateError (HS2-A4RVYA)
+  template_not_found: { message: 'That template no longer exists.', next: READ_AGAIN },
+  template_retired: { message: 'That template was retired.', next: 'Choose another template.' },
+  template_invalid: {
+    message: 'The template definition is not valid.',
+    next: 'Correct the template, then save it again.',
+  },
+  template_conflict: { message: 'The templates changed meanwhile.', next: READ_AGAIN },
+  template_inputs_invalid: { message: 'An input of the template is missing or not valid.', next: 'Check the inputs.' },
+  template_target_unknown: {
+    message: 'A step names a project this orchestration project does not include.',
+    next: `Choose another project, or add it in ${ORCHESTRATION_SETTINGS}.`,
+  },
+  template_apply_conflict: {
+    message: 'This apply was already made with other inputs.',
+    next: 'Apply the template again from the start.',
+  },
+  template_apply_not_found: { message: 'That apply is not known on this machine.' },
+  template_goal_empty: {
+    message: 'That goal has no plan steps to save.',
+    next: 'Propose a plan for it first.',
+  },
   // RunError
   run_target_active: { message: 'A run already works on that ticket.' },
   run_worker_busy: { message: 'That worker is busy with another run.' },

@@ -7,6 +7,10 @@ import { createScope } from 'kerfjs/scope';
 
 import { OrchestrationDecisionsDialog } from '../components/orchestration-decisions-dialog';
 import { OrchestrationInspector } from '../components/orchestration-inspector';
+import {
+  OrchestrationTemplateDialog,
+  type OrchestrationTemplateDialogState,
+} from '../components/orchestration-template-dialog';
 import { wireOrchestrationTimeline } from '../components/orchestration-timeline-interactions';
 import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
@@ -25,6 +29,9 @@ import {
   demoIntegrator,
   demoRoles,
   demoSummary,
+  demoTemplateApply,
+  demoTemplatePreview,
+  demoTemplates,
   demoTimeline,
 } from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
@@ -316,6 +323,7 @@ export function OrchestrationTimelineViewDemo() {
         showPlanner={orchestrationDemoSettings.planning.value === 'waiting'}
         busy={orchestrationDemoSettings.busy.value}
         defaultGoal={orchestrationDemoSettings.defaultGoal.value}
+        templates
         clock={demoClock}
       />
     );
@@ -412,8 +420,82 @@ export function OrchestrationToolbarDemo() {
             busy={orchestrationDemoSettings.busy.value}
             planning={orchestrationDemoSettings.planning.value || undefined}
             showPlanner={orchestrationDemoSettings.planning.value === 'waiting'}
+            templates
             clock={demoClock}
           />
+        </CatalogExample>
+      ))}
+      <OrchestrationTemplateDialogDemo />
+    </>
+  );
+}
+
+/** HS2-A4RVYA: the Use Template… dialog the header opens, in place, in each of its states. */
+function templateState(change: Partial<OrchestrationTemplateDialogState> = {}): OrchestrationTemplateDialogState {
+  const templates = demoTemplates();
+  return {
+    loading: false,
+    templates,
+    selected: templates[0].template_id,
+    mode: 'template',
+    detailActive: false,
+    inputs: { feature: 'Rate limits', priority: 'high', api: 'api', web: 'web', contract: true },
+    changed: [],
+    choices: {},
+    preview: demoTemplatePreview(),
+    previewing: false,
+    busy: false,
+    projects: [
+      { target_id: 'api', label: 'API · Build host' },
+      { target_id: 'web', label: 'Web · This computer' },
+      { target_id: 'docs', label: 'Docs · This computer' },
+    ],
+    save: { goal: 'ticket-LCH-1', name: '', description: '', targetsAsInputs: true },
+    goals: [{ connection_id: 'launch-tickets', native_id: 'ticket-LCH-1', slug: 'LCH-1', steps: 3 }],
+    session: 1,
+    ...change,
+  };
+}
+
+function OrchestrationTemplateDialogDemo() {
+  const examples: Array<[string, OrchestrationTemplateDialogState, boolean]> = [
+    ['Use Template…', templateState(), false],
+    [
+      'Use Template…: Problems',
+      templateState({
+        inputs: { feature: '', priority: 'high', api: 'api', web: 'docs', contract: true },
+        preview: { ...demoTemplatePreview(), problems: [{ code: 'target_unknown', at: 'steps[1].target' }] },
+        choices: { web: 'create' },
+      }),
+      false,
+    ],
+    ['Use Template…: Applied', templateState({ mode: 'result', result: demoTemplateApply('planning') }), false],
+    [
+      'Use Template…: Waiting for the Planner',
+      templateState({ mode: 'result', result: demoTemplateApply('waiting_planner') }),
+      false,
+    ],
+    [
+      'Save a Goal as Template…',
+      templateState({
+        mode: 'save',
+        save: { goal: 'ticket-LCH-1', name: 'Rate limits again', description: '', targetsAsInputs: true },
+      }),
+      false,
+    ],
+    [
+      'Use Template…: No Templates Yet',
+      templateState({ templates: [], selected: undefined, preview: undefined }),
+      false,
+    ],
+    ['Use Template…: Loading', templateState({ loading: true, templates: [], selected: undefined }), false],
+    ['Use Template…: Phone', templateState({ detailActive: true }), true],
+  ];
+  return (
+    <>
+      {examples.map(([label, state, compact]) => (
+        <CatalogExample label={label} viewport={{ width: compact ? 'compact' : 'full' }}>
+          <OrchestrationTemplateDialog state={state} compact={compact} embedded />
         </CatalogExample>
       ))}
     </>

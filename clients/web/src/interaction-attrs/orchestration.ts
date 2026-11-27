@@ -34,6 +34,18 @@ export const ORCHESTRATION_ACTIONS = {
   loadEarlierOrchestrationDecisions: action('load-earlier-orchestration-decisions'),
   /** HS2-F1BKQ0: a person drops this machine's conflicting pre-sharing plan definitions. */
   keepCheckedInOrchestrationPlan: action('keep-checked-in-orchestration-plan'),
+  /**
+   * HS2-A4RVYA: Use Template… opens the template dialog; a template row (with `data-template-id`) selects it;
+   * Apply Template applies it; Save a Goal as Template… opens the save form, which Save Template submits;
+   * the result's Open <goal> opens the goal ticket the apply opened.
+   */
+  useOrchestrationTemplate: action('use-orchestration-template'),
+  selectOrchestrationTemplate: action('select-orchestration-template'),
+  applyOrchestrationTemplate: action('apply-orchestration-template'),
+  saveOrchestrationGoalTemplate: action('save-orchestration-goal-template'),
+  cancelOrchestrationGoalTemplate: action('cancel-orchestration-goal-template'),
+  submitOrchestrationGoalTemplate: action('submit-orchestration-goal-template'),
+  openOrchestrationTemplateGoal: action('open-orchestration-template-goal'),
 } as const;
 
 /** Other delegated targets of the Orchestration view. */
@@ -42,4 +54,6 @@ export const ORCHESTRATION_TARGETS = {
   view: attr('data-orchestration-view', 'true'),
   /** HS2-77SRHC: the Show All Decisions… dialog, whose own close request dismisses it. */
   decisionsDialog: attr('data-dialog-component', 'orchestration-decisions-dialog'),
+  /** HS2-A4RVYA: the Use Template… dialog, whose own close request dismisses it. */
+  templateDialog: attr('data-dialog-component', 'orchestration-template-dialog'),
 } as const;

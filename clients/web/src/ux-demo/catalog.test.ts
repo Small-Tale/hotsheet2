@@ -476,6 +476,10 @@ describe('UX demo catalog', () => {
         'Overview the cataloged OrchestrationInspector shows with no card selected (HS2-2XJSJK, demoed as Nothing Selected).',
       'orchestration-decisions-dialog':
         'Show All Decisions… dialog opened from the cataloged OrchestrationInspector overview (HS2-77SRHC, demoed in place).',
+      'orchestration-template-dialog':
+        'Use Template… dialog opened from the cataloged OrchestrationToolbar (HS2-A4RVYA, demoed in place in every state).',
+      'orchestration-template-button':
+        'Use Template… button rendered within the cataloged OrchestrationToolbar and OrchestrationTimelineView (HS2-A4RVYA, demoed).',
       'orchestration-home-outage':
         'Home site unavailable banners of the cataloged OrchestrationTimelineView (HS2-EX594V, demoed as Home Site Unavailable).',
       'orchestration-plan-problem':

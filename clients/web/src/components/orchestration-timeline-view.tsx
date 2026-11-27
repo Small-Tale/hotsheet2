@@ -5,6 +5,7 @@ import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Sparkles, SquareTerminal, Workflow } from 'lucide';
 
@@ -14,6 +15,7 @@ import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { type ClockFormat, clockTime, plannerWorkingLabel, timelineColumns } from '../orchestration-timeline-board';
 import { OrchestrationHomeOutage } from './orchestration-home-outage';
 import { OrchestrationPlanProblem } from './orchestration-plan-problem';
+import { OrchestrationTemplateButton } from './orchestration-template-button';
 import { TicketBoard, type TicketBoardLayout } from './ticket-board';
 
 /** Whether the planner behind Propose Plan (HS2-HCW7MD) can be asked, and why not. */
@@ -46,6 +48,8 @@ export interface OrchestrationTimelineViewProps {
   clock?: ClockFormat;
   /** HS2-FA8G9J: the planner waits in its terminal and its tab is known, so Show Planner opens it. */
   showPlanner?: boolean;
+  /** HS2-A4RVYA: the No Plan Yet empty state offers Use Template… beside Propose Plan. */
+  templates?: boolean;
 }
 
 /**
@@ -69,6 +73,7 @@ export function OrchestrationTimelineView({
   defaultGoal = false,
   clock = clockTime,
   showPlanner = false,
+  templates = false,
 }: OrchestrationTimelineViewProps) {
   const working = plannerWorkingLabel(planning, busy);
   const failure =
@@ -146,21 +151,24 @@ export function OrchestrationTimelineView({
                   {working}
                 </Button>
               ) : (
-                <Button
-                  emphasis="primary"
-                  action={ORCHESTRATION_ACTIONS.proposeOrchestrationPlan.value}
-                  disabled={!propose.available}
-                  title={
-                    propose.available
-                      ? defaultGoal
-                        ? 'Propose a plan that works through all open tickets'
-                        : 'Propose a plan from the goal tickets'
-                      : propose.reason
-                  }
-                  icon={<LucideIcon size="s" icon={Sparkles} name="sparkles" />}
-                >
-                  Propose Plan
-                </Button>
+                <Row hAlign="center" gap="xs" wrap>
+                  <Button
+                    emphasis="primary"
+                    action={ORCHESTRATION_ACTIONS.proposeOrchestrationPlan.value}
+                    disabled={!propose.available}
+                    title={
+                      propose.available
+                        ? defaultGoal
+                          ? 'Propose a plan that works through all open tickets'
+                          : 'Propose a plan from the goal tickets'
+                        : propose.reason
+                    }
+                    icon={<LucideIcon size="s" icon={Sparkles} name="sparkles" />}
+                  >
+                    Propose Plan
+                  </Button>
+                  {templates ? <OrchestrationTemplateButton emphasis="secondary" busy={busy} /> : undefined}
+                </Row>
               )
             }
           />
