@@ -120,6 +120,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   ) => { draft: string; base: string } | undefined;
   /** Drop a field's recovery copy once its conflict card is resolved (HS2-7D3MPP). */
   readonly clearConflictRecoveryCopy: (conflict: TicketFieldConflict) => void;
+  /** Drop text still queued for a conflicted field once its card is resolved (HS2-A51MNY). */
+  readonly cancelConflictedFieldSave: (conflict: TicketFieldConflict, frameId?: string) => void;
   readonly resolveLinkedReaderConflict: (frameId: string, choice: 'theirs' | 'merged') => Promise<boolean>;
   readonly beginDetailsFinish: (reader?: boolean) => DetailsFinishTask;
   readonly finishDetailsEdit: (reader?: boolean) => Promise<boolean>;
@@ -218,6 +220,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     readerDetailsAutosave,
     restoreTicketDraft,
     clearConflictRecoveryCopy,
+    cancelConflictedFieldSave,
     resolveLinkedReaderConflict,
     detailsAutosave,
     beginDetailsFinish,
@@ -531,6 +534,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         }
         const conflict = fieldConflict.value;
         if (!conflict) return;
+        cancelConflictedFieldSave(conflict);
         updateConflictDraft(conflict.field, conflict.theirs);
         fieldConflict.value = undefined;
         fieldConflictResolution.value = '';
@@ -553,6 +557,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         error.value = 'Ticket title cannot be empty.';
         return;
       }
+      cancelConflictedFieldSave(conflict);
       updateConflictDraft(conflict.field, value, conflict.theirs);
       fieldConflict.value = undefined;
       fieldConflictResolution.value = '';

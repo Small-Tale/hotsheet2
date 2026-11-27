@@ -951,6 +951,9 @@ inspector in `clients/web/tests/ticket-editor-autosave-transitions.spec.ts`:
 - A failed page-hide save keeps the local copy; after returning, a focus loss with no new typing retries it, closes the editor, and clears the copy (HS2-Y0VRXR).
 - A stale cached detail refreshed after the edit began: the blur save merges on the refreshed token with no 409 retry, and an untouched open editor adopts the refreshed text.
 
+`clients/web/tests/ticket-editor-autosave-transitions.spec.ts # Use Theirs / Apply Merged Value on the inspector's card drops text typed before it, so a later focus loss keeps the choice (HS2-A51MNY)`
+drives a 409 overlap in the inspector, types on in the still-open Details editor (and the merge field for Apply), resolves the card, then moves focus through the editor and to another ticket. Use Theirs writes nothing; Apply writes once; the server keeps the chosen text. `clients/web/src/ticket-field-reconciliation.test.ts # names the editor queue a resolved conflict card supersedes, and none for fields without one (HS2-A51MNY)` pins the field-to-queue mapping that the inspector and linked readers share.
+
 `clients/web/tests/ticket-reader-stack.spec.ts # retries a failed linked reader Details save on the next focus loss, never over an overlap (HS2-Y0VRXR)`
 drives the same retry in a link-opened reader. It checks that a focus loss writes nothing
 while the frame's conflict card owns an overlapping edit, and that the card still holds

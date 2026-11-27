@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiHttpError, type FullTicket } from './api';
 import { beginFeedbackPromptEdit, endFeedbackPromptEdit } from './feedback-prompt-edits';
 import {
+  conflictedEditorQueue,
   isTicketConcurrencyConflict,
   isWriteBehindUnavailable,
   mergedEditNotice,
@@ -127,6 +128,12 @@ describe('field-aware ticket reconciliation', () => {
     } finally {
       endFeedbackPromptEdit('P1');
     }
+  });
+
+  it('names the editor queue a resolved conflict card supersedes, and none for fields without one (HS2-A51MNY)', () => {
+    for (const field of ['details', 'blocked_reason', 'note', 'title'] as const)
+      expect(conflictedEditorQueue(field)).toBe(field);
+    for (const field of ['tags', 'up_next', 'status', '']) expect(conflictedEditorQueue(field)).toBeUndefined();
   });
 
   it('marks only an explicitly opened FEEDBACK NEEDED prompt edit and keeps the mark on retry (HS2-ZXGEFE)', () => {

@@ -1075,6 +1075,11 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   keeps the remote text without a write. Apply Merged Value saves the merge once to that
   frame's own ticket. Either choice settles the field's local recovery copy, Apply only
   after its save commits (HS2-JT2AFG).
+  Because focus moving into a card keeps its editor open without saving, text typed in that
+  editor just before the choice is still queued. Resolving any card (the inspector's, the
+  workspace reader's, or a linked reader frame's) drops that queued text through one shared
+  path, so a later focus loss, ticket switch, or page hide never sends it over the chosen
+  value (HS2-A51MNY).
   A recently viewed ticket shown from cache and refreshed after an edit began is
   reconciled like a live refresh, so the blur save uses the refreshed token and an editor
   with nothing typed adopts the refreshed text (HS2-7D3MPP). Sometimes a list refresh would deselect the ticket being edited,

@@ -103,6 +103,7 @@ import {
   ticketDraftKey,
 } from '../ticket-draft-store';
 import {
+  conflictedEditorQueue,
   isTicketConcurrencyConflict,
   isWriteBehindUnavailable,
   mergedEditNotice,
@@ -1263,6 +1264,30 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
 
   /**
+   * A conflict card's choice supersedes any text still queued for that field's focus-loss save: the
+   * inspector's card (and the workspace reader's) for the selected ticket, or linked reader `frameId`'s
+   * own card. Both the inspector and linked readers resolve through here (HS2-JT2AFG, HS2-A51MNY).
+   */
+  function cancelConflictedFieldSave(conflict: TicketFieldConflict, frameId?: string) {
+    const queue = conflictedEditorQueue(conflict.field);
+    if (!queue) return;
+    if (frameId !== undefined) {
+      const saves = linkedReaderAutosaves.get(frameId);
+      if (!saves || queue === 'title') return;
+      (queue === 'details' ? saves.details : queue === 'note' ? saves.note : saves.blocked).cancel();
+      return;
+    }
+    // The inspector and the workspace reader both edit the selected ticket, so either one's queued
+    // text for that field predates the choice.
+    const selected = {
+      details: [detailsAutosave, readerDetailsAutosave],
+      blocked_reason: [blockedReasonAutosave, readerBlockedReasonAutosave],
+      note: [noteAutosave, readerNoteAutosave],
+      title: [titleAutosave],
+    }[queue];
+    for (const save of selected) save.cancel();
+  }
+  /**
    * Resolve a linked reader frame's conflict card (HS2-JT2AFG), as the inspector's card resolves its own:
    * Use Theirs keeps the remote text and settles the recovery copy; Apply Merged Value saves the merged
    * text to the frame's ticket and settles the copy once that save lands, so a failed save stays recoverable.
@@ -1272,11 +1297,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       owned = frame?.fieldConflict;
     if (!frame || !owned) return false;
     const { conflict, resolution } = owned;
-    // The choice supersedes any text still queued for that field's focus-loss save.
-    const saves = linkedReaderAutosaves.get(frameId);
-    if (conflict.field === 'details') saves?.details.cancel();
-    else if (conflict.field === 'blocked_reason') saves?.blocked.cancel();
-    else if (conflict.field === 'note') saves?.note.cancel();
+    cancelConflictedFieldSave(conflict, frameId);
     if (choice === 'theirs') {
       clearLinkedConflictRecoveryCopy(frame);
       replaceLinkedReaderFrame(frameId, (current) =>
@@ -3170,6 +3191,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     applyTicketPatch,
     restoreTicketDraft,
     clearConflictRecoveryCopy,
+    cancelConflictedFieldSave,
     resolveLinkedReaderConflict,
     flushTicketDrafts,
     flushSelectedTicketEdits,

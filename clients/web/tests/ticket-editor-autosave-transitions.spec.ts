@@ -950,6 +950,53 @@ test('a save answered by a 409 whose concurrent edit overlaps still shows the ca
   await expect(page.getByText('Merged your edit')).toHaveCount(0);
 });
 
+// HS2-A51MNY: text typed into the open Details editor while the inspector's card shows stays queued
+// for the next focus loss, because focus moving into the card keeps the editor open (HS2-3TSEAX).
+// Resolving the card is the user's choice, so that queued text must never be sent over it.
+for (const choice of ['Use Theirs', 'Apply Merged Value'] as const)
+  test(`${choice} on the inspector's card drops text typed before it, so a later focus loss keeps the choice (HS2-A51MNY)`, async ({
+    page,
+  }) => {
+    const server = await mockProject(page);
+    await openProject(page);
+    await ticketRow(page, 'HS2-EDIT').click();
+    const editor = await editDetails(page);
+    await editor.fill('Intro, mine');
+    server.details['01'] = 'Intro, theirs';
+    server.tokens['01'] = 'T-remote';
+    await editor.blur();
+    const card = conflictCard(page);
+    await expect(card).toBeVisible();
+    const sent = server.patches.length;
+
+    // The editor stays open beside the card; typing on queues text for the next focus loss.
+    await editor.focus();
+    await caretToEnd(editor);
+    await editor.pressSequentially(', typed on');
+    if (choice === 'Apply Merged Value')
+      await card.getByRole('textbox', { name: 'Merged details' }).fill('Intro, both of ours');
+    await page.waitForTimeout(300);
+    expect(server.patches).toHaveLength(sent);
+
+    await card.getByRole('button', { name: choice }).click();
+    await expect(card).toHaveCount(0);
+    const chosen = choice === 'Use Theirs' ? 'Intro, theirs' : 'Intro, both of ours';
+    await expect.poll(() => server.details['01']).toBe(chosen);
+    const resolved = server.patches.length;
+    expect(resolved).toBe(choice === 'Use Theirs' ? sent : sent + 1);
+
+    // Moving focus through the editor and away again, then to another ticket, sends nothing more.
+    if (await editor.isVisible()) {
+      await expect(editor).toHaveValue(chosen);
+      await editor.focus();
+      await editor.blur();
+    }
+    await ticketRow(page, 'HS2-NEXT').click();
+    await page.waitForTimeout(300);
+    expect(server.patches).toHaveLength(resolved);
+    expect(server.details['01']).toBe(chosen);
+  });
+
 test('a live change merged into an open unsaved draft is announced and saved on the next blur (HS2-JJ3R1G)', async ({
   page,
 }) => {

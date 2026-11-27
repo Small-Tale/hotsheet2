@@ -215,6 +215,19 @@ export function resolvedConflictPatch(
   return { [conflict.field]: value };
 }
 
+/** The focus-loss save queue a text editor keeps for a conflicted field. */
+export type ConflictedEditorQueue = 'details' | 'blocked_reason' | 'note' | 'title';
+
+/**
+ * The editor queue a field conflict card supersedes when the user resolves it, or undefined for a field
+ * no text editor queues (tags, Up Next). Focus moving into the card keeps the editor open without
+ * flushing (HS2-3TSEAX), so text typed before the choice is still queued and must be dropped, never
+ * sent over the chosen value by a later focus loss (HS2-JT2AFG, HS2-A51MNY).
+ */
+export function conflictedEditorQueue(field: string): ConflictedEditorQueue | undefined {
+  return field === 'details' || field === 'blocked_reason' || field === 'note' || field === 'title' ? field : undefined;
+}
+
 /** The draft-backed text value of `field` (a note's text for `note`), as the editors hold it. */
 export function ticketFieldText(ticket: FullTicket, field: string, noteId?: string): string {
   const value = ticketField(ticket, field, noteId);
