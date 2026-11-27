@@ -1569,6 +1569,40 @@ impl OrchestrationRuntime {
             let Some(mut trigger) = store.find(&trigger.trigger_id)? else {
                 continue;
             };
+            // The active delivery's entry follows its apply: the goal once it opens,
+            // and the reason it waits (or none), after HS2-AMJNER resumed it.
+            if let Some(active) = trigger.active.clone()
+                && let Ok(Some(apply)) = TemplateApplyStore::new(&self.home, owner_id)
+                    .and_then(|applies| applies.find(&active.operation_id))
+            {
+                let slug = apply.goal.as_ref().and_then(|goal| goal.slug.clone());
+                let reason = match apply.state {
+                    ApplyState::Planning => None,
+                    _ => apply.reason.clone(),
+                };
+                let stale = trigger
+                    .history
+                    .iter()
+                    .rev()
+                    .find(|entry| {
+                        entry.delivery_key == active.delivery_key
+                            && entry.outcome == DeliveryOutcome::Applied
+                    })
+                    .is_some_and(|entry| entry.goal_slug != slug || entry.reason != reason);
+                if stale {
+                    let (updated, ()) = store.update(&trigger.trigger_id, |current| {
+                        if let Some(entry) = current.history.iter_mut().rev().find(|entry| {
+                            entry.delivery_key == active.delivery_key
+                                && entry.outcome == DeliveryOutcome::Applied
+                        }) {
+                            entry.goal_slug.clone_from(&slug);
+                            entry.reason.clone_from(&reason);
+                        }
+                        Ok(())
+                    })?;
+                    trigger = updated;
+                }
+            }
             if self.review_lapsed(&owner, &mut trigger, tx)? || !trigger.state.fires() {
                 continue;
             }

@@ -1163,3 +1163,59 @@ fn hs2_kxka7x_a_ticket_opened_in_a_project_fires_once() {
             .is_empty()
     );
 }
+
+/// A delivery whose apply waits for a person: once the person answers and the apply
+/// resumes (HS2-AMJNER), the next pass records its goal and clears the wait reason.
+#[test]
+fn hs2_kxka7x_a_resumed_apply_updates_its_delivery_entry() {
+    let clock = At(AtomicU64::new(T0));
+    let mut rng = Rng(900);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[], &mut tx);
+    let template = f.template("Repair CI at {{commit}}", &mut tx);
+    let trigger = f.set(template_trigger(&template, "skip"), &mut tx);
+    f.m.runtime
+        .trigger_on(
+            &f.owner(),
+            &Fixture::reference(&trigger),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let first = f.fire(&trigger, "event-1", &mut tx);
+    assert_eq!(first.outcome, DeliveryOutcome::Applied);
+    assert_eq!(first.reason.as_deref(), Some("permission_required"));
+    let entry = |tx: &Transaction<'_>| f.show(&trigger, tx).trigger.history[0].clone();
+    assert!(entry(&tx).goal_slug.is_none());
+    let request =
+        f.m.runtime
+            .permission_list(&f.owner(), &mut tx)
+            .unwrap()
+            .requests[0]
+            .request
+            .request_id
+            .clone();
+    f.m.runtime
+        .permission_answer(
+            &f.owner(),
+            &request,
+            PermissionAnswer::AllowOnce,
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    f.m.runtime
+        .template_resume_waiting(&f.owner(), &mut ResumeMemory::default(), &mut tx)
+        .unwrap();
+    f.m.runtime.trigger_pass(&f.owner(), &mut tx).unwrap();
+    let updated = entry(&tx);
+    assert_eq!(
+        updated.goal_slug,
+        f.goals().first().map(|goal| goal.slug.clone())
+    );
+    assert!(updated.goal_slug.is_some());
+    assert_eq!(updated.reason, None);
+}
