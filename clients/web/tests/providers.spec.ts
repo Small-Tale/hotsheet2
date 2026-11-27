@@ -550,7 +550,7 @@ test('lists each uncovered Workers source once by name, with failures apart from
   await expect(notes).toHaveJSProperty('open', true);
   const line = notes.getByText('GitHub Small-Tale/hotsheet2: worker coordination is not available for this provider');
   await expect(line).toBeVisible();
-  expect(await columns.getByText('GitHub Small-Tale/hotsheet2', { exact: false }).count()).toBe(1);
+  await expect(columns.getByText('GitHub Small-Tale/hotsheet2', { exact: false })).toHaveCount(1);
   // A new worker snapshot re-renders the view without closing the opened details.
   cursor = 'coverage-2';
   for (const resolve of waiters) resolve();

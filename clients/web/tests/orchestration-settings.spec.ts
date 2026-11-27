@@ -706,7 +706,10 @@ test('HS2-N3HWP9 tool Sessions and Weight show Auto when empty and store 0 to tu
     await expect(policy).not.toContainText('Leave Sessions empty');
     const sessions = policy.getByRole('spinbutton', { name: 'Sessions', exact: true });
     const weights = policy.getByRole('spinbutton', { name: 'Weight', exact: true });
-    expect(await sessions.count()).toBeGreaterThan(0);
+    // HS2-SXJM1G: the tool rows can render after the policy copy, so wait on them before counting.
+    await expect(sessions.first()).toBeVisible();
+    const rows = await sessions.count();
+    await expect(weights).toHaveCount(rows);
     // Every tool reads Auto: an empty value with Auto as its placeholder.
     for (const field of [...(await sessions.all()), ...(await weights.all())]) {
       await expect(field).toHaveValue('');
@@ -722,7 +725,7 @@ test('HS2-N3HWP9 tool Sessions and Weight show Auto when empty and store 0 to tu
     // 0 turns the first tool off; a number on the second is a cap. Weight stays Auto.
     await sessions.nth(0).fill('0');
     await sessions.nth(0).blur();
-    const two = (await sessions.count()) > 1;
+    const two = rows > 1;
     if (two) {
       await sessions.nth(1).fill('3');
       await sessions.nth(1).blur();

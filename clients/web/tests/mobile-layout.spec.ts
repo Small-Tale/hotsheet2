@@ -1173,7 +1173,7 @@ test('keeps every tab strip horizontally scrollable only (HS2-QG4K9W)', async ({
     await page.locator('[data-ticket-slug]').first().click();
     await expect(page.locator('.ticket-inspector__tabs .kui-tab-bar__tabs').first()).toBeVisible();
     const strips = page.locator('.kui-tab-bar__tabs');
-    expect(await strips.count()).toBeGreaterThanOrEqual(phone ? 2 : 3);
+    await expect.poll(() => strips.count()).toBeGreaterThanOrEqual(phone ? 2 : 3);
     for (const strip of await strips.all()) {
       if (!(await strip.isVisible())) continue;
       expect(await strip.evaluate((element) => getComputedStyle(element).overflowY)).toBe('hidden');

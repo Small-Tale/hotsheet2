@@ -30,7 +30,7 @@ test('glance gauge names its reading, sweeps the needle, and keeps bare gauges t
   await expect(interactive.locator('title')).toHaveText('Token rate: 1.6k tokens/min (24-hour peak 6.2k)');
   await expect(interactive.locator('.glance-gauge__value')).toHaveText('1.6k');
   await expect(interactive.locator('.glance-gauge__unit')).toHaveText('tokens/min');
-  expect(await typical.count()).toBeGreaterThan(0);
+  await expect(typical).not.toHaveCount(0);
   await expect.poll(() => needleRotation(interactive)).toBe(-58);
 
   // Bare gauges at chip height carry no text on the face; the title says everything.

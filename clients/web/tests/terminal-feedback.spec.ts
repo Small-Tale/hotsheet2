@@ -594,7 +594,7 @@ test('releases magnified terminal resources and bounds duplicated scrollback', a
     await expect(tile.locator('[data-component="terminal-preview-placeholder"]')).toHaveCount(0);
     await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-connection', 'connected');
     await expect.poll(liveSockets).toBe(baselineSockets);
-    expect(await page.locator('.xterm').count()).toBe(baselineTerminals);
+    await expect(page.locator('.xterm')).toHaveCount(baselineTerminals);
     if (cycle === 0)
       await dashboard.screenshot({
         path: 'target/visual-captures/hs2-acmrf6-restored-preview.png',
