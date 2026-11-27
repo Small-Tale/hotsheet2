@@ -694,13 +694,8 @@ pub(crate) fn reported_session(
         );
     }
     if let Some(inbox) = &connection.claude_inbox {
-        use hotsheet_aitools::session_push::{
-            CLAUDE_SOCKET_FIELD, CLAUDE_TOKEN_FIELD, CLAUDE_VERSION_FIELD,
-        };
+        use hotsheet_aitools::session_push::{CLAUDE_SOCKET_FIELD, CLAUDE_VERSION_FIELD};
         fields.insert(CLAUDE_SOCKET_FIELD.to_string(), inbox.socket.clone());
-        if let Some(token) = &inbox.token {
-            fields.insert(CLAUDE_TOKEN_FIELD.to_string(), token.expose().to_owned());
-        }
         if let Some(version) = &inbox.tool_version {
             fields.insert(CLAUDE_VERSION_FIELD.to_string(), version.clone());
         }
@@ -708,6 +703,11 @@ pub(crate) fn reported_session(
     hotsheet_aitools::session_push::ReportedSession {
         session_id: connection.session_id.clone(),
         fields,
+        // HS2-7AJ57B: the inbox token stays a typed SecretString, never a plain map value.
+        token: connection
+            .claude_inbox
+            .as_ref()
+            .and_then(|inbox| inbox.token.clone()),
     }
 }
 

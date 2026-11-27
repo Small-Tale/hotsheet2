@@ -44,7 +44,7 @@ pub(crate) enum ResourceCmd {
         target: Option<String>,
         /// The renewal token (default: `$HOTSHEET_RESOURCE_CLAIM_TOKEN`).
         #[arg(long)]
-        token: Option<String>,
+        token: Option<hotsheet_sync::secret::SecretString>,
         /// The new lease length from now.
         #[arg(long)]
         duration: String,
@@ -69,7 +69,7 @@ pub(crate) enum ResourceCmd {
         target: Option<String>,
         /// The renewal token (default: `$HOTSHEET_RESOURCE_CLAIM_TOKEN`).
         #[arg(long)]
-        token: Option<String>,
+        token: Option<hotsheet_sync::secret::SecretString>,
         /// Release through this Hot Sheet server's token route; see `renew --server`.
         #[arg(long, value_name = "URL")]
         server: Option<String>,
@@ -301,8 +301,9 @@ fn token_path(target: Option<&str>, action: &str) -> Result<String> {
     }
 }
 
-fn token_value(flag: Option<String>) -> Result<String> {
-    flag.or_else(|| std::env::var(TOKEN_ENV).ok())
+fn token_value(flag: Option<hotsheet_sync::secret::SecretString>) -> Result<String> {
+    flag.map(hotsheet_sync::secret::SecretString::into_inner)
+        .or_else(|| std::env::var(TOKEN_ENV).ok())
         .map(|token| token.trim().to_owned())
         .filter(|token| !token.is_empty())
         .ok_or_else(|| anyhow!("pass --token or set {TOKEN_ENV}"))

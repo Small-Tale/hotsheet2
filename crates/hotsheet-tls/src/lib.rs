@@ -151,7 +151,8 @@ pub fn init_ca(paths: &Paths, hosts: &[String]) -> Result<(), TlsError> {
 pub struct DeviceCert {
     pub name: String,
     pub cert_pem: String,
-    pub key_pem: String,
+    /// The device's private key: `Debug` prints `<redacted>` (HS2-7AJ57B).
+    pub key_pem: hotsheet_sync::secret::SecretString,
     pub ca_pem: String,
     pub fingerprint: String,
 }
@@ -190,7 +191,7 @@ pub fn issue_device(paths: &Paths, name: &str) -> Result<DeviceCert, TlsError> {
     Ok(DeviceCert {
         name: name.to_string(),
         cert_pem,
-        key_pem: dev_key.serialize_pem(),
+        key_pem: dev_key.serialize_pem().into(),
         ca_pem,
         fingerprint,
     })
@@ -416,7 +417,11 @@ mod tests {
         init_ca(&p, &[]).unwrap();
         let dev = issue_device(&p, "laptop").unwrap();
         assert!(dev.cert_pem.contains("BEGIN CERTIFICATE"));
-        assert!(dev.key_pem.contains("PRIVATE KEY"));
+        assert!(dev.key_pem.expose().contains("PRIVATE KEY"));
+        // HS2-7AJ57B: the derived `Debug` never prints the private key.
+        let printed = format!("{dev:?}");
+        assert!(!printed.contains("PRIVATE KEY"), "{printed}");
+        assert!(printed.contains("key_pem: <redacted>"), "{printed}");
         assert_eq!(dev.fingerprint.len(), 64); // sha256 hex
 
         // The device cert's issuer chains to the stored CA: its DER fingerprint is recorded.

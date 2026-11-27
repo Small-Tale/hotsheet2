@@ -917,7 +917,7 @@ enum Cmd {
         local_bind: Option<String>,
         /// Shared secret for `X-Hotsheet-Secret` (generated + printed by the server if omitted).
         #[arg(long, conflicts_with = "list")]
-        secret: Option<String>,
+        secret: Option<hotsheet_sync::secret::SecretString>,
         /// Stop the running server for this store, then exit.
         #[arg(long, conflicts_with = "list")]
         stop: bool,

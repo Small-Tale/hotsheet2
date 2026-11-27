@@ -557,7 +557,10 @@ fn client_config(credentials: &RemoteCredentials) -> Result<rustls::ClientConfig
     let builder = rustls::ClientConfig::builder().with_root_certificates(roots);
     let mut config = if let (Some(certificates), Some(key)) = (
         credentials.client_certificate_pem.as_deref(),
-        credentials.client_key_pem.as_deref(),
+        credentials
+            .client_key_pem
+            .as_ref()
+            .map(hotsheet_sync::secret::SecretString::expose),
     ) {
         let certificates = rustls_pemfile::certs(&mut BufReader::new(certificates.as_bytes()))
             .collect::<Result<Vec<_>, _>>()

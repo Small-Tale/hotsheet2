@@ -595,8 +595,9 @@ sanitized capture is `crates/hotsheet-aitools/tests/fixtures/claude-2.1.302-inbo
   `/status` shows it as `uds:<path>`) and `CLAUDE_CODE_MESSAGING_TOKEN` to hooks.
   - Hot Sheet's `SessionStart` report adds `messaging_socket`, `messaging_token`, and
     `tool_version` (from `AI_AGENT`, else the versioned `CLAUDE_CODE_EXECPATH`).
-  - `reported_session` exposes these as the `messaging_socket`, `messaging_token`, and
-    `tool_version` fields.
+  - `reported_session` exposes the socket and version as the `messaging_socket` and
+    `tool_version` fields, and the token as the typed `ReportedSession.token` secret, never a
+    plain map value (HS2-7AJ57B).
   - The token is a per-session credential. It stays in server memory on the live connection,
     and neither terminal APIs nor the last-hook-report history serve it or the socket path.
   - A permission ask from the same session keeps the inbox its `SessionStart` recorded.
@@ -643,9 +644,11 @@ like this:
 1. **Report.** Each `POST /terminals/{id}/ai-connection` from the tool's hook stores the
    address on the terminal's internal connection.
 2. **Build.** `routes::terminals::reported_session` turns it into a
-   `session_push::ReportedSession {session_id, fields}`. Each tool's hook-reported fields
-   (`codex_home`; the Claude `messaging_socket`, `messaging_token`, and `tool_version`) are
-   added in that function.
+   `session_push::ReportedSession {session_id, fields, token}`. Each tool's hook-reported
+   fields (`codex_home`; the Claude `messaging_socket` and `tool_version`) are added in that
+   function; a credential (the Claude `messaging_token`) goes in the typed `token` secret.
+   The secret policy scan rejects an exposed secret inserted into a collection
+   (HS2-7AJ57B).
 3. **Register.** `routes::session_messages::register_reported` builds the adapter with
    `session_push::adapter_for_reported(spec, reported, program)` and puts it in the same
    per-terminal map. The program is the plugin's `[launch] program`, resolved on `PATH`; a

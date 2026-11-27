@@ -31,8 +31,9 @@ pub struct RemoteCredentials {
     pub ca_pem: Option<String>,
     #[serde(default)]
     pub client_certificate_pem: Option<String>,
+    /// The device's TLS private key (HS2-7AJ57B); serde-transparent, so the JSON is unchanged.
     #[serde(default)]
-    pub client_key_pem: Option<String>,
+    pub client_key_pem: Option<SecretString>,
 }
 
 impl std::fmt::Debug for RemoteCredentials {
@@ -119,7 +120,7 @@ impl RemoteCredentials {
             return Ok(None);
         }
         let cert = self.client_certificate_pem.as_deref();
-        let key = self.client_key_pem.as_deref();
+        let key = self.client_key_pem.as_ref().map(SecretString::expose);
         if cert.is_some() != key.is_some()
             || [cert, key]
                 .into_iter()

@@ -60,7 +60,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             &bind,
             remote_transport.as_deref(),
             local_bind.as_deref(),
-            secret,
+            secret.map(hotsheet_sync::secret::SecretString::into_inner),
             ServeStop {
                 stop,
                 kill_all_terminals,
@@ -167,7 +167,7 @@ pub(crate) fn cmd_cert(store_path: &Path, cmd: &CertCmd) -> Result<()> {
             println!("# ===== client certificate ({}.crt) =====", dev.name);
             print!("{}", dev.cert_pem);
             println!("# ===== client private key ({}.key) =====", dev.name);
-            print!("{}", dev.key_pem);
+            print!("{}", dev.key_pem.expose());
             println!("# ===== project CA (ca.crt — to verify the server) =====");
             print!("{}", dev.ca_pem);
         }
@@ -180,7 +180,7 @@ pub(crate) fn cmd_cert(store_path: &Path, cmd: &CertCmd) -> Result<()> {
             println!("# ===== client certificate ({}.crt) =====", dev.name);
             print!("{}", dev.cert_pem);
             println!("# ===== client private key ({}.key) =====", dev.name);
-            print!("{}", dev.key_pem);
+            print!("{}", dev.key_pem.expose());
             println!("# ===== project CA (ca.crt — to verify the server) =====");
             print!("{}", dev.ca_pem);
         }

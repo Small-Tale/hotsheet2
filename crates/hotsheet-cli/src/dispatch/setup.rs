@@ -437,7 +437,7 @@ fn permission_discard_hosts(
         .collect::<std::io::Result<Vec<_>>>()?;
     records.sort();
     let mut hosts = Vec::new();
-    let mut seen = HashMap::<u32, (String, String)>::new();
+    let mut seen = HashMap::<u32, (String, hotsheet_sync::secret::SecretString)>::new();
     for path in records {
         if path.extension().is_none_or(|extension| extension != "json") {
             continue;
@@ -455,17 +455,14 @@ fn permission_discard_hosts(
         let host = hotsheet_cli::external_launch::discover_running_server(store, home)
             .with_context(|| format!("permission host {} is unavailable", record.store_path))?;
         if let Some((url, secret)) = seen.get(&host.pid) {
-            if url != &host.url || secret.as_str() != host.secret.expose() {
+            if url != &host.url || secret != &host.secret {
                 bail!(
                     "conflicting instance records for Hot Sheet host {}",
                     host.pid
                 );
             }
         } else {
-            seen.insert(
-                host.pid,
-                (host.url.clone(), host.secret.expose().to_owned()),
-            );
+            seen.insert(host.pid, (host.url.clone(), host.secret.clone()));
             hosts.push(host);
         }
     }

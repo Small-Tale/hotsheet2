@@ -284,7 +284,7 @@ pub(super) fn expired_credentials(paths: &Paths) -> RemoteCredentials {
         session_csrf: None,
         ca_pem: Some(ca_pem),
         client_certificate_pem: Some(certificate.pem()),
-        client_key_pem: Some(key.serialize_pem()),
+        client_key_pem: Some(key.serialize_pem().into()),
     }
 }
 

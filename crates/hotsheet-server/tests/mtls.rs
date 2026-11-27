@@ -98,7 +98,7 @@ async fn get_health(
 }
 
 fn client_config(paths: &Paths, dev: &hotsheet_tls::DeviceCert) -> rustls::ClientConfig {
-    let (chain, key) = client_identity(&dev.cert_pem, &dev.key_pem);
+    let (chain, key) = client_identity(&dev.cert_pem, dev.key_pem.expose());
     rustls::ClientConfig::builder()
         .with_root_certificates(root_store(paths))
         .with_client_auth_cert(chain, key)
@@ -153,7 +153,7 @@ async fn a_ca_issued_client_cert_gets_in_and_no_cert_or_revoked_is_rejected() {
 
     // (1) A client presenting a CA-issued device cert completes the handshake and gets 200.
     let dev = issue_device(&paths, "laptop").unwrap();
-    let (chain, key) = client_identity(&dev.cert_pem, &dev.key_pem);
+    let (chain, key) = client_identity(&dev.cert_pem, dev.key_pem.expose());
     let good = rustls::ClientConfig::builder()
         .with_root_certificates(roots.clone())
         .with_client_auth_cert(chain, key)
@@ -177,7 +177,7 @@ async fn a_ca_issued_client_cert_gets_in_and_no_cert_or_revoked_is_rejected() {
     // already-running server — no restart, no config rebuild — and it's rejected because the
     // verifier re-reads the revocation file per handshake.
     revoke_device(&paths, "laptop").unwrap();
-    let (chain, key) = client_identity(&dev.cert_pem, &dev.key_pem);
+    let (chain, key) = client_identity(&dev.cert_pem, dev.key_pem.expose());
     let revoked_client = rustls::ClientConfig::builder()
         .with_root_certificates(roots)
         .with_client_auth_cert(chain, key)

@@ -1425,6 +1425,26 @@ token. The tests are:
 - `crates/hotsheet-server/tests/session_messages.rs`: still proves the Claude inbox token
   reaches the socket end to end.
 
+HS2-7AJ57B covers three shapes the HS2-N1JXBZ scan missed. `key_pem` joins the secret words,
+so `RemoteCredentials.client_key_pem` and `hotsheet_tls::DeviceCert.key_pem` are now
+`SecretString`. The scan reads enum struct variants, and tuple structs or enum tuple variants
+whose secret-named type wraps a plain string. A map value has no field name, so the scan
+flags an `.insert(...)` that copies an `.expose()`d secret into a collection. The Claude inbox
+token therefore moved from `ReportedSession.fields` to a typed `ReportedSession.token`. Its
+other findings were retyped: the `serve --secret` flag, the `resource renew`/`release
+--token` flags and the permission-host dedupe map. Concurrency tokens, a credential-store error
+message, a borrowed request-header view and test callers are exempt with reasons. The tests
+are:
+
+- `secret_debug_policy.rs # hs2_7aj57b_*`: word-list false-positive checks and scanner
+  fixtures for variants, tuple structs and exposed inserts;
+- `remote_servers/tests.rs # hs2_n1jxbz_remote_credentials_json_is_byte_identical`: the device
+  key keeps its JSON and prints `<redacted>`;
+- `hotsheet-tls # issued_device_chains_to_the_ca_and_a_foreign_cert_does_not`: the derived
+  `DeviceCert` `Debug` hides the key;
+- `session_push/claude.rs # the_reported_token_is_a_typed_redacted_secret`: the typed token
+  reaches the adapter, a blank token is dropped and the report's `Debug` hides it.
+
 HS2-CQNE4E covers credentials in HTTP header collections:
 
 - The policy file's `hs2_cqne4e_*` tests reject a derived `Debug` over a `*header*` field

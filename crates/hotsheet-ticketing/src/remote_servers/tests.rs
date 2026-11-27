@@ -801,6 +801,12 @@ fn hs2_n1jxbz_remote_credentials_json_is_byte_identical() {
     assert!(decoded.bearer_secret.is_empty());
     assert_eq!(decoded.session_csrf, None);
     assert_eq!(serde_json::to_string(&decoded).unwrap(), device);
+    // HS2-7AJ57B: the device key is a `SecretString` with the same JSON.
+    assert_eq!(
+        decoded.client_key_pem.as_ref().map(SecretString::expose),
+        Some("key")
+    );
+    assert_eq!(format!("{:?}", decoded.client_key_pem), "Some(<redacted>)");
 
     let printed = format!("{decoded:?} {:?}", request().credentials);
     assert!(!printed.contains("synthetic-bearer"), "{printed}");

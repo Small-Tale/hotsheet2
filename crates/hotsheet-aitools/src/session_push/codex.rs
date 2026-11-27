@@ -284,6 +284,7 @@ mod tests {
         let spec = spec();
         let reported = |session: Option<&str>, home: Option<&str>| ReportedSession {
             session_id: session.map(str::to_owned),
+            token: None,
             fields: home
                 .map(|home| [(CODEX_HOME_FIELD.to_owned(), home.to_owned())].into())
                 .unwrap_or_default(),

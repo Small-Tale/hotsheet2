@@ -18,6 +18,13 @@
 //! `HeaderMap`), because `Authorization`, cookie and signature values print with it. Such a
 //! struct writes its `Debug` by hand with `hotsheet_sync::secret::RedactedHeaders`, or holds
 //! the values as `SecretString`.
+//!
+//! HS2-7AJ57B covers three more shapes. `key_pem` joins `SECRET_WORDS` for PEM private keys
+//! (`client_key_pem`); bare `_key` stays out because map keys and ids would match. Enum
+//! struct variants are scanned like structs, and a tuple struct or enum tuple variant whose
+//! secret-named type (`ApiToken(String)`, `Bearer(String)`) wraps a plain string is flagged
+//! as field `0`. A map value has no field name, so the scan flags the copy instead: an
+//! `.insert(...)` whose arguments `.expose()` a `SecretString`.
 
 use std::path::{Path, PathBuf};
 
@@ -191,6 +198,48 @@ const NOT_SECRET: &[(&str, &str, &str, &str)] = &[
         "secret",
         "test fake recording a synthetic machine secret it must assert on (HS2-N1JXBZ)",
     ),
+    (
+        "hotsheet-notify/src/remote_change/workflow.rs",
+        "WorkflowError::Secret",
+        "0",
+        "OS credential-store error message, not the secret (HS2-7AJ57B)",
+    ),
+    (
+        "hotsheet-server/src/remote_auth.rs",
+        "Proof::Browser",
+        "csrf",
+        "borrowed request-header view compared in place; no Debug or Serialize (HS2-7AJ57B)",
+    ),
+    (
+        "hotsheet-server/tests/remote_host_access.rs",
+        "As::Session",
+        "cookie",
+        "test caller replaying a synthetic cookie (HS2-7AJ57B)",
+    ),
+    (
+        "hotsheet-server/tests/remote_host_access.rs",
+        "As::Session",
+        "csrf",
+        "test caller replaying a synthetic CSRF proof (HS2-7AJ57B)",
+    ),
+    (
+        "hotsheet-cli/src/dispatch/orchestration.rs",
+        "TicketCmd::Update",
+        "expected_token",
+        "optimistic-concurrency version, not a credential (HS2-7AJ57B)",
+    ),
+    (
+        "hotsheet-cli/src/main.rs",
+        "Cmd::ProviderEdit",
+        "expected_token",
+        "optimistic-concurrency version, not a credential (HS2-7AJ57B)",
+    ),
+    (
+        "hotsheet-cli/src/main.rs",
+        "Cmd::ProviderReportNotWorking",
+        "expected_token",
+        "optimistic-concurrency version, not a credential (HS2-7AJ57B)",
+    ),
 ];
 
 // HS2-9ZMC7N retyped the nine secrets this lint found when it landed, so there is no
@@ -217,6 +266,8 @@ const SECRET_WORDS: &[&str] = &[
     "signing_key",
     "passphrase",
     "jwt",
+    // HS2-7AJ57B: a PEM private key (`client_key_pem`); `cert_pem` and `ca_pem` are public.
+    "key_pem",
 ];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -289,12 +340,156 @@ fn strip_visibility(text: &str) -> &str {
 /// (HS2-N1JXBZ): a hand-written redacting `Debug` does not cover `Serialize`, a `tracing`
 /// field or a later `derive(Debug)`.
 fn scan(file: &str, source: &str) -> Vec<Finding> {
-    scan_fields(
-        file,
-        source,
-        |_| true,
-        |name, ty| secret_named(name) && plain_string(ty),
-    )
+    let flagged = |name: &str, ty: &str| secret_named(name) && plain_string(ty);
+    let mut findings = scan_fields(file, source, |_| true, flagged);
+    findings.extend(scan_unnamed_and_variants(file, source));
+    findings.extend(scan_exposed_inserts(file, source));
+    findings.sort_by_key(|finding| finding.line);
+    findings
+}
+
+/// `ApiToken` -> `api_token`, so a type or variant name can be checked like a field name.
+fn snake_case(name: &str) -> String {
+    let mut out = String::new();
+    for (index, character) in name.chars().enumerate() {
+        if character.is_ascii_uppercase() {
+            if index > 0 {
+                out.push('_');
+            }
+            out.push(character.to_ascii_lowercase());
+        } else {
+            out.push(character);
+        }
+    }
+    out
+}
+
+/// The text between the first `(` and the last `)` of `item`.
+fn tuple_types(item: &str) -> Option<&str> {
+    let open = item.find('(')?;
+    let close = item.rfind(')')?;
+    (close > open).then(|| &item[open + 1..close])
+}
+
+/// HS2-7AJ57B: the shapes `scan_fields` cannot see.
+/// - A tuple struct whose secret-named type wraps a plain string (`struct ApiToken(String)`).
+/// - An enum struct variant's secret-named plain-string field (`Auth::Basic { password }`).
+/// - An enum tuple variant whose secret-named variant wraps a plain string (`Bearer(String)`).
+///
+/// A tuple field reports as `0`; a variant reports as `Enum::Variant`.
+fn scan_unnamed_and_variants(file: &str, source: &str) -> Vec<Finding> {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut findings = Vec::new();
+    let finding = |line: usize, strukt: String, field: &str, ty: &str| Finding {
+        file: file.to_owned(),
+        line,
+        strukt,
+        field: field.to_owned(),
+        ty: ty.trim().trim_end_matches(',').to_owned(),
+    };
+    let mut i = 0;
+    while i < lines.len() {
+        let item = strip_visibility(lines[i].trim());
+        i += 1;
+        if let Some(rest) = item.strip_prefix("struct ") {
+            let name = identifier(rest);
+            if rest[name.len()..].trim_start().starts_with('(')
+                && let Some(types) = tuple_types(rest)
+                && secret_named(&snake_case(name))
+                && plain_string(types)
+            {
+                findings.push(finding(i, name.to_owned(), "0", types));
+            }
+            continue;
+        }
+        let Some(rest) = item.strip_prefix("enum ") else {
+            continue;
+        };
+        if !item.ends_with('{') {
+            continue;
+        }
+        let enumeration = identifier(rest).to_owned();
+        while i < lines.len() && lines[i].trim() != "}" {
+            let line = lines[i].trim();
+            i += 1;
+            if line.starts_with("//") || line.starts_with("#[") {
+                continue;
+            }
+            let variant = identifier(line);
+            if variant.is_empty() {
+                continue;
+            }
+            let after = line[variant.len()..].trim_start();
+            let strukt = format!("{enumeration}::{variant}");
+            if after.starts_with('(') {
+                if let Some(types) = tuple_types(after)
+                    && secret_named(&snake_case(variant))
+                    && plain_string(types)
+                {
+                    findings.push(finding(i, strukt, "0", types));
+                }
+            } else if let Some(body) = after.strip_prefix('{') {
+                // One-line `Variant { a: String, b: u8 },` or a multi-line body.
+                let one_line = body.contains('}');
+                let mut fields: Vec<(usize, String)> = Vec::new();
+                if one_line {
+                    let inner = body.split('}').next().unwrap_or("");
+                    fields.extend(inner.split(',').map(|field| (i, field.to_owned())));
+                } else {
+                    while i < lines.len() && !lines[i].trim().starts_with('}') {
+                        fields.push((i + 1, lines[i].trim().to_owned()));
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                for (line, field) in fields {
+                    let field = strip_visibility(field.trim());
+                    if let Some((name, ty)) = field.split_once(':') {
+                        let name = name.trim();
+                        if identifier(name) == name && secret_named(name) && plain_string(ty) {
+                            findings.push(finding(line, strukt.clone(), name, ty));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    findings
+}
+
+/// HS2-7AJ57B: a map has no field name to scan, so a secret that enters one is caught where
+/// it is copied in: an `.insert(...)` statement whose arguments `.expose()` a `SecretString`
+/// turns it back into a plain string inside a collection. Store the `SecretString` itself,
+/// or carry the secret in a typed field. Reports as struct `<insert>`, field `expose`.
+fn scan_exposed_inserts(file: &str, source: &str) -> Vec<Finding> {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut findings = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") || !trimmed.contains(".insert(") {
+            continue;
+        }
+        let mut statement = String::new();
+        for next in lines.iter().skip(index).take(8) {
+            statement.push_str(next.trim());
+            if statement.ends_with(';') || statement.ends_with("});") {
+                break;
+            }
+        }
+        let arguments = statement
+            .split_once(".insert(")
+            .map_or("", |(_, rest)| rest);
+        if arguments.contains(".expose()") {
+            findings.push(Finding {
+                file: file.to_owned(),
+                line: index + 1,
+                strukt: "<insert>".to_owned(),
+                field: "expose".to_owned(),
+                ty: statement,
+            });
+        }
+    }
+    findings
 }
 
 /// Every plain-string header-collection field of a `derive(Debug)` struct in `source`.
@@ -602,4 +797,101 @@ struct Tuple(String);
     assert!(!derives_debug(
         "#[derive(Clone, Serialize)]#[serde(rename = \"Debug\")]"
     ));
+}
+
+#[test]
+fn hs2_7aj57b_key_pem_names_match_and_public_pems_do_not() {
+    for name in [
+        "key_pem",
+        "client_key_pem",
+        "private_key_pem",
+        "device_key_pem",
+    ] {
+        assert!(secret_named(name), "{name}");
+    }
+    for name in [
+        "cert_pem",
+        "ca_pem",
+        "client_certificate_pem",
+        "key",
+        "map_key",
+        "key_pem_path",
+        "keypair",
+        "api_key_id",
+    ] {
+        assert!(!secret_named(name), "{name}");
+    }
+    assert_eq!(snake_case("ApiToken"), "api_token");
+    assert_eq!(snake_case("Bearer"), "bearer");
+    assert_eq!(snake_case("ClientKeyPem"), "client_key_pem");
+}
+
+#[test]
+fn hs2_7aj57b_scanner_flags_enum_variants_and_tuple_structs() {
+    let source = r#"
+#[derive(Debug, Clone)]
+pub enum Auth {
+    /// Doc.
+    Basic {
+        user: String,
+        password: String,
+        #[serde(default)]
+        pub(crate) session_csrf: Option<SecretString>,
+    },
+    Device { client_key_pem: Option<String>, name: String },
+    Bearer(String),
+    ApiToken(Option<&'static str>),
+    Secret(SecretString),
+    Invalid(String),
+    None,
+}
+
+pub struct ApiToken(pub String);
+struct SessionSecret(SecretString);
+#[derive(Debug)]
+struct Tuple(String);
+struct Unit;
+pub(crate) enum Empty {}
+"#;
+    let found: Vec<(String, String)> = scan("x.rs", source)
+        .into_iter()
+        .map(|f| (f.strukt, f.field))
+        .collect();
+    let expected = [
+        ("Auth::Basic", "password"),
+        ("Auth::Device", "client_key_pem"),
+        ("Auth::Bearer", "0"),
+        ("Auth::ApiToken", "0"),
+        ("ApiToken", "0"),
+    ]
+    .map(|(s, f)| (s.to_owned(), f.to_owned()));
+    assert_eq!(found, expected);
+}
+
+#[test]
+fn hs2_7aj57b_scanner_flags_an_exposed_secret_copied_into_a_collection() {
+    let source = r#"
+fn build(token: &SecretString, map: &mut BTreeMap<String, String>) {
+    map.insert(TOKEN_FIELD.to_string(), token.expose().to_owned());
+    map.insert(
+        "secret".into(),
+        host.secret.expose().to_owned(),
+    );
+    // map.insert(k, token.expose().to_owned());
+    map.insert("socket".into(), socket.clone());
+    secrets.insert(name, token.clone());
+    let value = token.expose().to_owned();
+}
+"#;
+    let found: Vec<usize> = scan("x.rs", source)
+        .into_iter()
+        .inspect(|f| {
+            assert_eq!(
+                (f.strukt.as_str(), f.field.as_str()),
+                ("<insert>", "expose")
+            )
+        })
+        .map(|f| f.line)
+        .collect();
+    assert_eq!(found, [3, 4]);
 }

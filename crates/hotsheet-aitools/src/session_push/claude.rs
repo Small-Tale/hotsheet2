@@ -33,8 +33,6 @@ use super::{PushError, PushMessage, PushReceipt, ReportedSession, SessionPush};
 pub const MECHANISM: &str = "claude-inbox";
 /// The reported address field naming the inbox socket (`CLAUDE_CODE_MESSAGING_SOCKET`).
 pub const SOCKET_FIELD: &str = "messaging_socket";
-/// The reported field carrying the per-session token (`CLAUDE_CODE_MESSAGING_TOKEN`).
-pub const TOKEN_FIELD: &str = "messaging_token";
 /// The reported field carrying the Claude Code version, for the version check.
 pub const VERSION_FIELD: &str = "tool_version";
 /// First Claude Code release with the inbox socket on macOS and Linux.
@@ -85,7 +83,12 @@ impl ClaudeInboxPush {
         }
         Some(Self {
             socket,
-            token: field(TOKEN_FIELD).map(hotsheet_sync::secret::SecretString::from),
+            token: reported
+                .token
+                .as_ref()
+                .map(|token| token.expose().trim())
+                .filter(|token| !token.is_empty())
+                .map(hotsheet_sync::secret::SecretString::from),
             session_id: reported.session_id.clone().filter(|id| !id.is_empty()),
             timeout: DEFAULT_TIMEOUT,
         })
@@ -235,11 +238,13 @@ pub fn post(_socket: &str, _frame: &str, _timeout: Duration) -> Result<(), PushE
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hotsheet_sync::secret::SecretString;
     use serde_json::Value;
 
     fn reported(fields: &[(&str, &str)], session: Option<&str>) -> ReportedSession {
         ReportedSession {
             session_id: session.map(str::to_owned),
+            token: Some("t".into()),
             fields: fields
                 .iter()
                 .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
@@ -287,7 +292,6 @@ mod tests {
         let ok = ClaudeInboxPush::from_reported(&reported(
             &[
                 (SOCKET_FIELD, "uds:/tmp/cc-socks/1.sock"),
-                (TOKEN_FIELD, "t"),
                 (VERSION_FIELD, "2.1.302"),
             ],
             Some("s-1"),
@@ -297,7 +301,7 @@ mod tests {
         assert_eq!(ok.session_id().as_deref(), Some("s-1"));
         assert_eq!(ok.mechanism(), MECHANISM);
         assert!(!format!("{ok:?}").contains("\"t\""), "token is redacted");
-        assert!(ClaudeInboxPush::from_reported(&reported(&[(TOKEN_FIELD, "t")], None)).is_none());
+        assert!(ClaudeInboxPush::from_reported(&reported(&[], None)).is_none());
         assert!(
             ClaudeInboxPush::from_reported(&reported(
                 &[(SOCKET_FIELD, "/s.sock"), (VERSION_FIELD, "2.1.200")],
@@ -306,6 +310,26 @@ mod tests {
             .is_none()
         );
         assert!(ClaudeInboxPush::from_reported(&reported(&[(SOCKET_FIELD, "  ")], None)).is_none());
+    }
+
+    /// HS2-7AJ57B: the token is a typed secret on the report, never a plain map value; a
+    /// blank token is no token, and the report's `Debug` does not print it.
+    #[test]
+    fn the_reported_token_is_a_typed_redacted_secret() {
+        let mut report = reported(&[(SOCKET_FIELD, "/s.sock")], None);
+        report.token = Some(" synthetic-inbox-token ".into());
+        let printed = format!("{report:?}");
+        assert!(!printed.contains("synthetic-inbox-token"), "{printed}");
+        let push = ClaudeInboxPush::from_reported(&report).unwrap();
+        assert_eq!(
+            push.token.as_ref().map(SecretString::expose),
+            Some("synthetic-inbox-token")
+        );
+        for blank in [None, Some("  ")] {
+            report.token = blank.map(SecretString::from);
+            let push = ClaudeInboxPush::from_reported(&report).unwrap();
+            assert!(push.token.is_none(), "{blank:?}");
+        }
     }
 
     #[test]
@@ -361,7 +385,7 @@ mod tests {
             got
         });
         let push = ClaudeInboxPush::from_reported(&reported(
-            &[(SOCKET_FIELD, path.to_str().unwrap()), (TOKEN_FIELD, "t")],
+            &[(SOCKET_FIELD, path.to_str().unwrap())],
             Some("s-1"),
         ))
         .unwrap();

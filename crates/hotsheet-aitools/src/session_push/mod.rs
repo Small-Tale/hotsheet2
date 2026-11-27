@@ -31,10 +31,9 @@ use std::sync::Arc;
 
 pub use claude::{
     ClaudeInboxPush, MECHANISM as CLAUDE_INBOX, SOCKET_FIELD as CLAUDE_SOCKET_FIELD,
-    TOKEN_FIELD as CLAUDE_TOKEN_FIELD, VERIFIED_INBOX_VERSION as CLAUDE_VERIFIED_INBOX_VERSION,
-    VERSION_FIELD as CLAUDE_VERSION_FIELD, claude_version_from_env,
-    message_frame as claude_message_frame, socket_path as claude_socket_path,
-    version_supported as claude_version_supported,
+    VERIFIED_INBOX_VERSION as CLAUDE_VERIFIED_INBOX_VERSION, VERSION_FIELD as CLAUDE_VERSION_FIELD,
+    claude_version_from_env, message_frame as claude_message_frame,
+    socket_path as claude_socket_path, version_supported as claude_version_supported,
 };
 pub use codex::{
     CODEX_HOME_FIELD, CodexQueuePush, MECHANISM as CODEX_QUEUE, codex_error_line, queued_message_id,
@@ -157,7 +156,11 @@ pub fn reported_needs_program(mechanism: &str) -> bool {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ReportedSession {
     pub session_id: Option<String>,
+    /// Plain address fields only: a credential never goes in this map (HS2-7AJ57B).
     pub fields: BTreeMap<String, String>,
+    /// The session's messaging credential (Claude's `CLAUDE_CODE_MESSAGING_TOKEN`). A typed
+    /// field, so `Debug` prints `<redacted>` and the policy scan can see it (HS2-7AJ57B).
+    pub token: Option<SecretString>,
 }
 
 /// Build the adapter for a hook-reported session, or `None` when the mechanism is not a
