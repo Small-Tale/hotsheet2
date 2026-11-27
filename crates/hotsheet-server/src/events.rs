@@ -283,6 +283,9 @@ impl AppState {
             });
             event_time += event_started.elapsed();
         }
+        // The stream owes this write an echo: prove it current, or bridge the store while
+        // it lags, so external writes stay visible too (HS2-P702Y8). Never blocks.
+        entry.freshness.request_verification_if_stale();
         let worklist_started = Instant::now();
         self.schedule_store_worklists(entry);
         let worklist_time = worklist_started.elapsed();
@@ -318,6 +321,7 @@ impl AppState {
             assignment: None,
             turn: None,
         });
+        entry.freshness.request_verification_if_stale();
         self.schedule_store_worklists(entry);
         self.kick_sync();
     }

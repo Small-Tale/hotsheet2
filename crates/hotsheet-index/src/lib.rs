@@ -138,7 +138,10 @@ mod prune;
 pub use prune::{PruneReport, prune_stale_index_files};
 
 mod resolve;
-pub use resolve::{IndexFreshness, resolve_ticket, resolve_ticket_with_freshness};
+pub use resolve::{
+    FreshnessVerifier, IndexFreshness, MISS_VERIFY_WAIT, VERIFIED_WINDOW, resolve_ticket,
+    resolve_ticket_with_freshness,
+};
 
 /// The small projection needed to display a reverse duplicate link.
 #[derive(Debug, Clone, PartialEq, Eq)]
