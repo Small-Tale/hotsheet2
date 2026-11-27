@@ -309,8 +309,21 @@ fn hs2_n1qdzw_waiters_start_the_platform_watcher_only_through_the_shared_one() {
         std::fs::read_to_string(crates.join("hotsheet-server/src/watcher.rs")).unwrap();
     let monitor = &repository[repository.find("fn run_native_repository_monitor").unwrap()..];
     let monitor = &monitor[..monitor.find("\n}\n").unwrap()];
-    assert!(monitor.contains("PathWatcher::start("));
     assert!(!monitor.contains(".watch("));
+    // HS2-2HZN2C: the monitor starts its stream through `start_repository_stream`, which uses
+    // the shared `PathWatcher` (with source-side exclusions on macOS).
+    let stream = &repository[repository.find("fn start_repository_stream").unwrap()..];
+    let stream = &stream[..stream.find("\n}\n").unwrap()];
+    let monitor_with = &repository[repository
+        .find("fn run_native_repository_monitor_with")
+        .unwrap()..];
+    let monitor_with = &monitor_with[..monitor_with.find("\n}\n").unwrap()];
+    assert!(monitor_with.contains("start_repository_stream("));
+    assert!(!monitor_with.contains(".watch("));
+    assert!(
+        stream.contains("PathWatcher::start_excluding(") && stream.contains("PathWatcher::start(")
+    );
+    assert!(!stream.contains(".watch("));
     let settings = std::fs::read_to_string(
         crates.join("hotsheet-server/src/routes/orchestration_settings_watch.rs"),
     )
