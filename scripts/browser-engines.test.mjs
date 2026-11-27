@@ -241,7 +241,7 @@ test('HS2-HW6VED gate evidence annotates selected and deferred browser stages wi
   assert.deepEqual(evidence.local.stages[0].engines, ['chromium', 'webkit']);
   assert.equal(evidence.local.summary, 'chromium: terminal-safari / webkit: spec-launched in terminal-safari');
   assert.equal(evidence.deferred.stages[0].defaultEngine, 'webkit');
-  assert.match(evidence.deferred.summary, /^webkit: native-prompt-replacements, providers; grep @ci-webkit$/);
+  assert.match(evidence.deferred.summary, /^webkit: native-prompt-replacements, note-click-reflow, providers; grep @ci-webkit$/);
   assert.ok(evidence.ci.some((row) => row.job === 'browser-full' && row.files === null));
   assert.deepEqual(gateBrowserCoverage([], repo), { stages: [], summary: 'no Playwright tests' });
   const empty = mkdtempSync(join(tmpdir(), 'hs2-hw6ved-'));

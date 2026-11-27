@@ -1290,12 +1290,12 @@ Environment opt-in profilers (`firefox-pty-profile`, `real-pty-profile`,
 
 <!-- browser-engine-matrix:begin -->
 
-| Workflow        | Job            | Default engine | Selection                                              | Spec-launched engines                                                          |
-| --------------- | -------------- | -------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `ci.yml`        | `webkit-popup` | webkit         | native-prompt-replacements, providers; grep @ci-webkit | none                                                                           |
-| `ci.yml`        | `check`        | chromium       | providers; grep @ci-smoke                              | none                                                                           |
-| `ci.yml`        | `browser-full` | chromium       | all specs                                              | webkit: browser-draft-files, browser-ids-lan, terminal-replay, terminal-safari |
-| `platforms.yml` | `core`         | chromium       | all specs                                              | webkit: browser-draft-files, browser-ids-lan, terminal-replay, terminal-safari |
+| Workflow        | Job            | Default engine | Selection                                                                 | Spec-launched engines                                                          |
+| --------------- | -------------- | -------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `ci.yml`        | `webkit-popup` | webkit         | native-prompt-replacements, note-click-reflow, providers; grep @ci-webkit | none                                                                           |
+| `ci.yml`        | `check`        | chromium       | providers; grep @ci-smoke                                                 | none                                                                           |
+| `ci.yml`        | `browser-full` | chromium       | all specs                                                                 | webkit: browser-draft-files, browser-ids-lan, terminal-replay, terminal-safari |
+| `platforms.yml` | `core`         | chromium       | all specs                                                                 | webkit: browser-draft-files, browser-ids-lan, terminal-replay, terminal-safari |
 
 <!-- browser-engine-matrix:end -->
 

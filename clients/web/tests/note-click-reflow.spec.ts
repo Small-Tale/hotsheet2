@@ -60,7 +60,7 @@ async function pressAcrossReflow(page: Page, host: Locator, target: Locator, mov
 }
 
 for (const surface of ['inspector', 'reader'] as const)
-  test(`a note pressed while another note is open opens its editor after the re-flow (${surface})`, async ({
+  test(`a note pressed while another note is open opens its editor after the re-flow (${surface}) @ci-webkit`, async ({
     page,
   }) => {
     const server = await realTicketServer();
