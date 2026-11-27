@@ -100,6 +100,7 @@ function TemplateEditorStates() {
         problems: [
           { code: 'placeholder_unknown', at: 'steps[1].title' },
           { code: 'target_unknown', at: 'steps[1].target' },
+          { code: 'step_gates_invalid', at: 'steps[1].after[0].gates' },
           { code: 'step_cycle', at: 'steps.web' },
         ],
       }),

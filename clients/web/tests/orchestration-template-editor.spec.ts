@@ -124,6 +124,28 @@ async function fill(field: Locator, value: string) {
   await input.blur();
 }
 
+/**
+ * HS2-324VN2: a select's problem is its own error: shown under it, `aria-invalid` on its combobox, and
+ * read with it through `aria-describedby`.
+ */
+async function expectSelectError(editor: Locator, suffix: string, words: string) {
+  const select = editor.locator(`[data-template-field$="${suffix}"]`);
+  await expect(select).toContainText(words);
+  const combobox = select.getByRole('combobox');
+  await expect(combobox).toHaveAttribute('aria-invalid', 'true');
+  await expect
+    .poll(() =>
+      combobox.evaluate((element) =>
+        (element.getAttribute('aria-describedby') ?? '')
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((id) => document.getElementById(id)?.textContent ?? '')
+          .join(' '),
+      ),
+    )
+    .toContain(words);
+}
+
 const toast = (page: Page, text: string) => page.locator('.app-toast').filter({ hasText: text });
 
 test('HS2-1XCW6N builds a new template part by part, shows its problems in place and saves it', async ({ page }) => {
@@ -462,13 +484,22 @@ test('HS2-4EBCNH an open select in a step stays open while a validation answer r
         timeout: 60_000,
       });
       const body = (await response.json()) as { problems?: unknown[] };
-      const added = problem ? [{ code: 'target_unknown', at: 'steps[0].target' }] : [];
+      const added = problem
+        ? [
+            { code: 'target_unknown', at: 'steps[0].target' },
+            { code: 'step_cycle', at: 'steps.step-1' },
+          ]
+        : [];
       await route.fulfill({ response, json: { ...body, problems: [...(body.problems ?? []), ...added] } });
     });
     const title = editor.locator('[data-template-field$=".title"]');
     await fill(title, 'Add headers');
     const banner = editor.locator('[data-template-part-problems]');
     await expect(banner).toBeVisible();
+    // HS2-324VN2: the project's problem sits under its select; the banner keeps only the circular wait.
+    await expectSelectError(editor, '.target', 'This project is not one this orchestration project includes.');
+    await expect(banner).toContainText('The steps wait for each other in a circle.');
+    await expect(banner).not.toContainText('This project is not one');
     problem = false;
     await fill(title, 'Add rate limit headers');
     await expect.poll(() => release !== undefined).toBe(true);
@@ -477,9 +508,117 @@ test('HS2-4EBCNH an open select in a step stays open while a validation answer r
     await expect(page.getByRole('option', { name: 'High', exact: true })).toBeVisible();
     release?.();
     await expect(banner).toHaveCount(0);
+    await expect(editor.locator('[data-template-field$=".target"]').getByRole('combobox')).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
     await expect(priority).toHaveAttribute('aria-expanded', 'true');
     await page.getByRole('option', { name: 'High', exact: true }).click();
     await expect(priority).toContainText('High');
+    await page.unroute('**/orchestration/templates/validate');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-324VN2 step and input select problems sit under their selects at every width in both schemes', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/templates/set`, {
+      templates: [
+        {
+          name: 'Feature in Self',
+          inputs: [
+            { key: 'feature', label: 'Feature', kind: 'text', required: true },
+            { key: 'urgency', label: 'Urgency', kind: 'priority' },
+          ],
+          goal: { title: '{{feature}} in Self' },
+          steps: [
+            { key: 'build', target: TARGET, title: 'Build {{feature}}' },
+            { key: 'docs', target: TARGET, title: 'Document {{feature}}', after: [{ step: 'build', gates: 'ci' }] },
+          ],
+        },
+      ],
+      actor: person,
+    });
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    // Registered after the project's proxy, so it answers first.
+    // Every validation answer adds select problems of the second step and the second input, and the
+    // step's circular wait, which no control shows.
+    const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
+    await page.route('**/orchestration/templates/validate', async (route) => {
+      const incoming = new URL(route.request().url());
+      const response = await proxyFetch(route, {
+        url: `${server.url}${incoming.pathname.slice(apiPath.length)}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        timeout: 60_000,
+      });
+      const body = (await response.json()) as { problems?: unknown[] };
+      await route.fulfill({
+        response,
+        json: {
+          ...body,
+          problems: [
+            ...(body.problems ?? []),
+            { code: 'target_unknown', at: 'steps[1].target' },
+            { code: 'step_gates_invalid', at: 'steps[1].after[0].gates' },
+            { code: 'step_cycle', at: 'steps.docs' },
+            { code: 'input_default_invalid', at: 'inputs[1].default' },
+          ],
+        },
+      });
+    });
+    let edits = 0;
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      const section = await showTemplatesSettings(page);
+      for (const [index, size] of [
+        { width: 1440, height: 900 },
+        { width: 1100, height: 900 },
+        { width: 390, height: 844 },
+        { width: 1440, height: 900 },
+      ].entries()) {
+        await resizeTo(page, size);
+        const suffix = `${String(size.width)}${index === 3 ? '-after-390' : ''}-${scheme}`;
+        const row = section.locator('[data-orchestration-template]').first();
+        await row.scrollIntoViewIfNeeded();
+        await row.locator('button[data-item-id]').click();
+        const editor = editorOf(page);
+        await expect(editor).toBeVisible();
+        await partOf(editor, '2 · Document').click();
+        edits += 1;
+        await fill(editor.locator('[data-template-field$=".title"]'), `Document {{feature}} ${String(edits)}`);
+        await expectSelectError(editor, '.target', 'This project is not one this orchestration project includes.');
+        await expectSelectError(editor, '.after.0.gates', 'Choose what to wait for.');
+        const banner = editor.locator('[data-template-part-problems]');
+        await expect(banner).toContainText('1 Problem');
+        await expect(banner).toContainText('The steps wait for each other in a circle.');
+        await expect(banner).not.toContainText('This project is not one');
+        await expect(banner).not.toContainText('Choose what to wait for.');
+        const fits = await editor.evaluate((dialog) => {
+          const box = dialog.getBoundingClientRect();
+          return box.left >= 0 && box.right <= window.innerWidth + 0.5 && dialog.scrollWidth <= dialog.clientWidth + 1;
+        });
+        expect(fits).toBe(true);
+        await capture(page, `select-errors-step-${suffix}`);
+        await editor.locator('[data-template-after="0"]').scrollIntoViewIfNeeded();
+        await capture(page, `select-errors-waits-${suffix}`);
+        if (size.width === 390) await editor.getByRole('button', { name: 'Back to Parts' }).click();
+        await partOf(editor, 'Urgency').click();
+        await expectSelectError(editor, '.default', 'This default is not a value the input accepts.');
+        await expect(editor.locator('[data-template-part-problems]')).toHaveCount(0);
+        await capture(page, `select-errors-input-${suffix}`);
+        await editor.locator('[data-dialog-close]').filter({ hasText: 'Cancel' }).click();
+        // The edited title is discarded after asking.
+        await page.getByRole('button', { name: 'Discard Changes', exact: true }).click();
+        await expect(editor).toBeHidden();
+      }
+    }
     await page.unroute('**/orchestration/templates/validate');
   } finally {
     await server.stop(page);

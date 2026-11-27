@@ -596,7 +596,42 @@ export function problemWords(code: string): string {
   return WORDS[code] ?? `${code.replaceAll('_', ' ')}.`;
 }
 
-/** The words of a part's problems that no control of it shows (selects, whole-part problems). */
+/**
+ * The fields of a part that the editor shows as a control with its own `error` (text fields, selects and
+ * checkboxes; HS2-324VN2), so the part's banner lists only the rest: whole-part problems, a step's
+ * circular wait, a step's key (it has no control), and a field the input's kind hides (a non-choice
+ * input's choices, a non-text input's longest value).
+ */
+export function shownFields(part: EditorPart, draft: TemplateDraft): string[] {
+  if (part === 'template') return ['name', 'description', 'instructions'];
+  if (part === 'goal') return ['goal.title', 'goal.details', 'goal.tags'];
+  if (part.startsWith('input:')) {
+    const id = part.slice('input:'.length),
+      input = draft.inputs.find((candidate) => candidate.id === id);
+    if (!input) return [];
+    const fields = ['label', 'key', 'kind', 'required', ...(input.kind === 'choice' ? ['choices'] : []), 'default'];
+    if (input.kind === 'text') fields.push('maxLen');
+    fields.push('hint');
+    return fields.map((field) => `input.${id}.${field}`);
+  }
+  const id = part.slice('step:'.length),
+    step = draft.steps.find((candidate) => candidate.id === id);
+  if (!step) return [];
+  return [
+    'title',
+    'target',
+    'ticket',
+    'details',
+    'priority',
+    'category',
+    'tool',
+    'when',
+    'validation',
+    ...step.after.flatMap((_after, index) => [`after.${index}.step`, `after.${index}.gates`]),
+  ].map((field) => `step.${id}.${field}`);
+}
+
+/** The words of a part's problems that no control of it shows (whole-part problems, hidden fields). */
 export function partProblemText(placed: readonly PlacedProblem[], shownFields: ReadonlySet<string>): string[] {
   return [
     ...new Set(

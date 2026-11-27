@@ -8,6 +8,7 @@ import {
   draftFromTemplate,
   editDraft,
   fieldError,
+  INPUT_KINDS,
   inputReferences,
   kindLabel,
   localProblems,
@@ -21,6 +22,7 @@ import {
   removeAfter,
   removeInput,
   removeStep,
+  shownFields,
   templateFromDraft,
   templateSummary,
 } from './orchestration-template-editor';
@@ -297,6 +299,78 @@ describe('HS2-1XCW6N template editor model', () => {
       ),
     ).toEqual([]);
     expect(problemWords('mystery_code')).toBe('mystery code.');
+  });
+
+  it('HS2-324VN2 shows a select problem under its select and keeps only unshown problems in the banner', () => {
+    const draft = draftFromTemplate(CHECKED_IN);
+    const step = draft.steps[1];
+    expect(step.after.length).toBe(1);
+    const placed = placeProblems(draft, [
+      { code: 'step_target_invalid', at: 'steps[1].target' },
+      { code: 'step_priority_invalid', at: 'steps[1].priority' },
+      { code: 'step_tool_invalid', at: 'steps[1].tool' },
+      { code: 'step_when_invalid', at: 'steps[1].when' },
+      { code: 'step_after_unknown', at: 'steps[1].after[0]' },
+      { code: 'step_gates_invalid', at: 'steps[1].after[0].gates' },
+      { code: 'step_after_unknown', at: 'steps[1].after[3].step' },
+      { code: 'step_key_invalid', at: 'steps[1].key' },
+      { code: 'step_cycle', at: 'steps.web' },
+      { code: 'input_choices_missing', at: 'steps[1]' },
+    ]);
+    const shown = new Set(shownFields(`step:${step.id}`, draft));
+    for (const name of ['target', 'priority', 'tool', 'when', 'after.0.step', 'after.0.gates'])
+      expect(shown.has(`step.${step.id}.${name}`)).toBe(true);
+    expect(fieldError(placed, `step.${step.id}.target`)).toBe('Choose a project, or a project input.');
+    expect(fieldError(placed, `step.${step.id}.priority`)).toBe('Choose a priority, or a priority input.');
+    expect(fieldError(placed, `step.${step.id}.tool`)).toBe('Choose an AI tool, or an AI tool input.');
+    expect(fieldError(placed, `step.${step.id}.when`)).toBe('Choose a yes-or-no input.');
+    expect(fieldError(placed, `step.${step.id}.after.0.step`)).toBe('Choose a step of this template.');
+    expect(fieldError(placed, `step.${step.id}.after.0.gates`)).toBe('Choose what to wait for.');
+    // The banner keeps what no control shows: a wait the step no longer has, the key (no control), the
+    // circular wait and a whole-step problem.
+    expect(partProblemText(placed, shown)).toEqual([
+      'Choose a step of this template.',
+      'Use a key of letters, digits, “-”, “_” or “.”, at most 64 characters.',
+      'The steps wait for each other in a circle.',
+      'A choice input needs at least one choice.',
+    ]);
+    // Removing the wait takes its selects with it: its problems move to the banner.
+    const unwaited = removeAfter(draft, step.id, 0);
+    expect(shownFields(`step:${step.id}`, unwaited)).not.toContain(`step.${step.id}.after.0.gates`);
+    expect(
+      partProblemText(
+        placeProblems(unwaited, [{ code: 'step_gates_invalid', at: 'steps[1].after[0].gates' }]),
+        new Set(shownFields(`step:${step.id}`, unwaited)),
+      ),
+    ).toEqual(['Choose what to wait for.']);
+
+    // An input's kind and default show their own problems whatever the kind; choices and longest value only
+    // for the kinds that show them.
+    const byKind = (kind: string) => {
+      const input = editDraft(draft, `input.${draft.inputs[0].id}.kind`, kind);
+      return new Set(shownFields(`input:${draft.inputs[0].id}`, input));
+    };
+    const at = (name: string) => `input.${draft.inputs[0].id}.${name}`;
+    for (const kind of INPUT_KINDS) {
+      const fields = byKind(kind);
+      expect([at('kind'), at('default'), at('label'), at('key'), at('hint')].every((name) => fields.has(name))).toBe(
+        true,
+      );
+      expect(fields.has(at('choices'))).toBe(kind === 'choice');
+      expect(fields.has(at('maxLen'))).toBe(kind === 'text');
+    }
+    const inputPlaced = placeProblems(editDraft(draft, at('kind'), 'priority'), [
+      { code: 'input_default_invalid', at: 'inputs[0].default' },
+      { code: 'input_choices_unexpected', at: 'inputs[0].choices' },
+    ]);
+    expect(fieldError(inputPlaced, at('default'))).toBe('This default is not a value the input accepts.');
+    expect(partProblemText(inputPlaced, byKind('priority'))).toEqual(['Only a choice input has choices.']);
+
+    // A part the draft no longer has shows nothing, so every problem stays in its banner.
+    expect(shownFields('step:gone', draft)).toEqual([]);
+    expect(shownFields('input:gone', draft)).toEqual([]);
+    expect(shownFields('template', draft)).toEqual(['name', 'description', 'instructions']);
+    expect(shownFields('goal', draft)).toEqual(['goal.title', 'goal.details', 'goal.tags']);
   });
 
   it('labels parts, kinds, references and summaries', () => {

@@ -8160,9 +8160,12 @@ rewritten; the validator names them.
 The server's validator is the authority. The draft is checked through `validate` (a read)
 after a 400 ms pause in typing, on leaving a field and on each select, checkbox or
 structural change; its coded problems are mapped from their paths (`steps[1].after[0]`)
-onto the parts by id, so a moved step keeps its problems. A text field shows its problem as
-its error; a part's other problems are listed in a danger banner above its fields; the
-list shows a problem count on each part and the footer the total. **Save Template**
+onto the parts by id, so a moved step keeps its problems. A text field, select or
+checkbox shows its problem as its error, under it, with `aria-invalid` (a step's project,
+priority, tool, Include and each **Waits For** step and gate; an input's kind and default;
+HS2-324VN2); a part's other problems (the whole part, a circular wait, a step's key, a
+field its input's kind hides) are listed in a danger banner above its fields; the list
+shows a problem count on each part and the footer the total. **Save Template**
 checks the draft again and, with problems, is refused locally (`Fix N problems before
 saving.`, toasted and kept as a banner); otherwise it sends the whole template to `set`
 with the `expected_revision` the list was read at. A template changed elsewhere meanwhile

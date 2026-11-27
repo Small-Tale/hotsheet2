@@ -35,6 +35,7 @@ import {
   type PlacedProblem,
   placeProblems,
   PRIORITIES,
+  shownFields,
   STEP_GATES,
   type StepDraft,
   type TemplateDraft,
@@ -71,22 +72,6 @@ interface Context {
   projects: ReadonlyArray<{ target_id: string; label: string }>;
   tools: ReadonlyArray<{ id: string; label: string }>;
 }
-
-/** The fields a part shows in a TextField (with its own error), so its banner lists only the others. */
-const TEXT_FIELDS = (part: EditorPart, draft: TemplateDraft): string[] => {
-  if (part === 'template') return ['name', 'description', 'instructions'];
-  if (part === 'goal') return ['goal.title', 'goal.details', 'goal.tags'];
-  if (part.startsWith('input:')) {
-    const id = part.slice('input:'.length),
-      input = draft.inputs.find((candidate) => candidate.id === id);
-    const fields = ['key', 'label', 'hint', ...(input?.kind === 'choice' ? ['choices'] : [])];
-    if (input?.kind === 'text') fields.push('maxLen');
-    if (input && ['text', 'number', 'tool'].includes(input.kind)) fields.push('default');
-    return fields.map((field) => `input.${id}.${field}`);
-  }
-  const id = part.slice('step:'.length);
-  return ['key', 'title', 'details', 'category', 'validation'].map((field) => `step.${id}.${field}`);
-};
 
 function field(context: Context, name: string) {
   return {
@@ -175,7 +160,14 @@ function DefaultField({ context, input }: { context: Context; input: InputDraft 
   const name = `input.${input.id}.default`;
   switch (input.kind) {
     case 'boolean':
-      return <Checkbox {...field(context, name)} label="On by default" checked={input.default === 'true'} />;
+      return (
+        <Checkbox
+          {...field(context, name)}
+          label="On by default"
+          checked={input.default === 'true'}
+          error={fieldError(context.placed, name)}
+        />
+      );
     case 'choice':
     case 'priority':
     case 'target': {
@@ -196,6 +188,7 @@ function DefaultField({ context, input }: { context: Context; input: InputDraft 
           value={input.default}
           placeholderText="No default"
           choices={[{ value: '', label: 'No Default' }, ...choices]}
+          error={fieldError(context.placed, name)}
         />
       );
     }
@@ -242,8 +235,14 @@ function InputPart({ context, input }: { context: Context; input: InputDraft }) 
         label="Kind"
         value={input.kind}
         choices={INPUT_KINDS.map((kind) => ({ value: kind, label: kindLabel(kind) }))}
+        error={fieldError(context.placed, at('kind'))}
       />
-      <Checkbox {...field(context, at('required'))} label="Required" checked={input.required} />
+      <Checkbox
+        {...field(context, at('required'))}
+        label="Required"
+        checked={input.required}
+        error={fieldError(context.placed, at('required'))}
+      />
       {input.kind === 'choice' ? (
         <TextField
           {...field(context, at('choices'))}
@@ -310,6 +309,7 @@ function StepPart({ context, step }: { context: Context; step: StepDraft }) {
             ],
             step.target,
           )}
+          error={fieldError(context.placed, at('target'))}
         />
         <Select
           {...field(context, at('ticket'))}
@@ -319,6 +319,7 @@ function StepPart({ context, step }: { context: Context; step: StepDraft }) {
             { value: 'search', label: 'Find an Open Ticket First' },
             { value: 'create', label: 'Always Create a New Ticket' },
           ]}
+          error={fieldError(context.placed, at('ticket'))}
         />
         <TextField
           {...field(context, at('details'))}
@@ -341,6 +342,7 @@ function StepPart({ context, step }: { context: Context; step: StepDraft }) {
             ],
             step.priority,
           )}
+          error={fieldError(context.placed, at('priority'))}
         />
         <TextField
           {...field(context, at('category'))}
@@ -362,6 +364,7 @@ function StepPart({ context, step }: { context: Context; step: StepDraft }) {
             ],
             step.tool,
           )}
+          error={fieldError(context.placed, at('tool'))}
         />
         <Select
           {...field(context, at('when'))}
@@ -377,6 +380,7 @@ function StepPart({ context, step }: { context: Context; step: StepDraft }) {
             ],
             step.when,
           )}
+          error={fieldError(context.placed, at('when'))}
         />
         <TextField
           {...field(context, at('validation'))}
@@ -397,7 +401,20 @@ function StepPart({ context, step }: { context: Context; step: StepDraft }) {
         ) : undefined}
         <List gap="xs" controlInsets="rl">
           {step.after.map((after, index) => (
-            <Row gap="xs" vAlign="bottom" wrap rootAttributes={{ 'data-template-after': String(index) }}>
+            <Row
+              gap="xs"
+              // HS2-324VN2: an error under one select would push its row-mate down under bottom alignment, so a
+              // row with an error aligns its selects at the top (KF-0ZHH83: no public way to align the trailing
+              // button with the control boxes as well).
+              vAlign={
+                fieldError(context.placed, at(`after.${index}.step`)) ||
+                fieldError(context.placed, at(`after.${index}.gates`))
+                  ? 'top'
+                  : 'bottom'
+              }
+              wrap
+              rootAttributes={{ 'data-template-after': String(index) }}
+            >
               <Select
                 {...field(context, at(`after.${index}.step`))}
                 label="Step"
@@ -410,6 +427,7 @@ function StepPart({ context, step }: { context: Context; step: StepDraft }) {
                   })),
                   after.step,
                 )}
+                error={fieldError(context.placed, at(`after.${index}.step`))}
               />
               <Select
                 {...field(context, at(`after.${index}.gates`))}
@@ -425,6 +443,7 @@ function StepPart({ context, step }: { context: Context; step: StepDraft }) {
                   ],
                   after.gates,
                 )}
+                error={fieldError(context.placed, at(`after.${index}.gates`))}
               />
               <Button
                 ariaLabel={`Stop Waiting for Step ${index + 1}`}
@@ -561,7 +580,7 @@ export function OrchestrationTemplateEditor({
       tools,
     },
     part = state.part,
-    shown = new Set(TEXT_FIELDS(part, draft)),
+    shown = new Set(shownFields(part, draft)),
     partProblems = partProblemText(
       placed.filter((problem) => problem.part === part),
       shown,
