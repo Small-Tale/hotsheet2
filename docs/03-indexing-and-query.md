@@ -247,6 +247,34 @@ listing skips plain files directly under `tickets/`. A store that cannot take a 
 falls back to the former 1.5 s start-up wait. On Linux and Windows the probe is reported at once,
 so startup no longer waits a fixed delay there either.
 
+**The checkout's repository watcher leaves ignored build trees out at the source (HS2-2HZN2C).**
+Separate from the store watcher, each open checkout has a repository monitor (`docs/06-clients.md`,
+HS2-4S9ENS) whose stream covers the whole working tree. FSEvents streams are recursive, and notify
+filters only in its own callback, so every write under `target/`, `node_modules/` or an agent
+worktree's `target/` was routed by `fseventsd` to the server and dropped there. That kept
+`fseventsd` near 100% CPU and the server around a third of a core on a busy development Mac. On
+macOS the repository stream is now created directly (`hotsheet_jobs::watch::PathWatcher::start_excluding`)
+with `FSEventStreamSetExclusionPaths`, so the file-event service drops those events itself. A stream
+takes at most eight exclusions. They are chosen from the ignored directories Git reports
+(`git ls-files --others --ignored --directory`) inside the working tree and confirmed by
+`git check-ignore`: Git also lists an untracked directory whose files all happen to be ignored
+(`.claude/` holding only `.claude/worktrees/`), and a new file there must still count, so the event
+filter and the exclusions keep only entries an ignore pattern matches. Both Git reads are skipped
+while the listing is unchanged. An exclusion is never one that is or contains
+a watched Git directory or the group registry, ranked by events the filter has dropped so far, then
+known heavy output names (`target`, `node_modules`, `worktrees`, `dist`, `build`, ...), then the
+shallowest path. An excluded directory's own creation and removal are still reported to its parent;
+nothing inside it is. The ignored set is re-read after every status read. When the pick changes, a
+replacement stream starts on a helper thread while the current one keeps reporting, the old one is
+stopped off-thread, and the status is read once more. An exclusion Git no longer ignores (a
+`.gitignore` edit or a forced add) is dropped at once; a new ignored tree (a first build) is added
+at once; any other swap waits 30 s after the last replacement, so churn alternating among more than
+eight trees cannot restart the stream often. The exclusions are paths, so they survive the checkout
+root being removed and recreated. Linux and Windows have no exclusion API here: they keep notify's
+watcher and the event filter, and Linux inotify still watches each directory under ignored trees.
+The store watcher's stream over a store's parent directory (HS2-R6FZ54) is a separate source of
+the same cost (HS2-AZFCB6).
+
 On change:
 
 1. **Debounce** rapid bursts (an editor save, a git checkout touching many files). A batch

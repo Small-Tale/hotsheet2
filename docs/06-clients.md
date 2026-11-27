@@ -2870,9 +2870,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   pause (175 ms), or for at most one second during a continuous stream. The monitor then
   re-reads Git's porcelain-v2 status fingerprint, at most once every 750 ms, and announces
   only a changed fingerprint. Events under paths Git ignores, and under `.git/objects` or
-  `.git/logs`, are dropped before that read. The ignored set is re-learned whenever events
-  arrive without a status change, and a linked worktree's external Git directories are
-  watched too. An idle checkout spawns no `git` process. Starting a native stream can take
+  `.git/logs`, are dropped before that read. On macOS up to eight ignored directories
+  (build output such as `target/` and `node_modules/`, agent worktrees) are excluded from
+  the stream itself, so the file-event service never delivers their churn (HS2-2HZN2C,
+  `docs/03-indexing-and-query.md` §3.4). The ignored set is re-learned after every status
+  read, and a linked worktree's external Git directories are watched too. An idle checkout spawns no `git` process. Starting a native stream can take
   seconds on a busy Mac, so until it is live the monitor polls the fingerprint every 750 ms
   as a bridge. If the native watcher cannot start at all, it falls back to that poll with a
   two-second idle backoff. Changes are announced as checkout-scoped `repository_changed`

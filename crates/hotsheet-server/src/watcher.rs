@@ -1089,13 +1089,18 @@ impl RepositoryRefreshGate {
 struct RepositoryEventFilter {
     ignored: Vec<std::path::PathBuf>,
     git_dirs: Vec<std::path::PathBuf>,
+    /// HS2-2HZN2C: the last raw `ls-files` listing, so an unchanged one costs no further Git.
+    listing: Vec<u8>,
+    /// HS2-2HZN2C: whether `ignored` holds only entries an ignore pattern matches, which
+    /// is what makes them safe to exclude from the platform stream.
+    pattern_checked: bool,
 }
 
 impl RepositoryEventFilter {
     fn load(root: &FsPath) -> Self {
         let mut filter = Self {
-            ignored: Vec::new(),
             git_dirs: repository_git_dirs(root),
+            ..Self::default()
         };
         filter.refresh_ignored(root);
         filter
@@ -1120,12 +1125,19 @@ impl RepositoryEventFilter {
         else {
             return;
         };
-        if !output.status.success() {
+        if !output.status.success() || output.stdout == self.listing {
             return;
         }
+        self.listing = output.stdout;
+        // HS2-2HZN2C: `--directory` also lists an untracked directory whose files all happen
+        // to be ignored (`.claude/` holding only `.claude/worktrees/`). No pattern ignores it,
+        // so a new file in it changes the status: keep only entries a pattern matches. If Git
+        // cannot answer, keep the listing (the filter's old behavior) and exclude nothing.
+        let checked = pattern_ignored_entries(root, &self.listing);
+        self.pattern_checked = checked.is_some();
+        let entries = checked.unwrap_or_else(|| self.listing.clone());
         let bases = path_spellings(root);
-        self.ignored = output
-            .stdout
+        self.ignored = entries
             .split(|byte| *byte == 0)
             .filter(|entry| !entry.is_empty())
             .map(|entry| {
@@ -1152,8 +1164,17 @@ impl RepositoryEventFilter {
         event.paths.iter().any(|path| self.path_is_relevant(path))
     }
 
+    /// HS2-2HZN2C: the most specific ignored entry `path` lies in, if any (Git lists both
+    /// an untracked directory holding only ignored files and the ignored directory in it).
+    fn ignored_entry(&self, path: &FsPath) -> Option<&std::path::PathBuf> {
+        self.ignored
+            .iter()
+            .filter(|ignored| path.starts_with(ignored))
+            .max_by_key(|ignored| ignored.components().count())
+    }
+
     fn path_is_relevant(&self, path: &FsPath) -> bool {
-        if self.ignored.iter().any(|ignored| path.starts_with(ignored)) {
+        if self.ignored_entry(path).is_some() {
             return false;
         }
         for git_dir in &self.git_dirs {
@@ -1223,6 +1244,165 @@ fn announce_repository_change(
     Some(changed)
 }
 
+/// HS2-2HZN2C: what a native repository monitor has done, for tests and measurements.
+#[derive(Debug, Default)]
+pub(crate) struct RepositoryMonitorProbe {
+    /// Every delivery the platform handed the monitor.
+    delivered: AtomicU64,
+    /// Streams started (the first one and each replacement).
+    streams: AtomicU64,
+    /// The directories the live stream leaves out.
+    excluded: Mutex<Vec<std::path::PathBuf>>,
+}
+
+impl RepositoryMonitorProbe {
+    #[cfg(test)]
+    pub(crate) fn delivered(&self) -> u64 {
+        self.delivered.load(Ordering::SeqCst)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn streams(&self) -> u64 {
+        self.streams.load(Ordering::SeqCst)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn excluded(&self) -> Vec<std::path::PathBuf> {
+        self.excluded.lock_or_recover().clone()
+    }
+}
+
+/// HS2-2HZN2C: the paths no exclusion may cover: Git directories (watched or inside the
+/// working tree) and the group registry with its ignored remote overlay, in every spelling.
+fn repository_protected_paths(
+    root: &FsPath,
+    git_dirs: &[std::path::PathBuf],
+) -> Vec<std::path::PathBuf> {
+    let mut protected = git_dirs.to_vec();
+    protected.extend(path_spellings(
+        &root.join(hotsheet_ticketing::groups::GROUP_REGISTRY_DIR),
+    ));
+    protected.extend(path_spellings(
+        &root.join(hotsheet_ticketing::groups::git_sync::GROUP_REMOTE_OVERLAY_FILE),
+    ));
+    protected
+}
+
+/// HS2-2HZN2C: the ignored directories the checkout's stream should leave out, in the
+/// spelling the platform reports (macOS `/private/var` for `/var`).
+fn desired_repository_exclusions(
+    root: &FsPath,
+    filter: &RepositoryEventFilter,
+    churn: &std::collections::HashMap<std::path::PathBuf, u64>,
+) -> Vec<std::path::PathBuf> {
+    if !filter.pattern_checked {
+        return Vec::new();
+    }
+    let reported_root = path_spellings(root)
+        .pop()
+        .unwrap_or_else(|| root.to_path_buf());
+    let candidates: Vec<std::path::PathBuf> = filter
+        .ignored
+        .iter()
+        .filter(|entry| entry.starts_with(&reported_root))
+        .cloned()
+        .collect();
+    crate::repository_watch_exclusions::select_exclusions(
+        &candidates,
+        &repository_protected_paths(root, &filter.git_dirs),
+        churn,
+        hotsheet_jobs::watch::MAX_EXCLUDED_PATHS,
+        FsPath::is_dir,
+    )
+}
+
+/// HS2-2HZN2C: the entries of a raw `ls-files -z` listing that one of the checkout's ignore
+/// patterns matches, in the same NUL-separated form; `None` when Git cannot answer.
+fn pattern_ignored_entries(root: &FsPath, listing: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Write;
+    if listing.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut child = hotsheet_ticketing::git::command()
+        .arg("--no-optional-locks")
+        .arg("-C")
+        .arg(root)
+        .args(["check-ignore", "--stdin", "-z"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    let mut stdin = child.stdin.take()?;
+    let input = listing.to_vec();
+    // Written from its own thread so a large answer cannot fill the pipe while we write.
+    let writer = std::thread::spawn(move || stdin.write_all(&input));
+    let output = child.wait_with_output().ok()?;
+    let _ = writer.join();
+    // Exit status 1 means that nothing matched; anything else but 0 is an error.
+    match output.status.code() {
+        Some(0 | 1) => Some(output.stdout),
+        _ => None,
+    }
+}
+
+/// Start the checkout's stream over its working tree and any Git directory outside it,
+/// leaving out `excluded`. Returns the watcher and the exclusions it actually applies.
+fn start_repository_stream(
+    watch_root: &FsPath,
+    git_dirs: &[std::path::PathBuf],
+    excluded: &[std::path::PathBuf],
+    tx: &std::sync::mpsc::Sender<hotsheet_jobs::watch::Delivery>,
+) -> Result<(hotsheet_jobs::watch::PathWatcher, Vec<std::path::PathBuf>), hotsheet_jobs::watch::Error>
+{
+    use hotsheet_jobs::watch::{PathWatcher, RecursiveMode};
+    // A linked worktree keeps its HEAD, index and refs outside the working tree.
+    // HS2-654VBY: every directory is registered before the watcher starts once; a
+    // `watch` call per directory restarted the macOS event stream each time.
+    let roots = path_spellings(watch_root);
+    let mut outside: Vec<&std::path::Path> = Vec::new();
+    for git_dir in git_dirs {
+        if roots.iter().any(|root| git_dir.starts_with(root))
+            || !git_dir.is_dir()
+            || outside.contains(&git_dir.as_path())
+        {
+            continue;
+        }
+        outside.push(git_dir);
+    }
+    let mut paths = vec![(watch_root, RecursiveMode::Recursive)];
+    paths.extend(outside.iter().map(|dir| (*dir, RecursiveMode::Recursive)));
+    let excluded_refs: Vec<&FsPath> = excluded.iter().map(std::path::PathBuf::as_path).collect();
+    // HS2-P0EHD4: `PathWatcher` never delivers access events, so a read of a watched
+    // file (Linux inotify reports each open) does not re-read the repository.
+    let handler = || {
+        let tx = tx.clone();
+        move |result| {
+            let _ = tx.send(result);
+        }
+    };
+    let error = match PathWatcher::start_excluding(&paths, &excluded_refs, handler()) {
+        Ok(watcher) => return Ok((watcher, excluded.to_vec())),
+        Err(error) => error,
+    };
+    // One directory that cannot be watched must not cost the others: watch the working
+    // tree alone, as the per-directory registration did.
+    tracing::warn!(
+        checkout_root = %watch_root.display(),
+        %error,
+        "repository watcher could not watch an outside Git directory"
+    );
+    match PathWatcher::start_excluding(&paths[..1], &excluded_refs, handler()) {
+        Ok(watcher) => Ok((watcher, excluded.to_vec())),
+        Err(_) if !excluded.is_empty() => {
+            // HS2-2HZN2C: a platform that refuses the exclusions still gets a plain stream;
+            // the event filter drops ignored output as before.
+            PathWatcher::start(&paths[..1], handler()).map(|watcher| (watcher, Vec::new()))
+        }
+        Err(error) => Err(error),
+    }
+}
+
 fn run_native_repository_monitor(
     root: std::path::PathBuf,
     checkout_id: String,
@@ -1230,60 +1410,66 @@ fn run_native_repository_monitor(
     event_log: Arc<Mutex<EventLog>>,
     stop: std::sync::mpsc::Receiver<()>,
 ) {
-    use hotsheet_jobs::watch::{PathWatcher, RecursiveMode};
+    run_native_repository_monitor_with(
+        root,
+        checkout_id,
+        events,
+        event_log,
+        stop,
+        true,
+        &RepositoryMonitorProbe::default(),
+    );
+}
 
+/// The native repository monitor; `exclude` turns the HS2-2HZN2C source exclusions on.
+pub(crate) fn run_native_repository_monitor_with(
+    root: std::path::PathBuf,
+    checkout_id: String,
+    events: broadcast::Sender<ChangeEvent>,
+    event_log: Arc<Mutex<EventLog>>,
+    stop: std::sync::mpsc::Receiver<()>,
+    exclude: bool,
+    probe: &RepositoryMonitorProbe,
+) {
+    type Started = Result<
+        (hotsheet_jobs::watch::PathWatcher, Vec<std::path::PathBuf>),
+        hotsheet_jobs::watch::Error,
+    >;
     let mut previous = git_repository_fingerprint(&root);
     let mut registry = group_registry_fingerprint(&root);
     let mut filter = RepositoryEventFilter::load(&root);
+    // HS2-2HZN2C: events dropped as ignored, by ignored entry, ranking exclusion candidates.
+    let mut churn: std::collections::HashMap<std::path::PathBuf, u64> =
+        std::collections::HashMap::new();
+    let wanted = if exclude {
+        desired_repository_exclusions(&root, &filter, &churn)
+    } else {
+        Vec::new()
+    };
     let (tx, rx) = std::sync::mpsc::channel();
     // Starting a native stream can take many seconds on a busy Mac (HS2-XAHR91), so it starts
     // on its own thread while this one keeps the old Git-status poll going as a bridge.
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
-    let watch_root = root.clone();
-    let git_dirs = filter.git_dirs.clone();
-    std::thread::spawn(move || {
-        // A linked worktree keeps its HEAD, index and refs outside the working tree.
-        // HS2-654VBY: every directory is registered before the watcher starts once; a
-        // `watch` call per directory restarted the macOS event stream each time.
-        let roots = path_spellings(&watch_root);
-        let mut outside: Vec<&std::path::Path> = Vec::new();
-        for git_dir in &git_dirs {
-            if roots.iter().any(|root| git_dir.starts_with(root))
-                || !git_dir.is_dir()
-                || outside.contains(&git_dir.as_path())
-            {
-                continue;
-            }
-            outside.push(git_dir);
-        }
-        let mut paths = vec![(watch_root.as_path(), RecursiveMode::Recursive)];
-        paths.extend(outside.iter().map(|dir| (*dir, RecursiveMode::Recursive)));
-        // HS2-P0EHD4: `PathWatcher` never delivers access events, so a read of a watched
-        // file (Linux inotify reports each open) does not re-read the repository.
-        let handler = {
-            let tx = tx.clone();
-            move |result| {
-                let _ = tx.send(result);
-            }
-        };
-        let started = PathWatcher::start(&paths, handler).or_else(|error| {
-            // One directory that cannot be watched must not cost the others: watch the
-            // working tree alone, as the per-directory registration did.
-            tracing::warn!(
-                checkout_root = %watch_root.display(),
-                %error,
-                "repository watcher could not watch an outside Git directory"
-            );
-            PathWatcher::start(&paths[..1], move |result| {
-                let _ = tx.send(result);
-            })
+    let stream_git_dirs = filter.git_dirs.clone();
+    let spawn_start = |excluded: Vec<std::path::PathBuf>| {
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Started>();
+        let watch_root = root.clone();
+        let git_dirs = stream_git_dirs.clone();
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            // If the monitor already stopped, the send fails and the watcher is dropped.
+            let _ = ready_tx.send(start_repository_stream(
+                &watch_root,
+                &git_dirs,
+                &excluded,
+                &tx,
+            ));
         });
-        // If the monitor already stopped, the send fails and the watcher is dropped.
-        let _ = ready_tx.send(started);
-    });
-    let _watcher = loop {
+        ready_rx
+    };
+    let ready_rx = spawn_start(wanted);
+    let (mut watcher, mut excluded) = loop {
         match ready_rx.recv_timeout(REPOSITORY_FINGERPRINT_INTERVAL) {
-            Ok(Ok(watcher)) => break watcher,
+            Ok(Ok(started)) => break started,
             Ok(Err(error)) => {
                 tracing::warn!(
                     "native repository watcher for {} failed to start ({error}); falling back to Git status",
@@ -1309,6 +1495,12 @@ fn run_native_repository_monitor(
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
         }
     };
+    probe.streams.fetch_add(1, Ordering::SeqCst);
+    *probe.excluded.lock_or_recover() = excluded.clone();
+    // HS2-2HZN2C: a replacement stream with new exclusions, starting while the current one
+    // keeps reporting.
+    let mut replacement: Option<std::sync::mpsc::Receiver<Started>> = None;
+    let mut last_replacement: Option<Instant> = None;
 
     let mut gate = RepositoryRefreshGate::new();
     // Compare once the stream is live, covering the moments since the bridge's last read.
@@ -1318,13 +1510,47 @@ fn run_native_repository_monitor(
         if stop.try_recv().is_ok() {
             return;
         }
+        if let Some(ready) = &replacement {
+            match ready.try_recv() {
+                Ok(Ok((next, next_excluded))) => {
+                    let old = std::mem::replace(&mut watcher, next);
+                    // Stopping a stream can take seconds on a busy Mac; never on this thread.
+                    std::thread::spawn(move || drop(old));
+                    excluded = next_excluded;
+                    probe.streams.fetch_add(1, Ordering::SeqCst);
+                    *probe.excluded.lock_or_recover() = excluded.clone();
+                    replacement = None;
+                    last_replacement = Some(Instant::now());
+                    // Read once more: a newly watched directory's changes went unreported.
+                    gate.note_event(Instant::now());
+                }
+                Ok(Err(error)) => {
+                    tracing::warn!(
+                        checkout_root = %root.display(),
+                        %error,
+                        "repository watcher kept its stream: the replacement did not start"
+                    );
+                    replacement = None;
+                    last_replacement = Some(Instant::now());
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => replacement = None,
+            }
+        }
         match rx.recv_timeout(gate.wait(Instant::now())) {
             Ok(result) => {
+                probe.delivered.fetch_add(1, Ordering::Relaxed);
                 if touches_group_registry(&root, &result) {
                     registry_touched = true;
                     gate.note_event(Instant::now());
                 } else if filter.is_relevant(&result) {
                     gate.note_event(Instant::now());
+                } else if exclude && let Ok(event) = &result {
+                    for path in &event.paths {
+                        if let Some(entry) = filter.ignored_entry(path) {
+                            *churn.entry(entry.clone()).or_default() += 1;
+                        }
+                    }
                 }
                 continue;
             }
@@ -1339,11 +1565,24 @@ fn run_native_repository_monitor(
         if std::mem::take(&mut registry_touched) {
             announce_group_registry_change(&root, &mut registry, &checkout_id, &events, &event_log);
         }
-        let changed =
-            announce_repository_change(&root, &mut previous, &checkout_id, &events, &event_log);
-        if changed == Some(false) {
-            // Events without a status change are usually new ignored output: learn it.
-            filter.refresh_ignored(&root);
+        announce_repository_change(&root, &mut previous, &checkout_id, &events, &event_log);
+        // Events without a status change are usually new ignored output; a status change may
+        // be a `.gitignore` edit or a forced add that stops Git ignoring a directory. Either
+        // way, learn the ignored set again (HS2-2HZN2C; before, only the first case).
+        filter.refresh_ignored(&root);
+        if exclude && replacement.is_none() {
+            let desired = desired_repository_exclusions(&root, &filter, &churn);
+            let still_ignored =
+                |path: &FsPath| filter.ignored.iter().any(|entry| entry == path) || !path.exists();
+            if crate::repository_watch_exclusions::replacement_due(
+                &excluded,
+                &desired,
+                still_ignored,
+                last_replacement,
+                now,
+            ) {
+                replacement = Some(spawn_start(desired));
+            }
         }
     }
 }
@@ -2163,6 +2402,20 @@ mod watcher_tests {
         assert!(filter.is_relevant(&event(root.join("dist/bundle.js"))));
         filter.refresh_ignored(root);
         assert!(!filter.is_relevant(&event(root.join("dist/bundle.js"))));
+
+        // HS2-2HZN2C: Git lists `.claude/` as ignored while it holds only an ignored
+        // directory, but no pattern ignores it: a new file beside the ignored one counts.
+        std::fs::write(
+            root.join(".gitignore"),
+            "target/\ndist/\n.claude/worktrees/\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join(".claude/worktrees/agent")).unwrap();
+        std::fs::write(root.join(".claude/worktrees/agent/file"), "x").unwrap();
+        filter.refresh_ignored(root);
+        assert!(filter.pattern_checked);
+        assert!(!filter.is_relevant(&event(root.join(".claude/worktrees/agent/file"))));
+        assert!(filter.is_relevant(&event(root.join(".claude/settings.json"))));
     }
 
     fn git(root: &std::path::Path, args: &[&str]) {

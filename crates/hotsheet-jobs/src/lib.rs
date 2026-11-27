@@ -34,6 +34,8 @@ mod clock;
 mod error;
 mod feed;
 mod fixture;
+#[cfg(target_os = "macos")]
+mod fsevent_stream;
 mod github;
 mod gitlab;
 mod jenkins;
