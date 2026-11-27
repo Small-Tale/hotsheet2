@@ -68,6 +68,9 @@
 > work and its integrator for handed-off work, and keeps each while the target needs it
 > (§26.30, HS2-TK9ADC). A project with several sites runs one pool on its home site,
 > which workers on its other sites join through the orchestrator (§26.30, HS2-5P112Z).
+> Reusable plan templates hand a new goal ticket with a typed brief to the planner,
+> idempotently by operation id, with Use Template… and Save a Goal as Template… in the
+> view and the same operations headless (§26.32, HS2-A4RVYA).
 
 ## 26.1 Boundary and existing foundations
 
@@ -5783,8 +5786,9 @@ operation id and `plan_started`, `plan_replanned`, `plan_existing` or the refusa
 
 `goal` names one goal ticket (slug or id, with its `connection_id` when the project
 has several git sources); without it every open goal ticket is planned. The answer
-lists the goals oldest first with the plan steps this machine holds for each (at most
-256 listed; `goal_count` counts all), the number of declared targets, the planner's
+lists the goals oldest first with their titles (at most 200 characters, HS2-M7RXCB) and
+the plan steps this machine holds for each (at most 256 listed; `goal_count` counts
+all), the number of declared targets, the planner's
 hosted session, and how its prompt was delivered. `show` adds the plan's step count
 and `placement_automatic`, so a view can say the plan is a dry run. The planner's
 hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestration
@@ -7661,3 +7665,298 @@ the last timeline showed them):
 
 Other failures keep the generic banner. The view's long poll keeps retrying with its
 bounded backoff, so a plan fixed in Git comes back without a reload.
+
+## 26.32 Plan templates (HS2-A4RVYA)
+
+A **plan template** is a saved, typed recipe for a kind of work that recurs: a feature
+across an API and a Web project, a repair of failing CI, a dependency bump in every
+project. The maintainer's decisions (answer on HS2-A4RVYA to the `Design v1` review):
+
+- **The planner adapts the template each run.** A template is a brief for the planner,
+  not a deterministic expansion. Applying it hands a new goal to the existing Propose
+  Plan or Update Plan flow (§26.25), and the planner's proposed plan is the preview a
+  person reviews, as any plan is reviewed.
+- **A new goal ticket per apply.**
+- **Applied work is a snapshot.** Later template edits change nothing already applied.
+- **Authoring v1** is Save a Goal as Template… plus headless JSON. The visual editor of
+  Settings › Orchestration › Templates (HS2-1XCW6N) followed; it edits through the same
+  `set` and `retire` routes.
+- **Create steps search first**, propose reuse, and let the person switch a step to
+  create.
+
+### The templates file
+
+`.hotsheet2/orchestration-templates.json` is checked in beside the plan, the policy and
+the manifest and is re-included by the managed `.gitignore` block (§4, HS2-GY8C2D). It
+follows the plan file's rules (§26.15): `schema_version: 1`, an opaque ULID `revision`
+replaced on every change, a locked atomic replace, never created by a read, and a newer
+schema (`upgrade_required`) or damaged content (merge markers, an unknown field, an
+invalid template, unsorted ids: `corrupt_orchestration_data`) refused rather than
+overwritten. Templates merge by `template_id` (a ULID, never reused: a template is
+retired, not deleted); the same id with two definitions is `template_conflict`. At most
+64 templates and 512 KiB.
+
+```json
+{
+  "schema_version": 1,
+  "revision": "<ULID>",
+  "templates": [
+    {
+      "template_id": "<ULID>",
+      "name": "Feature across API and Web",
+      "description": "API change, then the Web change on its green CI.",
+      "state": "active",
+      "version": 3,
+      "inputs": [
+        { "key": "feature", "label": "Feature", "kind": "text", "required": true },
+        { "key": "api", "label": "API Project", "kind": "target", "default": "<target id>" },
+        { "key": "contract", "label": "Run the Contract Check", "kind": "boolean", "default": true }
+      ],
+      "goal": { "title": "{{feature}}: API and Web", "details": "…", "tags": ["feature"] },
+      "steps": [
+        { "key": "api", "target": "{{api}}", "title": "Add {{feature}} headers", "tool": "claude" },
+        {
+          "key": "web",
+          "target": "<target id>",
+          "title": "Show {{feature}} errors",
+          "ticket": "create",
+          "after": [{ "step": "api", "gates": "ci" }],
+          "validation": ["contract-check"],
+          "when": "{{contract}}"
+        }
+      ],
+      "instructions": "Keep {{feature}} behind a flag.",
+      "created_at_ms": 0,
+      "updated_at_ms": 0,
+      "updated_by": "maintainer"
+    }
+  ]
+}
+```
+
+- **Inputs** (at most 16) are typed: `text` (one line, at most `max_len`, default 500),
+  `number`, `boolean`, `choice` (one of `choices`), `priority` (`highest` … `lowest`),
+  `target` (a declared project's id) and `tool` (a plugin id), each `required` or with a
+  `default`, a `label` and an optional `hint`.
+- **Placeholders** `{{key}}` in titles, details and instructions are replaced by the
+  input's value as text; nothing is evaluated, and a text value holding `{{` is refused.
+  A step's `target`, `priority` and `tool` are a literal or one `{{key}}` naming an
+  input of that kind; `when` names a `boolean` input and leaves the step out while it is
+  false (an `after` naming a left-out step is dropped).
+- **Steps** (at most 64): a `key`, the project, a `title`, optional `details`,
+  `category`, `priority` and preferred `tool`, `ticket` (`search`, the default: find or
+  create; or `create`), `after` (step keys with `gates` `none`, `ci` (default),
+  `deployment` or `review`) and `validation` (test profiles the project defines,
+  §26.12). The validator names every problem with a code and where it is
+  (`input_missing` at `inputs.feature`, `step_cycle`, `step_target_invalid` at
+  `steps[1].target`, …).
+- `version` starts at 1 and grows with every changed definition; the bookkeeping fields
+  are written by Hot Sheet.
+
+Changing templates changes only the orchestration project (the "own records" row of
+§26.7), so `set`, `retire` and `save_goal` never ask; each is audited as `template_set`.
+
+### Applying a template
+
+`OrchestrationRuntime::template_apply(owner, ApplyTemplate { template_id, inputs,
+choices, tool, model, effort, operation_id }, actor, tx)` is the one way to apply a
+template, for a person, an AI session and a trigger (HS2-KXKA7X) alike. In order:
+
+1. **Permission.** A person's apply is their own act. Any other actor authorizes
+   `tickets_write` in each project the brief names through `authorize` (one request per
+   project, under `<operation id>.t<n>`), so the request shows on the ordinary
+   permission card; the call answers 403 `permission_required` with the first
+   `request_id` and the apply waits as `waiting_permission`. After the answer the same
+   call goes on (an Allow Once is used when the goal opens); a Deny is final for that
+   operation id (`denied`).
+2. **The goal.** One new goal ticket opens in the orchestration project's first git
+   ticket source, tagged `orchestration-template` (plus the template's goal tags), with
+   the template's goal title and, as its details, the rendered **brief**: the template's
+   name, id and version, the operation id, the inputs, the steps in order (project,
+   "find or create" or "create a new ticket", priority, preferred tool, `after` with
+   gates, validation profiles), the steps the inputs left out, the instructions, and the
+   planner's rules (search first and ask once with a `CHOICE` per reused step; create
+   under `tpl-<operation id>-<step key>`; one step per target ticket; attach the named
+   validation profiles). The goal's id is recorded before it is created, so a repeat
+   creates that same ticket and never a second one.
+3. **The planner.** With an empty live plan the goal goes to Propose Plan; once the plan
+   has steps, to Update Plan, which drafts beside the running plan and merges (§26.25).
+   Either names only that goal. The proposal id is the operation id (a later attempt
+   `<operation id>.p<n>`), recorded before asking, so a repeat after a crash asks under
+   the same id and the planner never starts twice. A planner at work on another
+   proposal leaves the apply `waiting_planner` with its goal open (`plan_update_planner_busy`,
+   or the host's refusal code): a repeat asks again, and any later Propose Plan or
+   Update Plan plans that open goal as well. Once the planner took it the apply is
+   `planning`.
+
+The apply is recorded machine-locally in
+`${HOTSHEET_HOME}/orchestration-template-applies/<owner>.json` (mode 0600, at most 256;
+the oldest finished one is forgotten first, an unfinished one never). The record keeps
+the template as applied (`snapshot`), the resolved inputs and choices, the goal, the
+proposal id, the attempts and the permission requests.
+
+**Idempotency** is the pure `decide_apply`: the same operation id with the same template,
+inputs and choices answers a finished apply as recorded (`outcome: existing`) and
+resumes an unfinished one; a different template, other inputs or other choices under it
+is `template_apply_conflict`. Defaults left out of a repeat are the same apply. Because
+the record keeps the snapshot, a repeat after the template changed still applies the
+version it started with, and the goal's brief is never rewritten.
+
+Refused before anything opens: `template_not_found`, `template_retired`,
+`template_inputs_invalid` (a missing or ill-typed input, an unknown step in `choices`),
+`template_target_unknown` (a project the orchestration project does not declare), an
+unidentified actor or an operation id over 140 characters (`invalid_request`). Audited as
+`template_apply` with the operation id and `template_planning`,
+`template_waiting_planner`, `permission_required`, `permission_denied` or the refusal.
+
+**Preview.** `template_preview` is the pre-run summary and writes nothing: the inputs as
+resolved, the `problems` (with `target_unknown` and `choice_unknown`), the goal title, the
+steps of the brief, the steps left out, and per project whether applying is the person's
+own act (`person`) or asks, and whether the planner's ticket writes there are allowed by
+a remembered rule (`remembered`) or ask (`asks`): the planner is an AI session, so its
+creates pass the gate as in §26.25. It also says whether the planner proposes or updates
+and whether placement starts planned work by itself.
+
+**Test profiles in the preview (HS2-K3ESZR).** For each declared project whose kept steps
+name test profiles (§26.12), the preview reads the profiles the project offers from its
+checked-in `.hotsheet2/validation-profiles.json` through the gate as an observation
+(`gates_observe`, the same read as `validation profiles`): it never asks, and repeated
+identical reads coalesce in the audit journal (HS2-SV4SMY). A profile the project does not
+offer, including every profile while it has no profile file, is
+`validation_profile_unknown` at `steps[n].validation[m]`; a profile file with problems is
+`validation_profiles_invalid` at `steps[n].validation` for each step naming profiles
+there. Both keep Apply disabled. The project's entry in `targets` says `profiles: checked`;
+when the read cannot happen now (the project is offline, or the caller is not
+identified) it says `profiles: unverified` and reports no problem, so an offline project
+never blocks Apply; the planner and the validation run check the profiles later. A step a
+false `when` leaves out is not checked. In Use Template… the problem names the profile and
+project (`Step 1 names the test profile “lint”, which API does not offer.`), and an
+unverified project shows a quiet line under the steps.
+
+### Save a Goal as Template…
+
+`template_save_goal` turns an open goal's current plan steps into a new template, oldest
+step first: each becomes a `search` step keyed `step-<n>` titled from its target
+ticket's title where this machine can read it, with its preferred tool, and its ticket
+prerequisites on other steps of the goal become `after` with their gates. The goal's
+title and details become the template's goal. With `targets_as_inputs`, each project
+becomes a required `target` input (`project-<n>`) defaulting to it. A goal without steps
+is `template_goal_empty`.
+
+The view's **Goal** select offers the open goals that have plan steps, each named by its
+title, then its slug and step count (`Rate limits for the API · LCH-7 · 3 steps`; a title
+past 80 characters is shortened with an ellipsis, HS2-M7RXCB).
+
+### In the Orchestration view
+
+**Use Template…** sits in the Orchestration header beside Propose Plan and Update Plan,
+and in the No Plan Yet empty state beside Propose Plan. It opens a Kerf
+`ListDetailDialog` (`clients/web/src/components/orchestration-template-dialog.tsx`):
+
+- the list column holds the active templates and **Save a Goal as Template…**;
+- the detail column holds the selected template's typed **Inputs** (a text, number or
+  tool input is a text field, a boolean a checkbox, a choice, priority or project a
+  select), **What the Planner Gets** (the goal title and each step of the brief from the
+  server's preview, with **Create a New Ticket for Step N** on each search-first step),
+  and **Permissions** (per project, then the planner flow and when work starts);
+- a danger banner counts the problems that keep **Apply Template** disabled: a required
+  input left empty (checked locally) and the preview's own problems.
+
+Typing changes only the dialog at once; a 400 ms pause in typing, leaving a field, or
+changing a select or checkbox reads the preview again (keystroke coalescing; nothing
+polls), and the same inputs are never read twice in a row. **Apply Template** applies under one operation id
+kept while the same apply is repeated: the result says the planner is adapting the
+template (or that it waits for the planner, with **Apply Again**), and **Open <goal>**
+opens the new goal ticket. The planner's tool is the one Propose Plan would choose. On a
+phone the dialog is the compact drill-down (list, then detail, with Back to Templates).
+Refusals read through the shared refusal map.
+
+### Settings › Orchestration › Templates (HS2-1XCW6N)
+
+Settings › Orchestration lists the checked-in templates between Projects and Policy
+(`clients/web/src/components/orchestration-template-settings.tsx`): each template is a row
+with its input and step counts, version and description, retired ones last with a
+**Retired** badge. **New Template** opens a blank template (one search-first step in the
+first declared project); a row, or **Edit Template…** in its menu, opens the template;
+**Retire Template…** in the menu asks first (it can no longer be applied, its id is never
+reused, applied work keeps its work) and then calls `retire`. The list is read when the
+category shows and again on the project's `orchestration_changed` event; nothing polls.
+
+The editor (`clients/web/src/components/orchestration-template-editor.tsx`) is a Kerf
+`ListDetailDialog` like Use Template…: the template's parts on the left (**Template**,
+**Goal**, each input under **Inputs** and each step under **Steps**, with **Add Input** and
+**Add Step**), and the selected part's fields on the right:
+
+- **Template**: name, description and instructions for the planner.
+- **Goal**: goal title, details and tags (separated by commas).
+- **Input**: label, key, kind (Text, Number, Yes or No, Choice, Priority, Project, AI
+  Tool), Required, choices (one per line, for a choice input), a default suited to the kind
+  (a select of the choices, priorities or projects, a checkbox, or a text field), longest
+  value (a text input) and hint, with **Move Up**, **Move Down** and **Remove Input**.
+- **Step**: ticket title, project (a declared project or a Project input), Find an Open
+  Ticket First or Always Create a New Ticket, details, priority (or a Priority input),
+  category, preferred AI tool (or an AI Tool input), Include (always, or when a Yes or No
+  input is on), test profiles, and **Waits For**: each prerequisite step with what it
+  waits for (CI passed by default, finished, deployed or review approved), with **Move
+  Up**, **Move Down** and **Remove Step** (the last step cannot be removed).
+
+Inputs and steps keep stable local ids while edited. Renaming an input's key follows the
+fields that name it whole (`{{key}}` as a step's project, priority, tool or Include);
+renaming a step's key follows the steps that wait for it; removing an input clears those
+fields and removing a step drops the prerequisites on it. Placeholders inside text are not
+rewritten; the validator names them.
+
+The server's validator is the authority. The draft is checked through `validate` (a read)
+after a 400 ms pause in typing, on leaving a field and on each select, checkbox or
+structural change; its coded problems are mapped from their paths (`steps[1].after[0]`)
+onto the parts by id, so a moved step keeps its problems. A text field shows its problem as
+its error; a part's other problems are listed in a danger banner above its fields; the
+list shows a problem count on each part and the footer the total. **Save Template**
+checks the draft again and, with problems, is refused locally (`Fix N problems before
+saving.`, toasted and kept as a banner); otherwise it sends the whole template to `set`
+with the `expected_revision` the list was read at. A template changed elsewhere meanwhile
+is refused `template_conflict`: the **Changed Elsewhere** banner offers **Reload
+Templates**, which reopens an existing template as it now is (the draft's changes are
+discarded) or keeps a new template's draft against the new revision. A saved template is
+the next version and the list is read again. Cancel or Escape with unsaved changes asks
+before discarding them. A retired template opens read-only (its fields disabled, with
+**Close** only). On a phone the editor is the compact drill-down (parts, then one part,
+with Back to Parts). Every outcome is a toast (HS2-1K6122).
+
+Kerf's `Select` has no `error` text, so a problem of a select (a step's project, priority,
+tool, Include, Waits For, an input's kind or default) is listed in the part's banner
+rather than under the control until Kerf `KF-H4APEQ` adds it (HS2-324VN2).
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration template list --project <owner>
+hotsheet-cli ... orchestration template show <template-id> --project <owner>
+hotsheet-cli ... orchestration template validate --file <template.json|-> --project <owner>
+hotsheet-cli ... orchestration template set --file <file|-> [--expected-revision <rev>] --project <owner>
+hotsheet-cli ... orchestration template retire <template-id> --project <owner>
+hotsheet-cli ... orchestration template save-goal --goal <ticket> [--source <connection>] \
+  --name <name> [--description <text>] [--targets-as-inputs] --project <owner>
+hotsheet-cli ... orchestration template preview <template-id> [--input key=value]... \
+  [--inputs <json>] [--create <step>]... --project <owner>
+hotsheet-cli ... orchestration template apply <template-id> --tool <tool> --operation-id <id> \
+  [--input key=value]... [--inputs <json>] [--create <step>]... [--model <m>] [--effort <e>] --project <owner>
+hotsheet-cli ... orchestration template apply-show <operation-id> --project <owner>
+```
+
+`set --file` takes one template, an object with `templates`, or a whole templates file.
+`--input` reads a value that parses as JSON (`true`, `3`) as that value and anything
+else as text.
+
+| Route                                                                                                           | Methods and purpose                                                                         |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/templates/{list,show,validate,set,retire,save_goal,preview,apply,apply_show}` | POST; machine-local (it reads this machine's permission ledger and starts the planner here) |
+
+MCP `hotsheet_targets` adds `template_list`, `template_show`, `template_validate`,
+`template_set`, `template_retire`, `template_save_goal`, `template_preview`,
+`template_apply` (with `template_id`, `inputs`, `choices`, `tool`, `operation_id`) and
+`template_apply_show`. The `hotsheet-planner` skill (version 7) plans a goal tagged
+`orchestration-template` from its brief (§26.25 "What the planner does"): it adapts the
+steps to the projects as they are now, searches first for a find-or-create step and,
+when it reuses a ticket, asks once with a `CHOICE` per reused step whether to keep it
+or create a new ticket.

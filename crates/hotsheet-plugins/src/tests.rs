@@ -866,6 +866,14 @@ fn hs2_hcw7md_planner_skill_proposes_a_dry_run_plan_only() {
         "never create target tickets for the default goal",
         "An explicit goal takes precedence",
         "Tickets created in a target later are planned by the next Update Plan.",
+        // HS2-A4RVYA: a template's goal carries the brief; steps search first, a
+        // reused ticket is a CHOICE to keep or create, and creates are idempotent.
+        "## Template runs (HS2-A4RVYA)",
+        "tagged `orchestration-template`",
+        "plan from it, not from the template file",
+        "with a `CHOICE` per reused step",
+        "create without reusing a match",
+        "`tpl-<operation id>-<step key>`",
     ] {
         assert!(planner.contains(phrase), "planner missing {phrase}");
     }

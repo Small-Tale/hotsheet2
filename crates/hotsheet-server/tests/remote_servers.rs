@@ -546,6 +546,7 @@ mod permissions;
 #[cfg(unix)]
 #[path = "remote_servers/planning.rs"]
 mod planning;
+// HS2-A4RVYA: applying a template starts the fake agent as the planner.
 #[path = "remote_servers/policy.rs"]
 mod policy;
 #[path = "remote_servers/projects.rs"]
@@ -556,6 +557,9 @@ mod provisional;
 mod readiness;
 #[path = "remote_servers/role_sessions.rs"]
 mod role_sessions;
+#[cfg(unix)]
+#[path = "remote_servers/templates.rs"]
+mod templates;
 // HS2-75Q254: a real PTY session of the fake agent, a Unix test double.
 #[cfg(unix)]
 #[path = "remote_servers/reconcile_restart.rs"]

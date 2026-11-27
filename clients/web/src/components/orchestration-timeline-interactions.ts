@@ -4,6 +4,7 @@ import { createScope } from 'kerfjs/scope';
 import { ORCHESTRATION_ACTIONS, ORCHESTRATION_TARGETS } from '../interaction-attrs/orchestration';
 import { TICKET_GROUP_ACTIONS, TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+import type { SaveGoalForm } from '../orchestration-templates';
 import { stepOfCard } from '../orchestration-timeline-board';
 
 /**
@@ -46,6 +47,143 @@ export interface OrchestrationTimelineBindings {
   readonly closeDecisions: () => void;
   /** HS2-F1BKQ0: Keep the Checked-In Plan… on a plan conflict this machine's copies cause. */
   readonly keepCheckedInPlan: () => void;
+  /** HS2-A4RVYA: Use Template… and its dialog. Absent where the surface offers no templates. */
+  readonly templates?: OrchestrationTemplateBindings;
+}
+
+/** HS2-A4RVYA: the Use Template… dialog's actions. */
+export interface OrchestrationTemplateBindings {
+  readonly open: () => void;
+  readonly select: (templateId: string) => void;
+  /** A typed input changed; `commit` is a change event (not each keystroke), which reads the summary again. */
+  readonly editInput: (key: string, value: unknown, commit: boolean) => void;
+  readonly chooseStep: (step: string, create: boolean) => void;
+  readonly apply: () => void;
+  readonly openSave: () => void;
+  readonly editSave: (change: Partial<SaveGoalForm>) => void;
+  readonly cancelSave: () => void;
+  readonly submitSave: () => void;
+  readonly openGoal: () => void;
+  readonly back: () => void;
+  readonly close: () => void;
+}
+
+const TEMPLATE_INPUT = '[name^="template-input-"]';
+const TEMPLATE_STEP = '[name^="template-step-create-"]';
+const TEMPLATE_SAVE = '[name^="template-save-"]';
+type FieldElement = Element & { value?: unknown; checked?: boolean; type?: string };
+
+/** The value of a template input field: a checkbox's checked state, otherwise its value. */
+function fieldValue(target: FieldElement): unknown {
+  return target.type === 'checkbox' ? target.checked === true : typeof target.value === 'string' ? target.value : '';
+}
+
+function wireTemplateDialog(root: HTMLElement, current: () => OrchestrationTemplateBindings | undefined) {
+  const lifetime = createScope();
+  const dialog = ORCHESTRATION_TARGETS.templateDialog.selector;
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.useOrchestrationTemplate.selector, () => {
+      current()?.open();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.selectOrchestrationTemplate.selector, (_event, target) => {
+      const id = target.closest<HTMLElement>('[data-template-id]')?.dataset.templateId;
+      if (id) current()?.select(id);
+    }),
+  );
+  for (const commit of [false, true])
+    lifetime.add(
+      delegate(root, commit ? 'change' : 'input', TEMPLATE_INPUT, (_event, target) => {
+        if (!target.closest(dialog)) return;
+        const field = target as FieldElement;
+        const key = (field.getAttribute('name') ?? '').slice('template-input-'.length);
+        if (!key) return;
+        // A text field reports each keystroke as input and commits on change; a checkbox or select only changes.
+        if (!commit && field.type === 'checkbox') return;
+        current()?.editInput(key, fieldValue(field), commit);
+      }),
+    );
+  // Leaving a text field commits it too: WebKit fires no change once a re-render wrote the same value back.
+  lifetime.add(
+    delegate(root, 'focusout', TEMPLATE_INPUT, (_event, target) => {
+      const field = target as FieldElement;
+      const key = (field.getAttribute('name') ?? '').slice('template-input-'.length);
+      if (key && target.closest(dialog) && (target.localName === 'input' || target.localName === 'textarea'))
+        if (field.type !== 'checkbox') current()?.editInput(key, fieldValue(field), true);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'change', TEMPLATE_STEP, (_event, target) => {
+      const field = target as FieldElement;
+      const step = (field.getAttribute('name') ?? '').slice('template-step-create-'.length);
+      if (step && target.closest(dialog)) current()?.chooseStep(step, field.checked === true);
+    }),
+  );
+  for (const type of ['input', 'change'])
+    lifetime.add(
+      delegate(root, type, TEMPLATE_SAVE, (_event, target) => {
+        if (!target.closest(dialog)) return;
+        const field = target as FieldElement;
+        const value = fieldValue(field);
+        switch (field.getAttribute('name')) {
+          case 'template-save-goal':
+            current()?.editSave({ goal: String(value) });
+            break;
+          case 'template-save-name':
+            current()?.editSave({ name: String(value) });
+            break;
+          case 'template-save-description':
+            current()?.editSave({ description: String(value) });
+            break;
+          case 'template-save-inputs':
+            if (type === 'change') current()?.editSave({ targetsAsInputs: value === true });
+            break;
+          case null:
+          default:
+            break;
+        }
+      }),
+    );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.applyOrchestrationTemplate.selector, () => {
+      current()?.apply();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.saveOrchestrationGoalTemplate.selector, () => {
+      current()?.openSave();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.cancelOrchestrationGoalTemplate.selector, () => {
+      current()?.cancelSave();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.submitOrchestrationGoalTemplate.selector, () => {
+      current()?.submitSave();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.openOrchestrationTemplateGoal.selector, () => {
+      current()?.openGoal();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', '[data-nav-back]', (_event, target) => {
+      if (target.closest(dialog)) current()?.back();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'kui-request-close', dialog, (event, target) => {
+      // Only the dialog's own close request counts (Escape, the close control, Cancel and Close).
+      if (event.target === target) current()?.close();
+    }),
+  );
+  return () => {
+    lifetime.dispose();
+  };
 }
 
 const inView = (target: Element) => Boolean(target.closest(ORCHESTRATION_TARGETS.view.selector));
@@ -246,6 +384,8 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
       if (event.target === target) bindings.closeDecisions();
     }),
   );
+  // HS2-A4RVYA: read lazily, so a surface wired without templates registers handlers that do nothing.
+  lifetime.add(wireTemplateDialog(root, () => bindings.templates));
   return () => {
     lifetime.dispose();
   };

@@ -3,7 +3,7 @@ name: hotsheet-planner
 description: Propose a Hot Sheet orchestration project's dry-run plan from its open goal tickets, without placing any work.
 ---
 
-<!-- hotsheet-skill-version: 6 -->
+<!-- hotsheet-skill-version: 7 -->
 
 You are the planner of a Hot Sheet orchestration project (HS2-HCW7MD). The project's own
 tickets are its **goal tickets**. The projects it orchestrates are its declared
@@ -121,6 +121,48 @@ its work is every open ticket of each target rather than what a goal describes:
 An explicit goal takes precedence: while one is open, the default goal is not offered
 to you, and you plan only the explicit goals. Tickets created in a target later are
 planned by the next Update Plan.
+
+## Template runs (HS2-A4RVYA)
+
+A goal ticket tagged `orchestration-template` was opened by applying a plan template.
+Its details hold a `## Template brief`: the template's name and version, the inputs a
+person chose, the steps in order (each with its project, title, priority, preferred
+tool, the steps it comes after with their gates, and any validation profiles), the
+template's instructions, and its rules. The brief is a snapshot of the template as it
+was applied; plan from it, not from the template file. Adapt it to the projects as
+they are now: the brief says what the work is, not which tickets already exist.
+
+- **Find or create (the default).** For a step marked "find or create", search its
+  project's open tickets (`ticket_list`) for that work before anything else. When one
+  matches, reuse it: link it (`ticket_link`, `relation: observed`) and plan the step
+  on it. Name it in your `## Proposed plan` note as found by search. Then ask once, in
+  one `FEEDBACK NEEDED` note on the goal with a `CHOICE` per reused step, whether to
+  keep reusing it or create a new ticket for that step:
+
+  ```
+  FEEDBACK NEEDED: I reused tickets the template steps found by search.
+
+  CHOICE: Step <key> reuses <slug>. Keep it, or create a new ticket?
+  - **Keep <slug>.** The step stays on the existing ticket.
+  - **Create a new ticket for step <key>.** I create one and move the step to it.
+  ```
+
+  Plan everything else meanwhile, and do not claim the goal for this question. When
+  the person chooses to create, create the ticket and define the step on it instead
+  (the old link stays as an observation; remove the old step with `readiness_remove`).
+- **Create a new ticket.** For a step marked "create a new ticket" (the template's
+  choice, or the person switched it before applying), create without reusing a match.
+- **Operation ids.** Create a step's ticket under `tpl-<operation id>-<step key>`
+  exactly as the brief's rules say, so proposing again returns the same ticket.
+- **Steps.** One plan step per target ticket for this goal. A step's `after` entries
+  are `ticket` prerequisites on the tickets of those steps, with the gates written
+  (`ci` when none is written). A step the inputs left out is not planned.
+- **Validation.** For each validation profile a step names, define a validation step
+  on this goal (`validation_define` with `{kind: profile, name}`) for that step's
+  project, and make it a prerequisite where a later step comes after it.
+- Everything else (permissions, judgment calls, finishing) is as for any goal. When
+  the template is truly unworkable for a project (a profile the project does not
+  offer, a project that cannot be read), say so in your note and plan the rest.
 
 ## Plan updates (HS2-190RDX)
 

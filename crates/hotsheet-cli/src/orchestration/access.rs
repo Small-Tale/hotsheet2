@@ -297,7 +297,10 @@ impl OrchestrationRuntime {
         Ok(decision_of(asked))
     }
 
-    fn remembered(&self, key: &PermissionKey) -> Result<Option<String>, OrchestrationError> {
+    pub(super) fn remembered(
+        &self,
+        key: &PermissionKey,
+    ) -> Result<Option<String>, OrchestrationError> {
         Ok(self
             .permission_ledger()
             .rules(&key.target.owner_checkout_id)?

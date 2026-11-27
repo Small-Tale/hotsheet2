@@ -1014,3 +1014,211 @@ describe('following a running validation (HS2-JGFPG4)', () => {
     t.controller.dispose();
   });
 });
+
+describe('Use Template… through the view (HS2-A4RVYA)', () => {
+  const template = {
+    template_id: 'T1',
+    name: 'Feature',
+    version: 1,
+    state: 'active',
+    inputs: [
+      { key: 'feature', label: 'Feature', kind: 'text', required: true },
+      { key: 'flag', label: 'Flag', kind: 'boolean' },
+    ],
+    goal: { title: '{{feature}}' },
+    steps: [{ key: 'api', target: 'T', title: 'Build {{feature}}' }],
+  };
+
+  function setup(options: { applyFails?: Error; choice?: boolean } = {}) {
+    const project = { id: 'orch', name: 'orch', root: '/synthetic/orch', apiPath: '/api/orch' } as Project;
+    const calls: Array<[string, Record<string, unknown>]> = [],
+      opened: string[] = [],
+      toasts: string[] = [];
+    let templates: unknown[] = [template];
+    const known: Record<string, unknown> = {
+      orchestrationPlanning: () =>
+        Promise.resolve({ goals: [{ connection_id: 'c', native_id: 'g1', slug: 'LCH-1', steps: 2 }] }),
+      orchestrationTimeline: (_owner: string, after?: string) =>
+        after ? new Promise<never>(() => undefined) : Promise.resolve(demoTimeline('proposed')),
+      orchestrationTemplates: (_owner: string, operation: string, body: Record<string, unknown>) => {
+        calls.push([operation, body]);
+        if (operation === 'list') return Promise.resolve({ templates, applies: [] });
+        if (operation === 'preview')
+          return Promise.resolve({
+            template: { template_id: body.template_id },
+            problems: (body.inputs as Record<string, unknown>).feature
+              ? []
+              : [{ code: 'input_missing', at: 'inputs.feature' }],
+            goal_title: (body.inputs as Record<string, string | undefined>).feature ?? '',
+            steps: [],
+            targets: [],
+            planning: 'propose',
+          });
+        if (operation === 'apply') {
+          if (options.applyFails) return Promise.reject(options.applyFails);
+          return Promise.resolve({
+            operation_id: body.operation_id,
+            template_id: 'T1',
+            snapshot: { name: 'Feature', version: 1 },
+            state: 'planning',
+            planning: 'propose',
+            goal: { connection_id: 'c', native_id: 'g9', slug: 'LCH-9', created: true },
+            outcome: 'applied',
+          });
+        }
+        if (operation === 'save_goal') {
+          templates = [...templates, { ...template, template_id: 'T2', name: String(body.name) }];
+          return Promise.resolve({ ...template, template_id: 'T2', name: body.name });
+        }
+        return Promise.reject(new Error(operation));
+      },
+    };
+    const client = new Proxy(known, {
+      get: (target, key: string) => target[key] ?? (() => new Promise<never>(() => undefined)),
+    }) as unknown as Api;
+    const controller = createOrchestrationViewController({
+      project: () => project,
+      viewMode: signal<WorkspaceViewMode>('orchestration'),
+      fallbackViewMode: () => 'list',
+      orchestrationViewMode: signal<OrchestrationProjectViewMode>('orchestration'),
+      mobile: () => false,
+      confirm: () => Promise.resolve(false),
+      showToast: (message) => void toasts.push(message),
+      openTicket: (match) => {
+        opened.push(match.qualifiedId);
+        return Promise.resolve();
+      },
+      showPermissionRequest: () => Promise.resolve(),
+      openOrchestrationSettings: () => undefined,
+      persistWorkspacePreferences: () => undefined,
+      planner: {
+        availability: () =>
+          options.choice === false ? { available: false, reason: 'Choose an AI tool' } : { available: true },
+        choice: () => (options.choice === false ? undefined : { tool: 'claude' }),
+      } as never,
+      personId: () => 'person-1',
+      createClient: () => client,
+      orchestrationProject: () => true,
+    });
+    return { controller, calls, opened, toasts };
+  }
+
+  it('opens on the first template, previews on a committed change, and applies under one retained id', async () => {
+    const t = setup();
+    await vi.waitFor(() => {
+      expect(t.controller.timeline.value).toBeDefined();
+    });
+    await t.controller.openTemplates();
+    await vi.waitFor(() => {
+      expect(t.controller.templateDialog.value?.preview?.template_id).toBe('T1');
+    });
+    const state = () => t.controller.templateDialog.value!;
+    expect(state().selected).toBe('T1');
+    expect(state().inputs).toEqual({ feature: '', flag: false });
+    expect(state().goals.map((goal) => goal.slug)).toEqual(['LCH-1']);
+    expect(state().projects.length).toBeGreaterThan(0);
+    // Typing changes the input at once; a pause in typing, or the change event, reads the summary again.
+    t.controller.editTemplateInput('feature', 'Sea', false);
+    t.controller.editTemplateInput('feature', 'Search', false);
+    expect(t.calls.filter(([operation]) => operation === 'preview')).toHaveLength(1);
+    expect(state().changed).toEqual(['feature']);
+    await vi.waitFor(() => {
+      expect(t.calls.filter(([operation]) => operation === 'preview')).toHaveLength(2);
+    });
+    expect(t.calls.filter(([operation]) => operation === 'preview')[1][1].inputs).toEqual({
+      feature: 'Search',
+      flag: false,
+    });
+    // The change after the pause asks nothing new: the same inputs were just read.
+    t.controller.editTemplateInput('feature', 'Search', true);
+    await vi.waitFor(() => {
+      expect(state().preview?.goal_title).toBe('Search');
+    });
+    expect(state().changed).toEqual([]);
+    t.controller.chooseTemplateStep('api', true);
+    expect(state().choices).toEqual({ api: 'create' });
+    t.controller.chooseTemplateStep('api', false);
+    expect(state().choices).toEqual({});
+    await t.controller.applyTemplate();
+    expect(state().mode).toBe('result');
+    expect(state().result?.goal?.slug).toBe('LCH-9');
+    const applies = t.calls.filter(([operation]) => operation === 'apply');
+    expect(applies[0][1]).toMatchObject({
+      template_id: 'T1',
+      inputs: { feature: 'Search', flag: false },
+      tool: 'claude',
+    });
+    // Apply Again repeats the same apply; an edited input starts a new one.
+    await t.controller.applyTemplate();
+    t.controller.selectTemplate('T1');
+    t.controller.editTemplateInput('feature', 'Other', false);
+    await t.controller.applyTemplate();
+    const ids = t.calls.filter(([operation]) => operation === 'apply').map(([, body]) => body.operation_id);
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[2]).not.toBe(ids[0]);
+    expect(String(ids[0])).toMatch(/^tpl-/);
+    await t.controller.openTemplateGoal();
+    expect(t.opened).toEqual(['c:g9']);
+    expect(t.controller.templateDialog.value).toBeUndefined();
+    t.controller.dispose();
+  });
+
+  it('says why an apply failed, and that no AI tool is chosen, without applying', async () => {
+    const refused = new ApiHttpError('template_apply_conflict', 409, 'template_apply_conflict');
+    const t = setup({ applyFails: refused });
+    await t.controller.openTemplates();
+    await vi.waitFor(() => {
+      expect(t.controller.templateDialog.value?.selected).toBe('T1');
+    });
+    t.controller.editTemplateInput('feature', 'X', false);
+    await t.controller.applyTemplate();
+    expect(t.controller.templateDialog.value?.failure).toBe(
+      'This apply was already made with other inputs. Apply the template again from the start. (template_apply_conflict)',
+    );
+    expect(t.controller.templateDialog.value?.busy).toBe(false);
+    const none = setup({ choice: false });
+    await none.controller.openTemplates();
+    await vi.waitFor(() => {
+      expect(none.controller.templateDialog.value?.selected).toBe('T1');
+    });
+    await none.controller.applyTemplate();
+    expect(none.controller.templateDialog.value?.failure).toBe('Choose an AI tool.');
+    expect(none.calls.some(([operation]) => operation === 'apply')).toBe(false);
+    t.controller.dispose();
+    none.controller.dispose();
+  });
+
+  it('saves a goal as a template and selects it; closing and the phone back control reset the dialog', async () => {
+    const t = setup();
+    await t.controller.openTemplates();
+    await vi.waitFor(() => {
+      expect(t.controller.templateDialog.value?.selected).toBe('T1');
+    });
+    t.controller.openSaveTemplate();
+    expect(t.controller.templateDialog.value).toMatchObject({ mode: 'save', detailActive: true });
+    expect(t.controller.templateDialog.value?.save.goal).toBe('g1');
+    t.controller.editSaveTemplate({ name: 'Feature again', targetsAsInputs: true });
+    await t.controller.submitSaveTemplate();
+    const save = t.calls.find(([operation]) => operation === 'save_goal')!;
+    expect(save[1]).toEqual({
+      goal: { connection_id: 'c', native_id: 'g1' },
+      name: 'Feature again',
+      targets_as_inputs: true,
+    });
+    await vi.waitFor(() => {
+      expect(t.controller.templateDialog.value?.selected).toBe('T2');
+    });
+    expect(t.toasts).toEqual(['Saved the template Feature again.']);
+    // Cancel returns to the template; on a phone the back control returns to the list.
+    t.controller.openSaveTemplate();
+    t.controller.cancelSaveTemplate();
+    expect(t.controller.templateDialog.value?.mode).toBe('template');
+    t.controller.selectTemplate('T1');
+    expect(t.controller.templateDialog.value?.detailActive).toBe(true);
+    t.controller.backToTemplates();
+    expect(t.controller.templateDialog.value?.detailActive).toBe(false);
+    t.controller.closeTemplates();
+    expect(t.controller.templateDialog.value).toBeUndefined();
+    t.controller.dispose();
+  });
+});

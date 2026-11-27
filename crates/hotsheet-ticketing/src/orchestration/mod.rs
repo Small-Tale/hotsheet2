@@ -38,6 +38,8 @@ mod summary;
 mod summary_use;
 mod summary_wait;
 mod target_lines;
+// HS2-A4RVYA: reusable plan templates, applied through the planner.
+mod templates;
 // HS2-YDY5HJ: the checked-in step definitions of a plan.
 mod shared_plan;
 // HS2-KB2Y51: lines another machine pushed for a checkout hosted here.
@@ -216,6 +218,16 @@ pub use summary_wait::{
 pub use target_lines::{
     TargetLine, TargetLineSource, TargetLines, target_lines, target_lines_observed,
 };
+pub use templates::{
+    ApplyDecision, ApplyGoal, ApplyState, Brief, BriefStep, InputKind, MAX_APPLY_OPERATION_ID,
+    MAX_INPUT_TEXT, MAX_TEMPLATE_APPLIES, MAX_TEMPLATE_INPUTS, MAX_TEMPLATE_LINE,
+    MAX_TEMPLATE_STEPS, MAX_TEMPLATE_TEXT, MAX_TEMPLATES, MAX_TEMPLATES_BYTES, PRIORITIES,
+    STEP_GATES, StepAfter, StepTicket, TEMPLATE_APPLY_DIR, TEMPLATE_GOAL_TAG, TEMPLATES_PATH,
+    Template, TemplateApply, TemplateApplyStore, TemplateError, TemplateGoal, TemplateInput,
+    TemplateProblem, TemplateState, TemplateStep, TemplateStore, TemplatesFile, decide_apply,
+    input_value, merge_templates, placeholders, reference, render_brief, resolve_inputs,
+    substitute, validate_template,
+};
 pub use timeline::{
     DEFAULT_WAVE_MINUTES, DecisionWait, EstimateBasis, ItemState, KickOff, PermissionWait,
     PlacementHint, RunGateVerdicts, TargetLocation, TicketLabel, Timeline, TimelineInput,
@@ -315,6 +327,9 @@ pub enum OrchestrationError {
     /// observed value, so a person learns what to change.
     #[error("the machine refused the session: {}", .0.describe())]
     AdmissionRefused(Box<AdmissionRefusal>),
+    /// HS2-A4RVYA: a plan template, its inputs or its apply refused the request.
+    #[error("orchestration template refused the request: {}", .0.code())]
+    Template(TemplateError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -352,6 +367,7 @@ impl OrchestrationError {
                 RequirementState::Unknown => "requirement_unknown",
             },
             Self::AdmissionRefused(_) => SessionError::AdmissionRefused.code(),
+            Self::Template(error) => error.code(),
         }
     }
 
@@ -613,6 +629,8 @@ mod summary_use_tests;
 mod summary_wait_tests;
 #[cfg(test)]
 mod target_lines_tests;
+#[cfg(test)]
+mod template_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

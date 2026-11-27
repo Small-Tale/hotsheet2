@@ -2331,6 +2331,7 @@ file the same way. It owns one delimited block:
 !/.hotsheet2/orchestration.json
 !/.hotsheet2/orchestration-plan.json
 !/.hotsheet2/orchestration-policy.json
+!/.hotsheet2/orchestration-templates.json
 !/.hotsheet2/validation-profiles.json
 !/.hotsheet2/resource-claims.json
 # <<< Hot Sheet 2 <<<
@@ -2339,8 +2340,8 @@ file the same way. It owns one delimited block:
 - Everything under `.hotsheet2/` is machine-local except the paths in
   `project_gitignore::SHARED_PROJECT_PATHS`: the shared settings file, the group registry
   ([02](02-ticket-storage.md) §2.7.1), and the shared orchestration files: the target
-  manifest, the shared plan, the policy, the validation profiles, and the project
-  resource-claim registry (HS2-GY8C2D). A new machine-local file needs no new ignore line.
+  manifest, the shared plan, the policy, the plan templates (HS2-A4RVYA), the validation
+  profiles, and the project resource-claim registry (HS2-GY8C2D). A new machine-local file needs no new ignore line.
   A new shared file must be added to that list. A policy test fails when an orchestration
   `Storage::shared_named` writer or a shared-path constant names a file the list misses,
   and checks with `git check-ignore` that every listed path is committable.

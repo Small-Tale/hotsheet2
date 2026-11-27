@@ -2466,6 +2466,23 @@ export class Api {
       `/checkouts/${encodeURIComponent(checkout)}/orchestration/planning/update_cancel`,
       { method: 'POST', body: JSON.stringify({ actor: { role: 'human', id: actorId } }) },
     );
+  /**
+   * HS2-A4RVYA: plan templates. `list`, `preview` and `apply_show` read and change nothing; `apply` opens a
+   * new goal ticket and hands it to the planner, idempotent by `operation_id`; `save_goal` saves a goal's plan
+   * steps as a template. A person's apply is their own act.
+   */
+  orchestrationTemplates = (
+    checkout: string,
+    operation: 'list' | 'preview' | 'apply' | 'apply_show' | 'save_goal' | 'validate' | 'set' | 'retire',
+    body: Record<string, unknown>,
+    actorId: string,
+  ) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/templates/${operation}`,
+      { method: 'POST', body: JSON.stringify({ ...body, actor: { role: 'human', id: actorId } }) },
+      operation !== 'list' && operation !== 'preview' && operation !== 'apply_show' && operation !== 'validate',
+    );
   /** HS2-HCW7MD: where planning stands (`idle`, `planning` or `ended`); starts nothing. */
   orchestrationPlanning = (checkout: string) =>
     this.parsed(

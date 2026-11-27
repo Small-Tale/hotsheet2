@@ -19,6 +19,7 @@ import {
   startExplanation,
   timelineStatus,
 } from '../orchestration-timeline-board';
+import { OrchestrationTemplateButton } from './orchestration-template-button';
 import type { OrchestrationProposeAvailability } from './orchestration-timeline-view';
 
 export interface OrchestrationToolbarProps {
@@ -44,6 +45,8 @@ export interface OrchestrationToolbarProps {
   clock?: ClockFormat;
   /** HS2-FA8G9J: the planner waits in its terminal and its tab is known, so Show Planner opens it. */
   showPlanner?: boolean;
+  /** HS2-A4RVYA: offer Use Template…, which applies a plan template through the planner. */
+  templates?: boolean;
 }
 
 /** What the header adds for a planning session. */
@@ -76,6 +79,7 @@ export function OrchestrationToolbar({
   planning,
   clock = clockTime,
   showPlanner = false,
+  templates = false,
 }: OrchestrationToolbarProps) {
   const goal = defaultGoal && timeline.phase !== 'no_projects' ? ' · Working through all open tickets' : '';
   const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
@@ -107,6 +111,10 @@ export function OrchestrationToolbar({
       </Button>
     ) : undefined;
   const planner = showPlanner && planning === 'waiting' ? <ShowPlannerButton emphasis="secondary" /> : undefined;
+  const template =
+    templates && timeline.phase !== 'no_projects' ? (
+      <OrchestrationTemplateButton emphasis="secondary" busy={busy} />
+    ) : undefined;
   const replan =
     timeline.phase === 'proposed' || timeline.phase === 'running' || timeline.phase === 'paused' ? (
       updating ? (
@@ -263,6 +271,7 @@ export function OrchestrationToolbar({
           <>
             {answer}
             {planner}
+            {template}
             {replan}
             {action}
           </>

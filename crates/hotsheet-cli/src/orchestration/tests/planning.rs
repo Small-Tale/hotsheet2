@@ -108,6 +108,7 @@ fn hs2_hcw7md_a_press_starts_one_planner_in_the_orchestration_project() {
     assert_eq!(first.goal_count, 1);
     assert_eq!(first.goals[0].native_id, open.id.to_string());
     assert_eq!(first.goals[0].slug, open.slug);
+    assert_eq!(first.goals[0].title, "Ship the release");
     assert_eq!(first.goals[0].steps, 0);
     assert_eq!(first.tool_setup.map(|setup| setup.wrote), Some(2));
     assert_eq!(first.session.session.role, SessionRole::Planner);
@@ -1230,4 +1231,44 @@ fn hs2_3h51nm_a_drafting_plan_update_across_a_host_restart() {
     assert_ne!(third.update_id, second.update_id);
     assert_eq!(third.state, PlanUpdateState::Drafting);
     assert_eq!(fresh.launches().len(), 1);
+}
+
+/// HS2-M7RXCB: plan show names each goal by its title, bounded, so Save a Goal as
+/// Template… can offer goals by what they are about; a renamed goal reads its new title.
+#[test]
+fn hs2_m7rxcb_plan_show_lists_goal_titles_bounded() {
+    let mut rng = Rng(140);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    // Empty, then refilled.
+    assert!(f.status(&mut tx).goals.is_empty());
+    let short = f.goal("Rate limits for the API");
+    let long_title = "é".repeat(super::super::planning::GOAL_TITLE_CHARS + 40);
+    let long = f.goal(&long_title);
+    let status = f.status(&mut tx);
+    let title_of = |id: &str| {
+        status
+            .goals
+            .iter()
+            .find(|goal| goal.native_id == id)
+            .map(|goal| goal.title.clone())
+            .unwrap()
+    };
+    assert_eq!(title_of(&short.id.to_string()), "Rate limits for the API");
+    let bounded = title_of(&long.id.to_string());
+    assert_eq!(
+        bounded.chars().count(),
+        super::super::planning::GOAL_TITLE_CHARS
+    );
+    assert!(long_title.starts_with(&bounded));
+    // The wire form carries the title; an older record without one still reads.
+    let wire = serde_json::to_value(&status.goals[0]).unwrap();
+    assert!(wire["title"].is_string());
+    let mut older = wire.clone();
+    older.as_object_mut().unwrap().remove("title");
+    let read: super::super::planning::GoalTicket = serde_json::from_value(older).unwrap();
+    assert_eq!(read.title, "");
 }

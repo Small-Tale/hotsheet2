@@ -51,6 +51,7 @@ mod step_process;
 // HS2-2R32SD: Windows resolution rules, tested on every platform.
 mod step_program;
 mod summary;
+mod templates;
 mod ticket_list;
 mod tickets;
 mod timeline;

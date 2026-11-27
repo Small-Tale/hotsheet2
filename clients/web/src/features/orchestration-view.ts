@@ -16,6 +16,7 @@ import {
 } from '../bounded-backoff';
 import type { OrchestrationDecisionsDialogState } from '../components/orchestration-decisions-dialog';
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
+import type { OrchestrationTemplateDialogState } from '../components/orchestration-template-dialog';
 import type { OrchestrationProposeAvailability } from '../components/orchestration-timeline-view';
 import type { WorkspaceViewMode } from '../components/workspace-controls';
 import type { ConfirmationOptions } from '../confirmation';
@@ -41,6 +42,19 @@ import {
   type RoleStandingView,
   type SchedulerDecisionPage,
 } from '../orchestration-scheduler';
+import {
+  initialInputs,
+  inputsToSend,
+  newApplyOperationId,
+  parsePlanTemplate,
+  parseTemplateApply,
+  parseTemplateList,
+  parseTemplatePreview,
+  savableGoals,
+  type SaveGoalForm,
+  saveProblem,
+  type StepTicketChoice,
+} from '../orchestration-templates';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import {
@@ -70,6 +84,8 @@ export const ORCHESTRATION_GROUP_SCOPE = 'orchestration';
 /** The planning session behind Propose Plan (HS2-HCW7MD); the UX demo passes fixture state. */
 export interface OrchestrationPlanner {
   availability(project: Project): OrchestrationProposeAvailability;
+  /** HS2-A4RVYA: the AI tool a template's planner runs in, as Propose Plan would choose it. */
+  choice?(project: Project): AiToolChoice | undefined;
   propose(project: Project): Promise<string>;
   /** HS2-190RDX: Update Plan, which re-plans beside the running plan; answers the toast. */
   update(project: Project): Promise<string>;
@@ -197,6 +213,7 @@ export function createServerPlanner(options: {
   return {
     availability: (project) =>
       options.choice(project) ? { available: true } : { available: false, reason: missing(project) },
+    choice: (project) => options.choice(project),
     async propose(project) {
       const choice = options.choice(project);
       if (!choice) throw new Error(`${missing(project)}.`);
@@ -304,6 +321,9 @@ export interface OrchestrationViewDependencies {
   /** HS2-JGFPG4 seam: the bounded backoff's wait between retries of a transient failure. */
   readonly delay?: BackoffDelay;
 }
+
+/** HS2-A4RVYA: how long typing in a template input pauses before the summary is read again. */
+export const TEMPLATE_PREVIEW_PAUSE_MS = 400;
 
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
 
@@ -431,6 +451,16 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   /** HS2-77SRHC: the open Show All Decisions… dialog and the cursor of the page before what it shows. */
   const decisionsDialog = signal<OrchestrationDecisionsDialogState | undefined>(undefined);
   let decisionsBefore = 0;
+  /** HS2-A4RVYA: the open Use Template… dialog. */
+  const templateDialog = signal<OrchestrationTemplateDialogState | undefined>(undefined);
+  let templateSession = 0,
+    templatePreviews = 0,
+    /** The inputs and choices of the last preview asked for. */
+    lastPreview = '',
+    /** A pause in typing reads the summary again (keystroke coalescing, no polling). */
+    previewTimer: ReturnType<typeof setTimeout> | undefined,
+    /** The operation id of the apply on screen, kept so Apply Again repeats the same apply. */
+    applyOperation: string | undefined;
   /** HS2-9XJEZC: Run Validation requests waiting on a person, by `<step id>:<validation step id>`. */
   const pendingValidations = signal<Readonly<Record<string, PendingValidation>>>({});
   /**
@@ -1194,6 +1224,259 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
   }
 
+  /** HS2-A4RVYA: change the open template dialog, if it is still the session `session` opened. */
+  function updateTemplates(
+    session: number,
+    change: (state: OrchestrationTemplateDialogState) => Partial<OrchestrationTemplateDialogState>,
+  ) {
+    const state = templateDialog.value;
+    if (state?.session === session) templateDialog.value = { ...state, ...change(state) };
+  }
+
+  /** HS2-A4RVYA: Use Template…: read the templates and the goals that can be saved, then select the first. */
+  async function openTemplates(select?: string) {
+    const current = dependencies.project();
+    if (!current) return;
+    const session = ++templateSession;
+    applyOperation = undefined;
+    lastPreview = '';
+    templateDialog.value = {
+      loading: true,
+      templates: [],
+      mode: 'template',
+      detailActive: false,
+      inputs: {},
+      changed: [],
+      choices: {},
+      previewing: false,
+      busy: false,
+      projects: (timeline.value?.targets ?? []).map((target) => ({ target_id: target.target_id, label: target.label })),
+      save: { goal: '', name: '', description: '', targetsAsInputs: false },
+      goals: [],
+      session,
+    };
+    const client = clientFor(current);
+    const [listed, planningView] = await Promise.allSettled([
+      client.orchestrationTemplates(current.id, 'list', {}, dependencies.personId()),
+      client.orchestrationPlanning(current.id),
+    ]);
+    const goals = planningView.status === 'fulfilled' ? savableGoals(planningView.value) : [];
+    if (listed.status === 'rejected') {
+      updateTemplates(session, () => ({ loading: false, error: describeRefusal(listed.reason), goals }));
+      return;
+    }
+    const list = parseTemplateList(listed.value);
+    const first = list.templates.find(
+      (template) => template.state === 'active' && (select === undefined || template.template_id === select),
+    );
+    updateTemplates(session, () => ({ loading: false, templates: list.templates, goals }));
+    if (first) selectTemplate(first.template_id, false);
+  }
+
+  function selectTemplate(templateId: string, drill = true) {
+    const state = templateDialog.value,
+      template = state?.templates.find((candidate) => candidate.template_id === templateId);
+    if (!state || !template) return;
+    applyOperation = undefined;
+    lastPreview = '';
+    templateDialog.value = {
+      ...state,
+      selected: templateId,
+      mode: 'template',
+      detailActive: drill,
+      inputs: initialInputs(template),
+      changed: [],
+      choices: {},
+      preview: undefined,
+      result: undefined,
+      failure: undefined,
+    };
+    void previewTemplate();
+  }
+
+  /** The pre-run summary of the selected template with the inputs as they are. Writes nothing. */
+  async function previewTemplate() {
+    const current = dependencies.project(),
+      state = templateDialog.value,
+      template = state?.templates.find((candidate) => candidate.template_id === state.selected);
+    if (!current || !state || !template) return;
+    // The same inputs and choices again (a change and a focusout of one edit) read nothing new.
+    const asked = JSON.stringify([template.template_id, inputsToSend(template, state.inputs), state.choices]);
+    if (asked === lastPreview && (state.previewing || state.preview?.template_id === template.template_id)) return;
+    lastPreview = asked;
+    const request = ++templatePreviews,
+      session = state.session,
+      sentChanges = new Set(state.changed);
+    updateTemplates(session, () => ({ previewing: true }));
+    try {
+      const answer = await clientFor(current).orchestrationTemplates(
+        current.id,
+        'preview',
+        {
+          template_id: template.template_id,
+          inputs: inputsToSend(template, state.inputs),
+          choices: state.choices,
+        },
+        dependencies.personId(),
+      );
+      if (request !== templatePreviews) return;
+      updateTemplates(session, (now) => ({
+        previewing: false,
+        preview: parseTemplatePreview(answer),
+        // Inputs changed while the preview was on its way are judged by the next one.
+        changed: now.changed.filter((key) => !sentChanges.has(key) || now.inputs[key] !== state.inputs[key]),
+      }));
+    } catch (reason) {
+      if (request === templatePreviews)
+        updateTemplates(session, () => ({ previewing: false, failure: describeRefusal(reason) }));
+    }
+  }
+
+  /** A typed input changed; `commit` (a change, not each keystroke) also reads the summary again. */
+  function editTemplateInput(key: string, value: unknown, commit: boolean) {
+    const state = templateDialog.value;
+    if (!state || state.mode !== 'template') return;
+    // A different value is a different apply; leaving a field unchanged keeps the one on screen.
+    if (state.inputs[key] !== value) applyOperation = undefined;
+    templateDialog.value = {
+      ...state,
+      inputs: { ...state.inputs, [key]: value },
+      // Only a different value waits for the next summary; committing the same value changes nothing.
+      changed: state.changed.includes(key) || state.inputs[key] === value ? state.changed : [...state.changed, key],
+      failure: undefined,
+    };
+    if (previewTimer !== undefined) clearTimeout(previewTimer);
+    previewTimer = undefined;
+    if (commit) void previewTemplate();
+    else
+      previewTimer = setTimeout(() => {
+        previewTimer = undefined;
+        void previewTemplate();
+      }, TEMPLATE_PREVIEW_PAUSE_MS);
+  }
+
+  /** A step switched between searching first and always creating a new ticket. */
+  function chooseTemplateStep(step: string, create: boolean) {
+    const state = templateDialog.value;
+    if (!state) return;
+    applyOperation = undefined;
+    const choices: Record<string, StepTicketChoice> = Object.fromEntries(
+      Object.entries(state.choices).filter(([key]) => key !== step),
+    );
+    if (create) choices[step] = 'create';
+    templateDialog.value = { ...state, choices, failure: undefined };
+    void previewTemplate();
+  }
+
+  /**
+   * Apply Template: open a new goal ticket and hand it to the planner. The operation id is kept while the same
+   * apply is repeated (Apply Again), so a retry never opens a second goal or starts a second planner.
+   */
+  async function applyTemplate() {
+    const current = dependencies.project(),
+      state = templateDialog.value,
+      template = state?.templates.find((candidate) => candidate.template_id === state.selected);
+    if (!current || !state || !template || state.busy) return;
+    const session = state.session,
+      choice = planner.choice?.(current);
+    if (!choice) {
+      updateTemplates(session, () => ({ failure: `${planner.availability(current).reason ?? 'Choose an AI tool'}.` }));
+      return;
+    }
+    applyOperation ??= newApplyOperationId();
+    updateTemplates(session, () => ({ busy: true, failure: undefined }));
+    try {
+      const answer = await clientFor(current).orchestrationTemplates(
+        current.id,
+        'apply',
+        {
+          template_id: template.template_id,
+          inputs: inputsToSend(template, state.inputs),
+          choices: state.choices,
+          operation_id: applyOperation,
+          ...choice,
+        },
+        dependencies.personId(),
+      );
+      const result = parseTemplateApply(answer);
+      updateTemplates(session, () => ({ busy: false, mode: 'result', detailActive: true, result }));
+      void refreshPlanning(current, generation);
+    } catch (reason) {
+      updateTemplates(session, () => ({ busy: false, failure: describeRefusal(reason) }));
+    }
+  }
+
+  function openSaveTemplate() {
+    const state = templateDialog.value;
+    if (!state) return;
+    templateDialog.value = {
+      ...state,
+      mode: 'save',
+      detailActive: true,
+      failure: undefined,
+      save: { ...state.save, goal: state.save.goal || (state.goals[0]?.native_id ?? '') },
+    };
+  }
+
+  function editSaveTemplate(change: Partial<SaveGoalForm>) {
+    const state = templateDialog.value;
+    if (state?.mode === 'save')
+      templateDialog.value = { ...state, save: { ...state.save, ...change }, failure: undefined };
+  }
+
+  function cancelSaveTemplate() {
+    const state = templateDialog.value;
+    if (state) templateDialog.value = { ...state, mode: 'template', detailActive: false, failure: undefined };
+  }
+
+  /** Save a Goal as Template…: the goal's current plan steps become a new template, then it is selected. */
+  async function submitSaveTemplate() {
+    const current = dependencies.project(),
+      state = templateDialog.value;
+    if (!current || !state || state.busy || saveProblem(state.save, state.goals)) return;
+    const goal = state.goals.find((candidate) => candidate.native_id === state.save.goal);
+    if (!goal) return;
+    const session = state.session;
+    updateTemplates(session, () => ({ busy: true, failure: undefined }));
+    try {
+      const saved = parsePlanTemplate(
+        await clientFor(current).orchestrationTemplates(
+          current.id,
+          'save_goal',
+          {
+            goal: { connection_id: goal.connection_id, native_id: goal.native_id },
+            name: state.save.name.trim(),
+            ...(state.save.description.trim() ? { description: state.save.description.trim() } : {}),
+            targets_as_inputs: state.save.targetsAsInputs,
+          },
+          dependencies.personId(),
+        ),
+      );
+      dependencies.showToast(`Saved the template ${saved?.name ?? state.save.name.trim()}.`);
+      await openTemplates(saved?.template_id);
+    } catch (reason) {
+      updateTemplates(session, () => ({ busy: false, failure: describeRefusal(reason) }));
+    }
+  }
+
+  /** Open the goal ticket the apply opened, and close the dialog. */
+  async function openTemplateGoal() {
+    const current = dependencies.project(),
+      goal = templateDialog.value?.result?.goal;
+    if (!current || !goal) return;
+    templateDialog.value = undefined;
+    const qualified = `${goal.connection_id}:${goal.native_id}`;
+    await dependencies.openTicket({
+      projectId: current.id,
+      projectName: current.name,
+      ticketId: qualified,
+      qualifiedId: qualified,
+      connectionId: goal.connection_id,
+      slug: goal.slug ?? goal.native_id,
+      title: '',
+    });
+  }
+
   function stepName(stepId: string): string {
     return lastSlugs.get(stepId) ?? `step ${stepId.slice(-6)}`;
   }
@@ -1357,6 +1640,31 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     closeDecisions: () => {
       decisionsDialog.value = undefined;
     },
+    /** HS2-A4RVYA: the Use Template… dialog and its actions. */
+    templateDialog,
+    openTemplates: () => openTemplates(),
+    selectTemplate: (templateId: string) => {
+      selectTemplate(templateId);
+    },
+    editTemplateInput,
+    chooseTemplateStep,
+    applyTemplate,
+    openSaveTemplate,
+    editSaveTemplate,
+    cancelSaveTemplate,
+    submitSaveTemplate,
+    openTemplateGoal,
+    /** On a phone, the back control returns from a template's detail to the list. */
+    backToTemplates: () => {
+      const state = templateDialog.value;
+      if (state) templateDialog.value = { ...state, detailActive: false };
+    },
+    closeTemplates: () => {
+      if (previewTimer !== undefined) clearTimeout(previewTimer);
+      previewTimer = undefined;
+      templateDialog.value = undefined;
+      applyOperation = undefined;
+    },
     propose,
     updatePlan,
     cancelPlanUpdate,
@@ -1375,6 +1683,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     },
     placeTimeline,
     dispose() {
+      if (previewTimer !== undefined) clearTimeout(previewTimer);
       follows.abort();
       streamStop?.();
       eventsStop?.();

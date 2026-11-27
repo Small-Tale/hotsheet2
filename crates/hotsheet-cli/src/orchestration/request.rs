@@ -110,6 +110,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "scheduler", _]
             // HS2-HCW7MD: Propose Plan and where planning stands.
             | ["checkouts", _, "orchestration", "planning", _]
+            // HS2-A4RVYA: plan templates and their applies.
+            | ["checkouts", _, "orchestration", "templates", _]
             | ["remote-checkouts", _, "resolution"]
     )
 }
@@ -201,6 +203,9 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "scheduler", _]
             // HS2-HCW7MD: the planner runs on this machine, in the project itself.
             | ["checkouts", _, "orchestration", "planning", _]
+            // HS2-A4RVYA: an apply starts the planner on this machine and reads its
+            // permission ledger; templates are read and written beside its plan.
+            | ["checkouts", _, "orchestration", "templates", _]
     )
 }
 
@@ -952,6 +957,34 @@ impl OrchestrationRuntime {
                     "update_cancel" => {
                         value(self.plan_update_cancel(owner, &decode(body)?, actor.as_ref(), tx)?)
                     }
+                    _ => Err(OrchestrationError::Invalid("unsupported target route")),
+                }
+            }
+            // HS2-A4RVYA: plan templates. `list`, `show`, `validate`, `preview` and
+            // `apply_show` read; `apply` hands a new goal to the planner.
+            ("POST", ["checkouts", owner, "orchestration", "templates", operation]) => {
+                let actor = actor(body)?;
+                match *operation {
+                    "list" => {
+                        decode::<super::PlanRequest>(body)?;
+                        value(self.template_list(owner)?)
+                    }
+                    "show" => value(self.template_show(owner, &decode(body)?)?),
+                    "validate" => value(self.template_validate(owner, &decode(body)?)?),
+                    "set" => value(self.template_set(owner, decode(body)?, actor.as_ref(), tx)?),
+                    "retire" => {
+                        value(self.template_retire(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "save_goal" => {
+                        value(self.template_save_goal(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "preview" => {
+                        value(self.template_preview(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "apply" => {
+                        value(self.template_apply(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    "apply_show" => value(self.template_apply_show(owner, &decode(body)?)?),
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }
             }

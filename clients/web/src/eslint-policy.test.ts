@@ -602,6 +602,8 @@ describe('web ESLint policy', () => {
       RunError: 'runs.rs',
       SessionError: 'sessions.rs',
       ValidationError: 'validation.rs',
+      // HS2-A4RVYA
+      TemplateError: 'templates.rs',
     };
     const codes = new Set<string>();
     for (const [name, file] of Object.entries(enums)) {

@@ -47,6 +47,8 @@ mod step_process;
 mod step_program;
 mod summary;
 mod target_lines;
+// HS2-A4RVYA: reusable plan templates, applied through the planner.
+mod templates;
 // HS2-H1CSSN: the owner of the runtime's background threads.
 mod tasks;
 mod ticket_list;
@@ -150,6 +152,11 @@ pub use sessions::{
 };
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use tasks::{RuntimeTasks, StopHook, TasksShutdown};
+pub use templates::{
+    AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES, PreviewTarget,
+    PreviewTemplate, ProfilesCheck, SaveGoalTemplate, SetTemplates, TemplateApplyView,
+    TemplateList, TemplatePreview, TemplateRef, TemplateValidation, ValidateTemplate,
+};
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,
     TargetTicketRow, TargetTicketSearch,
@@ -682,6 +689,18 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
         }
         // HS2-8Z9VHH: a refused admission, with its reason and limit.
         OrchestrationError::AdmissionRefused(_) => 409,
+        // HS2-A4RVYA: an unknown template or apply is absent; a definition or inputs
+        // that do not fit are invalid; anything else conflicts with what is recorded.
+        OrchestrationError::Template(error) => {
+            use hotsheet_ticketing::orchestration::TemplateError as E;
+            match error {
+                E::NotFound | E::ApplyNotFound => 404,
+                E::Invalid | E::InputsInvalid => 422,
+                E::Retired | E::Conflict | E::TargetUnknown | E::ApplyConflict | E::GoalEmpty => {
+                    409
+                }
+            }
+        }
         OrchestrationError::Session(error) => {
             use hotsheet_ticketing::orchestration::SessionError as E;
             match error {

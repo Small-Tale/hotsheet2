@@ -42,6 +42,10 @@ pub struct UpdatePlan {
     /// `plan_update_auto`. Never read from a request.
     #[serde(skip)]
     pub(super) automatic: bool,
+    /// HS2-A4RVYA: draft only this goal (a template's new goal). Never read from a
+    /// request.
+    #[serde(skip)]
+    pub(super) goal: Option<super::tickets::OrchestrationTicket>,
 }
 
 /// Names the update to finish or cancel; the drafting one when omitted.
@@ -360,7 +364,7 @@ impl OrchestrationRuntime {
                 tool: request.tool,
                 model: request.model,
                 effort: request.effort,
-                goal: None,
+                goal: request.goal,
                 operation_id: Some(update_id.clone()),
                 plan_update: true,
             },

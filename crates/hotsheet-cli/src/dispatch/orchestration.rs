@@ -20,6 +20,7 @@ use super::orchestration_projects as projects;
 use super::orchestration_readiness as readiness;
 use super::orchestration_scheduler as scheduler;
 use super::orchestration_sessions as sessions;
+use super::orchestration_templates as templates;
 use super::orchestration_validation as validation;
 use crate::Cmd;
 
@@ -67,6 +68,9 @@ enum OrchestrationCmd {
     /// HS2-HCW7MD: Propose Plan: start the project's planning AI session, which proposes
     /// the dry-run plan from the open goal tickets, or show where planning stands.
     Plan(planning::PlanArgs),
+    /// HS2-A4RVYA: reusable plan templates: list, edit and retire them, save a goal
+    /// as one, preview and apply one (a new goal ticket handed to the planner).
+    Template(templates::TemplateArgs),
     /// HS2-M7EV18: the detached runner of one hosted validation step. Started by the
     /// hosting process; not for direct use.
     #[command(hide = true)]
@@ -1482,6 +1486,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Plan(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = planning::route(&owner_id, arguments)?;
+            (owner_id, request)
+        }
+        OrchestrationCmd::Template(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = templates::route(&owner_id, arguments)?;
             (owner_id, request)
         }
         OrchestrationCmd::Gate(arguments) => {

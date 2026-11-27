@@ -54,6 +54,7 @@ pub const SHARED_PROJECT_PATHS: &[&str] = &[
     ".hotsheet2/orchestration.json",
     ".hotsheet2/orchestration-plan.json",
     ".hotsheet2/orchestration-policy.json",
+    ".hotsheet2/orchestration-templates.json",
     ".hotsheet2/validation-profiles.json",
     ".hotsheet2/resource-claims.json",
 ];
@@ -66,6 +67,7 @@ pub const BLOCK_RULES: &[&str] = &[
     "!/.hotsheet2/orchestration.json",
     "!/.hotsheet2/orchestration-plan.json",
     "!/.hotsheet2/orchestration-policy.json",
+    "!/.hotsheet2/orchestration-templates.json",
     "!/.hotsheet2/validation-profiles.json",
     "!/.hotsheet2/resource-claims.json",
 ];
@@ -80,6 +82,7 @@ const COMMITTED_PROBES: &[&str] = &[
     ".hotsheet2/orchestration.json",
     ".hotsheet2/orchestration-plan.json",
     ".hotsheet2/orchestration-policy.json",
+    ".hotsheet2/orchestration-templates.json",
     ".hotsheet2/validation-profiles.json",
     ".hotsheet2/resource-claims.json",
 ];
