@@ -3,6 +3,9 @@
 //! streams, deadlines, crashes, backoff, the circuit, idle exit and orderly stop. Waits
 //! are on supervisor events, never fixed sleeps.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,7 +39,9 @@ fn fixture() -> Fixture {
 fn write_plugin(plugins: &Path, id: &str, args: &[&str], capabilities: &[&str]) -> PathBuf {
     let dir = plugins.join(id);
     std::fs::create_dir_all(dir.join("bin")).expect("plugin dir");
-    let exe = Path::new(env!("CARGO_BIN_EXE_hs-plugin-diagnostics"));
+    // HS2-4TCTEW: the stable snapshot, never the uplifted target path.
+    let exe = workspace_bin::path("hs-plugin-diagnostics");
+    let exe = exe.as_path();
     let target = dir.join("bin").join(exe.file_name().expect("exe name"));
     #[cfg(unix)]
     std::os::unix::fs::symlink(exe, &target).expect("link plugin binary");

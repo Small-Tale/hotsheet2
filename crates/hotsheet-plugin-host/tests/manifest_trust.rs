@@ -78,7 +78,7 @@ fn hs2_xy0vtn_invalid_manifests_are_rejected_with_a_reason() {
             "unknown capability",
         ),
         (
-            VALID.replace("bin/hs-plugin-github\"\nargs", "/usr/bin/evil\"\nargs"),
+            VALID.replace("bin/hs-plugin-github\"\nargs", "/opt/evil\"\nargs"),
             "github",
             "relative path",
         ),
@@ -122,7 +122,8 @@ fn plugin_dir(root: &Path, program: &str, executable: bool) -> std::path::PathBu
     std::fs::create_dir_all(dir.join("bin")).expect("dir");
     std::fs::write(dir.join("manifest.toml"), VALID).expect("manifest");
     let path = dir.join(program);
-    std::fs::write(&path, "#!/bin/sh\n").expect("program");
+    // Never executed: resolution only checks the file and its mode.
+    std::fs::write(&path, "plugin binary v1\n").expect("program");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -186,11 +187,7 @@ fn hs2_xy0vtn_approvals_cover_exact_contents_and_can_be_revoked() {
         store.check("jira", &dir),
         Err(TrustError::NotApproved { .. })
     ));
-    std::fs::write(
-        dir.join("bin/hs-plugin-github"),
-        "#!/bin/sh\necho changed\n",
-    )
-    .expect("edit");
+    std::fs::write(dir.join("bin/hs-plugin-github"), "plugin binary v2\n").expect("edit");
     match store.check("github", &dir) {
         Err(TrustError::Changed {
             approved, current, ..
