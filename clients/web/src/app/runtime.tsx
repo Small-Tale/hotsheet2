@@ -2051,9 +2051,13 @@ export async function startHotSheetWebClient() {
   effect(() => {
     const current = project();
     if (!current) return;
-    queueMicrotask(() => {
-      ticketStoreSync.loadOnce(current);
-    });
+    // HS2-C07C8Y: after the switch has painted, so a warm switch issues no request before its first
+    // frame; this matters since a failed load is asked again on the next show (HS2-JGFPG4).
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (project()?.id === current.id) ticketStoreSync.loadOnce(current);
+      }),
+    );
   });
   const ticketStoreSyncReport = ticketStoreSync.report;
   // Still-opening remembered roots stay remembered, in place, if the set is saved mid-restore (HS2-2BEJXD).
