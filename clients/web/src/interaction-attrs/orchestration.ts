@@ -46,6 +46,21 @@ export const ORCHESTRATION_ACTIONS = {
   cancelOrchestrationGoalTemplate: action('cancel-orchestration-goal-template'),
   submitOrchestrationGoalTemplate: action('submit-orchestration-goal-template'),
   openOrchestrationTemplateGoal: action('open-orchestration-template-goal'),
+  /**
+   * HS2-KXKA7X: Triggers… opens the trigger dialog; a trigger row (with `data-trigger-id`) selects it; New
+   * Trigger… and Edit… open the setup, which Save submits and Cancel leaves; Turn On… is the reviewed turn on;
+   * Pause and Resume change its state; Open <goal> opens the goal of the run a skip waits for.
+   */
+  openOrchestrationTriggers: action('open-orchestration-triggers'),
+  selectOrchestrationTrigger: action('select-orchestration-trigger'),
+  newOrchestrationTrigger: action('new-orchestration-trigger'),
+  editOrchestrationTrigger: action('edit-orchestration-trigger'),
+  cancelOrchestrationTrigger: action('cancel-orchestration-trigger'),
+  saveOrchestrationTrigger: action('save-orchestration-trigger'),
+  turnOnOrchestrationTrigger: action('turn-on-orchestration-trigger'),
+  pauseOrchestrationTrigger: action('pause-orchestration-trigger'),
+  resumeOrchestrationTrigger: action('resume-orchestration-trigger'),
+  openOrchestrationTriggerGoal: action('open-orchestration-trigger-goal'),
 } as const;
 
 /** Other delegated targets of the Orchestration view. */
@@ -56,4 +71,6 @@ export const ORCHESTRATION_TARGETS = {
   decisionsDialog: attr('data-dialog-component', 'orchestration-decisions-dialog'),
   /** HS2-A4RVYA: the Use Template… dialog, whose own close request dismisses it. */
   templateDialog: attr('data-dialog-component', 'orchestration-template-dialog'),
+  /** HS2-KXKA7X: the Triggers… dialog, whose own close request dismisses it. */
+  triggerDialog: attr('data-dialog-component', 'orchestration-trigger-dialog'),
 } as const;

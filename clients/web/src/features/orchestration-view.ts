@@ -18,6 +18,7 @@ import type { OrchestrationDecisionsDialogState } from '../components/orchestrat
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
 import type { OrchestrationTemplateDialogState } from '../components/orchestration-template-dialog';
 import type { OrchestrationProposeAvailability } from '../components/orchestration-timeline-view';
+import type { OrchestrationTriggerDialogState } from '../components/orchestration-trigger-dialog';
 import type { WorkspaceViewMode } from '../components/workspace-controls';
 import type { ConfirmationOptions } from '../confirmation';
 import type { Project } from '../interactions/types';
@@ -57,6 +58,18 @@ import {
 } from '../orchestration-templates';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
+import {
+  type EventField,
+  formFromTrigger,
+  formProblem,
+  formToRequest,
+  formToSpec,
+  newTriggerForm,
+  parseTriggerList,
+  parseTriggerReview,
+  parseTriggerView,
+  type TriggerForm,
+} from '../orchestration-triggers';
 import {
   parseValidationOperation,
   parseValidationRunAnswer,
@@ -325,6 +338,91 @@ export interface OrchestrationViewDependencies {
 /** HS2-A4RVYA: how long typing in a template input pauses before the summary is read again. */
 export const TEMPLATE_PREVIEW_PAUSE_MS = 400;
 
+/** HS2-KXKA7X: one change of the trigger setup form, by the field's name without its `trigger-` prefix. */
+export interface TriggerFormEdit {
+  readonly field: string;
+  readonly value: unknown;
+}
+
+/** HS2-KXKA7X: apply one field change to the setup form; an unknown field changes nothing. */
+export function editTriggerForm(form: TriggerForm, field: string, value: unknown): TriggerForm {
+  const text = typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value);
+  switch (field) {
+    case 'form-name':
+      return { ...form, name: text };
+    case 'form-when':
+      return text === 'schedule' || text === 'event' ? { ...form, when: text } : form;
+    case 'form-target':
+      return { ...form, target: text };
+    case 'form-event':
+      return text === 'ticket_opened' ||
+        text === 'gate_failed' ||
+        text === 'branch_ci_failed' ||
+        text === 'commit_landed'
+        ? { ...form, event: text }
+        : form;
+    case 'form-tag':
+      return { ...form, tag: text };
+    case 'form-category':
+      return { ...form, category: text };
+    case 'form-provider':
+      return { ...form, provider: text };
+    case 'form-repository':
+      return { ...form, repository: text };
+    case 'form-workflow':
+      return { ...form, workflow: text };
+    case 'form-branch':
+      return { ...form, branch: text };
+    case 'form-template':
+      return form.template === text ? form : { ...form, template: text, eventInputs: {} };
+    case 'form-tool':
+      return { ...form, tool: text };
+    case 'form-placement':
+      return { ...form, placement: text === 'start' || text === 'pause' ? text : '' };
+    case 'form-start':
+      return { ...form, start: text === 'paused' ? 'paused' : 'dry_run' };
+    case 'form-overlap':
+      return { ...form, overlap: text === 'queue_latest' ? 'queue_latest' : 'skip' };
+    case 'schedule-repeats':
+      return text === 'minutely' ||
+        text === 'hourly' ||
+        text === 'daily' ||
+        text === 'weekly' ||
+        text === 'monthly' ||
+        text === 'yearly'
+        ? {
+            ...form,
+            schedule: {
+              ...form.schedule,
+              scheduleType: 'repeating',
+              repeats: text,
+              every: text === 'minutely' ? '15' : '1',
+            },
+          }
+        : form;
+    case 'schedule-every':
+      return { ...form, schedule: { ...form.schedule, every: text } };
+    case 'schedule-weekday':
+      return { ...form, schedule: { ...form.schedule, weekdays: [Number(text) || 1] } };
+    case 'schedule-start':
+      return { ...form, schedule: { ...form.schedule, startDate: text } };
+    case 'schedule-time':
+      return { ...form, schedule: { ...form.schedule, time: text } };
+    case 'schedule-zone':
+      return { ...form, schedule: { ...form.schedule, timeZone: text } };
+    default:
+      if (field.startsWith('event-input-')) {
+        const key = field.slice('event-input-'.length);
+        const eventInputs: Partial<Record<string, EventField>> = Object.fromEntries(
+          Object.entries(form.eventInputs).filter(([known]) => known !== key),
+        );
+        if (text) eventInputs[key] = text as EventField;
+        return { ...form, eventInputs };
+      }
+      return form;
+  }
+}
+
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
 
 /** The selected run's records as the inspector shows them; an unread record leaves its part absent. */
@@ -461,6 +559,14 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     previewTimer: ReturnType<typeof setTimeout> | undefined,
     /** The operation id of the apply on screen, kept so Apply Again repeats the same apply. */
     applyOperation: string | undefined;
+  /** HS2-KXKA7X: the open Triggers… dialog. */
+  const triggerDialog = signal<OrchestrationTriggerDialogState | undefined>(undefined);
+  let triggerSession = 0,
+    triggerReviews = 0,
+    /** The definition of the last review asked for. */
+    lastTriggerReview = '',
+    /** A pause in typing reads the review again (keystroke coalescing, no polling). */
+    reviewTimer: ReturnType<typeof setTimeout> | undefined;
   /** HS2-9XJEZC: Run Validation requests waiting on a person, by `<step id>:<validation step id>`. */
   const pendingValidations = signal<Readonly<Record<string, PendingValidation>>>({});
   /**
@@ -1477,6 +1583,323 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     });
   }
 
+  /** HS2-KXKA7X: change the open trigger dialog, if it is still the session `session` opened. */
+  function updateTriggers(
+    session: number,
+    change: (state: OrchestrationTriggerDialogState) => Partial<OrchestrationTriggerDialogState>,
+  ) {
+    const state = triggerDialog.value;
+    if (state?.session === session) triggerDialog.value = { ...state, ...change(state) };
+  }
+
+  /** HS2-KXKA7X: Triggers…: read this machine's triggers and the templates a setup offers. */
+  async function openTriggers() {
+    const current = dependencies.project();
+    if (!current) return;
+    const session = ++triggerSession;
+    lastTriggerReview = '';
+    triggerDialog.value = {
+      loading: true,
+      triggers: [],
+      mode: 'detail',
+      detailActive: false,
+      form: newTriggerForm(),
+      fixedInputs: {},
+      templates: [],
+      projects: (timeline.value?.targets ?? []).map((target) => ({ target_id: target.target_id, label: target.label })),
+      ownerName: current.name,
+      reviewing: false,
+      busy: false,
+      now: Date.now(),
+      session,
+    };
+    const client = clientFor(current);
+    const [listed, templates] = await Promise.allSettled([
+      client.orchestrationTriggers(current.id, 'list', {}, dependencies.personId()),
+      client.orchestrationTemplates(current.id, 'list', {}, dependencies.personId()),
+    ]);
+    const plans = templates.status === 'fulfilled' ? parseTemplateList(templates.value).templates : [];
+    if (listed.status === 'rejected') {
+      updateTriggers(session, () => ({ loading: false, error: describeRefusal(listed.reason), templates: plans }));
+      return;
+    }
+    const triggers = parseTriggerList(listed.value);
+    updateTriggers(session, () => ({ loading: false, triggers, templates: plans }));
+    if (triggers[0] && !dependencies.mobile()) selectTrigger(triggers[0].trigger_id, false);
+  }
+
+  /** Read the triggers again (an `orchestration_changed`, or after a change here), keeping the selection. */
+  async function rereadTriggers(select?: string) {
+    const current = dependencies.project(),
+      state = triggerDialog.value;
+    if (!current || !state) return;
+    const session = state.session;
+    try {
+      const triggers = parseTriggerList(
+        await clientFor(current).orchestrationTriggers(current.id, 'list', {}, dependencies.personId()),
+      );
+      updateTriggers(session, (now) => ({
+        triggers,
+        now: Date.now(),
+        ...(select ? { selected: select } : {}),
+        ...(now.selected && !triggers.some((trigger) => trigger.trigger_id === (select ?? now.selected))
+          ? { selected: undefined, mode: 'detail' as const }
+          : {}),
+      }));
+      if (triggerDialog.value?.mode === 'detail') void reviewTrigger(true);
+    } catch (reason) {
+      updateTriggers(session, () => ({ failure: describeRefusal(reason) }));
+    }
+  }
+
+  function selectTrigger(triggerId: string, drill = true) {
+    const state = triggerDialog.value;
+    if (!state?.triggers.some((trigger) => trigger.trigger_id === triggerId)) return;
+    if (reviewTimer !== undefined) clearTimeout(reviewTimer);
+    reviewTimer = undefined;
+    lastTriggerReview = '';
+    triggerDialog.value = {
+      ...state,
+      selected: triggerId,
+      mode: 'detail',
+      editing: undefined,
+      detailActive: drill,
+      review: undefined,
+      failure: undefined,
+    };
+    void reviewTrigger();
+  }
+
+  /** The review of the selected trigger, or of the setup as it is. Writes nothing. */
+  async function reviewTrigger(again = false) {
+    const current = dependencies.project(),
+      state = triggerDialog.value;
+    if (!current || !state) return;
+    const body =
+      state.mode === 'setup'
+        ? { trigger: formToSpec(state.form, state.fixedInputs) }
+        : state.selected
+          ? { trigger_id: state.selected }
+          : undefined;
+    if (!body) return;
+    const asked = JSON.stringify(body);
+    if (!again && asked === lastTriggerReview) return;
+    lastTriggerReview = asked;
+    const request = ++triggerReviews,
+      session = state.session;
+    updateTriggers(session, () => ({ reviewing: true }));
+    try {
+      const answer = await clientFor(current).orchestrationTriggers(
+        current.id,
+        'review',
+        body,
+        dependencies.personId(),
+      );
+      if (request === triggerReviews)
+        updateTriggers(session, () => ({ reviewing: false, review: parseTriggerReview(answer) }));
+    } catch (reason) {
+      if (request === triggerReviews)
+        updateTriggers(session, () => ({ reviewing: false, failure: describeRefusal(reason) }));
+    }
+  }
+
+  /** New Trigger…: an empty setup, defaulting to the planner's AI tool and the first project. */
+  function newTrigger() {
+    const current = dependencies.project(),
+      state = triggerDialog.value;
+    if (!current || !state) return;
+    lastTriggerReview = '';
+    triggerDialog.value = {
+      ...state,
+      mode: 'setup',
+      editing: undefined,
+      detailActive: true,
+      form: newTriggerForm({ tool: planner.choice?.(current)?.tool, target: state.projects[0]?.target_id }),
+      fixedInputs: {},
+      review: undefined,
+      failure: undefined,
+    };
+    void reviewTrigger();
+  }
+
+  /** Edit…: the selected trigger's definition in the setup. */
+  function editTrigger() {
+    const state = triggerDialog.value,
+      view = state?.triggers.find((trigger) => trigger.trigger_id === state.selected);
+    if (!state || !view) return;
+    lastTriggerReview = '';
+    triggerDialog.value = {
+      ...state,
+      mode: 'setup',
+      editing: view.trigger_id,
+      detailActive: true,
+      form: formFromTrigger(view),
+      fixedInputs: Object.fromEntries(
+        Object.entries(view.action.template?.inputs ?? {}).map(([key, value]) => [
+          key,
+          typeof value === 'string' ? value : JSON.stringify(value),
+        ]),
+      ),
+      review: undefined,
+      failure: undefined,
+    };
+    void reviewTrigger();
+  }
+
+  /**
+   * One setup field changed. Typing changes the form at once and reads the review again after a pause; a
+   * `commit` (a change, a select, leaving a field) reads it now. Nothing is saved until Save.
+   */
+  function editTriggerField(field: string, value: unknown, commit: boolean) {
+    const state = triggerDialog.value;
+    if (state?.mode !== 'setup') return;
+    if (field.startsWith('input-')) {
+      const key = field.slice('input-'.length);
+      triggerDialog.value = {
+        ...state,
+        fixedInputs: { ...state.fixedInputs, [key]: typeof value === 'string' ? value : '' },
+        failure: undefined,
+      };
+    } else {
+      const form = editTriggerForm(state.form, field, value);
+      triggerDialog.value = {
+        ...state,
+        form,
+        failure: undefined,
+        fixedInputs: form.template === state.form.template ? state.fixedInputs : {},
+      };
+    }
+    if (reviewTimer !== undefined) clearTimeout(reviewTimer);
+    reviewTimer = undefined;
+    if (commit) void reviewTrigger();
+    else
+      reviewTimer = setTimeout(() => {
+        reviewTimer = undefined;
+        void reviewTrigger();
+      }, TEMPLATE_PREVIEW_PAUSE_MS);
+  }
+
+  /** Save as Dry Run (or Paused), or Save Changes: the definition only; it never turns a trigger on. */
+  async function saveTrigger() {
+    const current = dependencies.project(),
+      state = triggerDialog.value;
+    if (!current || state?.mode !== 'setup' || state.busy || formProblem(state.form)) return;
+    const session = state.session;
+    updateTriggers(session, () => ({ busy: true, failure: undefined }));
+    try {
+      const saved = parseTriggerView(
+        await clientFor(current).orchestrationTriggers(
+          current.id,
+          'set',
+          formToRequest(state.form, state.editing, state.fixedInputs),
+          dependencies.personId(),
+        ),
+      );
+      updateTriggers(session, () => ({ busy: false, mode: 'detail', editing: undefined }));
+      dependencies.showToast(
+        state.editing
+          ? `Saved the trigger ${saved?.name ?? state.form.name.trim()}.`
+          : `Saved the trigger ${saved?.name ?? state.form.name.trim()} as a ${state.form.start === 'paused' ? 'paused trigger' : 'dry run'}.`,
+      );
+      await rereadTriggers(saved?.trigger_id);
+      if (saved) selectTrigger(saved.trigger_id, triggerDialog.value?.detailActive ?? true);
+    } catch (reason) {
+      updateTriggers(session, () => ({ busy: false, failure: describeRefusal(reason) }));
+    }
+  }
+
+  function cancelTriggerSetup() {
+    const state = triggerDialog.value;
+    if (!state) return;
+    if (reviewTimer !== undefined) clearTimeout(reviewTimer);
+    reviewTimer = undefined;
+    lastTriggerReview = '';
+    triggerDialog.value = {
+      ...state,
+      mode: 'detail',
+      editing: undefined,
+      detailActive: false,
+      review: undefined,
+      failure: undefined,
+    };
+    if (state.selected) void reviewTrigger();
+  }
+
+  /** Turn On…, Pause or Resume of the selected trigger. Turn On is the reviewed act, confirmed first. */
+  async function changeTrigger(operation: 'on' | 'pause' | 'resume') {
+    const current = dependencies.project(),
+      state = triggerDialog.value,
+      view = state?.triggers.find((trigger) => trigger.trigger_id === state.selected);
+    if (!current || !state || !view || state.busy) return;
+    if (operation === 'on') {
+      const asks = (state.review?.permissions ?? []).filter((row) => row.need === 'asks').length;
+      const confirmed = await dependencies.confirm({
+        title: `Turn on ${view.name}?`,
+        message: `From now on each ${view.source.kind === 'schedule' ? 'scheduled time' : 'event'} runs it for real. ${
+          asks > 0
+            ? `${asks === 1 ? '1 action asks' : `${asks} actions ask`} through the permission prompt each time unless you always allow it.`
+            : 'Nothing it does asks first.'
+        } Push and deploy stay with each project’s integrator.`,
+        confirmLabel: 'Turn On',
+      });
+      if (!confirmed) return;
+    }
+    const session = state.session;
+    updateTriggers(session, () => ({ busy: true, failure: undefined }));
+    try {
+      await clientFor(current).orchestrationTriggers(
+        current.id,
+        operation,
+        { trigger_id: view.trigger_id },
+        dependencies.personId(),
+      );
+      updateTriggers(session, () => ({ busy: false }));
+      dependencies.showToast(
+        operation === 'on'
+          ? `Turned on ${view.name}.`
+          : operation === 'pause'
+            ? `Paused ${view.name}.`
+            : `Resumed ${view.name}.`,
+      );
+      await rereadTriggers(view.trigger_id);
+    } catch (reason) {
+      updateTriggers(session, () => ({ busy: false, failure: describeRefusal(reason) }));
+    }
+  }
+
+  /** Open the goal of the run a skipped delivery waits for (its template apply's goal), and close the dialog. */
+  async function openTriggerGoal() {
+    const current = dependencies.project(),
+      state = triggerDialog.value,
+      view = state?.triggers.find((trigger) => trigger.trigger_id === state.selected);
+    if (!current || !view?.active_operation) return;
+    try {
+      const apply = parseTemplateApply(
+        await clientFor(current).orchestrationTemplates(
+          current.id,
+          'apply_show',
+          { operation_id: view.active_operation },
+          dependencies.personId(),
+        ),
+      );
+      const goal = apply?.goal;
+      if (!goal) return;
+      triggerDialog.value = undefined;
+      const qualified = `${goal.connection_id}:${goal.native_id}`;
+      await dependencies.openTicket({
+        projectId: current.id,
+        projectName: current.name,
+        ticketId: qualified,
+        qualifiedId: qualified,
+        connectionId: goal.connection_id,
+        slug: goal.slug ?? goal.native_id,
+        title: '',
+      });
+    } catch (reason) {
+      if (state) updateTriggers(state.session, () => ({ failure: describeRefusal(reason) }));
+    }
+  }
+
   function stepName(stepId: string): string {
     return lastSlugs.get(stepId) ?? `step ${stepId.slice(-6)}`;
   }
@@ -1612,6 +2035,9 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     sessionsChanged: (projectId: string) => {
       const current = dependencies.project();
       if (current?.id === projectId && streamKey) void refreshPlanning(current, generation);
+      // HS2-KXKA7X: a trigger fired or changed; the open Triggers… dialog reads them again.
+      if (current?.id === projectId && triggerDialog.value && triggerDialog.value.mode === 'detail')
+        void rereadTriggers();
     },
     proposeAvailability: (): OrchestrationProposeAvailability => {
       const current = dependencies.project();
@@ -1658,6 +2084,30 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     backToTemplates: () => {
       const state = templateDialog.value;
       if (state) templateDialog.value = { ...state, detailActive: false };
+    },
+    /** HS2-KXKA7X: the Triggers… dialog and its actions. */
+    triggerDialog,
+    openTriggers: () => openTriggers(),
+    selectTrigger: (triggerId: string) => {
+      selectTrigger(triggerId);
+    },
+    newTrigger,
+    editTrigger,
+    editTriggerField,
+    saveTrigger,
+    cancelTriggerSetup,
+    turnOnTrigger: () => changeTrigger('on'),
+    pauseTrigger: () => changeTrigger('pause'),
+    resumeTrigger: () => changeTrigger('resume'),
+    openTriggerGoal,
+    backToTriggers: () => {
+      const state = triggerDialog.value;
+      if (state) triggerDialog.value = { ...state, detailActive: false };
+    },
+    closeTriggers: () => {
+      if (reviewTimer !== undefined) clearTimeout(reviewTimer);
+      reviewTimer = undefined;
+      triggerDialog.value = undefined;
     },
     closeTemplates: () => {
       if (previewTimer !== undefined) clearTimeout(previewTimer);

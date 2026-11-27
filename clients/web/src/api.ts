@@ -2483,6 +2483,23 @@ export class Api {
       { method: 'POST', body: JSON.stringify({ ...body, actor: { role: 'human', id: actorId } }) },
       operation !== 'list' && operation !== 'preview' && operation !== 'apply_show',
     );
+  /**
+   * HS2-KXKA7X: this machine's scheduled and event triggers. `list`, `show` and `review` read and change nothing;
+   * `set` saves a definition (new triggers start as Dry Run or Paused), `on` is the reviewed turn On, `dry_run`,
+   * `pause` and `resume` change its state, `fire` delivers one manual delivery and `remove` forgets it.
+   */
+  orchestrationTriggers = (
+    checkout: string,
+    operation: 'list' | 'show' | 'review' | 'set' | 'on' | 'dry_run' | 'pause' | 'resume' | 'fire' | 'remove',
+    body: Record<string, unknown>,
+    actorId: string,
+  ) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/triggers/${operation}`,
+      { method: 'POST', body: JSON.stringify({ ...body, actor: { role: 'human', id: actorId } }) },
+      operation !== 'list' && operation !== 'show' && operation !== 'review',
+    );
   /** HS2-HCW7MD: where planning stands (`idle`, `planning` or `ended`); starts nothing. */
   orchestrationPlanning = (checkout: string) =>
     this.parsed(

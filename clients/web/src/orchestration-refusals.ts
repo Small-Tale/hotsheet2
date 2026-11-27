@@ -270,6 +270,20 @@ export const ORCHESTRATION_REFUSALS: Readonly<Record<string, RefusalText>> = {
     message: 'That goal has no plan steps to save.',
     next: 'Propose a plan for it first.',
   },
+  // TriggerError (HS2-KXKA7X)
+  trigger_not_found: { message: 'That trigger no longer exists on this machine.', next: READ_AGAIN },
+  trigger_invalid: {
+    message: 'The trigger is not complete or not valid.',
+    next: 'Check what it watches and what it runs, then save it again.',
+  },
+  trigger_not_firing: {
+    message: 'The trigger is paused or waits for a review, so it does not run.',
+    next: 'Resume it, or review it and turn it on.',
+  },
+  trigger_template_missing: {
+    message: 'The template this trigger runs no longer exists or was retired.',
+    next: 'Edit the trigger and choose another template.',
+  },
   // RunError
   run_target_active: { message: 'A run already works on that ticket.' },
   run_worker_busy: { message: 'That worker is busy with another run.' },

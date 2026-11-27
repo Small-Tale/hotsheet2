@@ -21,6 +21,7 @@ import {
 } from '../orchestration-timeline-board';
 import { OrchestrationTemplateButton } from './orchestration-template-button';
 import type { OrchestrationProposeAvailability } from './orchestration-timeline-view';
+import { OrchestrationTriggerButton } from './orchestration-trigger-button';
 
 export interface OrchestrationToolbarProps {
   timeline: OrchestrationTimeline;
@@ -47,6 +48,8 @@ export interface OrchestrationToolbarProps {
   showPlanner?: boolean;
   /** HS2-A4RVYA: offer Use Template…, which applies a plan template through the planner. */
   templates?: boolean;
+  /** HS2-KXKA7X: offer Triggers…, this computer's scheduled and event triggers. */
+  triggers?: boolean;
 }
 
 /** What the header adds for a planning session. */
@@ -80,6 +83,7 @@ export function OrchestrationToolbar({
   clock = clockTime,
   showPlanner = false,
   templates = false,
+  triggers = false,
 }: OrchestrationToolbarProps) {
   const goal = defaultGoal && timeline.phase !== 'no_projects' ? ' · Working through all open tickets' : '';
   const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
@@ -115,6 +119,7 @@ export function OrchestrationToolbar({
     templates && timeline.phase !== 'no_projects' ? (
       <OrchestrationTemplateButton emphasis="secondary" busy={busy} />
     ) : undefined;
+  const trigger = triggers && timeline.phase !== 'no_projects' ? <OrchestrationTriggerButton busy={busy} /> : undefined;
   const replan =
     timeline.phase === 'proposed' || timeline.phase === 'running' || timeline.phase === 'paused' ? (
       updating ? (
@@ -272,6 +277,7 @@ export function OrchestrationToolbar({
             {answer}
             {planner}
             {template}
+            {trigger}
             {replan}
             {action}
           </>

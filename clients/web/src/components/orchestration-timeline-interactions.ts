@@ -49,6 +49,94 @@ export interface OrchestrationTimelineBindings {
   readonly keepCheckedInPlan: () => void;
   /** HS2-A4RVYA: Use Template… and its dialog. Absent where the surface offers no templates. */
   readonly templates?: OrchestrationTemplateBindings;
+  /** HS2-KXKA7X: Triggers… and its dialog. Absent where the surface offers no triggers. */
+  readonly triggers?: OrchestrationTriggerBindings;
+}
+
+/** HS2-KXKA7X: the Triggers… dialog's actions. */
+export interface OrchestrationTriggerBindings {
+  readonly open: () => void;
+  readonly select: (triggerId: string) => void;
+  readonly create: () => void;
+  readonly edit: () => void;
+  /** A setup field changed (its name without `trigger-`); `commit` reads the review again now. */
+  readonly editField: (field: string, value: unknown, commit: boolean) => void;
+  readonly save: () => void;
+  readonly cancel: () => void;
+  readonly turnOn: () => void;
+  readonly pause: () => void;
+  readonly resume: () => void;
+  readonly openGoal: () => void;
+  readonly back: () => void;
+  readonly close: () => void;
+}
+
+const TRIGGER_FIELD = '[name^="trigger-"]';
+
+function wireTriggerDialog(root: HTMLElement, current: () => OrchestrationTriggerBindings | undefined) {
+  const lifetime = createScope();
+  const dialog = ORCHESTRATION_TARGETS.triggerDialog.selector;
+  const click = (selector: string, run: (target: Element) => void) => {
+    lifetime.add(
+      delegate(root, 'click', selector, (_event, target) => {
+        run(target);
+      }),
+    );
+  };
+  click(ORCHESTRATION_ACTIONS.openOrchestrationTriggers.selector, () => current()?.open());
+  click(ORCHESTRATION_ACTIONS.selectOrchestrationTrigger.selector, (target) => {
+    const id = target.closest<HTMLElement>('[data-trigger-id]')?.dataset.triggerId;
+    if (id) current()?.select(id);
+  });
+  click(ORCHESTRATION_ACTIONS.newOrchestrationTrigger.selector, () => current()?.create());
+  click(ORCHESTRATION_ACTIONS.editOrchestrationTrigger.selector, () => current()?.edit());
+  click(ORCHESTRATION_ACTIONS.saveOrchestrationTrigger.selector, () => current()?.save());
+  click(ORCHESTRATION_ACTIONS.cancelOrchestrationTrigger.selector, () => current()?.cancel());
+  click(ORCHESTRATION_ACTIONS.turnOnOrchestrationTrigger.selector, () => current()?.turnOn());
+  click(ORCHESTRATION_ACTIONS.pauseOrchestrationTrigger.selector, () => current()?.pause());
+  click(ORCHESTRATION_ACTIONS.resumeOrchestrationTrigger.selector, () => current()?.resume());
+  click(ORCHESTRATION_ACTIONS.openOrchestrationTriggerGoal.selector, () => current()?.openGoal());
+  const field = (target: Element) => {
+    const element = target as FieldElement;
+    return {
+      name: (element.getAttribute('name') ?? '').slice('trigger-'.length),
+      value: fieldValue(element),
+      text: target.localName === 'input' || target.localName === 'textarea',
+      kind: element.type,
+    };
+  };
+  for (const commit of [false, true])
+    lifetime.add(
+      delegate(root, commit ? 'change' : 'input', TRIGGER_FIELD, (_event, target) => {
+        if (!target.closest(dialog)) return;
+        const changed = field(target);
+        if (!changed.name) return;
+        // A text field reports each keystroke as input and commits on change; a radio or select only changes.
+        if (!commit && changed.kind === 'radio') return;
+        current()?.editField(changed.name, changed.value, commit);
+      }),
+    );
+  // Leaving a text field commits it too: WebKit fires no change once a re-render wrote the same value back.
+  lifetime.add(
+    delegate(root, 'focusout', TRIGGER_FIELD, (_event, target) => {
+      const changed = field(target);
+      if (changed.name && changed.text && changed.kind !== 'radio' && target.closest(dialog))
+        current()?.editField(changed.name, changed.value, true);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', '[data-nav-back]', (_event, target) => {
+      if (target.closest(dialog)) current()?.back();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'kui-request-close', dialog, (event, target) => {
+      if (event.target === target) current()?.close();
+    }),
+  );
+  return () => {
+    lifetime.dispose();
+  };
 }
 
 /** HS2-A4RVYA: the Use Template… dialog's actions. */
@@ -386,6 +474,8 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
   );
   // HS2-A4RVYA: read lazily, so a surface wired without templates registers handlers that do nothing.
   lifetime.add(wireTemplateDialog(root, () => bindings.templates));
+  // HS2-KXKA7X: likewise for Triggers….
+  lifetime.add(wireTriggerDialog(root, () => bindings.triggers));
   return () => {
     lifetime.dispose();
   };

@@ -480,6 +480,10 @@ describe('UX demo catalog', () => {
         'Use Template… dialog opened from the cataloged OrchestrationToolbar (HS2-A4RVYA, demoed in place in every state).',
       'orchestration-template-button':
         'Use Template… button rendered within the cataloged OrchestrationToolbar and OrchestrationTimelineView (HS2-A4RVYA, demoed).',
+      'orchestration-trigger-dialog':
+        'Triggers… dialog opened from the cataloged OrchestrationToolbar (HS2-KXKA7X, demoed in place in every state).',
+      'orchestration-trigger-button':
+        'Triggers… button rendered within the cataloged OrchestrationToolbar (HS2-KXKA7X, demoed).',
       'orchestration-home-outage':
         'Home site unavailable banners of the cataloged OrchestrationTimelineView (HS2-EX594V, demoed as Home Site Unavailable).',
       'orchestration-plan-problem':

@@ -14,6 +14,7 @@ import type {
   TimelineTarget,
   TimelineWave,
 } from '../orchestration-timeline';
+import { parseTriggerList, parseTriggerReview, type TriggerReview, type TriggerView } from '../orchestration-triggers';
 
 /** 14:00 on a fixed day, so captures and tests read the same times. */
 export const DEMO_NOW = Date.UTC(2026, 10, 14, 14, 0);
@@ -641,4 +642,167 @@ export function demoTemplateApply(state: TemplateApply['state']): TemplateApply 
     permission_requests: state === 'waiting_permission' ? ['request-1'] : [],
     outcome: 'applied',
   };
+}
+
+/** HS2-KXKA7X: the design's triggers, synthetic, as the server answers `triggers/list`. */
+export function demoTriggers(): TriggerView[] {
+  const HOUR = 60 * MINUTE;
+  const at = (hoursAgo: number) => DEMO_NOW - hoursAgo * HOUR;
+  const raw = [
+    {
+      trigger_id: '01JTRIGGER0000000000000BMP',
+      name: 'Dependency bump',
+      source: {
+        kind: 'schedule',
+        schedule: {
+          time_zone: 'UTC',
+          local_time: '02:00',
+          recurrence: { kind: 'hourly', start_date: '2026-11-01', every: 4 },
+        },
+      },
+      action: { template: { template_id: '01JTEMPLATE00000000000FEAT', tool: 'claude' } },
+      state: 'on',
+      review: { role: 'human', actor_id: 'maintainer', at_ms: at(24 * 6) },
+      history: [
+        {
+          delivery_key: 'schedule:a',
+          kind: 'schedule',
+          at_ms: at(40),
+          outcome: 'applied',
+          goal_slug: 'LCH-11',
+          missed: 1,
+        },
+        { delivery_key: 'schedule:b', kind: 'schedule', at_ms: at(12), outcome: 'applied', goal_slug: 'LCH-12' },
+      ],
+      next_runs_ms: [DEMO_NOW + 2 * HOUR, DEMO_NOW + 6 * HOUR, DEMO_NOW + 10 * HOUR],
+      template_name: 'Dependency bump in every project',
+      template_version: 2,
+      reviewed: true,
+      running: false,
+      updated_at_ms: at(24 * 6),
+    },
+    {
+      trigger_id: '01JTRIGGER0000000000000REP',
+      name: 'Repair API main CI',
+      source: {
+        kind: 'branch_ci_failed',
+        target_id: 'api',
+        watch: { repository: 'small/api', workflow: 'ci.yml', branch: 'main' },
+      },
+      action: {
+        template: { template_id: '01JTEMPLATE00000000000FEAT', tool: 'claude', event_inputs: { feature: 'commit' } },
+      },
+      state: 'dry_run',
+      history: [
+        {
+          delivery_key: 'ci:github-actions:9177:1',
+          kind: 'ci_failed',
+          at_ms: at(3),
+          outcome: 'dry_run',
+          evidence: { commit: 'a71e004aa', ci_run: '9177.1' },
+          would: { goal_title: 'Repair API CI on a71e004', steps: 1, targets: ['api'], asks: ['api'] },
+        },
+        {
+          delivery_key: 'ci:github-actions:9182:1',
+          kind: 'ci_failed',
+          at_ms: at(0.5),
+          outcome: 'dry_run',
+          evidence: { commit: '3f9c2a1bb', ci_run: '9182.1' },
+          would: { goal_title: 'Repair API CI on 3f9c2a1', steps: 1, targets: ['api'], asks: ['api'] },
+        },
+        { delivery_key: 'ci:github-actions:9182:1', kind: 'ci_failed', at_ms: at(0.4), outcome: 'already_handled' },
+      ],
+      template_name: 'Repair failing CI',
+      reviewed: false,
+      running: false,
+      updated_at_ms: at(5),
+    },
+    {
+      trigger_id: '01JTRIGGER0000000000000WEB',
+      name: 'Validate merged Web commits',
+      source: {
+        kind: 'commit_landed',
+        target_id: 'web',
+        watch: { repository: 'small/web', workflow: 'ci.yml', branch: 'main' },
+      },
+      action: { placement: 'start' },
+      state: 'paused',
+      paused_from: 'on',
+      history: [],
+      reviewed: true,
+      running: false,
+      updated_at_ms: at(30),
+    },
+    {
+      trigger_id: '01JTRIGGER0000000000000DOC',
+      name: 'Weekly docs sweep',
+      source: {
+        kind: 'schedule',
+        schedule: {
+          time_zone: 'UTC',
+          local_time: '09:00',
+          recurrence: { kind: 'weekly', start_date: '2026-11-02', every: 1, weekdays: [1] },
+        },
+      },
+      action: { template: { template_id: '01JTEMPLATE00000000000FEAT', tool: 'codex' } },
+      state: 'needs_review',
+      history: [
+        { delivery_key: 'review:3', kind: 'manual', at_ms: at(2), outcome: 'needs_review', reason: 'template_changed' },
+      ],
+      reviewed: false,
+      running: false,
+      updated_at_ms: at(2),
+    },
+  ];
+  return parseTriggerList({ triggers: raw });
+}
+
+/** HS2-KXKA7X: the overlap state of the design: the 02:00 run still works, later slots were skipped. */
+export function demoOverlapTrigger(): TriggerView {
+  const [bump] = demoTriggers();
+  const HOUR = 60 * MINUTE;
+  return {
+    ...bump,
+    running: true,
+    running_goal: 'LCH-12',
+    history: [
+      ...bump.history,
+      {
+        delivery_key: 'schedule:c',
+        kind: 'schedule',
+        at_ms: DEMO_NOW - 4 * HOUR,
+        outcome: 'skipped_overlap',
+        count: 2,
+        evidence: {},
+        missed: 0,
+      },
+    ],
+  };
+}
+
+/** HS2-KXKA7X: the review of the CI repair trigger, as `triggers/review` answers it. */
+export function demoTriggerReview(): TriggerReview {
+  return parseTriggerReview({
+    problems: [],
+    scope: {
+      watches: {
+        kind: 'branch_ci_failed',
+        target_id: 'api',
+        label: 'API · Build host',
+        branch: { repository: 'small/api', workflow: 'ci.yml', branch: 'main' },
+      },
+      projects: [{ target_id: 'api', label: 'API · Build host', declared: true, steps: 1 }],
+      per_delivery: { goals: 1, steps: 1, goal_title: 'Repair API CI on <commit>' },
+    },
+    permissions: [
+      { action: 'watch', target_id: 'api', need: 'not_needed' },
+      { action: 'tickets_write', target_id: 'api', need: 'asks' },
+      { action: 'session_start', target_id: 'api', need: 'remembered', tool: 'claude', rule_id: 'rule-1' },
+      { action: 'push_deploy', need: 'unchanged' },
+    ],
+    next: { runs_ms: [], event: 'branch_ci_failed', overlap: 'skip' },
+    digest: 'demo-digest',
+    template_version: 3,
+    turn_on: 'person',
+  });
 }
