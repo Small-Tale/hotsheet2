@@ -1749,7 +1749,9 @@ request and response schemas for operations marked `route-only` are tracked by
 HS2-11BVBS now types the full 165-path inventory, including attachment binary
 and multipart routes, terminal WebSocket upgrade, provider outbox, guidance,
 permission, and analytics DTOs. The contract test rejects any remaining
-`route-only` marker and compiles every component schema.
+`route-only` marker and compiles every component schema. HS2-RX1ET8 removed
+the hand-bumped path count: the exact path comparison pins the inventory, and
+the README route count is checked against the contract (HS2-ZVB932).
 
 HS2-ZVB932 makes `npm run contract:sync` reproduce the committed
 `docs/contracts/v1/openapi.yaml` byte for byte: Prettier (`proseWrap: always`
