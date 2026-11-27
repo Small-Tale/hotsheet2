@@ -1303,6 +1303,7 @@ name = "hotsheet-resource-claims"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-http",
  "hotsheet-process-journal",
  "hotsheet-sync",
  "hotsheet-ticketing",
@@ -1317,7 +1318,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ulid",
- "ureq 2.12.1",
+ "ureq 3.5.2",
 ]
 
 [[package]]
