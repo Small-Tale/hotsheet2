@@ -334,7 +334,9 @@ test('HS2-PRCC6V sets voice, speed, and clears history from the settings menu', 
   const spoken = () => page.evaluate(() => (window as unknown as { __announcerSpoken: unknown[] }).__announcerSpoken);
   await expect
     .poll(spoken)
-    .toEqual([{ text: 'codex decided: keep the synthetic sample short', rate: 1.5, voice: 'Synthetic Bass' }]);
+    .toEqual([
+      { text: 'For demo, codex decided: keep the synthetic sample short', rate: 1.5, voice: 'Synthetic Bass' },
+    ]);
   // Settings are the device's: they survive a reload.
   await page.reload();
   await page.getByRole('button', { name: 'Announcer', exact: true }).click();
@@ -458,7 +460,7 @@ test('HS2-CEZVSE lists the server engine voices in the announcer settings menu',
   expect((await serverSpeech).postDataJSON()).toMatchObject({
     provider: 'macos-say',
     voice: 'Synthetic Server Bass (English (UK))',
-    text: 'codex decided: keep the synthetic sample short',
+    text: 'For demo, codex decided: keep the synthetic sample short',
   });
 
   // The chosen server voice survives a reload, and the menu reads the voices again.
@@ -649,7 +651,7 @@ test('HS2-R5Q2GY speaks a summary instead of the literal command', async ({ page
   await overlay.getByRole('button', { name: 'Play Narration' }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
-    .toEqual(['claude wrote ft.md.']);
+    .toEqual(['For demo, claude wrote ft.md.']);
 });
 
 test('HS2-NKE7RB speaks what a tool call does, not its raw tool id', async ({ page }) => {
@@ -702,7 +704,68 @@ test('HS2-NKE7RB speaks what a tool call does, not its raw tool id', async ({ pa
   await overlay.getByRole('button', { name: 'Play Narration' }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
-    .toEqual(['claude updated a ticket.']);
+    .toEqual(['For demo, claude updated a ticket.']);
+});
+
+test('HS2-MR8GA4 names the project when the announcer starts talking about it', async ({ page }) => {
+  await page.addInitScript(() => {
+    const spoken: string[] = [];
+    Object.defineProperty(window, '__announcerSpoken', { value: spoken });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: class {
+        onend?: () => void;
+        constructor(readonly text: string) {}
+      },
+    });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel() {},
+        speak(utterance: { text: string; onend?: () => void }) {
+          spoken.push(utterance.text);
+          queueMicrotask(() => utterance.onend?.());
+        },
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  const event = (id: string, ts: string, script: string) => ({
+    store_id: 'synthetic-store',
+    event: {
+      id,
+      ts,
+      tool: 'codex',
+      kind: 'command',
+      summary: `codex ran \`${script}\``,
+      detail: { command: script },
+      importance: 'high',
+    },
+  });
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: [
+        event('mr-1', '2026-11-01T01:00:00Z', 'git commit -m synthetic'),
+        event('mr-2', '2026-11-01T01:00:05Z', 'git push origin main'),
+      ],
+    }),
+  );
+  const launch = page.getByRole('button', { name: 'Announcer', exact: true });
+  await launch.click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  const spoken = () => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken);
+  await overlay.getByRole('button', { name: 'Play Narration' }).click();
+  await expect.poll(spoken).toEqual(['For demo, codex committed changes.']);
+  // The next utterance is about the same project, so it is said without the project.
+  await overlay.getByRole('button', { name: 'Next Activity' }).click();
+  await overlay.getByRole('button', { name: 'Play Narration' }).click();
+  await expect.poll(spoken).toEqual(['For demo, codex committed changes.', 'codex pushed changes to main.']);
+  // Reopened, the announcer names the project again before its first utterance.
+  await launch.click();
+  await launch.click();
+  await overlay.getByRole('button', { name: 'Play Narration' }).click();
+  await expect.poll(async () => (await spoken()).at(-1)).toMatch(/^For demo, codex /);
 });
 
 test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across sizes', async ({ page }) => {
@@ -823,7 +886,7 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
   await overlay.getByRole('button', { name: 'Play Narration' }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
-    .toEqual(['Updated the synthetic sample file']);
+    .toEqual(['For demo, updated the synthetic sample file']);
   // Shown beside an open sidebar, the announcer docks in its footer without an expand control (HS2-BS0XFK).
   expect(await overlay.evaluate((node) => Boolean(node.closest('[data-region-id="app-left-rail"]')))).toBe(true);
   await expect(overlay.getByRole('button', { name: 'Expand Announcer' })).toHaveCount(0);
@@ -974,7 +1037,7 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
   await expect(overlay.getByLabel('Current working-tree diff')).toContainText('+const live = false;');
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
-    .toEqual(['Changed the synthetic live file']);
+    .toEqual(['For demo, changed the synthetic live file']);
 });
 
 test('HS2-RKYCTP edits a live burst into an intent summary and speaks the headline', async ({ page }) => {
@@ -1049,7 +1112,7 @@ test('HS2-RKYCTP edits a live burst into an intent summary and speaks the headli
   // Five events become two entries: the footwork summarized, then the failing test run said at once.
   await expect
     .poll(spoken)
-    .toEqual(['codex looked through the code for overlay.', 'codex ran the unit tests, and they failed.']);
+    .toEqual(['For demo, codex looked through the code for overlay.', 'codex ran the unit tests, and they failed.']);
   await expect(overlay.locator('.announcer__count')).toHaveText('2 / 2');
   await overlay.getByRole('button', { name: 'Previous Activity' }).click();
   // The summary still lists every step it folded, with its precise command on screen.
@@ -1077,7 +1140,7 @@ test('HS2-RKYCTP edits a live burst into an intent summary and speaks the headli
   await expect
     .poll(spoken)
     .toEqual([
-      'codex looked through the code for overlay.',
+      'For demo, codex looked through the code for overlay.',
       'codex ran the unit tests, and they failed.',
       'codex looked through the code for failing.',
     ]);

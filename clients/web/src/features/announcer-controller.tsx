@@ -29,6 +29,7 @@ import {
   loadAnnouncerSettings,
   saveAnnouncerSettings,
 } from '../announcer-settings';
+import { announcerUtterance } from '../announcer-utterance';
 import { type ActivityEvent, Api, type TtsVoice } from '../api';
 import { AnnouncerOverlay } from '../components/announcer-overlay';
 import type { Project } from '../interactions/types';
@@ -159,6 +160,9 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   let currentUrl: string | undefined;
   /** Narration has started and not yet ended, including the gap before speech reports its start. */
   let narrating = false;
+  /** The project the last utterance was about; a different one is named first (HS2-MR8GA4). Opening the
+   * announcer forgets it, so the first utterance always names its project. */
+  let lastSpokenProject: string | undefined;
 
   const editorialOptions = () => ({ now: Date.now(), receivedAt: (key: string) => receivedAt.get(key) });
 
@@ -277,15 +281,13 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       pumpLive();
     };
     error.value = undefined;
+    const text = announcerUtterance(item, lastSpokenProject);
+    lastSpokenProject = item.projectId;
     if (provider.peek() !== 'browser') {
       try {
         const project = projects.peek().find((entry) => entry.id === item.projectId);
         if (!project) throw new Error('Project is no longer open.');
-        const blob = await new Api(project.apiPath).synthesizeSpeech(
-          item.spoken,
-          provider.peek(),
-          voice.peek() || undefined,
-        );
+        const blob = await new Api(project.apiPath).synthesizeSpeech(text, provider.peek(), voice.peek() || undefined);
         if (generation !== speechGeneration) return;
         currentUrl = URL.createObjectURL(blob);
         const audio = new Audio(currentUrl);
@@ -316,7 +318,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       return;
     }
     // Speech says the item's summary, never its literal command (HS2-R5Q2GY).
-    const utterance = new SpeechSynthesisUtterance(item.spoken);
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = rate.peek();
     if (voice.peek()) {
       const selected = speechSynthesis.getVoices().find((candidate) => candidate.name === voice.peek());
@@ -401,6 +403,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       case 'open':
         clearDiff();
         open.value = !open.peek();
+        lastSpokenProject = undefined;
         if (open.peek()) void loadDigest();
         else {
           live.value = false;

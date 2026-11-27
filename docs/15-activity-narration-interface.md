@@ -109,7 +109,11 @@ The `activity` capability turns native signals → events; the host owns the str
   cross-project digest, live narration over the change stream, a bounded reel stepped
   with previous and next (the expanded surface shows no history list and gives its height
   to the current item, HS2-7YD7S9). The shown item renders as Markdown through the
-  shared note renderer, so commands and code are monospaced (HS2-YJK0G9). Speech
+  shared note renderer, so commands and code are monospaced (HS2-YJK0G9). An utterance about a
+  different project than the one said before it, and the first utterance after the announcer opens,
+  names its project first: "For Hot Sheet 2, codex pushed changes to main." Utterances about the same
+  project follow without it; the shown item is unchanged, since its header already names the project
+  (HS2-MR8GA4, `clients/web/src/announcer-utterance.ts`). Speech
   never reads a literal command (HS2-R5Q2GY): the client derives a deterministic spoken
   summary. A command event becomes what it does, as specifically as can be said without reading
   the command (HS2-RKYCTP). Wrappers are unwrapped first: a shell running a script (`zsh -lc '…'`,
