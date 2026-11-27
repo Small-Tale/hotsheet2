@@ -1549,6 +1549,44 @@ out (HS2-JFE7JJ). Codex 0.167.1 started and read through the MCP tools, but each
 Sheet MCP call waited on its own permission request (HS2-MYDER8), so it planned
 nothing; its run is open until that is fixed.
 
+## Update Plan and planner questions with a real AI tool (HS2-BFNP45)
+
+Automated tests drive Update Plan and the pushed answer with a fake planner (HS2-190RDX,
+HS2-N5BDE4). This check runs the real `hotsheet-planner` skill. Use the setup of
+"Propose Plan with real AI tools" above. Worker sessions may be a synthetic tool plugin in
+the throwaway home's `plugins/`, allowed as the only tool for each target. That keeps the
+planner as the only real AI. A synthetic worker does not join a pool, so register each
+worker id (`hotsheet-cli coordination --project <target> register --role worker`).
+
+1. Plan a goal with three target tickets, Start Orchestration, and wait until each step's
+   run is `dispatched`.
+2. Change the goal so one step's work leaves it and another step gets a new
+   prerequisite. Press Update Plan (`orchestration plan update --tool <tool>`). While it
+   drafts, confirm the live plan is unchanged and no run is cancelled; the planner passes
+   the update id (`--plan-update`) on its readiness writes.
+3. When the planner runs `plan update-finish`, confirm `plan show` `update.swap` lists
+   the steps as kept, changed and removed, and the unchanged step's run is still
+   `dispatched`. The removed step's run should be `cancelled` with `step_removed`, and
+   the changed one's with `step_replanned`. Their sessions are wound down only at a safe
+   point: a busy session is audited `not_at_safe_point` and keeps running.
+4. Open a goal whose owning project is undecided and press Update Plan. Confirm the
+   planner claims the goal (Started), adds one `FEEDBACK NEEDED` note with `CHOICE`
+   options, releases it, and leaves the update drafting, and that `plan show` lists it
+   under `questions`.
+5. Answer on the goal ticket through the note form. The answer reports
+   `feedback_delivery: sent`. Confirm the planner continues, creates the chosen ticket,
+   and finishes the update (`swap.added`).
+6. Repeat with `codex`, then stop every terminal and server and remove the temporary
+   directories.
+
+Last run (HS2-BFNP45, 2026-11-27, `main` build, Claude 2.1.326 as planner, synthetic
+worker tool): Claude passed steps 1 to 5. The swap kept 1 step, changed 1 and removed 1.
+The two runs were cancelled `step_replanned` and `step_removed` at the swap. Their busy
+synthetic sessions were refused wind-down as `not_at_safe_point`, so wind-down was not
+seen completing. The answer was delivered and the update finished with the new step
+added. Claude shows each push as "another Claude session"'s message (HS2-KNRRCF). The
+Codex half is still open: it needs a person to answer Codex's permission prompts.
+
 ## A plan template applied with a real AI planner (HS2-A4RVYA)
 
 Automated tests run the planner as a fake agent and check that applying a template
@@ -1578,6 +1616,18 @@ with one open Alpha ticket that already describes a template step's work.
    the template and confirm the goal's brief is unchanged.
 6. Repeat 3 to 5 with `codex`, then stop every planner, server and broker and remove the
    temporary directories.
+
+Last run (HS2-1P0R0P, 2026-11-27, `main` build, Claude 2.1.326, placement Manual): the
+per-template Wait for accept setting (HS2-36XDDX) was not in the build, so the plan
+waited for Start Orchestration. Step 2 was checked through `template preview`, not the
+dialog. Claude passed steps 1, 3 and 5. The new goal held the brief, the existing API
+ticket was linked `observed` and named as found by search, one `FEEDBACK NEEDED` note
+held the reuse `CHOICE`, the dropped step had no step, and nothing was dispatched. The
+Web create waited on its permission request; nobody answered it, so the Web step was
+never defined. Step 4 failed: the answer was not pushed because the goal stays Not Started
+(HS2-A1M4KN). A second Propose Plan press then created the API ticket under
+`tpl-<operation id>-api` and moved the step. The Codex half is still open: it needs a
+person to answer Codex's permission prompts.
 
 ## Triggers with a real CI provider and a second machine (HS2-KXKA7X)
 
