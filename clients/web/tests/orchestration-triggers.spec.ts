@@ -104,8 +104,20 @@ const capture = async (page: Page, name: string) => {
   await page.screenshot({ path: test.info().outputPath(`triggers-impl-${name}.png`), animations: 'disabled' });
 };
 
-/** Wide, medium, phone and wide again, light and dark. */
-async function captureSizes(page: Page, name: string, phone: () => Promise<void>) {
+/**
+ * Wide, medium, phone and wide again, light and dark. HS2-7PEADD: the return to 1440 after the phone width is
+ * captured too (`<name>-1440-again-*`), once `wide` confirms the wide layout came back.
+ */
+async function captureSizes(
+  page: Page,
+  name: string,
+  phone: () => Promise<void>,
+  wide: () => Promise<void> = async () => {
+    const dialog = dialogOf(page);
+    // Back at full width the dialog shows its list beside the detail again, not the phone's drill-down.
+    if (await dialog.isVisible()) await expect(dialog.getByRole('button', { name: 'New Trigger…' })).toBeVisible();
+  },
+) {
   for (const [width, height] of [
     [1440, 900],
     [1100, 800],
@@ -123,6 +135,11 @@ async function captureSizes(page: Page, name: string, phone: () => Promise<void>
   await capture(page, `${name}-390-dark`);
   await page.emulateMedia({ colorScheme: 'light' });
   await resizeTo(page, { width: 1440, height: 900 });
+  await wide();
+  await capture(page, `${name}-1440-again-light`);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await capture(page, `${name}-1440-again-dark`);
+  await page.emulateMedia({ colorScheme: 'light' });
 }
 
 /** A toast over the footer would take a click meant for Pause or Resume: wait until each one is gone. */
@@ -426,9 +443,13 @@ test('HS2-40GPZK Triggers… gives fixed template inputs Use Template…’s typ
     await pick(page, input('size').getByRole('combobox', { name: 'Value' }), 'large');
     await input('attempts').getByLabel('Value').fill('3');
     await expect(input('attempts').getByLabel('Value')).toHaveAttribute('type', 'number');
-    await captureSizes(page, 'typed-inputs', async () => {
-      await expect(input('urgent')).toBeVisible();
-    });
+    // Each capture shows the typed controls, wherever the setup scrolled to.
+    const typed = async () => {
+      await input('urgent').scrollIntoViewIfNeeded();
+      await expect(input('urgent')).toBeInViewport();
+    };
+    await typed();
+    await captureSizes(page, 'typed-inputs', typed, typed);
     await dialog.getByRole('button', { name: 'Save as Dry Run' }).click();
     await expect(dialog.getByRole('heading', { name: 'Typed repair' })).toBeVisible();
     const inputs = async () => {
@@ -485,12 +506,18 @@ test('HS2-X3FZJE the overview inspector’s Triggers row counts triggers, names 
     await expect(row).toContainText(/1 dry run · next .+, Morning start/);
     await dismissToasts(page);
     await row.scrollIntoViewIfNeeded();
-    await captureSizes(page, 'overview-row', async () => {
-      // On a phone the inspector is not beside the view; the capture shows the view as a person sees it.
-      await expect(page.locator('body')).toBeVisible();
-    });
-    await row.scrollIntoViewIfNeeded();
-    await capture(page, 'overview-row-1440-again-light');
+    await captureSizes(
+      page,
+      'overview-row',
+      async () => {
+        // On a phone the inspector is not beside the view; the capture shows the view as a person sees it.
+        await expect(page.locator('body')).toBeVisible();
+      },
+      async () => {
+        await row.scrollIntoViewIfNeeded();
+        await expect(row).toBeInViewport();
+      },
+    );
     // Paused: counted, with no next run.
     await row.getByRole('button', { name: 'Triggers…' }).click();
     await dismissToasts(page);
