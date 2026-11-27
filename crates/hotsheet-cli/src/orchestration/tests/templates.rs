@@ -1048,3 +1048,232 @@ fn hs2_a4rvya_an_interrupted_apply_resumes_under_the_recorded_ids() {
     assert_eq!(again.outcome.as_deref(), Some("existing"));
     assert_eq!(f.host.launches().len(), 1);
 }
+
+/// HS2-AMJNER: an AI session's apply that waits for a permission continues on its own
+/// once a person answers: the resume pass repeats it under its operation id and as
+/// its actor, exactly once, and leaves an unanswered or denied apply alone.
+#[test]
+fn hs2_amjner_a_waiting_apply_resumes_once_its_permission_is_answered() {
+    let mut rng = Rng(1100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    let template = f.define("Feature", &mut tx);
+    let mut memory = ResumeMemory::default();
+    let resume = |memory: &mut ResumeMemory, tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .template_resume_waiting(&f.owner(), memory, tx)
+            .unwrap()
+            .resumed
+    };
+    // Nothing waits: nothing is resumed and nothing is audited.
+    assert!(resume(&mut memory, &mut tx).is_empty());
+    assert!(matches!(
+        f.apply(
+            &template,
+            json!({"feature": "Quotas"}),
+            "op-ai",
+            &worker(),
+            &mut tx
+        ),
+        Err(OrchestrationError::PermissionRequired { .. })
+    ));
+    let waiting =
+        f.m.runtime
+            .template_apply_show(
+                &f.owner(),
+                &ApplyRef {
+                    operation_id: "op-ai".into(),
+                },
+            )
+            .unwrap();
+    // Unanswered (none, then one of two): it keeps waiting and files nothing new.
+    assert!(resume(&mut memory, &mut tx).is_empty());
+    f.m.runtime
+        .permission_answer(
+            &f.owner(),
+            &waiting.apply.permission_requests[0],
+            PermissionAnswer::AllowOnce,
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(resume(&mut memory, &mut tx).is_empty());
+    assert_eq!(
+        f.m.runtime
+            .permission_list(&f.owner(), &mut tx)
+            .unwrap()
+            .requests
+            .len(),
+        2
+    );
+    f.m.runtime
+        .permission_answer(
+            &f.owner(),
+            &waiting.apply.permission_requests[1],
+            PermissionAnswer::AllowOnce,
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let resumed = resume(&mut memory, &mut tx);
+    assert_eq!(
+        resumed,
+        [ResumedApply {
+            operation_id: "op-ai".into(),
+            state: ApplyState::Planning,
+            reason: None,
+        }]
+    );
+    assert_eq!(f.goals().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+    // Recorded as the AI session's own apply, with the ordinary audit.
+    let shown =
+        f.m.runtime
+            .template_apply_show(
+                &f.owner(),
+                &ApplyRef {
+                    operation_id: "op-ai".into(),
+                },
+            )
+            .unwrap();
+    assert_eq!(shown.apply.actor_id.as_deref(), worker().id.as_deref());
+    assert_eq!(
+        f.m.last_audit(),
+        (
+            "template_apply".into(),
+            AuditOutcome::Succeeded,
+            Some("template_planning".into())
+        )
+    );
+    // Planning now: a second pass (and a third) does nothing more.
+    assert!(resume(&mut memory, &mut tx).is_empty());
+    assert!(resume(&mut ResumeMemory::default(), &mut tx).is_empty());
+    assert_eq!(f.goals().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+
+    // Denied: the pass records it denied, once, and opens nothing.
+    f.host.crash(&f.host.launches()[0].session_id);
+    let OrchestrationError::PermissionRequired { request_id } = f
+        .apply(
+            &template,
+            json!({"feature": "Other"}),
+            "op-deny",
+            &worker(),
+            &mut tx,
+        )
+        .unwrap_err()
+    else {
+        panic!("expected a permission request");
+    };
+    let other =
+        f.m.runtime
+            .template_apply_show(
+                &f.owner(),
+                &ApplyRef {
+                    operation_id: "op-deny".into(),
+                },
+            )
+            .unwrap();
+    for request in &other.apply.permission_requests {
+        f.m.runtime
+            .permission_answer(
+                &f.owner(),
+                request,
+                if *request == request_id {
+                    PermissionAnswer::Deny
+                } else {
+                    PermissionAnswer::AllowOnce
+                },
+                Some(&human()),
+                &mut tx,
+            )
+            .unwrap();
+    }
+    let resumed = resume(&mut memory, &mut tx);
+    assert_eq!(resumed.len(), 1);
+    assert_eq!(resumed[0].state, ApplyState::Denied);
+    assert!(resume(&mut memory, &mut tx).is_empty());
+    assert_eq!(f.goals().len(), 1);
+}
+
+/// HS2-AMJNER: an apply waiting on a busy planner is not asked again while the planner
+/// works; once it finishes its turn the pass gives it the goal, under the next attempt
+/// id, and nothing more after that.
+#[test]
+fn hs2_amjner_a_waiting_apply_resumes_once_the_planner_is_free() {
+    let mut rng = Rng(1200);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    let template = f.define("Feature", &mut tx);
+    f.m.orchestration_ticket("Ship the launch");
+    let busy = f
+        .m
+        .runtime
+        .plan_propose(
+            &f.owner(),
+            serde_json::from_value(json!({"tool": "claude", "operation_id": "press-1"})).unwrap(),
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let terminal = busy.session.session.session_id.clone();
+    f.host.set_busy(&terminal, true);
+    let waiting = f
+        .apply(
+            &template,
+            json!({"feature": "Billing"}),
+            "op-w",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(waiting.apply.state, ApplyState::WaitingPlanner);
+    let pushes = f.host.pushes().len();
+    let mut memory = ResumeMemory::default();
+    // Busy: the pass leaves it waiting and asks nothing of the planner.
+    for _ in 0..3 {
+        assert!(
+            f.m.runtime
+                .template_resume_waiting(&f.owner(), &mut memory, &mut tx)
+                .unwrap()
+                .resumed
+                .is_empty()
+        );
+    }
+    assert_eq!(f.host.pushes().len(), pushes);
+    // Free: the goal is given to the planner once.
+    f.host.set_busy(&terminal, false);
+    let resumed =
+        f.m.runtime
+            .template_resume_waiting(&f.owner(), &mut memory, &mut tx)
+            .unwrap()
+            .resumed;
+    assert_eq!(resumed.len(), 1);
+    assert_eq!(resumed[0].state, ApplyState::Planning);
+    let shown =
+        f.m.runtime
+            .template_apply_show(
+                &f.owner(),
+                &ApplyRef {
+                    operation_id: "op-w".into(),
+                },
+            )
+            .unwrap();
+    assert_eq!(shown.apply.proposal_id.as_deref(), Some("op-w.p1"));
+    assert_eq!(f.host.pushes().len(), pushes + 1);
+    assert!(
+        f.m.runtime
+            .template_resume_waiting(&f.owner(), &mut memory, &mut tx)
+            .unwrap()
+            .resumed
+            .is_empty()
+    );
+    assert_eq!(f.goals().len(), 1);
+    assert_eq!(f.host.launches().len(), 1);
+}

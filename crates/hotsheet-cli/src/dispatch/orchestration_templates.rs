@@ -98,6 +98,10 @@ enum TemplateCmd {
     },
     /// One apply on this machine by its operation id.
     ApplyShow { operation_id: String },
+    /// HS2-AMJNER: continue every apply that waits and can go on now (a person
+    /// answered its permission request, or the planner is free), under its own
+    /// operation id and as the actor who applied it. A server does this on its own.
+    Resume,
 }
 
 fn read_json(path: &str) -> Result<Value> {
@@ -231,6 +235,7 @@ pub(super) fn route(
             format!("{base}/apply_show"),
             json!({"operation_id": operation_id}),
         ),
+        TemplateCmd::Resume => ("POST", format!("{base}/resume"), json!({})),
     })
 }
 
@@ -326,6 +331,10 @@ mod tests {
                 format!("{base}/preview"),
                 json!({"template_id":"T1","inputs":{"feature":"Search"},"choices":{}})
             )
+        );
+        assert_eq!(
+            request(&["resume"]).unwrap(),
+            ("POST", format!("{base}/resume"), json!({}))
         );
         assert_eq!(
             request(&["apply-show", "op-1"]).unwrap(),

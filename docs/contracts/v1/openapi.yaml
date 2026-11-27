@@ -3915,7 +3915,10 @@ paths:
         `template_apply_conflict`. A person's apply is their own act; any other actor is answered 403
         `permission_required` with the `request_id` until a person answers the ticket-write request for each project.
         Refused with `template_not_found`, `template_retired`, `template_inputs_invalid` or `template_target_unknown`
-        before anything opens. Audited as `template_set` and `template_apply`."
+        before anything opens. Audited as `template_set` and `template_apply`. HS2-AMJNER: `resume` continues every
+        apply that waits and can go on now (each permission request answered, or the planner free) under its own
+        operation id and as the actor who applied it, as the server does on its own; it answers the applies it
+        continued."
       requestBody:
         required: true
         content:
@@ -3936,6 +3939,7 @@ paths:
                   - $ref: '#/components/schemas/TemplateValidation'
                   - $ref: '#/components/schemas/TemplatePreview'
                   - $ref: '#/components/schemas/TemplateApply'
+                  - $ref: '#/components/schemas/TemplateResumeReport'
         default:
           description:
             Stable content-free error code; authentication/device-role/locality denial may return a fixed text
@@ -3970,6 +3974,7 @@ paths:
             - preview
             - apply
             - apply_show
+            - resume
   /checkouts/{owner}/orchestration/timeline:
     description:
       Machine-local orchestration timeline of an owning checkout (HS2-J89JC7). The plan as dependency waves with
@@ -26692,7 +26697,8 @@ components:
         Body of a template operation (HS2-A4RVYA). `show` and `retire` take `template_id`; `validate` takes `template`;
         `set` takes `templates` and an optional `expected_revision`; `save_goal` takes `goal`, `name`, `description`
         and `targets_as_inputs`; `preview` takes `template_id`, `inputs` and `choices`; `apply` adds `tool`, `model`,
-        `effort` and a retained `operation_id` (at most 140 characters); `apply_show` takes `operation_id`.
+        `effort` and a retained `operation_id` (at most 140 characters); `apply_show` takes `operation_id`; `resume`
+        takes nothing.
       type: object
       properties:
         actor:
@@ -27047,6 +27053,32 @@ components:
           type: integer
         updated_at_ms:
           type: integer
+    TemplateResumeReport:
+      description:
+        'What one resume pass did (HS2-AMJNER): each apply it continued, with the state it reached and, when it still
+        waits or was refused, the reason code.'
+      type: object
+      required:
+        - resumed
+      properties:
+        resumed:
+          type: array
+          items:
+            type: object
+            required:
+              - operation_id
+              - state
+            properties:
+              operation_id:
+                type: string
+              state:
+                enum:
+                  - waiting_permission
+                  - waiting_planner
+                  - planning
+                  - denied
+              reason:
+                type: string
     PlanningOperation:
       description:
         Body of a planning operation (HS2-HCW7MD). `propose` takes `tool` and optionally `model`, `effort`, one

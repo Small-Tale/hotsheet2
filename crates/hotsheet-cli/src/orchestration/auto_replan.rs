@@ -126,7 +126,7 @@ impl OrchestrationRuntime {
 
     /// The latest plan update's id and whether it still drafts, as `plan show` reads
     /// it (a drafting update whose planner ended is failed on the way).
-    fn replan_latest(
+    pub(super) fn replan_latest(
         &self,
         owner: &Checkout,
         tx: &mut Transaction<'_>,

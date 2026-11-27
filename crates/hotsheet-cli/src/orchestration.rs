@@ -4,6 +4,8 @@
 mod access;
 mod assignment;
 mod auto_replan;
+// HS2-AMJNER: the work a host runs between requests (resuming waiting applies).
+mod automation;
 // HS2-H1CSSN: the one bounded backoff of the follower loops.
 mod backoff;
 mod cancel_hold;
@@ -62,6 +64,7 @@ mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION, REVIEW_RETURNED};
 pub use auto_replan::{AUTO_REPLAN_ACTION, AutoReplan};
+pub use automation::{AutomationMemory, AutomationReport};
 pub use backoff::{BACKOFF_FAST_STEP, BACKOFF_FIRST, BACKOFF_MAX, Backoff, is_fast_step};
 pub use cancel_hold::CANCELLED_BY_PERSON;
 pub use capacity::{
@@ -153,9 +156,10 @@ pub use sessions::{
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use tasks::{RuntimeTasks, StopHook, TasksShutdown};
 pub use templates::{
-    AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES, PreviewTarget,
-    PreviewTemplate, SaveGoalTemplate, SetTemplates, TemplateApplyView, TemplateList,
-    TemplatePreview, TemplateRef, TemplateValidation, ValidateTemplate,
+    AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES, MAX_RESUME_BACKOFF_MS,
+    PreviewTarget, PreviewTemplate, ResumeMemory, ResumeReport, ResumedApply, SaveGoalTemplate,
+    SetTemplates, TemplateApplyView, TemplateList, TemplatePreview, TemplateRef,
+    TemplateValidation, ValidateTemplate,
 };
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,

@@ -17,6 +17,8 @@ pub(crate) mod guidance;
 pub(crate) mod mcp_presence;
 pub(crate) mod notifiers;
 pub(crate) mod orchestration;
+// HS2-AMJNER: the orchestration work this server runs between requests.
+pub(crate) mod orchestration_automation;
 pub(crate) mod orchestration_permissions;
 pub(crate) mod orchestration_sessions;
 pub(crate) mod orchestration_settings_watch;

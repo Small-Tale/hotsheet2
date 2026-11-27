@@ -985,6 +985,15 @@ impl OrchestrationRuntime {
                         value(self.template_apply(owner, decode(body)?, actor.as_ref(), tx)?)
                     }
                     "apply_show" => value(self.template_apply_show(owner, &decode(body)?)?),
+                    // HS2-AMJNER: one resume pass, as the server runs on its own.
+                    "resume" => {
+                        decode::<super::PlanRequest>(body)?;
+                        value(self.template_resume_waiting(
+                            owner,
+                            &mut super::ResumeMemory::default(),
+                            tx,
+                        )?)
+                    }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }
             }

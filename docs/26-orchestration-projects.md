@@ -7766,6 +7766,22 @@ template, for a person, an AI session and a trigger (HS2-KXKA7X) alike. In order
    Update Plan plans that open goal as well. Once the planner took it the apply is
    `planning`.
 
+**Resuming a waiting apply (HS2-AMJNER).** Nobody has to repeat a waiting apply by hand.
+`template_resume_waiting` continues, under the apply's own operation id and as the actor
+who applied it (so it is audited as that actor's ordinary `template_apply`), every apply
+that can go on now: a `waiting_permission` apply once a person answered each request it
+waits on (an Allow goes on, a Deny makes it `denied`), and a `waiting_planner` apply that
+was refused only because the planner was busy (or was interrupted between asking and the
+answer) once the planner is free (no drafting plan update, and no planner at work on
+another proposal). An apply waiting for any other reason waits for its caller. The
+server runs this from one automation thread that waits on the permission signal, the
+scheduler wake marker (a permission answer writes it), the plan-update records, the run
+event journal and the apply records themselves with the platform file watcher, never on
+an interval. An apply that is still blocked when a pass tries it is tried again only
+after a pause that doubles from one second to at most a minute, unless its record
+changes. `hotsheet-cli orchestration template resume` and `POST templates/resume` run
+one pass headless and answer the applies continued.
+
 The apply is recorded machine-locally in
 `${HOTSHEET_HOME}/orchestration-template-applies/<owner>.json` (mode 0600, at most 256;
 the oldest finished one is forgotten first, an unfinished one never). The record keeps
