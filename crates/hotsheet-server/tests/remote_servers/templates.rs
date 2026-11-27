@@ -354,12 +354,21 @@ async fn hs2_amjner_answering_the_card_resumes_the_apply_without_a_second_call()
                 json!({"operation_id":"tpl-auto"}),
             )
             .await;
-        if shown["state"] == "planning" {
+        // The apply is recorded before its audit entry: wait for both.
+        let (_, audit) = world.call("GET", "/audit", Value::Null).await;
+        let audited = audit["entries"].as_array().is_some_and(|entries| {
+            entries.iter().any(|entry| {
+                entry["action"] == "template_apply" && entry["reason"] == "template_planning"
+            })
+        });
+        if shown["state"] == "planning" && audited {
             break;
         }
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
         assert!(!remaining.is_zero(), "the apply never resumed: {shown}");
-        tokio::task::block_in_place(|| waiter.wait(remaining));
+        tokio::task::block_in_place(|| {
+            waiter.wait(remaining.min(std::time::Duration::from_secs(1)))
+        });
     }
     assert_eq!(goals(&world).len(), 1);
     assert_eq!(drawer(&world.router).await.len(), 1, "one planner");
