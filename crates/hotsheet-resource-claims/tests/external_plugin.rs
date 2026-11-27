@@ -921,7 +921,12 @@ fn hs2_br14fm_a_quiet_leftover_is_ended_without_a_warning() {
         until_gone(grandchild),
         "the quiet child {grandchild} outlived its run"
     );
-    assert!(!log.contains(LEFT_RUNNING), "{log}");
+    // HS2-03PD7G: on Windows a process the plugin starts inherits the plugin's inheritable
+    // handles, its output pipe included, even with null stdio, so there the "quiet" child
+    // really holds the output and the warning is accurate. It is still ended above.
+    if cfg!(not(windows)) {
+        assert!(!log.contains(LEFT_RUNNING), "{log}");
+    }
 }
 
 // Unix only: the leftovers are started by `/bin/sh` scripts (`&`, `$!`, redirections). The
