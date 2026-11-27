@@ -42,6 +42,16 @@ integrated `merge-pending/<SLUG>` branches with `coordination merge-pending-prun
 --apply` is the main use. A push that also sends commits, and any update to `main`,
 keeps the normal path.
 
+HS2-0BP0G8 lets a push whose every update creates, advances or deletes a
+`merge-pending/<SLUG>` parking branch skip the gate too, even though it sends commits.
+Parking branches never ship: their commits reach `main` only through the
+main-integration window and the covering `main` CI run, which keep every gate. Work
+parked this way may therefore defer local checks, such as client suites, to the
+integration ticket (maintainer decision, 2026-11-27). A push that also updates any
+other branch, or `main`, keeps the normal path. Because `core.hooksPath` names the
+main checkout's `.githooks`, the exemption applies from worktrees once that checkout
+carries this hook.
+
 ## Read-only dependency edge preview (HS2-55MWQ9)
 
 `scripts/check.sh --plan` also reports an `edgePreview`. This is a candidate

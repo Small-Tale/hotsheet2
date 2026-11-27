@@ -262,6 +262,67 @@ test('HS2-9EGWC4 pre-push lets only a registry-only fast-forward skip the gate a
   }
 });
 
+test('HS2-0BP0G8 pre-push lets a merge-pending-only push skip the gate but nothing else', () => {
+  const f = fixture();
+  try {
+    const bin = resolve(f.root, 'bin');
+    // The main-integration window runs through zsh; failing it proves main never takes the fast path.
+    executable(resolve(bin, 'zsh'), '#!/bin/sh\nexit 1\n');
+    const log = resolve(f.root, 'gate.log');
+    executable(
+      resolve(f.repo, 'scripts/check.sh'),
+      '#!/bin/sh\nprintf "check\\n" >> "$HOTSHEET_HOOK_TEST_LOG"\nexit 1\n',
+    );
+    run('git', ['add', 'scripts/check.sh'], f.repo);
+    run('git', ['commit', '-q', '-m', 'Failing fixture gate'], f.repo);
+    const remote = resolve(f.root, 'remote.git');
+    run('git', ['init', '-q', '--bare', remote], f.root);
+    run('git', ['remote', 'add', 'origin', remote], f.repo);
+    run('git', ['push', '-q', 'origin', 'main'], f.repo);
+    run('git', ['config', 'core.hooksPath', '.githooks'], f.repo);
+    const env = {
+      ...withoutGitRepositoryEnv(process.env),
+      PATH: `${bin}:${process.env.PATH}`,
+      HOTSHEET_HOOK_TEST_LOG: log,
+    };
+    const noHooks = resolve(f.root, 'no-hooks');
+    mkdirSync(noHooks);
+    const commit = (name) => {
+      put(resolve(f.repo, name), `${name}\n`);
+      run('git', ['add', name], f.repo);
+      run('git', ['-c', `core.hooksPath=${noHooks}`, 'commit', '-q', '-m', name], f.repo);
+    };
+    const heads = () =>
+      run('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads'], remote).trim().split('\n').sort();
+    const tip = (ref) => run('git', ['rev-parse', ref], remote).trim();
+
+    // Creating, then advancing, one parking branch sends code without the gate.
+    commit('one.ts');
+    const push = (refs) => run('git', ['push', '-q', 'origin', ...refs], f.repo, env);
+    push(['HEAD:refs/heads/merge-pending/HS-ONE']);
+    commit('two.ts');
+    push(['HEAD:refs/heads/merge-pending/HS-ONE']);
+    assert.equal(tip('merge-pending/HS-ONE'), run('git', ['rev-parse', 'HEAD'], f.repo).trim());
+    // Several parking branches, including a delete, in one push also skip it.
+    push(['HEAD:refs/heads/merge-pending/HS-TWO', 'HEAD:refs/heads/merge-pending/HS-THREE']);
+    push([':refs/heads/merge-pending/HS-THREE']);
+    assert.deepEqual(heads(), ['main', 'merge-pending/HS-ONE', 'merge-pending/HS-TWO']);
+    assert.equal(existsSync(log), false);
+
+    // A push that also updates any other branch runs the gate, and the failing gate blocks it all.
+    commit('three.ts');
+    assert.throws(() => push(['HEAD:refs/heads/merge-pending/HS-ONE', 'HEAD:refs/heads/feature']));
+    assert.equal(readFileSync(log, 'utf8'), 'check\n');
+    assert.deepEqual(heads(), ['main', 'merge-pending/HS-ONE', 'merge-pending/HS-TWO']);
+    // Main never takes the fast path, alone or beside a parking branch.
+    assert.throws(() => push(['HEAD:refs/heads/main']));
+    assert.throws(() => push(['HEAD:refs/heads/main', 'HEAD:refs/heads/merge-pending/HS-ONE']));
+    assert.notEqual(tip('main'), run('git', ['rev-parse', 'HEAD'], f.repo).trim());
+  } finally {
+    f.dispose();
+  }
+});
+
 test('HS2-12K3FN pre-push lets a delete-only push of non-main branches skip the gate', () => {
   const f = fixture();
   try {

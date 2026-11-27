@@ -19,6 +19,10 @@ registry_only=1
 # deletes integrated `merge-pending/<SLUG>` branches this way. Any update that sends commits, or
 # that touches main, takes the normal path below.
 delete_only=1
+# HS2-0BP0G8: a push whose every update creates, moves or deletes a `merge-pending/*` parking
+# branch skips the local gate. Parking branches never ship; their commits reach main only through
+# the main-integration window and covering main CI, which keep every gate.
+merge_pending_only=1
 registry_only_update() {
   local local_sha="$1" remote_sha="$2" paths
   [[ ! "$local_sha" =~ ^0+$ && ! "$remote_sha" =~ ^0+$ ]] || return 1
@@ -35,6 +39,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
   if [[ ! "$local_sha" =~ ^0+$ || "$remote_ref" == refs/heads/main ]]; then
     delete_only=0
+  fi
+  if [[ "$remote_ref" != refs/heads/merge-pending/?* ]]; then
+    merge_pending_only=0
   fi
   last_remote_ref="$remote_ref"
   last_local_sha="$local_sha"
@@ -53,6 +60,10 @@ if [[ "$total_updates" -gt 0 && "$registry_only" -eq 1 && -z "${HOTSHEET_MAIN_WI
   exit 0
 fi
 if [[ "$total_updates" -gt 0 && "$delete_only" -eq 1 && -z "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then
+  exit 0
+fi
+if [[ "$total_updates" -gt 0 && "$merge_pending_only" -eq 1 && -z "${HOTSHEET_MAIN_WINDOW_TOKEN:-}" ]]; then
+  echo 'pre-push: merge-pending/* parking push; local gate skipped, integration into main keeps every gate (HS2-0BP0G8)' >&2
   exit 0
 fi
 # HS2-GT57BQ: a reserved ci-staged push to the integration branch carries the window token;

@@ -3154,7 +3154,9 @@ ticket in the selected store. Otherwise it is kept with a reason:
 or `ticket_moved`. The default is a dry run (`would_delete`); `--apply` runs
 `git push <remote> --delete` and reports `deleted` or `delete_failed` with the Git
 error. The repository's `pre-push` hook lets a delete-only push of non-main branches
-skip the local gate, because it sends no code (HS2-12K3FN). A rerun is a no-op. The
+skip the local gate, because it sends no code (HS2-12K3FN). It also lets a push that
+only creates or advances `merge-pending/*` branches skip it, because parking branches
+reach `main` only through the gated integration (HS2-0BP0G8). A rerun is a no-op. The
 integration ticket runs it for its own branch before
 completion; an integrator or maintainer can run it for every branch.
 
