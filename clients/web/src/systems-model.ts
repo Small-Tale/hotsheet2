@@ -1,0 +1,341 @@
+/**
+ * The Systems screen's machines and what each one shows (HS2-DR0ZSQ, docs/06-clients.md §6.13).
+ * Pure: the runtime passes the open project tabs, the paired remote servers, and each machine's last
+ * readings (host health, the hosted capacity snapshot, the live CPU frame); these functions decide
+ * the machine list, the rail rows, and the detail's tables. A reading the machine did not give reads
+ * as unknown, never as zero.
+ */
+import type { OrchestrationCapacity, OrchestrationToolCapacity } from './api';
+import type { HostCpuFrame } from './host-cpu-feed';
+import type { HostHealthSnapshot } from './host-health';
+import { gpuLabel, systemLabel } from './orchestration-capabilities';
+import { formatMegabytes } from './orchestration-settings-model';
+import { parseRemoteProjectId, remoteHostLabel } from './remote-projects/identity';
+import { hostPlatform } from './stats-this-mac';
+
+/** The id of this computer's entry; a remote's id is `remote:<binding id>`. */
+export const LOCAL_MACHINE_ID = 'local';
+
+export type SystemsMachineKind = 'local' | 'remote';
+
+/** Why a machine has no live readings. */
+export type SystemsMachineUnavailable = 'no-project' | 'not-connected' | 'revoked';
+
+export interface SystemsMachine {
+  id: string;
+  kind: SystemsMachineKind;
+  name: string;
+  /** The open project tab whose path reaches this machine; its reads go through that path. */
+  projectId?: string;
+  unavailable?: SystemsMachineUnavailable;
+}
+
+/** An open project tab, as the machine list needs it. */
+export interface SystemsOpenProject {
+  id: string;
+  /** A remote tab's machine name (HS2-CW8EY3). */
+  remoteHost?: string;
+}
+
+/** A paired remote server (the desktop's remote list). */
+export interface SystemsRemoteServer {
+  id: string;
+  label: string;
+  origin: string;
+  revoked: boolean;
+}
+
+export const remoteMachineId = (bindingId: string) => `remote:${bindingId}`;
+
+/**
+ * This computer first, then each paired remote server in its listed order, then any remote an open
+ * tab reaches that the list does not name (a browser without the desktop's remote list). A machine
+ * is read through its first open tab; one without an open tab has no live readings.
+ */
+export function systemsMachines({
+  projects,
+  remoteServers,
+  localName,
+}: {
+  projects: readonly SystemsOpenProject[];
+  remoteServers: readonly SystemsRemoteServer[];
+  /** The local server's host name, once host health has been read. */
+  localName?: string;
+}): SystemsMachine[] {
+  const local = projects.find((project) => !parseRemoteProjectId(project.id));
+  const tabsByBinding = new Map<string, SystemsOpenProject>();
+  for (const project of projects) {
+    const remote = parseRemoteProjectId(project.id);
+    if (remote && !tabsByBinding.has(remote.bindingId)) tabsByBinding.set(remote.bindingId, project);
+  }
+  const machines: SystemsMachine[] = [
+    {
+      id: LOCAL_MACHINE_ID,
+      kind: 'local',
+      name: localName?.trim() || 'This Computer',
+      ...(local ? { projectId: local.id } : { unavailable: 'no-project' as const }),
+    },
+  ];
+  const listed = new Set<string>();
+  for (const server of remoteServers) {
+    if (listed.has(server.id)) continue;
+    listed.add(server.id);
+    const tab = tabsByBinding.get(server.id);
+    machines.push({
+      id: remoteMachineId(server.id),
+      kind: 'remote',
+      name: tab?.remoteHost?.trim() || remoteHostLabel(null, server.origin) || server.label,
+      ...(server.revoked
+        ? { unavailable: 'revoked' as const }
+        : tab
+          ? { projectId: tab.id }
+          : { unavailable: 'not-connected' as const }),
+    });
+  }
+  for (const [bindingId, tab] of tabsByBinding) {
+    if (listed.has(bindingId)) continue;
+    machines.push({
+      id: remoteMachineId(bindingId),
+      kind: 'remote',
+      name: tab.remoteHost?.trim() || 'Remote Server',
+      projectId: tab.id,
+    });
+  }
+  return machines;
+}
+
+/** The selected machine, else this computer (a selected remote that went away falls back). */
+export function selectedSystemsMachine(machines: readonly SystemsMachine[], selected: string | undefined) {
+  return machines.find((machine) => machine.id === selected) ?? machines[0];
+}
+
+/** The live readings one machine has, any of which may be missing. */
+export interface SystemsMachineReadings {
+  health?: HostHealthSnapshot;
+  capacity?: OrchestrationCapacity;
+  /** The live CPU frame, only for the selected machine while Systems shows. */
+  cpu?: HostCpuFrame;
+}
+
+/** How many AI sessions run on the machine, or `undefined` while unknown. */
+export function aiSessionCount(capacity: OrchestrationCapacity | undefined): number | undefined {
+  return capacity?.sessions?.length ?? undefined;
+}
+
+const plural = (count: number, one: string, many = `${one}s`) => `${String(count)} ${count === 1 ? one : many}`;
+
+/** The machine's kind in words: the inspector's subtitle and the detail's context line. */
+export function machineKindLabel(machine: SystemsMachine): string {
+  return machine.kind === 'local' ? 'This Computer' : 'Paired Remote';
+}
+
+/** The quiet line under a machine's name in the Machines list. */
+export function machineRowDescription(machine: SystemsMachine, readings: SystemsMachineReadings): string {
+  if (machine.unavailable === 'revoked') return 'Approval revoked';
+  if (machine.unavailable === 'not-connected') return 'Not connected';
+  if (machine.unavailable === 'no-project') return `${machineKindLabel(machine)} · no project open`;
+  const sessions = aiSessionCount(readings.capacity);
+  return [machineKindLabel(machine), sessions === undefined ? undefined : plural(sessions, 'AI session')]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** The CPU busy percent the Machines list's gauge shows: the live frame, else the host-health sample. */
+export function machineCpuPercent(readings: SystemsMachineReadings): number | undefined {
+  const live = readings.cpu?.status === 'live' ? readings.cpu.busy_percent : null;
+  const value = live ?? readings.health?.signals.cpu.busy_percent ?? readings.capacity?.cpu.load_percent ?? null;
+  return value === null ? undefined : Math.max(0, Math.min(100, value));
+}
+
+/** Why a machine shows no readings, as an empty state's title and detail. */
+export function machineUnavailableMessage(machine: SystemsMachine): { title: string; detail: string } | undefined {
+  if (machine.unavailable === 'revoked')
+    return {
+      title: `${machine.name} Revoked This Computer`,
+      detail: 'Pair this computer with it again to see its readings here.',
+    };
+  if (machine.unavailable === 'not-connected')
+    return {
+      title: `${machine.name} Is Not Connected`,
+      detail: 'Open one of its projects in a tab to see its live readings here.',
+    };
+  if (machine.unavailable === 'no-project')
+    return {
+      title: 'No Project Is Open on This Computer',
+      detail: 'Open a project to see this computer’s live readings here.',
+    };
+  return undefined;
+}
+
+export type SystemsBadgeTone = 'success' | 'warning' | 'danger' | 'neutral';
+
+/** One AI tool on the machine: installed or not, its version, and how many of its sessions run. */
+export interface SystemsAiToolRow {
+  tool: string;
+  label: string;
+  description: string;
+  status: { label: string; tone: SystemsBadgeTone };
+  installed: boolean;
+  sessions: number;
+}
+
+/**
+ * The machine's AI tools: every tool the capacity snapshot names, installed ones first. Versions come
+ * from the capabilities report; sessions are counted by tool. `undefined` while the snapshot is unread.
+ */
+export function aiToolRows(
+  capacity: OrchestrationCapacity | undefined,
+  toolLabel: (tool: string) => string = (tool) => tool,
+): SystemsAiToolRow[] | undefined {
+  if (!capacity) return undefined;
+  const versions = new Map((capacity.capabilities?.ai_tools ?? []).map((tool) => [tool.tool, tool.version]));
+  const installed = new Map<string, boolean>();
+  for (const tool of capacity.tools ?? []) installed.set(tool.tool, tool.installed);
+  for (const tool of versions.keys()) if (!installed.has(tool)) installed.set(tool, true);
+  const sessions = new Map<string, number>();
+  for (const session of capacity.sessions ?? [])
+    if (session.tool) sessions.set(session.tool, (sessions.get(session.tool) ?? 0) + 1);
+  return [...installed]
+    .map(([tool, present]): SystemsAiToolRow => {
+      const count = sessions.get(tool) ?? 0;
+      const version = versions.get(tool);
+      return {
+        tool,
+        label: [toolLabel(tool), version].filter(Boolean).join(' '),
+        description: present
+          ? count
+            ? `${plural(count, 'session')} running`
+            : 'Installed · no sessions running'
+          : 'Not installed on this machine',
+        status: present ? { label: 'Installed', tone: 'success' } : { label: 'Not Installed', tone: 'neutral' },
+        installed: present,
+        sessions: count,
+      };
+    })
+    .sort((a, b) => Number(b.installed) - Number(a.installed) || a.label.localeCompare(b.label));
+}
+
+export interface SystemsValueRow {
+  label: string;
+  value: string;
+}
+
+/**
+ * The Capabilities table: System, Processor, GPU and Memory. Memory reads free of total from the
+ * capacity snapshot; the host platform stands in for System until capabilities are reported.
+ */
+export function capabilityRows(readings: SystemsMachineReadings): SystemsValueRow[] {
+  const { capacity, health } = readings;
+  const capabilities = capacity?.capabilities;
+  const cores = capacity?.cpu.logical_cpus ?? null;
+  const rows: SystemsValueRow[] = [];
+  if (capabilities) rows.push({ label: 'System', value: systemLabel(capabilities) });
+  else if (health) rows.push({ label: 'System', value: hostPlatform(health) });
+  const processor = [capabilities?.cpu_model, cores === null ? undefined : plural(cores, 'core')]
+    .filter(Boolean)
+    .join(' · ');
+  if (processor) rows.push({ label: 'Processor', value: processor });
+  if (capabilities) rows.push({ label: 'GPU', value: gpuLabel(capabilities) });
+  if (capacity)
+    rows.push({
+      label: 'Memory',
+      value:
+        capacity.memory.total_mb === null
+          ? formatMegabytes(capacity.memory.free_mb)
+          : `${formatMegabytes(capacity.memory.free_mb)} free of ${formatMegabytes(capacity.memory.total_mb)}`,
+    });
+  return rows;
+}
+
+/** The Toolchains table: each installed toolchain and its version; `undefined` while unreported. */
+export function toolchainRows(capacity: OrchestrationCapacity | undefined): SystemsValueRow[] | undefined {
+  const toolchains = capacity?.capabilities?.toolchains;
+  if (!toolchains) return undefined;
+  return toolchains
+    .filter((toolchain) => toolchain.installed)
+    .map((toolchain) => ({ label: toolchain.name, value: toolchain.version ?? 'Installed' }));
+}
+
+/** A terminal the workspace knows, used to name a running session. */
+export interface SystemsKnownTerminal {
+  id: string;
+  title?: string;
+  projectName: string;
+}
+
+export interface SystemsSessionRow {
+  id: string;
+  title: string;
+  description: string;
+  busy: boolean;
+}
+
+/** The inspector's AI Sessions Here: each running AI session, named by its terminal when it is known. */
+export function sessionRows(
+  capacity: OrchestrationCapacity | undefined,
+  terminals: readonly SystemsKnownTerminal[],
+  toolLabel: (tool: string) => string = (tool) => tool,
+): SystemsSessionRow[] | undefined {
+  if (!capacity?.sessions) return undefined;
+  const known = new Map(terminals.map((terminal) => [terminal.id, terminal]));
+  return capacity.sessions.map((session) => {
+    const terminal = known.get(session.session_id);
+    const tool = session.tool ? toolLabel(session.tool) : 'AI session';
+    return {
+      id: session.session_id,
+      title: terminal?.title ? `${terminal.title} · ${tool}` : tool,
+      description: terminal?.projectName ?? 'Not shown in an open project tab',
+      busy: session.busy,
+    };
+  });
+}
+
+export interface SystemsToolCapacityRow {
+  key: string;
+  label: string;
+  description: string;
+  status: { label: string; tone: SystemsBadgeTone };
+}
+
+/**
+ * AI Tool Capacity (HS2-AHG7HW) across the open orchestration projects: one row per tool and
+ * account, the first project's reading winning, since the observed state is the machine's.
+ */
+export function toolCapacityRows(
+  views: readonly OrchestrationToolCapacity[],
+  toolLabel: (tool: string) => string = (tool) => tool,
+  formatTime: (ms: number) => string = (ms) => new Date(ms).toLocaleTimeString(),
+): SystemsToolCapacityRow[] {
+  const rows = new Map<string, SystemsToolCapacityRow>();
+  for (const view of views) {
+    if (!view.enabled) continue;
+    for (const row of view.tools) {
+      const key = `${row.tool}\u0000${row.account ?? ''}`;
+      if (rows.has(key)) continue;
+      const budget =
+        row.budget_cents_per_day === undefined
+          ? undefined
+          : `$${String(Math.round((row.spent_cents_today ?? 0) / 100))} of $${String(Math.round(row.budget_cents_per_day / 100))} today`;
+      rows.set(key, {
+        key,
+        label: row.account ? `${toolLabel(row.tool)} · ${row.account}` : toolLabel(row.tool),
+        description: [
+          row.state === 'limited' && row.until_ms ? `Until ${formatTime(row.until_ms)}` : undefined,
+          `Up to ${plural(row.max_sessions, 'session')}`,
+          budget,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        status:
+          row.state === 'available'
+            ? { label: 'Available', tone: 'success' }
+            : row.state === 'limited'
+              ? { label: 'Limited', tone: 'warning' }
+              : row.state === 'degraded'
+                ? { label: 'Degraded', tone: 'warning' }
+                : { label: 'Unknown', tone: 'neutral' },
+      });
+    }
+  }
+  return [...rows.values()];
+}

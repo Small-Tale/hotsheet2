@@ -3638,6 +3638,195 @@
       }
     },
     {
+      "id": "systems-view",
+      "name": "SystemsView",
+      "kind": "component",
+      "purpose": "The Systems screen's workspace: the selected machine's This Mac cards, AI tools with running sessions, capabilities and toolchains, or how to connect a machine without live readings (HS2-DR0ZSQ).",
+      "source": "src/components/systems-view.tsx",
+      "publicExports": [
+        {
+          "name": "SystemsView"
+        }
+      ],
+      "sourceLinks": ["src/components/systems-view.tsx", "src/systems-model.ts"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/systems-view.tsx",
+        "composition": "src/components/systems-view.tsx"
+      },
+      "selection": {
+        "useWhen": ["Showing one machine's live readings and what it is on the Systems screen."],
+        "avoidWhen": ["A project's own statistics; use the Stats page."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "systems-sidebar",
+      "name": "SystemsSidebar",
+      "kind": "component",
+      "purpose": "The Systems screen's left rail: the Machines list (This Computer, then each paired remote) with a bare CPU gauge or why there is none, and AI Tool Capacity (HS2-DR0ZSQ).",
+      "source": "src/components/systems-sidebar.tsx",
+      "publicExports": [
+        {
+          "name": "SystemsSidebar"
+        }
+      ],
+      "sourceLinks": ["src/components/systems-sidebar.tsx", "src/systems-model.ts"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/systems-sidebar.tsx",
+        "composition": "src/components/systems-sidebar.tsx"
+      },
+      "selection": {
+        "useWhen": ["Choosing which machine the Systems screen shows."],
+        "avoidWhen": ["Choosing a project; use the project strip."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "systems-inspector",
+      "name": "SystemsInspector",
+      "kind": "component",
+      "purpose": "The Systems screen's right rail: the selected machine's running AI sessions, each named by its terminal when this app shows it (HS2-DR0ZSQ).",
+      "source": "src/components/systems-inspector.tsx",
+      "publicExports": [
+        {
+          "name": "SystemsInspector"
+        }
+      ],
+      "sourceLinks": ["src/components/systems-inspector.tsx", "src/systems-model.ts"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "parent",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/systems-inspector.tsx",
+        "composition": "src/components/systems-inspector.tsx"
+      },
+      "selection": {
+        "useWhen": ["Listing the AI sessions running on the machine Systems shows."],
+        "avoidWhen": ["Managing orchestrator sessions; use Settings \u203a Orchestration."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "glance-sparkline",
       "name": "GlanceSparkline",
       "kind": "component",

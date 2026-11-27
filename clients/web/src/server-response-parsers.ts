@@ -1945,7 +1945,8 @@ export const parseOrchestrationCapacity = shape<OrchestrationCapacity>(
     claim_namespaces: isStringArray,
   },
   {},
-  { capabilities: capabilitiesShape.check },
+  // HS2-P5GTSW: `version` lets a reader wait for the next change (HS2-DR0ZSQ's Systems screen).
+  { capabilities: capabilitiesShape.check, version: isString },
 );
 export const parseOrchestrationAdmission = shape<OrchestrationAdmission>('admission decision', {
   outcome: oneOf('accepted', 'reduced', 'refused'),

@@ -1216,6 +1216,8 @@ export interface OrchestrationCapacity {
   claim_namespaces: string[];
   /** HS2-ZY4Z4G: what the machine is; absent from an older host or when it could not tell. */
   capabilities?: OrchestrationCapabilities;
+  /** HS2-P5GTSW: changes when the room on the machine changes; absent from an older host. */
+  version?: string;
 }
 /** HS2-ZY4Z4G: a target machine's OS, architecture, CPU, GPU, AI tool versions and toolchains. */
 export interface OrchestrationCapabilities {
@@ -2110,6 +2112,9 @@ export function parseAdmissionRefusal(value: unknown): AdmissionRefusalDetail | 
     tool: text('tool'),
   };
 }
+
+/** The longest the hosted capacity long poll holds (the server caps it at eight seconds, HS2-P5GTSW). */
+export const MACHINE_CAPACITY_WAIT_MS = 8_000;
 
 export class ApiHttpError extends Error {
   constructor(
@@ -3455,6 +3460,20 @@ export class Api {
     const query = new URLSearchParams({ capabilities: 'true', actor_role: 'human', actor_id: ORCHESTRATION_APP_ACTOR });
     return this.parsed(parseOrchestrationSites, `/checkouts/${encodeURIComponent(owner)}/orchestration/sites?${query}`);
   };
+  /**
+   * HS2-DR0ZSQ: the machine that serves this project, as the Systems screen shows it: the hosted
+   * capacity snapshot (HS2-J8PRTV). With `after` it is a long poll (HS2-P5GTSW) that answers when the
+   * snapshot's version differs, or after {@link MACHINE_CAPACITY_WAIT_MS}. Not a busy-indicator read.
+   */
+  machineCapacity = (checkout: string, after: string | undefined, signal?: AbortSignal) =>
+    this.parsed(
+      parseOrchestrationCapacity,
+      `/checkouts/${encodeURIComponent(checkout)}/target-capacity${
+        after === undefined ? '' : `?after=${encodeURIComponent(after)}&wait_ms=${String(MACHINE_CAPACITY_WAIT_MS)}`
+      }`,
+      signal ? { signal } : {},
+      false,
+    );
   orchestrationAdmission = (owner: string, target: string, tool: string) =>
     this.parsed(
       parseOrchestrationAdmission,

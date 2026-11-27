@@ -2771,6 +2771,69 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "systems-inspector",
+      "name": "SystemsInspector",
+      "kind": "component",
+      "purpose": "The Systems screen's right rail: the selected machine's running AI sessions, each named by its terminal when this app shows it (HS2-DR0ZSQ).",
+      "useWhen": [
+        "Listing the AI sessions running on the machine Systems shows."
+      ],
+      "avoidWhen": [
+        "Managing orchestrator sessions; use Settings › Orchestration."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/systems-inspector.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "systems-sidebar",
+      "name": "SystemsSidebar",
+      "kind": "component",
+      "purpose": "The Systems screen's left rail: the Machines list (This Computer, then each paired remote) with a bare CPU gauge or why there is none, and AI Tool Capacity (HS2-DR0ZSQ).",
+      "useWhen": [
+        "Choosing which machine the Systems screen shows."
+      ],
+      "avoidWhen": [
+        "Choosing a project; use the project strip."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/systems-sidebar.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "systems-view",
+      "name": "SystemsView",
+      "kind": "component",
+      "purpose": "The Systems screen's workspace: the selected machine's This Mac cards, AI tools with running sessions, capabilities and toolchains, or how to connect a machine without live readings (HS2-DR0ZSQ).",
+      "useWhen": [
+        "Showing one machine's live readings and what it is on the Systems screen."
+      ],
+      "avoidWhen": [
+        "A project's own statistics; use the Stats page."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/systems-view.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "tag-chip",
       "name": "TagChip",
       "kind": "component",

@@ -213,6 +213,7 @@ import { createSettingsSurface } from '../features/settings-surface';
 import { createSidebarSurface } from '../features/sidebar-surface';
 import { createStandbyController } from '../features/standby';
 import { createStatsGlanceController } from '../features/stats-glance';
+import { createSystemsController } from '../features/systems';
 import { createTerminalDashboardController } from '../features/terminal-dashboard';
 import { createTerminalDrawerController } from '../features/terminal-drawer';
 import {
@@ -5002,10 +5003,13 @@ export async function startHotSheetWebClient() {
   const sidebarLiveStates = projectLiveStates(liveStates, remoteLiveStates);
   // The server host's health (HS2-NS0AYR). Every project reaches the same machine server through
   // the bridge, so one resource reads through the Stats project, else the first open project.
-  const hostHealth = createHostHealthResource(() => {
-    const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
-    return new Api(target?.apiPath ?? '');
-  });
+  // HS2-DR0ZSQ: a first tab that is a remote project reaches another machine, so the fallback is the
+  // first local project; Systems names this resource This Computer.
+  const localHostTarget = () =>
+    projects.peek().find((item) => item.id === statsProjectId.peek()) ??
+    projects.peek().find((item) => !isRemoteProjectId(item.id)) ??
+    projects.peek().at(0);
+  const hostHealth = createHostHealthResource(() => new Api(localHostTarget()?.apiPath ?? ''));
   // A cross-server tab reads its own server's health (HS2-K4DY5G); the sidebar picks per project.
   const remoteHostHealth = createRemoteHostHealth();
   const sidebarHostHealth = projectHostHealth(
@@ -5018,16 +5022,10 @@ export async function startHotSheetWebClient() {
   );
   // The live CPU feed (HS2-CPFBWP) reads through the same server; the Stats glance starts it only while
   // Stats shows on a visible page.
-  const hostCpu = createHostCpuFeed(() => {
-    const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
-    return new Api(target?.apiPath ?? '', '', { trackBusy: false });
-  });
+  const hostCpu = createHostCpuFeed(() => new Api(localHostTarget()?.apiPath ?? '', '', { trackBusy: false }));
   const pageVisible = signal(document.visibilityState !== 'hidden');
   // Disk choices for host health (HS2-NHK8V8): saved through the same server, then the snapshot re-read.
-  const hostDisks = createHostDiskChoices(() => {
-    const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
-    return new Api(target?.apiPath ?? '');
-  }, hostHealth.refresh);
+  const hostDisks = createHostDiskChoices(() => new Api(localHostTarget()?.apiPath ?? ''), hostHealth.refresh);
   // Render-only clock that ages the Live section's rates and times while live state exists; it never
   // issues a request (HS2-F788GW).
   const liveClock = signal(Date.now());
@@ -6249,6 +6247,30 @@ export async function startHotSheetWebClient() {
     standbyEnteredAtMs: () => standby.enteredAtMs.value,
   });
   statsOvernight.resync = () => (shellMode.peek() === 'stats' ? statsGlance.refreshOvernight() : Promise.resolve());
+  // HS2-DR0ZSQ: the Systems screen's machines and their live reads, which run only while it shows.
+  const systems = createSystemsController({
+    showing: () => shellMode.value === 'systems',
+    pageVisible: () => pageVisible.value,
+    projects: () => projects.value,
+    remoteServers: () => desktopRemoteServers.value,
+    localHealth: () => hostHealth.state.value,
+    remoteHealth: (projectId) => sidebarHostHealth.forProject(projectId),
+    api: (projectId) => {
+      const target = projects.peek().find((item) => item.id === projectId);
+      return target ? new Api(target.apiPath, '', { trackBusy: false }) : undefined;
+    },
+    orchestrationProject: (projectId) => orchestrationView.isOrchestrationProject(projectId),
+    terminals: () =>
+      terminalGroups.value.flatMap((group) =>
+        group.sessions.map((session) => ({
+          id: session.id,
+          ...(session.title ? { title: session.title } : {}),
+          projectName: group.projectName,
+        })),
+      ),
+    toolLabel: aiToolLabel,
+    diskMessage: () => hostDisks.message.value,
+  });
   type NoteRepairSession = {
     note: Note;
     ticket: FullTicket;
@@ -6883,6 +6905,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
+    systems,
     sourceNameFor: ticketSourceName,
     minimizedTickets: () => minimizedDialogs.items(),
     settingsInspector: (current) => orchestrationSurfaceRef.current?.inspector(current),
@@ -7626,6 +7649,10 @@ export async function startHotSheetWebClient() {
     setInspectorVisible,
     statsProjectId,
     setShellMode,
+    selectSystemsMachine: (machineId: string) => {
+      systems.select(machineId);
+      setShellMode('systems');
+    },
     selectTerminalRailProject,
     selectTicketView,
     terminalRailScreen,
@@ -8494,6 +8521,7 @@ export async function startHotSheetWebClient() {
       disposeProjectChangeStreams();
       statsGlance.dispose();
       hostCpu.stop();
+      systems.dispose();
       hostHealth.dispose();
       remoteHostHealth.reset();
       disposeGridSidebarPages();

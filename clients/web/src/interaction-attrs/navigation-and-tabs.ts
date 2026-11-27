@@ -12,6 +12,11 @@ export const NAVIGATION_AND_TABS_ACTIONS = {
   selectCorruptTicket: action('select-corrupt-ticket'),
   setShellMode: action('set-shell-mode'),
   openProjectStats: action('open-project-stats'),
+  /**
+   * Show the Systems screen with the row's `data-machine-id` selected (HS2-DR0ZSQ): a Machines row,
+   * or Open in Systems from another screen (HS2-JF3EA3).
+   */
+  selectSystemsMachine: action('select-systems-machine'),
   selectProjectTab: action('select-project-tab'),
   /** Switch the workspace grid ticket rail to the row's `data-project-id` (HS2-2609BW). */
   selectTerminalRailProject: action('select-terminal-rail-project'),

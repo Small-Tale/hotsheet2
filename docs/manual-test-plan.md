@@ -613,6 +613,18 @@ Inspect the rebuilt app at wide, medium and phone widths and after returning
 to wide; verify the source choice, address form, project list and tab states
 without clipping.
 
+### Systems screen with a real paired remote (HS2-DR0ZSQ)
+
+With a disposable synthetic remote host paired in the desktop app and one of its
+projects open in a tab, open Systems from the project strip's `server` button.
+Confirm This Computer and the remote each show their own host name, cards,
+capabilities and toolchains, that the remote's CPU card follows its own live
+feed after selecting it, and that starting and stopping an AI session on each
+machine changes its session count and AI Sessions Here without a reload. Close
+the remote's last tab: its row reads Not connected. Revoke this computer on the
+remote host: its row reads Revoked. Repeat in the Tauri desktop host and on a
+phone-width browser, where both rails open as overlays from the toolbar.
+
 ### Remote project terminals (HS2-PPHJMZ, HS2-JJKVJJ)
 
 Use two disposable synthetic hosts; on one, register two checkouts, and give the

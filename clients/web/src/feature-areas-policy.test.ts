@@ -58,6 +58,8 @@ const CORE = {
     // Minimizing a ticket reader is core reader behavior (HS2-Q8WF64).
     'minimize-ticket-reader',
   ],
+  // HS2-DR0ZSQ: Systems holds the machine facts the core orchestration inspector showed.
+  stripModes: ['systems'],
   // Orchestration is shown only for an Orchestration project (HS2-J89JC7), not a feature area.
   viewModes: ['list', 'board', 'orchestration', 'notifications', 'settings'],
   settingsCategories: [
@@ -152,12 +154,14 @@ describe('feature areas policy (HS2-3GJZGG)', () => {
     }
   });
 
-  it('tags every project-strip dashboard button with its feature', () => {
+  it('tags every project-strip dashboard button that is not core with its feature', () => {
     const strip = read('components/project-strip-actions.tsx');
     const buttons = [...strip.matchAll(/<button[^>]*?data-shell-mode="(\w+)"[^>]*?>/gs)];
     expect(buttons.length).toBeGreaterThan(0);
-    for (const [button, mode] of buttons)
-      expect(/data-feature="[\w-]+"/.test(button), `strip button ${mode}`).toBe(true);
+    for (const [button, mode] of buttons) {
+      const core = (CORE.stripModes as readonly string[]).includes(mode);
+      expect(core !== /data-feature="[\w-]+"/.test(button), `strip button ${mode}`).toBe(true);
+    }
   });
 
   it('names only registered features in data-feature attributes, and gates every registered feature', () => {

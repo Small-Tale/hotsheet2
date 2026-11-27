@@ -22,6 +22,7 @@ import { StatsDashboard, type StatsDashboardProps } from './stats-dashboard';
 import { StatsOvernight, type StatsOvernightProps } from './stats-overnight';
 import { StatsRightNow, type StatsRightNowProps } from './stats-right-now';
 import { StatsThisMac, type StatsThisMacProps } from './stats-this-mac';
+import { SystemsView, type SystemsViewProps } from './systems-view';
 import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashboard';
 import { TerminalDrawer, type TerminalDrawerProps } from './terminal-drawer';
 import {
@@ -122,6 +123,8 @@ export function terminalRailSurfacePanel({ rail }: TerminalRailSurfaceProps): Na
 
 export type GlobalWorkspaceSurfaceProps =
   | { kind: 'terminals'; dashboard: TerminalDashboardProps }
+  /** The Systems screen's selected machine (HS2-DR0ZSQ). */
+  | { kind: 'systems'; systems: SystemsViewProps }
   | {
       kind: 'stats';
       projectName?: string;
@@ -140,6 +143,7 @@ export type GlobalWorkspaceSurfaceProps =
 
 export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
   if (props.kind === 'terminals') return <TerminalDashboard {...props.dashboard} />;
+  if (props.kind === 'systems') return <SystemsView {...props.systems} />;
   if (props.projectName)
     return (
       // Per-project statistics (HS2-Q1WCCY): Kerf's Pane owns the scroll and outer inset, and a
