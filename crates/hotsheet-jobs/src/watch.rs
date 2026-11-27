@@ -1077,6 +1077,9 @@ mod tests {
 
     /// HS2-2HZN2C: the exclusions are paths, so they keep applying when the watched root is
     /// removed and created again; tracked writes in the new root are still reported.
+    /// macOS only: an FSEvents stream follows the path, while the plain watcher used elsewhere
+    /// (Linux inotify) watches the removed root's inode and reports nothing in its successor.
+    #[cfg(target_os = "macos")]
     #[test]
     fn hs2_2hzn2c_exclusions_survive_the_root_being_recreated() {
         let temp = tempfile::tempdir().unwrap();
@@ -1090,19 +1093,17 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
         fs::create_dir_all(&root).unwrap();
         let seen = churn_then_marker(&receiver, &[root.join("target")], 100, &root.join("again"));
-        if cfg!(target_os = "macos") {
-            // The excluded directory's own removal and creation belong to its parent and are
-            // reported; nothing inside it is.
-            let target = root.join("target");
-            let leaked: Vec<_> = seen
-                .iter()
-                .filter(|path| path.starts_with(&target) && **path != target)
-                .collect();
-            assert!(
-                leaked.is_empty(),
-                "recreated excluded tree reported {leaked:?}"
-            );
-        }
+        // The excluded directory's own removal and creation belong to its parent and are
+        // reported; nothing inside it is.
+        let target = root.join("target");
+        let leaked: Vec<_> = seen
+            .iter()
+            .filter(|path| path.starts_with(&target) && **path != target)
+            .collect();
+        assert!(
+            leaked.is_empty(),
+            "recreated excluded tree reported {leaked:?}"
+        );
     }
 
     /// HS2-2HZN2C: changing the watched paths keeps the exclusions; an empty exclusion list
