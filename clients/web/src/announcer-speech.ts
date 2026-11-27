@@ -84,24 +84,50 @@ type SpeakableEvent = Pick<ActivityEvent, 'tool' | 'kind' | 'summary' | 'detail'
  * What the announcer says aloud for an activity event (HS2-R5Q2GY): a short summary of what was done,
  * never a literal command. Commands become a deterministic phrase by what they do; other summaries
  * keep their prose and replace inline code, code blocks, and links with plain words.
+ *
+ * The agent speaks for itself (HS2-G3HJZH): "I pushed changes to main.", never "codex pushed…". Prose
+ * that opens with the tool's name is turned to the first person by {@link firstPerson}; the shown text
+ * keeps the tool's name.
  */
 export function announcerSpokenText(event: SpeakableEvent): string {
-  const tool = agentName(event);
   if (event.kind === 'command') {
     const step = announcerStep(event);
-    return `${tool} ${withOutcome(step)}.`;
+    return `I ${withOutcome(step)}.`;
   }
   // A default tool-call summary names a raw tool id; say what the tool does instead (HS2-NKE7RB).
-  if (isDefaultToolCall(event)) return `${tool} ${toolCallPhrase(detailString(event.detail, 'name') ?? '')}.`;
+  if (isDefaultToolCall(event)) return `I ${toolCallPhrase(detailString(event.detail, 'name') ?? '')}.`;
   if (event.kind === 'edit') {
     const path = detailString(event.detail, 'path');
-    if (path && /^\S+ edited /.test(event.summary.trim())) return `${tool} edited ${basename(path)}.`;
+    if (path && /^\S+ edited /.test(event.summary.trim())) return `I edited ${basename(path)}.`;
   }
-  const spoken = speakableProse(event.summary);
-  return spoken || `${tool} reported ${event.kind.replaceAll('_', ' ')}.`;
+  const spoken = firstPerson(speakableProse(event.summary), event.tool);
+  return spoken || `I reported ${event.kind.replaceAll('_', ' ')}.`;
 }
 
 export const agentName = (event: Pick<ActivityEvent, 'tool'>) => event.tool.trim() || 'The agent';
+
+/** Nouns that follow a tool's name as its possession: "claude sub-agent: …" is "My sub-agent: …". */
+const POSSESSED = /^(?:sub-agents?|background tasks?|activity|turn|session)\b/i;
+
+/**
+ * Prose that opens with the agent's own name, said in the first person (HS2-G3HJZH): "codex is blocked:
+ * …" becomes "I am blocked: …", "claude has …" "I have …", "claude's plan" "My plan", "claude
+ * sub-agent: …" "My sub-agent: …", and "codex decided: …" "I decided: …". Other prose is unchanged.
+ */
+export function firstPerson(prose: string, tool: string): string {
+  const name = tool.trim();
+  if (!name || prose.slice(0, name.length).toLowerCase() !== name.toLowerCase()) return prose;
+  const rest = prose.slice(name.length);
+  if (/^'s\s/.test(rest)) return `My ${rest.slice(3)}`;
+  if (!/^\s/.test(rest)) return prose;
+  const words = rest.trimStart();
+  if (!words) return prose;
+  if (/^is\b/.test(words)) return `I am${words.slice(2)}`;
+  if (/^was\b/.test(words)) return `I was${words.slice(3)}`;
+  if (/^has\b/.test(words)) return `I have${words.slice(3)}`;
+  if (POSSESSED.test(words)) return `My ${words}`;
+  return `I ${words}`;
+}
 
 const isDefaultToolCall = (event: SpeakableEvent) =>
   event.kind === 'tool_call' && /^\S+ (?:called \S+|used a tool)$/.test(event.summary.trim());

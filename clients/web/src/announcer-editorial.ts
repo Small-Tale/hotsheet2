@@ -13,9 +13,10 @@ import { agentName, type AnnouncedStep, announcerStep, HEADLINE_CATEGORIES } fro
  *   and any other event whose prose reports a failure or an error.
  * - **Routine steps** (reading, searching, listing, Git status and diffs, edits, other programs and
  *   tool calls, notes) fold into one entry per agent (project, tool, and session) for up to
- *   {@link ANNOUNCER_GROUP_WINDOW_MS}, said once as what was done ("codex looked through the code for
+ *   {@link ANNOUNCER_GROUP_WINDOW_MS}, shown once as what was done ("codex looked through the code for
  *   overlay and edited reel.ts.") with every step still listed on screen. A headline from the same
- *   agent closes its open group first, so the summary is said before the headline.
+ *   agent closes its open group first. Live narration does not say routine entries (HS2-G3HJZH,
+ *   {@link announcerSpeaks}).
  *
  * The edit is pure and deterministic: the same reel, clock, and arrival times give the same entries.
  * Entries keep the reel's time order, and a group keeps its first step's key as it grows.
@@ -101,6 +102,19 @@ export function editAnnouncerReel(reel: readonly AnnouncerReelItem[], options: E
   });
 }
 
+/** Turn boundaries: shown in the reel, never said, since "I finished a turn" says nothing (HS2-G3HJZH). */
+const UNSPOKEN_KINDS: ReadonlySet<string> = new Set(['turn_start', 'turn_end']);
+
+/**
+ * Whether live narration says an entry aloud (HS2-G3HJZH). Routine steps, folded or alone, and turn
+ * boundaries are minutiae: they stay in the reel to read and step through, and Play still says them
+ * on request, but live narration passes over them and says only headlines.
+ */
+export function announcerSpeaks(entry: Pick<AnnouncerEntry, 'level' | 'members'>): boolean {
+  if (entry.level !== 'headline') return false;
+  return !entry.members.every((member) => UNSPOKEN_KINDS.has(member.event.kind));
+}
+
 /** When the earliest open group settles, for a runtime timer; undefined when none is open. */
 export function nextSettleAt(entries: readonly AnnouncerEntry[], options: EditorialOptions): number | undefined {
   const windowMs = options.windowMs ?? ANNOUNCER_GROUP_WINDOW_MS;
@@ -119,7 +133,10 @@ function groupEntry(group: Group, settled: boolean): AnnouncerEntry {
   const [first] = group.members;
   if (group.members.length === 1) return { ...first, members: group.members, level: 'routine', settled };
   const last = group.members[group.members.length - 1];
-  const spoken = `${agentName(first.event)} ${groupPhrase(group.steps)}.`;
+  const phrase = groupPhrase(group.steps);
+  // Spoken in the first person (HS2-G3HJZH); shown with the tool's name.
+  const spoken = `I ${phrase}.`;
+  const shown = `${agentName(first.event)} ${phrase}.`;
   const listed = group.members
     .slice(0, LISTED_STEPS)
     .map((member) => `- ${member.narration.replace(/\s+/g, ' ').trim()}`);
@@ -131,7 +148,7 @@ function groupEntry(group: Group, settled: boolean): AnnouncerEntry {
     projectName: first.projectName,
     storeId: first.storeId,
     event: last.event,
-    narration: `${spoken}\n\n${listed.join('\n')}`,
+    narration: `${shown}\n\n${listed.join('\n')}`,
     spoken,
     members: group.members,
     level: 'routine',

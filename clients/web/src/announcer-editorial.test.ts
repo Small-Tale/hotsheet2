@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ANNOUNCER_GROUP_WINDOW_MS,
   announcerLevel,
+  announcerSpeaks,
   editAnnouncerReel,
   groupPhrase,
   nextSettleAt,
@@ -100,13 +101,13 @@ describe('announcer editorial reel (HS2-RKYCTP)', () => {
     ];
     const entries = editAnnouncerReel(reel, settledLater);
     expect(entries.map((entry) => entry.spoken)).toEqual([
-      'codex edited reel.ts and speech.ts and looked through the code for overlay.',
-      'codex ran the unit tests, and they failed.',
-      'codex edited speech.ts and searched the code for failing.',
-      'codex ran the unit tests, and they passed.',
-      'codex staged changes and committed changes.',
-      'codex pushed changes to main.',
-      'codex finished a turn',
+      'I edited reel.ts and speech.ts and looked through the code for overlay.',
+      'I ran the unit tests, and they failed.',
+      'I edited speech.ts and searched the code for failing.',
+      'I ran the unit tests, and they passed.',
+      'I staged changes and committed changes.',
+      'I pushed changes to main.',
+      'I finished a turn',
     ]);
     expect(entries.length).toBeLessThanOrEqual(reel.length / 2);
     // Every reel item is told by exactly one entry, in order.
@@ -121,7 +122,7 @@ describe('announcer editorial reel (HS2-RKYCTP)', () => {
     const entries = editAnnouncerReel(reel, settledLater);
     const headlines = entries.filter((entry) => entry.level === 'headline');
     expect(headlines).toHaveLength(6);
-    expect(headlines.every((entry) => entry.members.length === 1 && entry.spoken === 'codex committed changes.')).toBe(
+    expect(headlines.every((entry) => entry.members.length === 1 && entry.spoken === 'I committed changes.')).toBe(
       true,
     );
     expect(entries.filter((entry) => entry.level === 'routine').map((entry) => entry.members.length)).toEqual([
@@ -134,7 +135,7 @@ describe('announcer editorial reel (HS2-RKYCTP)', () => {
     const entries = editAnnouncerReel(reel, settledLater);
     // 150 seconds of searching in 45-second windows: four summaries.
     expect(entries.map((entry) => entry.members.length)).toEqual([9, 9, 9, 3]);
-    expect(entries[0].spoken).toBe('codex looked through the code.');
+    expect(entries[0].spoken).toBe('I looked through the code.');
   });
 
   it('keeps agents apart and the order stable as entries grow', () => {
@@ -154,7 +155,7 @@ describe('announcer editorial reel (HS2-RKYCTP)', () => {
       [b.key, 1, true],
       [b2.key, 1, true],
     ]);
-    expect(second[0].spoken).toBe('codex looked through the code for alpha.');
+    expect(second[0].spoken).toBe('I looked through the code for alpha.');
     // Same input, same output.
     expect(editAnnouncerReel([a, b, a2, b2], { now: BASE + 4_000 })).toEqual(second);
     // Another project or session is another agent.
@@ -215,7 +216,7 @@ describe('announcer editorial reel (HS2-RKYCTP)', () => {
     // A lone step keeps its own display and speech.
     const lone = editAnnouncerReel([edit(0, 'src/sample.ts')], settledLater)[0];
     expect(lone.narration).toBe('codex edited src/sample.ts');
-    expect(lone.spoken).toBe('codex edited sample.ts.');
+    expect(lone.spoken).toBe('I edited sample.ts.');
     expect(lone.change?.path).toBe('src/sample.ts');
   });
 
@@ -251,5 +252,33 @@ describe('announcer group phrases (HS2-RKYCTP)', () => {
     expect(groupPhrase([])).toBe('kept working');
     expect(spokenList(['a', 'b', 'c'])).toBe('a, b and c');
     expect(spokenList([])).toBe('');
+  });
+});
+
+describe('live narration says headlines, not minutiae (HS2-G3HJZH)', () => {
+  it('passes over routine groups, lone routine steps, and turn boundaries', () => {
+    const reel = [
+      step(0, 'turn_start', 'codex started a turn'),
+      command(1, 'rg -n overlay src'),
+      command(2, 'sed -n 1,80p src/reel.ts'),
+      command(3, 'git commit -m x'),
+      edit(4, 'src/sample.ts'),
+      step(5, 'turn_end', 'codex finished a turn', { importance: 'high' }),
+      step(6, 'blocked', 'codex is blocked: waiting for review', { importance: 'high' }),
+    ];
+    const entries = editAnnouncerReel(reel, settledLater);
+    expect(entries.map((entry) => [entry.spoken, announcerSpeaks(entry)])).toEqual([
+      ['I looked through the code for overlay and took one other step.', false],
+      ['I committed changes.', true],
+      ['I edited sample.ts.', false],
+      ['I finished a turn', false],
+      ['I am blocked: waiting for review', true],
+    ]);
+  });
+
+  it('shows a group with the tool name while speaking it in the first person', () => {
+    const [entry] = editAnnouncerReel([command(0, 'rg -n alpha src'), command(1, 'rg -n alpha lib')], settledLater);
+    expect(entry.spoken).toBe('I looked through the code for alpha.');
+    expect(entry.narration.split('\n')[0]).toBe('codex looked through the code for alpha.');
   });
 });

@@ -111,9 +111,12 @@ The `activity` capability turns native signals → events; the host owns the str
   to the current item, HS2-7YD7S9). The shown item renders as Markdown through the
   shared note renderer, so commands and code are monospaced (HS2-YJK0G9). An utterance about a
   different project than the one said before it, and the first utterance after the announcer opens,
-  names its project first: "For Hot Sheet 2, codex pushed changes to main." Utterances about the same
+  names its project first: "For Hot Sheet 2, I pushed changes to main." Utterances about the same
   project follow without it; the shown item is unchanged, since its header already names the project
-  (HS2-MR8GA4, `clients/web/src/announcer-utterance.ts`). Speech
+  (HS2-MR8GA4, `clients/web/src/announcer-utterance.ts`). The agent speaks for itself (HS2-G3HJZH):
+  spoken text says "I" and "my", never the tool's name ("I pushed changes to main", "I am blocked:
+  …", "My sub-agent: …"), and prose that opens with the tool's name is turned to the first person.
+  The shown text keeps the tool's name. Speech
   never reads a literal command (HS2-R5Q2GY): the client derives a deterministic spoken
   summary. A command event becomes what it does, as specifically as can be said without reading
   the command (HS2-RKYCTP). Wrappers are unwrapped first: a shell running a script (`zsh -lc '…'`,
@@ -122,7 +125,7 @@ The `activity` capability turns native signals → events; the host owns the str
   (`npx`, `npm exec`, `pnpm dlx`, `bunx`) and environment runners (`uv run`, `bundle exec`), so the
   announcer never says "ran zsh". A compound line is split at unquoted `&&`, `||`, `;`, `&`, `|` and
   parentheses, shell housekeeping (`cd`, `export`, `echo`, `set`) and pipe filters are dropped, and
-  the two most important distinct phrases are said in the order they ran ("codex committed changes
+  the two most important distinct phrases are said in the order they ran ("I committed changes
   and pushed changes to main"). A script is named by what its name says it does
   (`node scripts/test-quiet.mjs` "ran the tests"). When the tool reports the exit code (Codex
   records it), a test run says "and they passed" or "and they failed", and any other failed command
@@ -158,11 +161,17 @@ The `activity` capability turns native signals → events; the host owns the str
   before the headline; another agent's events never close it. The folded entry still shows its
   summary over a list of the steps it folded (up to 12, then a count), each with its precise
   command. A lone routine step keeps its own text and speech. Entries keep the reel's time order and
-  a growing group keeps its first step's key, so the shown entry stays selected. Live narration says
+  a growing group keeps its first step's key, so the shown entry stays selected. Live narration takes
   each entry once, when it is settled: a headline immediately and a group when a headline closes it
-  or its window ends, using a runtime timer that exists only while live narration is on. Entries
+  or its window ends, using a runtime timer that exists only while live narration is on. It says
+  only headlines (HS2-G3HJZH): routine entries, folded or alone, and turn start and turn end events
+  are minutiae, so live mode shows them as it passes but does not say them; Play still says the
+  shown entry on request. Entries
   already shown when live narration starts, and retained history, are not repeated. Clear history
-  resets the edit. Other events keep their prose,
+  resets the edit. Ticket-level milestones with substance (a ticket started with initial thoughts, a
+  decision with the follow-up it created, a question for the person) need a ticket-write source the
+  activity stream does not carry yet; the wording source and default chattiness wait on the
+  maintainer's choice on HS2-G3HJZH. Other events keep their prose,
   with inline code read as a short name or "a command", and code blocks and links
   replaced by plain words. A default edit summary is read by file name,
   browser speech or a configured server provider. The macOS server offers a local
