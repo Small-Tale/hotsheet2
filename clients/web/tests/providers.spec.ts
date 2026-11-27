@@ -38311,6 +38311,113 @@ test('keeps an unmergeable attachment label recovery copy in a conflict card and
   await expect.poll(storedDraft).toEqual([]);
 });
 
+test('shows the conflict card instead of overwriting when a finished label edit overlaps a newer label, and announces a clean merge (HS2-ESHNH3)', async ({
+  page,
+}) => {
+  const writes: Array<{ attachment_ids: string[]; batch_label?: string; batch_id?: string }> = [],
+    polls: import('@playwright/test').Route[] = [];
+  let ticketReads = 0,
+    cursor = 1,
+    liveFull = {
+      ...full,
+      attachments: full.attachments.map((item) => ({ ...item, batch_id: 'b1', batch_label: 'Repro' })),
+    };
+  const setLabel = (label: string) => {
+    liveFull = { ...liveFull, attachments: liveFull.attachments.map((item) => ({ ...item, batch_label: label })) };
+  };
+  await mockProject(page);
+  await page.route('**/tickets/*01', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    ticketReads += 1;
+    return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+  });
+  await page.route('**/tickets/*01/attachments', (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    const body = route.request().postDataJSON() as (typeof writes)[number];
+    writes.push(body);
+    if (body.batch_label !== undefined) setLabel(body.batch_label);
+    return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+  });
+  await page.route('**/ws/poll*', (route) => {
+    if (new URL(route.request().url()).searchParams.get('since') === null)
+      return route.fulfill({ json: { cursor, events: [], overflow: false } });
+    polls.push(route);
+  });
+  /** Another collaborator relabels the batch; the change stream refreshes the open inspector. */
+  const relabelElsewhere = async (label: string) => {
+    setLabel(label);
+    const readsBefore = ticketReads;
+    await expect.poll(() => polls.length).toBeGreaterThan(0);
+    cursor += 1;
+    await polls.shift()!.fulfill({
+      json: {
+        cursor,
+        events: [{ store: 'demo-checkout', kind: 'updated', id: '01', slug: 'HS2-DEMO01' }],
+        overflow: false,
+      },
+    });
+    await expect.poll(() => ticketReads).toBeGreaterThan(readsBefore);
+  };
+  const storedDraft = () =>
+    page.evaluate(() =>
+      Object.keys(localStorage)
+        .filter((key) => key.includes(':attachment_label:'))
+        .map((key) => JSON.parse(localStorage.getItem(key)!) as { base: string; draft: string }),
+    );
+  const inspector = page.locator('#app-right-rail'),
+    batch = inspector.locator('[data-attachment-batch-key="b1"]'),
+    card = batch.locator('[data-component="ticket-field-conflict"]'),
+    editor = batch.getByRole('textbox', { name: /^Batch Label for/ });
+  await page.goto('/');
+  await openMockedProject(page);
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
+  await inspector.getByRole('tab', { name: /Attachments/ }).click();
+
+  // The user rewrites the label while a collaborator rewrites the same words.
+  await batch.getByRole('button', { name: 'Edit Batch Label Repro' }).click();
+  await expect(editor).toBeFocused();
+  await editor.fill('Repro on Safari 17');
+  await relabelElsewhere('Repro on WebKit');
+  await expect(editor).toHaveValue('Repro on Safari 17');
+  expect(writes).toHaveLength(0);
+
+  // Finishing the edit writes nothing: the newer label stays, the user's text is kept in the copy, and
+  // the batch offers both versions in its conflict card.
+  await editor.press('Enter');
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Resolve attachment label conflict');
+  await expect(card).toContainText('Repro on WebKit');
+  await expect(card).toContainText('Repro on Safari 17');
+  await expect(editor).toBeHidden();
+  await expect(batch.getByRole('heading', { level: 3 })).toHaveText('Repro on WebKit');
+  await expect.poll(storedDraft).toEqual([expect.objectContaining({ base: 'Repro', draft: 'Repro on Safari 17' })]);
+  expect(writes).toHaveLength(0);
+  const merged = card.getByRole('textbox', { name: 'Merged attachment label' });
+  await expect(merged).toHaveValue('Repro on Safari 17');
+  await merged.fill('Repro on Safari 17 and WebKit');
+  expect(writes).toHaveLength(0);
+  await card.getByRole('button', { name: 'Apply Merged Value' }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toMatchObject({ batch_label: 'Repro on Safari 17 and WebKit' });
+  await expect(card).toHaveCount(0);
+  await expect(batch.getByRole('heading', { level: 3 })).toHaveText('Repro on Safari 17 and WebKit');
+  await expect.poll(storedDraft).toEqual([]);
+
+  // Edits to different words merge at save time, write once, and say so with the merge toast.
+  await relabelElsewhere('alpha beta gamma');
+  await batch.getByRole('button', { name: 'Edit Batch Label alpha beta gamma' }).click();
+  await expect(editor).toBeFocused();
+  await editor.fill('ALPHA beta gamma');
+  await relabelElsewhere('alpha beta GAMMA');
+  await editor.press('Enter');
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]).toMatchObject({ batch_label: 'ALPHA beta GAMMA' });
+  await expect(page.locator('.app-toast')).toContainText('Merged your edit with a newer change to Attachment Label.');
+  await expect(card).toHaveCount(0);
+  await expect(batch.getByRole('heading', { level: 3 })).toHaveText('ALPHA beta GAMMA');
+  await expect.poll(storedDraft).toEqual([]);
+});
+
 test('moves a media thumbnail between batches and removes active media from its gallery menu (HS2-9PA2KD, HS2-EDX5J3)', async ({
   page,
 }) => {

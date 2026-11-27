@@ -374,6 +374,9 @@ describe('attachment label autosave contract (HS2-0QQHSZ)', () => {
     h.setRemote('alpha beta GAMMA');
     await h.editor.finish(batch.input);
     expect(h.saves.at(-1)?.label).toBe('ALPHA beta GAMMA');
+    expect(h.storage.items.size).toBe(0);
+    // The combined save is announced once it commits, as ticket fields do (HS2-ESHNH3, HS2-JJ3R1G).
+    expect(h.notes).toEqual(['Merged your edit with a newer change to Attachment Label.']);
 
     // When the remote already holds the draft, or the user changed nothing, no write happens.
     const converged = editableBatch('k2', 'A');
@@ -484,6 +487,9 @@ describe('attachment label conflicts keep the recovery copy (HS2-9DQXGY)', () =>
       editor,
       setFail: (next: boolean) => {
         fail = next;
+      },
+      setRemote: (next: string) => {
+        label = next;
       },
       field: (value: string) => ({ value }) as unknown as HTMLTextAreaElement,
     };
@@ -608,5 +614,128 @@ describe('attachment label conflicts keep the recovery copy (HS2-9DQXGY)', () =>
     h.editor.begin(converged.title);
     expect(h.conflict.value).toBeUndefined();
     expect(h.storage.items.size).toBe(0);
+  });
+  it('a finished edit that overlaps a newer label keeps the draft in the card and writes nothing (HS2-ESHNH3)', async () => {
+    const h = setup('Repro');
+    const batch = editableBatch('k1', 'Repro', ['a', 'b'], 'reader-1');
+    expect(h.editor.begin(batch.title)).toBe(batch.input);
+    batch.input.value = 'Repro on Safari 17';
+    h.editor.input(batch.input);
+    // Another collaborator rewrote the same words while the editor was open.
+    h.setRemote('Repro on WebKit');
+    await expect(h.editor.finish(batch.input)).resolves.toBe(true);
+    expect(h.saves).toEqual([]);
+    expect(h.notes).toEqual([]);
+    expect(h.editing.value).toBeUndefined();
+    expect(JSON.parse(h.storage.getItem('draft:k1') ?? '{}')).toMatchObject({
+      base: 'Repro',
+      draft: 'Repro on Safari 17',
+    });
+    expect(h.conflict.value).toMatchObject({
+      scope: 'reader-1',
+      ticketKey: 'ticket-of-reader-1',
+      key: 'k1',
+      draftKey: 'draft:k1',
+      ids: ['a', 'b'],
+      metadata: { batch_id: 'batch-id' },
+      base: 'Repro',
+      mine: 'Repro on Safari 17',
+      theirs: 'Repro on WebKit',
+      resolution: 'Repro on Safari 17',
+    });
+    // The debounce timer fires later without writing either.
+    vi.runAllTimers();
+    expect(h.saves).toEqual([]);
+    // Reopening the rerendered batch finds the same kept copy and keeps the card instead of the editor.
+    expect(h.editor.begin(editableBatch('k1', 'Repro on WebKit', ['a', 'b'], 'reader-1').title)).toBeUndefined();
+    expect(h.conflict.value?.mine).toBe('Repro on Safari 17');
+    // Apply Merged Value writes once and drops the copy; editing afterwards starts from the result.
+    h.editor.conflictInput(h.field('Repro on Safari 17 and WebKit'));
+    await expect(h.editor.applyMerge()).resolves.toBe(true);
+    expect(h.saves).toEqual(['Repro on Safari 17 and WebKit']);
+    expect(h.storage.items.size).toBe(0);
+    expect(h.conflict.value).toBeUndefined();
+    const again = editableBatch('k1', 'Repro on Safari 17 and WebKit', ['a', 'b'], 'reader-1');
+    expect(h.editor.begin(again.title)).toBe(again.input);
+    again.input.value = 'Repro everywhere';
+    h.editor.input(again.input);
+    await h.editor.finish(again.input);
+    expect(h.saves.at(-1)).toBe('Repro everywhere');
+  });
+
+  it('an overlap found by page hide keeps the copy, and Use Theirs then drops it without a write', async () => {
+    const h = setup('one');
+    const batch = editableBatch('k1', 'one');
+    h.editor.begin(batch.title);
+    batch.input.value = 'two';
+    h.editor.input(batch.input);
+    h.setRemote('three');
+    await expect(h.editor.flush()).resolves.toBe(true);
+    expect(h.saves).toEqual([]);
+    expect(h.conflict.value).toMatchObject({ base: 'one', mine: 'two', theirs: 'three' });
+    expect(h.storage.items.has('draft:k1')).toBe(true);
+    h.editor.acceptTheirs();
+    expect(h.conflict.value).toBeUndefined();
+    expect(h.storage.items.size).toBe(0);
+    expect(h.saves).toEqual([]);
+  });
+
+  it('an editor left open after a page-hide save continues from the saved label (HS2-ESHNH3)', async () => {
+    const h = setup('one two three four five');
+    const batch = editableBatch('k1', 'one two three four five');
+    h.editor.begin(batch.title);
+    batch.input.value = 'ONE two three four five';
+    h.editor.input(batch.input);
+    h.setRemote('one two three four FIVE');
+    await expect(h.editor.flush()).resolves.toBe(true);
+    expect(h.saves).toEqual(['ONE two three four FIVE']);
+    // The unchanged draft adopts the merged label, so blurring afterwards writes nothing.
+    expect(h.editing.value).toMatchObject({ draft: 'ONE two three four FIVE', base: 'ONE two three four FIVE' });
+    await h.editor.finish(batch.input);
+    expect(h.saves).toHaveLength(1);
+
+    // Text typed while a merged write is in flight merges against the sent draft, so the newer
+    // label's change is never reverted and nothing reads as a conflict.
+    const next = editableBatch('k2', 'one two three four five');
+    h.setRemote('one two three four five');
+    h.editor.begin(next.title);
+    next.input.value = 'ONE two three four five';
+    h.editor.input(next.input);
+    h.setRemote('one two three four FIVE');
+    const pending = h.editor.flush();
+    next.input.value = 'ONE two THREE four five';
+    h.editor.input(next.input);
+    await expect(pending).resolves.toBe(true);
+    expect(h.editing.value?.base).toBe('ONE two three four five');
+    await expect(h.editor.finish(next.input)).resolves.toBe(true);
+    expect(h.saves.slice(1)).toEqual(['ONE two three four FIVE', 'ONE two THREE four FIVE']);
+    expect(h.conflict.value).toBeUndefined();
+  });
+
+  it('a save-time merge is announced only after its write commits (HS2-ESHNH3)', async () => {
+    const h = setup('alpha beta gamma');
+    const batch = editableBatch('k1', 'alpha beta gamma');
+    h.editor.begin(batch.title);
+    batch.input.value = 'ALPHA beta gamma';
+    h.editor.input(batch.input);
+    h.setRemote('alpha beta GAMMA');
+    h.setFail(true);
+    await expect(h.editor.finish(batch.input)).resolves.toBe(false);
+    expect(h.saves).toEqual(['ALPHA beta GAMMA']);
+    expect(h.notes).toEqual([]);
+    expect(h.conflict.value).toBeUndefined();
+    h.setFail(false);
+    h.editor.input(batch.input);
+    await expect(h.editor.finish(batch.input)).resolves.toBe(true);
+    expect(h.saves).toEqual(['ALPHA beta GAMMA', 'ALPHA beta GAMMA']);
+    expect(h.notes).toEqual(['Merged your edit with a newer change to Attachment Label.']);
+    // A plain save with no newer label says nothing beyond the save's own acknowledgement.
+    const plain = editableBatch('k2', 'x');
+    h.setRemote('x');
+    h.editor.begin(plain.title);
+    plain.input.value = 'y';
+    h.editor.input(plain.input);
+    await h.editor.finish(plain.input);
+    expect(h.notes).toHaveLength(1);
   });
 });

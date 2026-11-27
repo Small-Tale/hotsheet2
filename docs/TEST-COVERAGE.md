@@ -959,6 +959,12 @@ unmergeable recovery copy.
 - `clients/web/src/components/ticket-field-conflict.test.ts` and `clients/web/src/components/ticket-attachments-interactions.test.ts` pin the card's routed actions and field name and the batch's handler wiring.
 - `clients/web/tests/providers.spec.ts # keeps an unmergeable attachment label recovery copy in a conflict card and auto-merges a disjoint one (HS2-9DQXGY)` runs through the shipped inspector attachment list: a reload whose copy overlaps a newer label shows the card with the copy kept, Apply Merged Value writes once, Use Theirs writes nothing, and a disjoint copy merges with the toast.
 
+HS2-ESHNH3 applies the rule at save time: a finished label edit no longer overwrites a newer
+label it overlaps.
+
+- `clients/web/src/attachment-label-editing.test.ts # attachment label conflicts keep the recovery copy (HS2-9DQXGY)` covers a finished overlapping edit that writes nothing and keeps its copy in the card (then Apply Merged Value and a later edit), an overlap found by page hide settled by Use Theirs, a save-time merge announced only after its write commits, and an editor left open after a page-hide save that continues from the saved label, including text typed during the write.
+- `clients/web/tests/providers.spec.ts # shows the conflict card instead of overwriting when a finished label edit overlaps a newer label, and announces a clean merge (HS2-ESHNH3)` runs through the shipped inspector: a live relabel that overlaps the open edit makes Enter write nothing and show the card with the copy kept; Apply Merged Value writes once; a disjoint live relabel merges at save time with one write and the merge toast.
+
 HS2-P9A21R covers the five-view phone toolbar and reachable sidebar toggle
 through the shipped shell in `clients/web/tests/shell-composition.spec.ts`.
 `mobile-layout.spec.ts` keeps overlay and resize navigation in the affected

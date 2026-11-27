@@ -204,7 +204,9 @@ const defaultStorage = (): DraftStorage | undefined => (typeof localStorage === 
  * debounce, a local recovery copy keyed by project, ticket, and batch with the label the edit
  * started from. The single server write happens when focus leaves the editor (Enter blurs it) or
  * the page hides, three-way merged against that edit-start label so the user's own typing never
- * conflicts. Reopening the batch restores an unsaved copy.
+ * conflicts. A newer label changed in other words merges and is announced; one that truly overlaps
+ * keeps the copy for the batch's conflict card instead of being overwritten (HS2-ESHNH3). Reopening
+ * the batch restores an unsaved copy.
  */
 export function createAttachmentLabelEditor(options: AttachmentLabelEditorOptions): AttachmentLabelEditor {
   const { editing, draftKey, currentLabel, describe, save, notify } = options,
@@ -223,21 +225,70 @@ export function createAttachmentLabelEditor(options: AttachmentLabelEditorOption
       if (committed === undefined || !stored || stored.draft.trim() === committed.trim())
         clearTicketDraft(copy.store, copy.key);
     };
+  // The card's merged value re-renders its batch once per typing pause, never per key (HS2-9CWDSB).
+  const conflictInput = createCoalescedInput<string>((resolution) => {
+    const current = conflict.value;
+    if (current) conflict.value = { ...current, resolution };
+  });
+  const sameEdit = (a: AttachmentLabelEditing | undefined, b: AttachmentLabelEditing) =>
+    a?.scope === b.scope && a.key === b.key;
   async function commit(edit: AttachmentLabelEditing): Promise<boolean> {
-    const copy = copyOf(edit.key),
+    // A queued draft merges against the open editor's latest base: an earlier write from the same
+    // edit (page hide) moved it, so this client's own committed label never reads as a newer one.
+    const live = editing.value,
+      copy = copyOf(edit.key),
       draft = edit.draft ?? edit.original,
-      base = edit.base ?? edit.original,
+      base = (sameEdit(live, edit) ? live?.base : undefined) ?? edit.base ?? edit.original,
       theirs = currentLabel(edit),
-      next = reconcileActiveDraft(base, draft, theirs),
-      // A clean merge keeps both sides; a true conflict lets the user's finished edit win.
-      label = (next.kind === 'merged' ? next.draft : draft).trim();
+      next = reconcileActiveDraft(base, draft, theirs);
+    if (next.kind === 'conflict') {
+      // A true overlap never overwrites the newer label (HS2-ESHNH3, HS2-7D3MPP): write nothing, keep
+      // the recovery copy, close the editor, and offer both versions in the batch's conflict card, as
+      // a reopened overlapping copy does (HS2-9DQXGY).
+      const key = copy?.key ?? `attachment_label:${edit.scope}:${edit.key}`;
+      if (copy) saveTicketDraft(copy.store, copy.key, { base, draft });
+      conflictInput.cancel();
+      conflict.value = {
+        scope: edit.scope,
+        ticketKey: options.ticketKey?.(edit.scope),
+        key: edit.key,
+        draftKey: key,
+        ids: edit.ids,
+        metadata: edit.metadata,
+        base,
+        mine: draft,
+        theirs,
+        resolution: draft,
+      };
+      if (sameEdit(editing.value, edit)) editing.value = undefined;
+      return true;
+    }
+    // A clean merge keeps both sides.
+    const label = (next.kind === 'merged' ? next.draft : draft).trim();
     if (next.kind === 'adopt-remote' || label === theirs.trim()) {
       dropCopy(edit.key);
       return true;
     }
+    // A merged save also settles the copy of the draft it merged; text typed during the write stays.
     const clearCommitted = prepareCommittedDraftCleanup(copy?.store, copy?.key, 'attachment_label', label),
+      clearMerged = prepareCommittedDraftCleanup(copy?.store, copy?.key, 'attachment_label', draft),
       saved = await save(edit, label);
-    if (saved) clearCommitted();
+    if (saved) {
+      clearCommitted();
+      clearMerged();
+      // An editor left open (page hide) continues from what was saved: an unchanged draft adopts the
+      // merged label, and text typed during the write merges against the sent draft next time.
+      const current = editing.value;
+      if (current && sameEdit(current, edit))
+        editing.value =
+          (current.draft ?? current.original) === draft
+            ? { ...current, base: label, draft: next.kind === 'merged' ? label : draft }
+            : { ...current, base: next.kind === 'merged' ? draft : label };
+      // The saved label combines both edits, so say so once it commits, as ticket fields do (HS2-JJ3R1G).
+      // The one toast replaces the save's "Attachment group updated." acknowledgement.
+      if (next.kind === 'merged' && label !== draft.trim() && label !== theirs.trim())
+        notify?.(mergedEditNotice(['attachment_label']));
+    }
     return saved;
   }
   const autosave = createFocusLossAutosave(commit, {
@@ -269,11 +320,6 @@ export function createAttachmentLabelEditor(options: AttachmentLabelEditorOption
     },
   });
   const owns = (field: Element) => editing.value?.scope === attachmentLabelEditScope(field);
-  // The card's merged value re-renders its batch once per typing pause, never per key (HS2-9CWDSB).
-  const conflictInput = createCoalescedInput<string>((resolution) => {
-    const current = conflict.value;
-    if (current) conflict.value = { ...current, resolution };
-  });
   let applying = false;
   const settleConflict = (settled: AttachmentLabelConflict) => {
     const store = storage();

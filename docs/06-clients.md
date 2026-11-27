@@ -2917,6 +2917,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   local recovery copy keyed by project, ticket, and batch with the label the edit started from.
   The one server write happens when focus leaves the editor (Enter blurs it) or the page hides,
   merged against that edit-start label, and the editor shows its draft until the write commits.
+  A newer label that changed other words is three-way merged into that write and announced with
+  the merge toast once it commits. A newer label that overlaps the user's change is never
+  overwritten: nothing is written, the editor closes, the recovery copy stays, and the batch shows
+  the conflict card described below (HS2-ESHNH3). An editor left open after a page-hide write
+  continues from the saved label.
   Enter or Escape returns keyboard focus to the batch title once that write settles and the
   editor closes, however long the save takes (HS2-VRBDPV). Reopening the batch restores an
   unsaved copy with the ticket fields' restore rules: a copy that a newer label changed in other
