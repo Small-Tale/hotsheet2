@@ -9,9 +9,16 @@
 //! kill-on-close job object (the one validation steps use, HS2-2R32SD). A plugin that
 //! starts a child of its own (a shell script that does not `exec`) therefore leaves
 //! nothing running after a timeout or a cancel, and nothing holding its output pipes.
+//!
+//! HS2-BR14FM: the same holds after a plugin exits normally. Its output is drained for at
+//! most [`DRAIN_GRACE`] after the exit, then whatever it left in its tree is ended and the
+//! run returns with what the plugin printed. On Unix the exit is observed without reaping
+//! the plugin (`waitid` with `WNOWAIT`), so its group id stays its own until `killpg`.
 
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use crate::cancel::WaitCancel;
@@ -23,6 +30,9 @@ pub struct ProcessOutput {
     pub code: Option<i32>,
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
+    /// HS2-BR14FM: the plugin exited but something it started still held its output
+    /// open after [`DRAIN_GRACE`]; that process tree was ended.
+    pub left_running: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -130,36 +140,23 @@ fn run_process(
         // and output then explain the failure, so a write error is not reported here.
         let _ = pipe.write_all(stdin);
     }
-    let mut stdout = child.stdout.take();
-    let mut stderr = child.stderr.take();
-    let out_reader = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(pipe) = stdout.as_mut() {
-            let _ = pipe.read_to_end(&mut buf);
-        }
-        buf
-    });
-    let err_reader = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(pipe) = stderr.as_mut() {
-            let _ = pipe.read_to_end(&mut buf);
-        }
-        buf
-    });
+    let (closed, drained) = std::sync::mpsc::channel();
+    let stdout = read_stream(child.stdout.take(), closed.clone());
+    let stderr = read_stream(child.stderr.take(), closed);
     let started = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
+    loop {
+        match tree.exited(&mut child) {
+            Ok(true) => break,
             // HS2-P234BH: checked on the same local child-exit loop, so a cancel stops
             // the process within one step and adds no wake-up of its own.
-            Ok(None) if cancelled() => {
+            Ok(false) if cancelled() => {
                 tree.stop(&mut child);
                 let _ = child.wait();
                 return Err(RunError::Cancelled {
                     program: program.to_owned(),
                 });
             }
-            Ok(None) if started.elapsed() >= timeout => {
+            Ok(false) if started.elapsed() >= timeout => {
                 tree.stop(&mut child);
                 let _ = child.wait();
                 return Err(RunError::Timeout {
@@ -168,21 +165,86 @@ fn run_process(
                 });
             }
             // A local child-process wait; no network request is issued here.
-            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+            Ok(false) => std::thread::sleep(Duration::from_millis(10)),
             Err(e) => {
+                tree.stop(&mut child);
+                let _ = child.wait();
                 return Err(RunError::Wait {
                     program: program.to_owned(),
                     message: e.to_string(),
                 });
             }
         }
-    };
+    }
+    // HS2-BR14FM: the plugin has exited (on Unix it is not reaped yet). Its output closes
+    // with it unless something it started still holds a pipe; that is waited for only
+    // `DRAIN_GRACE`, then the rest of its tree is ended the way a stop ends it.
+    let open = await_closed(&drained, 2, DRAIN_GRACE);
+    tree.end_leftovers(&child);
+    let status = child.wait().map_err(|e| RunError::Wait {
+        program: program.to_owned(),
+        message: e.to_string(),
+    })?;
+    if open > 0 {
+        // Ending the tree closes the pipes; a process that left the tree is not waited
+        // for beyond this, and what was read so far is the output.
+        await_closed(&drained, open, DRAIN_GRACE);
+    }
     Ok(ProcessOutput {
         success: status.success(),
         code: status.code(),
-        stdout: out_reader.join().unwrap_or_default(),
-        stderr: err_reader.join().unwrap_or_default(),
+        stdout: take(&stdout),
+        stderr: take(&stderr),
+        left_running: open > 0,
     })
+}
+
+/// HS2-BR14FM: how long a finished plugin's output may stay open before what holds it
+/// is taken for a process the plugin left running.
+const DRAIN_GRACE: Duration = Duration::from_secs(1);
+
+/// Read `pipe` to its end on a thread of its own, into a buffer the caller can take at
+/// any time; `closed` is told when the stream ends.
+fn read_stream<R: Read + Send + 'static>(
+    pipe: Option<R>,
+    closed: std::sync::mpsc::Sender<()>,
+) -> Arc<Mutex<Vec<u8>>> {
+    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let filled = buffer.clone();
+    std::thread::spawn(move || {
+        if let Some(mut pipe) = pipe {
+            let mut chunk = [0_u8; 8192];
+            loop {
+                match pipe.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(n) => filled
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .extend_from_slice(&chunk[..n]),
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(_) => break,
+                }
+            }
+        }
+        let _ = closed.send(());
+    });
+    buffer
+}
+
+/// Wait up to `grace` for `open` streams to end; how many are still open.
+fn await_closed(drained: &Receiver<()>, mut open: usize, grace: Duration) -> usize {
+    let deadline = Instant::now() + grace;
+    while open > 0 {
+        match drained.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(()) => open -= 1,
+            Err(_) => break,
+        }
+    }
+    open
+}
+
+fn take(buffer: &Mutex<Vec<u8>>) -> Vec<u8> {
+    std::mem::take(&mut *buffer.lock().unwrap_or_else(PoisonError::into_inner))
 }
 
 /// HS2-CYDK9Z: the process tree a plugin run owns: its own process group on Unix, a
@@ -244,6 +306,53 @@ impl ProcessTree {
         })
     }
 
+    /// Whether the root has exited. On Unix it is left unreaped, so its process group id
+    /// still names only its own group when [`Self::end_leftovers`] runs.
+    #[cfg(unix)]
+    fn exited(&self, child: &mut std::process::Child) -> std::io::Result<bool> {
+        let id = libc::id_t::from(child.id());
+        loop {
+            // SAFETY: an all-zero `siginfo_t` is a valid value of this plain C struct.
+            let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+            // SAFETY: `info` is a live, writable `siginfo_t`; `WNOWAIT` leaves the child
+            // waitable, so `Child::wait` still reaps it.
+            let result = unsafe {
+                libc::waitid(
+                    libc::P_PID,
+                    id,
+                    &raw mut info,
+                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                )
+            };
+            if result == 0 {
+                // With `WNOHANG` and nothing to report, the zeroed record stays zeroed.
+                return Ok(info.si_signo == libc::SIGCHLD);
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() != std::io::ErrorKind::Interrupted {
+                return Err(error);
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn exited(&self, child: &mut std::process::Child) -> std::io::Result<bool> {
+        child.try_wait().map(|status| status.is_some())
+    }
+
+    /// HS2-BR14FM: end what the exited root left in its tree. On Unix the root is not
+    /// reaped yet, so the group id is still its own.
+    fn end_leftovers(&self, child: &std::process::Child) {
+        #[cfg(windows)]
+        if let Some(job) = &self.job {
+            job.terminate();
+        }
+        #[cfg(unix)]
+        kill_group(child);
+        #[cfg(not(unix))]
+        let _ = child;
+    }
+
     /// Stop the root and everything it started. The root is not reaped yet, so its
     /// group id cannot name another group.
     fn stop(&self, child: &mut std::process::Child) {
@@ -252,15 +361,20 @@ impl ProcessTree {
             job.terminate();
         }
         #[cfg(unix)]
-        if let Ok(group) = libc::pid_t::try_from(child.id()) {
-            // SAFETY: `killpg` takes plain integers and touches no memory. The group is
-            // the child's own, made by `process_group(0)` at spawn, and the child is
-            // not reaped yet.
-            unsafe {
-                libc::killpg(group, libc::SIGKILL);
-            }
-        }
+        kill_group(child);
         let _ = child.kill();
+    }
+}
+
+/// Kill the process group `child` leads, made by `process_group(0)` at spawn. The caller
+/// has not reaped `child`, so the group id cannot name another group.
+#[cfg(unix)]
+fn kill_group(child: &std::process::Child) {
+    if let Ok(group) = libc::pid_t::try_from(child.id()) {
+        // SAFETY: `killpg` takes plain integers and touches no memory.
+        unsafe {
+            libc::killpg(group, libc::SIGKILL);
+        }
     }
 }
 

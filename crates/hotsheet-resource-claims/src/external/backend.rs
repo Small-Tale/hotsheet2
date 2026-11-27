@@ -343,6 +343,17 @@ impl ExternalBackend {
             RunError::Cancelled { .. } => ClaimError::Interrupted,
             e => ClaimError::BackendUnreachable(format!("plugin '{}': {e}", self.manifest.id)),
         })?;
+        if output.left_running {
+            // HS2-BR14FM: the plugin's answer is still used; its leftovers were ended.
+            // Identifiers only: no settings, request or output.
+            tracing::warn!(
+                plugin = %self.manifest.id,
+                configuration = %self.configuration,
+                op,
+                "claim plugin exited but left a process running that held its output; \
+                 that process was stopped"
+            );
+        }
         let reply: Option<Reply> = String::from_utf8_lossy(&output.stdout)
             .lines()
             .rev()

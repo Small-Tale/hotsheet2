@@ -17,7 +17,8 @@ use serde_json::{Value, json};
 
 use hotsheet_resource_claims::conformance::{self, Fixture};
 use hotsheet_resource_claims::external::{
-    self, ExternalBackend, LiveRunner, PluginManifest, SharedSecrets, approve, load_all,
+    self, CommandRunner, ExternalBackend, LiveRunner, PluginManifest, SharedSecrets, approve,
+    load_all,
 };
 use hotsheet_resource_claims::{
     AcquireRequest, ClaimBackend, ClaimError, Namespace, OfflinePolicy, ResourceRef, WaitCancel,
@@ -103,6 +104,23 @@ fn fake_plugin_main() {
             std::fs::rename(pid_file.with_extension("tmp"), pid_file).unwrap();
             // Hangs as long as its child sleeps.
             let _ = child.wait();
+        }
+        // HS2-BR14FM: start a child that outlives this run, record its pid, then answer
+        // and exit normally. `leaves_child` shares the output pipes with it;
+        // `leaves_quiet_child` gives it none.
+        "leaves_child" | "leaves_quiet_child" => {
+            let mut command = std::process::Command::new("sleep");
+            command.arg("120").stdin(std::process::Stdio::null());
+            if mode.trim() == "leaves_quiet_child" {
+                command
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null());
+            }
+            #[expect(clippy::zombie_processes, reason = "HS2-BR14FM: the runner ends it")]
+            let child = command.spawn().unwrap();
+            let pid_file = state_dir.join("grandchild.pid");
+            std::fs::write(pid_file.with_extension("tmp"), child.id().to_string()).unwrap();
+            std::fs::rename(pid_file.with_extension("tmp"), pid_file).unwrap();
         }
         "ok_but_failed_exit" => {
             println!("\n{}", json!({ "ok": true, "result": {} }));
@@ -753,6 +771,139 @@ fn hs2_cydk9z_a_cancel_stops_the_plugins_own_children_too() {
     plugin.mode("");
     backend.release(held.renewal_token.expose()).unwrap();
     assert!(backend.get(&target("vms/one")).unwrap().is_none());
+}
+
+// ---- HS2-BR14FM: a plugin that exits normally but leaves a child running --------------
+
+/// What the backend logged while `body` ran on this thread.
+fn logged<T>(body: impl FnOnce() -> T) -> (T, String) {
+    #[derive(Clone, Default)]
+    struct Capture(Arc<std::sync::Mutex<Vec<u8>>>);
+    impl std::io::Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Capture {
+        type Writer = Self;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+    let capture = Capture::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(capture.clone())
+        .with_ansi(false)
+        .finish();
+    let value = tracing::subscriber::with_default(subscriber, body);
+    let text = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+    (value, text)
+}
+
+const LEFT_RUNNING: &str = "left a process running";
+
+#[test]
+fn hs2_br14fm_a_child_holding_the_plugins_output_is_ended_and_the_answer_used() {
+    // A long timeout, so only the fix (not the timeout) can end the run promptly.
+    let plugin = install("fake", "none", 60);
+    let backend = plugin.approved_backend("fake");
+    plugin.mode("leaves_child");
+    // Repeated: each run leaves a fresh child, and each is ended.
+    for round in 1..=2 {
+        plugin.forget_grandchild();
+        let began = Instant::now();
+        let (held, log) = logged(|| backend.acquire(&target(&format!("vms/{round}")), &lease(60)));
+        let held = held.unwrap_or_else(|e| panic!("the plugin's answer is used: {e}"));
+        assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
+        assert!(held.claim.fencing_token > 0);
+        let grandchild = plugin.grandchild();
+        let _guard = KillOnDrop(grandchild);
+        assert!(
+            until_gone(grandchild),
+            "the plugin's child {grandchild} outlived its run"
+        );
+        assert!(log.contains(LEFT_RUNNING), "{log}");
+        assert!(
+            log.contains("plugin=fake") && log.contains("op=\"acquire\""),
+            "{log}"
+        );
+        assert!(
+            !log.contains(plugin.state_dir.to_str().unwrap()),
+            "no settings: {log}"
+        );
+        // The claim it granted is real.
+        let read = backend
+            .get(&target(&format!("vms/{round}")))
+            .unwrap()
+            .unwrap();
+        assert_eq!(read.claim_id, held.claim.claim_id);
+    }
+
+    // A plugin that stops leaving children is unaffected: no warning, same answers.
+    plugin.mode("");
+    plugin.forget_grandchild();
+    let began = Instant::now();
+    let (listed, log) = logged(|| backend.get(&target("vms/1")));
+    assert!(listed.unwrap().is_some());
+    assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
+    assert!(!log.contains(LEFT_RUNNING), "{log}");
+}
+
+#[test]
+fn hs2_br14fm_a_quiet_leftover_is_ended_without_a_warning() {
+    let plugin = install("fake", "none", 60);
+    let backend = plugin.approved_backend("fake");
+    plugin.mode("leaves_quiet_child");
+    let (read, log) = logged(|| backend.get(&target("vms/one")));
+    assert!(read.unwrap().is_none());
+    let grandchild = plugin.grandchild();
+    let _guard = KillOnDrop(grandchild);
+    // Its tree is ended as a stop ends it, though nothing held the output.
+    assert!(
+        until_gone(grandchild),
+        "the quiet child {grandchild} outlived its run"
+    );
+    assert!(!log.contains(LEFT_RUNNING), "{log}");
+}
+
+#[test]
+fn hs2_br14fm_the_runner_reports_leftovers_only_when_they_hold_the_output() {
+    let run = |script: &str| {
+        let began = Instant::now();
+        let output = LiveRunner
+            .run(
+                "/bin/sh",
+                &["-c".to_owned(), script.to_owned()],
+                b"",
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        assert!(began.elapsed() < PROMPT, "{script}: {:?}", began.elapsed());
+        output
+    };
+    // Exits at once, holding nothing: unaffected.
+    let plain = run("echo answer; echo note >&2");
+    assert!(plain.success && !plain.left_running);
+    assert_eq!(String::from_utf8_lossy(&plain.stdout), "answer\n");
+    assert_eq!(String::from_utf8_lossy(&plain.stderr), "note\n");
+    // A child holding stdout, then stderr only: the output so far is kept, the child ended.
+    for redirect in ["2>/dev/null", ">/dev/null"] {
+        let held = run(&format!(
+            "sleep 120 {redirect} </dev/null & echo $!; echo answer; exit 4"
+        ));
+        assert!(held.left_running, "{redirect}");
+        assert_eq!(held.code, Some(4));
+        let text = String::from_utf8_lossy(&held.stdout).into_owned();
+        let mut lines = text.lines();
+        let pid: u32 = lines.next().unwrap().parse().unwrap();
+        let _guard = KillOnDrop(pid);
+        assert_eq!(lines.next(), Some("answer"));
+        assert!(until_gone(pid), "the child {pid} outlived its run");
+    }
 }
 
 // ---- approval -----------------------------------------------------------------------

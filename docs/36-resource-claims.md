@@ -666,7 +666,11 @@ the renewal token, the metadata key, and the approval of the plugin's own code.
 and reads the last stdout line that is a JSON result; earlier lines are ignored, so logging is
 safe. A plugin that outlives its timeout is killed together with every process it started
 (HS2-CYDK9Z): it runs in its own process group on Unix and in a kill-on-close job object on
-Windows, and the whole tree is stopped. Exiting without a result line, or
+Windows, and the whole tree is stopped. A plugin that exits normally ends its tree too
+(HS2-BR14FM): its output is read for at most one second after it exits, then whatever it
+left running is stopped the same way and its answer is used. If a leftover process still held
+the plugin's output, Hot Sheet logs a warning that names the plugin, configuration and
+operation (never settings or output); the server's log shows it. Exiting without a result line, or
 reporting `ok` and then exiting non-zero, is `backend_unreachable` with the stderr tail.
 
 ```json
