@@ -925,7 +925,7 @@ impl OrchestrationRuntime {
                 )
             })
             .collect();
-        let applies: Vec<TemplateApply> = self
+        let mut applies: Vec<TemplateApply> = self
             .template_applies(owner_id)?
             .applies()?
             .into_iter()
@@ -939,6 +939,15 @@ impl OrchestrationRuntime {
         if applies.is_empty() {
             return Ok(held);
         }
+        // HS2-MGG1GM: a closed goal's record no longer holds, as its retired checked-in
+        // hold does not, so a retired hold never falls back to this machine's record.
+        let owner = self.owner(owner_id)?;
+        applies.retain(|apply| {
+            apply
+                .goal
+                .as_ref()
+                .is_none_or(|goal| !Self::goal_closed(&owner, &goal.native_id, true))
+        });
         let records = plan.records(owner_id)?;
         for (step_id, apply) in held_template_steps(
             &applies,
@@ -956,6 +965,80 @@ impl OrchestrationRuntime {
             });
         }
         Ok(held)
+    }
+
+    /// HS2-MGG1GM: whether a template's goal ticket is closed: found in one of the
+    /// orchestration project's git sources and not open (completed, verified, deleted,
+    /// archived or moved). A goal found nowhere counts as gone only when `created_here`
+    /// (this machine opened it, so it was purged); elsewhere it may not have synced yet.
+    /// A source that cannot be read answers not closed, the safe direction.
+    fn goal_closed(owner: &Checkout, native_id: &str, created_here: bool) -> bool {
+        let Ok(id) = native_id.parse::<ulid::Ulid>() else {
+            return false;
+        };
+        let mut readable = true;
+        for source in owner
+            .sources
+            .iter()
+            .filter(|source| source.provider == "git")
+        {
+            let Ok(store) = owner.verified_git_source(&source.connection_id) else {
+                readable = false;
+                continue;
+            };
+            match store.read_ticket(&id) {
+                Ok(ticket) => return !ops::is_open(&ticket),
+                Err(error) if error.is_io_kind(std::io::ErrorKind::NotFound) => {}
+                Err(_) => readable = false,
+            }
+        }
+        readable && created_here
+    }
+
+    /// HS2-MGG1GM: retire the checked-in holds whose goal closed and that hold no live
+    /// step (a closed goal's unaccepted steps keep theirs), so the plan is version 1
+    /// again once no template waits and an older Hot Sheet reads it. Every machine
+    /// decides the same from the shared goal ticket, so whichever notices first
+    /// retires; a repeat, or a race with another machine, writes nothing more (the
+    /// plan's lock and revision). Audited `template_hold_retire` per hold. Answers the
+    /// operation ids retired.
+    pub(super) fn template_holds_retire(
+        &self,
+        owner_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Vec<String>, OrchestrationError> {
+        let holds = self.plan().holds(owner_id)?;
+        if holds.is_empty() {
+            return Ok(Vec::new());
+        }
+        let owner = self.owner(owner_id)?;
+        let applies = self.template_applies(owner_id)?.applies()?;
+        let closed: BTreeSet<String> = holds
+            .iter()
+            .filter(|hold| {
+                let created_here = applies.iter().any(|apply| {
+                    apply.operation_id == hold.operation_id
+                        && apply.goal.as_ref().is_some_and(|goal| {
+                            goal.created && goal.native_id == hold.goal.native_id
+                        })
+                });
+                Self::goal_closed(&owner, &hold.goal.native_id, created_here)
+            })
+            .map(|hold| hold.operation_id.clone())
+            .collect();
+        let retired = self.plan().retire_holds(owner_id, &closed, tx)?;
+        for operation_id in &retired {
+            self.template_audit(
+                owner_id,
+                actor,
+                "template_hold_retire",
+                Some(operation_id),
+                (AuditOutcome::Succeeded, Some("template_goal_closed")),
+                tx,
+            )?;
+        }
+        Ok(retired)
     }
 
     /// HS2-38MFXT: check the apply's Wait for Accept in with the plan, once its goal's

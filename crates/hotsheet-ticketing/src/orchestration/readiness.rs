@@ -17,6 +17,7 @@ use super::contract::{valid_identifier, valid_token};
 use super::reconcile::ticket_finished;
 use super::shared_plan::{
     PlanHold, SharedPlan, SharedPlanStore, SharedStep, held_plan_steps, merge_steps,
+    retire_plan_holds,
 };
 use super::storage::{Storage, decode};
 use super::*;
@@ -972,6 +973,26 @@ impl PlanRegistry {
         let answer = change(&mut holds, &steps)?;
         shared.write_holds_locked(current.as_ref(), holds, tx)?;
         Ok(answer)
+    }
+
+    /// HS2-MGG1GM: retire the owner's checked-in holds of `closed_operations` (their
+    /// goal is closed or gone) that hold no live step, under the plan's lock, so two
+    /// machines retiring at once both end with the same plan. Answers the operation ids
+    /// retired by this call; a hold already retired (by another machine) writes nothing.
+    pub fn retire_holds(
+        &self,
+        owner_checkout_id: &str,
+        closed_operations: &BTreeSet<String>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<Vec<String>, OrchestrationError> {
+        if closed_operations.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.update_holds(owner_checkout_id, tx, |holds, steps| {
+            Ok(retire_plan_holds(holds, steps, |hold| {
+                closed_operations.contains(&hold.operation_id)
+            }))
+        })
     }
 
     /// HS2-190RDX: swap the live plan to an update's draft in one write of the

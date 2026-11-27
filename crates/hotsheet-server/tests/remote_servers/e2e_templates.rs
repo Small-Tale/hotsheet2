@@ -501,3 +501,120 @@ async fn hs2_0yha2s_one_accept_releases_every_held_plan() {
     assert_eq!(again["outcome"], "existing", "{again}");
     assert_eq!(again["released"], json!([]), "{again}");
 }
+
+/// HS2-MGG1GM: the checked-in plan as an older Hot Sheet reads it: version 1 and only
+/// the version-1 fields (its decoder refuses anything else).
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)] // HS2-MGG1GM: the fields are only decoded, as an older reader does
+struct VersionOnePlan {
+    schema_version: u32,
+    revision: String,
+    steps: Vec<Value>,
+}
+
+fn checked_in_plan(fleet: &Fleet) -> (String, Value) {
+    let path = std::path::Path::new(&fleet.owner.root)
+        .join(hotsheet_ticketing::orchestration::SHARED_PLAN_PATH);
+    let text = std::fs::read_to_string(path).unwrap();
+    let value = serde_json::from_str(&text).unwrap();
+    (text, value)
+}
+
+/// HS2-MGG1GM: a template's hold stays while its closed goal has a step nobody
+/// accepted; once accepted, the next pass of either machine (the other one has no apply
+/// record) notices the closed goal and retires the hold, so the plan is version 1 again and an older
+/// reader takes it. The machine that applied does not hold the step again, and its own
+/// pass writes nothing more.
+#[tokio::test(flavor = "multi_thread", worker_threads = 6)]
+async fn hs2_mgg1gm_a_closed_goals_hold_retires_on_either_machine_and_the_plan_is_version_1() {
+    let mut fleet = Fleet::new().await;
+    fleet
+        .policy(json!({"placement":{"actor":ACTOR,"cooldown_minutes":0}}))
+        .await;
+    let other = OtherMachine::new(&fleet).await;
+    let (goal, apply) = applied(&fleet, "Repair the release", true, "tpl-retire").await;
+    let step = planned_step(&fleet, &goal, "Synthetic retired hold").await;
+    held_on_both(&fleet, &other, &step, "tpl-retire").await;
+    assert_eq!(checked_in_plan(&fleet).1["schema_version"], 2);
+
+    // The goal closes before anyone accepted its step: still held on both machines.
+    let goal_id: ulid::Ulid = apply["goal"]["native_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    hotsheet_ticketing::ops::update(
+        &FsStore::open(&fleet.owner_store).unwrap(),
+        &goal_id,
+        "2026-01-01T00:00:00Z".into(),
+        hotsheet_ticketing::TicketPatch {
+            status: Some(hotsheet_model::Status::Completed),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    other
+        .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+        .await;
+    assert_eq!(
+        checked_in_plan(&fleet).1["holds"][0]["operation_id"],
+        "tpl-retire"
+    );
+    held_on_both(&fleet, &other, &step, "tpl-retire").await;
+
+    // Accepted on the other machine: released on both, then retired at the next pass.
+    other
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"operation_id":"tpl-retire","actor":Fleet::person()}),
+        )
+        .await;
+    released_on_both(&fleet, &other, &step).await;
+    other
+        .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+        .await;
+    let (text, plan) = checked_in_plan(&fleet);
+    assert_eq!(plan["schema_version"], 1, "{text}");
+    assert!(plan.get("holds").is_none(), "{text}");
+    let older: VersionOnePlan = serde_json::from_str(&text).expect("an older reader takes it");
+    assert_eq!(older.schema_version, 1);
+    assert_eq!(older.steps.len(), 1);
+    // Whichever machine's pass noticed first retired it, once: the applying machine's
+    // own loop may get there before this tick (it saw the accept arrive).
+    let mut retired = 0;
+    for audit in [
+        other.ok("GET", "/audit", Value::Null).await,
+        fleet.ok("GET", "/audit", Value::Null).await,
+    ] {
+        retired += audit["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| {
+                entry["action"] == "template_hold_retire" && entry["operation_id"] == "tpl-retire"
+            })
+            .count();
+    }
+    assert_eq!(retired, 1);
+
+    // The machine that applied: its record does not hold the step again, and its pass
+    // finds nothing left to retire.
+    let explained = fleet
+        .ok(
+            "POST",
+            "/scheduler/explain",
+            json!({"actor":Fleet::ai(),"step_id":step}),
+        )
+        .await;
+    assert_ne!(
+        explained["reason"], "template_plan_not_accepted",
+        "{explained}"
+    );
+    fleet
+        .ok("POST", "/scheduler/tick", json!({"actor":Fleet::ai()}))
+        .await;
+    assert_eq!(checked_in_plan(&fleet).0, text);
+    other.stop().await;
+}

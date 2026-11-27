@@ -2018,3 +2018,159 @@ fn hs2_0yha2s_one_accept_releases_every_held_template_plan() {
     assert_eq!(later.released, std::slice::from_ref(&a3));
     assert_eq!(later.accepted.len(), 1);
 }
+
+/// HS2-MGG1GM: the checked-in hold of each template apply, by operation id, and the
+/// plan's version.
+fn checked_in_holds(f: &Fixture) -> (Vec<String>, u64, Value) {
+    let path = std::path::Path::new(&f.m.owner.root).join(SHARED_PLAN_PATH);
+    let on_disk: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let holds = on_disk
+        .get("holds")
+        .and_then(Value::as_array)
+        .map(|holds| {
+            holds
+                .iter()
+                .map(|hold| hold["operation_id"].as_str().unwrap().to_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    (
+        holds,
+        on_disk["schema_version"].as_u64().unwrap(),
+        on_disk["revision"].clone(),
+    )
+}
+
+fn pass(f: &Fixture, dry_run: bool, tx: &mut Transaction<'_>) {
+    f.m.runtime
+        .scheduler_tick(&f.owner(), &TickRequest { dry_run }, Some(&human()), tx)
+        .unwrap();
+}
+
+fn set_goal_status(f: &Fixture, goal: &ApplyGoal, status: hotsheet_model::Status) {
+    ops::update(
+        &f.m.owner_store,
+        &goal.native_id.parse().unwrap(),
+        NOW.into(),
+        hotsheet_ticketing::TicketPatch {
+            status: Some(status),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+}
+
+/// HS2-MGG1GM: a template's checked-in hold is retired at the next scheduling pass
+/// once its goal closes (completed, deleted, or purged where it was opened) and it
+/// holds no live step, so the plan is version 1 again once no template waits. A closed
+/// goal whose step nobody accepted keeps its hold; a dry run retires nothing; a goal
+/// another machine opened and this one cannot find (not synced yet) keeps it; a
+/// closed goal's apply record no longer holds either.
+#[test]
+fn hs2_mgg1gm_a_closed_goals_hold_is_retired_and_the_plan_is_version_1_again() {
+    let mut rng = Rng(3900);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    f.m.runtime
+        .set_policy(
+            &f.owner(),
+            hotsheet_ticketing::orchestration::SetPolicy {
+                expected_revision: None,
+                policy: super::sessions::policy(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let template = f.define("Feature across API and Web", &mut tx);
+    let apply = |operation: &str, feature: &str, tx: &mut Transaction<'_>| {
+        f.apply(
+            &template,
+            json!({ "feature": feature }),
+            operation,
+            &human(),
+            tx,
+        )
+        .unwrap()
+        .apply
+        .goal
+        .unwrap()
+    };
+    let closing = apply("op-close", "Rate limits", &mut tx);
+    let open = apply("op-open", "Audit log", &mut tx);
+    let first = plan_step(&f, closing.slug.as_deref().unwrap(), "Add headers", &mut tx);
+    // Open goals: a pass retires nothing.
+    pass(&f, false, &mut tx);
+    assert_eq!(checked_in_holds(&f).0, ["op-close", "op-open"]);
+
+    // The goal closes with its step unaccepted: the hold stays, the step waits.
+    set_goal_status(&f, &closing, hotsheet_model::Status::Completed);
+    pass(&f, false, &mut tx);
+    assert_eq!(checked_in_holds(&f).0, ["op-close", "op-open"]);
+    assert_eq!(standing(&f, &first, &mut tx).1, "waits_for_accept");
+    // Accepted: it holds nothing now. A dry run retires nothing; the next pass does.
+    accept(&f, "op-close", &human(), &mut tx).unwrap();
+    pass(&f, true, &mut tx);
+    assert_eq!(checked_in_holds(&f).0, ["op-close", "op-open"]);
+    pass(&f, false, &mut tx);
+    assert_eq!(checked_in_holds(&f).0, ["op-open"]);
+    assert_eq!(
+        f.m.last_audit(),
+        (
+            "template_hold_retire".into(),
+            AuditOutcome::Succeeded,
+            Some("template_goal_closed".into())
+        )
+    );
+    // This machine's apply record does not hold it again (its goal is closed).
+    assert_ne!(standing(&f, &first, &mut tx).1, "waits_for_accept");
+
+    // A deleted goal with nothing planned: retired, and the plan is version 1 again.
+    set_goal_status(&f, &open, hotsheet_model::Status::Deleted);
+    pass(&f, false, &mut tx);
+    let (holds, version, revision) = checked_in_holds(&f);
+    assert!(holds.is_empty());
+    assert_eq!(version, 1);
+    let text =
+        std::fs::read_to_string(std::path::Path::new(&f.m.owner.root).join(SHARED_PLAN_PATH))
+            .unwrap();
+    assert!(!text.contains("holds"), "{text}");
+    // A repeated pass writes nothing.
+    pass(&f, false, &mut tx);
+    assert_eq!(checked_in_holds(&f).2, revision);
+
+    // A goal this machine cannot find: on another machine (no apply record) it may not
+    // have synced yet, so the hold stays; where it was opened, it was purged.
+    let purged = apply("op-purge", "Exports", &mut tx);
+    std::fs::remove_file(
+        f.m.owner_store
+            .ticket_path(&purged.native_id.parse().unwrap()),
+    )
+    .unwrap();
+    let records =
+        f.m.home
+            .join(hotsheet_ticketing::orchestration::TEMPLATE_APPLY_DIR);
+    let kept = f.m.home.join("applies-kept");
+    std::fs::rename(&records, &kept).unwrap();
+    pass(&f, false, &mut tx);
+    assert_eq!(checked_in_holds(&f).0, ["op-purge"]);
+    std::fs::rename(&kept, &records).unwrap();
+    pass(&f, false, &mut tx);
+    assert_eq!(checked_in_holds(&f).1, 1);
+
+    // An apply recorded before holds were checked in (no checked-in hold): its record
+    // holds the step until its goal closes.
+    let legacy = apply("op-legacy", "Webhooks", &mut tx);
+    let plan_path = std::path::Path::new(&f.m.owner.root).join(SHARED_PLAN_PATH);
+    let mut on_disk: Value = serde_json::from_slice(&std::fs::read(&plan_path).unwrap()).unwrap();
+    on_disk.as_object_mut().unwrap().remove("holds");
+    on_disk["schema_version"] = json!(1);
+    std::fs::write(&plan_path, serde_json::to_vec_pretty(&on_disk).unwrap()).unwrap();
+    let legacy_step = plan_step(&f, legacy.slug.as_deref().unwrap(), "Send hooks", &mut tx);
+    assert_eq!(standing(&f, &legacy_step, &mut tx).1, "waits_for_accept");
+    set_goal_status(&f, &legacy, hotsheet_model::Status::Verified);
+    assert_ne!(standing(&f, &legacy_step, &mut tx).1, "waits_for_accept");
+}

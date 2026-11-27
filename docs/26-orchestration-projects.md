@@ -3048,7 +3048,9 @@ and is written as version 2 while it holds one, so an older Hot Sheet answers
 `upgrade_required` for the plan (and places nothing, and never overwrites the hold)
 instead of reading the steps without it. A version-1 file with holds or a version-2 file
 without is damaged; so are holds out of order by operation id. Every step write keeps the
-holds as they are.
+holds as they are. A hold is retired once its goal closes and it holds no live step
+(HS2-MGG1GM, §26.32 "Retired when the goal closes"), so the file is version 1 again, byte
+for byte, once no template waits.
 
 **Merging.** Every change is a read-modify-write of the checked-in file under its
 lock, merged by step id: a step on one side only is kept and an identical step is
@@ -7956,9 +7958,28 @@ applied).
 - **Older machines.** The plan is version 2 while it carries a hold (§26.15 "Template
   holds"), so a machine with an older Hot Sheet answers `upgrade_required` for the plan
   and places nothing for the project until it is upgraded; it never reads the steps
-  without their hold. A hold stays in the plan after its accept, because steps the planner
-  adds later are held again, so every machine running the project's scheduler needs this
-  version once a waiting template was applied.
+  without their hold. A hold stays in the plan after its accept while its goal is open,
+  because steps the planner adds later are held again, so every machine running the
+  project's scheduler needs this version while a waiting template's goal is open.
+- **Retired when the goal closes (HS2-MGG1GM).** At each scheduling pass that is not a
+  dry run (the loop's, or a tick without `dry_run`, whatever the placement mode), the
+  machine looks up each checked-in hold's goal by native id in the orchestration
+  project's git ticket sources. A goal found and not open (completed, verified, deleted,
+  archived or moved) is closed; a goal found nowhere counts as gone only on the machine
+  whose apply record opened it (it was purged there), since on another machine it may
+  not have synced yet; a source that cannot be read keeps the hold. A closed goal's hold
+  is retired from `.hotsheet2/orchestration-plan.json` once it holds no live step; a step
+  nobody accepted keeps it (retiring would place work a person never accepted for a goal
+  they closed), so the step still shows **Waits for the plan to be accepted** until
+  someone accepts or removes it, and the next pass retires the hold. Every machine
+  decides the same from the shared goal ticket, so whichever notices first retires it;
+  the write is made under the plan's lock with a fresh revision, and a repeat or a race
+  with another machine writes nothing more. Audited `template_hold_retire` (reason
+  `template_goal_closed`) on the machine that retired it. When the last hold goes, the
+  plan is written as version 1, byte for byte what a version-1 writer produces, so older
+  machines read it again. A closed goal's apply record no longer holds its steps either.
+  Template applies have no cancel: a denied apply never checks a hold in, since its goal
+  id is recorded only after the permission answer.
 - **The apply record.** The apply itself (the snapshot, inputs, planner and permission
   progress) stays machine-local in
   `${HOTSHEET_HOME}/orchestration-template-applies/<owner>.json` on the machine that

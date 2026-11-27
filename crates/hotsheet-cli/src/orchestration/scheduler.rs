@@ -1433,6 +1433,13 @@ impl OrchestrationRuntime {
         // before anything is decided on it. Without provisional work this reads one
         // absent file.
         self.provisional_follow(owner_id, tx);
+        // HS2-MGG1GM: a template hold whose goal closed is retired before the pass reads
+        // the holds, so the plan returns to version 1 once no template waits. Best
+        // effort: a goal or plan that cannot be read keeps the hold, and the hold read
+        // below fails the pass as before.
+        if !dry_run {
+            let _ = self.template_holds_retire(owner_id, actor, tx);
+        }
         let Some(gathered) = self.scheduler_gather(owner_id, actor, tx)? else {
             return Ok(TickView {
                 tick_id,
