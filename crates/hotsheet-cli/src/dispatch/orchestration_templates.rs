@@ -101,8 +101,14 @@ enum TemplateCmd {
     /// HS2-36XDDX: accept the plan the planner proposed for an apply's goal, as a
     /// person reviewing it. With the template's Wait for Accept on, the goal's planned
     /// steps wait for this before placement starts them; steps planned later wait for
-    /// the next accept. A person's action: an AI actor is refused.
-    Accept { operation_id: String },
+    /// the next accept. A person's action: an AI actor is refused. HS2-0YHA2S: with
+    /// `--all` instead of an operation id, every template plan held now.
+    Accept {
+        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        operation_id: Option<String>,
+        #[arg(long)]
+        all: bool,
+    },
     /// HS2-AMJNER: continue every apply that waits and can go on now (a person
     /// answered its permission request, or the planner is free), under its own
     /// operation id and as the actor who applied it. A server does this on its own.
@@ -240,10 +246,13 @@ pub(super) fn route(
             format!("{base}/apply_show"),
             json!({"operation_id": operation_id}),
         ),
-        TemplateCmd::Accept { operation_id } => (
+        TemplateCmd::Accept { operation_id, all } => (
             "POST",
             format!("{base}/accept"),
-            json!({"operation_id": operation_id}),
+            match operation_id {
+                Some(operation_id) if !all => json!({"operation_id": operation_id}),
+                _ => json!({"all": true}),
+            },
         ),
         TemplateCmd::Resume => ("POST", format!("{base}/resume"), json!({})),
     })
@@ -354,6 +363,13 @@ mod tests {
                 json!({"operation_id": "op-1"})
             )
         );
+        // HS2-0YHA2S: every held plan, never together with one.
+        assert_eq!(
+            request(&["accept", "--all"]).unwrap(),
+            ("POST", format!("{base}/accept"), json!({"all": true}))
+        );
+        assert!(request(&["accept"]).is_err());
+        assert!(request(&["accept", "op-1", "--all"]).is_err());
         assert_eq!(
             request(&["apply-show", "op-1"]).unwrap(),
             (

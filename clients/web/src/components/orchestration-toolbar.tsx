@@ -5,7 +5,17 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { MessageCircleQuestionMark, Pause, Play, RefreshCw, Settings, Sparkles, SquareTerminal, X } from 'lucide';
+import {
+  ClipboardCheck,
+  MessageCircleQuestionMark,
+  Pause,
+  Play,
+  RefreshCw,
+  Settings,
+  Sparkles,
+  SquareTerminal,
+  X,
+} from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
@@ -13,6 +23,9 @@ import {
   type ClockFormat,
   clockTime,
   dryRunPlan,
+  heldTemplatePlans,
+  heldTemplateStatus,
+  heldTemplateTitle,
   plannerWorkingLabel,
   startBlockedInSettings,
   startBlockedReason,
@@ -70,7 +83,8 @@ const PLANNING_STATUS: Record<string, string> = {
  * turns automatic placement on through the policy), and Pause while running. A proposed plan is
  * labeled as the dry run it is. HS2-R2N33M: placement left Auto runs once a plan exists, under a banner that says
  * sessions start automatically, with Pause beside it. HS2-190RDX: once there is a plan, Update Plan re-plans beside it while its
- * work keeps running (no pause), and Cancel Plan Update replaces it while an update drafts.
+ * work keeps running (no pause), and Cancel Plan Update replaces it while an update drafts. HS2-0YHA2S: while
+ * template plans wait for a person's accept, the status counts their steps and one Accept Plan accepts them all.
  */
 export function OrchestrationToolbar({
   timeline,
@@ -86,7 +100,10 @@ export function OrchestrationToolbar({
   triggers = false,
 }: OrchestrationToolbarProps) {
   const goal = defaultGoal && timeline.phase !== 'no_projects' ? ' · Working through all open tickets' : '';
-  const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
+  const held = heldTemplatePlans(timeline);
+  const status = `${timelineStatus(timeline, clock)}${goal}${PLANNING_STATUS[planning ?? ''] ?? ''}${
+    held ? heldTemplateStatus(held) : ''
+  }`;
   const blocked = startBlockedReason(timeline);
   // HS2-1DC8X1: the reason a person can act on is a banner with the way there, never only a disabled title.
   // HS2-D9KP86: with no saved policy the same way leads to the defaults Start Orchestration saves.
@@ -115,6 +132,20 @@ export function OrchestrationToolbar({
       </Button>
     ) : undefined;
   const planner = showPlanner && planning === 'waiting' ? <ShowPlannerButton emphasis="secondary" /> : undefined;
+  // HS2-0YHA2S: one accept for every template plan held now; each held card's inspector keeps its own.
+  const accept = held ? (
+    <Button
+      emphasis="primary"
+      shape="pill"
+      action={ORCHESTRATION_ACTIONS.acceptOrchestrationTemplatePlans.value}
+      disabled={busy}
+      title={heldTemplateTitle(held)}
+      icon={<LucideIcon size="s" icon={ClipboardCheck} name="clipboard-check" />}
+      rootAttributes={{ 'data-held-steps': String(held.steps) }}
+    >
+      Accept Plan
+    </Button>
+  ) : undefined;
   const template =
     templates && timeline.phase !== 'no_projects' ? (
       <OrchestrationTemplateButton emphasis="secondary" busy={busy} />
@@ -275,6 +306,7 @@ export function OrchestrationToolbar({
         trailing={
           <>
             {answer}
+            {accept}
             {planner}
             {template}
             {trigger}

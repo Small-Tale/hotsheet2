@@ -429,7 +429,9 @@ export function OrchestrationToolbarDemo() {
         <CatalogExample label={label}>
           <OrchestrationToolbar
             timeline={{
-              ...demoTimeline(value),
+              // HS2-0YHA2S: with DOC-9 held for its template's accept, the running header counts it and
+              // offers Accept Plan (a held step exists only while placement is on).
+              ...(value === 'running' ? withHeldTemplate(demoTimeline(value)) : demoTimeline(value)),
               automatic_by_default: value === 'running' && orchestrationDemoSettings.autoPlacement.value,
               never_started: value === 'paused' && orchestrationDemoSettings.neverStarted.value,
               ...((value === 'proposed' || value === 'paused') && orchestrationDemoSettings.policyAbsent.value
@@ -794,6 +796,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       showRequest: () => undefined,
       openGoal: () => undefined,
       acceptPlan: () => undefined,
+      acceptAllPlans: () => undefined,
       runValidation: () => undefined,
       linkGate: () => undefined,
       reopen: () => undefined,

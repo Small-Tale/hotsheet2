@@ -3971,6 +3971,7 @@ paths:
                   - $ref: '#/components/schemas/TemplatePreview'
                   - $ref: '#/components/schemas/TemplateApply'
                   - $ref: '#/components/schemas/TemplateAccept'
+                  - $ref: '#/components/schemas/TemplateAcceptAll'
                   - $ref: '#/components/schemas/TemplateResumeReport'
         default:
           description:
@@ -26934,6 +26935,7 @@ components:
         `set` takes `templates` and an optional `expected_revision`; `save_goal` takes `goal`, `name`, `description` and
         `targets_as_inputs`; `preview` takes `template_id`, `inputs` and `choices`; `apply` adds `tool`, `model`,
         `effort` and a retained `operation_id` (at most 140 characters); `apply_show` and `accept` take `operation_id`;
+        HS2-0YHA2S - `accept` takes `all` true in place of `operation_id` to accept every template plan held now;
         `resume` takes nothing.
       type: object
       properties:
@@ -26964,6 +26966,9 @@ components:
             - 'null'
           maxLength: 4000
         targets_as_inputs:
+          type: boolean
+        all:
+          description: HS2-0YHA2S. `accept` only - every template plan held now, in place of `operation_id`.
           type: boolean
         inputs:
           description: Input values by key; text, number, boolean, a choice, a priority, a project id or a tool id.
@@ -27353,6 +27358,28 @@ components:
           enum:
             - accepted
             - existing
+    TemplateAcceptAll:
+      description:
+        HS2-0YHA2S. A person's accept of every template plan held now (`accept` with `all`) - each apply's accept as
+        TemplateAccept, every step released, and `outcome` `accepted`, or `existing` when nothing was held.
+      type: object
+      required:
+        - outcome
+        - accepted
+        - released
+      properties:
+        outcome:
+          enum:
+            - accepted
+            - existing
+        accepted:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateAccept'
+        released:
+          type: array
+          items:
+            type: string
     PlanHold:
       description:
         HS2-38MFXT. A template apply's Wait for Accept, checked in with the plan (`holds` of a version-2

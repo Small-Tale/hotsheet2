@@ -438,3 +438,66 @@ async fn hs2_38mfxt_an_accept_on_the_applying_machine_releases_the_other_one() {
     assert_eq!(again["outcome"], "existing", "{again}");
     other.stop().await;
 }
+
+/// HS2-0YHA2S: the Orchestration header's one Accept Plan (`{"all": true}`) releases
+/// every held template plan on a real server; an AI session is refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 6)]
+async fn hs2_0yha2s_one_accept_releases_every_held_plan() {
+    let mut fleet = Fleet::new().await;
+    fleet
+        .policy(json!({"placement":{"actor":ACTOR,"cooldown_minutes":0}}))
+        .await;
+    let (first_goal, _) = applied(&fleet, "Repair the release", true, "tpl-one").await;
+    let (second_goal, _) = applied(&fleet, "Bump a dependency", true, "tpl-two").await;
+    let first = planned_step(&fleet, &first_goal, "Synthetic first held").await;
+    let second = planned_step(&fleet, &second_goal, "Synthetic second held").await;
+    for step in [&first, &second] {
+        assert_eq!(item_state(&fleet, step).await["state"], "waits_for_accept");
+    }
+    let (status, refused) = fleet
+        .call(
+            "POST",
+            "/templates/accept",
+            json!({"all":true,"actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
+    let accepted = fleet
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"all":true,"actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(accepted["outcome"], "accepted", "{accepted}");
+    let mut expected = vec![first.clone(), second.clone()];
+    expected.sort();
+    assert_eq!(accepted["released"], json!(expected), "{accepted}");
+    assert_eq!(
+        accepted["accepted"].as_array().unwrap().len(),
+        2,
+        "{accepted}"
+    );
+    for step in [&first, &second] {
+        let explained = fleet
+            .ok(
+                "POST",
+                "/scheduler/explain",
+                json!({"actor":Fleet::ai(),"step_id":step}),
+            )
+            .await;
+        assert_ne!(
+            explained["reason"], "template_plan_not_accepted",
+            "{explained}"
+        );
+    }
+    let again = fleet
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"all":true,"actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(again["outcome"], "existing", "{again}");
+    assert_eq!(again["released"], json!([]), "{again}");
+}

@@ -117,10 +117,25 @@ pub struct ApplyRef {
 }
 
 /// HS2-36XDDX: a person accepts the plan the planner proposed for an apply's goal.
-#[derive(Debug, Clone, Deserialize)]
+/// HS2-0YHA2S: or, with `all` and no operation id, every template plan held now (the
+/// Orchestration header's Accept Plan).
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AcceptTemplate {
+    #[serde(default)]
     pub operation_id: String,
+    #[serde(default)]
+    pub all: bool,
+}
+
+/// HS2-0YHA2S: an accept of every template plan held now: each apply's accept as
+/// [`TemplateAcceptView`], and every step released, ordered.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateAcceptAllView {
+    /// `accepted` when steps were released, `existing` when nothing was held.
+    pub outcome: String,
+    pub accepted: Vec<TemplateAcceptView>,
+    pub released: Vec<String>,
 }
 
 /// HS2-36XDDX: an accept's answer: the apply as recorded now and the steps this
@@ -1098,6 +1113,11 @@ impl OrchestrationRuntime {
     ) -> Result<TemplateAcceptView, OrchestrationError> {
         access::person(actor)?;
         self.owner(owner_id)?;
+        if request.all || request.operation_id.is_empty() {
+            return Err(OrchestrationError::Invalid(
+                "name one operation id, or accept every held plan with all",
+            ));
+        }
         let store = self.template_applies(owner_id)?;
         let result = (|| {
             let _lock = store.lock()?;
@@ -1139,6 +1159,52 @@ impl OrchestrationRuntime {
             Self::scheduler_wake_at(&self.home);
         }
         Ok(view)
+    }
+
+    /// HS2-0YHA2S: the Orchestration header's Accept Plan: a person accepts every
+    /// template plan held now, each as its own [`Self::template_accept`] (audited
+    /// `template_accept` per apply). Only a person accepts; with nothing held the answer
+    /// is `existing` and nothing is written.
+    pub fn template_accept_held(
+        &self,
+        owner_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TemplateAcceptAllView, OrchestrationError> {
+        access::person(actor)?;
+        self.owner(owner_id)?;
+        let operations: BTreeSet<String> = self
+            .template_holds(owner_id)?
+            .into_values()
+            .map(|wait| wait.operation_id)
+            .collect();
+        let mut accepted = Vec::new();
+        for operation_id in operations {
+            accepted.push(self.template_accept(
+                owner_id,
+                &AcceptTemplate {
+                    operation_id,
+                    all: false,
+                },
+                actor,
+                tx,
+            )?);
+        }
+        let mut released: Vec<String> = accepted
+            .iter()
+            .flat_map(|view| view.released.iter().cloned())
+            .collect();
+        released.sort();
+        Ok(TemplateAcceptAllView {
+            outcome: if released.is_empty() {
+                "existing"
+            } else {
+                "accepted"
+            }
+            .into(),
+            accepted,
+            released,
+        })
     }
 
     /// HS2-36XDDX: Start Orchestration is a person's review of the whole plan, so it

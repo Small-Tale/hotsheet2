@@ -284,6 +284,67 @@ describe('A planner question in the Orchestration toolbar (HS2-N5BDE4)', () => {
   });
 });
 
+describe('Held template plans in the Orchestration toolbar (HS2-0YHA2S)', () => {
+  /** The demo timeline with the first `count` items held for their template's accept. */
+  const held = (phase: Parameters<typeof demoTimeline>[0], count: number, names = ['Document a feature']) => {
+    const timeline = structuredClone(demoTimeline(phase));
+    let n = 0;
+    for (const wave of timeline.waves)
+      for (const item of wave.items)
+        if (n < count) {
+          const name = names[n % names.length];
+          Object.assign(item, {
+            state: 'waits_for_accept',
+            accept: { operation_id: `tpl-${name}`, template_name: name },
+          });
+          n += 1;
+        }
+    return timeline;
+  };
+  const toolbar = (timeline: ReturnType<typeof demoTimeline>, extra = {}) =>
+    String(OrchestrationToolbar({ timeline, clock: demoClock, ...extra }));
+  const enabled = (markup: string, action: string) =>
+    new RegExp(`<[^>]*data-action="${action}"[^>]*>`).exec(markup)?.[0].includes('disabled') === false;
+
+  it('counts the held steps and offers one Accept Plan naming the templates', () => {
+    const one = toolbar(held('running', 1));
+    expect(one).toContain('· 1 step waits for an accept');
+    expect(enabled(one, 'accept-orchestration-template-plans')).toBe(true);
+    expect(one).toContain('data-held-steps="1"');
+    expect(one).toContain(
+      'Accept the planned steps of Document a feature (1 step); placement starts them within the Orchestration settings',
+    );
+    const several = toolbar(held('running', 3, ['Document a feature', 'Repair the release']));
+    expect(several).toContain('· 3 steps wait for an accept');
+    expect(several).toContain('Accept the planned steps of Document a feature and Repair the release (3 steps)');
+    // One button whatever the number of templates, beside Pause.
+    expect(several.split('data-action="accept-orchestration-template-plans"')).toHaveLength(2);
+    expect(several).toContain('pause-orchestration');
+  });
+
+  it('is disabled while a change is on its way and absent when nothing is held', () => {
+    expect(enabled(toolbar(held('running', 2), { busy: true }), 'accept-orchestration-template-plans')).toBe(false);
+    for (const phase of ['no_plan', 'proposed', 'running', 'paused'] as const) {
+      const markup = toolbar(demoTimeline(phase));
+      expect(markup).not.toContain('accept-orchestration-template-plans');
+      expect(markup).not.toContain('wait for an accept');
+      expect(markup).not.toContain('waits for an accept');
+    }
+    // Held, then accepted (the items move on): the line and the button go together.
+    const accepted = held('running', 2);
+    for (const wave of accepted.waves)
+      for (const item of wave.items) if (item.state === 'waits_for_accept') item.state = 'ready';
+    expect(toolbar(accepted)).not.toContain('accept-orchestration-template-plans');
+  });
+
+  it('keeps the planner question beside it', () => {
+    const markup = toolbar(held('running', 1), { planning: 'asked', question: 'LCH-1' });
+    expect(markup).toContain('· Planner asked a question · 1 step waits for an accept');
+    expect(markup).toContain('answer-orchestration-question');
+    expect(markup).toContain('accept-orchestration-template-plans');
+  });
+});
+
 describe('The default goal in the Orchestration toolbar (HS2-YSRT6Y)', () => {
   const toolbar = (phase: Parameters<typeof demoTimeline>[0], extra = {}) =>
     String(OrchestrationToolbar({ timeline: demoTimeline(phase), clock: demoClock, ...extra }));
@@ -919,6 +980,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       runValidation: () => calls.push('validate'),
       linkGate: (gate: string) => calls.push(`link ${gate}`),
       acceptPlan: (operation: string) => calls.push(`accept ${operation}`),
+      acceptAllPlans: () => calls.push('accept all'),
       reopen: (reason: string) => calls.push(`reopen ${reason}`),
       showDecisions: () => calls.push('decisions'),
       loadEarlierDecisions: () => calls.push('earlier'),
@@ -955,6 +1017,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'open-orchestration-goal', target({}));
     run('click', 'accept-orchestration-template-plan', target({ operationId: 'tpl-9' }));
     run('click', 'accept-orchestration-template-plan', target({}));
+    run('click', 'accept-orchestration-template-plans', target({}));
     run('click', 'run-orchestration-validation', target({}));
     run('click', 'link-orchestration-gate', target({ gateId: 'gate-7' }));
     run('click', 'link-orchestration-gate', target({}));
@@ -986,6 +1049,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'request request-6',
       'goal',
       'accept tpl-9',
+      'accept all',
       'validate',
       'link gate-7',
       'reopen fix_changed_contract',
@@ -1058,6 +1122,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       showRequest: noop,
       openGoal: noop,
       acceptPlan: noop,
+      acceptAllPlans: noop,
       runValidation: noop,
       linkGate: noop,
       reopen: noop,

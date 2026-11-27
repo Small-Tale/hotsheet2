@@ -1912,3 +1912,109 @@ fn hs2_38mfxt_the_hold_and_the_accept_travel_with_the_checked_in_plan() {
         "template_apply_not_found"
     );
 }
+
+/// HS2-0YHA2S: the Orchestration header's Accept Plan accepts every template plan held
+/// now, each as its own accept (audited per apply); only a person accepts, nothing held
+/// answers `existing`, and a step planned later is held again.
+#[test]
+fn hs2_0yha2s_one_accept_releases_every_held_template_plan() {
+    let mut rng = Rng(3900);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    f.m.runtime
+        .set_policy(
+            &f.owner(),
+            hotsheet_ticketing::orchestration::SetPolicy {
+                expected_revision: None,
+                policy: super::sessions::policy(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let all = |actor: &MutationActor, tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .template_accept_held(&f.owner(), Some(actor), tx)
+    };
+    // Nothing held yet: nothing to accept, and nothing written.
+    let empty = all(&human(), &mut tx).unwrap();
+    assert_eq!(empty.outcome, "existing");
+    assert!(empty.accepted.is_empty() && empty.released.is_empty());
+    assert_eq!(code(all(&worker(), &mut tx)), "forbidden");
+
+    let first = f.define("Feature across API and Web", &mut tx);
+    let second = f.define("Repair failing CI", &mut tx);
+    let mut goals = Vec::new();
+    for (template, operation, feature) in [
+        (&first, "op-a", "Rate limits"),
+        (&second, "op-b", "Flaky login"),
+    ] {
+        let applied = f
+            .apply(
+                template,
+                json!({"feature": feature}),
+                operation,
+                &human(),
+                &mut tx,
+            )
+            .unwrap();
+        goals.push(applied.apply.goal.unwrap().slug.unwrap());
+    }
+    let a1 = plan_step(&f, &goals[0], "Add rate limit headers", &mut tx);
+    let a2 = plan_step(&f, &goals[0], "Show rate limit errors", &mut tx);
+    let b1 = plan_step(&f, &goals[1], "Repair the login test", &mut tx);
+    for step in [&a1, &a2, &b1] {
+        assert_eq!(standing(&f, step, &mut tx).1, "waits_for_accept");
+    }
+    // An AI actor never accepts, not even all at once; nothing is released.
+    assert_eq!(code(all(&worker(), &mut tx)), "forbidden");
+    assert_eq!(standing(&f, &a1, &mut tx).1, "waits_for_accept");
+    // A request naming nothing is refused.
+    assert_eq!(
+        code(f.m.runtime.template_accept(
+            &f.owner(),
+            &AcceptTemplate::default(),
+            Some(&human()),
+            &mut tx
+        )),
+        "invalid_request"
+    );
+
+    // One accept releases both templates' plans.
+    let accepted = all(&human(), &mut tx).unwrap();
+    assert_eq!(accepted.outcome, "accepted");
+    let mut expected = vec![a1.clone(), a2.clone(), b1.clone()];
+    expected.sort();
+    assert_eq!(accepted.released, expected);
+    let operations: Vec<&str> = accepted
+        .accepted
+        .iter()
+        .map(|view| view.hold.as_ref().unwrap().operation_id.as_str())
+        .collect();
+    assert_eq!(operations, ["op-a", "op-b"]);
+    for step in [&a1, &a2, &b1] {
+        assert_ne!(standing(&f, step, &mut tx).1, "waits_for_accept");
+    }
+    let journal = f.m.runtime.audit(&f.owner(), 0, 500).unwrap().entries;
+    let accepts: Vec<_> = journal
+        .iter()
+        .filter(|entry| {
+            entry.record.action == "template_accept"
+                && entry.record.reason.as_deref() == Some("template_accepted")
+        })
+        .collect();
+    assert_eq!(accepts.len(), 2, "one accept per apply");
+    // Again: nothing held, nothing new.
+    let again = all(&human(), &mut tx).unwrap();
+    assert_eq!(again.outcome, "existing");
+    assert!(again.accepted.is_empty());
+    // The planner adds a step to one goal: only that one is held, and released again.
+    let a3 = plan_step(&f, &goals[0], "Document rate limits", &mut tx);
+    assert_eq!(standing(&f, &a3, &mut tx).1, "waits_for_accept");
+    let later = all(&human(), &mut tx).unwrap();
+    assert_eq!(later.released, std::slice::from_ref(&a3));
+    assert_eq!(later.accepted.len(), 1);
+}

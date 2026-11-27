@@ -7902,6 +7902,17 @@ applied).
   Manual placement the review is **Start Orchestration**, so Start accepts every template
   plan held then (audited `start_orchestration`), and a Manual plan reads as the dry run
   it always was. Audited as `template_accept`.
+- **One Accept Plan in the header (HS2-0YHA2S).** While any step waits for an accept, the
+  Orchestration header's status line adds "· N steps wait for an accept" (the
+  `waits_for_accept` items of the timeline, each step once) and offers one **Accept Plan**
+  (primary, its tooltip naming the templates and the count) beside the other header actions,
+  as the planner's question is shown there. It accepts every template plan held now in one
+  request (`templates/accept` with `{"all": true}`): each held apply is accepted as its own
+  accept (audited `template_accept` per apply), and the answer lists each accept, every
+  released step and `outcome` `accepted`, or `existing` when nothing was held. Only a person
+  accepts (`forbidden` for an AI actor). Each held card's inspector keeps its own Accept Plan
+  and **Open <goal>**. Headless: `orchestration template accept --all`, MCP `template_accept`
+  with `all: true`.
 - **Newly planned steps.** A step the planner adds to the goal later (Update Plan, or a
   re-proposal) is held again until the next accept; steps accepted before keep running.
 - **On every machine (HS2-38MFXT).** The hold is checked in with the plan, so another
@@ -8050,7 +8061,7 @@ hotsheet-cli ... orchestration template preview <template-id> [--input key=value
 hotsheet-cli ... orchestration template apply <template-id> --tool <tool> --operation-id <id> \
   [--input key=value]... [--inputs <json>] [--create <step>]... [--model <m>] [--effort <e>] --project <owner>
 hotsheet-cli ... orchestration template apply-show <operation-id> --project <owner>
-hotsheet-cli ... orchestration template accept <operation-id> --project <owner>
+hotsheet-cli ... orchestration template accept <operation-id>|--all --project <owner>
 ```
 
 `set --file` takes one template, an object with `templates`, or a whole templates file.
@@ -8064,8 +8075,8 @@ else as text.
 MCP `hotsheet_targets` adds `template_list`, `template_show`, `template_validate`,
 `template_set`, `template_retire`, `template_save_goal`, `template_preview`,
 `template_apply` (with `template_id`, `inputs`, `choices`, `tool`, `operation_id`),
-`template_apply_show` and `template_accept` (with `operation_id`; refused for an AI actor,
-HS2-36XDDX). The `hotsheet-planner` skill (version 7) plans a goal tagged
+`template_apply_show` and `template_accept` (with `operation_id`, or `all: true` for every
+held plan, HS2-0YHA2S; refused for an AI actor, HS2-36XDDX). The `hotsheet-planner` skill (version 7) plans a goal tagged
 `orchestration-template` from its brief (§26.25 "What the planner does"): it adapts the
 steps to the projects as they are now, searches first for a find-or-create step and,
 when it reuses a ticket, asks once with a `CHOICE` per reused step whether to keep it
