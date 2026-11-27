@@ -247,6 +247,26 @@ impl TwoProjects {
         }
     }
 
+    /// HS2-C4SSN1: waits, woken by the machine home changing, until the re-plan memory shows
+    /// `handed` tickets handed. The follower saves its memory after the update it asked
+    /// for is audited, so the audit alone can be ahead of it.
+    async fn handed_until(&self, handed: usize) {
+        let store = ReplanMemoryStore::new(&self.home, &self.owner.id).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let waiter = hotsheet_jobs::ChangeWaiter::starting(&[self.home.as_path()]).unwrap();
+            if store.read().is_ok_and(|memory| memory.handed() == handed) {
+                return;
+            }
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            assert!(
+                !remaining.is_zero(),
+                "the re-plan memory never showed {handed} handed"
+            );
+            tokio::task::block_in_place(|| waiter.wait(remaining));
+        }
+    }
+
     /// `plan show` once the server sees the planner idle in its open tab.
     async fn replannable(&self) -> Value {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
@@ -491,12 +511,9 @@ async fn hs2_a0853j_a_ticket_written_while_the_follower_seeds_replans() {
     assert_eq!(auto["reason"], "plan_update_started", "{auto}");
     let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
     assert_eq!(shown["update"]["state"], "drafting", "{shown}");
-    // Exactly one: the ticket the planner read was not handed.
-    let memory = ReplanMemoryStore::new(&world.home, &world.owner.id)
-        .unwrap()
-        .read()
-        .unwrap();
-    assert_eq!(memory.handed(), 1);
+    // Exactly one: the ticket the planner read was not handed (HS2-C4SSN1: the memory is saved
+    // just after the audit entry, so wait for it).
+    world.handed_until(1).await;
     assert_eq!(count(&world.audit().await, is_auto), 1);
     world.host.begin_stopping();
 }
