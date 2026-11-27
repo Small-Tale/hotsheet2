@@ -43,8 +43,17 @@ pub enum Event {
     Closed,
 }
 
+/// HS2-VDF7VS: ends one open stream from another thread; its reader then sees it close.
+pub type StreamCloser = Box<dyn Fn() + Send + Sync>;
+
 pub trait Subscription: Send {
     fn next(&mut self) -> Result<Event, RestError>;
+
+    /// A handle that closes this stream at once from another thread, when the transport
+    /// can give one. `None` leaves the stream to end at its next event or its lifetime.
+    fn closer(&self) -> Option<StreamCloser> {
+        None
+    }
 }
 
 /// The three calls the backend makes. Injected so a fake can stand in for the service.
@@ -118,7 +127,15 @@ impl UreqTransport {
     }
 
     fn post(&self, path: &str) -> ureq::RequestBuilder<ureq::typestate::WithBody> {
-        self.agent
+        self.post_on(&self.agent, path)
+    }
+
+    fn post_on(
+        &self,
+        agent: &ureq::Agent,
+        path: &str,
+    ) -> ureq::RequestBuilder<ureq::typestate::WithBody> {
+        agent
             .post(&format!("{}{path}", self.base))
             .header("Authorization", &format!("Bearer {}", self.token.expose()))
     }
@@ -203,10 +220,18 @@ impl RestTransport for UreqTransport {
         channel: &str,
         lifetime: Duration,
     ) -> Result<Box<dyn Subscription>, RestError> {
+        // HS2-VDF7VS: each stream has its own agent, so shutting that agent down closes
+        // exactly this stream's connection (and interrupts a read blocked on it in another
+        // thread) and nothing else.
+        let agent = hotsheet_http::build(
+            hotsheet_http::config()
+                .http_status_as_error(false)
+                .timeout_connect(Some(Duration::from_secs(10))),
+        );
         // The overall timeout bounds connecting and reading, so it is the stream's lifetime:
         // when it passes mid-read the reader reports `Timeout`.
         let response = Self::checked(
-            self.post(&format!("/subscribe/{channel}"))
+            self.post_on(&agent, &format!("/subscribe/{channel}"))
                 .header("Accept", "text/event-stream")
                 .config()
                 .timeout_global(Some(lifetime.max(Duration::from_millis(50))))
@@ -215,12 +240,15 @@ impl RestTransport for UreqTransport {
         )?;
         Ok(Box::new(SseStream {
             reader: BufReader::new(response.into_body().into_reader()),
+            agent,
         }))
     }
 }
 
 struct SseStream {
     reader: BufReader<ureq::BodyReader<'static>>,
+    /// The stream's own agent (HS2-VDF7VS), whose shutdown closes the stream.
+    agent: ureq::Agent,
 }
 
 /// One `data:` payload of the stream. `subscribe,<channel>,<count>` confirms the
@@ -251,5 +279,12 @@ impl Subscription for SseStream {
                 Err(e) => return Err(RestError::Unreachable(e.to_string())),
             }
         }
+    }
+
+    fn closer(&self) -> Option<StreamCloser> {
+        let agent = self.agent.clone();
+        // Clones share one pool, so shutting down a clone closes the stream; a second
+        // shutdown finds nothing left to close.
+        Some(Box::new(move || agent.clone().shutdown()))
     }
 }

@@ -451,6 +451,10 @@ impl upstash::transport::Subscription for TrackedStream {
     fn next(&mut self) -> Result<upstash::transport::Event, upstash::transport::RestError> {
         self.0.next()
     }
+
+    fn closer(&self) -> Option<upstash::transport::StreamCloser> {
+        self.0.closer()
+    }
 }
 
 impl upstash::transport::RestTransport for Tracked {
@@ -530,7 +534,8 @@ fn hs2_p234bh_a_cancel_ends_a_parked_stream_wait_and_its_stream_reads_nothing_af
     // Parked: the first read, the stream, and the read once the stream was confirmed.
     until_logged(&fake, "eval get", 2);
     until_logged(&fake, "subscribe", 1);
-    assert_eq!(cancel.registered(), 1);
+    // The wait's waker and the stream's closer (HS2-VDF7VS).
+    until_registered(&cancel, 2);
     let from = fake.requests();
 
     let began = Instant::now();
@@ -538,13 +543,11 @@ fn hs2_p234bh_a_cancel_ends_a_parked_stream_wait_and_its_stream_reads_nothing_af
     let error = parked.recv_timeout(PROMPT).unwrap().unwrap_err();
     assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
     assert_eq!(error.code(), "interrupted");
-    assert_eq!(
-        cancel.registered(),
-        0,
-        "the waker is removed as the wait ends"
-    );
+    // The waker is removed as the wait ends; the stream's closer as its helper thread
+    // drops the closed stream (HS2-VDF7VS).
+    until_registered(&cancel, 0);
 
-    // The release reaches the abandoned stream, which ends on it without reading state or
+    // The abandoned stream ends (the cancel closes it, HS2-VDF7VS) without reading state or
     // subscribing again: the only request after the cancel is the release itself.
     backend.release(held.renewal_token.expose()).unwrap();
     streams_ended.recv_timeout(PROMPT).unwrap();
@@ -596,7 +599,8 @@ fn hs2_p234bh_an_abandoned_stream_ends_at_its_lifetime_without_a_request() {
         parked.recv_timeout(PROMPT).unwrap().unwrap_err().code(),
         "interrupted"
     );
-    // The stream reaches its lifetime and is dropped; nothing reads the expiry.
+    // The stream is dropped (closed by the cancel, HS2-VDF7VS, before its lifetime);
+    // nothing reads the expiry.
     streams_ended.recv_timeout(PROMPT).unwrap();
     assert!(
         log_since(&fake, from).is_empty(),
@@ -627,6 +631,111 @@ fn hs2_p234bh_a_cancel_during_the_backoff_after_a_failed_stream_ends_the_wait() 
         began.elapsed() < Duration::from_millis(1500),
         "the backoff was not waited out: {:?}",
         began.elapsed()
+    );
+}
+
+// ---- HS2-VDF7VS: a cancel closes the abandoned stream ----------------------------------
+
+/// Block until the fake has seen the client close `count` streams; how long that took.
+fn until_closed_by_client(fake: &Fake, count: usize) -> Duration {
+    let started = Instant::now();
+    while fake.closed_by_client() < count {
+        assert!(
+            started.elapsed() < PROMPT,
+            "the fake saw {} closed streams, wanted {count}",
+            fake.closed_by_client()
+        );
+        std::thread::yield_now();
+    }
+    started.elapsed()
+}
+
+/// Block until `cancel` has `count` registrations (the wait's waker, the stream's closer).
+fn until_registered(cancel: &WaitCancel, count: usize) {
+    let started = Instant::now();
+    while cancel.registered() != count {
+        assert!(
+            started.elapsed() < PROMPT,
+            "{} registrations, wanted {count}",
+            cancel.registered()
+        );
+        std::thread::yield_now();
+    }
+}
+
+#[test]
+fn hs2_vdf7vs_a_cancel_closes_the_abandoned_stream_at_once() {
+    let fake = Fake::start();
+    let (backend, streams_ended) = tracked(&fake);
+    let held = backend.acquire(&target("vms/one"), &lease(600)).unwrap();
+    for round in 1..=2 {
+        let cancel = WaitCancel::new();
+        let parked = spawn_wait(&backend, &cancel, Duration::from_secs(600));
+        // Parked on its stream, with the stream's closer registered beside the waker.
+        until_logged(&fake, "eval get", 2 * round);
+        until_registered(&cancel, 2);
+        assert_eq!(
+            fake.closed_by_client(),
+            round - 1,
+            "the stream is still open"
+        );
+        let from = fake.requests();
+
+        cancel.cancel();
+        assert_eq!(
+            parked.recv_timeout(PROMPT).unwrap().unwrap_err().code(),
+            "interrupted"
+        );
+        // The fake sees the stream close right after the cancel, not at the holder's
+        // lease (ten minutes away), and nothing is sent after it.
+        let took = until_closed_by_client(&fake, round);
+        assert!(took < PROMPT, "{took:?}");
+        streams_ended.recv_timeout(PROMPT).unwrap();
+        until_registered(&cancel, 0);
+        assert!(
+            log_since(&fake, from).is_empty(),
+            "{:?}",
+            log_since(&fake, from)
+        );
+    }
+
+    // A wait nobody cancels keeps its stream open until the release wakes it.
+    let subscribed = fake.count("subscribe");
+    let waiting = spawn_wait(&backend, &WaitCancel::new(), Duration::from_secs(600));
+    until_logged(&fake, "subscribe", subscribed + 1);
+    until_logged(&fake, "eval get", 5);
+    assert_eq!(fake.closed_by_client(), 2);
+    backend.release(held.renewal_token.expose()).unwrap();
+    assert_eq!(
+        waiting.recv_timeout(PROMPT).unwrap().unwrap(),
+        WaitOutcome::Free
+    );
+}
+
+#[test]
+fn hs2_vdf7vs_a_cancel_before_the_closer_is_registered_still_closes_the_stream() {
+    let fake = Fake::start();
+    let backend = Arc::new(backend(&fake));
+    backend.acquire(&target("vms/one"), &lease(600)).unwrap();
+    let cancel = WaitCancel::new();
+    // The cancel lands while the subscribe is in flight: after the fake registered the
+    // stream and before it answered, so before the client could register the closer.
+    let cancelling = cancel.clone();
+    *fake.faults.on_subscribe.lock().unwrap() = Some(Box::new(move |_| cancelling.cancel()));
+    let parked = spawn_wait(&backend, &cancel, Duration::from_secs(600));
+    assert_eq!(
+        parked.recv_timeout(PROMPT).unwrap().unwrap_err().code(),
+        "interrupted"
+    );
+    let took = until_closed_by_client(&fake, 1);
+    assert!(took < PROMPT, "{took:?}");
+    until_registered(&cancel, 0);
+    // The stream was dropped unread: no read after the subscribe.
+    let log = fake.log.lock().unwrap().clone();
+    assert!(
+        log.last()
+            .is_some_and(|last| last.starts_with("subscribe ")),
+        "{log:?}"
     );
 }
 
