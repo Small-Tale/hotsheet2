@@ -1537,6 +1537,36 @@ out (HS2-JFE7JJ). Codex 0.167.1 started and read through the MCP tools, but each
 Sheet MCP call waited on its own permission request (HS2-MYDER8), so it planned
 nothing; its run is open until that is fixed.
 
+## A plan template applied with a real AI planner (HS2-A4RVYA)
+
+Automated tests run the planner as a fake agent and check that applying a template
+opens one goal with the brief and starts the planner once; they cannot judge how a real
+planner adapts the brief (§26.32). Use the setup of "Propose Plan with real AI tools"
+above (throwaway home, Alpha and Beta bound, `tickets_write` remembered for Alpha only),
+with one open Alpha ticket that already describes a template step's work.
+
+1. Check in a template with a `text` input, two `target` inputs, a search-first step in
+   Alpha, a `create` step in Beta after it (`gates: ci`), and a `boolean` input whose
+   `when` drops a third step (`orchestration template set --file <file>`), then
+   `template validate` a broken copy and confirm it names the problem.
+2. In the Orchestration view press Use Template…: Apply stays disabled until the text
+   input is filled; the summary shows Alpha's ticket writes as allowed by a remembered
+   rule and Beta's as asking; switching the third step's boolean off drops it.
+3. Apply with Claude. In the planner's tab answer the tool's first-run dialogs. Check,
+   with identifiers only: one new goal tagged `orchestration-template` whose details
+   hold the brief; the existing Alpha ticket linked `observed` and named as found by
+   search, with one `FEEDBACK NEEDED` note holding a `CHOICE` to keep it or create a
+   new ticket; the Beta ticket created under `tpl-<operation id>-<step key>` after a
+   permission request on the card; the Beta step requiring the Alpha ticket with
+   `gates: ci`; no step for the dropped one; `run list` and `session list` empty.
+4. Answer the `CHOICE` with Create a new ticket: the pushed answer makes the planner
+   create the Alpha ticket and move the step to it.
+5. Apply again from the CLI with the same operation id (`template apply ...
+--operation-id <id>`): it answers `existing`, and no goal or planner is added. Edit
+   the template and confirm the goal's brief is unchanged.
+6. Repeat 3 to 5 with `codex`, then stop every planner, server and broker and remove the
+   temporary directories.
+
 ## Orchestration end to end with real tools and hosts (HS2-2EY9DP)
 
 The end-to-end scenarios (§26.23) run fake AI tools, a loopback GitHub Actions
