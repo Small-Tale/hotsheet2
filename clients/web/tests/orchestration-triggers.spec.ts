@@ -310,17 +310,11 @@ async function savedSchedule(server: Server) {
   return trigger.source.schedule;
 }
 
-/**
- * Pick one option of a Kerf select (its listbox opens in the page's top layer) until the select shows it. The live
- * review re-renders the setup when it answers, which closes a list opened just before (HS2-CJYD5A): open it again.
- */
+/** Pick one option of a Kerf select (its listbox opens in the page's top layer); the select then shows it. */
 async function pick(page: Page, select: Locator, option: string) {
-  const choice = page.getByRole('option', { name: option, exact: true });
-  await expect(async () => {
-    if (!(await choice.isVisible())) await select.click();
-    await choice.click({ timeout: 2_000 });
-    await expect(select).toContainText(option, { timeout: 2_000 });
-  }).toPass({ timeout: 30_000 });
+  await select.click();
+  await page.getByRole('option', { name: option, exact: true }).click();
+  await expect(select).toContainText(option);
 }
 
 async function choose(page: Page, scope: Locator, label: string, option: string) {
@@ -344,10 +338,15 @@ test('HS2-SEEMXR Triggers… schedules with every recurrence field the command s
     await dialog.getByRole('radio', { name: 'Start orchestration' }).check();
     // Weekly on Monday, Wednesday and Friday, ending in March, skipping Christmas, at 06:30 UTC.
     await choose(page, dialog, 'Repeats', 'Weekly');
-    // Each pick re-renders the setup from the controller's form, which may close the list: `pick` opens it again.
+    // A multiple select stays open while each pick re-renders the setup and its review answers (HS2-CJYD5A).
     const weekdays = dialog.getByRole('combobox', { name: 'Weekdays', exact: true });
-    for (const day of ['Wednesday', 'Friday']) await pick(page, weekdays, day);
-    if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
+    await weekdays.click();
+    for (const day of ['Wednesday', 'Friday']) {
+      await page.getByRole('option', { name: day, exact: true }).click();
+      await expect(weekdays).toContainText(day);
+      await expect(weekdays).toHaveAttribute('aria-expanded', 'true');
+    }
+    await page.keyboard.press('Escape');
     await expect(dialog).toBeVisible();
     await dialog.getByLabel('Ends On', { exact: true }).fill('2027-03-01');
     await dialog.getByLabel('Exclude Dates', { exact: true }).fill('2026-12-25');
@@ -433,11 +432,32 @@ test('HS2-40GPZK Triggers… gives fixed template inputs Use Template…’s typ
     const dialog = dialogOf(page);
     await dialog.getByRole('button', { name: 'New Trigger…' }).click();
     await dialog.getByLabel('Name', { exact: true }).fill('Typed repair');
+    // HS2-CJYD5A: hold the reviews until a select is open. The last answered review (nothing runs yet) shows a
+    // problem banner above the setup once a template is chosen; the held answer removes it, and the open list must
+    // stay open while that lands.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/orchestration/triggers/review', async (route) => {
+      await held;
+      await route.fallback();
+    });
     await choose(page, dialog, 'Template', 'Typed repair');
     const input = (key: string) => dialog.locator(`[data-trigger-input="${key}"]`);
-    await input('feature').getByLabel('Value').fill('Nightly');
     // A project input offers the declared projects, after its template default.
-    await pick(page, input('project').getByRole('combobox', { name: 'Value' }), 'Self');
+    const project = input('project').getByRole('combobox', { name: 'Value' });
+    await project.click();
+    await expect(page.getByRole('option', { name: 'Default: Self', exact: true })).toBeVisible();
+    const banner = dialog.locator('[data-trigger-setup] > :not(.kui-grid):not([hidden])');
+    await expect(banner).toContainText(/Keeps? Save Disabled/);
+    release();
+    await expect(banner).toHaveCount(0);
+    await expect(project).toHaveAttribute('aria-expanded', 'true');
+    await page.getByRole('option', { name: 'Self', exact: true }).click();
+    await expect(project).toContainText('Self');
+    await page.unroute('**/orchestration/triggers/review');
+    await input('feature').getByLabel('Value').fill('Nightly');
     // A boolean is a checkbox, a choice its choices, a number a number field.
     await input('urgent').getByRole('checkbox', { name: 'Value' }).check();
     await pick(page, input('size').getByRole('combobox', { name: 'Value' }), 'large');
