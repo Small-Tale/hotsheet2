@@ -5920,3 +5920,17 @@ Linux runtime evidence comes from the `glassbox-linux-verify` Docker image (real
   HS2-0M3DS2, HS2-NKCXW4 and permission-popup specs use it. The HS2-2MZWZT, HS2-WHW46N and
   `feedback-session-choice.spec.ts` (HS2-25TP3N) flows exercise the moved advisory and note-delivery
   handlers through the shipped app.
+
+### Permission and terminal nudge fixtures match the server shapes (HS2-GM6A8W)
+
+- `clients/web/tests/providers.spec.ts`: typed builders mirror the server's events and list entries.
+  `permissionAnsweredEvent` is an answered `permission_resolved` with an empty `slug` and a
+  `<decision>:<scope>` message. `permissionRemovedEvent` is an unanswered removal (withdrawn or timed
+  out) with the tool as `slug` and no message. Both carry the request's project as `store`
+  (`checkout:demo-checkout`). `pendingPermission` builds a `GET /permissions` entry with `project`,
+  `always_allow_supported` and `suggestions` always present, as `PermissionInfo` serializes them.
+  `terminalEvent` keeps the unscoped `store: ''` and `slug: ''` of terminal question and halted
+  nudges, and only a detected halt carries a message. Every `/permissions` fixture, the halted-session
+  fixture's `emit` and the drive mock's permission events use them.
+- `clients/web/src/eslint-policy.test.ts`: `hs2_gm6a8w_permission_events_use_typed_builders` allows
+  `permission_*` and terminal nudge kind literals only inside the builders.
