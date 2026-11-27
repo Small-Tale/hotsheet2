@@ -1,9 +1,9 @@
 /**
- * Server-shaped ticket change, nudge and pending-permission builders shared by the web E2E specs
- * (HS2-GM6A8W, HS2-CSPDW8, HS2-Y59J3K). Each builder mirrors one server emitter and is checked against the client's
+ * Server-shaped ticket change, activity, nudge and pending-permission builders shared by the web E2E specs
+ * (HS2-GM6A8W, HS2-CSPDW8, HS2-Y59J3K, HS2-F3S1ZZ). Each builder mirrors one server emitter and is checked against the client's
  * contract types with `satisfies`, so a fixture cannot drift into a shape the server never sends.
  */
-import type { ChangeEvent, PermissionRequest, Ticket } from '../src/api';
+import type { ActivityEvent, ChangeEvent, PermissionRequest, Ticket } from '../src/api';
 import type { PermissionDecision, PermissionScope } from '../src/permission-notifications';
 
 /**
@@ -39,6 +39,33 @@ export const ticketChangeEvent = (
   kind: TicketChangeKind,
   ticket: Pick<Ticket, 'connection_id' | 'native_id'> & { slug: string },
 ) => ({ store: ticket.connection_id, kind, id: ticket.native_id, slug: ticket.slug }) satisfies ChangeEvent;
+
+/** The activity kinds the server serializes (`ActivityKind` in `crates/hotsheet-ticketing/src/activity.rs`). */
+export type ServerActivityKind =
+  | 'turn_start'
+  | 'plan'
+  | 'edit'
+  | 'command'
+  | 'tool_call'
+  | 'decision'
+  | 'blocked'
+  | 'permission'
+  | 'note'
+  | 'ticket_status'
+  | 'summary'
+  | 'turn_end';
+
+/** One captured `ActivityEvent` as the server serializes it, with a kind the server can emit. */
+export type ServerActivity = ActivityEvent & { kind: ServerActivityKind };
+
+/**
+ * The server's live `activity` event (`record_activity` in `crates/hotsheet-server/src/activity_capture.rs`):
+ * `store` is the recording store's connection id (`store_url_id`, the `connection_id` its tickets
+ * carry), `id` is the activity event's id, `slug` is empty, and `activity` carries the full event;
+ * `message` is omitted (HS2-F3S1ZZ).
+ */
+export const activityEvent = (store: string, activity: ServerActivity) =>
+  ({ store, kind: 'activity', id: activity.id, slug: '', activity }) satisfies ChangeEvent;
 
 /**
  * The mocked project's permission identity: `ask_project` (`crates/hotsheet-server/src/routes/permissions.rs`)

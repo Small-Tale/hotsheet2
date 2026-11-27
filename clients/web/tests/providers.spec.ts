@@ -28,6 +28,7 @@ import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { openUpstreamSocket, proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
 import {
+  activityEvent,
   pendingPermission,
   permissionAnsweredEvent,
   permissionAskedEvent,
@@ -2295,9 +2296,10 @@ async function mockProject(
   // Long polls held open until an event arrives, as the real server holds them (HS2-6H4M85).
   const drivePollWaiters = new Set<() => void>();
   // Permission nudges carry the asking project's identity; other drive events the primary store.
+  const driveStore = '/work/demo.hs2';
   const pushDriveEvent = (event: Omit<MockDriveEvent, 'cursor' | 'store'> & { store?: string }) => {
     driveCursor += 1;
-    driveEvents.push({ cursor: driveCursor, store: '/work/demo.hs2', ...event });
+    driveEvents.push({ cursor: driveCursor, store: driveStore, ...event });
     for (const wake of [...drivePollWaiters]) wake();
   };
   const replayLastDriveEvent = () => {
@@ -2882,20 +2884,17 @@ async function mockProject(
       // HS2-M5GN19: a tool-only turn (activity, a zero-usage result, real usage, no text).
       if (body.content === 'work on HS2-XMJGFJ now') {
         for (const [index, summary] of ['claude called hotsheet_claim', 'claude read lecture-outlines.md'].entries())
-          pushDriveEvent({
-            kind: 'activity',
-            id: `activity-tool-only-${index}`,
-            slug: '',
-            activity: {
+          pushDriveEvent(
+            activityEvent(driveStore, {
               id: `activity-tool-only-${index}`,
               ts: '2026-10-15T02:43:00Z',
               tool: running.tool,
               session: id,
-              kind: 'tool',
+              kind: 'tool_call',
               summary,
               importance: 'normal',
-            },
-          });
+            }),
+          );
         turnEvent(running, { type: 'usage', tokens_in: 0, tokens_out: 0, cost_usd: 0 }, body.turn_id);
         turnEvent(running, { type: 'usage', tokens_in: 900, tokens_out: 60, cost_usd: 0.04 }, body.turn_id);
         const idle = { ...running, busy: false };
@@ -2972,20 +2971,17 @@ async function mockProject(
       }
       // Streams tool activity in steps for the collapsible activity group (HS2-Y3SGH3).
       const stepActivity = (id: string, summary: string) => {
-        pushDriveEvent({
-          kind: 'activity',
-          id,
-          slug: '',
-          activity: {
+        pushDriveEvent(
+          activityEvent(driveStore, {
             id,
             ts: '2026-09-08T00:00:00Z',
             tool: 'codex',
             session: running.session_id,
-            kind: 'tool',
+            kind: 'tool_call',
             summary,
             importance: 'normal',
-          },
-        });
+          }),
+        );
       };
       if (body.content === 'Research with tools.') {
         stepActivity('activity-step-1', 'codex called WebSearch');
@@ -3019,11 +3015,8 @@ async function mockProject(
       }
       driveEvent(running);
       if (body.content === 'Check message ordering across a permission pause.') {
-        pushDriveEvent({
-          kind: 'activity',
-          id: 'activity-ordering',
-          slug: '',
-          activity: {
+        pushDriveEvent(
+          activityEvent(driveStore, {
             id: 'activity-ordering',
             ts: '2026-09-14T07:23:40Z',
             tool: 'codex',
@@ -3031,8 +3024,8 @@ async function mockProject(
             kind: 'command',
             summary: 'codex ran `date`',
             importance: 'normal',
-          },
-        });
+          }),
+        );
         drivePermissions = [
           pendingPermission({
             id: 73,
@@ -3067,11 +3060,8 @@ async function mockProject(
           truncated: false,
         });
         turnEvent(running, { type: 'usage', model: 'codex-5.6', tokens_in: 12_000, tokens_out: 840, cost_usd: 0.0423 });
-        pushDriveEvent({
-          kind: 'activity',
-          id: 'activity-1',
-          slug: '',
-          activity: {
+        pushDriveEvent(
+          activityEvent(driveStore, {
             id: 'activity-1',
             ts: '2026-09-08T00:00:00Z',
             tool: 'codex',
@@ -3079,8 +3069,8 @@ async function mockProject(
             kind: 'edit',
             summary: 'Edited the conversation projection',
             importance: 'normal',
-          },
-        });
+          }),
+        );
         drivePermissions = [
           pendingPermission({
             id: 42,

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { openDemoProject } from './mobile-project-fixture';
+import { activityEvent, type ServerActivity } from './server-event-fixtures';
 
 /** Choose `choice` in the announcer settings menu's `submenu` (HS2-PRCC6V), or a top-level item. */
 async function chooseAnnouncerSetting(
@@ -1007,11 +1008,7 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
         events: [
           {
             cursor: 1,
-            store: 'synthetic-store',
-            kind: 'activity',
-            id: 'live-1',
-            slug: '',
-            activity: {
+            ...activityEvent('synthetic-store', {
               id: 'live-1',
               ts: '2026-11-01T01:01:00Z',
               tool: 'codex',
@@ -1019,7 +1016,7 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
               summary: 'Changed the synthetic live file',
               detail: { path: 'src/live.ts', diff: '+const live = true;' },
               importance: 'high',
-            },
+            }),
           },
         ],
       },
@@ -1067,7 +1064,7 @@ test('HS2-RKYCTP edits a live burst into an intent summary and speaks the headli
   await openDemoProject(page);
   await page.route('**/checkouts/demo-checkout/activity**', (route) => route.fulfill({ json: [] }));
   // Codex's real command shape: every command runs inside `zsh -lc`.
-  const command = (id: string, script: string, detail: Record<string, unknown> = {}) => ({
+  const command = (id: string, script: string, detail: Record<string, unknown> = {}): ServerActivity => ({
     id,
     ts: '2026-11-01T01:01:00Z',
     tool: 'codex',
@@ -1092,14 +1089,7 @@ test('HS2-RKYCTP edits a live burst into an intent summary and speaks the headli
     const batch = release > 0 ? batches.shift() : undefined;
     if (!batch) return route.fulfill({ json: { cursor, events: [], overflow: false } });
     release -= 1;
-    const events = batch.map((activity) => ({
-      cursor: ++cursor,
-      store: 'synthetic-store',
-      kind: 'activity',
-      id: activity.id,
-      slug: '',
-      activity,
-    }));
+    const events = batch.map((activity) => ({ cursor: ++cursor, ...activityEvent('synthetic-store', activity) }));
     return route.fulfill({ json: { cursor, overflow: false, events } });
   });
   const spoken = () => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken);

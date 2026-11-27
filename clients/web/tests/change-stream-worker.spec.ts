@@ -4,7 +4,7 @@ import type { ChangeEvent } from '../src/api';
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
 import { proxyFetch } from './real-ticket-server';
-import { ticketChangeEvent } from './server-event-fixtures';
+import { activityEvent, ticketChangeEvent } from './server-event-fixtures';
 
 /**
  * HS2-SH9179: the shared change-stream worker, opted in through its local setting, follows two
@@ -254,11 +254,19 @@ test('follows two projects through the shared change-stream worker during switch
   const fixture = await openBothProjectsInWorker(page);
 
   // Sustained activity on both projects, interleaved with switching and searching.
-  // A payload-free stand-in for the server's `activity` event: only its delivery volume matters here.
-  const activity = { store: 'git', kind: 'activity', id: 'activity', slug: '' } satisfies ChangeEvent;
+  // Server-shaped low-importance activity: only its delivery volume matters here (HS2-F3S1ZZ).
+  const activity = (index: number) =>
+    activityEvent('git', {
+      id: `activity-${index}`,
+      ts: '2026-11-01T01:01:00Z',
+      tool: 'codex',
+      kind: 'tool_call',
+      summary: 'codex called hotsheet_list',
+      importance: 'low',
+    });
   for (let index = 0; index < 20; index += 1) {
-    fixture.emit(projects.alpha.id, activity);
-    fixture.emit(projects.beta.id, activity);
+    fixture.emit(projects.alpha.id, activity(index));
+    fixture.emit(projects.beta.id, activity(index));
   }
   const beta02 = row('BETA02', 'Beta second');
   fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], beta02];

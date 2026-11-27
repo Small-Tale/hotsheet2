@@ -676,11 +676,11 @@ describe('web ESLint policy', () => {
     expect(unworded).toEqual([]);
   });
 
-  it('hs2_gm6a8w_permission_events_use_typed_builders in every spec (HS2-CSPDW8, HS2-Y59J3K)', () => {
-    // Permission and terminal nudges, ticket change events, and the pending list mirror the server's
-    // ChangeEvent and PermissionInfo shapes only through the shared typed builders; a hand-written
-    // literal drifts (empty store, no project, a ticket slug for the tool, a `turn` the nudge never
-    // carries, a placeholder ticket id or store).
+  it('hs2_gm6a8w_permission_events_use_typed_builders in every spec (HS2-CSPDW8, HS2-Y59J3K, HS2-F3S1ZZ)', () => {
+    // Permission and terminal nudges, ticket change and activity events, and the pending list mirror
+    // the server's ChangeEvent and PermissionInfo shapes only through the shared typed builders; a
+    // hand-written literal drifts (empty store, no project, a ticket slug for the tool, a `turn` the
+    // nudge never carries, a placeholder ticket id or store, an activity event without its payload).
     const tests = new URL('../tests/', import.meta.url);
     const builders = readFileSync(new URL('server-event-fixtures.ts', tests), 'utf8');
     const nudgeLiteral = /[{,]\s*kind: '(?:permission_asked|permission_resolved|terminal_question|terminal_halted)'/;
@@ -693,7 +693,10 @@ describe('web ESLint policy', () => {
     expect(builders).toMatch(
       /const ticketChangeEvent = \([^)]*\) =>\s*\(\{ store: ticket\.connection_id, kind, id: ticket\.native_id, slug: ticket\.slug \}\)/,
     );
-    expect(builders.match(/\bsatisfies ChangeEvent\b/g)).toHaveLength(5);
+    expect(builders).toMatch(
+      /const activityEvent = \(store: string, activity: ServerActivity\) =>\s*\(\{ store, kind: 'activity', id: activity\.id, slug: '', activity \}\)/,
+    );
+    expect(builders.match(/\bsatisfies ChangeEvent\b/g)).toHaveLength(6);
     const ticketChangeLiteral =
       /[{,]\s*kind: '(?:created|updated|deleted|changed|closed|moved|claimed|released|renewed|assigned|note_added|attachment_\w+)'/;
     const offenders: string[] = [];
@@ -704,12 +707,17 @@ describe('web ESLint policy', () => {
         if (nudgeLiteral.test(line)) offenders.push(`${name}:${index + 1} hand-written nudge literal`);
         if (ticketChangeLiteral.test(line)) offenders.push(`${name}:${index + 1} hand-written ticket change literal`);
       });
+      // A change event's `kind: 'activity'` is followed by its `id` and `slug`; a ticket note's
+      // `kind: 'activity'` (followed by `created_at`) is not a change event.
+      for (const match of source.matchAll(/[{,]\s*kind: 'activity'(?: as const)?,\s*id\b[^\n]*\n?\s*slug:/g))
+        offenders.push(`${name}:${source.slice(0, match.index).split('\n').length} hand-written activity event`);
       // Builders replace both forms of a hand-written nudge: an `emit('<kind>')` shorthand, and a
       // spread that adds fields (such as a `turn` envelope) the server's nudge never carries.
       if (/emit\(\d*,?\s*'(?:terminal_|permission_)/.test(source)) offenders.push(`${name} emits a nudge by kind`);
       if (/\.\.\.(?:permission\w+Event|terminalEvent)\(/.test(source))
         offenders.push(`${name} extends a nudge builder`);
-      if (/const (?:permission\w+Event|pendingPermission|terminalEvent|ticketChangeEvent) =/.test(source))
+      if (/emit\(\d*,?\s*'activity'/.test(source)) offenders.push(`${name} emits an activity event by kind`);
+      if (/const (?:permission\w+Event|pendingPermission|terminalEvent|ticketChangeEvent|activityEvent) =/.test(source))
         offenders.push(`${name} redefines a shared builder`);
     }
     expect(offenders).toEqual([]);

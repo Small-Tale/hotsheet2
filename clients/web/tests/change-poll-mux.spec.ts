@@ -4,7 +4,7 @@ import type { ChangeEvent, Ticket } from '../src/api';
 import { appRequests } from './app-requests';
 import { openMockedProject } from './open-mocked-project';
 import { realTicketServer } from './real-ticket-server';
-import { ticketChangeEvent } from './server-event-fixtures';
+import { activityEvent, ticketChangeEvent } from './server-event-fixtures';
 
 /**
  * HS2-6W1NNF: with WebSockets failing, every open project used to hold its own replay long-poll,
@@ -470,8 +470,18 @@ for (const mode of ['main thread', 'worker'] as const)
     // Each remaining project still polls through the shared request (a project between its
     // WebSocket retry and its replay poll is briefly absent, so collect across requests).
     const afterClose = bridge.muxBodies.length;
-    // A payload-free stand-in for the server's `activity` event: any delivery wakes the shared poll.
-    bridge.emit(projects[0].id, { store: 'git', kind: 'activity', id: 'activity', slug: '' });
+    // Any delivery, here a server-shaped activity event, wakes the shared poll (HS2-F3S1ZZ).
+    bridge.emit(
+      projects[0].id,
+      activityEvent('git', {
+        id: 'activity-after-close',
+        ts: '2026-11-01T01:01:00Z',
+        tool: 'codex',
+        kind: 'tool_call',
+        summary: 'codex called hotsheet_list',
+        importance: 'low',
+      }),
+    );
     await expect
       .poll(() => new Set(bridge.muxBodies.slice(afterClose).flatMap((polls) => polls.map((poll) => poll.project))), {
         timeout: 40_000,
