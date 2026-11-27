@@ -560,6 +560,10 @@ mod role_sessions;
 #[cfg(unix)]
 #[path = "remote_servers/templates.rs"]
 mod templates;
+// HS2-KXKA7X: scheduled and event triggers on a real server.
+#[cfg(unix)]
+#[path = "remote_servers/triggers.rs"]
+mod triggers;
 // HS2-75Q254: a real PTY session of the fake agent, a Unix test double.
 #[cfg(unix)]
 #[path = "remote_servers/reconcile_restart.rs"]

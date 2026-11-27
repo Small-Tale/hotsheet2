@@ -493,6 +493,9 @@ mod tests {
             // HS2-A4RVYA: templates and their applies are this machine's.
             "/checkouts/owner/orchestration/templates/list",
             "/checkouts/owner/orchestration/templates/apply",
+            // HS2-KXKA7X: triggers live on this machine.
+            "/checkouts/owner/orchestration/triggers/list",
+            "/checkouts/owner/orchestration/triggers/on",
             // HS2-W27N1D: adding binds here and removing unbinds here.
             "/checkouts/owner/orchestration/projects",
             "/checkouts/owner/orchestration/projects/id",

@@ -21,6 +21,7 @@ use super::orchestration_readiness as readiness;
 use super::orchestration_scheduler as scheduler;
 use super::orchestration_sessions as sessions;
 use super::orchestration_templates as templates;
+use super::orchestration_triggers as triggers;
 use super::orchestration_validation as validation;
 use crate::Cmd;
 
@@ -71,6 +72,9 @@ enum OrchestrationCmd {
     /// HS2-A4RVYA: reusable plan templates: list, edit and retire them, save a goal
     /// as one, preview and apply one (a new goal ticket handed to the planner).
     Template(templates::TemplateArgs),
+    /// HS2-KXKA7X: scheduled and event triggers on this machine: list, set up, review,
+    /// turn On, Dry Run, Pause, Resume, remove, fire by hand, run one pass.
+    Trigger(triggers::TriggerArgs),
     /// HS2-M7EV18: the detached runner of one hosted validation step. Started by the
     /// hosting process; not for direct use.
     #[command(hide = true)]
@@ -1491,6 +1495,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Template(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = templates::route(&owner_id, arguments)?;
+            (owner_id, request)
+        }
+        OrchestrationCmd::Trigger(arguments) => {
+            let owner_id = required(arguments.project.clone())?;
+            let request = triggers::route(&owner_id, arguments)?;
             (owner_id, request)
         }
         OrchestrationCmd::Gate(arguments) => {

@@ -3975,6 +3975,83 @@ paths:
             - apply
             - apply_show
             - resume
+  /checkouts/{owner}/orchestration/triggers/{operation}:
+    description:
+      Machine-local scheduled and event triggers (HS2-KXKA7X). A trigger binds a schedule, or an event in one declared
+      project (a ticket opened, a run's CI gate failed, a branch's CI failed, a commit landed on a branch), to applying
+      one plan template, starting or pausing placement, or both. It never dispatches, pushes or deploys. Every
+      delivery has a deterministic key whose hash is the template apply's operation id, so a redelivered event opens no
+      second goal.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: orchestrateTriggers
+      description:
+        "`list`, `show` and `review` read and write nothing; `review` answers the scope, the permissions (each
+        `not_needed`, `remembered`, `asks` or `unchanged`) and the next actions of a saved trigger or an unsaved
+        definition. `set` adds a trigger (Dry Run, or Paused) or replaces one's definition (an On trigger goes to
+        Review); it is refused `trigger_invalid`. `on` is a person's own act; an AI session's is answered 403
+        `permission_required` with the `request_id` until a person answers, and the trigger goes On after the answer.
+        `dry_run`, `pause`, `resume` and `remove` never ask; turning On and resuming never backfill. `fire` delivers one
+        `manual` event under a retained `operation_id` (`trigger_not_firing` while paused or in Review). `pass` runs one
+        pass of due schedules, failed run gates, queued deliveries and answered turn-Ons, as the server does on its
+        own; its `at_ms` is honoured only by a test build. Refused with `trigger_not_found` or
+        `trigger_template_missing`. Audited as `trigger_set`, `trigger_on`, `trigger_dry_run`, `trigger_pause`,
+        `trigger_resume`, `trigger_remove`, `trigger_needs_review` and `trigger_delivery`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerOperation'
+      responses:
+        '200':
+          description: The triggers, one trigger, a review, a delivery or a pass.
+          content:
+            application/json:
+              schema:
+                description: Shape depends on the operation.
+                anyOf:
+                  - $ref: '#/components/schemas/TriggerList'
+                  - $ref: '#/components/schemas/Trigger'
+                  - $ref: '#/components/schemas/TriggerReview'
+                  - $ref: '#/components/schemas/TriggerDelivery'
+                  - $ref: '#/components/schemas/TriggerPass'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - list
+            - show
+            - review
+            - set
+            - remove
+            - 'on'
+            - dry_run
+            - pause
+            - resume
+            - fire
+            - pass
   /checkouts/{owner}/orchestration/timeline:
     description:
       Machine-local orchestration timeline of an owning checkout (HS2-J89JC7). The plan as dependency waves with
@@ -4310,6 +4387,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HostedValidation'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+  /checkouts/{checkout}/target-branch-head:
+    description:
+      Where a branch of a checkout this machine hosts points (HS2-KXKA7X), for a remote orchestrator's branch watch
+      to learn the head it follows. Reads the checkout's remote-tracking ref `origin/<branch>`, else its local
+      branch; contacts nothing. Ordinary authenticated project data under the caller's device role.
+    get:
+      operationId: readHostedBranchHead
+      parameters:
+        - name: branch
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+            pattern: ^[A-Za-z0-9._/-]+$
+      responses:
+        '200':
+          description: The branch and its commit, or a null commit when the checkout has no such branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - branch
+                  - commit
+                properties:
+                  branch:
+                    type: string
+                  commit:
+                    type:
+                      - string
+                      - 'null'
+                    pattern: ^[0-9a-f]{40}$
         default:
           description:
             Stable content-free error code; authentication/device-role/locality denial may return a fixed text
@@ -27052,6 +27180,360 @@ components:
         created_at_ms:
           type: integer
         updated_at_ms:
+          type: integer
+    TriggerOperation:
+      description:
+        Body of a trigger operation (HS2-KXKA7X). `show`, `on`, `dry_run`, `pause`, `resume` and `remove` take
+        `trigger_id`; `review` takes `trigger_id` or an unsaved `trigger`; `set` takes `name`, `source`, `action`,
+        `overlap`, an optional `trigger_id` to replace and an optional `start` (`dry_run` or `paused`); `fire` takes
+        `trigger_id`, a retained `operation_id` and `evidence`; `pass` takes an optional `at_ms`.
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        trigger_id:
+          type: string
+          maxLength: 160
+        trigger:
+          $ref: '#/components/schemas/TriggerSpec'
+        name:
+          type: string
+          maxLength: 200
+        source:
+          $ref: '#/components/schemas/TriggerSource'
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+        overlap:
+          enum:
+            - skip
+            - queue_latest
+        start:
+          enum:
+            - dry_run
+            - paused
+        operation_id:
+          type: string
+          maxLength: 160
+        evidence:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 200
+        at_ms:
+          type: integer
+          minimum: 0
+    TriggerSpec:
+      description: A trigger's reviewed definition (HS2-KXKA7X).
+      type: object
+      required:
+        - name
+        - source
+        - action
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        source:
+          $ref: '#/components/schemas/TriggerSource'
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+        overlap:
+          enum:
+            - skip
+            - queue_latest
+    TriggerSource:
+      description:
+        When a trigger fires (HS2-KXKA7X). `schedule` takes `schedule` (`time_zone`, `local_time` `HH:mm` and the
+        command-schedule `recurrence`, at least every five minutes); `ticket_opened` takes `target_id` and optional
+        `tag` and `category`; `gate_failed` takes an optional `target_id`; `branch_ci_failed` and `commit_landed` take
+        `target_id` and `watch` (`repository`, `workflow`, `branch`, optional `provider`).
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          enum:
+            - schedule
+            - ticket_opened
+            - gate_failed
+            - branch_ci_failed
+            - commit_landed
+        schedule:
+          type: object
+          properties:
+            time_zone:
+              type: string
+            local_time:
+              type: string
+            recurrence:
+              type: object
+        target_id:
+          type: string
+          maxLength: 160
+        tag:
+          type: string
+          maxLength: 200
+        category:
+          type: string
+          maxLength: 200
+        watch:
+          type: object
+          properties:
+            provider:
+              type: string
+            repository:
+              type: string
+            workflow:
+              type: string
+            branch:
+              type: string
+    TriggerAction:
+      description:
+        'What a delivery does (HS2-KXKA7X): apply `template` (`template_id`, `tool`, optional `model` and `effort`, fixed
+        `inputs` and `event_inputs` mapping an input key to `commit`, `ci_run`, `ticket`, `branch`, `occurrence` or
+        `gate`), and or set `placement` (`start` or `pause`).'
+      type: object
+      properties:
+        template:
+          type: object
+          properties:
+            template_id:
+              type: string
+            tool:
+              type: string
+            model:
+              type: string
+            effort:
+              type: string
+            inputs:
+              type: object
+            event_inputs:
+              type: object
+              additionalProperties:
+                enum:
+                  - commit
+                  - ci_run
+                  - ticket
+                  - branch
+                  - occurrence
+                  - gate
+        placement:
+          enum:
+            - start
+            - pause
+    Trigger:
+      description:
+        One trigger as this machine records it (HS2-KXKA7X), with `next_runs_ms` (a schedule's next three instants),
+        the template's name and version, whether the review on record still covers it (`reviewed`), and whether its
+        last applied run still works (`running`, `running_goal`). `history` is newest last, skips and redeliveries
+        coalesced (`count`); `cursor`, `active`, `queued`, `handled`, `warning` and `pending_on` are its machine-local
+        state.
+      type: object
+      required:
+        - trigger_id
+        - name
+        - source
+        - action
+        - state
+      properties:
+        trigger_id:
+          type: string
+        name:
+          type: string
+        source:
+          $ref: '#/components/schemas/TriggerSource'
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+        overlap:
+          enum:
+            - skip
+            - queue_latest
+        state:
+          enum:
+            - 'on'
+            - dry_run
+            - paused
+            - needs_review
+        paused_from:
+          enum:
+            - 'on'
+            - dry_run
+            - paused
+            - needs_review
+        review:
+          type: object
+        pending_on:
+          type: object
+        history:
+          type: array
+          items:
+            type: object
+            required:
+              - delivery_key
+              - kind
+              - at_ms
+              - outcome
+            properties:
+              delivery_key:
+                type: string
+              kind:
+                enum:
+                  - schedule
+                  - ticket_opened
+                  - gate_failed
+                  - ci_failed
+                  - commit_landed
+                  - manual
+              at_ms:
+                type: integer
+              outcome:
+                enum:
+                  - applied
+                  - dry_run
+                  - skipped_overlap
+                  - queued
+                  - already_handled
+                  - needs_review
+                  - refused
+              count:
+                type: integer
+              missed:
+                type: integer
+              evidence:
+                type: object
+              operation_id:
+                type: string
+              goal_slug:
+                type: string
+              placement:
+                enum:
+                  - start
+                  - pause
+              reason:
+                type: string
+              would:
+                type: object
+        warning:
+          type: object
+        next_runs_ms:
+          type: array
+          items:
+            type: integer
+        template_name:
+          type: string
+        template_version:
+          type: integer
+        reviewed:
+          type: boolean
+        running:
+          type: boolean
+        running_goal:
+          type: string
+    TriggerList:
+      description: This machine's triggers of the orchestration project (HS2-KXKA7X).
+      type: object
+      required:
+        - triggers
+      properties:
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trigger'
+    TriggerReview:
+      description:
+        "The side-effect-free review of a trigger (HS2-KXKA7X): `problems`, `scope` (`watches`, the `projects` it may
+        change with their step counts, and `per_delivery`), `permissions` (one row per action and project, `need`
+        `not_needed`, `remembered`, `asks` or `unchanged`), `next` (a schedule's `runs_ms`, or the `event`, and the
+        `overlap`), the `digest` turning it On records, and `turn_on` (`person`, `remembered` or `asks`)."
+      type: object
+      required:
+        - problems
+        - scope
+        - permissions
+        - next
+        - digest
+        - turn_on
+      properties:
+        problems:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              at:
+                type: string
+        scope:
+          type: object
+        permissions:
+          type: array
+          items:
+            type: object
+            required:
+              - action
+              - need
+            properties:
+              action:
+                type: string
+              target_id:
+                type: string
+              need:
+                enum:
+                  - not_needed
+                  - remembered
+                  - asks
+                  - unchanged
+              rule_id:
+                type: string
+              tool:
+                type: string
+        next:
+          type: object
+        digest:
+          type: string
+        template_version:
+          type: integer
+        turn_on:
+          enum:
+            - person
+            - remembered
+            - asks
+    TriggerDelivery:
+      description: What one delivery did (HS2-KXKA7X).
+      type: object
+      required:
+        - trigger_id
+        - delivery_key
+        - outcome
+      properties:
+        trigger_id:
+          type: string
+        delivery_key:
+          type: string
+        outcome:
+          enum:
+            - applied
+            - dry_run
+            - skipped_overlap
+            - queued
+            - already_handled
+            - needs_review
+            - refused
+        operation_id:
+          type: string
+        reason:
+          type: string
+    TriggerPass:
+      description: What one trigger pass delivered, and the next instant a schedule is due (HS2-KXKA7X).
+      type: object
+      required:
+        - deliveries
+      properties:
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriggerDelivery'
+        next_wake_ms:
           type: integer
     TemplateResumeReport:
       description:
