@@ -80,7 +80,8 @@ struct NativeWatcherState {
         hotsheet_index::FreshnessVerifier,
     )>,
     /// HS2-AZFCB6: reports the store root itself vanishing, returning or being replaced,
-    /// so the native watcher need not watch the parent (macOS).
+    /// so the native watcher need not watch the parent (macOS; HS2-CRXWR9: Linux and
+    /// Windows, where a parent watch also ended with a removed parent).
     root_watch: Option<hotsheet_jobs::watch::RootWatch>,
     /// Raw callbacks from the native watcher and the root watch (measurement and tests).
     deliveries: Arc<AtomicU64>,
@@ -544,7 +545,7 @@ struct StartupHooks {
     /// `fseventsd` (HS2-190GDZ).
     dropped_probes: usize,
     /// Watch the store's parent for root changes even where a root watch is available:
-    /// the registration HS2-AZFCB6 replaced on macOS, kept for its measurement.
+    /// the registration HS2-AZFCB6 and HS2-CRXWR9 replaced, kept for its measurement.
     parent_monitor: bool,
     /// Replaces the platform stream with an in-process one whose delivery a test controls,
     /// so a backlog can be simulated without depending on `fseventsd` (HS2-P702Y8).
@@ -700,13 +701,19 @@ fn spawn_watcher_in_scope_with_startup_hooks(
                     .map(|root| root.join("tickets"));
                 let removal = invalidation.clone();
                 let observed_proof = proof.clone();
-                // HS2-AZFCB6: on macOS the root's own path is watched (kqueue on the root and
-                // its parent's entries) instead of registering the parent with the native
-                // stream. An FSEvents stream is recursive, so the parent registration routed
-                // every event beneath it (a whole projects folder) to this process. Start it
-                // before the store's directories, as the parent was, so a replacement during
-                // startup is reported. Every report is a possible replacement: invalidate
-                // and let the supervisor re-register, prove and reconcile.
+                // HS2-AZFCB6: the root's own path is watched instead of registering the parent
+                // with the native stream. On macOS (kqueue on the root and its parent's
+                // entries) an FSEvents stream is recursive, so the parent registration routed
+                // every event beneath it (a whole projects folder) to this process.
+                // HS2-CRXWR9: on Linux the parent registration belonged to the parent's inode
+                // and ended with a removed parent; the root watch falls back to the nearest
+                // existing ancestor until the parent returns. Windows has the same gap and
+                // keeps the parent registration until its root watch has run there
+                // (HS2-PR9X5H).
+                // Start it before the store's directories, as the parent was, so a
+                // replacement during startup is reported. Every report is a possible
+                // replacement: invalidate and let the supervisor re-register, prove and
+                // reconcile.
                 let root_rearm = rearm_tx.clone();
                 let root_invalidation = invalidation.clone();
                 let root_deliveries = deliveries.clone();
@@ -771,9 +778,10 @@ fn spawn_watcher_in_scope_with_startup_hooks(
                             return;
                         }
                     };
-                // Register the stable parent first (where no root watch reports the root).
-                // If the store vanishes during startup, a failed child registration must not
-                // discard this signal. Linux inotify and Windows watch it without its subtree.
+                // Register the stable parent first (where no root watch reports the root:
+                // the measurement seam, or a root watch that failed to start). If the store
+                // vanishes during startup, a failed child registration must not discard this
+                // signal. Linux inotify and Windows watch it without its subtree.
                 if root_watch.is_none()
                     && let Err(error) = watcher.watch(&parent, RecursiveMode::NonRecursive)
                 {
@@ -3659,14 +3667,15 @@ mod freshness_tests {
         (after - before, process_cpu() - cpu, root_watch)
     }
 
-    /// HS2-AZFCB6: on macOS the store watcher no longer registers its parent with FSEvents,
-    /// whose streams are recursive: thousands of writes in a sibling project deliver
-    /// nothing, and a ticket written after them is still indexed. Linux and Windows watch
-    /// the parent without its subtree and deliver nothing either.
+    /// HS2-AZFCB6: the store watcher no longer registers its parent with FSEvents, whose
+    /// streams are recursive: thousands of writes in a sibling project deliver nothing,
+    /// and a ticket written after them is still indexed. HS2-CRXWR9: Linux and Windows use a
+    /// root watch too, which wakes on the parent's entries but reports nothing for them
+    /// (Windows keeps the parent registration until HS2-PR9X5H).
     #[test]
     fn hs2_azfcb6_sibling_churn_never_reaches_the_store_watcher() {
         let (delivered, _, root_watch) = sibling_churn_deliveries(false, 3000);
-        assert_eq!(root_watch, cfg!(target_os = "macos"));
+        assert_eq!(root_watch, hotsheet_jobs::watch::RootWatch::supported());
         // The ticket write itself: its file, the staged write and the shard directory.
         assert!(
             delivered < 40,
@@ -3714,7 +3723,10 @@ mod freshness_tests {
         } = &layout;
         let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
         let (handle, entry) = live_store_watcher(&state, root, false);
-        assert_eq!(handle.native_deliveries().1, cfg!(target_os = "macos"));
+        assert_eq!(
+            handle.native_deliveries().1,
+            hotsheet_jobs::watch::RootWatch::supported()
+        );
 
         // Moved away, written to while away, moved back.
         let away = parent.join("store-away");
@@ -3749,10 +3761,11 @@ mod freshness_tests {
                 && indexed(&entry, &after_parent)
         });
 
-        // The parent removed, then recreated with a new store at the same path. Only the
-        // macOS root watch follows a removed parent: an inotify or Windows watch on the
-        // parent ends with it (HS2-CRXWR9).
-        if !cfg!(target_os = "macos") {
+        // The parent removed, then recreated with a new store at the same path. A watch on
+        // the parent's inode or handle would end with it; the root watch falls back to the
+        // grandparent until the parent returns (HS2-CRXWR9). Windows still watches the parent
+        // until its root watch has run there (HS2-PR9X5H).
+        if !hotsheet_jobs::watch::RootWatch::supported() {
             return;
         }
         let old = after_parent;
@@ -3775,6 +3788,63 @@ mod freshness_tests {
         });
         let later = create(&replacement, "after the recreation");
         wait_for_native_rearm("a write after the recreation", || indexed(&entry, &later));
+        drop(handle);
+    }
+
+    /// HS2-CRXWR9: the store watcher follows its path above the parent too. The grandparent
+    /// removed (the parent and store with it) and the whole chain recreated with a new store
+    /// replaces the index; then the parent removed and recreated with yet another store,
+    /// three times without waiting in between, ends on the last store's tickets.
+    #[test]
+    fn hs2_crxwr9_the_store_watcher_follows_a_recreated_grandparent_and_rapid_parents() {
+        // Windows keeps the parent registration until its root watch has run there
+        // (HS2-PR9X5H).
+        if !hotsheet_jobs::watch::RootWatch::supported() {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let grandparent = temp.path().join("g");
+        let parent = grandparent.join("projects");
+        let root = parent.join("store");
+        let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let (handle, entry) = live_store_watcher(&state, &root, false);
+        let old = create(&store, "before the grandparent went");
+        wait_for_native_rearm("the first write", || indexed(&entry, &old));
+        let gone = |entry: &crate::multistore::StoreEntry, ticket: &hotsheet_model::Ticket| {
+            entry
+                .index
+                .lock()
+                .unwrap()
+                .slug_candidates(&ticket.slug)
+                .unwrap()
+                .is_empty()
+        };
+
+        std::fs::remove_dir_all(&grandparent).unwrap();
+        wait_for_native_rearm("the removed store to be out of sync", || {
+            !entry.freshness.in_sync()
+        });
+        let replacement = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+        let first = create(&replacement, "in the store under the new grandparent");
+        wait_for_native_rearm("the recreated chain to replace the index", || {
+            entry.freshness.in_sync() && indexed(&entry, &first) && gone(&entry, &old)
+        });
+
+        let mut last = first;
+        for round in 0..3 {
+            std::fs::remove_dir_all(&parent).unwrap();
+            let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+            let ticket = create(&store, &format!("in the store of round {round}"));
+            let previous = last.clone();
+            wait_for_native_rearm(&format!("round {round} to replace the index"), || {
+                entry.freshness.in_sync() && indexed(&entry, &ticket) && gone(&entry, &previous)
+            });
+            last = ticket;
+        }
+        let store = FsStore::open(&root).unwrap();
+        let later = create(&store, "after the rounds");
+        wait_for_native_rearm("a write after the rounds", || indexed(&entry, &later));
         drop(handle);
     }
 

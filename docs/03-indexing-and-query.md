@@ -206,8 +206,10 @@ A relinked store is watched again at its new path when it is hosted there. The t
 an unhosted linked store (HS2-G5FYP6) uses the same scope.
 
 If a hosted store is deleted and recreated at the same path, the server watches for the store root
-to return (HS2-R6FZ54). On Linux and Windows it watches the stable parent without its subtree. On
-macOS it does not register the parent with FSEvents (HS2-AZFCB6): an FSEvents stream is always
+to return (HS2-R6FZ54) through a root watch (`hotsheet_jobs::watch::RootWatch`) on macOS and Linux,
+not a registration of the parent with the native watcher. Windows still registers the parent
+without its subtree (see below). On macOS it does not register the parent
+with FSEvents (HS2-AZFCB6): an FSEvents stream is always
 recursive, so the parent registration routed every event beneath the parent (a whole projects
 folder on a development Mac) to the server only to be dropped. Instead a root watch
 (`hotsheet_jobs::watch::RootWatch`) holds kqueue vnode filters on the store root (removed, renamed,
@@ -219,8 +221,30 @@ churn beside the store delivers nothing. Each wake registers again while the old
 in place and collects events raised in between, so a move away and straight back is still reported.
 FSEvents' own `kFSEventStreamCreateFlagWatchRoot` was measured first and rejected: it dropped about
 one in six root-changed notices when the store or its parent moved away and back, sometimes several
-in a row. Unlike the parent watch on Linux and Windows, the root watch also follows a parent that is
-removed and recreated (HS2-CRXWR9 tracks that gap there). On macOS and Linux the watcher also watches the root without
+in a row.
+
+On Linux and Windows a parent registration belonged to the parent's inode or handle, so it ended
+when the parent was removed and a parent recreated with a store inside was never re-armed
+(HS2-CRXWR9). The root watch there follows the path instead. A platform-neutral plan
+(`crates/hotsheet-jobs/src/root_plan.rs`) picks the anchor: the store's parent, or while it is
+missing (or cannot be opened) the nearest existing ancestor, whose entries are watched for the one
+name that leads to the store. It reports when a wake may have moved the store (the store, the
+anchor or an ancestor left; notices were dropped; the store's own entry in its parent changed) or
+the directory object at the store path changed, and re-registers on any wake that concerns the path
+while the old registration still collects notices. Linux uses inotify directly: the anchor's
+entries and its own removal or move, the store's own removal or move, and every ancestor above the
+anchor for its own removal or move only (so a grandparent moved away and back is reported, without
+its entry churn). Windows uses `ReadDirectoryChangesW` (subdirectory names, no subtree) on the
+anchor and on the anchor's parent (for the anchor's own name, since Windows has no self-move
+notice); a failed read (the anchor deleted) or an overflowed one re-resolves and reports. A
+registration that went stale while it was made (a path changed between resolving and registering
+it) is never kept, since the notice that would correct it may already be taken; an existing
+directory the platform refuses to register counts as missing, so this ends. Names
+compare without case on Windows. A root watch that cannot start falls back to the parent
+registration. The Windows adapter is built and its decisions are unit-tested on every host, but it
+has not run on Windows yet, so `RootWatch::supported()` is false there and Windows production keeps
+the parent registration, with the removed-parent gap, until HS2-PR9X5H verifies it on Windows and
+flips `supported()`. On macOS and Linux the watcher also watches the root without
 recursion for a new `tickets/` directory. It removes the invalid native watch, registers the
 replacement directory, and reconciles the entire store index before declaring the watch live.
 The removal signal marks the index out of sync before a platform-native unwatch can block,
@@ -357,7 +381,8 @@ Windows `ReadDirectoryChangesW` watches a whole tree through one directory handl
 leave a subtree out (nor any per-directory watch cost to save), so Windows keeps notify's recursive
 watcher and the event filter drops ignored events.
 The store watcher's former stream over a store's parent directory (HS2-R6FZ54) was a separate
-source of the same cost; on macOS it is replaced by the kqueue root watch above (HS2-AZFCB6).
+source of the same cost; it is replaced by the root watch above (HS2-AZFCB6 on macOS, HS2-CRXWR9 on
+Linux; Windows pending HS2-PR9X5H).
 
 On change:
 

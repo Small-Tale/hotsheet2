@@ -5751,18 +5751,59 @@ ignored tests included): see the ticket's completion note for before and after c
   sibling project (2026-11-27, three rounds): about 20,000 records with the parent registered, 1
   without it, and zero root-watch wakes.
 
-`crates/hotsheet-jobs/src/watch.rs` has no root-watch cases of its own: `RootWatch` only forwards to
-that module on macOS and refuses elsewhere.
+`crates/hotsheet-jobs/src/watch.rs`
+`hs2_crxwr9_a_root_watch_follows_its_path_through_its_ancestors` runs the platform root watch
+(kqueue on macOS, inotify on Linux; skipped on Windows, where `supported()` stays false until
+HS2-PR9X5H runs it) through its public
+API: churn beside and inside the root reports nothing before the next move; the root moved away and
+back, removed and recreated; the parent removed, recreated and a store created inside it, then
+moved inside the new parent (the watch re-anchored); the parent moved away and back; the
+grandparent removed and the chain recreated at once; on Linux the grandparent flipped away and
+back; ten rounds each of root flips, parent flips and parent removal with recreation without
+waiting; a dropped watch reports nothing more.
+
+### Root watch plan off macOS (HS2-CRXWR9)
+
+`crates/hotsheet-jobs/src/root_plan.rs` (pure, runs on every host):
+
+- anchor resolution: the parent while it exists; the nearest existing ancestor while it is missing
+  (parent removed, grandparent removed too, nothing usable); an ancestor the adapter refuses is
+  skipped; the name the anchor must report and the ancestors above it;
+- wake classification: which wakes move the root (root, anchor or ancestor left, overflow, the
+  root's own name in its parent, the anchor's name above it), which only need a new plan (the
+  missing parent's name reappearing), and that sibling names need neither; Windows case folding;
+- the report rule (a move, or a changed directory object: replaced in one step, removed, created);
+- the watch loop over an in-memory tree whose watches follow objects like inotify: churn, root
+  moved and back, removed and recreated, parent removed then recreated then a store created inside
+  it, parent moved and back, grandparent removed and the chain recreated at once, grandparent moved
+  and back, overflow, each reported exactly once per step; four kinds of rapid flips repeated five
+  times, each reported; a change landing right after a registration re-registers (stale check); a
+  registration that keeps going stale (1, 7, 8, 9 and 30 times in a row) is never kept, so it ends
+  on the settled tree (keeping the ninth lost a recreated parent on Linux); a tree that keeps
+  raising notices stops re-registering after the bound once current and retires every older
+  registration; a parent that exists but cannot be registered is skipped without registering
+  forever, and anchors again once it can be; a stop ends the thread;
+- the Windows `FILE_NOTIFY_INFORMATION` record chain parser, including truncated records.
+
+Linux runtime evidence comes from the `glassbox-linux-verify` Docker image (real inotify): the
+`root_plan`, `watch::` and server watcher tests below.
 
 `crates/hotsheet-server/src/watcher.rs` (`freshness_tests`) runs the production store watcher:
 
 - `hs2_azfcb6_sibling_churn_never_reaches_the_store_watcher`: 3,000 writes in a sibling project
   deliver fewer than 40 native events (the following ticket write's own), and that ticket is
-  indexed; on macOS the root watch is in use.
+  indexed; the root watch is in use wherever `RootWatch::supported()` (macOS and Linux; Windows
+  keeps the parent registration until HS2-PR9X5H).
 - `hs2_azfcb6_the_store_watcher_follows_its_root_without_the_parent`: a store moved away, written
   to and moved back reconciles the write; a parent renamed away (with a write) and back reconciles
-  it; on macOS a removed parent recreated with a new store replaces the index (Linux and Windows
-  skip that step: HS2-CRXWR9); later writes are indexed after each transition.
-- The HS2-R6FZ54 and HS2-190GDZ native tests now run through the root watch on macOS.
+  it; a removed parent recreated with a new store replaces the index (macOS, and Linux since
+  HS2-CRXWR9; Windows skips that step until HS2-PR9X5H); later writes are indexed after each
+  transition.
+- `hs2_crxwr9_the_store_watcher_follows_a_recreated_grandparent_and_rapid_parents`: the
+  grandparent removed with the store and the chain recreated with a new store replaces the index;
+  then the parent removed and recreated with another store three times without waiting ends on the
+  last store's tickets, and a later write is indexed (skipped on Windows until HS2-PR9X5H).
+- The HS2-R6FZ54 and HS2-190GDZ native tests now run through the root watch on macOS, and on Linux
+  since HS2-CRXWR9.
 - `hs2_azfcb6_measure_sibling_churn_with_and_without_the_parent_watch` (ignored) prints deliveries
   and process CPU for the former parent registration against the root watch.

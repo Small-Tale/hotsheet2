@@ -235,20 +235,29 @@ pub fn is_access(delivery: &Delivery) -> bool {
 }
 
 /// HS2-AZFCB6: a watch on one directory's path that reports when the directory there
-/// changes (removed, created, replaced, renamed away or back, its parent moved) without
-/// watching anything beneath the parent.
+/// changes (removed, created, replaced, renamed away or back, its parent moved or removed)
+/// without watching anything beneath the parent.
 ///
 /// A consumer that must notice its directory vanish and return used to watch the parent
 /// with a [`PathWatcher`]. On macOS that is an FSEvents stream, which is always recursive,
 /// so every event beneath the parent reached the process; on a developer machine, a whole
 /// projects folder. On macOS this watch is a kqueue vnode watch on the directory and on its
-/// parent's entries (see `root_watch.rs`); the handler runs only when the directory object
-/// at the path changed, so churn beside it delivers nothing. Elsewhere the native watchers
-/// watch a parent without its subtree already, and [`RootWatch::start`] refuses so callers
-/// keep doing that.
+/// parent's entries (see `root_watch.rs`).
+///
+/// HS2-CRXWR9: on Linux and Windows a parent watch belongs to the parent's inode or handle,
+/// so it ended when the parent was removed and a recreated parent was never seen. There this
+/// watch follows the path instead: inotify on the parent's entries, the directory and every
+/// ancestor (`root_watch_inotify.rs`), or `ReadDirectoryChangesW` on the parent's and the
+/// grandparent's entries (`root_watch_windows.rs`), falling back to the nearest existing
+/// ancestor while the parent is missing (decisions in `root_plan.rs`). On every platform the
+/// handler runs only when the directory object at the path changed or may have left it, so
+/// churn beside it delivers nothing. [`RootWatch::supported`] is still false on Windows until
+/// the adapter has run there (HS2-PR9X5H).
 pub struct RootWatch {
     #[cfg(target_os = "macos")]
     _watch: crate::root_watch::KqueueRootWatch,
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    _watch: crate::root_plan::ThreadedRootWatch,
 }
 
 impl std::fmt::Debug for RootWatch {
@@ -271,18 +280,33 @@ impl RootWatch {
                 .map_err(Error::io)?;
             Ok(Self { _watch: watch })
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        {
+            let watch =
+                crate::root_watch_inotify::start(root, Box::new(handler)).map_err(Error::io)?;
+            Ok(Self { _watch: watch })
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let watch =
+                crate::root_watch_windows::start(root, Box::new(handler)).map_err(Error::io)?;
+            Ok(Self { _watch: watch })
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             let _ = (root, handler);
             Err(Error::generic(
-                "a root watch is only needed on macOS; watch the parent instead",
+                "no root watch on this platform; watch the parent instead",
             ))
         }
     }
 
-    /// Whether [`RootWatch::start`] works on this platform.
+    /// Whether consumers should use [`RootWatch::start`] on this platform instead of
+    /// watching the parent. HS2-CRXWR9: the Windows adapter is built and its decisions are
+    /// tested on every host, but it has not run on Windows yet, so Windows keeps the parent
+    /// registration; flip this once HS2-PR9X5H has verified it there.
     pub fn supported() -> bool {
-        cfg!(target_os = "macos")
+        cfg!(any(target_os = "macos", target_os = "linux"))
     }
 }
 
@@ -1285,5 +1309,147 @@ mod tests {
         let inside = root.join("src/later/x/file");
         fs::write(&inside, b"x").unwrap();
         assert!(sees(&receiver, &inside));
+    }
+
+    /// A root watch whose handler runs are counted and queued.
+    struct RootCalls {
+        _watch: RootWatch,
+        calls: Receiver<()>,
+        count: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl RootCalls {
+        fn start(root: &Path) -> Self {
+            let (sender, calls) = mpsc::channel();
+            let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let counted = count.clone();
+            let watch = RootWatch::start(root, move || {
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let _ = sender.send(());
+            })
+            .unwrap();
+            Self {
+                _watch: watch,
+                calls,
+                count,
+            }
+        }
+
+        /// Wait for the handler to run after `what`, then drop calls already queued.
+        fn reports(&self, what: &str) {
+            assert!(
+                self.calls.recv_timeout(Duration::from_secs(10)).is_ok(),
+                "no notice after {what}"
+            );
+            while self.calls.try_recv().is_ok() {}
+        }
+    }
+
+    /// HS2-CRXWR9 (HS2-R6FZ54 transitions): a root watch follows its path, not the objects
+    /// on it. Churn beside the root reports nothing; the root moved away and back, removed
+    /// and recreated; its parent removed, recreated and a store created inside it; the
+    /// parent moved away and back; the grandparent removed and the whole chain recreated;
+    /// and rapid flips of each, are all reported, and the watch keeps reporting afterwards
+    /// (it re-anchored on the new parent). On Linux the grandparent moved away and back is
+    /// reported too (macOS kqueue and Windows watch no higher than the grandparent's
+    /// entries).
+    #[test]
+    fn hs2_crxwr9_a_root_watch_follows_its_path_through_its_ancestors() {
+        if !RootWatch::supported() {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let base = real(temp.path());
+        let grandparent = base.join("g");
+        let parent = grandparent.join("projects");
+        let root = parent.join("store.hs2");
+        let sibling = parent.join("other-project");
+        fs::create_dir_all(root.join("tickets")).unwrap();
+        fs::create_dir_all(&sibling).unwrap();
+        let watched = RootCalls::start(&root);
+        let away = parent.join("store-away");
+        let parent_away = grandparent.join("projects-away");
+
+        // Churn beside and inside the root, then one move: only the move reports.
+        for index in 0..200 {
+            let entry = parent.join(format!("entry-{index}"));
+            fs::create_dir(&entry).unwrap();
+            fs::remove_dir(&entry).unwrap();
+            fs::write(sibling.join(format!("out-{index}")), b"x").unwrap();
+            fs::write(root.join("tickets").join(format!("t-{index}.md")), b"x").unwrap();
+        }
+        fs::rename(&root, &away).unwrap();
+        watched.reports("the move after the churn");
+        let count = watched.count.load(std::sync::atomic::Ordering::SeqCst);
+        assert!((1..=3).contains(&count), "{count} handler runs");
+        fs::rename(&away, &root).unwrap();
+        watched.reports("moved back");
+
+        fs::remove_dir_all(&root).unwrap();
+        watched.reports("removed");
+        fs::create_dir_all(root.join("tickets")).unwrap();
+        watched.reports("recreated");
+
+        // The parent removed (its own watch ends), recreated empty, then a store created
+        // inside the new parent; a later move proves the watch re-anchored on it.
+        fs::remove_dir_all(&parent).unwrap();
+        watched.reports("parent removed");
+        fs::create_dir(&parent).unwrap();
+        fs::create_dir(&root).unwrap();
+        watched.reports("a store created inside the recreated parent");
+        fs::rename(&root, &away).unwrap();
+        watched.reports("moved away inside the recreated parent");
+        fs::rename(&away, &root).unwrap();
+        watched.reports("moved back inside the recreated parent");
+
+        fs::rename(&parent, &parent_away).unwrap();
+        watched.reports("parent moved away");
+        fs::rename(&parent_away, &parent).unwrap();
+        watched.reports("parent moved back");
+
+        // The grandparent removed, then the whole chain recreated at once.
+        fs::remove_dir_all(&grandparent).unwrap();
+        watched.reports("grandparent removed");
+        fs::create_dir_all(root.join("tickets")).unwrap();
+        watched.reports("the chain recreated");
+        fs::rename(&root, &away).unwrap();
+        watched.reports("moved away after the chain returned");
+        fs::rename(&away, &root).unwrap();
+        watched.reports("moved back after the chain returned");
+
+        if cfg!(target_os = "linux") {
+            let grandparent_away = base.join("g-away");
+            fs::rename(&grandparent, &grandparent_away).unwrap();
+            fs::rename(&grandparent_away, &grandparent).unwrap();
+            watched.reports("grandparent flipped away and back");
+        }
+
+        // Rapid flips, each without waiting in between: every one is reported.
+        for round in 0..10 {
+            fs::rename(&root, &away).unwrap();
+            fs::rename(&away, &root).unwrap();
+            watched.reports(&format!("root flip {round}"));
+            fs::rename(&parent, &parent_away).unwrap();
+            fs::rename(&parent_away, &parent).unwrap();
+            watched.reports(&format!("parent flip {round}"));
+            fs::remove_dir_all(&parent).unwrap();
+            fs::create_dir_all(&root).unwrap();
+            watched.reports(&format!("parent recreated {round}"));
+        }
+
+        // Dropped: once the calls made before the drop are taken, the handler is gone, so
+        // nothing more can be reported.
+        let RootCalls { _watch, calls, .. } = watched;
+        drop(_watch);
+        fs::remove_dir(&root).unwrap();
+        loop {
+            match calls.recv_timeout(Duration::from_secs(10)) {
+                Ok(()) => {}
+                Err(error) => {
+                    assert_eq!(error, mpsc::RecvTimeoutError::Disconnected);
+                    break;
+                }
+            }
+        }
     }
 }

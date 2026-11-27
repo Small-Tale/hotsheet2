@@ -46,8 +46,14 @@ mod model;
 mod monitor;
 mod pipelines;
 mod probe;
+#[cfg(any(target_os = "linux", target_os = "windows", test))]
+mod root_plan;
 #[cfg(target_os = "macos")]
 mod root_watch;
+#[cfg(target_os = "linux")]
+mod root_watch_inotify;
+#[cfg(target_os = "windows")]
+mod root_watch_windows;
 mod signal;
 mod slot;
 mod state;
