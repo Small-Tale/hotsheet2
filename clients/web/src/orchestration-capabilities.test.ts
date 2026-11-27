@@ -67,6 +67,15 @@ describe('HS2-ZY4Z4G capacity snapshot parsing', () => {
     expect(parseOrchestrationCapacity({ ...snapshot, capabilities: bare }).capabilities).toEqual(bare);
   });
 
+  it('HS2-5H8R0N reads the owner’s placement limits, each optional, and refuses a malformed one', () => {
+    expect(parseOrchestrationCapacity(snapshot).owner_limits).toBeUndefined();
+    expect(parseOrchestrationCapacity({ ...snapshot, owner_limits: {} }).owner_limits).toEqual({});
+    const limits = { max_sessions: 3, min_free_ram_mb: 1024, max_cpu_percent: 85, min_free_disk_mb: 4096 };
+    expect(parseOrchestrationCapacity({ ...snapshot, owner_limits: limits }).owner_limits).toEqual(limits);
+    for (const owner_limits of [null, { max_sessions: '3' }, { max_cpu_percent: null }])
+      expect(() => parseOrchestrationCapacity({ ...snapshot, owner_limits })).toThrow();
+  });
+
   it('HS2-S1FEYY reads each AI tool’s sign-in state when the machine reports it', () => {
     const signed = {
       ...bare,

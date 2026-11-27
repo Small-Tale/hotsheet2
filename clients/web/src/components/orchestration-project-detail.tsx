@@ -19,11 +19,12 @@ import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { Bot, CircleHelp, CircleStop, Hand, MoreHorizontal, PanelBottomOpen, Server, Trash2 } from 'lucide';
 
-import type { OrchestrationAdmission, OrchestrationBinding, OrchestrationSession } from '../api';
+import type { OrchestrationBinding, OrchestrationSession } from '../api';
 import type { OrchestrationDetailState } from '../features/orchestration-settings';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
 import {
+  admissionValue,
   advancedLimitsChanged,
   BUILD_AHEAD_HINT,
   type ConnectionStatus,
@@ -100,24 +101,6 @@ export interface OrchestrationProjectDetailProps {
 
 const menuIcon = <LucideIcon icon={MoreHorizontal} name="more-horizontal" />;
 const defaultTime = (ms: number) => new Date(ms).toLocaleString();
-
-const ADMISSION_REASONS: Readonly<Record<string, string>> = {
-  tool_not_installed: 'not installed there',
-  tool_not_configured: 'turned off in that project',
-  session_cap_reached: 'session cap reached',
-  above_cpu_ceiling: 'CPU above the ceiling',
-  below_disk_floor: 'disk below the floor',
-  below_ram_floor: 'memory below the floor',
-  capacity_unknown: 'capacity unknown',
-};
-
-function admissionValue(admission: OrchestrationAdmission): string {
-  const reason = admission.reason ? ` · ${ADMISSION_REASONS[admission.reason] ?? admission.reason}` : '';
-  if (admission.outcome === 'accepted') return `Can start ${String(admission.admitted)} now`;
-  if (admission.outcome === 'reduced')
-    return `Can start ${String(admission.admitted)} of ${String(admission.requested)}${reason}`;
-  return `Refused${reason}`;
-}
 
 const badge = (status: ConnectionStatus) => (
   <Badge tone={status.tone} appearance="quiet" size="compact">

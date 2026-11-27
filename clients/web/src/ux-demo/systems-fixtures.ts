@@ -4,8 +4,10 @@ import type { SystemsSidebarProps, SystemsToolCapacityState } from '../component
 import type { SystemsViewProps } from '../components/systems-view';
 import type { HostCpuFrame } from '../host-cpu-feed';
 import {
+  admissionRow,
   machineCpuPercent,
   machineRowDescription,
+  placementLimitRows,
   sessionRows,
   type SystemsMachine,
   type SystemsMachineReadings,
@@ -79,8 +81,38 @@ export function systemsDemoCapacity(machine: SystemsDemoMachine): OrchestrationC
       ],
     },
     version: `demo-${machine}`,
+    // HS2-5H8R0N: this computer's owner set every limit; the build host's set none.
+    owner_limits: build ? {} : { max_sessions: 10, min_free_ram_mb: 1024, max_cpu_percent: 95, min_free_disk_mb: 5120 },
   };
 }
+
+/** HS2-5H8R0N: synthetic orchestrated projects placed on this computer, with their admission answers. */
+const DEMO_ADMISSION = [
+  admissionRow(
+    { owner: 'demo-local', targetId: 'P1', label: 'Hot Sheet 2' },
+    {
+      status: 'ready',
+      admissions: [
+        { outcome: 'accepted', tool: 'claude', requested: 1, admitted: 1, reason: null },
+        { outcome: 'accepted', tool: 'codex', requested: 1, admitted: 1, reason: null },
+      ],
+    },
+    systemsDemoToolLabel,
+  ),
+  admissionRow(
+    { owner: 'demo-local', targetId: 'P2', label: 'Website' },
+    {
+      status: 'ready',
+      admissions: [{ outcome: 'refused', tool: 'claude', requested: 1, admitted: 0, reason: 'session_cap_reached' }],
+    },
+    systemsDemoToolLabel,
+  ),
+  admissionRow(
+    { owner: 'demo-local', targetId: 'P3', label: 'Internal API' },
+    { status: 'ready', admissions: [] },
+    systemsDemoToolLabel,
+  ),
+];
 
 /** A synthetic live CPU frame. */
 export function systemsDemoCpu(machine: SystemsDemoMachine): HostCpuFrame {
@@ -192,9 +224,14 @@ export function systemsDemoInspector(
 ): SystemsInspectorProps {
   const read = readings(machine, scenario);
   const sessions = sessionRows(read.capacity, DEMO_TERMINALS, systemsDemoToolLabel);
+  const limits = placementLimitRows(read.capacity);
   return {
     machine: SYSTEMS_DEMO_MACHINES[machine],
     ...(sessions ? { sessions } : {}),
     ...(scenario === 'failed' ? { error: 'The Hot Sheet server could not be reached.' } : {}),
+    admission: machine === 'local' && read.capacity ? DEMO_ADMISSION : [],
+    orchestrating: true,
+    ...(limits ? { limits } : {}),
+    capacityRead: Boolean(read.capacity),
   };
 }

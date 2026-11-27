@@ -5,11 +5,17 @@
  * the machine list, the rail rows, and the detail's tables. A reading the machine did not give reads
  * as unknown, never as zero.
  */
-import type { OrchestrationCapacity, OrchestrationDestination, OrchestrationToolCapacity } from './api';
+import type {
+  OrchestrationAdmission,
+  OrchestrationCapacity,
+  OrchestrationDestination,
+  OrchestrationSitesView,
+  OrchestrationToolCapacity,
+} from './api';
 import type { HostCpuFrame } from './host-cpu-feed';
 import type { HostHealthSnapshot } from './host-health';
 import { gpuLabel, systemLabel } from './orchestration-capabilities';
-import { formatMegabytes } from './orchestration-settings-model';
+import { admissionValue, formatMegabytes } from './orchestration-settings-model';
 import { parseRemoteProjectId, remoteHostLabel } from './remote-projects/identity';
 import { hostPlatform } from './stats-this-mac';
 
@@ -374,4 +380,111 @@ export function toolCapacityRows(
     }
   }
   return [...rows.values()];
+}
+
+/* ---- Admission by Project and Placement Limits (HS2-5H8R0N) ------------------------------------- */
+
+/** One orchestrated project's site placed on a machine, read through its owning orchestration project. */
+export interface SystemsPlacedSite {
+  owner: string;
+  targetId: string;
+  label: string;
+}
+
+/**
+ * The sites of an orchestration project (`owner`, a local tab) that run on `machineId`, from its sites
+ * view (HS2-SHH7WW): each site's destination names its machine (`systemsMachineForDestination`). A
+ * home site reads as its project; another site adds its own label.
+ */
+export function sitesOnMachine(owner: string, view: OrchestrationSitesView, machineId: string): SystemsPlacedSite[] {
+  return view.projects.flatMap((project) =>
+    project.sites
+      .filter((site) => systemsMachineForDestination(site.destination, owner) === machineId)
+      .map((site) => ({
+        owner,
+        targetId: site.target_id,
+        label: site.project || site.label === project.label ? project.label : `${project.label} · ${site.label}`,
+      })),
+  );
+}
+
+/** What Systems last read of one placed site's admission. */
+export type SystemsAdmissionState =
+  | { status: 'loading' }
+  | { status: 'ready'; admissions: readonly OrchestrationAdmission[] }
+  | { status: 'error'; message: string };
+
+export interface SystemsAdmissionRow {
+  key: string;
+  label: string;
+  status: { label: string; tone: SystemsBadgeTone };
+  description?: string;
+}
+
+/**
+ * One Admission by Project row: the best answer as its badge ("Can start N now", the reduced count, or
+ * Refused), each tool's answer in the quiet line, and "No AI tool allowed here" when the policy lets
+ * no tool run there. The same answers as the orchestration inspector's Admission (HS2-JF3EA3).
+ */
+export function admissionRow(
+  site: SystemsPlacedSite,
+  state: SystemsAdmissionState | undefined,
+  toolLabel: (tool: string) => string = (tool) => tool,
+): SystemsAdmissionRow {
+  const key = `${site.owner}\u0000${site.targetId}`;
+  if (!state || state.status === 'loading')
+    return { key, label: site.label, status: { label: 'Checking', tone: 'neutral' } };
+  if (state.status === 'error')
+    return {
+      key,
+      label: site.label,
+      status: { label: 'Unknown', tone: 'neutral' },
+      description: `Admission is not available. ${state.message}`,
+    };
+  if (state.admissions.length === 0)
+    return { key, label: site.label, status: { label: 'No AI tool allowed here', tone: 'neutral' } };
+  const best = [...state.admissions].sort((a, b) => b.admitted - a.admitted)[0];
+  const status =
+    best.admitted === 0
+      ? { label: 'Refused', tone: 'warning' as const }
+      : best.outcome === 'accepted'
+        ? { label: `Can start ${String(best.admitted)} now`, tone: 'success' as const }
+        : { label: `Can start ${String(best.admitted)} of ${String(best.requested)}`, tone: 'warning' as const };
+  return {
+    key,
+    label: site.label,
+    status,
+    description: state.admissions
+      .map((admission) => `${toolLabel(admission.tool)}: ${admissionValue(admission)}`)
+      .join(' · '),
+  };
+}
+
+/**
+ * The Placement Limits table: the machine owner's four limits (`orchestration admission set`). An unset
+ * one leaves each project's policy value, so it says so. `undefined` while the snapshot is unread or the
+ * machine does not report its limits (an older host).
+ */
+export function placementLimitRows(capacity: OrchestrationCapacity | undefined): SystemsValueRow[] | undefined {
+  const limits = capacity?.owner_limits;
+  if (!limits) return undefined;
+  const policy = 'Set by each project';
+  return [
+    {
+      label: 'Sessions per Machine',
+      value: limits.max_sessions === undefined ? policy : String(limits.max_sessions),
+    },
+    {
+      label: 'Free Memory Floor',
+      value: limits.min_free_ram_mb === undefined ? policy : formatMegabytes(limits.min_free_ram_mb),
+    },
+    {
+      label: 'CPU Ceiling',
+      value: limits.max_cpu_percent === undefined ? policy : `${String(limits.max_cpu_percent)}%`,
+    },
+    {
+      label: 'Free Disk Floor',
+      value: limits.min_free_disk_mb === undefined ? policy : formatMegabytes(limits.min_free_disk_mb),
+    },
+  ];
 }

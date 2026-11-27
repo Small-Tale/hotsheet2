@@ -184,6 +184,36 @@ pub struct CapacitySnapshot {
     /// reads as unknown, never as met.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<HostCapabilities>,
+    /// HS2-5H8R0N: the machine owner's own placement limits (`orchestration admission
+    /// show`), so Systems can show them for a paired machine too. Each unset limit leaves
+    /// the orchestrator's policy value. Absent from an older peer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_limits: Option<OwnerLimits>,
+}
+
+/// HS2-5H8R0N: the four limits a machine owner may set for sessions started here, without
+/// the footprints and toolchains [`AdmissionConfig`] also keeps.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OwnerLimits {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_sessions: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_free_ram_mb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_cpu_percent: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_free_disk_mb: Option<u64>,
+}
+
+impl From<&AdmissionConfig> for OwnerLimits {
+    fn from(admission: &AdmissionConfig) -> Self {
+        Self {
+            max_sessions: admission.max_sessions,
+            min_free_ram_mb: admission.min_free_ram_mb,
+            max_cpu_percent: admission.max_cpu_percent,
+            min_free_disk_mb: admission.min_free_disk_mb,
+        }
+    }
 }
 
 /// HS2-TK9ADC: what a target's coordination pool says about its single-holder roles
@@ -387,6 +417,7 @@ impl CapacitySnapshot {
             version: None,
             pool: None,
             capabilities: host.capabilities,
+            owner_limits: None,
         }
     }
 
@@ -409,8 +440,11 @@ impl CapacitySnapshot {
     /// HS2-AWB7BX: stamp the snapshot with a version that also changes when the
     /// machine owner's own admission limits change, since those decide room as much
     /// as the measurements do. The default (no limits) gives [`Self::with_version`].
+    /// HS2-5H8R0N: the snapshot also reports those limits as `owner_limits`; they are not
+    /// part of [`capacity_version`], since the admission term already covers them.
     #[must_use]
-    pub fn with_admission_version(self, admission: &AdmissionConfig) -> Self {
+    pub fn with_admission_version(mut self, admission: &AdmissionConfig) -> Self {
+        self.owner_limits = Some(OwnerLimits::from(admission));
         let mut stamped = self.with_version();
         if *admission != AdmissionConfig::default() {
             let limits = serde_json::to_string(admission).unwrap_or_default();

@@ -169,6 +169,38 @@ describe('HS2-DR0ZSQ SystemsInspector', () => {
     );
   });
 
+  it('HS2-5H8R0N shows Admission by Project and the owner’s Placement Limits, with why when there are none', () => {
+    const markup = html(SystemsInspector(systemsDemoInspector('local', 'ready')));
+    expect(markup.indexOf('Admission by Project')).toBeLessThan(markup.indexOf('AI Sessions Here'));
+    expect(markup.indexOf('AI Sessions Here')).toBeLessThan(markup.indexOf('Placement Limits'));
+    expect(markup).toContain('data-systems-admission="demo-local:P1"');
+    expect(markup).toMatch(/Hot Sheet 2[^]*?Claude: Can start 1 now · Codex: Can start 1 now[^]*?>Can start 1 now</u);
+    expect(markup).toMatch(/Website[^]*?Claude: Refused · session cap reached[^]*?>Refused</u);
+    expect(markup).toMatch(/Internal API[^]*?>No AI tool allowed here</u);
+    expect(markup).toMatch(/data-systems-limit="Sessions per Machine"[^]*?>10</u);
+    expect(markup).toMatch(/data-systems-limit="Free Memory Floor"[^]*?1\.0 GB/u);
+    expect(markup).toMatch(/data-systems-limit="CPU Ceiling"[^]*?95%/u);
+    expect(markup).toMatch(/data-systems-limit="Free Disk Floor"[^]*?5\.0 GB/u);
+    // A machine whose owner set no limit leaves each one to the projects' policies.
+    const build = html(SystemsInspector(systemsDemoInspector('build', 'ready')));
+    expect(build).toContain('No orchestrated project runs on this machine.');
+    expect(build).toMatch(/Sessions per Machine[^]*?Set by each project/u);
+    expect(html(SystemsInspector(systemsDemoInspector('offline', 'ready')))).toContain(
+      'Admission shows while the machine is connected.',
+    );
+    expect(html(SystemsInspector(systemsDemoInspector('offline', 'ready')))).toContain(
+      'Limits show while the machine is connected.',
+    );
+    expect(html(SystemsInspector(systemsDemoInspector('local', 'loading')))).toMatch(/Placement Limits[^]*Loading…/u);
+    expect(html(SystemsInspector(systemsDemoInspector('local', 'failed')))).toContain(
+      'Limits are not available. The Hot Sheet server could not be reached.',
+    );
+    // An older host reports no limits; without an orchestration project Admission says how to get one.
+    const older = html(SystemsInspector({ machine: SYSTEMS_DEMO_MACHINES.local, sessions: [], capacityRead: true }));
+    expect(older).toContain('This machine does not report its limits.');
+    expect(older).toContain('Open an orchestration project to see what it can start here.');
+  });
+
   it('titles the right rail with the machine and its kind', () => {
     const panel = systemsInspectorPanel(systemsDemoInspector('build', 'ready'));
     expect(html(panel.toolbar.title)).toContain('Build Host');

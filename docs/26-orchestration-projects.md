@@ -1367,18 +1367,24 @@ A snapshot is what the server hosting a checkout measured just now. Megabytes an
 percent are integers. A value the host could not measure is `null`; nothing is
 estimated in its place.
 
-| Field                                  | Meaning                                                                                                  |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `server_id`, `checkout_id`             | The machine identity and the hosted checkout the snapshot is for                                         |
-| `sampled_at_ms`                        | When the shared reading was taken                                                                        |
-| `memory.free_mb`, `memory.total_mb`    | Memory a new process could use without swapping, and physical memory                                     |
-| `cpu.load_percent`, `cpu.logical_cpus` | Whole-machine busy share over a 250 ms window, and the core count                                        |
-| `disk.free_mb`, `disk.total_mb`        | The volume that holds the checkout                                                                       |
-| `tools[]`                              | Each drivable AI tool by name, whether it is `installed`, and whether the checkout has it `configured`   |
-| `sessions[]`                           | Each running AI session: `session_id`, `tool`, `busy`, `on_checkout`, `resident_mb`                      |
-| `claims[]`, `claim_namespaces`         | Live resource claims (namespace, resource, expiry) in the named namespaces, or in every one (HS2-YDZAFH) |
-| `capabilities`                         | What the machine is (HS2-ZY4Z4G, below); absent from an older host or when it could not tell             |
+| Field                                  | Meaning                                                                                                                                                          |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server_id`, `checkout_id`             | The machine identity and the hosted checkout the snapshot is for                                                                                                 |
+| `sampled_at_ms`                        | When the shared reading was taken                                                                                                                                |
+| `memory.free_mb`, `memory.total_mb`    | Memory a new process could use without swapping, and physical memory                                                                                             |
+| `cpu.load_percent`, `cpu.logical_cpus` | Whole-machine busy share over a 250 ms window, and the core count                                                                                                |
+| `disk.free_mb`, `disk.total_mb`        | The volume that holds the checkout                                                                                                                               |
+| `tools[]`                              | Each drivable AI tool by name, whether it is `installed`, and whether the checkout has it `configured`                                                           |
+| `sessions[]`                           | Each running AI session: `session_id`, `tool`, `busy`, `on_checkout`, `resident_mb`                                                                              |
+| `claims[]`, `claim_namespaces`         | Live resource claims (namespace, resource, expiry) in the named namespaces, or in every one (HS2-YDZAFH)                                                         |
+| `capabilities`                         | What the machine is (HS2-ZY4Z4G, below); absent from an older host or when it could not tell                                                                     |
+| `owner_limits`                         | The machine owner's own `max_sessions`, `min_free_ram_mb`, `max_cpu_percent`, `min_free_disk_mb` (each absent when unset; HS2-5H8R0N); absent from an older host |
 
+- **Owner limits** (HS2-5H8R0N) are the four limits of the machine's admission file
+  (`orchestration admission show`), without its footprints and toolchains. They let the
+  Systems screen show a paired machine's Placement Limits through the same capacity read.
+  The admission term already in the `version` covers them. An unset limit leaves the
+  orchestrator's policy value.
 - **Tools** come from the plugin registry. A tool is installed when its program is on
   the server's `PATH`; nothing is executed to find out, so
   `HOTSHEET_AI_TOOL_PROBES=off` changes nothing here. A tool is configured unless the

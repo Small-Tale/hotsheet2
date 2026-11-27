@@ -26,6 +26,7 @@ import {
   type AddDestination,
   addPolicyAccount,
   addTargetLimitsValue,
+  admissionTools,
   changePolicyDraft,
   changeTargetLimits,
   destinationOf,
@@ -40,7 +41,6 @@ import {
   tabProjectIdOf,
   type TargetLimitsDraft,
   targetLimitsDraftFrom,
-  usablePolicyTools,
 } from '../orchestration-settings-model';
 import { isRemoteProjectId } from '../remote-projects/identity';
 
@@ -788,11 +788,8 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       // HS2-Y3N3PH: only the tools the policy lets sessions use here; the policy's limits refuse
       // admission for any other, which is not something to ask about. An unlisted tool is Auto and
       // usable; one the policy turns off is not (HS2-N3HWP9).
-      usable = usablePolicyTools(policy, dependencies.knownTools()),
-      configured = new Set(usable),
-      scoped = (policy?.targets?.find((entry) => entry.target_id === targetId)?.tools ?? []).map((scope) => scope.tool),
       // HS2-N5BDE4: a project that lists no tools is Auto, so admission is asked for every usable one.
-      tools = [...new Set(scoped.length ? scoped.filter((tool) => configured.has(tool)) : usable)];
+      tools = admissionTools(policy, targetId, dependencies.knownTools());
     putDetail(projectId, targetId, { loading: !details.value[detailKey(projectId, targetId)]?.resolution });
     const part = async <T>(
       read: () => Promise<T>,

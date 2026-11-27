@@ -6249,6 +6249,8 @@ export async function startHotSheetWebClient() {
         })),
       ),
     toolLabel: aiToolLabel,
+    // HS2-5H8R0N: a policy listing no tools is Auto, so admission asks about every known tool.
+    knownTools: () => aiTools.value.map((tool) => tool.id),
     diskMessage: () => hostDisks.message.value,
   });
   type NoteRepairSession = {

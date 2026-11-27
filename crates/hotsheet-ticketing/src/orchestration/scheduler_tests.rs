@@ -101,6 +101,7 @@ fn prio(mut item: WorkItem, priority: &str) -> WorkItem {
 pub(super) fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> CapacitySnapshot {
     CapacitySnapshot {
         capabilities: None,
+        owner_limits: None,
         schema_version: 1,
         server_id: id(9000 + server),
         checkout_id: "checkout".into(),

@@ -857,3 +857,48 @@ fn hs2_0vtqff_reported_models_change_the_version_and_read_by_tool() {
         serde_json::from_value(serde_json::to_value(&reported).unwrap()).unwrap();
     assert_eq!(round, reported);
 }
+
+/// HS2-5H8R0N: a stamped snapshot reports the owner's four placement limits, all unset by
+/// default, without the footprints and toolchains; the field is not a second version
+/// term, and an older peer's answer without it still reads.
+#[test]
+fn hs2_5h8r0n_a_snapshot_reports_the_owners_placement_limits() {
+    let unset = healthy().with_admission_version(&AdmissionConfig::default());
+    assert_eq!(unset.owner_limits, Some(OwnerLimits::default()));
+    assert_eq!(
+        serde_json::to_value(&unset).unwrap()["owner_limits"],
+        serde_json::json!({})
+    );
+    let mut footprints = std::collections::BTreeMap::new();
+    footprints.insert("codex".to_owned(), 900);
+    let owner = AdmissionConfig {
+        max_sessions: Some(3),
+        min_free_ram_mb: Some(1024),
+        max_cpu_percent: Some(85),
+        min_free_disk_mb: Some(4096),
+        tool_footprint_mb: footprints,
+        toolchains: Some(vec!["node".into()]),
+        ..AdmissionConfig::default()
+    };
+    let set = healthy().with_admission_version(&owner);
+    assert_eq!(
+        serde_json::to_value(set.owner_limits).unwrap(),
+        serde_json::json!({
+            "max_sessions": 3,
+            "min_free_ram_mb": 1024,
+            "max_cpu_percent": 85,
+            "min_free_disk_mb": 4096,
+        })
+    );
+    // The limits alone never change the version beyond the admission term.
+    let mut without = set.clone();
+    without.owner_limits = None;
+    assert_eq!(capacity_version(&without), capacity_version(&set));
+    // Unstamped snapshots (and older peers) report none and serialize without it.
+    assert_eq!(healthy().owner_limits, None);
+    let mut older = serde_json::to_value(healthy()).unwrap();
+    assert!(older.get("owner_limits").is_none());
+    older["owner_limits"] = serde_json::json!({ "max_sessions": 1 });
+    let read: CapacitySnapshot = serde_json::from_value(older).unwrap();
+    assert_eq!(read.owner_limits.unwrap().max_sessions, Some(1));
+}

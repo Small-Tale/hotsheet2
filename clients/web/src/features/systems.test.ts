@@ -1,7 +1,13 @@
 import { signal } from 'kerfjs';
 import { describe, expect, it } from 'vitest';
 
-import type { OrchestrationCapacity, OrchestrationToolCapacity } from '../api';
+import type {
+  OrchestrationAdmission,
+  OrchestrationCapacity,
+  OrchestrationPolicyView,
+  OrchestrationSitesView,
+  OrchestrationToolCapacity,
+} from '../api';
 import type { HostCpuFrame } from '../host-cpu-feed';
 import type { HostHealthResourceState } from '../host-health-resource';
 import { hostHealthFixture } from '../ux-demo/host-health-fixtures';
@@ -26,6 +32,55 @@ function harness({ orchestration = ['local-1'] }: { orchestration?: string[] } =
     resolve: (v: OrchestrationToolCapacity) => void;
     reject: (e: unknown) => void;
   }[] = [];
+  // HS2-5H8R0N: one project placed on this computer and a site on the paired remote; its policy
+  // lets Codex and Claude run. Each admission answer is held until the test answers it.
+  const placementReads: string[] = [];
+  const sites: OrchestrationSitesView = {
+    revision: 'r1',
+    projects: [
+      {
+        project_id: 'P1',
+        label: 'Widgets',
+        sites: [
+          {
+            target_id: 'P1',
+            label: 'Widgets',
+            project: true,
+            destination: { kind: 'local', server_id: 's1', checkout_id: 'local-1', checkout_authority: 'a1' },
+            confirmed_at_ms: null,
+            last_failure: null,
+            stale: false,
+          },
+          {
+            target_id: 'S2',
+            label: 'Build clone',
+            project: false,
+            destination: {
+              kind: 'remote',
+              registration_id: BINDING,
+              identity: { server_id: 's2' },
+              checkout_id: 'c1',
+              checkout_authority: 'a2',
+            },
+            confirmed_at_ms: null,
+            last_failure: null,
+            stale: false,
+          },
+        ],
+      },
+    ],
+  };
+  const policy: OrchestrationPolicyView = {
+    enabled: true,
+    revision: 'p1',
+    policy: { tools: [{ tool: 'codex' }, { tool: 'claude' }] },
+  };
+  const admissionReads: {
+    target: string;
+    tool: string;
+    resolve: (v: OrchestrationAdmission) => void;
+    reject: (e: unknown) => void;
+  }[] = [];
   const api = (projectId: string): SystemsApi => ({
     machineCapacity: (_owner: string, after: string | undefined, abort?: AbortSignal) =>
       new Promise<OrchestrationCapacity>((resolve) => {
@@ -38,6 +93,18 @@ function harness({ orchestration = ['local-1'] }: { orchestration?: string[] } =
     orchestrationToolCapacity: () =>
       new Promise<OrchestrationToolCapacity>((resolve, reject) => {
         toolReads.push({ projectId, resolve, reject });
+      }),
+    orchestrationSites: (owner: string) => {
+      placementReads.push(`sites:${owner}`);
+      return Promise.resolve(sites);
+    },
+    orchestrationPolicy: (owner: string) => {
+      placementReads.push(`policy:${owner}`);
+      return Promise.resolve(policy);
+    },
+    orchestrationAdmission: (_owner: string, target: string, tool: string) =>
+      new Promise<OrchestrationAdmission>((resolve, reject) => {
+        admissionReads.push({ target, tool, resolve, reject });
       }),
   });
   const showing = signal(false),
@@ -63,8 +130,11 @@ function harness({ orchestration = ['local-1'] }: { orchestration?: string[] } =
     formatTime: () => 'soon',
     cpuOptions: { wait: () => Promise.resolve() },
     capacityOptions: { delay: () => Promise.resolve(), now: () => 0 },
+    knownTools: () => ['claude', 'codex'],
   });
   return {
+    placementReads,
+    admissionReads,
     controller,
     showing,
     visible,
@@ -206,5 +276,106 @@ describe('HS2-DR0ZSQ Systems controller', () => {
     expect(h.capacityReads.at(-1)?.projectId).toBe(`remote:${BINDING}:c2`);
     h.controller.dispose();
     expect(h.capacityReads.every((read) => read.signal.aborted)).toBe(true);
+  });
+
+  it('HS2-5H8R0N asks admission for the projects placed on the selected machine, again only when its room changes', async () => {
+    const h = harness();
+    h.showing.value = true;
+    await settle();
+    await settle();
+    // The orchestration project's sites and policy are read once per opening.
+    expect(h.placementReads).toEqual(['sites:local-1', 'policy:local-1']);
+    // This computer runs the home site: its policy's two tools are asked about.
+    expect(h.admissionReads.map((read) => [read.target, read.tool])).toEqual([
+      ['P1', 'codex'],
+      ['P1', 'claude'],
+    ]);
+    expect(h.controller.view().inspector.admission).toEqual([
+      { key: 'local-1\u0000P1', label: 'Widgets', status: { label: 'Checking', tone: 'neutral' } },
+    ]);
+    const answer = (outcome: OrchestrationAdmission['outcome'], admitted: number, reason: string | null = null) => ({
+      outcome,
+      tool: '',
+      requested: 1,
+      admitted,
+      reason,
+    });
+    h.admissionReads[0].resolve({ ...answer('accepted', 1), tool: 'codex' });
+    h.admissionReads[1].resolve({ ...answer('refused', 0, 'tool_not_installed'), tool: 'claude' });
+    await settle();
+    expect(h.controller.view().inspector.admission).toEqual([
+      {
+        key: 'local-1\u0000P1',
+        label: 'Widgets',
+        status: { label: 'Can start 1 now', tone: 'success' },
+        description: 'CODEX: Can start 1 now · CLAUDE: Refused · not installed there',
+      },
+    ]);
+    expect(h.controller.view().inspector.orchestrating).toBe(true);
+    // The capacity stream's first answer gives a version: admission is asked again once.
+    h.capacityReads[0].resolve({ ...systemsDemoCapacity('local'), version: 'v1', owner_limits: { max_sessions: 3 } });
+    await settle();
+    await settle();
+    expect(h.admissionReads).toHaveLength(4);
+    expect(h.controller.view().inspector.limits?.[0]).toEqual({ label: 'Sessions per Machine', value: '3' });
+    expect(h.controller.view().inspector.capacityRead).toBe(true);
+    // The same version again (a long poll timing out) asks nothing.
+    const next = h.capacityReads.find((read) => read.projectId === 'local-1' && read.after === 'v1')!;
+    next.resolve({ ...systemsDemoCapacity('local'), version: 'v1' });
+    await settle();
+    await settle();
+    expect(h.admissionReads).toHaveLength(4);
+    // A failed answer keeps the row and says why.
+    h.admissionReads[2].reject(new Error('refused by the gate'));
+    h.admissionReads[3].resolve({ ...answer('accepted', 1), tool: 'claude' });
+    await settle();
+    expect(h.controller.view().inspector.admission?.[0]).toMatchObject({
+      status: { label: 'Unknown' },
+      description: 'Admission is not available. refused by the gate',
+    });
+    // The paired remote runs the other site, named with its project.
+    h.controller.select(`remote:${BINDING}`);
+    await settle();
+    expect(h.admissionReads.slice(4).map((read) => read.target)).toEqual(['S2', 'S2']);
+    expect(h.controller.view().inspector.admission?.map((row) => row.label)).toEqual(['Widgets · Build clone']);
+    // Leaving reads nothing more; opening again re-reads the placements.
+    h.showing.value = false;
+    await settle();
+    const asked = h.admissionReads.length;
+    h.showing.value = true;
+    await settle();
+    await settle();
+    expect(h.placementReads).toHaveLength(4);
+    expect(h.admissionReads.length).toBeGreaterThan(asked);
+    h.controller.dispose();
+  });
+
+  it('HS2-5H8R0N shows no admission without an orchestration project, and none for a machine without readings', async () => {
+    const none = harness({ orchestration: [] });
+    none.showing.value = true;
+    await settle();
+    await settle();
+    expect(none.placementReads).toEqual([]);
+    expect(none.admissionReads).toEqual([]);
+    expect(none.controller.view().inspector).toMatchObject({
+      admission: [],
+      orchestrating: false,
+      capacityRead: false,
+    });
+    none.controller.dispose();
+    const h = harness();
+    h.showing.value = true;
+    await settle();
+    await settle();
+    h.remoteServers.value = [
+      ...h.remoteServers.value,
+      { id: '01JSYNTHREMTE0000000000002', label: 'Off', origin: 'https://off.example.test', revoked: false },
+    ];
+    const asked = h.admissionReads.length;
+    h.controller.select('remote:01JSYNTHREMTE0000000000002');
+    await settle();
+    expect(h.admissionReads).toHaveLength(asked);
+    expect(h.controller.view().inspector.admission).toEqual([]);
+    h.controller.dispose();
   });
 });

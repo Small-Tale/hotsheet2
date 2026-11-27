@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
+
 import { expect, type Page, type Request, test } from '@playwright/test';
 
 import { proxyFetch, realTicketServer } from './real-ticket-server';
@@ -115,7 +118,11 @@ function remoteReportsSignIn(snapshot: Record<string, unknown>) {
 
 /** Every Systems read the page makes, by kind and tab path. */
 function recordReads(page: Page, paths: { apiPath: string; remotePath: string }) {
-  const reads: { kind: 'capacity' | 'cpu' | 'tools'; machine: 'local' | 'remote'; after: string | null }[] = [];
+  const reads: {
+    kind: 'capacity' | 'cpu' | 'tools' | 'admission';
+    machine: 'local' | 'remote';
+    after: string | null;
+  }[] = [];
   page.on('request', (request: Request) => {
     const url = new URL(request.url());
     const machine = url.pathname.startsWith(paths.remotePath)
@@ -130,7 +137,9 @@ function recordReads(page: Page, paths: { apiPath: string; remotePath: string })
         ? 'cpu'
         : url.pathname.endsWith('/orchestration/tool-capacity')
           ? 'tools'
-          : undefined;
+          : url.pathname.endsWith('/admission')
+            ? 'admission'
+            : undefined;
     if (kind) reads.push({ kind, machine, after: url.searchParams.get('after') });
   });
   return reads;
@@ -249,6 +258,79 @@ test('HS2-DR0ZSQ Systems shows this computer and each paired remote with live re
   }
 });
 
+/**
+ * HS2-5H8R0N: this machine's own admission file (synthetic limits), as `orchestration admission set`
+ * writes it, in the fixture server's isolated home.
+ */
+async function ownerLimits(home: string, admission: Record<string, number>) {
+  await writeFile(resolve(home, 'orchestration-admission.json'), JSON.stringify({ schema_version: 1, admission }));
+}
+
+test('HS2-5H8R0N Systems shows admission for each project placed here and this machine’s placement limits, live', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    // The local project orchestrates one project, Widgets, placed on this computer.
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const widgetsRoot = join(dirname(server.root), 'widgets');
+    await mkdir(widgetsRoot, { recursive: true });
+    const widgets = await server.request<{ id: string }>('/checkouts', 'POST', {
+      root: widgetsRoot,
+      stores: [server.store],
+    });
+    await server.request(`${base}/projects`, 'POST', {
+      destination: { kind: 'local', checkout_id: widgets.id },
+      label: 'Widgets',
+      actor: { role: 'human' },
+    });
+    await ownerLimits(server.home, { max_sessions: 3, min_free_ram_mb: 1024 });
+    const paths = await openMachines(page, server);
+    const reads = recordReads(page, paths);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await expect(page.locator('[data-tab-kind="project"][data-location="remote"]')).toHaveCount(1, {
+      timeout: 30_000,
+    });
+    await page.locator('[aria-label="Global Dashboards"]').first().getByRole('button', { name: 'Systems' }).click();
+    const inspector = page.locator('[data-component="systems-inspector"]');
+    await expect(inspector).toHaveAttribute('data-machine-id', 'local');
+    // Admission by Project: Widgets with the real admission answer (the fixture host may lack every tool).
+    const admission = inspector.getByRole('region', { name: 'Admission by Project' });
+    await expect(admission.locator('[data-systems-admission]')).toHaveCount(1, { timeout: 30_000 });
+    await expect(admission).toContainText('Widgets');
+    await expect(admission).toContainText(/Can start \d+|Refused|No AI tool allowed here|Unknown/u, {
+      timeout: 30_000,
+    });
+    // Placement Limits: the owner's two limits, the rest left to each project.
+    const limits = inspector.getByRole('region', { name: 'Placement Limits' });
+    const limit = (label: string) => limits.locator(`[data-systems-limit="${label}"]`);
+    await expect(limit('Sessions per Machine')).toContainText('3', { timeout: 30_000 });
+    await expect(limit('Free Memory Floor')).toContainText('1.0 GB');
+    await expect(limit('CPU Ceiling')).toContainText('Set by each project');
+    await expect(limit('Free Disk Floor')).toContainText('Set by each project');
+    // The owner changes the limits: the capacity long poll answers with a new version, the rail
+    // follows without a reload, and admission is asked again for the changed room.
+    const asked = reads.filter((read) => read.kind === 'admission').length;
+    await ownerLimits(server.home, { max_sessions: 0, max_cpu_percent: 80 });
+    await expect(limit('Sessions per Machine')).toContainText('0', { timeout: 30_000 });
+    await expect(limit('CPU Ceiling')).toContainText('80%');
+    await expect(limit('Free Memory Floor')).toContainText('Set by each project');
+    await expect
+      .poll(() => reads.filter((read) => read.kind === 'admission').length, { timeout: 30_000 })
+      .toBeGreaterThan(asked);
+    // The paired remote (the same fixture server, reached through its tab) runs no Widgets site.
+    await machineRow(page, `remote:${BINDING}`).click();
+    await expect(inspector).toHaveAttribute('data-machine-id', `remote:${BINDING}`);
+    await expect(admission).toContainText('No orchestrated project runs on this machine.');
+    await expect(limit('Sessions per Machine')).toContainText('0', { timeout: 30_000 });
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-DR0ZSQ an idle Systems screen reads only through long polls, at a bounded rate', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();
@@ -292,6 +374,8 @@ test('HS2-DR0ZSQ an idle Systems screen reads only through long polls, at a boun
     expect(count('cpu', 'local')).toBeLessThanOrEqual(windowMs / 2_000 + 2);
     // AI Tool Capacity is read when the screen opens, never again while it stays open.
     expect(idle.filter((read) => read.kind === 'tools')).toEqual([]);
+    // HS2-5H8R0N: with no orchestration project open, nothing asks admission.
+    expect(idle.filter((read) => read.kind === 'admission')).toEqual([]);
   } finally {
     await server.stop(page);
   }

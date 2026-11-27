@@ -632,6 +632,14 @@ Claude Signed In and Codex Signed Out on that machine, and no account name or
 email appears anywhere in the screen or in `orchestration capacity show`. Sign
 Codex back in: it reads Signed In after the next detection.
 
+Admission by Project and Placement Limits (HS2-5H8R0N): with an orchestration
+project open whose sites run on this computer and on the paired remote, select
+each machine: its Admission by Project lists only the sites placed there, with
+a Can start or Refused badge matching the orchestration inspector's Admission.
+Run `hotsheet-cli orchestration admission set --max-sessions 0` on the remote:
+its Placement Limits reads 0 within a few seconds without a reload, and its
+admission turns Refused · session cap reached.
+
 ### Remote project terminals (HS2-PPHJMZ, HS2-JJKVJJ)
 
 Use two disposable synthetic hosts; on one, register two checkouts, and give the

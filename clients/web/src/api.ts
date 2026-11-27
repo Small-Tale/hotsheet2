@@ -1218,6 +1218,15 @@ export interface OrchestrationCapacity {
   capabilities?: OrchestrationCapabilities;
   /** HS2-P5GTSW: changes when the room on the machine changes; absent from an older host. */
   version?: string;
+  /** HS2-5H8R0N: the machine owner's own placement limits; absent from an older host, each unset one absent. */
+  owner_limits?: OrchestrationOwnerLimits;
+}
+/** HS2-5H8R0N: limits a machine's owner set for sessions started there (`orchestration admission set`). */
+export interface OrchestrationOwnerLimits {
+  max_sessions?: number;
+  min_free_ram_mb?: number;
+  max_cpu_percent?: number;
+  min_free_disk_mb?: number;
 }
 /** HS2-ZY4Z4G: a target machine's OS, architecture, CPU, GPU, AI tool versions and toolchains. */
 export interface OrchestrationCapabilities {

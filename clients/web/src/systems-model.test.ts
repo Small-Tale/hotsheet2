@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import type { OrchestrationCapacity, OrchestrationToolCapacity } from './api';
+import type {
+  OrchestrationAdmission,
+  OrchestrationCapacity,
+  OrchestrationSitesView,
+  OrchestrationSiteView,
+  OrchestrationToolCapacity,
+} from './api';
 import {
+  admissionRow,
   aiSessionCount,
   aiToolRows,
   capabilityRows,
@@ -10,9 +17,11 @@ import {
   machineKindLabel,
   machineRowDescription,
   machineUnavailableMessage,
+  placementLimitRows,
   remoteMachineId,
   selectedSystemsMachine,
   sessionRows,
+  sitesOnMachine,
   systemsMachineForDestination,
   systemsMachines,
   toolCapacityRows,
@@ -316,5 +325,109 @@ describe('HS2-JF3EA3 systemsMachineForDestination', () => {
     expect(systemsMachineForDestination(remote, `remote:${B}:c1`)).toBeUndefined();
     expect(systemsMachineForDestination(null, 'local-checkout')).toBeUndefined();
     expect(systemsMachineForDestination(undefined, 'local-checkout')).toBeUndefined();
+  });
+});
+
+describe('HS2-5H8R0N Admission by Project and Placement Limits', () => {
+  const BIND = '01JSYNTHREMTE0000000000001';
+  const site = (target: string, destination: OrchestrationSiteView['destination'], project = true, label = 'Widgets') =>
+    ({
+      target_id: target,
+      label,
+      project,
+      destination,
+      confirmed_at_ms: null,
+      last_failure: null,
+      stale: false,
+    }) satisfies OrchestrationSiteView;
+  const view: OrchestrationSitesView = {
+    revision: null,
+    projects: [
+      {
+        project_id: 'P1',
+        label: 'Widgets',
+        sites: [
+          site('P1', { kind: 'local', server_id: 's1', checkout_id: 'c1', checkout_authority: 'a1' }),
+          site(
+            'S2',
+            {
+              kind: 'remote',
+              registration_id: BIND,
+              identity: { server_id: 's2' },
+              checkout_id: 'c2',
+              checkout_authority: 'a2',
+            },
+            false,
+            'Build clone',
+          ),
+          site('S3', null, false, 'Unbound'),
+        ],
+      },
+    ],
+  };
+
+  it('places each site on the machine its destination names, through a local owner and a remote one', () => {
+    expect(sitesOnMachine('owner', view, 'local')).toEqual([{ owner: 'owner', targetId: 'P1', label: 'Widgets' }]);
+    expect(sitesOnMachine('owner', view, `remote:${BIND}`)).toEqual([
+      { owner: 'owner', targetId: 'S2', label: 'Widgets · Build clone' },
+    ]);
+    // Through a remote owner tab, a local destination is that remote; an unbound site is nowhere.
+    expect(sitesOnMachine(`remote:${BIND}:c9`, view, `remote:${BIND}`).map((entry) => entry.targetId)).toEqual(['P1']);
+    expect(sitesOnMachine('owner', { revision: null, projects: [] }, 'local')).toEqual([]);
+  });
+
+  it('reads each admission state as one row: checking, unknown, no tool, refused, reduced, accepted', () => {
+    const placed = { owner: 'o', targetId: 'T', label: 'Widgets' };
+    const ask = (
+      outcome: OrchestrationAdmission['outcome'],
+      admitted: number,
+      tool = 'codex',
+      reason: string | null = null,
+    ): OrchestrationAdmission => ({ outcome, tool, requested: 2, admitted, reason });
+    expect(admissionRow(placed, undefined).status.label).toBe('Checking');
+    expect(admissionRow(placed, { status: 'loading' }).status).toEqual({ label: 'Checking', tone: 'neutral' });
+    expect(admissionRow(placed, { status: 'error', message: 'Gone.' })).toMatchObject({
+      status: { label: 'Unknown' },
+      description: 'Admission is not available. Gone.',
+    });
+    expect(admissionRow(placed, { status: 'ready', admissions: [] }).status.label).toBe('No AI tool allowed here');
+    expect(
+      admissionRow(placed, { status: 'ready', admissions: [ask('refused', 0, 'codex', 'below_ram_floor')] }),
+    ).toMatchObject({
+      status: { label: 'Refused', tone: 'warning' },
+      description: 'codex: Refused · memory below the floor',
+    });
+    expect(
+      admissionRow(placed, { status: 'ready', admissions: [ask('reduced', 1, 'codex', 'session_cap_reached')] }).status,
+    ).toEqual({ label: 'Can start 1 of 2', tone: 'warning' });
+    // The best tool decides the badge; every tool is in the quiet line.
+    expect(
+      admissionRow(placed, { status: 'ready', admissions: [ask('refused', 0, 'claude'), ask('accepted', 2)] }, (tool) =>
+        tool.toUpperCase(),
+      ),
+    ).toEqual({
+      key: 'o\u0000T',
+      label: 'Widgets',
+      status: { label: 'Can start 2 now', tone: 'success' },
+      description: 'CLAUDE: Refused · CODEX: Can start 2 now',
+    });
+  });
+
+  it('lists the owner’s four limits, unset ones left to each project, and nothing from an older host', () => {
+    const base = systemsDemoCapacity('local');
+    expect(placementLimitRows(undefined)).toBeUndefined();
+    expect(placementLimitRows({ ...base, owner_limits: undefined })).toBeUndefined();
+    expect(placementLimitRows(base)).toEqual([
+      { label: 'Sessions per Machine', value: '10' },
+      { label: 'Free Memory Floor', value: '1.0 GB' },
+      { label: 'CPU Ceiling', value: '95%' },
+      { label: 'Free Disk Floor', value: '5.0 GB' },
+    ]);
+    expect(placementLimitRows({ ...base, owner_limits: { max_sessions: 0, min_free_disk_mb: 512 } })).toEqual([
+      { label: 'Sessions per Machine', value: '0' },
+      { label: 'Free Memory Floor', value: 'Set by each project' },
+      { label: 'CPU Ceiling', value: 'Set by each project' },
+      { label: 'Free Disk Floor', value: '512 MB' },
+    ]);
   });
 });
