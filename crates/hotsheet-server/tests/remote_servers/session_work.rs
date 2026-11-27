@@ -410,8 +410,9 @@ pub(super) fn received_prompt(reports: &Path, terminal_id: &str, wanted: &str) -
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
         assert!(
             !remaining.is_zero(),
-            "no prompt with {wanted} at {}",
-            path.display()
+            "no prompt with {wanted} at {}; received: {:?}",
+            path.display(),
+            std::fs::read_to_string(&path).unwrap_or_default()
         );
         tokio::task::block_in_place(|| waiter.wait(remaining));
     }

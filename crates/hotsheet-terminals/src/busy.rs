@@ -65,21 +65,37 @@ impl BusyDetector {
 
     /// Feed output bytes seen at `now_ms`. A turn that finishes stamps the time it went
     /// idle; one that starts clears it. Returns `true` if the busy state changed.
+    ///
+    /// HS2-NDX3WF: a turn that starts and finishes within these bytes stamps the time
+    /// too, though the state did not change: its end is still news to a reader that
+    /// compares stamps, where it was lost before.
     pub fn feed_at(&mut self, bytes: &[u8], now_ms: u64) -> bool {
-        let changed = self.feed(bytes);
-        if changed {
-            self.idle_since_ms = (!self.busy).then_some(now_ms);
+        let before = self.busy;
+        let finished = self.feed_turns(bytes);
+        if self.busy {
+            self.idle_since_ms = None;
+        } else if finished {
+            self.idle_since_ms = Some(now_ms);
         }
-        changed
+        self.busy != before
     }
 
     /// Feed output bytes. Returns `true` if the busy state changed (so a caller can emit).
     pub fn feed(&mut self, bytes: &[u8]) -> bool {
         let before = self.busy;
-        for &b in bytes {
-            self.byte(b);
-        }
+        self.feed_turns(bytes);
         self.busy != before
+    }
+
+    /// Feed output bytes; whether any turn finished among them (busy, then idle).
+    fn feed_turns(&mut self, bytes: &[u8]) -> bool {
+        let mut finished = false;
+        for &b in bytes {
+            let busy = self.busy;
+            self.byte(b);
+            finished |= busy && !self.busy;
+        }
+        finished
     }
 
     fn byte(&mut self, b: u8) {
@@ -219,5 +235,34 @@ mod hs2_rg91sk_tests {
         assert_eq!(d.idle_since_ms(), Some(500));
         // A detector never stamped knows nothing.
         assert_eq!(BusyDetector::new().idle_since_ms(), None);
+    }
+
+    /// HS2-NDX3WF: a turn that starts and finishes within one read still stamps its
+    /// end, though the state did not change, so a sampler comparing stamps sees it.
+    /// A read ending mid-turn clears the stamp; plain output and a finish without a
+    /// start keep it.
+    #[test]
+    fn hs2_ndx3wf_a_turn_within_one_read_stamps_its_end() {
+        let mut d = BusyDetector::idle_from(100);
+        // Started and finished together: no change, a new stamp.
+        let both = [START, b"listening\n", DONE].concat();
+        assert!(!d.feed_at(&both, 200));
+        assert_eq!(d.idle_since_ms(), Some(200));
+        // A finish without a start, or plain output, keeps it.
+        assert!(!d.feed_at(DONE, 250));
+        assert!(!d.feed_at(b"plain", 260));
+        assert_eq!(d.idle_since_ms(), Some(200));
+        // A turn finished and the next started in one read: busy, no stamp.
+        let next = [START, DONE, START].concat();
+        assert!(d.feed_at(&next, 300));
+        assert_eq!(d.idle_since_ms(), None);
+        // Finished and started again, then finished: the last end stamps.
+        let again = [DONE, START, DONE].concat();
+        assert!(d.feed_at(&again, 400));
+        assert_eq!(d.idle_since_ms(), Some(400));
+        // A sequence split across reads stamps when its finish arrives.
+        assert!(d.feed_at(b"\x1b]133;C\x07\x1b]133;", 500));
+        assert!(d.feed_at(b"D\x07", 510));
+        assert_eq!(d.idle_since_ms(), Some(510));
     }
 }

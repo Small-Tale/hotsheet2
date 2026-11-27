@@ -833,7 +833,7 @@ fn register_terminal_connection(
                     r.set_idle(&conn_id);
                 }
             }
-            if turn.ended(busy) {
+            if turn.ended(busy, term.idle_since_ms()) {
                 crate::routes::orchestration_sessions::note_session_change(&events, &conn_id);
             }
         }
@@ -843,15 +843,27 @@ fn register_terminal_connection(
 /// HS2-95SWQ4: tells the end of a turn from the busy feed: the first idle observation
 /// after a busy one, and the first observation at all when it is idle (a session that
 /// starts idle is at a safe point from then on).
+///
+/// HS2-NDX3WF: and an idle observation whose terminal stamped a newer finished turn
+/// (`idle_since_ms`) than the last one seen. The feed is sampled, so a whole turn can
+/// fall between two samples: a tool that started slowly read idle before it printed
+/// anything, and its one turn (busy until its session API listened) ended before the
+/// next sample. That turn end was the only event that retries a pending role prompt,
+/// so the prompt was never delivered.
 #[derive(Debug, Default)]
 struct TurnEnd {
     last: Option<bool>,
+    finished: Option<u64>,
 }
 
 impl TurnEnd {
-    fn ended(&mut self, busy: bool) -> bool {
-        let ended = !busy && self.last != Some(false);
+    fn ended(&mut self, busy: bool, idle_since_ms: Option<u64>) -> bool {
+        let newer = idle_since_ms.is_some() && idle_since_ms != self.finished;
+        let ended = !busy && (self.last != Some(false) || newer);
         self.last = Some(busy);
+        if idle_since_ms.is_some() {
+            self.finished = idle_since_ms;
+        }
         ended
     }
 }
@@ -907,7 +919,7 @@ fn register_broker_terminal_connection(
                             r.set_idle(&conn_id);
                         }
                     }
-                    if turn.ended(busy) {
+                    if turn.ended(busy, info.idle_since_ms) {
                         crate::routes::orchestration_sessions::note_session_change(
                             &events, &conn_id,
                         );
@@ -1373,7 +1385,66 @@ mod turn_end_tests {
             ),
         ] {
             let mut turn = TurnEnd::default();
-            let ended: Vec<bool> = feed.iter().map(|busy| turn.ended(*busy)).collect();
+            let ended: Vec<bool> = feed.iter().map(|busy| turn.ended(*busy, None)).collect();
+            assert_eq!(ended, expected, "{feed:?}");
+        }
+    }
+
+    /// HS2-NDX3WF: a turn that fell wholly between two samples still ends one: the
+    /// second idle sample carries a newer finished-turn stamp. The same stamp again, a
+    /// stamp seen while busy, or no stamp at all ends nothing more; a later turn ends
+    /// again, whether its busy stretch was sampled or not.
+    #[test]
+    fn hs2_ndx3wf_a_turn_between_two_samples_still_ends_one() {
+        type Sample = (bool, Option<u64>);
+        for (feed, expected) in [
+            // Read idle before the tool printed, then idle after its whole first turn.
+            (
+                &[(false, Some(10)), (false, Some(40))][..],
+                &[true, true][..],
+            ),
+            // The same stamp again is the same turn.
+            (
+                &[(false, Some(10)), (false, Some(40)), (false, Some(40))],
+                &[true, true, false],
+            ),
+            // A sampled busy stretch ends once, by its state and its stamp alike.
+            (
+                &[
+                    (false, Some(10)),
+                    (true, None),
+                    (false, Some(40)),
+                    (false, Some(40)),
+                ],
+                &[true, false, true, false],
+            ),
+            // A stamp that moved while a hook still reports busy is that turn's end.
+            (
+                &[(false, Some(10)), (true, Some(40)), (false, Some(40))],
+                &[true, false, true],
+            ),
+            // Two unsampled turns, then a sampled one: each ends once.
+            (
+                &[
+                    (false, Some(10)),
+                    (false, Some(40)),
+                    (false, Some(90)),
+                    (true, None),
+                    (false, Some(120)),
+                ],
+                &[true, true, true, false, true],
+            ),
+            // No stamp (a broker that does not report one) keeps the state rule only.
+            (
+                &[(false, None), (false, None), (false, Some(5))],
+                &[true, false, true],
+            ),
+        ] {
+            let mut turn = TurnEnd::default();
+            let ended: Vec<bool> = feed
+                .iter()
+                .map(|(busy, stamp): &Sample| turn.ended(*busy, *stamp))
+                .collect();
             assert_eq!(ended, expected, "{feed:?}");
         }
     }
