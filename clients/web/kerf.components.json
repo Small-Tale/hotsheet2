@@ -10036,7 +10036,7 @@
       "id": "orchestration-project-detail",
       "name": "OrchestrationProjectDetail",
       "kind": "component",
-      "purpose": "One orchestrated project's detail in the inspector: binding with every site's location (HS2-NGP2AK) and connection, the project's own limits with a help popup (HS2-Y737GM), the Auto limits under Advanced (HS2-25KT42) and Apply Limits (HS2-7WF6JD), capacity and admission, AI tool capacity, held resources, sessions with Show in Drawer, Take Over\u2026 and Stop, and Stop Orchestrating\u2026; a section whose read fails says so in place (HS2-W27N1D).",
+      "purpose": "One orchestrated project's detail in the inspector: binding with every site's location (HS2-NGP2AK) and connection, the project's own limits with a help popup (HS2-Y737GM), the Auto limits under Advanced (HS2-25KT42) and Apply Limits (HS2-7WF6JD), this project's admission with Open in Systems (HS2-JF3EA3), held resources, sessions with Show in Drawer, Take Over\u2026 and Stop, and Stop Orchestrating\u2026; a section whose read fails says so in place (HS2-W27N1D).",
       "source": "src/components/orchestration-project-detail.tsx",
       "publicExports": [
         {

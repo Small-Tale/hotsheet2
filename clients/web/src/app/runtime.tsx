@@ -7649,8 +7649,8 @@ export async function startHotSheetWebClient() {
     setInspectorVisible,
     statsProjectId,
     setShellMode,
-    selectSystemsMachine: (machineId: string) => {
-      systems.select(machineId);
+    selectSystemsMachine: (machineId: string | undefined) => {
+      if (machineId) systems.select(machineId);
       setShellMode('systems');
     },
     selectTerminalRailProject,

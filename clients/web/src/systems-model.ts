@@ -5,7 +5,7 @@
  * the machine list, the rail rows, and the detail's tables. A reading the machine did not give reads
  * as unknown, never as zero.
  */
-import type { OrchestrationCapacity, OrchestrationToolCapacity } from './api';
+import type { OrchestrationCapacity, OrchestrationDestination, OrchestrationToolCapacity } from './api';
 import type { HostCpuFrame } from './host-cpu-feed';
 import type { HostHealthSnapshot } from './host-health';
 import { gpuLabel, systemLabel } from './orchestration-capabilities';
@@ -102,6 +102,22 @@ export function systemsMachines({
     });
   }
   return machines;
+}
+
+/**
+ * HS2-JF3EA3: the Systems machine an orchestration binding runs on, for Open in Systems. A binding is
+ * the serving tab's: through a local tab, a local destination is This Computer and a remote one is
+ * that registration; through a remote tab, a local destination is that remote, and a remote one is a
+ * machine this computer may not know, so it opens Systems without choosing.
+ */
+export function systemsMachineForDestination(
+  destination: OrchestrationDestination | null | undefined,
+  servingProjectId: string,
+): string | undefined {
+  if (!destination) return undefined;
+  const serving = parseRemoteProjectId(servingProjectId);
+  if (destination.kind === 'local') return serving ? remoteMachineId(serving.bindingId) : LOCAL_MACHINE_ID;
+  return serving ? undefined : remoteMachineId(destination.registration_id);
 }
 
 /** The selected machine, else this computer (a selected remote that went away falls back). */

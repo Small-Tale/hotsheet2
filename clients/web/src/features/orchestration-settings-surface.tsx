@@ -19,10 +19,10 @@ import {
   projectRows,
   resourceSuggestions,
   siteChoicesByProject,
-  siteReadFailure,
   usablePolicyTools,
 } from '../orchestration-settings-model';
 import { isRemoteProjectId } from '../remote-projects/identity';
+import { systemsMachineForDestination } from '../systems-model';
 import { createOrchestrationSettings } from './orchestration-settings';
 import { createOrchestrationTemplateEditing } from './orchestration-template-editing';
 
@@ -357,9 +357,9 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
         label: site.label,
         where: rows.find((item) => item.targetId === site.target_id)?.place ?? '',
         home: site.project,
-        capabilities: site.capabilities,
-        error: site.capabilities_error ? siteReadFailure(site.capabilities_error) : undefined,
       })),
+      // HS2-JF3EA3: the machine Open in Systems selects.
+      systemsMachineId: systemsMachineForDestination(state?.bindings[target]?.destination, current.id),
       // HS2-1X1TXC: the models each tool reports here, for its Models control.
       toolModels: Object.fromEntries(
         dependencies.aiTools().map((tool) => [tool.id, (tool.models ?? []).map((model) => model.id)]),

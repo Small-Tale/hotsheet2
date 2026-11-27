@@ -397,15 +397,14 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
       await expect(detail).toHaveAttribute('data-target-id', targets[label]);
     };
     await open('Web');
-    const capacity = detail.getByRole('region', { name: 'Capacity and Admission' });
-    // Capacity and admission are read, not refused.
-    await expect(capacity.getByText('Free Memory')).toBeVisible();
-    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+    // HS2-JF3EA3: only this project's admission stays; the machine facts are on Systems.
+    const capacity = detail.getByRole('region', { name: 'Admission' });
+    // Admission is read, not refused.
+    await expect(capacity.getByText('Codex', { exact: true })).toBeVisible();
     await expect(capacity).toContainText(/Can start|Refused/);
-    // HS2-ZY4Z4G: what the machine is, as the real server reports it.
-    await expect(capacity.getByText('System', { exact: true })).toBeVisible();
-    await expect(capacity).toContainText(/(macOS|Linux|Windows)[^,]*, (arm64|x86_64)/);
-    await expect(capacity.getByText('Toolchains', { exact: true })).toBeVisible();
+    await expect(capacity.getByRole('button', { name: 'Open in Systems' })).toBeVisible();
+    for (const moved of ['Free Memory', 'Toolchains', 'AI Tool Capacity'])
+      await expect(detail).not.toContainText(moved);
     await expect(detail).not.toContainText('is not available');
     await expect(detail).not.toContainText('not allowed it yet');
     // Nobody was asked: no permission request was filed for these reads.
@@ -413,12 +412,11 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
     expect(permissions.requests).toEqual([]);
     // HS2-N5BDE4: a project the policy does not list is Auto, so admission is asked for every usable tool.
     await open('Docs');
-    await expect(capacity.getByText('Free Memory')).toBeVisible();
-    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+    await expect(capacity.getByText('Codex', { exact: true })).toBeVisible();
     await expect(capacity).not.toContainText('No AI tool is allowed here yet');
     await expect(detail).not.toContainText('is not available');
     await open('Web');
-    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+    await expect(capacity.getByText('Codex', { exact: true })).toBeVisible();
 
     const directory = join('target', 'visual-captures', 'hs2-y3n3ph');
     await mkdir(directory, { recursive: true });
@@ -430,7 +428,7 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
         const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
         if (await show.isVisible()) await show.click();
       }
-      await expect(capacity.getByText('Codex Admission')).toBeVisible();
+      await expect(capacity.getByText('Codex', { exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.screenshot({
         path: join(
@@ -440,6 +438,22 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
         animations: 'disabled',
       });
     }
+    // HS2-JF3EA3: Open in Systems shows this computer, where the project runs, with what it is.
+    await page.setViewportSize(wide);
+    await capacity.getByRole('button', { name: 'Open in Systems' }).click();
+    const systems = page.locator('[data-component="systems-view"]');
+    await expect(systems).toHaveAttribute('data-machine-id', 'local');
+    await expect(
+      page.locator('[aria-label="Global Dashboards"]').first().getByRole('button', { name: 'Systems' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(systems.locator('[data-systems-section="Capabilities"]')).toContainText(
+      /(macOS|Linux|Windows)[^,]*, (arm64|x86_64)/,
+      { timeout: 30_000 },
+    );
+    await page.screenshot({
+      path: join(directory, `hs2-jf3ea3-open-in-systems-${browserName}.png`),
+      animations: 'disabled',
+    });
   } finally {
     await server.stop(page);
   }
@@ -513,8 +527,8 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     await openAdvancedLimits(page);
     await expect(limits.getByRole('spinbutton', { name: 'Sessions Here' })).toHaveValue('');
     await expect(limits.getByRole('spinbutton', { name: 'Sessions Here' })).toHaveAttribute('placeholder', 'Auto');
-    const capacity = page.getByRole('region', { name: 'Capacity and Admission' });
-    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+    const capacity = page.getByRole('region', { name: 'Admission' });
+    await expect(capacity.getByText('Codex', { exact: true })).toBeVisible();
     // Allow Codex here with its own machine limits, and apply.
     await limits.getByRole('checkbox', { name: 'Codex' }).check();
     await openAdvancedLimits(page);
@@ -539,7 +553,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     // Sessions Here left empty is Auto, stored by leaving it out.
     expect(stored.policy.targets[1]).not.toHaveProperty('max_sessions');
     // Admission is now asked for Codex here.
-    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+    await expect(capacity.getByText('Codex', { exact: true })).toBeVisible();
     await expect(limits).not.toContainText('does not list this project');
 
     // HS2-YSY7AR: the models Codex may use here and the resources work here must hold.
@@ -1731,31 +1745,24 @@ test('HS2-D4G81Q Settings shows each site OS and tools', async ({ page, browserN
     await expect(rows.nth(1)).toContainText('Site · Local on This Computer · ');
     await expect(rows.nth(1)).toContainText(system);
 
-    // The home's detail lists both sites with the machine rows of the capacity region.
+    // The home's detail names where each site is in Binding; what each machine is moved to Systems
+    // (HS2-JF3EA3), and the detail keeps this project's admission.
     await rows.nth(0).click();
     const detail = page.locator('[data-component="orchestration-project-detail"]');
     await expect(detail).toHaveAttribute('data-target-id', targets.Widgets);
-    const sites = detail.getByRole('region', { name: 'Sites' });
-    const tables = sites.locator('[data-orchestration-site]');
-    await expect(tables).toHaveCount(2);
-    await expect(tables.nth(0)).toContainText('Widgets · Home');
-    await expect(tables.nth(1)).toContainText('Widgets second clone');
-    for (const index of [0, 1]) {
-      const table = tables.nth(index);
-      await expect(table).toContainText('Local on This Computer');
-      await expect(table).toContainText(system);
-      for (const label of ['System', 'GPU', 'AI Tools', 'Toolchains'])
-        await expect(table.getByText(label, { exact: true })).toBeVisible();
-    }
-    // One place for what a machine is: with several sites the capacity region does not repeat it.
-    const capacityRegion = detail.getByRole('region', { name: 'Capacity and Admission' });
-    await expect(capacityRegion).toContainText('Free Memory');
-    await expect(capacityRegion).not.toContainText(system);
-    await expect(capacityRegion.getByText('Toolchains', { exact: true })).toHaveCount(0);
-    // The site's own detail shows the same Sites section.
+    const binding = detail.getByRole('region', { name: 'Binding' });
+    await expect(binding).toContainText('2 sites');
+    await expect(binding).toContainText('Widgets (Home)');
+    await expect(binding).toContainText('Widgets second clone');
+    await expect(detail.getByRole('region', { name: 'Sites' })).toHaveCount(0);
+    await expect(detail).not.toContainText(system);
+    const admission = detail.getByRole('region', { name: 'Admission' });
+    await expect(admission.getByRole('button', { name: 'Open in Systems' })).toBeVisible();
+    await expect(admission).toContainText(/Can start|Refused|not available|No AI tool/u);
+    // The site's own detail names the sites the same way.
     await rows.nth(1).click();
     await expect(detail).toHaveAttribute('data-target-id', targets['Widgets second clone']);
-    await expect(tables).toHaveCount(2);
+    await expect(binding).toContainText('2 sites');
     await rows.nth(0).click();
     await expect(detail).toHaveAttribute('data-target-id', targets.Widgets);
 
@@ -1771,30 +1778,19 @@ test('HS2-D4G81Q Settings shows each site OS and tools', async ({ page, browserN
           if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
           const hideInspector = page.getByRole('button', { name: 'Hide Project Detail', exact: true });
           if (await hideInspector.isVisible()) await hideInspector.click({ timeout: 3_000 }).catch(() => undefined);
-          // The rows first, then the detail sheet with the Sites section.
           await expect(rows.nth(1)).toContainText(system);
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
           await page.screenshot({ path: join(directory, `hs2-d4g81q-rows-${name}.png`), animations: 'disabled' });
           const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
           if (await show.isVisible()) await show.click();
-          // The capacity region, which leaves the machine rows to the Sites tables, at the same width.
-          const capacity = detail.getByRole('region', { name: 'Capacity and Admission' });
-          await capacity.getByText('Free Memory', { exact: true }).scrollIntoViewIfNeeded();
-          await page.screenshot({ path: join(directory, `hs2-d4g81q-capacity-${name}.png`), animations: 'disabled' });
         } else {
           await expect(rows.nth(1)).toContainText(system);
           await page.screenshot({ path: join(directory, `hs2-d4g81q-rows-${name}.png`), animations: 'disabled' });
         }
-        await expect(tables.nth(1)).toContainText(system);
-        // The Sites header with the end of the capacity region above it.
-        await sites.evaluate((element) => {
-          element.scrollIntoView({ block: 'start' });
-          let scroller = element.parentElement;
-          while (scroller && scroller.scrollHeight <= scroller.clientHeight) scroller = scroller.parentElement;
-          scroller?.scrollBy(0, -120);
-        });
+        await admission.scrollIntoViewIfNeeded();
+        await expect(admission.getByRole('button', { name: 'Open in Systems' })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-        await page.screenshot({ path: join(directory, `hs2-d4g81q-sites-${name}.png`), animations: 'disabled' });
+        await page.screenshot({ path: join(directory, `hs2-jf3ea3-detail-${name}.png`), animations: 'disabled' });
       }
     }
   } finally {

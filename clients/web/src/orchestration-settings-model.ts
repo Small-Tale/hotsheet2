@@ -213,17 +213,6 @@ export function projectRows(
     });
 }
 
-const SITE_READ_FAILURES: Readonly<Record<string, string>> = {
-  target_unavailable: 'Cannot be reached now',
-  policy_denied: 'The policy does not allow reading it',
-  permission_required: 'Waits for a person to answer a permission request',
-  permission_denied: 'A person denied reading it',
-};
-/** HS2-D4G81Q: why a site's machine could not be read, from the sites view's error code. */
-export function siteReadFailure(code: string): string {
-  return SITE_READ_FAILURES[code] ?? `Could not be read (${code})`;
-}
-
 export interface AddChoice {
   /** The open tab's project id. */
   projectId: string;

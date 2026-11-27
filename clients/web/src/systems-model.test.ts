@@ -13,6 +13,7 @@ import {
   remoteMachineId,
   selectedSystemsMachine,
   sessionRows,
+  systemsMachineForDestination,
   systemsMachines,
   toolCapacityRows,
   toolchainRows,
@@ -256,5 +257,24 @@ describe('HS2-DR0ZSQ detail tables', () => {
       toolCapacityRows([view([{ tool: 'x', state: 'unknown', verified: false, max_sessions: 3, weight: 1 }])])[0]
         .status,
     ).toEqual({ label: 'Unknown', tone: 'neutral' });
+  });
+});
+
+describe('HS2-JF3EA3 systemsMachineForDestination', () => {
+  const local = { kind: 'local' as const, server_id: 's', checkout_id: 'c', checkout_authority: 'a' };
+  const remote = {
+    kind: 'remote' as const,
+    registration_id: A,
+    identity: { server_id: 'r' },
+    checkout_id: 'c',
+    checkout_authority: 'a',
+  };
+  it('maps a binding to the machine it runs on, as the serving tab sees it', () => {
+    expect(systemsMachineForDestination(local, 'local-checkout')).toBe(LOCAL_MACHINE_ID);
+    expect(systemsMachineForDestination(remote, 'local-checkout')).toBe(remoteMachineId(A));
+    expect(systemsMachineForDestination(local, `remote:${B}:c1`)).toBe(remoteMachineId(B));
+    expect(systemsMachineForDestination(remote, `remote:${B}:c1`)).toBeUndefined();
+    expect(systemsMachineForDestination(null, 'local-checkout')).toBeUndefined();
+    expect(systemsMachineForDestination(undefined, 'local-checkout')).toBeUndefined();
   });
 });

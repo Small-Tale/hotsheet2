@@ -35,8 +35,8 @@ export interface NavigationAndTabInteractionsDependencies {
   readonly error: Signal<string>;
   readonly statsProjectId: Signal<string | undefined>;
   readonly setShellMode: (mode: ProjectTabBarMode) => void;
-  /** Show Systems with one machine selected (HS2-DR0ZSQ). */
-  readonly selectSystemsMachine: (machineId: string) => void;
+  /** Show Systems, with one machine selected when named (HS2-DR0ZSQ, HS2-JF3EA3). */
+  readonly selectSystemsMachine: (machineId: string | undefined) => void;
   readonly selectTerminalRailProject: (next: string) => void;
   readonly selectTicketView: (next: TicketView, { refresh }?: { refresh?: boolean }) => void;
   readonly selectProjectTab: (next: string) => void;
@@ -204,8 +204,8 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
   );
   lifetime.add(
     delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.selectSystemsMachine.selector, (_event, target) => {
+      // Open in Systems without a known machine opens the screen on its current selection (HS2-JF3EA3).
       const machineId = data(target.closest<HTMLElement>('[data-machine-id]') ?? target).machineId;
-      if (!machineId) return;
       statsProjectId.value = undefined;
       dependencies.selectSystemsMachine(machineId);
     }),
