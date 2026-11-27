@@ -739,6 +739,57 @@ fn hs2_vdf7vs_a_cancel_before_the_closer_is_registered_still_closes_the_stream()
     );
 }
 
+// ---- HS2-4XC2Y3: the stream closer itself, on every platform ---------------------------
+
+#[test]
+fn hs2_4xc2y3_the_stream_closer_ends_only_its_own_blocked_read() {
+    use upstash::transport::{Event, RestTransport};
+
+    let fake = Fake::start();
+    let transport = UreqTransport::new(&fake.url, TOKEN);
+    let (mut first, mut second) = (
+        transport
+            .subscribe("synthetic-a", Duration::from_secs(600))
+            .unwrap(),
+        transport
+            .subscribe("synthetic-b", Duration::from_secs(600))
+            .unwrap(),
+    );
+    assert_eq!(first.next().unwrap(), Event::Subscribed);
+    assert_eq!(second.next().unwrap(), Event::Subscribed);
+    let close = first
+        .closer()
+        .expect("the real transport can close a stream");
+
+    // A reader blocked on the first stream (nothing will ever be published to it).
+    let (read, ended) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = read.send(first.next());
+    });
+    let began = Instant::now();
+    close();
+    let outcome = ended.recv_timeout(PROMPT).expect("the blocked read ended");
+    assert!(began.elapsed() < PROMPT, "{:?}", began.elapsed());
+    assert!(matches!(outcome, Ok(Event::Closed) | Err(_)), "{outcome:?}");
+    until_closed_by_client(&fake, 1);
+    // Closing again finds nothing left to close.
+    close();
+
+    // The other stream, on its own agent, is still open and still delivers.
+    assert_eq!(
+        transport
+            .command(&[
+                serde_json::json!("PUBLISH"),
+                serde_json::json!("synthetic-b"),
+                serde_json::json!("hello")
+            ])
+            .unwrap(),
+        serde_json::json!(1)
+    );
+    assert_eq!(second.next().unwrap(), Event::Message("hello".into()));
+    assert_eq!(fake.closed_by_client(), 1);
+}
+
 // ---- listing and namespaces ---------------------------------------------------------
 
 #[test]

@@ -343,6 +343,19 @@ impl Fake {
         };
         match name.as_str() {
             "PING" => Ok(json!("PONG")),
+            // HS2-4XC2Y3: Redis's PUBLISH, answering with the subscribers reached.
+            "PUBLISH" => {
+                let (channel, payload) = (text(1)?, text(2)?);
+                let mut store = self.store.lock().unwrap();
+                publish(&mut store, &channel, &payload);
+                Ok(json!(
+                    store
+                        .subscribers
+                        .iter()
+                        .filter(|(name, _)| *name == channel)
+                        .count()
+                ))
+            }
             "SMEMBERS" => {
                 let key = text(1)?;
                 let now = self.now_ms();

@@ -809,6 +809,9 @@ pruned with HS2-FYXHA6.
   `WaitCancel` right after subscribing and reads the flag after registering, so a cancel that lands
   while the subscribe is in flight drops (and so closes) the stream unread. Before this, the stream
   stayed open until its next event or its lifetime (up to the holder's lease left).
+  The close works the same on every platform, Windows included (HS2-4XC2Y3): the agent shuts its
+  connection down with the standard library's socket shutdown, with no platform-specific lookup.
+  A transport-level test pins that the closer ends a blocked read on its own stream only.
 - **Rate limits and errors.** A 429 is retried at most three times after the `Retry-After` delay
   (capped at 2 s); more is `backend_unreachable` naming the configuration. A 401 is `unsupported`
   and names `resource backend secret <id> token`; a refused command is a storage error; an unreachable
