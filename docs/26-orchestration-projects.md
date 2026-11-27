@@ -1066,6 +1066,10 @@ hotsheet-cli --actor-role human -C <configured-host-source> orchestration policy
 ```
 
 `--file` takes a policy body or the output of `policy show`, and `-` reads stdin.
+A member the policy does not have (such as a stray `schema_version`) is refused with
+`invalid_request`, naming it by its path: "`policy.schema_version` is not a known
+field" (HS2-4F9VGQ). Every orchestration request names an unknown member the same way;
+other malformed bodies keep the generic refusal, which never echoes a value.
 `policy set` without `--expected-revision` reads the current revision first, so a
 repeated setup run changes nothing while a concurrent edit still conflicts.
 `policy start` and `policy pause` are Start Orchestration and Pause of §26.26 (HS2-D9KP86):
@@ -5961,6 +5965,12 @@ path, and the question is visible until the person answers:
   the author of the feedback request the note answers, or of the newest unanswered one
   (`asker` in `crates/hotsheet-server/src/routes/feedback_session.rs`). The planner
   reads the answer, plans by it and finishes as usual. Nothing polls.
+- **Answers on a goal the planner did not claim (HS2-A1M4KN).** A template's reuse
+  `CHOICE` is asked without claiming the goal, so the goal stays Not Started. A person's
+  note that answers an AI's question on a Not Started or Backlog ticket is pushed too,
+  but only into the live session of the AI that asked: no other session, chooser or
+  start action is offered, and nothing is pushed when that session is gone (the note
+  stays for the AI's next read). A closed ticket never notifies.
 
 ### What the planner does
 
@@ -8086,11 +8096,12 @@ MCP `hotsheet_targets` adds `template_list`, `template_show`, `template_validate
 `template_set`, `template_retire`, `template_save_goal`, `template_preview`,
 `template_apply` (with `template_id`, `inputs`, `choices`, `tool`, `operation_id`),
 `template_apply_show` and `template_accept` (with `operation_id`, or `all: true` for every
-held plan, HS2-0YHA2S; refused for an AI actor, HS2-36XDDX). The `hotsheet-planner` skill (version 7) plans a goal tagged
+held plan, HS2-0YHA2S; refused for an AI actor, HS2-36XDDX). The `hotsheet-planner` skill (version 8) plans a goal tagged
 `orchestration-template` from its brief (§26.25 "What the planner does"): it adapts the
 steps to the projects as they are now, searches first for a find-or-create step and,
 when it reuses a ticket, asks once with a `CHOICE` per reused step whether to keep it
-or create a new ticket.
+or create a new ticket. It asks without claiming the goal; the person's answer is still
+pushed to it (HS2-A1M4KN, §26.25 "A planner asks instead of stalling").
 
 ## 26.33 Scheduled and event triggers (HS2-KXKA7X)
 

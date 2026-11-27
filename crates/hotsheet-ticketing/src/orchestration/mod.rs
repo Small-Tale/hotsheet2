@@ -275,6 +275,11 @@ pub use workflow::{ObservedTarget, Orchestration, TargetObserver};
 pub enum OrchestrationError {
     #[error("invalid orchestration request: {0}")]
     Invalid(&'static str),
+    /// HS2-4F9VGQ: the request carries a member nothing reads, such as a policy file's
+    /// extra top-level field. `path` names it from the body's root (`policy.extra`); the
+    /// code stays `invalid_request`.
+    #[error("invalid orchestration request: `{path}` is not a known field")]
+    UnknownField { path: String },
     #[error("orchestration state changed; read it and review again")]
     Conflict,
     #[error("orchestration target was not found")]
@@ -362,7 +367,7 @@ impl OrchestrationError {
     /// Content-free adapter code; callers must not format Debug/source chains into DTOs.
     pub fn code(&self) -> &'static str {
         match self {
-            Self::Invalid(_) => "invalid_request",
+            Self::Invalid(_) | Self::UnknownField { .. } => "invalid_request",
             Self::Conflict => "conflict",
             Self::NotFound => "target_not_found",
             Self::Removed => "target_removed",

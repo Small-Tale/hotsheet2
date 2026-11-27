@@ -658,7 +658,7 @@ fn remote_error(error: RemoteError) -> OrchestrationError {
 /// One status mapping for HTTP and MCP; messages use Display/code only, never source chains.
 pub fn error_status(error: &OrchestrationError) -> u16 {
     match error {
-        OrchestrationError::Invalid(_) => 400,
+        OrchestrationError::Invalid(_) | OrchestrationError::UnknownField { .. } => 400,
         OrchestrationError::Conflict | OrchestrationError::Capacity => 409,
         OrchestrationError::NotFound => 404,
         OrchestrationError::Removed => 410,

@@ -529,7 +529,8 @@ fn hs2_j8prtv_orchestration_capacity_routes_and_hosted_routes() {
                     &body,
                     &mut tx
                 ),
-                Err(OrchestrationError::Invalid(_))
+                // HS2-4F9VGQ: an unknown member (`path`) is named.
+                Err(OrchestrationError::Invalid(_) | OrchestrationError::UnknownField { .. })
             ),
             "{body}"
         );
@@ -602,7 +603,7 @@ fn hs2_j8prtv_orchestration_capacity_routes_and_hosted_routes() {
             &json!({"actor":actor,"tool":"codex","limits":{"max_sessions":64}}),
             &mut tx
         ),
-        Err(OrchestrationError::Invalid(_))
+        Err(OrchestrationError::Invalid(_) | OrchestrationError::UnknownField { .. })
     ));
 }
 

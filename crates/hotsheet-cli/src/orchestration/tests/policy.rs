@@ -573,7 +573,7 @@ fn hs2_tzjykh_start_and_pause_edit_the_stored_policy_at_its_revision() {
             json!({"automatic":true,"automatic_edit":true,"actor":person}),
             &mut tx
         ),
-        Err(OrchestrationError::Invalid(_))
+        Err(OrchestrationError::Invalid(_) | OrchestrationError::UnknownField { .. })
     ));
 
     // No policy: the defaults, with placement on, in one write.
@@ -802,4 +802,93 @@ fn hs2_tzjykh_role_sessions_edit_one_target_at_the_stored_revision() {
     put(json!({"target_id":id(2),"auto":true}), &mut tx).unwrap();
     assert_eq!(stored(&f), Value::Null);
     assert_eq!(f.runtime.policy(&f.owner.id).unwrap().policy, Some(listed));
+}
+
+/// HS2-4F9VGQ: a policy carrying a member nothing reads is refused with the field named
+/// by its path, through validate and set alike, and the refusal code stays
+/// `invalid_request` (400). Nested unknown members name their place; a request whose
+/// failure is not an unknown field keeps the generic refusal and echoes no value.
+#[test]
+fn hs2_4f9vgq_an_unknown_policy_field_is_named_by_its_path() {
+    let f = fixture();
+    let mut rng = Rng(400);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let base = format!("/checkouts/{}/orchestration", f.owner.id);
+    let mut refused = |method: &str, path: &str, body: Value| {
+        f.runtime
+            .request(method, &format!("{base}/{path}"), &body, &mut tx)
+            .unwrap_err()
+    };
+    let limits = json!({"machine": {"max_sessions": 2}});
+    let mut extra = limits.clone();
+    extra["schema_version"] = json!(1);
+    for (method, path, body) in [
+        ("POST", "policy/validate", json!({"policy": extra.clone()})),
+        ("POST", "policy/dry-run", json!({"policy": extra.clone()})),
+        (
+            "PUT",
+            "policy",
+            json!({"expected_revision": null, "policy": extra.clone(),
+                "actor": {"role": "human", "id": "maintainer"}}),
+        ),
+    ] {
+        let error = refused(method, path, body);
+        assert_eq!(error.code(), "invalid_request", "{path}");
+        assert_eq!(error_status(&error), 400, "{path}");
+        assert_eq!(
+            error.to_string(),
+            "invalid orchestration request: `policy.schema_version` is not a known field",
+            "{path}"
+        );
+    }
+    // A nested member names its place, and an unknown top-level request member too.
+    let nested = refused(
+        "POST",
+        "policy/validate",
+        json!({"policy": {"machine": {"max_sessions": 2, "max_sesions": 3}}}),
+    );
+    assert_eq!(
+        nested.to_string(),
+        "invalid orchestration request: `policy.machine.max_sesions` is not a known field"
+    );
+    let top = refused(
+        "POST",
+        "policy/validate",
+        json!({"policy": limits.clone(), "dry": true}),
+    );
+    assert_eq!(
+        top.to_string(),
+        "invalid orchestration request: `dry` is not a known field"
+    );
+    // A field name is the caller's text: kept printable and short.
+    let mut odd = limits.clone();
+    odd[format!("bad name\n{}", "x".repeat(300))] = json!(1);
+    let odd = refused("POST", "policy/validate", json!({"policy": odd}));
+    let OrchestrationError::UnknownField { path } = &odd else {
+        panic!("{odd:?}");
+    };
+    assert!(path.starts_with("policy.badname"), "{path}");
+    assert_eq!(path.chars().count(), 120, "{path}");
+    // A wrong type is not an unknown field: the generic refusal, no value echoed.
+    let typed = refused(
+        "POST",
+        "policy/validate",
+        json!({"policy": {"machine": {"max_sessions": "synthetic-secret"}}}),
+    );
+    assert!(matches!(typed, OrchestrationError::Invalid(_)), "{typed:?}");
+    assert!(!typed.to_string().contains("synthetic-secret"));
+    // Without the extra member the same policy validates.
+    let valid = f
+        .runtime
+        .request(
+            "POST",
+            &format!("{base}/policy/validate"),
+            &json!({"policy": limits}),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(valid["valid"], true, "{valid}");
 }

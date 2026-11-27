@@ -1382,7 +1382,7 @@ fn hs2_42tara_routes_are_machine_local_and_share_the_runtime() {
         assert!(
             matches!(
                 post(operation, body, &mut tx),
-                Err(OrchestrationError::Invalid(_))
+                Err(OrchestrationError::Invalid(_) | OrchestrationError::UnknownField { .. })
             ),
             "{operation}"
         );
