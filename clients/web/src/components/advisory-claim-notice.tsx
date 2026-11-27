@@ -3,6 +3,7 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 
 import { advisoryRenewExpiry } from '../advisory-claim-resource';
 import type { AdvisoryClaimStatus } from '../api';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 
 export interface AdvisoryClaimNoticeProps {
   status?: AdvisoryClaimStatus;
@@ -88,21 +89,30 @@ export function AdvisoryClaimNotice({ status, loading, busy, error, worker, oper
           !loading ? (
             <>
               {canClaim && (
-                <Button type="button" emphasis="secondary" action="advisory-claim">
+                <Button type="button" emphasis="secondary" action={NOTIFICATIONS_AND_LINKS_ACTIONS.advisoryClaim.value}>
                   Claim Advisory
                 </Button>
               )}
               {canRenew && (
-                <Button type="button" emphasis="secondary" action="advisory-renew">
+                <Button type="button" emphasis="secondary" action={NOTIFICATIONS_AND_LINKS_ACTIONS.advisoryRenew.value}>
                   Renew Advisory
                 </Button>
               )}
               {canRelease && (
-                <Button type="button" emphasis="secondary" action="advisory-release">
+                <Button
+                  type="button"
+                  emphasis="secondary"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.advisoryRelease.value}
+                >
                   Release Advisory
                 </Button>
               )}
-              <Button type="button" emphasis="secondary" action="advisory-refresh" disabled={busy}>
+              <Button
+                type="button"
+                emphasis="secondary"
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.advisoryRefresh.value}
+                disabled={busy}
+              >
                 Refresh
               </Button>
             </>

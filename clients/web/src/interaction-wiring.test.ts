@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { AttrSpec } from 'kerfjs';
 import ts from 'typescript';
@@ -176,7 +178,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(490); // HS2-W1XEH7 added Show minimized; HS2-HC67SP added the project heading toggle; HS2-EEBM4W added the HS1 job details close; HS2-S2T4VJ added drawer Retry and Close; HS2-4Q9DVS added minimize and restore; HS2-RWA8V6 added backup controls; HS2-7VB81E added the existing-repository choice, HS2-RJRRSF added selected terminal right-click, HS2-4B0KSD added Renew, Dismiss and Pair Again (3), HS2-WNK73S added Retry now, HS2-3GJZGG feature checkboxes and Restore Defaults, HS2-Q8WF64 added Minimize (2), HS2-7HPXCY added phone search (3), HS2-FN018Q auto-group toggle, HS2-MN0MXT removed the preview action; HS2-CHH28E, HS2-6T8C1D, HS2-J4G9GB, HS2-MCGCPQ, HS2-BT4KN6, HS2-KBVZV1, HS2-NHK8V8, HS2-EFTHS6, HS2-9AN4DN, HS2-JJ9RYN, HS2-TWZSZF, HS2-N2AG8V, HS2-PRXD39, HS2-EQVZTZ, HS2-F788GW, HS2-B8M0QB, HS2-63D6F9, HS2-1YXCCW, HS2-RFJ1GN, HS2-2Z11A5, HS2-PWNPM2, HS2-9YVX6Q, HS2-ZP869N, HS2-KPJWBK, HS2-C7GMQN, HS2-8QJ6W3, HS2-5E8Y9R, HS2-Q0GWXT, HS2-NBDXPW, HS2-M5QPED
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(497); // HS2-K7CZR2 moved the advisory and note-delivery actions out of a raw body listener (7); HS2-W1XEH7 added Show minimized; HS2-HC67SP added the project heading toggle; HS2-EEBM4W added the HS1 job details close; HS2-S2T4VJ added drawer Retry and Close; HS2-4Q9DVS added minimize and restore; HS2-RWA8V6 added backup controls; HS2-7VB81E added the existing-repository choice, HS2-RJRRSF added selected terminal right-click, HS2-4B0KSD added Renew, Dismiss and Pair Again (3), HS2-WNK73S added Retry now, HS2-3GJZGG feature checkboxes and Restore Defaults, HS2-Q8WF64 added Minimize (2), HS2-7HPXCY added phone search (3), HS2-FN018Q auto-group toggle, HS2-MN0MXT removed the preview action; HS2-CHH28E, HS2-6T8C1D, HS2-J4G9GB, HS2-MCGCPQ, HS2-BT4KN6, HS2-KBVZV1, HS2-NHK8V8, HS2-EFTHS6, HS2-9AN4DN, HS2-JJ9RYN, HS2-TWZSZF, HS2-N2AG8V, HS2-PRXD39, HS2-EQVZTZ, HS2-F788GW, HS2-B8M0QB, HS2-63D6F9, HS2-1YXCCW, HS2-RFJ1GN, HS2-2Z11A5, HS2-PWNPM2, HS2-9YVX6Q, HS2-ZP869N, HS2-KPJWBK, HS2-C7GMQN, HS2-8QJ6W3, HS2-5E8Y9R, HS2-Q0GWXT, HS2-NBDXPW, HS2-M5QPED
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))
@@ -258,5 +260,46 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
     const getters = [...port.matchAll(/\bget (\w+)\(\)/g)].map((match) => match[1]);
     expect(getters.length).toBeGreaterThan(20);
     for (const name of getters) expect(port).toContain(`set ${name}(value)`);
+  });
+});
+
+describe('hs2_k7czr2 page listeners are owned by a lifetime', () => {
+  const srcRoot = fileURLToPath(new URL('.', import.meta.url));
+  const sources = (directory: string): string[] =>
+    readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) return sources(path);
+      return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+    });
+  const files = sources(srcRoot).map((path) => [relative(srcRoot, path), readFileSync(path, 'utf8')] as const);
+
+  it('hs2_k7czr2_no_raw_body_listeners keeps document.body listeners in sanctioned modules', () => {
+    // Each sanctioned module removes its listener through its own lifetime; everything else
+    // registers through Kerf `delegate()` in an interaction group's scope.
+    const sanctioned: Record<string, string> = {
+      'features/halted-sessions.tsx': 'document.body.removeEventListener(TOP_LAYER_PRESENTED_EVENT, acknowledge)',
+    };
+    const offenders = files
+      .filter(([, source]) => /document\.body\.addEventListener\(/.test(source))
+      .map(([path]) => path.split('\\').join('/'));
+    expect(offenders.sort()).toEqual(Object.keys(sanctioned).sort());
+    for (const [path, removal] of Object.entries(sanctioned))
+      expect(files.find(([file]) => file.split('\\').join('/') === path)![1]).toContain(removal);
+  });
+
+  it('hs2_k7czr2_overlay_disposer_retained keeps every wireTopLayerOverlays disposer', () => {
+    // Call sites, not comments that name the helper.
+    const calls = files.flatMap(([path, source]) =>
+      path.startsWith('top-layer-overlay')
+        ? []
+        : source
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.includes('wireTopLayerOverlays(') && !/^(?:\/\/|\*|\/\*)/.test(line))
+            .map((line) => [path.split('\\').join('/'), line] as const),
+    );
+    expect(calls.map(([path]) => path).sort()).toEqual(['interactions/terminals.ts', 'ux-demo/main.tsx']);
+    // A bare statement discards the disposer; the group or demo scope must own it.
+    for (const [, line] of calls) expect(line).toMatch(/^(?:lifetime|demoListeners)\.add\(wireTopLayerOverlays\(/);
   });
 });

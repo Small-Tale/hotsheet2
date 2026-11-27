@@ -129,7 +129,16 @@ export interface NotificationAndLinkInteractionsDependencies {
   /** App Settings → Devices (HS2-DXM0YN); absent in compositions without it. */
   readonly remoteDevices?: RemoteDevices;
   readonly registeredProjects?: RegisteredProjects;
+  /** The inspector's advisory process-claim notice actions (HS2-K7CZR2). */
+  readonly handleAdvisoryAction: (action: AdvisoryAction) => Promise<void>;
+  /** The app-level Choose/Start an AI Session prompt after a human note (HS2-6RXBS9). */
+  readonly chooseFeedbackSession: (ticketId: string, connectionId: string) => Promise<void>;
+  readonly dismissFeedbackDelivery: () => void;
+  readonly startFeedbackSession: () => void;
 }
+
+/** The `data-action` values of the advisory process-claim notice (HS2-K7CZR2). */
+export type AdvisoryAction = 'advisory-claim' | 'advisory-renew' | 'advisory-release' | 'advisory-refresh';
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireNotificationAndLinkInteractions(dependencies: NotificationAndLinkInteractionsDependencies) {
@@ -187,6 +196,10 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     remoteDevices,
     registeredProjects,
     clientNotifications,
+    handleAdvisoryAction,
+    chooseFeedbackSession,
+    dismissFeedbackDelivery,
+    startFeedbackSession,
   } = dependencies;
   const permissionRuleEditorFocus = createPermissionRuleEditorFocus(document, () => selectedProjectId.value);
   lifetime.add(permissionRuleEditorFocus.dispose);
@@ -909,6 +922,49 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
         if (ticketLinkChoice.value) cancelTicketLinkChoice();
       },
     ),
+  );
+  // The advisory claim notice and the note-delivery prompt, owned by this group's scope rather than a
+  // raw page listener (HS2-K7CZR2).
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.advisoryClaim.selector, () => {
+      void handleAdvisoryAction('advisory-claim');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.advisoryRenew.selector, () => {
+      void handleAdvisoryAction('advisory-renew');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.advisoryRelease.selector, () => {
+      void handleAdvisoryAction('advisory-release');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.advisoryRefresh.selector, () => {
+      void handleAdvisoryAction('advisory-refresh');
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.chooseFeedbackSession.selector,
+      (_event, target) => {
+        const { ticketId, connectionId } = data(target);
+        if (ticketId && connectionId) void chooseFeedbackSession(ticketId, connectionId);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.dismissFeedbackDelivery.selector, () => {
+      dismissFeedbackDelivery();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.startFeedbackSession.selector, () => {
+      startFeedbackSession();
+    }),
   );
   // App Settings → Notifications (HS2-DPBJJA): the same handlers the catalog demo installs.
   if (notificationSettings) lifetime.add(wireNotificationSettings(document.body, notificationSettings));

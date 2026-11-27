@@ -10,7 +10,7 @@ import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { ConversationMessage } from '../src/ai-conversation';
-import type { AdvisoryClaimStatus, FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
+import type { AdvisoryClaimStatus, ChangeEvent, FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
 import { isFeedbackNeeded } from '../src/feedback-needed';
@@ -28,6 +28,14 @@ import { openUpstreamSocket, proxyFetch, realTicketServer, routeProjectChangeSoc
 import { printThenEcho } from './terminal-fixture-command';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
+
+/**
+ * The server's `permission_asked` nudge (`crates/hotsheet-server/src/lib.rs`): `store` is the asking
+ * project's identity (`checkout:<id>` for a registered checkout), `slug` is the tool, and `message`
+ * is omitted rather than null (HS2-K7CZR2).
+ */
+const permissionAskedEvent = (id: string, tool = 'Bash') =>
+  ({ store: 'checkout:demo-checkout', kind: 'permission_asked', id, slug: tool }) satisfies ChangeEvent;
 
 test('routes live server notices into the project inbox and bell (HS2-ZP869N)', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
@@ -10741,7 +10749,7 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: '', kind: 'permission_asked', id: '77', slug: 'Bash', message: null }],
+      events: [permissionAskedEvent('77')],
       overflow: false,
     },
   });
@@ -19140,7 +19148,7 @@ for (const width of [1280, 390]) {
     await expect.poll(() => polls.length).toBeGreaterThan(0);
     cursor += 1;
     await polls.shift()!.fulfill({
-      json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '64', slug: 'Bash' }], overflow: false },
+      json: { cursor, events: [permissionAskedEvent('64')], overflow: false },
     });
     await expect(popup).toContainText('cargo test');
     await expect(title).toBeFocused();
@@ -19194,7 +19202,7 @@ for (const width of [1280, 390]) {
     await expect.poll(() => polls.length).toBeGreaterThan(0);
     cursor += 1;
     await polls.shift()!.fulfill({
-      json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '65', slug: 'Bash' }], overflow: false },
+      json: { cursor, events: [permissionAskedEvent('65')], overflow: false },
     });
     await expect(popup).toContainText('cargo test');
     await expect.poll(() => popup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
@@ -21636,7 +21644,7 @@ for (const width of [1280, 390]) {
     ];
     cursor += 1;
     await polls.shift()!.fulfill({
-      json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '61', slug: 'Bash' }], overflow: false },
+      json: { cursor, events: [permissionAskedEvent('61')], overflow: false },
     });
     await expect(popup).toBeVisible();
     await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(before);
@@ -21700,7 +21708,7 @@ test('renders exactly once when the long poll announces a permission request', a
   ];
   cursor += 1;
   await polls.shift()!.fulfill({
-    json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '77', slug: 'Bash' }], overflow: false },
+    json: { cursor, events: [permissionAskedEvent('77')], overflow: false },
   });
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
@@ -21981,7 +21989,7 @@ test('hides a permission popup when its server disconnects and restores only liv
     await polls.shift()!.fulfill({
       json: {
         cursor,
-        events: [{ store: '', kind: 'permission_asked', id: String(id), slug: 'Bash' }],
+        events: [permissionAskedEvent(String(id))],
         overflow: false,
       },
     });
@@ -22023,7 +22031,7 @@ test('records externally resolved empty-action permissions in notification histo
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: '', kind: 'permission_asked', id: '81', slug: 'ToolSearch' }],
+      events: [permissionAskedEvent('81', 'ToolSearch')],
       overflow: false,
     },
   });
@@ -40568,7 +40576,7 @@ test('reconciles permissions from the change stream with no polling timer, backi
   pending = [{ id: 31, connection: 'codex-session', tool: 'Bash', action: 'cargo test', project: '/work/demo' }];
   cursor += 1;
   await polls.shift()!.fulfill({
-    json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '31', slug: 'Bash' }], overflow: false },
+    json: { cursor, events: [permissionAskedEvent('31')], overflow: false },
   });
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();

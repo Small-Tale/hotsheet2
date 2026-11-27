@@ -95,7 +95,7 @@ const openStagedContextMenus = () => {
 };
 new MutationObserver(openStagedContextMenus).observe(root, { childList: true, subtree: true });
 // Magnified terminals are manual popovers in the top layer, as in the app (HS2-Z9PQSC).
-wireTopLayerOverlays(root);
+demoListeners.add(wireTopLayerOverlays(root));
 openStagedContextMenus();
 // The app clears its menu signals through capture-phase Escape and outside-press listeners; the
 // demo's bubble-phase handlers run after Kerf's menu has consumed the key, so mirror the menu's own

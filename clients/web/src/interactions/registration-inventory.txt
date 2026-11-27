@@ -384,6 +384,13 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="open-linke
 notifications-and-links	delegate	document.body	'click'	'[data-action="select-ticket-link-match"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-ticket-link-choice"]'
 notifications-and-links	delegateCapture	document.body	'kui-request-close'	'[data-dialog-component="ticket-link-choice-dialog"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="advisory-claim"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="advisory-renew"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="advisory-release"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="advisory-refresh"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="choose-feedback-session"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="dismiss-feedback-delivery"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="start-feedback-session"]'
 notifications-and-links	wireNotificationSettings	document.body
 notifications-and-links	wireRemoteDevicesSettings	document.body
 notifications-and-links	wireRegisteredProjectsSettings	document.body

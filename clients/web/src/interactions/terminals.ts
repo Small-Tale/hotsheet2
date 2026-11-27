@@ -274,8 +274,9 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalDrawerSelected,
   } = dependencies;
   // The magnified terminal (HS2-Z9PQSC) and the shell's permission popup (HS2-ZESCM2) are manual
-  // popovers; keep them in the top layer as Kerf renders them.
-  wireTopLayerOverlays(document.body);
+  // popovers; keep them in the top layer as Kerf renders them. The group teardown disconnects the
+  // overlay observer and its capture listeners (HS2-K7CZR2).
+  lifetime.add(wireTopLayerOverlays(document.body));
   lifetime.add(
     delegate(document.body, 'focusin', '.terminal-session:not([hidden]) .xterm-helper-textarea', (_event, target) => {
       const viewport = target.closest<HTMLElement>('[data-terminal-id]');

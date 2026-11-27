@@ -13,6 +13,7 @@ import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { createFeedbackResponseDrafts } from '../feedback-response-drafts';
 import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { KEYBOARD_SHORTCUT_STORAGE_KEY, type ShortcutChord } from '../keyboard-shortcuts';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
 import {
@@ -24,6 +25,10 @@ import {
   type InspectorAndEditorInteractionsDependencies,
   wireInspectorAndEditorInteractions,
 } from './inspector-and-editor';
+import {
+  type NotificationAndLinkInteractionsDependencies,
+  wireNotificationAndLinkInteractions,
+} from './notifications-and-links';
 import { type ProjectLifecycleInteractionsDependencies, wireProjectLifecycleInteractions } from './project-lifecycle';
 import { type RepositoryInteractionsDependencies, wireRepositoryInteractions } from './repository';
 import { type TerminalInteractionsDependencies, wireTerminalInteractions } from './terminals';
@@ -1033,5 +1038,105 @@ describe('HS2-VBFSZJ response input lifecycle', () => {
       dispose();
       vi.useRealTimers();
     }
+  });
+});
+
+describe('HS2-K7CZR2 group-owned page listeners', () => {
+  it('disconnects the top-layer overlay wiring when the terminals group is torn down', () => {
+    const observers: Array<{ observing: boolean }> = [];
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        readonly state = { observing: false };
+        constructor() {
+          observers.push(this.state);
+        }
+        observe() {
+          this.state.observing = true;
+        }
+        disconnect() {
+          this.state.observing = false;
+        }
+      },
+    );
+    vi.stubGlobal('customElements', { whenDefined: () => Promise.resolve() });
+    const attached = new Map<string, number>(),
+      key = (type: string, capture?: boolean | AddEventListenerOptions) =>
+        `${type}:${String(typeof capture === 'object' ? Boolean(capture.capture) : Boolean(capture))}`;
+    Object.assign(document.body, {
+      querySelectorAll: () => [],
+      addEventListener: (type: string, _listener: unknown, capture?: boolean) => {
+        attached.set(key(type, capture), (attached.get(key(type, capture)) ?? 0) + 1);
+      },
+      removeEventListener: (type: string, _listener: unknown, capture?: boolean) => {
+        attached.set(key(type, capture), (attached.get(key(type, capture)) ?? 0) - 1);
+      },
+    });
+    const dependencies = {
+      terminalSearchModel: createSearchFieldModel(),
+      terminalSearchOpen: signal(false),
+      terminalSearchResults: signal(undefined),
+      terminalDrawerSelected: signal('grid'),
+    } as unknown as TerminalInteractionsDependencies;
+    // Wire, tear down, and wire again: each generation owns exactly one observer and listener set.
+    for (let generation = 1; generation <= 2; generation += 1) {
+      const dispose = wireTerminalInteractions(dependencies);
+      expect(observers).toHaveLength(generation);
+      expect(observers.at(-1)!.observing).toBe(true);
+      for (const type of ['keydown:true', 'cancel:true', 'close:true', 'focusout:true', 'wa-show:false'])
+        expect(attached.get(type), type).toBe(1);
+      dispose();
+      expect(observers.every((observer) => !observer.observing)).toBe(true);
+      expect([...attached.values()].every((count) => count === 0)).toBe(true);
+    }
+  });
+
+  it('routes advisory and note-delivery actions through their specs and detaches them on teardown', () => {
+    const calls: unknown[][] = [],
+      dependencies = {
+        selectedProjectId: signal('a'),
+        handleAdvisoryAction: (action: string) => {
+          calls.push(['advisory', action]);
+          return Promise.resolve();
+        },
+        chooseFeedbackSession: (ticketId: string, connectionId: string) => {
+          calls.push(['choose', ticketId, connectionId]);
+          return Promise.resolve();
+        },
+        dismissFeedbackDelivery: () => calls.push(['dismiss']),
+        startFeedbackSession: () => calls.push(['start']),
+      } as unknown as NotificationAndLinkInteractionsDependencies;
+    const click = (spec: { selector: string }, dataset: Record<string, string> = {}) => {
+      dispatchDelegated(new Event('click'), spec.selector, target(dataset));
+    };
+    const dispose = wireNotificationAndLinkInteractions(dependencies);
+    const actions = NOTIFICATIONS_AND_LINKS_ACTIONS;
+    click(actions.advisoryClaim);
+    click(actions.advisoryRenew);
+    click(actions.advisoryRelease);
+    click(actions.advisoryRefresh);
+    click(actions.chooseFeedbackSession, { ticketId: 't1', connectionId: 'c1' });
+    // A choice without its connection is ignored rather than sent half-addressed.
+    click(actions.chooseFeedbackSession, { ticketId: 't1' });
+    click(actions.dismissFeedbackDelivery);
+    click(actions.startFeedbackSession);
+    expect(calls).toEqual([
+      ['advisory', 'advisory-claim'],
+      ['advisory', 'advisory-renew'],
+      ['advisory', 'advisory-release'],
+      ['advisory', 'advisory-refresh'],
+      ['choose', 't1', 'c1'],
+      ['dismiss'],
+      ['start'],
+    ]);
+    for (const spec of [actions.advisoryClaim, actions.chooseFeedbackSession, actions.startFeedbackSession])
+      expect(handler('click', spec.selector)).toBeTypeOf('function');
+    dispose();
+    calls.length = 0;
+    click(actions.advisoryClaim);
+    click(actions.chooseFeedbackSession, { ticketId: 't1', connectionId: 'c1' });
+    click(actions.dismissFeedbackDelivery);
+    click(actions.startFeedbackSession);
+    expect(calls).toEqual([]);
   });
 });

@@ -5642,33 +5642,13 @@ export async function startHotSheetWebClient() {
       />
     );
   }
-  document.body.addEventListener('click', (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const advisoryAction = target.closest<HTMLElement>('[data-action^="advisory-"]')?.dataset.action;
-    if (advisoryAction) {
-      void handleAdvisoryAction(advisoryAction);
-      return;
-    }
-    const choose = target.closest<HTMLElement>('[data-action="choose-feedback-session"]');
-    if (choose) {
-      const ticketId = choose.dataset.ticketId,
-        connectionId = choose.dataset.connectionId;
-      if (ticketId && connectionId) void chooseFeedbackSession(ticketId, connectionId);
-      return;
-    }
-    if (target.closest('[data-action="dismiss-feedback-delivery"]')) {
-      dismissFeedbackDelivery();
-      return;
-    }
-    if (target.closest('[data-action="start-feedback-session"]')) {
-      // The prompt can be answered from any tab: start the session in the note's own project.
-      const owner = feedbackDelivery.value?.projectId;
-      dismissFeedbackDelivery();
-      if (owner && owner !== selectedProjectId.value) selectProjectTab(owner);
-      void toggleSidebarDrive();
-    }
-  });
+  /** Start an AI session in the note's own project; the prompt can be answered from any tab (HS2-6RXBS9). */
+  function startFeedbackSession() {
+    const owner = feedbackDelivery.value?.projectId;
+    dismissFeedbackDelivery();
+    if (owner && owner !== selectedProjectId.value) selectProjectTab(owner);
+    void toggleSidebarDrive();
+  }
   const projectTeardown = createProjectTeardown({
     projects,
     selectedProjectId,
@@ -7986,6 +7966,10 @@ export async function startHotSheetWebClient() {
     ticketLinkChoice,
     openTicketLinkMatch,
     cancelTicketLinkChoice,
+    handleAdvisoryAction,
+    chooseFeedbackSession,
+    dismissFeedbackDelivery,
+    startFeedbackSession,
     searchOpen,
     guidanceSearchOpen,
     terminalSearchOpen,

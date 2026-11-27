@@ -48,6 +48,11 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   chooseFeedbackSession: action('choose-feedback-session'),
   startFeedbackSession: action('start-feedback-session'),
   dismissFeedbackDelivery: action('dismiss-feedback-delivery'),
+  /** The inspector's advisory process-claim notice (HS2-K7CZR2). */
+  advisoryClaim: action('advisory-claim'),
+  advisoryRenew: action('advisory-renew'),
+  advisoryRelease: action('advisory-release'),
+  advisoryRefresh: action('advisory-refresh'),
   answerTerminalQuestion: action('answer-terminal-question'),
   returnTerminalQuestion: action('return-terminal-question'),
   toggleVerifiedColumn: action('toggle-verified-column'),

@@ -5863,3 +5863,23 @@ Linux runtime evidence comes from the `glassbox-linux-verify` Docker image (real
   since HS2-CRXWR9.
 - `hs2_azfcb6_measure_sibling_churn_with_and_without_the_parent_watch` (ignored) prints deliveries
   and process CPU for the former parent registration against the root watch.
+
+### Group-owned page listeners and the permission_asked fixture shape (HS2-K7CZR2)
+
+- `clients/web/src/interactions/handler-transitions.test.ts` (`HS2-K7CZR2 group-owned page listeners`):
+  wiring, tearing down and rewiring the terminals group leaves no top-layer overlay
+  MutationObserver observing and no overlay capture listener on the body. The notifications-and-links
+  group routes Claim/Renew/Release/Refresh Advisory and the note-delivery Choose/Dismiss/Start actions
+  through their `NOTIFICATIONS_AND_LINKS_ACTIONS` specs, ignores a session choice without a connection,
+  and stops handling all of them after teardown.
+- `clients/web/src/interaction-wiring.test.ts`: `hs2_k7czr2_no_raw_body_listeners` limits
+  `document.body.addEventListener` to sanctioned modules that pair it with a removal.
+  `hs2_k7czr2_overlay_disposer_retained` requires every `wireTopLayerOverlays(` call site (terminals
+  group and `/ux-demo`) to hand its disposer to a scope. The registration inventory pins the seven
+  new delegates.
+- `clients/web/tests/providers.spec.ts`: `permission_asked` long-poll events come from one
+  `permissionAskedEvent` builder typed `satisfies ChangeEvent`. Its `store` is the asking project's
+  `checkout:<id>` and `message` is omitted, as the server emits them. The HS2-EV1XK3, HS2-HZK70N,
+  HS2-0M3DS2, HS2-NKCXW4 and permission-popup specs use it. The HS2-2MZWZT, HS2-WHW46N and
+  `feedback-session-choice.spec.ts` (HS2-25TP3N) flows exercise the moved advisory and note-delivery
+  handlers through the shipped app.
