@@ -925,7 +925,9 @@ inspector in `clients/web/tests/ticket-editor-autosave-transitions.spec.ts`:
 - Page hide saves an open Details edit and keeps the editor open; typing after returning saves once more on the committed token without a conflict.
 - A held blur save with an edit typed before it answers and after it answers: the answer never closes the focused editor or sends the newer typing, and the next blur saves it without a prompt.
 - Selecting another ticket inside the 150 ms typing pause, with the caret at the start and at the end: one PATCH to the edited ticket, the neighbour untouched, no leftover copy, and no stale restore.
-- A failed blur save shows the error, keeps the editor text and its local copy; a second focus loss sends nothing; reopening restores the copy and blur saves it.
+- A failed blur save shows the error, keeps the editor text and its local copy. A second focus loss with no new typing retries the save; while it keeps failing the editor stays open on the text, and once the store answers the next focus loss saves it, closes the editor, and clears the copy (HS2-SJ5TCW).
+- A failed edit is never retried into another ticket: opening and leaving the neighbour's editor writes nothing to it, and reopening the edited ticket restores the copy and blur saves it (HS2-SJ5TCW).
+- A retried save that meets an overlapping edit opens the card; leaving the editor while the card is open writes nothing, and after Use Theirs a reopen and blur writes nothing (HS2-SJ5TCW). `clients/web/src/details-save-retry.test.ts` pins the retry decision: same ticket and edit only, never with newer typing, a closed editor, or the card open, and nothing to send once the text matches the ticket.
 - A stale cached detail refreshed after the edit began: the blur save merges on the refreshed token with no 409 retry, and an untouched open editor adopts the refreshed text.
 
 `clients/web/tests/ticket-edit-sequencing.spec.ts` now waits for the editor to close

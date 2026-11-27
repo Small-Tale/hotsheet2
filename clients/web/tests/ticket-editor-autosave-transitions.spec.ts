@@ -472,7 +472,58 @@ for (const caret of ['start', 'end'] as const)
     await expect(page.getByText('Restored an unsaved edit.')).toHaveCount(0);
   });
 
-test('a failed blur save is shown, keeps the text, and the edit can be retried (HS2-7D3MPP)', async ({ page }) => {
+test('a failed blur save is shown, keeps the text, and the next blur retries it (HS2-7D3MPP, HS2-SJ5TCW)', async ({
+  page,
+}) => {
+  const server = await mockProject(page);
+  let failing = true;
+  server.onPatch = () => (failing ? 503 : undefined);
+  await openProject(page);
+  await ticketRow(page, 'HS2-EDIT').click();
+  const editor = await editDetails(page);
+  await editor.fill('Intro\n- must not be lost');
+  await editor.blur();
+
+  // The failure is visible, the editor keeps the text, and the local copy stays.
+  const appError = page.locator('[data-component="app-error"]');
+  await expect(appError).toContainText('The ticket store is unavailable.');
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue('Intro\n- must not be lost');
+  expect(server.patches).toHaveLength(1);
+  expect(await storedDrafts(page)).toEqual([{ base: 'Intro', draft: 'Intro\n- must not be lost' }]);
+
+  // Focus in and out again with no new typing: the save is retried, and while it still fails the
+  // editor stays open on the text instead of settling to the server's older value (HS2-SJ5TCW).
+  await editor.focus();
+  await editor.blur();
+  await expect.poll(() => server.patches.length).toBe(2);
+  expect(server.patches[1]?.details).toBe('Intro\n- must not be lost');
+  await expect(appError).toContainText('The ticket store is unavailable.');
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue('Intro\n- must not be lost');
+  expect(await storedDrafts(page)).toEqual([{ base: 'Intro', draft: 'Intro\n- must not be lost' }]);
+
+  // Once the store answers, the next focus loss saves the text and closes the editor.
+  failing = false;
+  await editor.focus();
+  await editor.blur();
+  await expect.poll(() => server.details['01']).toBe('Intro\n- must not be lost');
+  await expect(editor).toBeHidden();
+  await expect(page.locator('#app-right-rail')).toContainText('must not be lost');
+  expect(server.patches).toHaveLength(3);
+  expect(server.conflicts).toBe(0);
+  await expect.poll(() => storedDrafts(page)).toEqual([]);
+
+  // Nothing is left to retry: opening and leaving the editor again writes nothing.
+  const reopened = await editDetails(page);
+  await reopened.blur();
+  await expect(reopened).toBeHidden();
+  expect(server.patches).toHaveLength(3);
+});
+
+test('a failed edit is never retried into another ticket, and reopening restores it (HS2-7D3MPP, HS2-SJ5TCW)', async ({
+  page,
+}) => {
   const server = await mockProject(page);
   let failing = true;
   server.onPatch = () => (failing ? 503 : undefined);
@@ -481,24 +532,19 @@ test('a failed blur save is shown, keeps the text, and the edit can be retried (
   let editor = await editDetails(page);
   await editor.fill('Intro\n- must not be lost');
   await editor.blur();
-
-  // The failure is visible, the editor keeps the text, and the local copy stays.
   await expect(page.locator('[data-component="app-error"]')).toContainText('The ticket store is unavailable.');
-  await expect(editor).toBeVisible();
-  await expect(editor).toHaveValue('Intro\n- must not be lost');
-  expect(server.patches).toHaveLength(1);
-  expect(await storedDrafts(page)).toEqual([{ base: 'Intro', draft: 'Intro\n- must not be lost' }]);
 
-  // Focus in and out again with no new typing: nothing is resent, the editor settles to the
-  // server's text, and the local copy remains (HS2-7D3MPP follow-up tracks keeping it open).
-  await editor.focus();
-  await editor.blur();
-  await expect(editor).toBeHidden();
-  expect(server.patches).toHaveLength(1);
-  expect(await storedDrafts(page)).toEqual([{ base: 'Intro', draft: 'Intro\n- must not be lost' }]);
+  // Opening and leaving another ticket's editor writes nothing to it.
+  await ticketRow(page, 'HS2-NEXT').click();
+  await expect(page.locator('#app-right-rail')).toContainText('Neighbour');
+  const neighbour = await editDetails(page);
+  await neighbour.blur();
+  await expect(neighbour).toBeHidden();
+  expect(server.patches.filter((patch) => patch.id === '02')).toEqual([]);
 
-  // Retry: reopening the editor restores the edit from its local copy, and blur saves it.
+  // Back on the ticket, reopening the editor restores the edit from its local copy, and blur saves it.
   failing = false;
+  await ticketRow(page, 'HS2-EDIT').click();
   editor = await editDetails(page);
   await expect(editor).toHaveValue('Intro\n- must not be lost');
   await expect(page.locator('.app-toast')).toContainText('Restored an unsaved edit.');
@@ -506,6 +552,50 @@ test('a failed blur save is shown, keeps the text, and the edit can be retried (
   await expect.poll(() => server.details['01']).toBe('Intro\n- must not be lost');
   expect(server.conflicts).toBe(0);
   await expect.poll(() => storedDrafts(page)).toEqual([]);
+});
+
+test('a retried save that meets an overlapping edit shows the card, and Use Theirs is not resent (HS2-SJ5TCW)', async ({
+  page,
+}) => {
+  const server = await mockProject(page);
+  let failing = true;
+  server.onPatch = () => (failing ? 503 : undefined);
+  await openProject(page);
+  await ticketRow(page, 'HS2-EDIT').click();
+  const editor = await editDetails(page);
+  await editor.fill('Intro, mine');
+  await editor.blur();
+  await expect(page.locator('[data-component="app-error"]')).toContainText('The ticket store is unavailable.');
+
+  // Someone changes the same text meanwhile; the retry meets it and the card takes over the edit.
+  failing = false;
+  server.details['01'] = 'Intro, theirs';
+  server.tokens['01'] = 'T-remote';
+  await editor.focus();
+  await editor.blur();
+  const card = conflictCard(page);
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Intro, mine');
+  await expect(card).toContainText('Intro, theirs');
+  const sent = server.patches.length;
+
+  // Leaving the editor while the card is open does not raise it again with another write; the card
+  // keeps the edit.
+  await editor.focus();
+  await editor.blur();
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Intro, mine');
+  expect(server.patches).toHaveLength(sent);
+
+  // Use Theirs resolves it; opening and leaving the editor afterwards has nothing to retry.
+  await card.getByRole('button', { name: 'Use Theirs' }).click();
+  await expect(card).toHaveCount(0);
+  const reopened = await editDetails(page);
+  await expect(reopened).toHaveValue('Intro, theirs');
+  await reopened.blur();
+  await expect(reopened).toBeHidden();
+  expect(server.patches).toHaveLength(sent);
+  expect(server.details['01']).toBe('Intro, theirs');
 });
 
 test('an edit begun on a stale cached detail merges with the refresh that lands after it (HS2-7D3MPP)', async ({
