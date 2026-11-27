@@ -13,6 +13,7 @@ import {
   scheduleInputFromDraft,
 } from './command-schedule-form';
 import type { Recurrence, ScheduleView } from './command-schedules';
+import { inputsToSend, type PlanTemplate } from './orchestration-templates';
 
 export type TriggerState = 'on' | 'dry_run' | 'paused' | 'needs_review';
 export type TriggerEvent = 'ticket_opened' | 'gate_failed' | 'branch_ci_failed' | 'commit_landed';
@@ -955,6 +956,19 @@ export function formToSpec(form: TriggerForm, fixedInputs: Readonly<Record<strin
     },
     overlap: form.overlap,
   };
+}
+
+/**
+ * HS2-40GPZK: the fixed values to send, typed as Use Template… sends them: a number as a number, a boolean as a
+ * boolean, empty left out (the template's default applies). Without the template (not read yet) they go as
+ * entered.
+ */
+export function fixedInputsToSend(
+  template: PlanTemplate | undefined,
+  fixed: Readonly<Partial<Record<string, unknown>>>,
+): Record<string, unknown> {
+  if (template) return inputsToSend(template, fixed);
+  return Object.fromEntries(Object.entries(fixed).filter(([, value]) => value !== undefined && value !== ''));
 }
 
 /** The `set` body: the definition, the trigger's id when editing, and how a new one starts. */

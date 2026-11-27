@@ -842,7 +842,17 @@ function OrchestrationTriggerDialogDemo() {
     },
   };
   const examples: Array<[string, OrchestrationTriggerDialogState, boolean]> = [
-    ['Triggers…: New Trigger', triggerState({ mode: 'setup', form: setup, detailActive: true }), false],
+    // HS2-40GPZK: fixed values in Use Template…'s typed controls (a priority, projects and a checkbox).
+    [
+      'Triggers…: New Trigger',
+      triggerState({
+        mode: 'setup',
+        form: setup,
+        detailActive: true,
+        fixedInputs: { priority: 'low', web: 'api', contract: false },
+      }),
+      false,
+    ],
     [
       'Triggers…: New Schedule Trigger',
       triggerState({ mode: 'setup', form: scheduled, detailActive: true, review: undefined }),

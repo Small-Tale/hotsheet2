@@ -61,6 +61,7 @@ import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import {
   type EventField,
+  fixedInputsToSend,
   formFromTrigger,
   formProblem,
   formToRequest,
@@ -1647,6 +1648,12 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     void reviewTrigger();
   }
 
+  /** HS2-40GPZK: the setup's fixed values, typed by the chosen template's inputs. */
+  function triggerFixedInputs(state: OrchestrationTriggerDialogState) {
+    const template = state.templates.find((candidate) => candidate.template_id === state.form.template);
+    return fixedInputsToSend(template, state.fixedInputs);
+  }
+
   /** The review of the selected trigger, or of the setup as it is. Writes nothing. */
   async function reviewTrigger(again = false) {
     const current = dependencies.project(),
@@ -1654,7 +1661,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     if (!current || !state) return;
     const body =
       state.mode === 'setup'
-        ? { trigger: formToSpec(state.form, state.fixedInputs) }
+        ? { trigger: formToSpec(state.form, triggerFixedInputs(state)) }
         : state.selected
           ? { trigger_id: state.selected }
           : undefined;
@@ -1711,12 +1718,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       editing: view.trigger_id,
       detailActive: true,
       form: formFromTrigger(view),
-      fixedInputs: Object.fromEntries(
-        Object.entries(view.action.template?.inputs ?? {}).map(([key, value]) => [
-          key,
-          typeof value === 'string' ? value : JSON.stringify(value),
-        ]),
-      ),
+      // HS2-40GPZK: saved fixed values keep their type, so a boolean or a number reads back into its control.
+      fixedInputs: { ...view.action.template?.inputs },
       review: undefined,
       failure: undefined,
     };
@@ -1734,7 +1737,10 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       const key = field.slice('input-'.length);
       triggerDialog.value = {
         ...state,
-        fixedInputs: { ...state.fixedInputs, [key]: typeof value === 'string' ? value : '' },
+        fixedInputs: {
+          ...state.fixedInputs,
+          [key]: typeof value === 'string' || typeof value === 'boolean' ? value : '',
+        },
         failure: undefined,
       };
     } else {
@@ -1768,7 +1774,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         await clientFor(current).orchestrationTriggers(
           current.id,
           'set',
-          formToRequest(state.form, state.editing, state.fixedInputs),
+          formToRequest(state.form, state.editing, triggerFixedInputs(state)),
           dependencies.personId(),
         ),
       );

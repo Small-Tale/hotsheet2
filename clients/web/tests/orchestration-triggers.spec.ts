@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { openMockedProject } from './open-mocked-project';
 import { resizeTo, syntheticTool } from './orchestration-real-fixtures';
@@ -293,10 +293,21 @@ async function savedSchedule(server: Server) {
   return trigger.source.schedule;
 }
 
-/** Pick one option of a Kerf select by its label (the listbox opens in the page's top layer). */
-async function choose(page: Page, scope: ReturnType<typeof dialogOf>, label: string, option: string) {
-  await scope.getByRole('combobox', { name: label, exact: true }).click();
-  await page.getByRole('option', { name: option, exact: true }).click();
+/**
+ * Pick one option of a Kerf select (its listbox opens in the page's top layer) until the select shows it. The live
+ * review re-renders the setup when it answers, which closes a list opened just before (HS2-CJYD5A): open it again.
+ */
+async function pick(page: Page, select: Locator, option: string) {
+  const choice = page.getByRole('option', { name: option, exact: true });
+  await expect(async () => {
+    if (!(await choice.isVisible())) await select.click();
+    await choice.click({ timeout: 2_000 });
+    await expect(select).toContainText(option, { timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+}
+
+async function choose(page: Page, scope: Locator, label: string, option: string) {
+  await pick(page, scope.getByRole('combobox', { name: label, exact: true }), option);
 }
 
 test('HS2-SEEMXR Triggers… schedules with every recurrence field the command schedule has, and Edit… reads them back', async ({
@@ -316,14 +327,9 @@ test('HS2-SEEMXR Triggers… schedules with every recurrence field the command s
     await dialog.getByRole('radio', { name: 'Start orchestration' }).check();
     // Weekly on Monday, Wednesday and Friday, ending in March, skipping Christmas, at 06:30 UTC.
     await choose(page, dialog, 'Repeats', 'Weekly');
-    // Each pick re-renders the setup from the controller's form, which may close the list: open it per pick.
+    // Each pick re-renders the setup from the controller's form, which may close the list: `pick` opens it again.
     const weekdays = dialog.getByRole('combobox', { name: 'Weekdays', exact: true });
-    for (const day of ['Wednesday', 'Friday']) {
-      const option = page.getByRole('option', { name: day, exact: true });
-      if (!(await option.isVisible())) await weekdays.click();
-      await option.click();
-      await expect(weekdays).toContainText(day);
-    }
+    for (const day of ['Wednesday', 'Friday']) await pick(page, weekdays, day);
     if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
     await expect(dialog).toBeVisible();
     await dialog.getByLabel('Ends On', { exact: true }).fill('2027-03-01');
@@ -374,6 +380,78 @@ test('HS2-SEEMXR Triggers… schedules with every recurrence field the command s
     expect(schedule.recurrence).toMatchObject({ kind: 'monthly', on: { kind: 'last_day' } });
     await dialog.getByRole('button', { name: 'Edit…' }).click();
     await expect(dialog.getByRole('combobox', { name: 'On', exact: true })).toContainText('Last Day');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-40GPZK Triggers… gives fixed template inputs Use Template…’s typed controls, and Edit… reads them back', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/templates/set`, {
+      templates: [
+        {
+          name: 'Typed repair',
+          inputs: [
+            { key: 'feature', label: 'Feature', kind: 'text', required: true },
+            { key: 'project', label: 'Project', kind: 'target', default: TARGET },
+            { key: 'urgent', label: 'Urgent', kind: 'boolean' },
+            { key: 'size', label: 'Size', kind: 'choice', choices: ['small', 'large'] },
+            { key: 'attempts', label: 'Attempts', kind: 'number' },
+          ],
+          goal: { title: '{{feature}} in Self' },
+          steps: [{ key: 'fix', target: '{{project}}', title: 'Repair {{feature}}' }],
+        },
+      ],
+      actor: person,
+    });
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    const toolbar = page.locator('[data-orchestration-toolbar="no_plan"]');
+    await toolbar.getByRole('button', { name: 'Triggers…' }).click();
+    const dialog = dialogOf(page);
+    await dialog.getByRole('button', { name: 'New Trigger…' }).click();
+    await dialog.getByLabel('Name', { exact: true }).fill('Typed repair');
+    await choose(page, dialog, 'Template', 'Typed repair');
+    const input = (key: string) => dialog.locator(`[data-trigger-input="${key}"]`);
+    await input('feature').getByLabel('Value').fill('Nightly');
+    // A project input offers the declared projects, after its template default.
+    await pick(page, input('project').getByRole('combobox', { name: 'Value' }), 'Self');
+    // A boolean is a checkbox, a choice its choices, a number a number field.
+    await input('urgent').getByRole('checkbox', { name: 'Value' }).check();
+    await pick(page, input('size').getByRole('combobox', { name: 'Value' }), 'large');
+    await input('attempts').getByLabel('Value').fill('3');
+    await expect(input('attempts').getByLabel('Value')).toHaveAttribute('type', 'number');
+    await captureSizes(page, 'typed-inputs', async () => {
+      await expect(input('urgent')).toBeVisible();
+    });
+    await dialog.getByRole('button', { name: 'Save as Dry Run' }).click();
+    await expect(dialog.getByRole('heading', { name: 'Typed repair' })).toBeVisible();
+    const inputs = async () => {
+      const listed = await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/triggers/list`, {
+        actor: person,
+      });
+      const [trigger] = listed.triggers as Array<{ action: { template?: { inputs?: Record<string, unknown> } } }>;
+      return trigger.action.template?.inputs;
+    };
+    expect(await inputs()).toEqual({ feature: 'Nightly', project: TARGET, urgent: true, size: 'large', attempts: 3 });
+
+    // Edit… reads each typed value back into its control; back to the default and unchecked, then saved.
+    await dialog.getByRole('button', { name: 'Edit…' }).click();
+    await expect(input('urgent').getByRole('checkbox', { name: 'Value' })).toBeChecked();
+    await expect(input('size').getByRole('combobox', { name: 'Value' })).toContainText('large');
+    await expect(input('project').getByRole('combobox', { name: 'Value' })).toContainText('Self');
+    await expect(input('attempts').getByLabel('Value')).toHaveValue('3');
+    await pick(page, input('project').getByRole('combobox', { name: 'Value' }), 'Default: Self');
+    await input('urgent').getByRole('checkbox', { name: 'Value' }).uncheck();
+    await input('attempts').getByLabel('Value').fill('');
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog.getByRole('button', { name: 'Edit…' })).toBeVisible();
+    expect(await inputs()).toEqual({ feature: 'Nightly', urgent: false, size: 'large' });
   } finally {
     await server.stop(page);
   }

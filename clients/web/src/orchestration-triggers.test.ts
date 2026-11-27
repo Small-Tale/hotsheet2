@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  fixedInputsToSend,
   formFromTrigger,
   formProblem,
   formToRequest,
@@ -454,6 +455,54 @@ describe('HS2-KXKA7X the setup form', () => {
       expect(form.when).toBe('schedule');
       expect(formToSpec(form).source, recurrence.kind).toEqual({ kind: 'schedule', schedule });
     }
+  });
+
+  it('HS2-40GPZK sends fixed values typed as Use Template… sends them, and Edit… keeps their types', () => {
+    const template = {
+      template_id: 'T1',
+      name: 'Repair',
+      description: '',
+      state: 'active' as const,
+      version: 1,
+      goal_title: 'Repair',
+      steps: [],
+      inputs: [
+        { key: 'project', label: 'Project', kind: 'target' as const, required: true, default: 'api', choices: [] },
+        { key: 'urgent', label: 'Urgent', kind: 'boolean' as const, required: false, choices: [] },
+        { key: 'attempts', label: 'Attempts', kind: 'number' as const, required: false, choices: [] },
+        { key: 'size', label: 'Size', kind: 'choice' as const, required: false, choices: ['small', 'large'] },
+        { key: 'note', label: 'Note', kind: 'text' as const, required: false, choices: [] },
+      ],
+    };
+    const fixed = { project: 'web', urgent: false, attempts: '3', size: 'large', note: '  look  ', commit: '' };
+    expect(fixedInputsToSend(template, fixed)).toEqual({
+      project: 'web',
+      urgent: false,
+      attempts: 3,
+      size: 'large',
+      note: 'look',
+    });
+    // Left at the template default: nothing is sent for it.
+    expect(fixedInputsToSend(template, { project: '', urgent: undefined })).toEqual({});
+    // A number that does not read as one goes as typed, so the server names it.
+    expect(fixedInputsToSend(template, { attempts: 'many' })).toEqual({ attempts: 'many' });
+    // Without the template (not read yet), values go as entered.
+    expect(fixedInputsToSend(undefined, { urgent: true, note: '', size: 'small' })).toEqual({
+      urgent: true,
+      size: 'small',
+    });
+    const form = { ...newTriggerForm(), name: 'Repair', template: 'T1', tool: 'claude' };
+    const spec = formToSpec(form, fixedInputsToSend(template, fixed));
+    expect(spec.action.template?.inputs).toEqual({
+      project: 'web',
+      urgent: false,
+      attempts: 3,
+      size: 'large',
+      note: 'look',
+    });
+    const view = parseTriggerView({ ...rawTrigger(), ...spec })!;
+    expect(view.action.template?.inputs).toEqual(spec.action.template?.inputs);
+    expect(formToSpec(formFromTrigger(view), view.action.template?.inputs ?? {})).toEqual(spec);
   });
 
   it('names what keeps Save disabled', () => {

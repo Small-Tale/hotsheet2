@@ -18,7 +18,7 @@ import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { CalendarClock, GitCommitHorizontal, Pause, Play, Plus, Zap } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
-import type { PlanTemplate } from '../orchestration-templates';
+import type { PlanTemplate, TemplateInput } from '../orchestration-templates';
 import {
   EVENT_FIELD_LABELS,
   EVENT_LABELS,
@@ -42,6 +42,7 @@ import {
 } from '../orchestration-triggers';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
 import { ScheduleRecurrenceFields } from './schedule-recurrence-fields';
+import { TemplateInputField } from './template-input-field';
 
 /** The open Triggers… dialog (HS2-KXKA7X). */
 export interface OrchestrationTriggerDialogState {
@@ -60,7 +61,7 @@ export interface OrchestrationTriggerDialogState {
   detailActive: boolean;
   form: TriggerForm;
   /** The template inputs given a fixed value, by key. */
-  fixedInputs: Readonly<Partial<Record<string, string>>>;
+  fixedInputs: Readonly<Partial<Record<string, unknown>>>;
   /** The checked-in templates the setup offers. */
   templates: readonly PlanTemplate[];
   /** The declared projects, for names and the project choice. */
@@ -318,6 +319,18 @@ function EventFields({ state }: { state: OrchestrationTriggerDialogState }) {
   );
 }
 
+/** The template's default for an input, in words ("Default: Self"), or nothing when it has none. */
+function defaultText(state: OrchestrationTriggerDialogState, input: TemplateInput): string | undefined {
+  if (input.default === undefined) return undefined;
+  const value =
+    typeof input.default === 'string'
+      ? input.kind === 'target'
+        ? (labelsOf(state)[input.default] ?? input.default)
+        : input.default
+      : JSON.stringify(input.default);
+  return `Default: ${value}`;
+}
+
 function WhatRuns({ state }: { state: OrchestrationTriggerDialogState }) {
   const form = state.form,
     template = state.templates.find((candidate) => candidate.template_id === form.template),
@@ -349,21 +362,19 @@ function WhatRuns({ state }: { state: OrchestrationTriggerDialogState }) {
                 ]}
               />
               {form.eventInputs[input.key] ? undefined : (
-                <TextField
+                // HS2-40GPZK: Use Template…'s typed control, so a fixed value cannot be mistyped.
+                <TemplateInputField
+                  input={input}
+                  value={
+                    input.kind === 'boolean'
+                      ? (state.fixedInputs[input.key] ?? input.default)
+                      : state.fixedInputs[input.key]
+                  }
+                  projects={state.projects}
                   name={`trigger-input-${input.key}`}
                   label="Value"
-                  value={state.fixedInputs[input.key] ?? ''}
-                  placeholder={
-                    input.default === undefined
-                      ? undefined
-                      : `Default: ${
-                          typeof input.default === 'string'
-                            ? input.kind === 'target'
-                              ? (labelsOf(state)[input.default] ?? input.default)
-                              : input.default
-                            : JSON.stringify(input.default)
-                        }`
-                  }
+                  emptyChoice={defaultText(state, input) ?? 'Template Default'}
+                  {...(defaultText(state, input) === undefined ? {} : { placeholder: defaultText(state, input) })}
                   rootAttributes={{ 'data-key': `trigger-input-${input.key}-${state.session}` }}
                 />
               )}

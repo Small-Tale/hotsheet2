@@ -8078,8 +8078,12 @@ and form mapping in `clients/web/src/orchestration-triggers.ts`):
   and yearly day rules, an end date, a run count, included and excluded dates, the time
   and the time zone, each read back by Edit…), or On a Project Event with the project, the
   event and its branch, workflow, repository, tag or category; **What Runs**: the
-  template with each input fixed or filled from the event, the tool, and the
-  placement change; **Mode**: Dry Run by default, or Paused; **Overlap**) and the live
+  template with each input fixed or filled from the event, a fixed value in Use
+  Template…'s own typed control (HS2-40GPZK, the shared `TemplateInputField`: the
+  declared projects for a project input, a checkbox for a boolean, the choices or
+  priorities, a number field), with a first "Default: …" choice that leaves it to the
+  template, sent typed as Use Template… sends inputs and read back typed by Edit…; the
+  tool, and the placement change; **Mode**: Dry Run by default, or Paused; **Overlap**) and the live
   review on the right (**Scope**, **Permissions**, **Next Actions**), read again after a
   pause in typing; **Save as Dry Run** saves it. Saving never turns a trigger On;
 - a saved trigger shows **Status** (state and who reviewed it, what it runs, the next
@@ -8091,8 +8095,7 @@ and form mapping in `clients/web/src/orchestration-triggers.ts`):
 
 The dialog reads the list again on `orchestration_changed`. On a phone it is the
 compact drill-down. Refusals read through the shared refusal map. The overview
-inspector's Triggers row (HS2-X3FZJE) and typed controls for fixed inputs (HS2-40GPZK)
-are follow-ups.
+inspector's Triggers row (HS2-X3FZJE) is a follow-up.
 
 ### Audit
 
