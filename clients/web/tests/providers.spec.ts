@@ -28276,6 +28276,53 @@ test('focuses the ticket title every time the real composer expands', async ({ p
   await expect(title).toBeFocused();
 });
 
+test('keeps a composer cancelled during the first activation refresh closed when its session restore lands (HS2-9FF3C2)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  // Hold the activation's custom-view refresh, and with it the delayed session restore.
+  const held: Route[] = [];
+  await page.route(/\/project-api\/demo-checkout\/views$/, (route) => {
+    held.push(route);
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  const sessionKey = 'hotsheet.workspace.project-session.v1.demo-checkout',
+    storedSession = () =>
+      page.evaluate(
+        (key) => JSON.parse(localStorage.getItem(key) ?? 'null') as { composer: { open: boolean } } | null,
+        sessionKey,
+      );
+  const launcher = page.getByRole('button', { name: 'New ticket…' }),
+    composer = page.locator('[data-component="quick-ticket-composer"]');
+  await launcher.click();
+  await expect(page.locator('input[name="new-ticket-title"]')).toBeFocused();
+  // The open composer persists itself; this is the first session the project has.
+  await expect.poll(async () => (await storedSession())?.composer.open).toBe(true);
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(composer).toHaveAttribute('data-controlled-open', 'false');
+  await expect.poll(async () => (await storedSession())?.composer.open).toBe(false);
+  // Under load the restore landed while the cancel's closed state was still debounced, so it read
+  // the user's own open composer back. Replay that window, with a ticket selection that shows the
+  // restore ran.
+  await page.evaluate((key) => {
+    const session = JSON.parse(localStorage.getItem(key)!) as {
+      composer: { open: boolean };
+      selectedTicketSlugs: string[];
+    };
+    session.composer.open = true;
+    session.selectedTicketSlugs = ['HS2-DEMO01'];
+    localStorage.setItem(key, JSON.stringify(session));
+  }, sessionKey);
+  await expect.poll(() => held.length).toBeGreaterThan(0);
+  for (const route of held.splice(0)) await route.fulfill({ status: 404, body: '' });
+  await expect(page.getByRole('option', { name: /HS2-DEMO01/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(composer).toHaveAttribute('data-controlled-open', 'false');
+  await expect(composer).not.toHaveAttribute('open', '');
+  await launcher.click();
+  await expect(page.locator('input[name="new-ticket-title"]')).toBeFocused();
+});
+
 test('stages safe attachment drops from the collapsed and expanded new-ticket composer', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
