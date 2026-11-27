@@ -320,8 +320,8 @@ fn watch_refs(
 }
 
 /// What the remote-tracking state of the common directory `common` looks like: each loose
-/// file under `refs/remotes`, with its size and modification time, and the remote-tracking
-/// lines of `packed-refs`. Read from the local disk only.
+/// ref under `refs/remotes` (not Git's `.lock` files), with its size and modification
+/// time, and the remote-tracking lines of `packed-refs`. Read from the local disk only.
 ///
 /// HS2-BN9MMJ: only the `refs/remotes/` lines of `packed-refs` count (with the peeled line
 /// that follows one), so packing local branches or tags is no push.
@@ -342,6 +342,14 @@ fn fingerprint(common: &Path) -> Fingerprint {
             let path = entry.path();
             if path.is_dir() {
                 directories.push(path);
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension == "lock")
+            {
+                // HS2-YRFW31: Git's lock file for a ref it is writing (no ref name ends in
+                // `.lock`). Counting it recorded one push up to three times as the stream
+                // read between Git creating, writing and renaming it.
+                continue;
             } else if let Ok(meta) = std::fs::metadata(&path) {
                 loose.push((path, meta.len(), meta.modified().ok()));
             }
@@ -729,6 +737,41 @@ mod tests {
         assert_eq!(recorded(&log), 2, "packed refs");
     }
 
+    /// HS2-YRFW31: Git writes a remote-tracking ref through a lock file beside it (create
+    /// `<ref>.lock`, write it, rename it onto `<ref>`), and inotify reports each step. A read
+    /// while the lock exists sees no new ref, so one push is recorded once, however the
+    /// stream's reads interleave with Git's steps.
+    #[test]
+    fn hs2_yrfw31_a_ref_lock_file_is_no_push() {
+        let dir = tempfile::tempdir().unwrap();
+        let clone = repository(dir.path());
+        git(&clone, &["push", "-q", "origin", "main"]);
+        let log = Arc::new(Mutex::new(EventLog::default()));
+        let (events, _keep) = broadcast::channel(64);
+        let watches = CodeRefWatches::default();
+        let stream = InProcessStream::default();
+        follow_live(&watches, &stream, &clone, &log, &events);
+        let origin = canonical(&clone.join(".git")).join("refs/remotes/origin");
+        let (lock, handoff) = (origin.join("handoff.lock"), origin.join("handoff"));
+        let target = std::fs::read(origin.join("main")).unwrap();
+
+        std::fs::File::create(&lock).unwrap();
+        stream.changed(&lock);
+        assert_eq!(recorded(&log), 0, "an empty lock file");
+        std::fs::write(&lock, &target).unwrap();
+        stream.changed(&lock);
+        assert_eq!(recorded(&log), 0, "a written lock file");
+        std::fs::rename(&lock, &handoff).unwrap();
+        stream.changed(&lock);
+        stream.changed(&handoff);
+        assert_eq!(recorded(&log), 1, "the ref renamed into place");
+
+        // A lock left behind by an interrupted update is no push either.
+        std::fs::write(origin.join("main.lock"), &target).unwrap();
+        stream.changed(&origin.join("main.lock"));
+        assert_eq!(recorded(&log), 1, "a stale lock file");
+    }
+
     /// HS2-BN9MMJ: a live stream that lags behind (held here, as a backlogged `fseventsd`
     /// held events for minutes) does not hold up a push or a pool change: the follower's
     /// next request reads the state and records each once; the late events, once
@@ -797,7 +840,9 @@ mod tests {
     /// HS2-BN9MMJ: this module's real-stream smoke test. Once the watch is live (and has
     /// read the refs), a push is recorded only if the platform's own stream reports it.
     /// The bound fails only a delivery that never comes; a backlogged `fseventsd`
-    /// delivered minutes late.
+    /// delivered minutes late. HS2-YRFW31: the wait ends at the first record and only
+    /// then asserts there is one, so a push recorded twice fails at once with its count
+    /// instead of never matching and running out the bound.
     #[test]
     fn hs2_bn9mmj_smoke_a_real_stream_records_a_push() {
         let dir = tempfile::tempdir().unwrap();
@@ -816,8 +861,9 @@ mod tests {
         wait_within(
             hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND,
             "the real stream to report the push",
-            || recorded(&log) == 1,
+            || recorded(&log) >= 1,
         );
+        assert_eq!(recorded(&log), 1, "one push is recorded once");
     }
     /// While the stream has not started (over a minute on a loaded machine), a push is
     /// still recorded by the local re-check, once; a local commit is not; and dropping
