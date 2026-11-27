@@ -35,6 +35,8 @@ const SITE = '01ARZ3NDEKTSV4RRFFQ69G5FJ9';
  */
 async function openInspector(page: Page) {
   const overview = page.locator('[data-orchestration-overview]');
+  // Sub-budget action cap (HS2-4DCFMG): a trial click dispatches nothing; its 2 s bound is the probe
+  // that reads whether the sheet is open (a closed sheet leaves the overview inert).
   const open = await overview
     .locator('h2')
     .first()

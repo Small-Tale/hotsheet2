@@ -219,16 +219,16 @@ for (const width of [1280, 940, 390]) {
       compact = width < 1024;
     await test.step('Open the synthetic project and its ticket inspector', async () => {
       await mockSearchProject(page);
-      await ticket.click({ timeout: 10_000 });
+      await ticket.click();
       if (!compact && (await rail.getAttribute('data-collapsed')) === 'true')
-        await page.getByRole('button', { name: 'Show Ticket Inspector' }).click({ timeout: 10_000 });
+        await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
       await expect(rail).toHaveAttribute('data-collapsed', 'false');
     });
 
     // A real modal must continue to suppress the global shortcut without dismissing its rail.
     const reader = page.locator('[data-reader-dialog][open]');
     await test.step('Preserve native reader shortcut suppression and close it', async () => {
-      await rail.getByRole('button', { name: 'Open Ticket Reader' }).click({ timeout: 10_000 });
+      await rail.getByRole('button', { name: 'Open Ticket Reader' }).click();
       await expect(reader).toBeVisible();
       await page.keyboard.press('ControlOrMeta+k');
       await expect(reader).toBeVisible();
@@ -250,7 +250,7 @@ for (const width of [1280, 940, 390]) {
     await expect(page.locator('[data-ticket-slug="HS2-QUEUE2"]')).toHaveCount(0);
 
     // Selecting a result reopens the phone inspector; a second search intent preserves its query.
-    await ticket.click({ timeout: 10_000 });
+    await ticket.click();
     await expect(rail).toHaveAttribute('data-collapsed', 'false');
     await page.keyboard.press('ControlOrMeta+k');
     await expect(rail).toHaveAttribute('data-collapsed', compact ? 'true' : 'false');
@@ -264,15 +264,15 @@ test('HS2-CSP42A compact search dismissal preserves the wide inspector preferenc
   await mockSearchProject(page);
   const rail = page.locator('#app-right-rail'),
     ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-QUEUE1"]').first();
-  await ticket.click({ timeout: 10_000 });
+  await ticket.click();
   if ((await rail.getAttribute('data-collapsed')) === 'true')
-    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect(rail).toHaveAttribute('data-collapsed', 'false');
   for (const width of [940, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(rail).toHaveAttribute('data-presentation', 'overlay');
     await expect(rail).toHaveAttribute('data-collapsed', 'true');
-    await ticket.click({ timeout: 10_000 });
+    await ticket.click();
     await expect(rail).toHaveAttribute('data-collapsed', 'false');
     await page.keyboard.press('ControlOrMeta+k');
     await expect(rail).toHaveAttribute('data-collapsed', 'true');

@@ -20,6 +20,8 @@ export async function openGlobalDashboard(page: Page, dashboard: GlobalDashboard
     folded = strip.locator('[data-dashboard-menu]'),
     button = strip.getByRole('button', { name: LABELS[dashboard], exact: true });
   await expect(async () => {
+    // Sub-budget action cap (HS2-4DCFMG): each 2 s click bounds one attempt of this toPass retry,
+    // which re-reads the fold; a click delivered late lands before the next attempt checks the mode.
     if ((await folded.count()) > 0) {
       await folded.getByRole('button', { name: 'Global Dashboards' }).click({ timeout: 2_000 });
       await page.locator(`[data-action="set-shell-mode"][data-shell-mode="${dashboard}"]`).click({ timeout: 2_000 });

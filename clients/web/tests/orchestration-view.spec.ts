@@ -582,7 +582,7 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
     // A phone pages one column at a time: Left and Right bring the card's column into view.
     await resizeTo(page, { width: 390, height: 844 });
     await expect(view).toHaveAttribute('data-layout', 'paged');
-    await card(top).focus({ timeout: 10_000 });
+    await card(top).focus();
     await page.keyboard.press('ArrowLeft');
     await expect(card(plan.second.slug)).toBeFocused();
     await expect.poll(() => visibleShare(page, 'Second · About +1 h Column')).toBeGreaterThan(0.85);
@@ -594,7 +594,7 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
     // Wide again: the focused card stays focused and in view.
     await resizeTo(page, { width: 1440, height: 900 });
     await expect(view).toHaveAttribute('data-layout', 'grid');
-    await card(top).focus({ timeout: 10_000 });
+    await card(top).focus();
     await page.keyboard.press('ArrowLeft');
     await expectAt(plan.second.slug);
     await expect(card(plan.second.slug)).toBeInViewport();
@@ -602,12 +602,10 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
 
     // A collapsed project group draws no cards in any column; expanding it again restores the walk.
     const group = view.locator('[data-ticket-group]').first();
-    await group.locator('[data-action="toggle-ticket-group"]').first().click({ timeout: 10_000 });
+    await group.locator('[data-action="toggle-ticket-group"]').first().click();
     await expect(view.locator('[data-ticket-slug]')).toHaveCount(0);
-    await view.locator('[data-ticket-group]').first().locator('[data-action="toggle-ticket-group"]').first().click({
-      timeout: 10_000,
-    });
-    await card(top).click({ timeout: 10_000 });
+    await view.locator('[data-ticket-group]').first().locator('[data-action="toggle-ticket-group"]').first().click();
+    await card(top).click();
     await expectAt(top);
     await page.keyboard.press('ArrowLeft');
     await expectAt(plan.second.slug);

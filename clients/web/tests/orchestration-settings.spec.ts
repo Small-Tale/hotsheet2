@@ -4,9 +4,23 @@ import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
+
+/**
+ * Closes a narrow-width rail through its Hide button when one shows. The rail may already be sliding
+ * closed after a resize, so a click can find nothing to press; the attempt then retries until the
+ * button is gone, and the test budget bounds the whole wait (HS2-4DCFMG).
+ */
+async function hideIfShown(hide: Locator) {
+  await expect(async () => {
+    // Sub-budget action cap (HS2-4DCFMG): bounds one retry attempt against a rail that slid closed
+    // under the click; a click delivered late under load is caught by the hidden check that follows.
+    if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+    await expect(hide).toBeHidden();
+  }).toPass();
+}
 
 /**
  * HS2-W27N1D: Project Type and Settings → Orchestration through the real shell, against a real
@@ -275,10 +289,7 @@ test('HS2-W27N1D captures Project Type, Orchestration, the Add Project menu and 
     const hideRails = async (names: string[]) => {
       for (const name of names) {
         const hide = page.getByRole('button', { name, exact: true });
-        // A rail may already be sliding closed after the resize; then the click finds nothing to
-        // press, which is fine: the capture only needs the rail closed.
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
-        await expect(hide).toBeHidden();
+        await hideIfShown(hide);
       }
     };
     const fits = async () => {
@@ -424,7 +435,7 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
         const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
         if (await show.isVisible()) await show.click();
       }
@@ -594,7 +605,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
         const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
         if (await show.isVisible()) await show.click();
       }
@@ -626,7 +637,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
         const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
         if (await show.isVisible()) await show.click();
       }
@@ -643,7 +654,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Project Detail', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
       }
       await account.scrollIntoViewIfNeeded();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -730,7 +741,7 @@ test('HS2-N3HWP9 tool Sessions and Weight show Auto when empty and store 0 to tu
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
       }
       await sessions.first().scrollIntoViewIfNeeded();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -802,7 +813,7 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
         const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
         if (await show.isVisible()) await show.click();
       }
@@ -952,7 +963,7 @@ test('HS2-92FJXM a remote orchestration project adds the projects open on its se
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
       }
       await expect(add).toBeVisible();
       await add.click();
@@ -1035,7 +1046,7 @@ test('HS2-89YNGN a remote orchestration project adds a site from the projects op
         await page.setViewportSize(size);
         if (size.width === 390) {
           const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-          if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+          await hideIfShown(hide);
         }
         const submenu = await openSites();
         const box = await submenu.boundingBox();
@@ -1117,7 +1128,7 @@ test('HS2-40CTDS a refused add toasts and keeps its record; a success is only a 
         await page.setViewportSize(size);
         if (size.width === 390) {
           const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-          if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+          await hideIfShown(hide);
         }
         await expect(record).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -1195,7 +1206,7 @@ test('HS2-0G80WD a remote orchestration project stops orchestrating a project af
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
       }
       await expect(webRow).toContainText('On Build host');
       await capture(`row-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
@@ -1350,8 +1361,7 @@ test('HS2-SHH7WW Settings lists a project with its other sites after it', async 
     const hideRails = async (names: string[]) => {
       for (const name of names) {
         const hide = page.getByRole('button', { name, exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
-        await expect(hide).toBeHidden();
+        await hideIfShown(hide);
       }
     };
     for (const scheme of ['light', 'dark'] as const) {
@@ -1490,8 +1500,7 @@ test('HS2-M1T6KN Projects is a tree of each project and its sites, remembered an
     const hideRails = async (names: string[]) => {
       for (const name of names) {
         const hide = page.getByRole('button', { name, exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
-        await expect(hide).toBeHidden();
+        await hideIfShown(hide);
       }
     };
     const capture = async (state: string) => {
@@ -1659,7 +1668,7 @@ test('HS2-SYZB33 a site Limits point Coordination Sessions at the project home',
       await page.setViewportSize(size);
       if (size.width === 390) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
         const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
         if (await show.isVisible()) await show.click();
       }
@@ -1775,9 +1784,9 @@ test('HS2-D4G81Q Settings shows each site OS and tools', async ({ page, browserN
         const name = `${String(size.width)}${index === 3 ? '-after-390' : ''}-${scheme}-${browserName}`;
         if (size.width === 390) {
           const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-          if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+          await hideIfShown(hide);
           const hideInspector = page.getByRole('button', { name: 'Hide Project Detail', exact: true });
-          if (await hideInspector.isVisible()) await hideInspector.click({ timeout: 3_000 }).catch(() => undefined);
+          await hideIfShown(hideInspector);
           await expect(rows.nth(1)).toContainText(system);
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
           await page.screenshot({ path: join(directory, `hs2-d4g81q-rows-${name}.png`), animations: 'disabled' });
@@ -1866,7 +1875,7 @@ test('HS2-NAA3HV makes a site the home site of its project from Settings', async
         if (size.width === 390)
           for (const name of ['Hide Settings Sidebar', 'Hide Project Detail']) {
             const hide = page.getByRole('button', { name, exact: true });
-            if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+            await hideIfShown(hide);
           }
         const menu = await openSiteMenu();
         const box = await menu.boundingBox();
@@ -1985,7 +1994,7 @@ test('HS2-E9VVQF adds and separates sites from Settings and asks only for a dupl
         if (size.width === 390)
           for (const name of ['Hide Settings Sidebar', 'Hide Project Detail']) {
             const hide = page.getByRole('button', { name, exact: true });
-            if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+            await hideIfShown(hide);
           }
         const name = `${String(size.width)}${index === 3 ? '-after-390' : ''}-${scheme}-${browserName}`;
         await expect(rows.first()).toBeVisible();
@@ -2246,7 +2255,7 @@ test('HS2-Y737GM HS2-25KT42 HS2-NGP2AK HS2-1X1TXC HS2-NPAZQW the project detail 
       await page.setViewportSize(size);
       if (size.width === narrow.width) {
         const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
-        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await hideIfShown(hide);
         const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
         if (await show.isVisible()) await show.click();
       }

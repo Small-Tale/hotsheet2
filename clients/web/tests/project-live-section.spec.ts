@@ -600,7 +600,7 @@ test('a remote project tab shows its own server host warnings, not the local mac
       await live.screenshot({ path: `target/visual-captures/hs2-k4dy5g-remote-warning-${width}.png`, timeout: 15_000 });
     }
     // The local tab keeps its own warning and none of the remote server's.
-    await projectTab(page, 'Launch').click({ timeout: 15_000 });
+    await projectTab(page, 'Launch').click();
     await expect(live.locator('[data-host-callout="disk"]')).toBeVisible({ timeout: 30_000 });
     await expect(live.locator('[data-host-callout="power"]')).toHaveCount(0);
   } finally {

@@ -110,3 +110,56 @@ describe('project tabs are found by name, not by their full label (HS2-YGSYJT)',
     expect(pattern('a.b').test('axb')).toBe(false);
   });
 });
+
+/**
+ * A loaded host can hold an actionable control's click for seconds while the app stays idle
+ * (HS2-8DPRAB), so an action capped below the test budget fails for the host, not the app. An action
+ * timeout under the budget must sit under a `Sub-budget action cap (HS2-4DCFMG): <reason>` comment
+ * naming the retry, probe or latency requirement it bounds.
+ */
+const ACTION_CAP =
+  /\.(click|dblclick|tap|check|uncheck|setChecked|hover|focus|fill|press|dragTo|selectOption)\(\s*(?:[^(){}]*,\s*)?\{[^{}]*?\btimeout\s*:\s*([0-9_]+)[^{}]*\}/gu;
+const CAP_REASON = /\/\/ Sub-budget action cap \(HS2-4DCFMG\): \S/u;
+
+function uncommentedActionCaps(source: string, budget: number): number[] {
+  const lines = source.split('\n'),
+    offenders: number[] = [];
+  for (const match of source.matchAll(ACTION_CAP)) {
+    if (Number(match[2].replaceAll('_', '')) >= budget) continue;
+    const line = source.slice(0, match.index).split('\n').length;
+    if (!lines.slice(Math.max(0, line - 6), line).some((text) => CAP_REASON.test(text))) offenders.push(line);
+  }
+  return offenders;
+}
+
+describe('Playwright action caps stay within the test budget (HS2-4DCFMG)', () => {
+  it('hs2_4dcfmg_no_uncommented_sub_budget_action_caps in tests/', () => {
+    const tests = new URL('../tests/', import.meta.url),
+      budget = config.timeout!;
+    expect(budget).toBe(60_000);
+    const offenders = readdirSync(tests)
+      .filter((name) => name.endsWith('.ts'))
+      .flatMap((name) =>
+        uncommentedActionCaps(readFileSync(new URL(name, tests), 'utf8'), budget).map((line) => `${name}:${line}`),
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  it('hs2_4dcfmg_detector flags a bare cap and accepts a named reason or the budget', () => {
+    expect(uncommentedActionCaps('await a.click({ timeout: 10_000 });', 60_000)).toEqual([1]);
+    expect(uncommentedActionCaps('await a\n  .click({ trial: true, timeout: 2_000 });', 60_000)).toEqual([2]);
+    expect(uncommentedActionCaps("await a.fill('x', { timeout: 3_000 });", 60_000)).toEqual([1]);
+    expect(uncommentedActionCaps('await a.click({ timeout: 60_000 });', 60_000)).toEqual([]);
+    expect(uncommentedActionCaps('await a.click();', 60_000)).toEqual([]);
+    expect(
+      uncommentedActionCaps(
+        '// Sub-budget action cap (HS2-4DCFMG): bounds one toPass attempt.\nawait a.click({ timeout: 3_000 });',
+        60_000,
+      ),
+    ).toEqual([]);
+    // A marker without a reason does not count.
+    expect(
+      uncommentedActionCaps('// Sub-budget action cap (HS2-4DCFMG):\nawait a.click({ timeout: 3_000 });', 60_000),
+    ).toEqual([2]);
+  });
+});

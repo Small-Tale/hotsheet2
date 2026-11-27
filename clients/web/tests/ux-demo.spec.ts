@@ -132,6 +132,8 @@ async function setDemoSettingsOpen(page: Page, open: boolean): Promise<void> {
           (node as HTMLElement).click();
         });
       } else {
+        // Sub-budget action cap (HS2-4DCFMG): bounds one attempt of this toPass retry, which re-reads
+        // the rail state; a click delivered late is caught by the next attempt.
         await toggle.click({ timeout: 5_000 });
       }
     }
