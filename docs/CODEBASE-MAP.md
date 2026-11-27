@@ -292,6 +292,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   .claude/skills/{ui-ux-review,security-review,feature-health}/ # pinned ai-playbook skills selected via guidance/rulesync (HS2-DKSN1H); write docs/security/ and docs/feature-health.md on first run (Codex mirror: .agents/skills/)
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 5.0.0-beta.117 + Web Awesome Vite/Playwright compatibility proof
+  spikes/plugin-transport/   # HS2-XE0ZVB plugin transport benchmark (standalone crate, not a workspace member)
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     vitest.config.ts          # Node unit/binary projects plus narrow jsdom dom-pilot project (HS2-3FQNGT)
     src/components/dom-pilot.dom.test.ts # Parent-composed search and Workers DOM pilot plus capability probes (HS2-3FQNGT)

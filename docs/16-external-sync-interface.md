@@ -400,10 +400,11 @@ an ongoing mirror relationship.
 
 Credentials live in the shipped OS-keychain registry and settings contain only secret
 references. The server owns provider credentials; clients and MCP callers receive no
-tokens. Built-in providers may live in a dedicated `hotsheet-providers` crate (HTTP
-dependencies, no terminal dependency). External provider executables use the existing
-trusted plugin loading model and a versioned IPC contract rather than Rust ABI dynamic
-libraries.
+tokens. Providers other than the native Markdown/Git store are `ticket_source` plugins:
+separate executables speaking the versioned out-of-process protocol in
+[38](38-plugin-protocol.md) §38.8, loaded and trusted like every other plugin. The
+first-party GitHub, GitLab and Jira sources move out of `hotsheet-extsync` into such
+plugins (HS2-5P32MR).
 
 **GitHub device sign-in and attachment copy routes.** These authenticated server routes
 (loopback secret, `X-Hotsheet-Secret`) keep tokens inside the server process:

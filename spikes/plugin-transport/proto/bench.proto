@@ -1,0 +1,27 @@
+syntax = "proto3";
+package bench;
+
+// Shaped like a ticket-source plugin's payloads (HS2-XE0ZVB).
+message Ticket {
+  string native_id = 1;
+  string title = 2;
+  string body = 3;
+  repeated string labels = 4;
+  string status = 5;
+  int64 updated_at = 6;
+}
+
+message GetReq { string native_id = 1; }
+message ListReq { uint32 count = 1; }
+message ListResp { repeated Ticket tickets = 1; }
+message BlobReq { uint32 size = 1; }
+message BlobResp { bytes data = 1; }
+message StreamReq { uint32 count = 1; }
+message Event { uint64 seq = 1; string kind = 2; string native_id = 3; }
+
+service Bench {
+  rpc Get(GetReq) returns (Ticket);
+  rpc List(ListReq) returns (ListResp);
+  rpc Blob(BlobReq) returns (BlobResp);
+  rpc Stream(StreamReq) returns (stream Event);
+}

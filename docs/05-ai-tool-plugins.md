@@ -9,9 +9,11 @@
 > _management_ lives in the **core**, driven by **either the CLI (headless — no
 > client, no server) or the server**, not the app layer (§5.1a, §5.12). (2) plugins
 > are **external and loadable**, layered as manifest-only (data, no ABI) → behavioral
-> by capability (**subprocess** for process-shaped behaviors, **WASM** for
-> pure-compute), with built-ins shipped through the same loader and a trust gate
-> (§5.12). Build tracked in HS2-91/HS2-92/HS2-93.
+> by capability (**subprocess** for process-shaped behaviors), with built-ins shipped
+> through the same loader and a trust gate (§5.12). Build tracked in HS2-91/HS2-92/HS2-93.
+> **The behavioral boundary is now specified in [38](38-plugin-protocol.md)**
+> (HS2-XE0ZVB, 2026-11-27): one out-of-process protocol for every code-bearing plugin,
+> JSON-RPC or protobuf frames over stdio; WASM is dropped from scope.
 
 ## 5.1 The principle
 
@@ -3784,7 +3786,8 @@ Full testing design: [12-code-organization-and-testing.md](12-code-organization-
 > HS1's `~/.hotsheet`). `hotsheet-cli plugin list|install|remove` manages them, and
 > `hotsheet-cli setup <third-party-id>` works with no recompile. A first-party id wins a
 > collision (a third party can't shadow a built-in). Still to build: the behavioral
-> subprocess/WASM boundary + the trust gate (**HS2-93**).
+> subprocess boundary + the trust gate, specified in [38](38-plugin-protocol.md) and
+> built by HS2-XY0VTN.
 
 Rust has no stable ABI, so "loadable plugin" cannot mean "load a `.dylib`." The
 **declarative/behavioral split (§5.3) is the escape hatch**: most of a plugin is
@@ -3798,16 +3801,13 @@ _data_, and data has no ABI problem. Plugins are therefore layered:
   `hotsheet setup <third-party-tool>` works headless.
 - **Behavioral plugins — manifest + code**, only for the custom bits (a persistent
   channel, an app-server drive, a bespoke permission bridge). The execution boundary
-  is chosen **by capability**:
-  - **Subprocess protocol (stdio JSON-RPC)** for the **process-shaped behaviors** —
-    `drive`/trigger, terminals, MCP. These are _already_ subprocess-shaped in HS2
-    (ACP, Codex app-server, the `hotsheet-mcp` shim), so an external drive plugin is
-    just another executable speaking the capability protocol. Language-agnostic; OS
-    crash-isolation.
-  - **WASM (`wasmtime`/`extism`)** for **pure-compute transforms** that want a
-    tighter sandbox — the host exposes only the §5.10 adapters (`ProcessSpawner`,
-    config writer, `PermissionTransport`, `McpConfigWriter`, `Clock`) as
-    capability-scoped imports; ambient fs/net is denied.
+  is a **subprocess speaking the out-of-process plugin protocol**
+  ([38](38-plugin-protocol.md)): JSON-RPC or negotiated protobuf frames over stdio,
+  one supervised process per plugin. Drives are _already_ subprocess-shaped in HS2
+  (ACP, Codex app-server, the `hotsheet-mcp` shim), so an external drive plugin is
+  just another executable speaking the `ai_drive` capability. Language-agnostic; OS
+  crash-isolation. (The earlier WASM option for pure-compute transforms was dropped by
+  HS2-XE0ZVB: no such plugin need exists.)
 
 **Built-ins are first-party plugins, in this repo, through the same loader — from
 day one** (maintainer, 2026-08-20). Claude and Codex are not special-cased and are
@@ -3858,7 +3858,7 @@ and its launch command _executes_. So:
 - **`hotsheet plugin verify`** runs the §5.10 conformance suite against a plugin
   (against `hs-fake-agent`) — the acceptance test a third-party plugin must pass,
   since we can't gate someone else's plugin in our CI.
-- Subprocess/WASM behavior runs under the least-privilege boundary above; a
+- Subprocess behavior runs under the boundary in [38](38-plugin-protocol.md) §38.7; a
   manifest-only plugin can _write_ but never _executes host code_.
 
 CLI surface: `hotsheet plugin list | info <id> | install <path|url> | verify <id> |
@@ -3870,9 +3870,10 @@ remove <id>`, and `hotsheet setup <tool|--detect>` (§5.1a).
 > plugin can't be tricked into writing outside the project). `plugin info` / `install`
 > **disclose what a plugin writes + launches** (plus provenance: first-party vs
 > unsigned third-party) and `install` requires confirmation (`--yes` to skip). **Still
-> to build:** the behavioral **subprocess/WASM sandbox** (no code-bearing plugins exist
-> yet — all current plugins are manifest-only data) and the **`hs-fake-agent`
-> conformance** half of `verify` (HS2-64).
+> to build:** the behavioral **subprocess boundary** ([38](38-plugin-protocol.md),
+> HS2-XY0VTN) and the **`hs-fake-agent` conformance** half of `verify` (HS2-64). Code-bearing
+> behavior does exist today, but it is compiled into the host (the Claude and Codex
+> drives in `hotsheet-aitools`); HS2-8Q4K4S moves it into plugins.
 
 ### Provider-owned model discovery and defaults
 
