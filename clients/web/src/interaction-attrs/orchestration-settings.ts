@@ -7,6 +7,8 @@ export const ORCHESTRATION_SETTINGS_ACTIONS = {
   /** HS2-92FJXM: one of the serving machine's open checkouts, for a project open from another server. */
   addHostedProject: action('add-hosted-orchestration-project'),
   openProjectDetail: action('open-orchestration-project'),
+  /** HS2-M1T6KN: a project group's disclosure arrow in the Projects tree, and Right and Left on its row. */
+  toggleProjectGroup: action('toggle-orchestration-project-group'),
   showProjectTab: action('show-orchestration-project-tab'),
   removeProject: action('remove-orchestration-project'),
   /** HS2-E9VVQF: a project row's Add a Site → an open project, and its Show All Projects choice. */

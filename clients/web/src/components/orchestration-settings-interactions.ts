@@ -1,15 +1,21 @@
 import { openAnchoredSurface } from '@kerfjs/ui/anchored-surface';
-import { openPopupMenu } from '@kerfjs/ui/popup-menu';
+import { closedPopupMenuRoot, openPopupMenu, openPopupMenuAt } from '@kerfjs/ui/popup-menu';
+import { wireTreeList } from '@kerfjs/ui/wire-tree-list';
 import { delegate } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import type { ProjectType } from '../api';
 import type { OrchestrationSettings } from '../features/orchestration-settings';
 import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
+import { targetOfNode } from '../orchestration-project-tree';
 import { ORCHESTRATION_PATTERN_COMMIT } from './app-combobox-wiring';
 import { OrchestrationLimitsHelp } from './orchestration-limits-help';
 
 const PROJECT_ROW = '[data-orchestration-project]';
+/** HS2-M1T6KN: a project group's row, which stands for its home site. */
+const PROJECT_GROUP = '[data-orchestration-project-group]';
+/** HS2-M1T6KN: a project's or a site's context menu beside the Projects tree. */
+const projectMenu = (targetId: string) => `[data-orchestration-project-menu="${CSS.escape(targetId)}"]`;
 const SESSION_ROW = '[data-orchestration-session]';
 const ROW_MENU = '[data-component="popup-menu"]';
 /** Kerf's `kui-menu-select`; cancelling it keeps the menu open. */
@@ -79,17 +85,78 @@ export function wireOrchestrationSettings(
   lifetime.add(
     delegate(root, 'click', ACTIONS.openProjectDetail.selector, (_event, target) => {
       const id = attribute(target, 'data-item-id');
+      // HS2-M1T6KN: a project group opens its home site's detail.
       if (id)
         withProject((projectId) => {
-          settings.openDetail(projectId, id);
+          settings.openDetail(projectId, targetOfNode(id), id);
         });
     }),
   );
   lifetime.add(
-    delegate(root, 'contextmenu', `${PROJECT_ROW},${SESSION_ROW}`, (event, target) => {
+    delegate(root, 'contextmenu', SESSION_ROW, (event, target) => {
       if (openRowMenu(target)) event.preventDefault();
     }),
   );
+  // HS2-M1T6KN: a Projects tree row's actions open at the pointer, or at the row from the keyboard; a group's are
+  // its home site's.
+  const treeRowTarget = (row: Element) =>
+    row.getAttribute('data-orchestration-project') ?? row.getAttribute('data-orchestration-project-group');
+  /** The tree row whose context menu is open, so closing the menu returns focus to it, not to its hidden anchor. */
+  let menuOrigin: string | undefined;
+  const openProjectMenu = (row: Element, x: number, y: number) => {
+    const targetId = treeRowTarget(row),
+      menu = targetId ? root.querySelector<HTMLElement>(projectMenu(targetId)) : null;
+    if (!menu) return false;
+    menuOrigin = row.getAttribute('data-item-id') ?? undefined;
+    openPopupMenuAt(menu, x, y);
+    return true;
+  };
+  const returnFocus = (event: Event) => {
+    const menu = closedPopupMenuRoot(event);
+    if (!menu?.matches('[data-orchestration-project-menu]') || !menuOrigin) return;
+    const origin = menuOrigin,
+      active = document.activeElement;
+    menuOrigin = undefined;
+    // A chosen action that moved focus elsewhere (a confirmation) keeps it.
+    if (active && active !== document.body && !menu.contains(active)) return;
+    root
+      .querySelector<HTMLElement>(`[role="treeitem"][data-item-id="${CSS.escape(origin)}"]`)
+      ?.focus({ preventScroll: true });
+  };
+  root.addEventListener('toggle', returnFocus, true);
+  lifetime.add(() => {
+    root.removeEventListener('toggle', returnFocus, true);
+  });
+  lifetime.add(
+    delegate(root, 'contextmenu', `${PROJECT_ROW},${PROJECT_GROUP}`, (event, target) => {
+      const pointer = event as MouseEvent,
+        rect = target.getBoundingClientRect(),
+        // A keyboard-made contextmenu event has no pointer position: open at the row.
+        keyboard = pointer.clientX === 0 && pointer.clientY === 0;
+      if (
+        openProjectMenu(target, keyboard ? rect.left + 24 : pointer.clientX, keyboard ? rect.bottom : pointer.clientY)
+      )
+        event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'keydown', `${PROJECT_ROW},${PROJECT_GROUP}`, (event, target) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key !== 'ContextMenu' && !(keyboard.shiftKey && keyboard.key === 'F10')) return;
+      const rect = target.getBoundingClientRect();
+      if (openProjectMenu(target, rect.left + 24, rect.bottom)) event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.toggleProjectGroup.selector, (_event, target) => {
+      const id = attribute(target, 'data-item-id');
+      if (id)
+        withProject((projectId) => {
+          settings.toggleProjectGroup(projectId, targetOfNode(id));
+        });
+    }),
+  );
+  lifetime.add(wireTreeList(root));
   lifetime.add(
     delegate(root, 'click', ACTIONS.openSessionActions.selector, (_event, target) => {
       openRowMenu(target.closest(SESSION_ROW));

@@ -122,6 +122,11 @@ export interface OrchestrationProjectRow {
   siteOf?: string;
   /** HS2-D4G81Q: the OS of a site's machine (`macOS 15.1, arm64`), once the sites view read it. */
   system?: string;
+  /**
+   * HS2-M1T6KN: the machine alone ("This Computer", "Build Host"), for a project's collapsed summary; empty
+   * when the site is not bound here, and absent before its binding is read.
+   */
+  machine?: string;
 }
 
 /**
@@ -182,6 +187,13 @@ export function projectRows(
       tabProjectId: destination ? tabProjectIdOf(destination, servingProjectId) : undefined,
       siteOf: projectOf(target),
       system: machine ? systemLabel(machine) : undefined,
+      machine: destination
+        ? servedBy !== undefined && destination.kind === 'local'
+          ? servedBy
+          : machineOf(destination, remoteLabels)
+        : binding
+          ? ''
+          : undefined,
     };
   };
   return active

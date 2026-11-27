@@ -1330,7 +1330,9 @@ commands`, and the server's command saves). Switching between Archive and Delete
   The project-scoped **General** category comes first and holds **Project Type**
   (Software or Orchestration), then the former Column view settings: **Group new tickets
   automatically** (HS2-FN018Q) and **Hide Verified column**. For an Orchestration project, **Orchestration** follows it
-  with the projects it orchestrates, + Add Project, each project's detail in the inspector
+  with the projects it orchestrates (a tree: a project with several sites is a group of its
+  home site and other sites, open until a person closes it, remembered per browser;
+  HS2-M1T6KN), + Add Project, each project's detail in the inspector
   and the limits-only policy; it is absent for a Software project (HS2-W27N1D, see
   [26-orchestration-projects.md](26-orchestration-projects.md) §26.27).
   **Project Settings → Ticket groups** lists every group of the project, including empty ones, with

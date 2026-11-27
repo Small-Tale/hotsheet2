@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ApiHttpError, type OrchestrationSession } from '../api';
 import { OrchestrationSettings } from '../components/orchestration-settings';
 import type { ConfirmationAnswer, ConfirmationOptions } from '../confirmation';
+import { projectCollapseKey, projectGroupId } from '../orchestration-project-tree';
 import { hostedSiteSources, projectRows, siteChoicesByProject } from '../orchestration-settings-model';
 import { remoteProjectId } from '../remote-projects/identity';
 import { remoteTerminalList } from '../remote-projects/terminals';
@@ -15,10 +16,16 @@ import {
   DEMO_REMOTE,
   DEMO_TARGETS,
   demoStore,
+  memoryStorage,
 } from '../ux-demo/orchestration-settings-fixtures';
 import { createOrchestrationSettings, type OrchestrationApi } from './orchestration-settings';
 
-function setup({ empty = false, answers = [] as boolean[], choices = [] as ConfirmationAnswer[] } = {}) {
+function setup({
+  empty = false,
+  answers = [] as boolean[],
+  choices = [] as ConfirmationAnswer[],
+  storage = memoryStorage(),
+} = {}) {
   const fake = createDemoOrchestrationApi({ empty });
   const api: OrchestrationApi = Object.fromEntries(
     Object.entries(fake.api).map(([name, call]) => [name, vi.fn(call as (...args: unknown[]) => unknown)]),
@@ -54,6 +61,7 @@ function setup({ empty = false, answers = [] as boolean[], choices = [] as Confi
     showInspector: vi.fn(),
     defer: (run) => deferred.push(run),
     notify: (message) => toasts.push(message),
+    viewStorage: storage,
   });
   return {
     settings,
@@ -1140,5 +1148,103 @@ describe('a change’s outcome is a toast, and a failure keeps its record (HS2-4
     await t.settings.loadSettings(DEMO_OWNER);
     expect(state(t).message).toBe('Could not read the orchestration settings. offline');
     expect(t.toasts).toEqual([]);
+  });
+});
+
+describe('the Projects tree (HS2-M1T6KN)', () => {
+  const MOBILE = 'mobile-0000000000ab';
+  const key = (target: string) => projectCollapseKey(DEMO_OWNER, target);
+  const rowsOf = (t: ReturnType<typeof setup>) => projectRows(state(t).manifest, state(t).bindings, {});
+
+  it('opens every group until a person closes one, remembers it per browser, and opens it again on a new site', async () => {
+    const storage = memoryStorage(),
+      t = setup({ storage });
+    expect(t.settings.collapsedGroups.value.size).toBe(0);
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.openTab({ id: MOBILE, name: 'Mobile' });
+    await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, MOBILE);
+    // Closed, opened, closed again: each toggle is remembered.
+    t.settings.toggleProjectGroup(DEMO_OWNER, DEMO_TARGETS.api);
+    expect(t.settings.collapsedGroups.value.has(key(DEMO_TARGETS.api))).toBe(true);
+    t.settings.toggleProjectGroup(DEMO_OWNER, DEMO_TARGETS.api);
+    expect(t.settings.collapsedGroups.value.has(key(DEMO_TARGETS.api))).toBe(false);
+    t.settings.toggleProjectGroup(DEMO_OWNER, DEMO_TARGETS.api);
+    // A reload in the same browser reads it back; another browser opens every group.
+    const reloaded = setup({ storage });
+    expect(reloaded.settings.collapsedGroups.value.has(key(DEMO_TARGETS.api))).toBe(true);
+    expect(setup().settings.collapsedGroups.value.size).toBe(0);
+    // A refused site leaves the group closed; an added one opens it beside the toast.
+    t.openTab({ id: 'billing-0000000000ab', name: 'Billing' });
+    await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, 'billing-0000000000ab');
+    expect(t.settings.collapsedGroups.value.has(key(DEMO_TARGETS.api))).toBe(true);
+    t.openTab({ id: 'mobile-1111111111ab', name: 'Tablet' });
+    await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, 'mobile-1111111111ab');
+    expect(t.toasts.at(-1)).toBe('Tablet added as a site of API.');
+    expect(t.settings.collapsedGroups.value.has(key(DEMO_TARGETS.api))).toBe(false);
+    expect(setup({ storage }).settings.collapsedGroups.value.has(key(DEMO_TARGETS.api))).toBe(false);
+  });
+
+  it('opens a group’s home site detail and keeps the group the chosen row', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.api, projectGroupId(DEMO_TARGETS.api));
+    expect(t.settings.selected.value[DEMO_OWNER]).toBe(DEMO_TARGETS.api);
+    expect(t.settings.selectedNodes.value[DEMO_OWNER]).toBe(projectGroupId(DEMO_TARGETS.api));
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.web);
+    expect(t.settings.selectedNodes.value[DEMO_OWNER]).toBe(DEMO_TARGETS.web);
+  });
+
+  it('renders a group with its home site first, a single-site project as a leaf, and one context menu per row', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.openTab({ id: MOBILE, name: 'Mobile' });
+    await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, MOBILE);
+    const rows = rowsOf(t),
+      mobile = rows.find((row) => row.label === 'Mobile')!;
+    const render = (collapsed: ReadonlySet<string>, selectedNode?: string) =>
+      String(
+        OrchestrationSettings({
+          rows,
+          ownerId: DEMO_OWNER,
+          collapsedGroups: collapsed,
+          selectedTarget: DEMO_TARGETS.api,
+          selectedNode,
+          siteChoices: { [DEMO_TARGETS.api]: [], [DEMO_TARGETS.web]: [], [DEMO_TARGETS.docs]: [] },
+          busy: [mobile.targetId],
+        }),
+      );
+    const open = render(new Set());
+    expect(open).toContain('role="tree"');
+    expect(open).toContain(`data-orchestration-project-group="${DEMO_TARGETS.api}"`);
+    expect(open).toContain('aria-expanded="true"');
+    expect(open).toContain('data-lucide="layers"');
+    expect(open).toContain('data-lucide="house"');
+    expect(open).toContain('Home Site');
+    expect(open).toContain('2 sites');
+    expect(open).toContain('data-action="toggle-orchestration-project-group"');
+    // Home site, then the site, under the group; Web and Docs stay leaves.
+    const order = ['data-orchestration-project-group', DEMO_TARGETS.api, mobile.targetId].map((id) =>
+      open.indexOf(id === 'data-orchestration-project-group' ? id : `data-orchestration-project="${id}"`),
+    );
+    expect(order).toEqual([...order].sort((left, right) => left - right));
+    expect(open.match(/data-orchestration-project-group=/g)).toHaveLength(1);
+    expect(open.match(/data-orchestration-project="/g)).toHaveLength(4);
+    // One context menu per project and site, none for the group, with no row "…" menu.
+    expect(open.match(/data-orchestration-project-menu=/g)).toHaveLength(4);
+    expect(open).not.toContain('data-lucide="more-horizontal"');
+    expect(open).toContain('Actions for Mobile');
+    expect(open).toContain('Separate from API');
+    expect(open).toContain('Make Mobile the Home Site');
+    // A change in flight shows a spinner in place of the badge.
+    expect(open).toContain('Changing Mobile');
+    // The chosen group is the selected row while API is the detail's target.
+    expect(render(new Set(), projectGroupId(DEMO_TARGETS.api))).toMatch(
+      /aria-selected="true"[^>]*data-orchestration-project-group|data-orchestration-project-group[^>]*aria-selected="true"/,
+    );
+    // Closed: the group's sites are not rendered, and the summary still names the sites.
+    const closed = render(new Set([key(DEMO_TARGETS.api)]));
+    expect(closed).toContain('aria-expanded="false"');
+    expect(closed).not.toContain(`data-orchestration-project="${mobile.targetId}"`);
+    expect(closed).toContain('2 sites');
   });
 });

@@ -1,6 +1,7 @@
 import { effect, type Signal } from 'kerfjs';
 
 import { Api } from '../api';
+import { projectActionItems } from '../components/orchestration-project-actions';
 import { orchestrationProjectPanel } from '../components/orchestration-project-detail';
 import type { OrchestrationSettingsProps } from '../components/orchestration-settings';
 import type { ProjectGeneralSettingsProps } from '../components/project-general-settings';
@@ -9,8 +10,10 @@ import type { SidebarPanelParts } from '../components/sidebar-panel';
 import type { Choose, Confirm } from '../confirmation';
 import type { Project } from '../interactions/types';
 import {
+  type AddChoice,
   addChoices,
   hostedSiteSources,
+  type OrchestrationProjectRow,
   projectRows,
   resourceSuggestions,
   siteChoicesByProject,
@@ -156,51 +159,68 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     return isRemoteProjectId(current.id) ? (current.remoteHost ?? 'the server') : undefined;
   }
 
+  /** The Add a Site props for the rows of a project's Settings → Orchestration (HS2-E9VVQF, HS2-89YNGN). */
+  function siteProps(
+    current: Project,
+    rows: OrchestrationProjectRow[],
+    choices: AddChoice[],
+  ): Pick<OrchestrationSettingsProps, 'siteChoices' | 'showAllSites' | 'hostedSites'> {
+    const state = settings.settings.value[current.id];
+    // HS2-E9VVQF: a project served here offers Add a Site on each project row. HS2-89YNGN: one open from
+    // another server offers that server's open checkouts of the same ticket store.
+    if (isRemoteProjectId(current.id)) {
+      if (!state?.hosted) return {};
+      const hosted = hostedSiteSources(state.hosted, servedBy(current) ?? 'the server');
+      return {
+        siteChoices: siteChoicesByProject(
+          rows,
+          hosted.choices,
+          hosted.stores,
+          state.manifest,
+          state.bindings,
+          Boolean(state.showAllSites),
+        ),
+        showAllSites: Boolean(state.showAllSites),
+        hostedSites: true,
+      };
+    }
+    return {
+      siteChoices: siteChoicesByProject(
+        rows,
+        choices,
+        state?.stores ?? {},
+        state?.manifest,
+        state?.bindings ?? {},
+        Boolean(state?.showAllSites),
+      ),
+      showAllSites: Boolean(state?.showAllSites),
+    };
+  }
+
+  function addChoicesOf(current: Project): AddChoice[] {
+    const state = settings.settings.value[current.id];
+    return addChoices(
+      projects.value.map((item) => ({ id: item.id, name: item.name })),
+      current.id,
+      state?.bindings ?? {},
+      state?.manifest,
+      settings.remoteLabels.value,
+    );
+  }
+
   function orchestration(current: Project): OrchestrationSettingsProps {
     const state = settings.settings.value[current.id],
       labels = settings.remoteLabels.value,
       rows = projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites, servedBy(current), current.id),
-      choices = addChoices(
-        projects.value.map((item) => ({ id: item.id, name: item.name })),
-        current.id,
-        state?.bindings ?? {},
-        state?.manifest,
-        labels,
-      );
+      choices = addChoicesOf(current);
     return {
       rows,
       choices,
-      // HS2-E9VVQF: a project served here offers Add a Site on each project row. HS2-89YNGN: one open from
-      // another server offers that server's open checkouts of the same ticket store.
-      ...(isRemoteProjectId(current.id)
-        ? state?.hosted
-          ? (() => {
-              const hosted = hostedSiteSources(state.hosted, servedBy(current) ?? 'the server');
-              return {
-                siteChoices: siteChoicesByProject(
-                  rows,
-                  hosted.choices,
-                  hosted.stores,
-                  state.manifest,
-                  state.bindings,
-                  Boolean(state.showAllSites),
-                ),
-                showAllSites: Boolean(state.showAllSites),
-                hostedSites: true,
-              };
-            })()
-          : {}
-        : {
-            siteChoices: siteChoicesByProject(
-              rows,
-              choices,
-              state?.stores ?? {},
-              state?.manifest,
-              state?.bindings ?? {},
-              Boolean(state?.showAllSites),
-            ),
-            showAllSites: Boolean(state?.showAllSites),
-          }),
+      ...siteProps(current, rows, choices),
+      // HS2-M1T6KN: the Projects tree's chosen row and each person's closed project groups.
+      ownerId: current.id,
+      selectedNode: settings.selectedNodes.value[current.id],
+      collapsedGroups: settings.collapsedGroups.value,
       openTabs: projects.value.map((item) => item.id),
       selectedTarget: settings.selected.value[current.id],
       loading: state?.loading ?? true,
@@ -223,6 +243,12 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
         : {}),
       policy: { draft: state?.draft, toolLabel: dependencies.toolLabel },
     };
+  }
+
+  /** Add a Site's choices by project row, or undefined where none can be added. */
+  function siteChoicesOf(current: Project, rows: OrchestrationProjectRow[], target: string) {
+    const choices = siteProps(current, rows, addChoicesOf(current)).siteChoices;
+    return choices ? (choices[target] ?? []) : undefined;
   }
 
   /** The inspector while Settings → Orchestration shows a selected project. */
@@ -264,6 +290,16 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
         ),
       ],
       removing: Boolean(state?.busy.includes(target)),
+      // HS2-M1T6KN: the same actions as the row's context menu in the Projects tree.
+      actions: projectActionItems(row, {
+        tabOpen: Boolean(row.tabProjectId && projects.value.some((item) => item.id === row.tabProjectId)),
+        busy: Boolean(state?.busy.includes(target)),
+        projectLabel: row.siteOf ? rows.find((item) => item.targetId === row.siteOf)?.label : undefined,
+        siteChoices: siteChoicesOf(current, rows, target),
+        showAllSites: Boolean(state?.showAllSites),
+        adding: Boolean(state?.busy.includes('add')),
+        hostedSites: isRemoteProjectId(current.id),
+      }),
       policyTools: usablePolicyTools(
         policy,
         dependencies.aiTools().map((tool) => tool.id),

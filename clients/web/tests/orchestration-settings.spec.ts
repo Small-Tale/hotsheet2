@@ -188,7 +188,7 @@ test('HS2-W27N1D Project Type adds the Orchestration category, which adds, detai
     await expect(settings.locator('[data-orchestration-project]').filter({ hasText: 'Docs' })).toBeVisible();
 
     // A row opens its detail in the inspector; each part reads through the existing routes.
-    await webRow.getByRole('button', { name: /Web/ }).first().click();
+    await webRow.click();
     const detail = page.locator('[data-component="orchestration-project-detail"]');
     await expect(detail).toBeVisible();
     await expect(detail.getByRole('region', { name: 'Binding' })).toContainText('Connected');
@@ -321,12 +321,7 @@ test('HS2-W27N1D captures Project Type, Orchestration, the Add Project menu and 
         await expect(page.getByRole('menu')).toBeHidden();
       }
       await page.setViewportSize(wide);
-      await settings
-        .locator('[data-orchestration-project]')
-        .filter({ hasText: 'Web' })
-        .getByRole('button', { name: /Web/ })
-        .first()
-        .click();
+      await settings.locator('[data-orchestration-project]').filter({ hasText: 'Web' }).click();
       const detail = page.locator('[data-component="orchestration-project-detail"]');
       await expect(detail.getByRole('region', { name: 'Binding' })).toContainText('Connected');
       for (const size of sizes) {
@@ -398,12 +393,7 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
     const settings = page.locator('[data-component="orchestration-settings"]');
     const detail = page.locator('[data-component="orchestration-project-detail"]');
     const open = async (label: string) => {
-      await settings
-        .locator('[data-orchestration-project]')
-        .filter({ hasText: label })
-        .getByRole('button', { name: new RegExp(label) })
-        .first()
-        .click();
+      await settings.locator('[data-orchestration-project]').filter({ hasText: label }).click();
       await expect(detail).toHaveAttribute('data-target-id', targets[label]);
     };
     await open('Web');
@@ -514,12 +504,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     );
     await orchestrationNav(page).click();
     const settings = page.locator('[data-component="orchestration-settings"]');
-    await settings
-      .locator('[data-orchestration-project]')
-      .filter({ hasText: 'Web' })
-      .getByRole('button', { name: /Web/ })
-      .first()
-      .click();
+    await settings.locator('[data-orchestration-project]').filter({ hasText: 'Web' }).click();
     const limits = page.locator('[data-component="orchestration-project-limits"]');
     // HS2-N5BDE4: an unlisted project is Auto: no tool checked, Sessions Here shows Auto, and admission
     // is asked for every usable tool.
@@ -778,12 +763,7 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
     await showProjectSettings(page, 'General');
     await orchestrationNav(page).click();
     const settings = page.locator('[data-component="orchestration-settings"]');
-    await settings
-      .locator('[data-orchestration-project]')
-      .filter({ hasText: 'Docs' })
-      .getByRole('button', { name: /Docs/ })
-      .first()
-      .click();
+    await settings.locator('[data-orchestration-project]').filter({ hasText: 'Docs' }).click();
     const limits = page.locator('[data-component="orchestration-project-limits"]');
     await openAdvancedLimits(page);
     const dispatcher = limits.getByRole('checkbox', { name: 'Dispatcher' }),
@@ -1025,7 +1005,7 @@ test('HS2-89YNGN a remote orchestration project adds a site from the projects op
 
     // Web's "…" → Add a Site: the server's open checkouts of its store, without Open Another Project….
     const openSites = async () => {
-      await rows.nth(0).getByRole('button', { name: 'Actions for Web' }).click();
+      await rows.nth(0).click({ button: 'right' });
       await page.getByRole('menuitem', { name: 'Add a Site' }).click();
       const submenu = page.getByRole('menu', { name: 'Add a Site' });
       await expect(submenu).toBeVisible();
@@ -1065,7 +1045,7 @@ test('HS2-89YNGN a remote orchestration project adds a site from the projects op
       ['Docs', web.target_id],
     ]);
     await expect(rows).toHaveCount(2);
-    await expect(rows.nth(1)).toContainText('Site of Web');
+    await expect(rows.nth(1)).toContainText('Site · ');
     await capture('added-1440-light');
   } finally {
     await server.stop(page);
@@ -1181,7 +1161,7 @@ test('HS2-0G80WD a remote orchestration project stops orchestrating a project af
     await page.emulateMedia({ colorScheme: 'dark' });
     await capture('row-1440-dark');
     await page.emulateMedia({ colorScheme: 'light' });
-    await webRow.getByRole('button', { name: /Actions for Web/ }).click();
+    await webRow.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Stop Orchestrating…' }).click();
     const dialog = page.getByRole('alertdialog');
     await expect(dialog).toContainText('Stop orchestrating Web?');
@@ -1197,7 +1177,7 @@ test('HS2-0G80WD a remote orchestration project stops orchestrating a project af
       }
       await expect(webRow).toContainText('On Build host');
       await capture(`row-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
-      await webRow.getByRole('button', { name: /Actions for Web/ }).click();
+      await webRow.click({ button: 'right' });
       await page.getByRole('menuitem', { name: 'Stop Orchestrating…' }).click();
       await expect(dialog).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -1277,7 +1257,7 @@ test('HS2-7SHGQH a remote orchestration project row shows its project open from 
     const settings = page.locator('[data-component="orchestration-settings"]');
     const webRow = settings.locator('[data-orchestration-project]').filter({ hasText: 'Web' });
     await expect(webRow).toBeVisible();
-    await webRow.getByRole('button', { name: /Actions for Web/ }).click();
+    await webRow.click({ button: 'right' });
     // The row is the serving server's local checkout; here it is the remote Web tab.
     const show = page.getByRole('menuitem', { name: 'Show Project Tab' });
     await expect(show).toBeEnabled();
@@ -1337,9 +1317,11 @@ test('HS2-SHH7WW Settings lists a project with its other sites after it', async 
     const rows = settings.locator('[data-orchestration-project]');
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(0)).toContainText('Widgets');
-    await expect(rows.nth(0)).toContainText('2 sites · Local on This Computer');
+    // HS2-M1T6KN: the project is a tree group naming its sites' machines, its home site first.
+    await expect(settings.locator('[data-orchestration-project-group]')).toContainText('2 sites · This Computer');
+    await expect(rows.nth(0)).toContainText('Home Site · Local on This Computer');
     await expect(rows.nth(1)).toContainText('Widgets second clone');
-    await expect(rows.nth(1)).toContainText('Site of Widgets · Local on This Computer');
+    await expect(rows.nth(1)).toContainText('Site · Local on This Computer');
 
     const directory = join('target', 'visual-captures', 'hs2-shh7ww');
     await mkdir(directory, { recursive: true });
@@ -1363,6 +1345,195 @@ test('HS2-SHH7WW Settings lists a project with its other sites after it', async 
         });
       }
     }
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
+ * HS2-M1T6KN (Design v1 Concept A): Settings → Orchestration → Projects is a tree. Widgets has two sites, so it
+ * is a group of its home site and its other site; Writer has one site and stays a leaf. Every group opens by
+ * default, a person's close or open is remembered across a reload, the rows' actions open from a right-click,
+ * from the context-menu key and from the inspector's actions menu, and the keyboard walks the tree. Through the
+ * real shell and the real orchestration routes; captured wide, medium, narrow and wide again in both schemes.
+ */
+test('HS2-M1T6KN Projects is a tree of each project and its sites, remembered and keyboard driven', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(300_000);
+  const { server, projects } = await openProjects(page, { names: ['Mobile', 'Writer'], open: 5 });
+  try {
+    const [owner, web, docs, , tablet] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const targets: Record<string, string> = {};
+    for (const [project, label] of [
+      [web, 'Widgets'],
+      [docs, 'Docs'],
+      [tablet, 'Writer'],
+    ] as const)
+      targets[label] = (
+        await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+          destination: { kind: 'local', checkout_id: project.id },
+          label,
+          actor: { role: 'human' },
+        })
+      ).target_id;
+    const { revision } = await server.request<{ revision: string }>(`${base}/targets`);
+    await server.request(`${base}/targets/${targets.Docs}`, 'PATCH', {
+      expected_revision: revision,
+      label: 'Docs',
+      site_of: targets.Widgets,
+      actor: { role: 'human' },
+    });
+
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'Orchestration');
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const tree = settings.getByRole('tree', { name: 'Orchestrated Projects' });
+    const group = tree.locator('[data-orchestration-project-group]');
+    const row = (label: string) =>
+      tree.locator('[data-orchestration-project]').filter({ has: page.getByText(label, { exact: true }) });
+    const items = tree.getByRole('treeitem');
+
+    // Expanded by default: the group, its home site, its other site, then the single-site project as a leaf.
+    await expect(group).toHaveAttribute('aria-expanded', 'true');
+    await expect(group).toContainText('2 sites · This Computer');
+    await expect(items).toHaveCount(4);
+    await expect(items.nth(1)).toContainText('Home Site · Local on This Computer');
+    await expect(items.nth(1)).toHaveAttribute('aria-level', '2');
+    await expect(items.nth(2)).toContainText('Docs');
+    await expect(items.nth(2)).toContainText('Site · Local on This Computer');
+    await expect(items.nth(3)).toContainText('Writer');
+    await expect(items.nth(3)).toHaveAttribute('aria-level', '1');
+    await expect(items.nth(3)).not.toHaveAttribute('aria-expanded', /.*/);
+    for (const index of [1, 2, 3]) await expect(items.nth(index)).toContainText('Bound');
+    // No row carries a "…" button: the actions are in each row's context menu and the inspector.
+    await expect(tree.getByRole('button', { name: /^Actions for / })).toHaveCount(0);
+
+    // Closed with its arrow, then remembered across a reload, in this browser.
+    await group.locator('[data-action="toggle-orchestration-project-group"]').click();
+    await expect(group).toHaveAttribute('aria-expanded', 'false');
+    await expect(items).toHaveCount(2);
+    await expect(group).toContainText('2 sites · This Computer');
+    await page.reload();
+    await showProjectSettings(page, 'Orchestration');
+    await expect(group).toHaveAttribute('aria-expanded', 'false');
+    await expect(items).toHaveCount(2);
+
+    // Choosing the group opens its home site's detail; the inspector's toolbar has the same actions.
+    await group.click();
+    await expect(group).toHaveAttribute('aria-selected', 'true');
+    const detail = page.locator('[data-component="orchestration-project-detail"]');
+    await expect(detail).toHaveAttribute('data-target-id', targets.Widgets);
+    // The keyboard: Right opens the group and is remembered, Down walks into it, Left goes back to the group.
+    await expect(group).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(group).toHaveAttribute('aria-expanded', 'true');
+    await expect(items).toHaveCount(4);
+    await page.keyboard.press('ArrowDown');
+    await expect(row('Widgets')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(row('Docs')).toBeFocused();
+    // The context-menu key opens the focused row's actions; Escape closes them and keeps the row focused.
+    await page.keyboard.press('Shift+F10');
+    const docsMenu = page.getByRole('menu', { name: 'Actions for Docs' });
+    await expect(docsMenu.getByRole('menuitem', { name: 'Make Docs the Home Site' })).toBeVisible();
+    await expect(docsMenu.getByRole('menuitem', { name: 'Separate from Widgets' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(docsMenu).toBeHidden();
+    await expect(row('Docs')).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(group).toBeFocused();
+    await page.keyboard.press('Shift+F10');
+    const widgetsMenu = page.getByRole('menu', { name: 'Actions for Widgets' });
+    await expect(widgetsMenu.getByRole('menuitem', { name: 'Add a Site' })).toBeVisible();
+    await expect(widgetsMenu.getByRole('menuitem', { name: /the Home Site/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(widgetsMenu).toBeHidden();
+    await expect(group).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(row('Writer')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(detail).toHaveAttribute('data-target-id', targets.Writer);
+    await page.reload();
+    await showProjectSettings(page, 'Orchestration');
+    await expect(group).toHaveAttribute('aria-expanded', 'true');
+
+    const directory = join('target', 'visual-captures', 'hs2-m1t6kn');
+    await mkdir(directory, { recursive: true });
+    const hideRails = async (names: string[]) => {
+      for (const name of names) {
+        const hide = page.getByRole('button', { name, exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await expect(hide).toBeHidden();
+      }
+    };
+    const capture = async (state: string) => {
+      for (const scheme of ['light', 'dark'] as const) {
+        await page.emulateMedia({ colorScheme: scheme });
+        for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+          await page.setViewportSize(size);
+          if (size.width === 390) await hideRails(['Hide Settings Sidebar', 'Hide Ticket Inspector']);
+          await expect(group).toBeVisible();
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+          await page.screenshot({
+            path: join(
+              directory,
+              `hs2-m1t6kn-${state}-${String(size.width)}${index === 3 ? '-again' : ''}-${scheme}-${browserName}.png`,
+            ),
+            animations: 'disabled',
+          });
+        }
+      }
+      await page.emulateMedia({ colorScheme: 'light' });
+    };
+    await capture('expanded');
+
+    // A right-click on the closed group: Add a Site → Mobile opens the group again beside the toast.
+    await group.locator('[data-action="toggle-orchestration-project-group"]').click();
+    await expect(group).toHaveAttribute('aria-expanded', 'false');
+    await capture('collapsed');
+    await group.click({ button: 'right' });
+    await widgetsMenu.getByRole('menuitem', { name: 'Add a Site' }).click();
+    const submenu = page.getByRole('menu', { name: 'Add a Site' });
+    await submenu.getByRole('menuitem', { name: /Mobile/ }).click();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Mobile added as a site of Widgets.' })).toBeVisible();
+    await expect(group).toHaveAttribute('aria-expanded', 'true');
+    await expect(group).toContainText('3 sites · This Computer');
+    await expect(items).toHaveCount(5);
+    await capture('added');
+
+    // A right-click on a site: Separate from Widgets makes Mobile a leaf of its own.
+    await row('Mobile').click({ button: 'right' });
+    await page
+      .getByRole('menu', { name: 'Actions for Mobile' })
+      .getByRole('menuitem', { name: 'Separate from Widgets' })
+      .click();
+    await expect(page.locator('.app-toast').filter({ hasText: 'Mobile is its own project again.' })).toBeVisible();
+    await expect(group).toContainText('2 sites');
+    await expect(row('Mobile')).toHaveAttribute('aria-level', '1');
+
+    // The inspector's actions menu: Make Docs the Home Site moves the home, and the group follows it.
+    await row('Docs').click();
+    await expect(detail).toHaveAttribute('data-target-id', targets.Docs);
+    await page.getByRole('button', { name: 'Actions for Docs' }).click();
+    await page
+      .getByRole('menu', { name: 'Actions for Docs' })
+      .getByRole('menuitem', { name: 'Make Docs the Home Site' })
+      .click();
+    await expect(
+      page.locator('.app-toast').filter({ hasText: 'Docs is the home site of the project now.' }),
+    ).toBeVisible();
+    await expect(group).toHaveAttribute('data-orchestration-project-group', targets.Docs);
+    // Mobile, a project of its own again, sorts first; the group's children follow it.
+    const children = tree.locator('[role="treeitem"][aria-level="2"]');
+    await expect(children.nth(0)).toContainText('Docs');
+    await expect(children.nth(0)).toContainText('Home Site · ');
+    await expect(children.nth(1)).toContainText('Widgets');
   } finally {
     await server.stop(page);
   }
@@ -1434,9 +1605,7 @@ test('HS2-SYZB33 a site Limits point Coordination Sessions at the project home',
     const open = (label: string) =>
       settings
         .locator('[data-orchestration-project]')
-        .filter({ hasText: label })
-        .getByRole('button', { name: new RegExp(label) })
-        .first()
+        .filter({ has: page.getByText(label, { exact: true }) })
         .click();
     await open('Widgets second clone');
     const limits = page.locator('[data-component="orchestration-project-limits"]');
@@ -1549,17 +1718,13 @@ test('HS2-D4G81Q Settings shows each site OS and tools', async ({ page, browserN
     const rows = settings.locator('[data-orchestration-project]');
     await expect(rows).toHaveCount(2);
     // Each site row adds its machine's OS once the sites view is read.
-    await expect(rows.nth(0)).toContainText('2 sites · Local on This Computer · ');
+    await expect(rows.nth(0)).toContainText('Home Site · Local on This Computer · ');
     await expect(rows.nth(0)).toContainText(system);
-    await expect(rows.nth(1)).toContainText('Site of Widgets · Local on This Computer · ');
+    await expect(rows.nth(1)).toContainText('Site · Local on This Computer · ');
     await expect(rows.nth(1)).toContainText(system);
 
     // The home's detail lists both sites with the machine rows of the capacity region.
-    await rows
-      .nth(0)
-      .getByRole('button', { name: /Widgets/ })
-      .first()
-      .click();
+    await rows.nth(0).click();
     const detail = page.locator('[data-component="orchestration-project-detail"]');
     await expect(detail).toHaveAttribute('data-target-id', targets.Widgets);
     const sites = detail.getByRole('region', { name: 'Sites' });
@@ -1580,18 +1745,10 @@ test('HS2-D4G81Q Settings shows each site OS and tools', async ({ page, browserN
     await expect(capacityRegion).not.toContainText(system);
     await expect(capacityRegion.getByText('Toolchains', { exact: true })).toHaveCount(0);
     // The site's own detail shows the same Sites section.
-    await rows
-      .nth(1)
-      .getByRole('button', { name: /Widgets second clone/ })
-      .first()
-      .click();
+    await rows.nth(1).click();
     await expect(detail).toHaveAttribute('data-target-id', targets['Widgets second clone']);
     await expect(tables).toHaveCount(2);
-    await rows
-      .nth(0)
-      .getByRole('button', { name: /Widgets/ })
-      .first()
-      .click();
+    await rows.nth(0).click();
     await expect(detail).toHaveAttribute('data-target-id', targets.Widgets);
 
     const directory = join('target', 'visual-captures', 'hs2-d4g81q');
@@ -1684,18 +1841,15 @@ test('HS2-NAA3HV makes a site the home site of its project from Settings', async
     const settings = page.locator('[data-component="orchestration-settings"]');
     const rows = settings.locator('[data-orchestration-project]');
     await expect(rows).toHaveCount(2);
-    await expect(rows.nth(1)).toContainText('Site of Widgets');
+    await expect(rows.nth(1)).toContainText('Site · ');
     const directory = join('target', 'visual-captures', 'hs2-naa3hv');
     await mkdir(directory, { recursive: true });
     // A project row has no Make … the Home Site; a site row has it beside Separate from Widgets.
-    await rows
-      .nth(0)
-      .getByRole('button', { name: /^Actions for / })
-      .click();
+    await rows.nth(0).click({ button: 'right' });
     await expect(page.getByRole('menuitem', { name: /the Home Site/ })).toHaveCount(0);
     await page.keyboard.press('Escape');
     const openSiteMenu = async () => {
-      await rows.nth(1).getByRole('button', { name: 'Actions for Widgets laptop' }).click();
+      await rows.nth(1).click({ button: 'right' });
       const menu = page.getByRole('menu', { name: 'Actions for Widgets laptop' });
       await expect(menu.getByRole('menuitem', { name: 'Make Widgets laptop the Home Site' })).toBeVisible();
       await expect(menu.getByRole('menuitem', { name: 'Separate from Widgets' })).toBeVisible();
@@ -1737,8 +1891,9 @@ test('HS2-NAA3HV makes a site the home site of its project from Settings', async
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     expect(await declared()).toEqual(['Widgets<Laptop', 'Laptop<']);
     await expect(rows.nth(0)).toContainText('Widgets laptop');
-    await expect(rows.nth(0)).toContainText('2 sites');
-    await expect(rows.nth(1)).toContainText('Site of Widgets laptop');
+    await expect(settings.locator('[data-orchestration-project-group]')).toContainText('2 sites');
+    await expect(rows.nth(0)).toContainText('Home Site · ');
+    await expect(rows.nth(1)).toContainText('Site · ');
     // The policy's entry for the old home moved with the home.
     const policy = await server.request<{ policy: { targets: { target_id: string }[] } }>(`${base}/policy`);
     expect(policy.policy.targets.map((target) => target.target_id)).toEqual([laptop]);
@@ -1798,7 +1953,7 @@ test('HS2-E9VVQF adds and separates sites from Settings and asks only for a dupl
 
     // A project row's "…" → Add a Site: the open projects of its ticket store only.
     const openSites = async (row = rows.nth(0)) => {
-      await row.getByRole('button', { name: /^Actions for / }).click();
+      await row.click({ button: 'right' });
       await page.getByRole('menuitem', { name: 'Add a Site' }).click();
       const submenu = page.getByRole('menu', { name: 'Add a Site' });
       await expect(submenu).toBeVisible();
@@ -1885,7 +2040,7 @@ test('HS2-E9VVQF adds and separates sites from Settings and asks only for a dupl
     await page.screenshot({ path: test.info().outputPath('hs2-1k6122-site-added-toast.png') });
     expect(await declared()).toEqual(['Widgets', 'Docs < Widgets']);
     await expect(rows).toHaveCount(2);
-    await expect(rows.nth(1)).toContainText('Site of Widgets');
+    await expect(rows.nth(1)).toContainText('Site · ');
 
     // A site row offers Separate from Widgets, not Add a Site; its context menu has the same entries.
     await rows.nth(1).click({ button: 'right' });
@@ -1988,7 +2143,11 @@ test('HS2-W27N1D catalog demos render the production components and run their co
   await expect(interactive.locator('[data-orchestration-project]')).toHaveCount(4);
   // HS2-E9VVQF: Mobile reaches API's ticket store, so the demo's duplicate question adds it as a site.
   // HS2-1K6122: the outcome is the app's toast, which the catalog demo does not host; the row shows the site.
-  await expect(interactive.locator('[data-orchestration-project]').filter({ hasText: 'Site of API' })).toHaveCount(1);
+  // HS2-M1T6KN: API is now a group of its home site and Mobile.
+  await expect(interactive.locator('[data-orchestration-project-group]')).toHaveCount(1);
+  await expect(interactive.locator('[data-orchestration-project]').filter({ hasText: 'Mobile' })).toContainText(
+    'Site ·',
+  );
   // HS2-DXAB4K: a project open from another server names that server on its rows.
   const hosted = page
     .getByRole('region', { name: 'OrchestrationSettings Examples' })
@@ -2060,12 +2219,7 @@ test('HS2-Y737GM HS2-25KT42 HS2-NGP2AK HS2-1X1TXC HS2-NPAZQW the project detail 
     await openOrchestrationProject(page);
     await showProjectSettings(page, 'Orchestration');
     const settings = page.locator('[data-component="orchestration-settings"]');
-    await settings
-      .locator('[data-orchestration-project]')
-      .filter({ hasText: '2 sites' })
-      .getByRole('button', { name: /Widgets/ })
-      .first()
-      .click();
+    await settings.locator('[data-orchestration-project-group]').filter({ hasText: '2 sites' }).click();
     const detail = page.locator('[data-component="orchestration-project-detail"]');
     const binding = detail.getByRole('region', { name: 'Binding' });
     // HS2-NGP2AK: one row per site, the home site marked.

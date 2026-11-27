@@ -19,6 +19,11 @@ import type {
 import { ApiHttpError } from '../api';
 import type { Choose, Confirm } from '../confirmation';
 import {
+  projectCollapseKey,
+  readCollapsedProjectGroups,
+  withProjectGroupCollapsed,
+} from '../orchestration-project-tree';
+import {
   type AddDestination,
   addPolicyAccount,
   addTargetLimitsValue,
@@ -172,6 +177,19 @@ export interface OrchestrationSettingsDependencies {
   defer?: (run: () => void) => void;
   /** HS2-1K6122: the app's toast, which announces each change's outcome. */
   notify?: (message: string) => void;
+  /**
+   * HS2-M1T6KN: where each person's open and closed project groups are remembered, per browser. Defaults to
+   * `localStorage`; tests pass their own.
+   */
+  viewStorage?: Pick<Storage, 'getItem' | 'setItem'>;
+}
+
+function browserStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
+  try {
+    return typeof localStorage === 'undefined' ? undefined : localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 const messageOf = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
@@ -231,7 +249,12 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     settings = signal<Record<string, OrchestrationSettingsState | undefined>>({}),
     selected = signal<Record<string, string | undefined>>({}),
     details = signal<Record<string, OrchestrationDetailState | undefined>>({}),
-    remoteLabels = signal<Record<string, string>>({});
+    remoteLabels = signal<Record<string, string>>({}),
+    // HS2-M1T6KN: the tree row the person chose (a project group stands for its home site), by orchestration project.
+    selectedNodes = signal<Record<string, string | undefined>>({});
+  const viewStorage = dependencies.viewStorage ?? browserStorage();
+  /** HS2-M1T6KN: closed project groups as `projectCollapseKey`s; every group is open until a person closes it. */
+  const collapsedGroups = signal<ReadonlySet<string>>(readCollapsedProjectGroups(viewStorage));
   /** Read generations, so an older answer never overwrites a newer one. */
   const generations = new Map<string, number>();
   const next = (key: string) => {
@@ -460,6 +483,8 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
             ? `${added.label} added as a site of ${site.label}.`
             : `${added.label} added.`,
       });
+      // HS2-M1T6KN: the project the site joined opens, so the new site shows beside the toast.
+      if (site) setProjectGroupOpen(projectId, site.targetId, true);
       await loadSettings(projectId);
     } catch (reason) {
       failed(
@@ -585,6 +610,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
             ? `${added.label} added as a site of ${site.label}.`
             : `${added.label} added.`,
       });
+      if (site) setProjectGroupOpen(ownerId, site.targetId, true);
       await loadSettings(ownerId);
     } catch (reason) {
       failed(
@@ -720,9 +746,26 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     putDetail(projectId, targetId, { limits: targetLimitsDraftFrom(stateOf(projectId).policy, targetId) });
   }
 
-  /** A row opens its project's detail in the inspector. */
-  function openDetail(projectId: string, targetId: string) {
+  /** HS2-M1T6KN: open or close one project group, and remember it in this browser. */
+  function setProjectGroupOpen(ownerId: string, homeTargetId: string, open: boolean) {
+    collapsedGroups.value = withProjectGroupCollapsed(
+      collapsedGroups.value,
+      projectCollapseKey(ownerId, homeTargetId),
+      !open,
+      viewStorage,
+    );
+  }
+  function toggleProjectGroup(ownerId: string, homeTargetId: string) {
+    setProjectGroupOpen(ownerId, homeTargetId, collapsedGroups.value.has(projectCollapseKey(ownerId, homeTargetId)));
+  }
+
+  /**
+   * A row opens its project's detail in the inspector. HS2-M1T6KN: `nodeId` is the tree row chosen, when it is a
+   * project group standing for its home site.
+   */
+  function openDetail(projectId: string, targetId: string, nodeId?: string) {
     selected.value = { ...selected.value, [projectId]: targetId };
+    selectedNodes.value = { ...selectedNodes.value, [projectId]: nodeId ?? targetId };
     syncLimits(projectId, targetId);
     dependencies.showInspector();
     void loadDetail(projectId, targetId);
@@ -1006,6 +1049,10 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     selected,
     details,
     remoteLabels,
+    selectedNodes,
+    collapsedGroups,
+    setProjectGroupOpen,
+    toggleProjectGroup,
     loadType,
     setType,
     loadSettings,
