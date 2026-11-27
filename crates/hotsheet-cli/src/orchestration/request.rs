@@ -203,6 +203,9 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "scheduler", _]
             // HS2-HCW7MD: the planner runs on this machine, in the project itself.
             | ["checkouts", _, "orchestration", "planning", _]
+            // HS2-A4RVYA: an apply starts the planner on this machine and reads its
+            // permission ledger; templates are read and written beside its plan.
+            | ["checkouts", _, "orchestration", "templates", _]
     )
 }
 

@@ -2609,6 +2609,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/planning/{operation}",
             post(routes::orchestration::write),
         )
+        // HS2-A4RVYA: plan templates and their applies (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/templates/{operation}",
+            post(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{checkout}/target-validations",
             get(routes::orchestration::read)

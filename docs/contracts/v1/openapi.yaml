@@ -3897,6 +3897,79 @@ paths:
           enum:
             - propose
             - show
+  /checkouts/{owner}/orchestration/templates/{operation}:
+    description:
+      Machine-local plan templates (HS2-A4RVYA). Templates are checked in at `.hotsheet2/orchestration-templates.json`
+      and are briefs for the planner. Applying one opens a new goal ticket carrying the rendered brief and hands it to
+      Propose Plan, or Update Plan once the live plan has steps; the planner's proposal is the preview a person
+      reviews.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: orchestrateTemplates
+      description:
+        "`list`, `show`, `validate`, `preview` and `apply_show` read and write nothing. `set` adds or replaces templates
+        merged by `template_id` (refused `template_invalid` or `template_conflict`), `retire` stops a template being
+        applied, and `save_goal` turns an open goal's plan steps into a template (`template_goal_empty` without steps);
+        none of them asks. `apply` is idempotent by its retained `operation_id`: a repeat never opens a second goal or
+        starts a second planner (`outcome: existing`), and other inputs under the same id are
+        `template_apply_conflict`. A person's apply is their own act; any other actor is answered 403
+        `permission_required` with the `request_id` until a person answers the ticket-write request for each project.
+        Refused with `template_not_found`, `template_retired`, `template_inputs_invalid` or `template_target_unknown`
+        before anything opens. Audited as `template_set` and `template_apply`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateOperation'
+      responses:
+        '200':
+          description: The templates, one template, a validation, a pre-run summary or an apply.
+          content:
+            application/json:
+              schema:
+                description: Shape depends on the operation.
+                anyOf:
+                  - $ref: '#/components/schemas/TemplateList'
+                  - $ref: '#/components/schemas/PlanTemplate'
+                  - $ref: '#/components/schemas/TemplatesFile'
+                  - $ref: '#/components/schemas/TemplateValidation'
+                  - $ref: '#/components/schemas/TemplatePreview'
+                  - $ref: '#/components/schemas/TemplateApply'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - list
+            - show
+            - validate
+            - set
+            - retire
+            - save_goal
+            - preview
+            - apply
+            - apply_show
   /checkouts/{owner}/orchestration/timeline:
     description:
       Machine-local orchestration timeline of an owning checkout (HS2-J89JC7). The plan as dependency waves with
@@ -26614,6 +26687,366 @@ components:
         - cancelled
         - rebase
         - site_assigned
+    TemplateOperation:
+      description:
+        Body of a template operation (HS2-A4RVYA). `show` and `retire` take `template_id`; `validate` takes `template`;
+        `set` takes `templates` and an optional `expected_revision`; `save_goal` takes `goal`, `name`, `description`
+        and `targets_as_inputs`; `preview` takes `template_id`, `inputs` and `choices`; `apply` adds `tool`, `model`,
+        `effort` and a retained `operation_id` (at most 140 characters); `apply_show` takes `operation_id`.
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        template_id:
+          type: string
+          maxLength: 160
+        template:
+          $ref: '#/components/schemas/PlanTemplate'
+        templates:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/PlanTemplate'
+        expected_revision:
+          type:
+            - string
+            - 'null'
+        goal:
+          $ref: '#/components/schemas/OrchestrationTicketRef'
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 4000
+        targets_as_inputs:
+          type: boolean
+        inputs:
+          description: Input values by key; text, number, boolean, a choice, a priority, a project id or a tool id.
+          type: object
+          additionalProperties: true
+        choices:
+          description: Steps switched to always create a new ticket (or back to search first), by step key.
+          type: object
+          additionalProperties:
+            enum:
+              - search
+              - create
+        tool:
+          type: string
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+        model:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        effort:
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+        operation_id:
+          type: string
+          maxLength: 140
+          pattern: ^[A-Za-z0-9._-]+$
+      additionalProperties: false
+    PlanTemplate:
+      description:
+        One plan template as checked in (HS2-A4RVYA). Text may hold `{{key}}` placeholders naming inputs; they are
+        substituted as text and never evaluated. A step's `target` is a declared project id or `{{key}}` naming a
+        `target` input; `ticket` is `search` (the default, which searches first and proposes reuse) or `create`.
+      type: object
+      required:
+        - name
+        - goal
+        - steps
+      properties:
+        template_id:
+          type: string
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 4000
+        state:
+          enum:
+            - active
+            - retired
+        version:
+          type: integer
+          minimum: 0
+        inputs:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            required:
+              - key
+              - label
+              - kind
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              kind:
+                enum:
+                  - text
+                  - number
+                  - boolean
+                  - choice
+                  - priority
+                  - target
+                  - tool
+              required:
+                type: boolean
+              default: {}
+              choices:
+                type: array
+                items:
+                  type: string
+              max_len:
+                type: integer
+              hint:
+                type: string
+        goal:
+          type: object
+          required:
+            - title
+          properties:
+            title:
+              type: string
+            details:
+              type: string
+            tags:
+              type: array
+              items:
+                type: string
+        steps:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            required:
+              - key
+              - target
+              - title
+            properties:
+              key:
+                type: string
+              target:
+                type: string
+              title:
+                type: string
+              details:
+                type: string
+              category:
+                type: string
+              priority:
+                type: string
+              ticket:
+                enum:
+                  - search
+                  - create
+              after:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - step
+                  properties:
+                    step:
+                      type: string
+                    gates:
+                      enum:
+                        - none
+                        - ci
+                        - deployment
+                        - review
+              validation:
+                type: array
+                items:
+                  type: string
+              tool:
+                type: string
+              when:
+                type: string
+        instructions:
+          type: string
+          maxLength: 4000
+        created_at_ms:
+          type: integer
+        updated_at_ms:
+          type: integer
+        updated_by:
+          type: string
+    TemplatesFile:
+      description: The checked-in templates document `.hotsheet2/orchestration-templates.json` (HS2-A4RVYA).
+      type: object
+      required:
+        - schema_version
+        - revision
+        - templates
+      properties:
+        schema_version:
+          const: 1
+        revision:
+          type: string
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanTemplate'
+    TemplateList:
+      description: The checked-in templates and this machine's newest applies (at most 20).
+      type: object
+      required:
+        - templates
+        - applies
+      properties:
+        revision:
+          type: string
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanTemplate'
+        applies:
+          type: array
+          items:
+            type: object
+    TemplateValidation:
+      type: object
+      required:
+        - valid
+        - problems
+      properties:
+        valid:
+          type: boolean
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateProblem'
+    TemplateProblem:
+      description: One coded problem and where it is, such as `input_missing` at `inputs.feature`.
+      type: object
+      required:
+        - code
+        - at
+      properties:
+        code:
+          type: string
+        at:
+          type: string
+    TemplatePreview:
+      description:
+        The pre-run summary of an apply (HS2-A4RVYA). Each target says whether applying is the person's own act
+        (`person`), allowed by a remembered rule (`remembered`) or asks (`asks`), and the same for the planner's ticket
+        writes there. `planning` is `propose` or `update`.
+      type: object
+      required:
+        - template
+        - inputs
+        - problems
+        - goal_title
+        - steps
+        - targets
+        - planning
+        - placement_automatic
+      properties:
+        template:
+          $ref: '#/components/schemas/PlanTemplate'
+        inputs:
+          type: object
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateProblem'
+        goal_title:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+        skipped:
+          type: array
+          items:
+            type: string
+        targets:
+          type: array
+          items:
+            type: object
+        planning:
+          enum:
+            - propose
+            - update
+        placement_automatic:
+          type: boolean
+    TemplateApply:
+      description:
+        One apply as recorded on this machine (HS2-A4RVYA). `state` is `waiting_permission`, `waiting_planner`,
+        `planning` or `denied`; `outcome` is `applied` when the call did something and `existing` when it answered as
+        recorded. `snapshot` is the template as applied.
+      type: object
+      required:
+        - operation_id
+        - template_id
+        - snapshot
+        - state
+      properties:
+        operation_id:
+          type: string
+        template_id:
+          type: string
+        snapshot:
+          $ref: '#/components/schemas/PlanTemplate'
+        inputs:
+          type: object
+        choices:
+          type: object
+        tool:
+          type: string
+        state:
+          enum:
+            - waiting_permission
+            - waiting_planner
+            - planning
+            - denied
+        goal:
+          type: object
+          properties:
+            connection_id:
+              type: string
+            native_id:
+              type: string
+            slug:
+              type: string
+            created:
+              type: boolean
+        proposal_id:
+          type: string
+        planning:
+          enum:
+            - propose
+            - update
+        attempts:
+          type: integer
+        permission_requests:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+        outcome:
+          enum:
+            - applied
+            - existing
+        created_at_ms:
+          type: integer
+        updated_at_ms:
+          type: integer
     PlanningOperation:
       description:
         Body of a planning operation (HS2-HCW7MD). `propose` takes `tool` and optionally `model`, `effort`, one

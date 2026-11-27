@@ -22,6 +22,7 @@ mod orchestration_projects;
 mod orchestration_readiness;
 mod orchestration_scheduler;
 mod orchestration_sessions;
+mod orchestration_templates;
 mod orchestration_validation;
 pub(crate) mod providers;
 pub(crate) mod remote_change;

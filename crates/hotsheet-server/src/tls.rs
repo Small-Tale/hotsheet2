@@ -490,6 +490,9 @@ mod tests {
             "/checkouts/owner/orchestration/planning/update",
             "/checkouts/owner/orchestration/planning/update_finish",
             "/checkouts/owner/orchestration/planning/update_cancel",
+            // HS2-A4RVYA: templates and their applies are this machine's.
+            "/checkouts/owner/orchestration/templates/list",
+            "/checkouts/owner/orchestration/templates/apply",
             // HS2-W27N1D: adding binds here and removing unbinds here.
             "/checkouts/owner/orchestration/projects",
             "/checkouts/owner/orchestration/projects/id",
