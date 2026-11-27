@@ -207,6 +207,11 @@ fn hs2_9abvdw_a_refused_connection_is_a_connection_failure() {
     );
 }
 
+// HS2-C7HPDB: not on Windows. There a plain-HTTP reply to a TLS client is aborted by the OS
+// (os error 10053) before rustls reports anything, and an abort cannot be told from one after
+// the request was sent, which must stay `Io`. The certificate case this stands for is covered
+// on every platform by own_tls.rs (a CA the roots do not hold fails as `ConnectionFailed`).
+#[cfg(not(windows))]
 #[test]
 fn hs2_9abvdw_a_failed_tls_handshake_is_a_connection_failure() {
     // A plain-HTTP server answering a TLS client: the handshake fails, as it would for a

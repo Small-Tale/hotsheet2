@@ -23,6 +23,37 @@ fn cli_binary() -> std::path::PathBuf {
     first_launch::launched(workspace_bin::path("hotsheet-cli"), &["--version"])
 }
 
+/// An event-backed wait's idle wake bound. A waiter wakes within about 1 s on an idle or
+/// CPU-loaded host (HS2-237JQE measured 500+ waits under CPU and fseventsd churn load).
+pub(super) const IDLE_WAKE_BOUND: Duration = Duration::from_secs(10);
+
+/// The default [`load_factor`]. HS2-237JQE: under a deep fseventsd backlog a live stream
+/// delivers seconds to minutes late (HS2-P702Y8, HS2-BN9MMJ), so four waits in one full
+/// local gate missed the bare 10 s bound together. Six makes the default bound nextest's
+/// 60 s slow-timeout period (`.config/nextest.toml`): a missed wake still fails, at the
+/// moment nextest would report the test SLOW and long before it terminates it.
+pub(super) const DEFAULT_LOAD_FACTOR: u32 = 6;
+
+/// `HOTSHEET_TEST_LOAD_FACTOR` (a positive integer) scales every coordination wake bound
+/// for a host known to be slower still; unset or invalid uses [`DEFAULT_LOAD_FACTOR`].
+pub(super) fn load_factor() -> u32 {
+    load_factor_from(std::env::var("HOTSHEET_TEST_LOAD_FACTOR").ok().as_deref())
+}
+
+/// [`load_factor`] for one `HOTSHEET_TEST_LOAD_FACTOR` value.
+pub(super) fn load_factor_from(value: Option<&str>) -> u32 {
+    value
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .filter(|factor| *factor > 0)
+        .unwrap_or(DEFAULT_LOAD_FACTOR)
+}
+
+/// How long a waiting child may take to subscribe, to wake once its event is written, or
+/// to close stderr after exiting (HS2-237JQE).
+pub(super) fn wake_bound() -> Duration {
+    IDLE_WAKE_BOUND * load_factor()
+}
+
 pub(super) struct Fixture {
     pub(super) root: tempfile::TempDir,
     pub(super) project: PathBuf,
@@ -115,7 +146,7 @@ impl Fixture {
             let _ = stderr_tx.send(bytes);
         });
         let line = ready_rx
-            .recv_timeout(Duration::from_secs(10))
+            .recv_timeout(wake_bound())
             .expect("wait process readiness");
         assert!(
             line.starts_with("Waiting on local"),
@@ -193,17 +224,17 @@ impl Waiting {
     }
 
     /// [`Self::exit_output`] for a wait that is due only after `due` (a known deadline,
-    /// such as a claim expiry): the usual wake bound starts when the deadline passes
+    /// such as a claim expiry): the usual [`wake_bound`] starts when the deadline passes
     /// (HS2-2982P2).
     pub(super) fn exit_output_within(&mut self, due: Duration) -> std::process::Output {
         let stdout = self
             .output
-            .recv_timeout(due + Duration::from_secs(10))
+            .recv_timeout(due + wake_bound())
             .expect("event-backed wait did not wake");
         let status = self.child.wait().unwrap();
         let stderr = self
             .errors
-            .recv_timeout(Duration::from_secs(10))
+            .recv_timeout(wake_bound())
             .expect("wait process stderr did not close");
         std::process::Output {
             status,

@@ -4,6 +4,8 @@
 # under one minute on CI runners; the slowest seen locally under full load (a CLI hook
 # test) took about four minutes, still inside the ten-minute limit. A timed-out
 # test's captured output is printed, so its progress markers show where it stopped.
+# HS2-237JQE: the hotsheet-cli coordination wake bound defaults to this period
+# (pinned by `hs2_237jqe_default_wake_bound_is_the_nextest_slow_period`).
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 10 }
 # HS2-FXF07C: nextest's 100ms default marked tests LEAKY under machine load when they start no
