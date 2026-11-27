@@ -27,7 +27,12 @@ import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../componen
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
-import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
+import {
+  createCoalescedInput,
+  createKeyedCoalescedInput,
+  type DebouncedAutosave,
+  type FocusLossAutosave,
+} from '../debounced-autosave';
 import { coalescedDraft, coalescedKeyedDraft, flushDraftInputs } from '../draft-input-coalescing';
 import { readerScopeOf } from '../features/linked-reader-subject';
 import type { MinimizedReadersController } from '../features/minimized-readers';
@@ -88,7 +93,7 @@ export interface InspectorAndEditorInteractionsDependencies {
   /** The one surface whose title editor is open (HS2-2M5BBN). */
   readonly titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
   readonly activeTicketSurface: () => ParentNode;
-  readonly titleAutosave: DebouncedAutosave<string>;
+  readonly titleAutosave: FocusLossAutosave<string>;
   readonly tagsAutosave: DebouncedAutosave<string[]>;
   pointerDetailsReader: boolean | undefined;
   pointerDetailsFinish: DetailsFinishTask | undefined;
@@ -98,9 +103,9 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly refreshLinkedCodeReview: (frameId: string) => Promise<void>;
   readonly replaceLinkedReaderFrame: (id: string, update: (frame: TicketReaderFrame) => TicketReaderFrame) => void;
   readonly linkedReaderSaves: (id: string) => {
-    details: DebouncedAutosave<string>;
-    note: DebouncedAutosave<{ id: string; value: string }>;
-    blocked: DebouncedAutosave<string>;
+    details: FocusLossAutosave<string>;
+    note: FocusLossAutosave<{ id: string; value: string }>;
+    blocked: FocusLossAutosave<string>;
     /** Answer a feedback request in the frame's ticket with a new regular note. */
     respond: (value: string, requestId?: string) => Promise<boolean>;
   };
@@ -133,8 +138,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly chooseNoteKind: (value: string) => void;
   readonly feedbackResponseDrafts: FeedbackResponseDrafts;
   readonly dismissFeedbackRequest: (requestId: string, frameId?: string) => Promise<boolean>;
-  readonly readerNoteAutosave: DebouncedAutosave<{ id: string; value: string }>;
-  readonly noteAutosave: DebouncedAutosave<{ id: string; value: string }>;
+  readonly readerNoteAutosave: FocusLossAutosave<{ id: string; value: string }>;
+  readonly noteAutosave: FocusLossAutosave<{ id: string; value: string }>;
   readonly readerInlineFeedbackReplies: Signal<Record<string, InlineFeedbackReply[]>>;
   readonly readerFeedbackChoiceSelections: Signal<Record<string, string[]>>;
   readonly readerFeedbackChoiceAnchors: Map<string, string>;
@@ -149,8 +154,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly loadNextTicketPage: () => Promise<void>;
   readonly readerBlockedReasonEditing: Signal<boolean>;
   readonly blockedReasonEditing: Signal<boolean>;
-  readonly readerBlockedReasonAutosave: DebouncedAutosave<string>;
-  readonly blockedReasonAutosave: DebouncedAutosave<string>;
+  readonly readerBlockedReasonAutosave: FocusLossAutosave<string>;
+  readonly blockedReasonAutosave: FocusLossAutosave<string>;
   readonly presentTicketReaderDialog: (
     id: string,
     trigger: HTMLElement | undefined,
@@ -582,6 +587,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       finish: () => {
         flushDraftInputs();
         if (!titleDraft.value.trim()) return;
+        // A focus loss after a failed save (blur or page hide) resends the open edit (HS2-Y0VRXR).
+        titleAutosave.retryFailedSave(titleDraft.value);
         void titleAutosave.flush().then((saved) => {
           if (saved) titleEditingSurface.value = undefined;
         });
@@ -692,15 +699,15 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         flushDraftInputs();
         const frame = linkedReaderFrame(field);
         if (frame) {
-          void linkedReaderSaves(frame.id)
-            .details.flush()
-            .then((saved) => {
-              if (saved)
-                replaceLinkedReaderFrame(frame.id, (current) => ({
-                  ...current,
-                  edit: { ...current.edit, detailsMode: 'preview' },
-                }));
-            });
+          const saves = linkedReaderSaves(frame.id);
+          if (frame.edit.detailsMode === 'write') saves.details.retryFailedSave(frame.edit.detailsDraft);
+          void saves.details.flush().then((saved) => {
+            if (saved)
+              replaceLinkedReaderFrame(frame.id, (current) => ({
+                ...current,
+                edit: { ...current.edit, detailsMode: 'preview' },
+              }));
+          });
           return;
         }
         if (insideEditor || (next instanceof Element && next.closest('[data-component="ticket-field-conflict"]'))) {
@@ -1201,15 +1208,16 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
             deleteLinkedReaderNote(frame, id);
             return;
           }
-          void linkedReaderSaves(frame.id)
-            .note.flush()
-            .then((saved) => {
-              if (saved)
-                replaceLinkedReaderFrame(frame.id, (current) => ({
-                  ...current,
-                  edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' },
-                }));
-            });
+          const saves = linkedReaderSaves(frame.id);
+          if (frame.edit.editingNoteId && frame.edit.responseRequestId !== frame.edit.editingNoteId)
+            saves.note.retryFailedSave({ id: frame.edit.editingNoteId, value: frame.edit.noteDraft });
+          void saves.note.flush().then((saved) => {
+            if (saved)
+              replaceLinkedReaderFrame(frame.id, (current) => ({
+                ...current,
+                edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' },
+              }));
+          });
           return;
         }
         const reader = isReaderSurface(field),
@@ -1223,6 +1231,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           deleteWorkspaceNote(finishedId);
           return;
         }
+        if (finishedId) autosave.retryFailedSave({ id: finishedId, value: draft.value });
         void autosave.flush().then((saved) => {
           if (saved) {
             endFeedbackPromptEdit(finishedId);
@@ -1481,20 +1490,21 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         flushDraftInputs();
         const frame = linkedReaderFrame(target);
         if (frame) {
-          void linkedReaderSaves(frame.id)
-            .blocked.flush()
-            .then((saved) => {
-              if (saved)
-                replaceLinkedReaderFrame(frame.id, (current) => ({
-                  ...current,
-                  edit: { ...current.edit, blockedReasonEditing: false },
-                }));
-            });
+          const saves = linkedReaderSaves(frame.id);
+          if (frame.edit.blockedReasonEditing) saves.blocked.retryFailedSave(frame.edit.blockedReasonDraft);
+          void saves.blocked.flush().then((saved) => {
+            if (saved)
+              replaceLinkedReaderFrame(frame.id, (current) => ({
+                ...current,
+                edit: { ...current.edit, blockedReasonEditing: false },
+              }));
+          });
           return;
         }
         const reader = isReaderSurface(target),
           editing = reader ? readerBlockedReasonEditing : blockedReasonEditing,
           autosave = reader ? readerBlockedReasonAutosave : blockedReasonAutosave;
+        if (editing.value) autosave.retryFailedSave((reader ? readerBlockedReasonDraft : blockedReasonDraft).value);
         void autosave.flush().then((saved) => {
           if (saved) editing.value = false;
         });

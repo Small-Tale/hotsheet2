@@ -149,7 +149,6 @@ import {
 } from '../custom-ai-command';
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import { syncDesktopWindowTheme } from '../desktop-window-theme';
-import { type FailedDetailsSave, settleFailedDetailsSave, shouldRetryFailedDetailsSave } from '../details-save-retry';
 import { developmentStrategyTagSuggestions } from '../development-strategy-tags';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
@@ -7373,39 +7372,21 @@ export async function startHotSheetWebClient() {
   let pointerDetailsReader: boolean | undefined,
     pointerDetailsFinish: DetailsFinishTask | undefined,
     pointerDetailsTimer: number | undefined;
-  // The Details edit whose focus-loss save failed; the next focus loss resends it (HS2-SJ5TCW).
-  let failedDetailsSave: FailedDetailsSave | undefined, failedReaderDetailsSave: FailedDetailsSave | undefined;
   function beginDetailsFinish(reader = false): DetailsFinishTask {
-    const ticketId = selectedTicket.value?.id,
-      generation = reader ? readerDetailsEditGeneration : detailsEditGeneration,
-      autosave = reader ? readerDetailsAutosave : detailsAutosave,
-      draft = reader ? readerDetailsDraft : detailsDraft;
-    if (
-      shouldRetryFailedDetailsSave({
-        failed: reader ? failedReaderDetailsSave : failedDetailsSave,
-        ticketId,
-        generation,
-        writing: (reader ? readerDetailsMode : detailsMode).value === 'write',
-        pending: autosave.pending(),
-        conflictOpen: fieldConflict.value?.key === 'details',
-        draft: draft.value,
-        current: selectedTicket.value?.details,
-      })
-    )
-      autosave.schedule(draft.value);
-    return { reader, ticketId, generation, saved: autosave.flush() };
+    const autosave = reader ? readerDetailsAutosave : detailsAutosave;
+    // A focus loss after a failed save (blur or page hide) resends the open edit (HS2-SJ5TCW, HS2-Y0VRXR).
+    if ((reader ? readerDetailsMode : detailsMode).value === 'write')
+      autosave.retryFailedSave((reader ? readerDetailsDraft : detailsDraft).value);
+    return {
+      reader,
+      ticketId: selectedTicket.value?.id,
+      generation: reader ? readerDetailsEditGeneration : detailsEditGeneration,
+      saved: autosave.flush(),
+    };
   }
   async function settleDetailsFinish(task: DetailsFinishTask) {
     const saved = await task.saved,
       mode = task.reader ? readerDetailsMode : detailsMode;
-    const failed = settleFailedDetailsSave(
-      task.reader ? failedReaderDetailsSave : failedDetailsSave,
-      task,
-      saved,
-      fieldConflict.value?.key === 'details',
-    );
-    if (task.reader) failedReaderDetailsSave = failed;
-    else failedDetailsSave = failed;
     // The user went back into the editor (or typed) while this save ran: keep it open (HS2-7D3MPP).
     const focused = document.activeElement;
     if (

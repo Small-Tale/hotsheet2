@@ -36,6 +36,7 @@ import { copyWithSelection } from '../copy-text';
 import {
   createDebouncedAutosave,
   createFocusLossAutosave,
+  type FailedSaveRetryOptions,
   type FocusLossAutosave,
   type InFlightRecovery,
 } from '../debounced-autosave';
@@ -959,14 +960,46 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     showToast(plan.merged ? mergedEditNotice([field], { restored: true }) : 'Restored an unsaved edit.');
     return { draft: plan.draft, base: plan.base };
   }
+  /** The recovery destination a field conflict owns, in the edited ticket or `ticketKey`'s ticket. */
+  function conflictDestination(
+    conflict: TicketFieldConflict,
+    ticketKey: (field: TicketDraftField, noteId?: string) => string | undefined = selectedDraftKey,
+  ): string | undefined {
+    const field = DRAFT_FIELDS.find((item) => item === conflict.field);
+    return field ? ticketKey(field, field === 'note' ? conflict.key.slice('note:'.length) : undefined) : undefined;
+  }
   /** A resolved field conflict settles the field's recovery copy: the user chose what to keep (HS2-7D3MPP). */
   function clearConflictRecoveryCopy(conflict: TicketFieldConflict) {
-    const field = DRAFT_FIELDS.find((item) => item === conflict.field);
-    if (!field) return;
     const storage = draftStorage(),
-      key = selectedDraftKey(field, field === 'note' ? conflict.key.slice('note:'.length) : undefined);
+      key = conflictDestination(conflict);
     if (storage && key) clearTicketDraft(storage, key);
   }
+  // Linked-reader destinations whose last save met an overlapping remote edit. A linked reader has no
+  // conflict card: its frame now holds the remote ticket, so resending the unchanged draft would
+  // overwrite that edit. The retry waits for the user to type again (HS2-Y0VRXR).
+  const linkedConflictDestinations = new Set<string>();
+  /** A field conflict owns the edit at `destination`, so a failed save there is neither kept nor retried. */
+  const conflictOwns = (destination: string) =>
+    linkedConflictDestinations.has(destination) ||
+    (fieldConflict.value !== undefined && conflictDestination(fieldConflict.value) === destination);
+  /** The field text a failed save is retried against; undefined while that ticket or note is not loaded. */
+  const committedFieldText = (ticket: FullTicket | null | undefined, field: TicketDraftField, noteId?: string) =>
+    !ticket || (field === 'note' && !ticket.notes.some((note) => note.id === noteId))
+      ? undefined
+      : ticketFieldText(ticket, field, noteId);
+  /** Retry a failed save of the edited ticket (the top linked reader's, matching `selectedDraftKey`) on focus loss. */
+  const selectedRetry = <T>(
+    field: TicketDraftField,
+    text: (value: T) => string,
+    noteId?: (value: T) => string,
+  ): FailedSaveRetryOptions<T> => ({
+    text,
+    committed: (value) =>
+      committedFieldText(linkedReaderStack.value.at(-1)?.ticket ?? selectedTicket.value, field, noteId?.(value)),
+    conflictOwns,
+  });
+  const trimmed = (value: string) => value.trim(),
+    noteValueId = ({ id }: { id: string; value: string }) => id;
   const savingDraft =
     <T>(
       field: TicketDraftField,
@@ -995,6 +1028,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       },
       prepareRecovery: (value, predecessor) =>
         prepareSelectedDraft('details', state.detailsDraftBase, value, undefined, predecessor),
+      retry: selectedRetry('details', plain),
     },
   );
   const readerDetailsAutosave = createFocusLossAutosave(
@@ -1005,6 +1039,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       },
       prepareRecovery: (value, predecessor) =>
         prepareSelectedDraft('details', state.readerDetailsDraftBase, value, undefined, predecessor),
+      retry: selectedRetry('details', plain),
     },
   );
   const noteAutosave = createFocusLossAutosave(
@@ -1028,6 +1063,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             ? { destination: predecessor.destination, value: predecessor.value.value }
             : undefined,
         ),
+      retry: selectedRetry('note', noteText, noteValueId),
     },
   );
   const readerNoteAutosave = createFocusLossAutosave(
@@ -1051,6 +1087,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             ? { destination: predecessor.destination, value: predecessor.value.value }
             : undefined,
         ),
+      retry: selectedRetry('note', noteText, noteValueId),
     },
   );
   const blockedReasonAutosave = createFocusLossAutosave(
@@ -1061,6 +1098,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       },
       prepareRecovery: (value, predecessor) =>
         prepareSelectedDraft('blocked_reason', state.blockedReasonDraftBase, value, undefined, predecessor),
+      retry: selectedRetry('blocked_reason', trimmed),
     },
   );
   const readerBlockedReasonAutosave = createFocusLossAutosave(
@@ -1071,6 +1109,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       },
       prepareRecovery: (value, predecessor) =>
         prepareSelectedDraft('blocked_reason', state.readerBlockedReasonDraftBase, value, undefined, predecessor),
+      retry: selectedRetry('blocked_reason', trimmed),
     },
   );
   const titleAutosave = createFocusLossAutosave(
@@ -1081,6 +1120,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       },
       prepareRecovery: (value, predecessor) =>
         prepareSelectedDraft('title', state.titleDraftBase, value, undefined, predecessor),
+      retry: selectedRetry('title', trimmed),
     },
   );
   // A tag save the debounce timer started has no caller to see it fail; show it (HS2-YA6D31).
@@ -1119,6 +1159,14 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   async function updateLinkedReader(frameId: string, patch: Record<string, unknown>, dismissedRequestId?: string) {
     const frame = linkedReaderStack.value.find((item) => item.id === frameId);
     if (!frame || !linkedReaderPatchAllowed(frame.capabilities, patch)) return false;
+    const frameKey = (field: TicketDraftField, noteId?: string) =>
+      ticketDraftKey(frame.projectId, frame.ticket.qualified_id, field, noteId);
+    // A new save of a field the user typed into again settles its earlier conflict (HS2-Y0VRXR).
+    for (const field of DRAFT_FIELDS)
+      if (Object.hasOwn(patch, field))
+        linkedConflictDestinations.delete(
+          frameKey(field, field === 'note' && typeof patch.note_id === 'string' ? patch.note_id : undefined),
+        );
     const client = new Api(frame.apiPath);
     let base = frame.ticket,
       pending: TicketPatch = patch;
@@ -1161,6 +1209,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             // Reconciling compares against the frame's draft, so typed text must be in it (HS2-WV0VPE).
             flushDraftInputs();
             replaceLinkedReaderFrame(frameId, (current) => reconcileTicketReaderFrame(current, remote));
+            for (const conflict of reconciled.conflicts) {
+              const destination = conflictDestination(conflict, frameKey);
+              if (destination) linkedConflictDestinations.add(destination);
+            }
             error.value = `This linked ticket's ${ticketFieldLabel(reconciled.conflicts[0].field).toLocaleLowerCase()} changed remotely in the same place you edited. Your draft was preserved; review it and try again.`;
             return false;
           }
@@ -1246,9 +1298,20 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           },
         };
       };
+      const retry = <T>(
+        field: TicketDraftField,
+        text: (value: T) => string,
+        noteId?: (value: T) => string,
+      ): FailedSaveRetryOptions<T> => ({
+        text,
+        committed: (value) =>
+          committedFieldText(linkedReaderStack.value.find((frame) => frame.id === id)?.ticket, field, noteId?.(value)),
+        conflictOwns,
+      });
       saves = {
         details: createFocusLossAutosave((value) => updateLinkedReader(id, { details: value }), {
           prepareRecovery: (value, predecessor) => capture('details', value, undefined, predecessor),
+          retry: retry('details', plain),
         }),
         note: createFocusLossAutosave(
           ({ id: noteId, value }) =>
@@ -1266,10 +1329,12 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
                   ? { destination: predecessor.destination, value: predecessor.value.value }
                   : undefined,
               ),
+            retry: retry('note', noteText, noteValueId),
           },
         ),
         blocked: createFocusLossAutosave((value) => updateLinkedReader(id, { blocked_reason: value.trim() || null }), {
           prepareRecovery: (value, predecessor) => capture('blocked_reason', value, undefined, predecessor),
+          retry: retry('blocked_reason', trimmed),
         }),
         respond: (value, requestId) =>
           updateLinkedReader(id, {

@@ -952,6 +952,86 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
   await expect(editor).toHaveValue('First line, rewritten here\nSecond line\nAppended elsewhere');
 });
 
+test('retries a failed linked reader Details save on the next focus loss, never over an overlap (HS2-Y0VRXR)', async ({
+  page,
+}) => {
+  await mockLayeredProjects(page);
+  let details = 'First line\nSecond line',
+    token = 'token-target',
+    failing = true;
+  const patches: Array<Record<string, unknown>> = [];
+  const ticketJson = () => ({
+    store: target.connection_id,
+    ...target,
+    details,
+    blocked_reason: null,
+    concurrency_token: token,
+    notes: [],
+    attachments: [],
+  });
+  await page.route('**/project-api/target-project/**/tickets/git-target%3Atarget', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: ticketJson() });
+    if (request.method() !== 'PATCH') return route.fallback();
+    const patch = request.postDataJSON() as Record<string, unknown>;
+    patches.push(patch);
+    if (failing)
+      return route.fulfill({ status: 503, json: { error: 'The ticket store is unavailable.', code: 'unavailable' } });
+    if (patch.expected_token !== token)
+      return route.fulfill({
+        status: 409,
+        json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+      });
+    if (typeof patch.details === 'string') details = patch.details;
+    token = `committed-${patches.length}`;
+    return route.fulfill({ json: ticketJson() });
+  });
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await openProjects(page);
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  const rendered = reader.locator('[data-action="edit-markdown"]');
+  await rendered.click({ position: { x: 4, y: 4 } });
+  const editor = reader.getByRole('textbox', { name: 'Ticket details' });
+  await editor.fill('First line, edited in the reader\nSecond line');
+  await editor.blur();
+  await expect(page.locator('.app-error')).toContainText('The ticket store is unavailable.');
+  await expect(editor).toHaveValue('First line, edited in the reader\nSecond line');
+  expect(patches).toHaveLength(1);
+
+  // No new typing: the focus loss resends the edit, and the editor stays open while it fails.
+  await editor.focus();
+  await editor.blur();
+  await expect.poll(() => patches.length).toBe(2);
+  expect(patches[1].details).toBe('First line, edited in the reader\nSecond line');
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue('First line, edited in the reader\nSecond line');
+
+  // Once the store answers, the next focus loss saves it and closes the editor.
+  failing = false;
+  await editor.focus();
+  await editor.blur();
+  await expect.poll(() => details).toBe('First line, edited in the reader\nSecond line');
+  await expect(editor).toBeHidden();
+  await expect(rendered).toContainText('First line, edited in the reader');
+  expect(patches).toHaveLength(3);
+
+  // An overlapping remote edit keeps the draft with an error; leaving again without typing must not
+  // send the draft over the other edit.
+  await rendered.click({ position: { x: 4, y: 4 } });
+  details = 'First line, rewritten elsewhere\nSecond line';
+  token = 'remote-overlap';
+  await editor.fill('First line, rewritten here\nSecond line');
+  await editor.blur();
+  await expect(page.locator('.app-error')).toContainText('changed remotely in the same place you edited');
+  const sent = patches.length;
+  await editor.focus();
+  await editor.blur();
+  await page.waitForTimeout(300);
+  expect(patches).toHaveLength(sent);
+  expect(details).toBe('First line, rewritten elsewhere\nSecond line');
+});
+
 for (const action of ['Respond', 'No Response Needed'] as const) {
   test(`answers a linked reader frame feedback prompt with ${action} on the frame ticket (HS2-04XTV5)`, async ({
     page,

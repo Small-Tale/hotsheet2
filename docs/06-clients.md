@@ -1050,11 +1050,17 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   has focus or unsaved text. Page hide saves an open edit and leaves the editor open; the
   next blur saves later typing on the committed token. A failed save shows the error,
   keeps the text and its local copy, and reopening the editor restores the copy for retry.
-  A Details focus loss after a failed save retries it even with no new typing, so the editor
-  stays open on the text while the save keeps failing and closes only once it commits. The
-  retry is limited to the same ticket and edit, never runs while the field-conflict card owns
-  the edit, and sends nothing once the text matches the ticket again (after Use Theirs or a
-  successful Apply) (HS2-SJ5TCW).
+  A focus loss after a failed save retries it even with no new typing, so the editor
+  stays open on the text while the save keeps failing and closes only once it commits. This
+  holds for every ticket text editor (Details, note, blocked reason, and title in the
+  inspector and reader, and Details, note, and blocked reason in a linked reader) and for a
+  save that failed at page hide, whose local copy also stays until the retry commits. The
+  focus-loss autosave remembers the failure by its recovery destination (project, ticket,
+  field, and note), so the retry never reaches another ticket or note. It never runs while a
+  field conflict owns the edit: the inspector's conflict card, or a linked reader's
+  overlapping-edit error, which waits for new typing instead of resending the draft over the
+  other edit. Once the text matches the ticket again (after Use Theirs or a successful Apply)
+  it sends nothing (HS2-SJ5TCW, HS2-Y0VRXR).
   A recently viewed ticket shown from cache and refreshed after an edit began is
   reconciled like a live refresh, so the blur save uses the refreshed token and an editor
   with nothing typed adopts the refreshed text (HS2-7D3MPP). Sometimes a list refresh would deselect the ticket being edited,

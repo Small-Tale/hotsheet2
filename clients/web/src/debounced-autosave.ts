@@ -1,3 +1,5 @@
+import { type FailedSave, settleFailedSave, shouldRetryFailedSave } from './failed-save-retry';
+
 export const AUTOSAVE_DELAY_MS = 150;
 
 export interface DebouncedAutosave<T> {
@@ -69,7 +71,18 @@ export interface FocusLossAutosaveOptions<T> {
   persist?: (value: T) => void;
   /** Strict local-only capture for controlled native close; failures must remain observable. */
   prepareRecovery?: (value: T, inFlight?: InFlightRecovery<T>) => PreparedRecovery;
+  /** How a failed save is retried on the next focus loss (HS2-Y0VRXR); needs `prepareRecovery`. */
+  retry?: FailedSaveRetryOptions<T>;
   delay?: number;
+}
+
+export interface FailedSaveRetryOptions<T> {
+  /** The text the save writes for `value`, normalized like the save (a trimmed title). */
+  text: (value: T) => string;
+  /** The text the ticket holds now for `value`'s field, or undefined when it is not loaded. */
+  committed: (value: T) => string | undefined;
+  /** A field conflict owns the edit at this destination, so it is neither kept nor retried. */
+  conflictOwns: (destination: string) => boolean;
 }
 
 export interface PreparedRecovery {
@@ -84,6 +97,12 @@ export interface InFlightRecovery<T> {
 
 export interface FocusLossAutosave<T> extends DebouncedAutosave<T> {
   captureRecovery(): void;
+  /**
+   * Queue `value` again when the last save to its destination failed and nothing newer is waiting,
+   * so the focus loss about to flush retries it instead of resolving on an empty queue (HS2-Y0VRXR).
+   * Returns whether a retry was queued.
+   */
+  retryFailedSave(value: T): boolean;
 }
 
 /**
@@ -95,7 +114,7 @@ export interface FocusLossAutosave<T> extends DebouncedAutosave<T> {
  */
 export function createFocusLossAutosave<T>(
   save: (value: T) => Promise<boolean>,
-  { persist, prepareRecovery, delay = AUTOSAVE_DELAY_MS }: FocusLossAutosaveOptions<T> = {},
+  { persist, prepareRecovery, retry, delay = AUTOSAVE_DELAY_MS }: FocusLossAutosaveOptions<T> = {},
 ): FocusLossAutosave<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let queued: T | undefined;
@@ -104,12 +123,16 @@ export function createFocusLossAutosave<T>(
   // HS2-E0H7S0: independent of the server queue, including active/failed saves.
   let recovery: Partial<PreparedRecovery> | undefined;
   let inFlight: InFlightRecovery<T> | undefined;
+  // HS2-Y0VRXR: the destination whose last save failed, whichever flush sent it (blur, page hide).
+  let failed: FailedSave | undefined;
 
   const persistNow = () => {
     if (timer) clearTimeout(timer);
     timer = undefined;
     if (hasQueuedValue) persist?.(queued as T);
   };
+  // Read after an await: typing during a save queues a newer value the narrowed local cannot see.
+  const queuedSince = () => hasQueuedValue;
   const flush = async (): Promise<boolean> => {
     if (active) {
       // Only an edit that was waiting when this flush began is its to send. Text typed while the
@@ -129,35 +152,68 @@ export function createFocusLossAutosave<T>(
     active = current;
     const saving = { value, destination: captured?.destination };
     inFlight = saving;
+    let saved = false;
     try {
-      const saved = await current;
+      saved = await current;
       if (saved && recovery === captured) recovery = undefined;
       return saved;
     } finally {
       if (active === current) active = undefined;
-      if (inFlight === saving) inFlight = undefined;
+      // A cancelled owner (another ticket selected) has no failure to keep; newer typing supersedes it.
+      const owned = inFlight === saving;
+      if (owned) inFlight = undefined;
+      if (retry && owned && !queuedSince()) {
+        const destination = saving.destination;
+        failed = settleFailedSave(
+          failed,
+          destination,
+          saved,
+          destination !== undefined && retry.conflictOwns(destination),
+        );
+      }
     }
   };
 
+  const schedule = (value: T) => {
+    recovery = prepareRecovery?.(value, inFlight) ?? {};
+    failed = undefined; // newer typing replaces the failed text; the next flush sends it
+    queued = value;
+    hasQueuedValue = true;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(persistNow, delay);
+  };
+
   return {
-    schedule(value) {
-      recovery = prepareRecovery?.(value, inFlight) ?? {};
-      queued = value;
-      hasQueuedValue = true;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(persistNow, delay);
-    },
+    schedule,
     flush,
     captureRecovery() {
       if (!recovery) return;
       if (!recovery.capture) throw new Error('Local recovery capture is unavailable.');
       recovery.capture();
     },
+    retryFailedSave(value) {
+      if (!retry || !failed) return false;
+      const destination = prepareRecovery?.(value, inFlight).destination;
+      if (
+        !shouldRetryFailedSave({
+          failed,
+          destination,
+          pending: hasQueuedValue || active !== undefined,
+          conflictOwns: destination !== undefined && retry.conflictOwns(destination),
+          text: retry.text(value),
+          committed: retry.committed(value),
+        })
+      )
+        return false;
+      schedule(value);
+      return true;
+    },
     cancel() {
       if (timer) clearTimeout(timer);
       timer = undefined;
       queued = undefined;
       hasQueuedValue = false;
+      failed = undefined;
       recovery = undefined;
       inFlight = undefined; // a cancelled owner cannot supply predecessor authority to a replacement
     },

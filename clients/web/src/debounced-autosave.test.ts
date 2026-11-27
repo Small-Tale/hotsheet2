@@ -493,3 +493,130 @@ describe('createKeyedCoalescedInput (HS2-2YW8R3)', () => {
     }
   });
 });
+
+describe('createFocusLossAutosave failed-save retry (HS2-Y0VRXR)', () => {
+  interface Edit {
+    ticket: string;
+    value: string;
+  }
+  const destinationOf = ({ ticket }: Edit) => `p1\u0000${ticket}\u0000details`;
+  function harness(outcomes: boolean[]) {
+    const sent: Edit[] = [],
+      committed = new Map([
+        ['A', 'old A'],
+        ['B', 'old B'],
+      ]),
+      conflicts = new Set<string>();
+    const autosave = createFocusLossAutosave(
+      async (value: Edit) => {
+        sent.push(value);
+        const saved = outcomes.shift() ?? true;
+        if (saved) committed.set(value.ticket, value.value);
+        return saved;
+      },
+      {
+        delay: 10,
+        prepareRecovery: (value) => ({ destination: destinationOf(value), capture: () => {} }),
+        retry: {
+          text: ({ value }) => value,
+          committed: ({ ticket }) => committed.get(ticket),
+          conflictOwns: (destination) => conflicts.has(destination),
+        },
+      },
+    );
+    return { autosave, sent, committed, conflicts };
+  }
+
+  it('retries the failed edit on the next focus loss until it commits, then sends nothing', async () => {
+    const { autosave, sent } = harness([false, false, true]);
+    const edit = { ticket: 'A', value: 'typed' };
+    autosave.schedule(edit);
+    await expect(autosave.flush()).resolves.toBe(false);
+    // An empty flush never retries on its own; only the focus-loss retry re-queues the text.
+    await expect(autosave.flush()).resolves.toBe(true);
+    expect(sent).toHaveLength(1);
+    expect(autosave.retryFailedSave(edit)).toBe(true);
+    await expect(autosave.flush()).resolves.toBe(false);
+    expect(autosave.retryFailedSave(edit)).toBe(true);
+    await expect(autosave.flush()).resolves.toBe(true);
+    expect(autosave.retryFailedSave(edit)).toBe(false);
+    expect(sent).toEqual([edit, edit, edit]);
+  });
+
+  it('keeps a failure from a page-hide flush for the next focus loss', async () => {
+    const { autosave, sent } = harness([false]);
+    autosave.schedule({ ticket: 'A', value: 'hidden' });
+    // Page hide flushes directly and nobody awaits a retry decision.
+    await expect(autosave.flush()).resolves.toBe(false);
+    expect(autosave.retryFailedSave({ ticket: 'A', value: 'hidden' })).toBe(true);
+    await expect(autosave.flush()).resolves.toBe(true);
+    expect(sent.map((edit) => edit.value)).toEqual(['hidden', 'hidden']);
+  });
+
+  it('never retries into another destination, after cancel, or behind newer typing', async () => {
+    const { autosave, sent } = harness([false, false]);
+    autosave.schedule({ ticket: 'A', value: 'typed' });
+    await autosave.flush();
+    expect(autosave.retryFailedSave({ ticket: 'B', value: 'typed' })).toBe(false);
+    // Newer typing replaces the failure; its own flush sends it.
+    autosave.schedule({ ticket: 'A', value: 'typed more' });
+    expect(autosave.retryFailedSave({ ticket: 'A', value: 'typed more' })).toBe(false);
+    await expect(autosave.flush()).resolves.toBe(false);
+    // A selection change cancels the edit and forgets the failure.
+    autosave.cancel();
+    expect(autosave.retryFailedSave({ ticket: 'A', value: 'typed more' })).toBe(false);
+    await expect(autosave.flush()).resolves.toBe(true);
+    expect(sent.map((edit) => edit.value)).toEqual(['typed', 'typed more']);
+  });
+
+  it('keeps no failure for a save cancelled while in flight', async () => {
+    let release: (value: boolean) => void = () => {};
+    const autosave = createFocusLossAutosave(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = resolve;
+        }),
+      {
+        prepareRecovery: () => ({ destination: 'd', capture: () => {} }),
+        retry: { text: (value: string) => value, committed: () => 'old', conflictOwns: () => false },
+      },
+    );
+    autosave.schedule('typed');
+    const flushing = autosave.flush();
+    autosave.cancel();
+    release(false);
+    await expect(flushing).resolves.toBe(false);
+    expect(autosave.retryFailedSave('typed')).toBe(false);
+  });
+
+  it('hands a conflicted edit to its owner and has nothing to send once the text matches the ticket', async () => {
+    const { autosave, sent, committed, conflicts } = harness([false, false]);
+    const edit = { ticket: 'A', value: 'mine' };
+    // The save raises a conflict: the card (or a linked reader's error) owns it, so nothing is kept.
+    conflicts.add(destinationOf(edit));
+    autosave.schedule(edit);
+    await autosave.flush();
+    conflicts.clear();
+    expect(autosave.retryFailedSave(edit)).toBe(false);
+    // A plain failure is kept, but not retried while a conflict opens over it.
+    autosave.schedule(edit);
+    await autosave.flush();
+    conflicts.add(destinationOf(edit));
+    expect(autosave.retryFailedSave(edit)).toBe(false);
+    conflicts.clear();
+    // Use Theirs: the draft now matches the ticket, so the focus loss writes nothing.
+    committed.set('A', 'theirs');
+    expect(autosave.retryFailedSave({ ticket: 'A', value: 'theirs' })).toBe(false);
+    expect(autosave.retryFailedSave(edit)).toBe(true);
+    expect(sent).toHaveLength(2);
+  });
+
+  it('keeps the flush-only behavior for an autosave without retry options', async () => {
+    const autosave = createFocusLossAutosave(async () => false, {
+      prepareRecovery: () => ({ destination: 'd', capture: () => {} }),
+    });
+    autosave.schedule('typed');
+    await expect(autosave.flush()).resolves.toBe(false);
+    expect(autosave.retryFailedSave('typed')).toBe(false);
+  });
+});

@@ -927,8 +927,17 @@ inspector in `clients/web/tests/ticket-editor-autosave-transitions.spec.ts`:
 - Selecting another ticket inside the 150 ms typing pause, with the caret at the start and at the end: one PATCH to the edited ticket, the neighbour untouched, no leftover copy, and no stale restore.
 - A failed blur save shows the error, keeps the editor text and its local copy. A second focus loss with no new typing retries the save; while it keeps failing the editor stays open on the text, and once the store answers the next focus loss saves it, closes the editor, and clears the copy (HS2-SJ5TCW).
 - A failed edit is never retried into another ticket: opening and leaving the neighbour's editor writes nothing to it, and reopening the edited ticket restores the copy and blur saves it (HS2-SJ5TCW).
-- A retried save that meets an overlapping edit opens the card; leaving the editor while the card is open writes nothing, and after Use Theirs a reopen and blur writes nothing (HS2-SJ5TCW). `clients/web/src/details-save-retry.test.ts` pins the retry decision: same ticket and edit only, never with newer typing, a closed editor, or the card open, and nothing to send once the text matches the ticket.
+- A retried save that meets an overlapping edit opens the card; leaving the editor while the card is open writes nothing, and after Use Theirs a reopen and blur writes nothing (HS2-SJ5TCW). `clients/web/src/failed-save-retry.test.ts` pins the retry decision: same destination (project, ticket, field, and note) only, never with newer typing or while a conflict owns the edit, and nothing to send once the text matches the ticket (HS2-Y0VRXR).
+- The note, blocked-reason, and title editors each run fail, then a retry that fails and stays open, then a retry that commits and closes; a reopen and blur afterwards writes nothing (HS2-Y0VRXR).
+- A failed page-hide save keeps the local copy; after returning, a focus loss with no new typing retries it, closes the editor, and clears the copy (HS2-Y0VRXR).
 - A stale cached detail refreshed after the edit began: the blur save merges on the refreshed token with no 409 retry, and an untouched open editor adopts the refreshed text.
+
+`clients/web/tests/ticket-reader-stack.spec.ts # retries a failed linked reader Details save on the next focus loss, never over an overlap (HS2-Y0VRXR)`
+drives the same retry in a link-opened reader and checks that a focus loss after an
+overlapping-edit error writes nothing. `clients/web/src/debounced-autosave.test.ts` pins the
+autosave side: a failure from any flush (blur or page hide) is kept for its destination;
+it is forgotten on success, newer typing, cancel, or a cancel while the save is in flight;
+and an autosave without retry options keeps the flush-only behavior (HS2-Y0VRXR).
 
 `clients/web/tests/ticket-edit-sequencing.spec.ts` now waits for the editor to close
 before its edits-after-save step, so that step deterministically follows the save.

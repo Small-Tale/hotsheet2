@@ -65,13 +65,34 @@ const rows = [row('01', 'HS2-EDIT', 'Edited ticket'), row('02', 'HS2-NEXT', 'Nei
 interface Patch {
   id: string;
   details?: string;
+  title?: string;
+  blocked_reason?: string | null;
+  note_id?: string;
+  note?: string;
   expected_token?: string;
 }
+interface Note {
+  id: string;
+  kind: 'regular';
+  created_at: string;
+  edited_at: string;
+  text: string;
+}
+const note = (id: string, text: string): Note => ({
+  id,
+  kind: 'regular',
+  created_at: '2026-09-10T00:00:00Z',
+  edited_at: '2026-09-10T00:00:00Z',
+  text,
+});
 
 /** A two-ticket mocked project whose ticket writes and reads the test can hold, fail, or change. */
 async function mockProject(page: Page) {
   const server = {
     details: { '01': 'Intro', '02': 'Neighbour' } as Record<string, string>,
+    titles: { '01': 'Edited ticket', '02': 'Neighbour ticket' } as Record<string, string>,
+    blocked: { '01': null, '02': null } as Record<string, string | null>,
+    notes: { '01': [], '02': [] } as Record<string, Note[]>,
     tokens: { '01': 'T0', '02': 'U0' } as Record<string, string>,
     patches: [] as Patch[],
     conflicts: 0,
@@ -86,9 +107,10 @@ async function mockProject(page: Page) {
   const full = (id: string) => ({
     store: 'git-local',
     ...rows.find((item) => item.id === id),
+    title: server.titles[id],
     details: server.details[id],
-    blocked_reason: null,
-    notes: [],
+    blocked_reason: server.blocked[id],
+    notes: server.notes[id],
     attachments: [],
     concurrency_token: server.tokens[id],
   });
@@ -127,6 +149,12 @@ async function mockProject(page: Page) {
         });
       }
       if (body.details !== undefined) server.details[ticket] = body.details;
+      if (body.title !== undefined) server.titles[ticket] = body.title;
+      if (body.blocked_reason !== undefined) server.blocked[ticket] = body.blocked_reason;
+      if (body.note_id !== undefined && body.note !== undefined)
+        server.notes[ticket] = server.notes[ticket].map((item) =>
+          item.id === body.note_id ? { ...item, text: body.note ?? item.text } : item,
+        );
       tokenSeq += 1;
       server.tokens[ticket] = `${ticket === '01' ? 'T' : 'U'}${tokenSeq}`;
       return route.fulfill({ json: full(ticket) });
@@ -596,6 +624,130 @@ test('a retried save that meets an overlapping edit shows the card, and Use Thei
   await expect(reopened).toBeHidden();
   expect(server.patches).toHaveLength(sent);
   expect(server.details['01']).toBe('Intro, theirs');
+});
+
+// HS2-Y0VRXR: every inspector text editor, not just Details, retries a failed save on the next focus
+// loss, through the same destination-keyed autosave retry.
+const otherEditors = [
+  {
+    name: 'note',
+    typed: 'A note, edited',
+    prepare: (server: Awaited<ReturnType<typeof mockProject>>) => {
+      server.notes['01'] = [note('N1', 'A note')];
+    },
+    open: async (inspector: Locator) => {
+      await inspector
+        .locator('[data-note-id="N1"] .note-card__body p')
+        .first()
+        .click({ position: { x: 4, y: 4 } });
+      return inspector.getByRole('textbox', { name: 'Note body' });
+    },
+    saved: (server: Awaited<ReturnType<typeof mockProject>>) => server.notes['01'][0]?.text,
+    sent: (patch: Patch) => patch.note,
+  },
+  {
+    name: 'blocked reason',
+    typed: 'Waits on the vendor and the auditor',
+    prepare: (server: Awaited<ReturnType<typeof mockProject>>) => {
+      server.blocked['01'] = 'Waits on the vendor';
+    },
+    open: async (inspector: Locator) => {
+      await inspector.getByRole('button', { name: 'Edit blocked reason' }).dblclick();
+      return inspector.getByRole('textbox', { name: 'Blocked Reason' });
+    },
+    saved: (server: Awaited<ReturnType<typeof mockProject>>) => server.blocked['01'],
+    sent: (patch: Patch) => patch.blocked_reason,
+  },
+  {
+    name: 'title',
+    typed: 'Edited ticket, renamed',
+    prepare: () => {},
+    open: async (inspector: Locator) => {
+      await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
+      return inspector.getByRole('textbox', { name: 'Ticket Title' });
+    },
+    saved: (server: Awaited<ReturnType<typeof mockProject>>) => server.titles['01'],
+    sent: (patch: Patch) => patch.title,
+  },
+] as const;
+
+for (const editorCase of otherEditors)
+  test(`a failed ${editorCase.name} save is retried by the next focus loss and closes once it commits (HS2-Y0VRXR)`, async ({
+    page,
+  }) => {
+    const server = await mockProject(page);
+    editorCase.prepare(server);
+    let failing = true;
+    server.onPatch = () => (failing ? 503 : undefined);
+    await openProject(page);
+    await ticketRow(page, 'HS2-EDIT').click();
+    const inspector = page.locator('#app-right-rail');
+    const editor = await editorCase.open(inspector);
+    await expect(editor).toBeFocused();
+    await editor.fill(editorCase.typed);
+    await editor.blur();
+
+    const appError = page.locator('[data-component="app-error"]');
+    await expect(appError).toContainText('The ticket store is unavailable.');
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveValue(editorCase.typed);
+    expect(server.patches).toHaveLength(1);
+
+    // No new typing: the focus loss resends the edit, and the editor stays open while it fails.
+    await editor.focus();
+    await editor.blur();
+    await expect.poll(() => server.patches.length).toBe(2);
+    expect(editorCase.sent(server.patches[1])).toBe(editorCase.typed);
+    await expect(appError).toContainText('The ticket store is unavailable.');
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveValue(editorCase.typed);
+
+    // Once the store answers, the next focus loss saves it and closes the editor.
+    failing = false;
+    await editor.focus();
+    await editor.blur();
+    await expect.poll(() => editorCase.saved(server)).toBe(editorCase.typed);
+    await expect(editor).toBeHidden();
+    expect(server.patches).toHaveLength(3);
+    await expect.poll(() => storedDrafts(page)).toEqual([]);
+
+    // Nothing is left to retry: opening and leaving the editor again writes nothing.
+    const reopened = await editorCase.open(inspector);
+    await expect(reopened).toHaveValue(editorCase.typed);
+    await reopened.blur();
+    await expect(reopened).toBeHidden();
+    expect(server.patches).toHaveLength(3);
+  });
+
+test('a failed page-hide save keeps the local copy and is retried by the next focus loss (HS2-Y0VRXR)', async ({
+  page,
+}) => {
+  const server = await mockProject(page);
+  let failing = true;
+  server.onPatch = () => (failing ? 503 : undefined);
+  await openProject(page);
+  await ticketRow(page, 'HS2-EDIT').click();
+  const editor = await editDetails(page);
+  await editor.fill('Intro\n- typed before hiding');
+
+  await setPageVisibility(page, 'hidden');
+  await expect.poll(() => server.patches.length).toBe(1);
+  await expect(page.locator('[data-component="app-error"]')).toContainText('The ticket store is unavailable.');
+  expect(server.details['01']).toBe('Intro');
+  expect(await storedDrafts(page)).toEqual([{ base: 'Intro', draft: 'Intro\n- typed before hiding' }]);
+
+  // Back on the page the editor still holds the text; leaving it with no new typing retries the save.
+  failing = false;
+  await setPageVisibility(page, 'visible');
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue('Intro\n- typed before hiding');
+  await editor.focus();
+  await editor.blur();
+  await expect.poll(() => server.details['01']).toBe('Intro\n- typed before hiding');
+  await expect(editor).toBeHidden();
+  expect(server.patches).toHaveLength(2);
+  expect(server.conflicts).toBe(0);
+  await expect.poll(() => storedDrafts(page)).toEqual([]);
 });
 
 test('an edit begun on a stale cached detail merges with the refresh that lands after it (HS2-7D3MPP)', async ({
