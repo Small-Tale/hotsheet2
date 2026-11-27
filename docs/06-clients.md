@@ -1105,19 +1105,22 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   collapses independently for each ticket and presentation across updates. Wide layouts
   show the full title, and the title editor still grows to show its draft.
 
-- **Ticket claims.** Ticket rows show a yellow spinner directly after status only
-  while a worker holds a non-expired claim lease. Started tickets without a lease remain
+- **Ticket claims.** Ticket rows show a small indeterminate Kerf `ProgressRing` (the live-work
+  indicator) directly after status only while a worker holds a non-expired claim lease. It
+  replaced the yellow `LoadingSpinner`, which spins a shape inside its SVG and repainted every
+  frame in WebKit, holding an idle Safari web app at 20% CPU or more per row (HS2-GFZYCZ,
+  KF-M4WWRW). Started tickets without a lease remain
   unclaimed, and old `claim_count` values never imply presence. A local one-shot expiry timer removes stale indicators without issuing
   polling requests; claim/release changes otherwise arrive through the shared live-update
   channel. When a live claim has an on-track ETA, a progress ring of the same size replaces
-  the spinner in that slot; the time-left label remains after the holder name. An overrun
-  keeps the spinner and shows `Soon`. Long worker IDs are clipped only in the row display;
+  the indeterminate ring in that slot; the time-left label remains after the holder name. An overrun
+  returns to the indeterminate ring and shows `Soon`. Long worker IDs are clipped only in the row display;
   hover and assistive technology retain the full value.
 
 - **Started phase.** List rows, column cards, and the ticket inspector show the optional phase label
   inside the Started badge. Other status labels remain hidden on column cards because the column
   already names their status. `Final testing` remains visible after a worker releases
-  the claim to wait for remote CI; the live-work spinner and worker name still follow the lease.
+  the claim to wait for remote CI; the live-work indicator and worker name still follow the lease.
   Legacy Started tickets without a phase keep the plain `Started` label.
 
 - **Custom project commands.** The sidebar renders machine-local typed command
@@ -3682,7 +3685,9 @@ view layer is new work.
   simultaneous active claim (capped at 8 drawn segments for legibility; the accessible
   label still reports the true active count), while the center label always projects the Up Next count
   (so it can read `0` while work is active); the ring's segment count is the only axis that
-  tracks active claims (HS2-3TGYER). Each open project's replay-safe WebSocket-first stream
+  tracks active claims (HS2-3TGYER). The whole ring `<svg>` rotates, never a shape inside it,
+  because WebKit composites only the former; an animated SVG shape repainted every frame and
+  kept an idle Safari web app busy for as long as a claim was live (HS2-GFZYCZ). Each open project's replay-safe WebSocket-first stream
   reconciles those cached rows after ticket, claim, renew, and release events even when the
   project is not selected; the indicator never waits for a tab activation to become current.
   Because lease expiry is a passage of time rather than a server mutation, the client also
@@ -5846,10 +5851,10 @@ brand-tinted "<holder> is working on this" line: the holder's worker label (else
 shared activity slot, and, when the claim carries an ETA, the same progress ring and time
 left (or `Soon` once overrun) that list and column rows show (HS2-XQMDQB). It uses the rows'
 local ETA clock, so the countdown never triggers network requests, and it disappears as soon as
-the claim is released, expires, or the ticket reaches a terminal status. The spinner and ETA ring
-come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
-The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with a
-public-token-colored `LoadingSpinner` when progress is indeterminate; the same-sized ETA ring
+the claim is released, expires, or the ticket reaches a terminal status. The indeterminate and ETA
+rings come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
+The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with an indeterminate
+`ProgressRing` when progress is unknown (HS2-GFZYCZ); the same-sized ETA ring
 occupies its icon slot while the estimate is on track (HS2-SNC0S3/1FYDF0). The time-left
 label stays in the banner action, and the claim label remains accessible (HS2-KEHG7H).
 The time-left label has an inline gap from the holder text. Generated worker ids show a

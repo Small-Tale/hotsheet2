@@ -13747,11 +13747,13 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
     idleRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     indicator = activeRow.locator('.ticket-list-row__claim');
   await expect(activeRow).toHaveAttribute('data-status', 'started');
-  await expect(indicator.locator('[data-component="loading-spinner"]')).toHaveAttribute(
+  // A live claim without an ETA spins Kerf's indeterminate ProgressRing: its whole svg box rotates, which
+  // WebKit composites, never a shape inside the svg (HS2-GFZYCZ).
+  await expect(indicator.locator('[data-component="progress-ring"][data-indeterminate]')).toHaveAttribute(
     'aria-label',
     'Codex is actively working on this ticket',
   );
-  await expect(indicator.locator('path')).toHaveCSS('animation-duration', '0.85s');
+  await expect(indicator.locator('[data-component="progress-ring"] > svg')).toHaveCSS('animation-duration', '1s');
   await expect(idleRow.locator('.ticket-list-row__claim')).toHaveCount(0);
   await expect(page.locator('[data-ticket-slug="HS2-DONE01"] .ticket-list-row__claim')).toHaveCount(0);
   expect(

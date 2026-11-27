@@ -49,7 +49,10 @@
   color: var(--hs-ticket-state-up-next);
   background: transparent;
 }
-/* The SVG activity ring overlays the badge box. */
+/* The SVG activity ring overlays the badge box. The whole <svg> box rotates, not a shape inside it:
+   WebKit composites a transform animation on a CSS box, but repaints an animated SVG shape every frame,
+   which kept an idle Safari web app at 20%+ CPU per ring (HS2-GFZYCZ). The track is a full circle, so
+   turning it with the segments looks the same. */
 .project-tab__activity-ring {
   position: absolute;
   inset: 0;
@@ -58,16 +61,15 @@
   overflow: visible;
   fill: none;
   stroke-width: 4;
+  animation: project-tab-activity-rotate 1.7s linear infinite;
 }
 /* The ring track, under the segments. */
 .project-tab__activity-track {
   stroke: var(--wa-color-neutral-fill-quiet);
 }
-/* One dashed segment per active ticket, rotating. */
+/* One dashed segment per active ticket; the ring around it rotates. */
 .project-tab__activity-segments {
   stroke: currentColor;
-  transform-origin: 12px 12px;
-  animation: project-tab-activity-rotate 1.7s linear infinite;
 }
 /* Dark ink keeps the up-next count legible on the always-yellow filled badge in both themes (HS2-SXXK5Q).
    In the active (transparent, activity-ring) state the ring keeps the up-next accent (currentColor from
@@ -91,7 +93,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-tab__activity-segments {
+  .project-tab__activity-ring {
     animation: none;
     transform: rotate(-90deg);
   }
