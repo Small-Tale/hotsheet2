@@ -89,9 +89,18 @@ struct SystemCapacity;
 /// a shipped server.
 pub const ROOMY_CAPACITY_ENV: &str = "HOTSHEET_TEST_ROOMY_CAPACITY";
 
+/// HS2-ZRPZJJ: with [`ROOMY_CAPACITY_ENV`], the comma-separated tool ids a browser test
+/// makes the roomy machine report signed out, since its fixtures never probe a real AI
+/// tool (HS2-F6R2HQ). Honored only where the roomy switch is.
+pub const SIGNED_OUT_TOOLS_ENV: &str = "HOTSHEET_TEST_SIGNED_OUT_TOOLS";
+
 /// HS2-YWN8JT: a roomy machine for real-server tests: ample memory, an idle CPU and a
-/// large disk, with the real host's tool detection and process sizes.
-pub struct RoomyFixtureCapacity;
+/// large disk, with the real host's tool detection and process sizes. HS2-ZRPZJJ: each
+/// tool in `signed_out` that the host detects reports `signed_in: false`.
+#[derive(Debug, Clone, Default)]
+pub struct RoomyFixtureCapacity {
+    pub signed_out: Vec<String>,
+}
 
 impl CapacitySource for RoomyFixtureCapacity {
     fn machine(&mut self) -> MachineReading {
@@ -121,7 +130,13 @@ impl CapacitySource for RoomyFixtureCapacity {
         plugin_dirs: &[PathBuf],
         toolchains: &[String],
     ) -> Option<HostCapabilities> {
-        SystemCapacity.capabilities(plugin_dirs, toolchains)
+        let mut capabilities = SystemCapacity.capabilities(plugin_dirs, toolchains)?;
+        for tool in capabilities.ai_tools.iter_mut().flatten() {
+            if self.signed_out.contains(&tool.tool) {
+                tool.signed_in = Some(false);
+            }
+        }
+        Some(capabilities)
     }
 
     fn models(
@@ -264,6 +279,9 @@ struct CapabilityReading {
 pub(crate) struct Capacity {
     inner: Mutex<Inner>,
     cache_ms: AtomicU64,
+    /// HS2-ZRPZJJ: how long one capability detection answers, normally
+    /// [`CAPABILITIES_TTL`](super::capabilities::CAPABILITIES_TTL).
+    capabilities_ttl_ms: AtomicU64,
     samples: AtomicU64,
     detections: AtomicU64,
     /// HS2-0VTQFF: bumped to drop the model reading without waiting behind one.
@@ -295,6 +313,9 @@ impl Capacity {
                 models: None,
             }),
             cache_ms: AtomicU64::new(CAPACITY_CACHE.as_millis() as u64),
+            capabilities_ttl_ms: AtomicU64::new(
+                super::capabilities::CAPABILITIES_TTL.as_millis() as u64
+            ),
             samples: AtomicU64::new(0),
             detections: AtomicU64::new(0),
             models_generation: AtomicU64::new(0),
@@ -304,6 +325,11 @@ impl Capacity {
     pub(crate) fn set_cache(&self, cache: Duration) {
         self.cache_ms
             .store(cache.as_millis() as u64, Ordering::SeqCst);
+    }
+
+    pub(crate) fn set_capabilities_ttl(&self, ttl: Duration) {
+        self.capabilities_ttl_ms
+            .store(ttl.as_millis() as u64, Ordering::SeqCst);
     }
 
     /// How many readings were taken since the server started.
@@ -324,10 +350,10 @@ impl Capacity {
         plugin_dirs: &[PathBuf],
         toolchains: &[String],
     ) -> Option<HostCapabilities> {
+        let ttl = Duration::from_millis(self.capabilities_ttl_ms.load(Ordering::SeqCst));
         let mut inner = self.inner.lock_or_recover();
         let fresh = inner.capabilities.as_ref().is_some_and(|reading| {
-            reading.toolchains == toolchains
-                && reading.taken.elapsed() < super::capabilities::CAPABILITIES_TTL
+            reading.toolchains == toolchains && reading.taken.elapsed() < ttl
         });
         if !fresh {
             self.detections.fetch_add(1, Ordering::SeqCst);
@@ -608,6 +634,14 @@ impl AppState {
     #[must_use]
     pub fn with_capacity_cache(self, cache: Duration) -> Self {
         self.capacity.set_cache(cache);
+        self
+    }
+
+    /// HS2-ZRPZJJ: how long one capability detection (versions, sign-in, toolchains)
+    /// answers further requests (tests, embedders); ten minutes otherwise.
+    #[must_use]
+    pub fn with_capabilities_ttl(self, ttl: Duration) -> Self {
+        self.capacity.set_capabilities_ttl(ttl);
         self
     }
 

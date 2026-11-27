@@ -23257,6 +23257,7 @@ components:
           enum:
             - tool_not_installed
             - tool_not_configured
+            - tool_signed_out
             - session_cap_reached
             - above_cpu_ceiling
             - below_disk_floor

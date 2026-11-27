@@ -409,7 +409,20 @@ async fn main() -> Result<()> {
     if isolated_vault
         && std::env::var(hotsheet_server::ROOMY_CAPACITY_ENV).is_ok_and(|value| value == "1")
     {
-        state = state.with_capacity_source(Box::new(hotsheet_server::RoomyFixtureCapacity));
+        // HS2-ZRPZJJ: a browser test may name tools the roomy machine reports signed out.
+        let signed_out = std::env::var(hotsheet_server::SIGNED_OUT_TOOLS_ENV)
+            .map(|tools| {
+                tools
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|tool| !tool.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        state = state.with_capacity_source(Box::new(hotsheet_server::RoomyFixtureCapacity {
+            signed_out,
+        }));
     }
 
     // Detached terminal hosting is the default: normal server stops/restarts disconnect from

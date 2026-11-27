@@ -6348,6 +6348,8 @@ toolbar.
     **Signed In**, **Signed Out**, or **Not Installed** (HS2-S1FEYY). A tool whose machine cannot
     tell whether it is signed in (an older host, probing off, no declared status command, or a
     check that did not finish) shows **Installed**. Tools that are not installed are listed last.
+    A Signed Out tool is not placed on this machine (HS2-ZRPZJJ); an Installed one (unknown)
+    still is.
   - **Capabilities:** System, Processor (with core count), GPU, and Memory (free of total).
   - **Toolchains:** each installed toolchain and its version.
 
@@ -6361,7 +6363,9 @@ toolbar.
     orchestration inspector (HS2-JF3EA3): one session of each tool the policy lets run there.
     - **Badge:** the best answer: "Can start N now", "Can start N of M", Refused, Checking, or
       Unknown. When the policy allows no tool there, the badge says "No AI tool allowed here".
-    - **Quiet line:** each tool's answer and why.
+    - **Quiet line:** each tool's answer and why. A tool signed out on the machine reads
+      "Claude: Refused · signed out there" (HS2-ZRPZJJ); another signed-in tool still sets the
+      badge.
     - **Without a placed project:** the rail says "No orchestrated project runs on this machine",
       or, with no orchestration project open, how to see one.
   - **AI Sessions Here.** Each running AI session is named by its terminal when this app shows

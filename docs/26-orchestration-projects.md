@@ -1455,7 +1455,9 @@ Total memory and logical CPUs stay where they are (`memory.total_mb`,
   name or credential leaves the machine. Without a declaration, with probing off, or when
   the check times out or is killed, `signed_in` is absent (unknown, never signed out). A
   change of it changes the capacity `version`, through the capabilities term. A sign-in
-  or sign-out shows at the next detection, within ten minutes. Admission does not read it. The platform readers are in [host-health](host-health.md).
+  or sign-out shows at the next detection, within ten minutes. Admission refuses a tool
+  reported `signed_in: false` as `tool_signed_out`, and placement skips it there; an
+  absent state is still tried (HS2-ZRPZJJ, below). The platform readers are in [host-health](host-health.md).
 - **Compatibility** (§26.5). The member is additive and optional: an older peer's
   snapshot has none and still reads, and an older reader ignores it. The capacity
   `version` digests it only when it is reported, so a snapshot without it keeps the
@@ -1548,6 +1550,7 @@ many) or `refused`, with the limits that were enforced and one reason code:
 | --------------------- | ------------------------------------------------------------------------- |
 | `tool_not_installed`  | The host does not know the tool or its program is missing                 |
 | `tool_not_configured` | The checkout opted out of the tool                                        |
+| `tool_signed_out`     | The machine reports the tool signed out (`signed_in: false`, HS2-ZRPZJJ)  |
 | `session_cap_reached` | Running AI sessions leave no room, or less room than asked, under the cap |
 | `above_cpu_ceiling`   | CPU load is above `max_cpu_percent`                                       |
 | `below_disk_floor`    | Free disk is below `min_free_disk_mb`                                     |
@@ -1558,8 +1561,16 @@ A refused or reduced answer also carries `refusal` (HS2-8Z9VHH): the reason with
 machine limit behind it (`setting`: `max_sessions`, `max_cpu_percent`,
 `min_free_disk_mb` or `min_free_ram_mb`), that limit's enforced value (`limit`) and
 what the machine measured (`observed`: running AI sessions, CPU percent, free disk or
-free RAM in MB). A tool reason carries `tool` instead; `capacity_unknown` carries the
-reason only.
+free RAM in MB). A tool reason (`tool_not_installed`, `tool_not_configured`,
+`tool_signed_out`) carries `tool` instead; `capacity_unknown` carries the reason only.
+
+**A signed-out tool (HS2-ZRPZJJ).** Only a known `capabilities.ai_tools[].signed_in:
+false` refuses: a tool whose sign-in is absent (an older tool or peer, probing off, a
+check that could not finish) is admitted as before, so nothing that worked before the
+field existed stops. A missing or opted-out tool keeps its own reason first; a signed-out
+tool is refused whatever the room, and even when a measurement is unknown. Signing in
+changes the capacity `version` (through the capabilities term), so a follower of the
+version sees it at the next detection.
 
 A limit that a known measurement breaks always refuses with its own reason. Unknown
 measurements are listed in `unknown` and refuse as `capacity_unknown` unless the owner
@@ -3989,11 +4000,15 @@ Work is placed best first. For each item, in this order:
    takes one session at a time (`probe_in_flight`). For each candidate the machine
    check is `decide_admission` (§26.10) with the policy's limits for the target and
    one session more than this pass already placed on that machine. A tool the
-   machine does not have moves on to the next candidate; a cap or floor ends the
+   machine does not have, or reports signed out (`tool_signed_out`, HS2-ZRPZJJ),
+   moves on to the next candidate; a cap or floor ends the
    search as `machine_refused` with the limit (`below_ram_floor`,
    `session_cap_reached`, `above_cpu_ceiling`, `below_disk_floor`,
    `capacity_unknown`). No candidate left is `no_tool_available` with the nearest
-   cause.
+   cause. A signed-out tool is that cause as detail `tool_signed_out:<tool>` (the
+   first signed-out candidate, named over a missing one, since signing in is what a
+   person can do); another site of the project whose tool is signed in takes the work
+   instead, and the passed-over site carries the same detail.
 
 So a limited tool moves work to another allowed tool, a machine below its RAM floor
 takes nothing, targets on one machine share its room, and every start counts
@@ -4041,7 +4056,12 @@ whose detail is a model-resolution code says the cause in place of the generic p
 on the Scheduler row, a passed-over site, a deferred decision and a role session not
 started alike: `model_unresolved` reads "its machine has not reported the AI tool's
 models, so no allowed model can be picked" and `no_matching_model` reads "no model its
-machine reports is an allowed model" (HS2-747WQA).
+machine reports is an allowed model" (HS2-747WQA). A `tool_signed_out:<tool>` detail
+reads "Claude is signed out" on a ready card's line, beside the badge that names its
+machine (kept short so it fits the card at every width), and "Claude is signed out on
+Build Host" ("… on this machine" for a local site) on the Scheduler row and a
+passed-over site; Why It Is Not Running adds What to Do: sign in to the tool there, or
+allow another AI tool for the project (HS2-ZRPZJJ).
 A resource another site was waiting on is listed in `contention` only when the work
 was placed nowhere, and a retry time counts only from the chosen site or, unplaced,
 from every site.
@@ -4227,7 +4247,8 @@ start is decided, applied and logged once however many passes are asked for at o
 **A machine that gains room (HS2-AWB7BX).** When a pass of the loop leaves work
 unplaced because a target's machine had no room (`machine_refused`, or a
 `refusal_backoff` whose reason is a capacity refusal: `session_admission_refused` or an
-admission reason such as `below_ram_floor`), the loop follows that target's capacity
+admission reason such as `below_ram_floor` or `tool_signed_out`, or a
+`no_tool_available` whose detail is `tool_signed_out:<tool>`, HS2-ZRPZJJ), the loop follows that target's capacity
 with the wait of §26.10 (HS2-P5GTSW), from the version the pass read and with the same
 claim namespaces. It passes the gate as `gates_observe` (it never asks; again after 10
 minutes) on a thread of its own, at most 16 targets at a time and once per target. A

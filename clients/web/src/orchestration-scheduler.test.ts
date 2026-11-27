@@ -630,6 +630,55 @@ describe('a pattern-only Models list that resolves to no model, in words (HS2-74
     for (const row of [...rows, ...sites]) expect(row.value).not.toContain('_');
   });
 
+  it('names a signed-out AI tool with its machine in every Why row (HS2-ZRPZJJ)', () => {
+    const waiting = explanationRows(
+      { standing: 'not_placed', reason: 'no_tool_available', detail: 'tool_signed_out:claude' },
+      clock,
+      5,
+      timeline,
+      { location: 'remote', machine_label: 'Build Host' },
+    );
+    expect(waiting).toEqual([
+      { label: 'Scheduler', value: 'Waits: Claude is signed out on Build Host (last pass t5)' },
+      { label: 'What to do', value: 'Sign in to Claude on Build Host, or allow another AI tool for its project' },
+      { label: 'Next', value: 'Looked at again when something it waits on changes' },
+    ]);
+    // A local step says this machine; with no item the machine is "its machine".
+    expect(
+      explanationRows(
+        { standing: 'not_placed', reason: 'no_tool_available', detail: 'tool_signed_out:codex' },
+        clock,
+        undefined,
+        undefined,
+        {
+          location: 'local',
+        },
+      )[0].value,
+    ).toBe('Waits: Codex is signed out on this machine');
+    expect(schedulerReasonWithModel('no_tool_available', 'tool_signed_out:codex')).toBe(
+      'Codex is signed out on its machine',
+    );
+    // A passed-over site names its own machine from the timeline; the chosen site needs no What to do.
+    const sites = explanationRows(
+      {
+        standing: 'start',
+        reason: 'ready_work',
+        site: 'web',
+        sites: [{ target_id: 'api', reason: 'no_tool_available', detail: 'tool_signed_out:claude' }],
+      },
+      clock,
+      undefined,
+      timeline,
+      { location: 'local' },
+    );
+    expect(sites).toContainEqual({ label: 'Not on API', value: 'Claude is signed out on Build host' });
+    expect(sites.map((row) => row.label)).not.toContain('What to do');
+    expect(sitePassText({ target_id: 'x', reason: 'no_tool_available', detail: 'tool_signed_out:claude' })).toBe(
+      'Claude is signed out on its machine',
+    );
+    for (const row of [...waiting, ...sites]) expect(row.value).not.toContain('_');
+  });
+
   it('says it for a deferred decision and a role session that is not started', () => {
     expect(
       decisionText(

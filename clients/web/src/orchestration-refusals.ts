@@ -50,6 +50,11 @@ export const ORCHESTRATION_REFUSALS: Readonly<Record<string, RefusalText>> = {
     message: 'That project opted out of the AI tool.',
     next: 'Choose another tool, or allow it in the project.',
   },
+  // HS2-ZRPZJJ: the machine reports the tool signed out; an unknown sign-in is still tried.
+  tool_signed_out: {
+    message: 'The AI tool is signed out on that machine.',
+    next: 'Sign in to it there, or choose another tool.',
+  },
   session_cap_reached: {
     message: 'The machine already runs as many AI sessions as its limit allows.',
     next: `Close a session, or raise Sessions per Machine in ${MACHINE_DEFAULTS}.`,
@@ -375,12 +380,15 @@ export function admissionRefusalText(detail: AdmissionRefusalDetail): RefusalTex
       break;
     case 'tool_not_installed':
     case 'tool_not_configured':
+    case 'tool_signed_out':
       if (detail.tool)
         return {
           message:
             detail.reason === 'tool_not_installed'
               ? `${detail.tool} is not installed on that machine.`
-              : `That project opted out of ${detail.tool}.`,
+              : detail.reason === 'tool_signed_out'
+                ? `${detail.tool} is signed out on that machine.`
+                : `That project opted out of ${detail.tool}.`,
           next: known?.next,
         };
       break;

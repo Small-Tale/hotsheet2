@@ -549,6 +549,8 @@ export function admissionTools(
 const ADMISSION_REASONS: Readonly<Record<string, string>> = {
   tool_not_installed: 'not installed there',
   tool_not_configured: 'turned off in that project',
+  // HS2-ZRPZJJ
+  tool_signed_out: 'signed out there',
   session_cap_reached: 'session cap reached',
   above_cpu_ceiling: 'CPU above the ceiling',
   below_disk_floor: 'disk below the floor',

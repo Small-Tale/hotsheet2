@@ -524,6 +524,10 @@ mod e2e_home_outage;
 #[cfg(unix)]
 #[path = "remote_servers/e2e_roles.rs"]
 mod e2e_roles;
+// HS2-ZRPZJJ: a tool signed out on its machine is not placed until it signs in.
+#[cfg(unix)]
+#[path = "remote_servers/e2e_signed_out.rs"]
+mod e2e_signed_out;
 // HS2-36XDDX: a template's Wait for Accept holds its steps until a person accepts.
 #[cfg(unix)]
 #[path = "remote_servers/e2e_templates.rs"]

@@ -457,6 +457,23 @@ describe('HS2-5H8R0N Admission by Project and Placement Limits', () => {
       status: { label: 'Can start 2 now', tone: 'success' },
       description: 'CLAUDE: Refused · CODEX: Can start 2 now',
     });
+    // HS2-ZRPZJJ: a tool signed out on the machine says so; another signed-in tool still starts.
+    expect(
+      admissionRow(placed, { status: 'ready', admissions: [ask('refused', 0, 'claude', 'tool_signed_out')] }),
+    ).toMatchObject({
+      status: { label: 'Refused', tone: 'warning' },
+      description: 'claude: Refused · signed out there',
+    });
+    expect(
+      admissionRow(
+        placed,
+        { status: 'ready', admissions: [ask('refused', 0, 'claude', 'tool_signed_out'), ask('accepted', 2)] },
+        (tool) => tool.toUpperCase(),
+      ),
+    ).toMatchObject({
+      status: { label: 'Can start 2 now', tone: 'success' },
+      description: 'CLAUDE: Refused · signed out there · CODEX: Can start 2 now',
+    });
   });
 
   it('lists the owner’s four limits, unset ones left to each project, and nothing from an older host', () => {

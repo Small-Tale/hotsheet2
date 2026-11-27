@@ -1367,7 +1367,9 @@ detection beside the version probe, bounded like every probe, in a fresh empty d
 only while AI-tool probes are enabled. The host never reads its output, so no account name or
 credential is read or reported; the machine reports only `signed_in` (true, false, or absent when
 unknown) in its capacity snapshot's `capabilities.ai_tools[]` ([26](26-orchestration-projects.md)
-§26.10), which the Systems screen shows (docs/06 §6.13). OpenCode and Antigravity declare none.
+§26.10), which the Systems screen shows (docs/06 §6.13). A tool reported signed out is not
+placed on that machine (HS2-ZRPZJJ); an absent state is still tried. OpenCode and Antigravity
+declare none.
 
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,

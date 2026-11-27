@@ -16,6 +16,7 @@ use hotsheet_resource_claims::MAX_WAIT;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     Blocker, CapacitySnapshot, Schedule, SchedulerStore, TargetAction, is_capacity_refusal,
+    is_signed_out_detail,
 };
 
 use super::capacity::{MAX_CAPACITY_WAIT_MS, capacity_query};
@@ -114,6 +115,8 @@ impl OrchestrationRuntime {
             .filter(|item| match item.reason {
                 Blocker::MachineRefused => true,
                 Blocker::RefusalBackoff => item.detail.as_deref().is_some_and(is_capacity_refusal),
+                // HS2-ZRPZJJ: a sign-in there changes the machine's capacity version.
+                Blocker::NoTool => item.detail.as_deref().is_some_and(is_signed_out_detail),
                 _ => false,
             })
             .map(|item| item.target_id.as_str())

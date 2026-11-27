@@ -635,6 +635,15 @@ Claude Signed In and Codex Signed Out on that machine, and no account name or
 email appears anywhere in the screen or in `orchestration capacity show`. Sign
 Codex back in: it reads Signed In after the next detection.
 
+Signed-out tool placement (HS2-ZRPZJJ): on the same disposable machine, with an
+orchestration project whose only allowed tool there is Codex and placement on,
+sign Codex out. After the next detection its ready card reads "Codex is signed
+out" beside its machine, Why It Is Not Running says "Codex is signed out on
+<machine>" with What to Do, its
+Admission by Project line reads "Codex: Refused · signed out there", and no
+session starts. Sign Codex back in: after the next detection the card starts a
+session without any other action.
+
 Admission by Project and Placement Limits (HS2-5H8R0N): with an orchestration
 project open whose sites run on this computer and on the paired remote, select
 each machine: its Admission by Project lists only the sites placed there, with

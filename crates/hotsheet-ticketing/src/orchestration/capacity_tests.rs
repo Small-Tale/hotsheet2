@@ -482,6 +482,7 @@ fn hs2_j8prtv_reason_codes_and_the_snapshot_wire_shape_are_stable() {
     let reasons = [
         (R::ToolNotInstalled, "tool_not_installed"),
         (R::ToolNotConfigured, "tool_not_configured"),
+        (R::ToolSignedOut, "tool_signed_out"),
         (R::SessionCapReached, "session_cap_reached"),
         (R::AboveCpuCeiling, "above_cpu_ceiling"),
         (R::BelowDiskFloor, "below_disk_floor"),
@@ -901,4 +902,127 @@ fn hs2_5h8r0n_a_snapshot_reports_the_owners_placement_limits() {
     older["owner_limits"] = serde_json::json!({ "max_sessions": 1 });
     let read: CapacitySnapshot = serde_json::from_value(older).unwrap();
     assert_eq!(read.owner_limits.unwrap().max_sessions, Some(1));
+}
+
+/// HS2-ZRPZJJ: a tool the machine reports signed out is refused there with its own
+/// reason, naming the tool; signed in or unknown (no report, no `ai_tools`, no entry,
+/// an older peer) admits as before. Every sign-in state of each tool is independent,
+/// and a missing or opted-out tool keeps its own reason first.
+#[test]
+fn hs2_zrpzjj_a_signed_out_tool_is_refused_and_unknown_is_still_tried() {
+    use crate::orchestration::{HostCapabilities, OsFamily, ToolVersion};
+    let signed = |states: &[(&str, Option<bool>)]| {
+        let mut snapshot = healthy();
+        snapshot.capabilities = Some(HostCapabilities {
+            ai_tools: Some(
+                states
+                    .iter()
+                    .map(|(tool, signed_in)| ToolVersion {
+                        tool: (*tool).into(),
+                        version: None,
+                        signed_in: *signed_in,
+                    })
+                    .collect(),
+            ),
+            ..HostCapabilities::bare(OsFamily::Linux, "arm64")
+        });
+        snapshot
+    };
+    let decide = |snapshot: &CapacitySnapshot, tool: &str, sessions: u32| {
+        decide_admission(snapshot, &AdmissionConfig::default(), &ask(tool, sessions))
+    };
+    // Signed out: refused, admitting none, whatever the room.
+    let out = signed(&[("codex", Some(false))]);
+    assert!(tool_signed_out(&out, "codex"));
+    for sessions in [1, 2] {
+        let decision = decide(&out, "codex", sessions);
+        assert_eq!(
+            (decision.outcome, decision.admitted, decision.reason),
+            (
+                AdmissionOutcome::Refused,
+                0,
+                Some(AdmissionReason::ToolSignedOut)
+            )
+        );
+        let refusal = decision.refusal.expect("a refusal");
+        assert_eq!(refusal.reason, "tool_signed_out");
+        assert_eq!(refusal.tool.as_deref(), Some("codex"));
+        assert_eq!(refusal.setting, None);
+        assert_eq!(refusal.describe(), "codex is signed out on this machine");
+    }
+    // Signed in, unknown, or no report at all: admitted exactly as before.
+    let plain = decide(&healthy(), "codex", 1);
+    for snapshot in [
+        signed(&[("codex", Some(true))]),
+        signed(&[("codex", None)]),
+        signed(&[("claude", Some(false))]),
+        signed(&[]),
+        {
+            let mut bare = healthy();
+            bare.capabilities = Some(HostCapabilities::bare(OsFamily::Linux, "arm64"));
+            bare
+        },
+        healthy(),
+    ] {
+        assert!(!tool_signed_out(&snapshot, "codex"));
+        let decision = decide(&snapshot, "codex", 1);
+        assert_eq!(
+            (decision.outcome, decision.admitted, decision.reason),
+            (plain.outcome, plain.admitted, plain.reason),
+            "{snapshot:?}"
+        );
+    }
+    // Several tools: each one's own state decides it.
+    let mixed = signed(&[("codex", Some(true)), ("claude", Some(false))]);
+    assert_eq!(
+        decide(&mixed, "codex", 1).outcome,
+        AdmissionOutcome::Accepted
+    );
+    // A missing or opted-out tool keeps that reason: it is what stops it first.
+    let mut missing = signed(&[("gemini", Some(false)), ("claude", Some(false))]);
+    assert_eq!(
+        decide(&missing, "gemini", 1).reason,
+        Some(AdmissionReason::ToolNotInstalled)
+    );
+    assert_eq!(
+        decide(&missing, "claude", 1).reason,
+        Some(AdmissionReason::ToolNotConfigured)
+    );
+    // Signing in admits on the next reading; signing out again refuses.
+    missing.tools.as_mut().unwrap()[1].configured = true;
+    assert_eq!(
+        decide(&missing, "claude", 1).reason,
+        Some(AdmissionReason::ToolSignedOut)
+    );
+    missing
+        .capabilities
+        .as_mut()
+        .unwrap()
+        .ai_tools
+        .as_mut()
+        .unwrap()[1]
+        .signed_in = Some(true);
+    assert_eq!(
+        decide(&missing, "claude", 1).outcome,
+        AdmissionOutcome::Accepted
+    );
+    missing
+        .capabilities
+        .as_mut()
+        .unwrap()
+        .ai_tools
+        .as_mut()
+        .unwrap()[1]
+        .signed_in = Some(false);
+    assert_eq!(
+        decide(&missing, "claude", 1).reason,
+        Some(AdmissionReason::ToolSignedOut)
+    );
+    // An unknown measurement does not hide the sign-in refusal.
+    let mut unmeasured = out.clone();
+    unmeasured.cpu.load_percent = None;
+    assert_eq!(
+        decide(&unmeasured, "codex", 1).reason,
+        Some(AdmissionReason::ToolSignedOut)
+    );
 }

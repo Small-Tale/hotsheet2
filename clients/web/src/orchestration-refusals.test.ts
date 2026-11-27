@@ -43,6 +43,12 @@ describe('HS2-8Z9VHH orchestration refusals', () => {
     expect(admissionRefusalText({ reason: 'tool_not_configured', tool: 'codex' }).message).toBe(
       'That project opted out of codex.',
     );
+    // HS2-ZRPZJJ: a tool the machine reports signed out, with and without the tool named.
+    expect(admissionRefusalText({ reason: 'tool_signed_out', tool: 'claude' })).toEqual({
+      message: 'claude is signed out on that machine.',
+      next: 'Sign in to it there, or choose another tool.',
+    });
+    expect(admissionRefusalText({ reason: 'tool_signed_out' })).toBe(ORCHESTRATION_REFUSALS.tool_signed_out);
     // An older host sends only the reason; a newer one may send a reason this client lacks.
     expect(admissionRefusalText({ reason: 'session_cap_reached' })).toBe(ORCHESTRATION_REFUSALS.session_cap_reached);
     expect(admissionRefusalText({ reason: 'tool_not_installed' })).toBe(ORCHESTRATION_REFUSALS.tool_not_installed);

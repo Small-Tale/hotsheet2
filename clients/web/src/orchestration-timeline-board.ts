@@ -44,6 +44,30 @@ export function machineLabel(item: Pick<TimelineItem, 'location' | 'machine_labe
   return 'Not bound on this machine';
 }
 
+/**
+ * HS2-ZRPZJJ: the machine as the end of a sentence ("signed out on Build Host", "on this machine"); "its
+ * machine" when the item is not bound here or the machine is not known.
+ */
+export function machinePhrase(item: Pick<TimelineItem, 'location' | 'machine_label'> | undefined): string {
+  if (item?.location === 'local') return 'this machine';
+  if (item?.location === 'remote') return item.machine_label ?? 'its machine';
+  return 'its machine';
+}
+
+const SIGNED_OUT = 'tool_signed_out:';
+
+/** HS2-ZRPZJJ: the tool a scheduler detail `tool_signed_out:<tool>` names, or undefined for any other detail. */
+export function signedOutTool(detail: string | undefined): string | undefined {
+  return detail?.startsWith(SIGNED_OUT) && detail.length > SIGNED_OUT.length
+    ? detail.slice(SIGNED_OUT.length)
+    : undefined;
+}
+
+/** HS2-ZRPZJJ: why work waits on a signed-out tool, in plain words: "Claude is signed out on Build Host". */
+export function signedOutText(tool: string, machine: string): string {
+  return `${toolLabel(tool) ?? tool} is signed out on ${machine}`;
+}
+
 /** The ticket's display identity: its slug, or a short form of its native id. */
 export const itemSlug = (item: TimelineItem) => item.slug ?? item.target.native_id.slice(-6);
 
@@ -58,8 +82,14 @@ export function stateWords(item: TimelineItem, proposed: boolean): { label: stri
       return undefined;
     case 'provisional':
       return { label: firstWait(item) ? `Provisional on ${firstWait(item)}` : 'Provisional', tone: 'info' };
-    case 'ready':
+    case 'ready': {
+      // HS2-ZRPZJJ: the scheduler's last pass found its AI tool signed out on its machine. The machine badge
+      // beside it names the machine, so the card's line stays short enough for the card at every width; the
+      // inspector's Why It Is Not Running says it in full.
+      const signedOut = item.placement?.decision === 'unplaced' ? signedOutTool(item.placement.detail) : undefined;
+      if (signedOut) return { label: `${toolLabel(signedOut) ?? signedOut} is signed out`, tone: 'warning' };
       return { label: 'Ready', tone: 'success' };
+    }
     case 'waits_for_prerequisite': {
       const wait = firstWait(item);
       if (proposed) return { label: wait ? `After ${wait}` : 'After its prerequisites', tone: 'neutral' };

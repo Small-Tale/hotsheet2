@@ -270,8 +270,10 @@ pub(crate) fn program_signed_in(
     signed_in_at(&found, args, timeout)
 }
 
-/// [`program_signed_in`] for a program already found.
-pub(crate) fn signed_in_at(program: &Path, args: &[String], timeout: Duration) -> Option<bool> {
+/// [`program_signed_in`] for a program already found. HS2-ZRPZJJ: public so a
+/// [`CapacitySource`](super::capacity::CapacitySource) that reports a machine's tools
+/// itself (tests, embedders) probes sign-in exactly as the real host does.
+pub fn signed_in_at(program: &Path, args: &[String], timeout: Duration) -> Option<bool> {
     let workspace = hotsheet_aitools::probe::probe_workspace().ok()?;
     let mut command = hotsheet_ticketing::git::launch(program);
     command.args(args).current_dir(workspace.path());

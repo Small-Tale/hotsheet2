@@ -884,6 +884,94 @@ test('HS2-747WQA Why It Is Not Running words a Models pattern that resolves to n
   }
 });
 
+/**
+ * HS2-ZRPZJJ: a project whose only AI tool its machine reports signed out starts nothing. Its card says so in
+ * plain words, and Why It Is Not Running names the tool, the machine and what to do, never the scheduler's code.
+ * The fixture host never probes a real tool (HS2-F6R2HQ), so its roomy test machine reports the synthetic tool
+ * signed out.
+ */
+test('HS2-ZRPZJJ a card whose AI tool is signed out on its machine says so in plain words', async ({ page }) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({
+    env: { HOTSHEET_TEST_ROOMY_CAPACITY: '1', HOTSHEET_TEST_SIGNED_OUT_TOOLS: SYNTHETIC_TOOL },
+    seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!),
+  });
+  try {
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const person = { role: 'human', id: 'maintainer' };
+    await send(server, 'POST', `${base}/permission-rules`, { target_id: TARGET, action: 'work_start', actor: person });
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: SYNTHETIC_TOOL,
+      actor: person,
+    });
+    const plan = await planTwoSteps(server);
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 4 }],
+        targets: [{ target_id: TARGET, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 2 }],
+        placement: { automatic: true, actor: 'scheduler-1', cooldown_minutes: 0, role_sessions: [] },
+      },
+      actor: person,
+    });
+    const detail = `tool_signed_out:${SYNTHETIC_TOOL}`;
+    await expect
+      .poll(
+        async () => {
+          const explained = (await send(server, 'POST', `${base}/scheduler/explain`, {
+            target_id: TARGET,
+            connection_id: plan.first.connection_id,
+            native_id: plan.first.id,
+            actor: person,
+          })) as { standing: string; reason: string; detail?: string };
+          return [explained.standing, explained.reason, explained.detail ?? null];
+        },
+        { timeout: 60_000 },
+      )
+      .toEqual(['not_placed', 'no_tool_available', detail]);
+    // Nothing started on the machine where the tool is signed out.
+    expect(await send(server, 'GET', `${base}/sessions`)).toEqual([]);
+    // The machine's own admission names the tool.
+    const admission = (await send(server, 'POST', `${base}/targets/${TARGET}/admission`, {
+      tool: SYNTHETIC_TOOL,
+      actor: scheduler,
+    })) as { outcome: string; reason: string };
+    expect([admission.outcome, admission.reason]).toEqual(['refused', 'tool_signed_out']);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    const words = 'Hs-synthetic-agent is signed out on this machine';
+    // The card says it beside its machine badge; Why It Is Not Running says it in full.
+    const state = card.locator('[data-orchestration-part="state"]');
+    await expect(state).toHaveText('Hs-synthetic-agent is signed out', { timeout: 30_000 });
+    await expect(card.locator('[data-orchestration-part="placement"]')).toHaveText('This machine');
+    await card.click();
+    const why = page.locator('[data-orchestration-inspector] [data-orchestration-section="Why It Is Not Running"]');
+    const row = (label: string) => why.locator('dl > div').filter({ has: page.locator('dt', { hasText: label }) });
+    await expect(row('Scheduler').locator('dd')).toHaveText(new RegExp(`^Waits: ${words}`), { timeout: 30_000 });
+    await expect(row('What to do').locator('dd')).toHaveText(
+      'Sign in to Hs-synthetic-agent on this machine, or allow another AI tool for its project',
+    );
+    await expect(row('Next').locator('dd')).toHaveText('Looked at again when something it waits on changes');
+    await expect(why).not.toContainText('_');
+    await visualPass(page, 'hs2-zrpzjj', 'why-signed-out', {
+      show: why,
+      check: () => expect(row('What to do')).toHaveCount(1),
+      atPhone: () => card.click(),
+    });
+    await visualPass(page, 'hs2-zrpzjj', 'card-signed-out', {
+      check: () => expect(state).toHaveText('Hs-synthetic-agent is signed out'),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-5GRXFN a held resource shows on the deferred card and in the overview with who waits', async ({ page }) => {
   test.setTimeout(150_000);
   const server = await realTicketServer();
