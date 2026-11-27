@@ -90,6 +90,42 @@ export function stateWords(item: TimelineItem, proposed: boolean): { label: stri
 export const TEMPLATE_ACCEPT_WAIT = 'Waiting for someone to accept the template’s plan';
 
 /**
+ * HS2-0YHA2S: what the Orchestration header's one Accept Plan accepts: the steps held for their template's
+ * accept, counted once each, and the templates they belong to, in timeline order. `undefined` when nothing is
+ * held (placement is off, or every template plan was accepted).
+ */
+export function heldTemplatePlans(
+  timeline: OrchestrationTimeline,
+): { steps: number; templates: readonly string[] } | undefined {
+  const steps = new Set<string>(),
+    templates: string[] = [];
+  for (const wave of timeline.waves)
+    for (const item of wave.items) {
+      if (item.state !== 'waits_for_accept') continue;
+      steps.add(item.step_id);
+      const name = item.accept?.template_name;
+      if (name && !templates.includes(name)) templates.push(name);
+    }
+  return steps.size === 0 ? undefined : { steps: steps.size, templates };
+}
+
+/** HS2-0YHA2S: the header's status addition for held template steps, sentence style. */
+export function heldTemplateStatus(held: { steps: number }): string {
+  return held.steps === 1 ? ' · 1 step waits for an accept' : ` · ${held.steps} steps wait for an accept`;
+}
+
+/** HS2-0YHA2S: the header Accept Plan's tooltip, naming the templates whose plans it accepts. */
+export function heldTemplateTitle(held: { steps: number; templates: readonly string[] }): string {
+  const names =
+    held.templates.length === 0
+      ? 'the held templates'
+      : held.templates.length === 1
+        ? held.templates[0]
+        : `${held.templates.slice(0, -1).join(', ')} and ${held.templates[held.templates.length - 1]}`;
+  return `Accept the planned steps of ${names} (${held.steps} ${held.steps === 1 ? 'step' : 'steps'}); placement starts them within the Orchestration settings`;
+}
+
+/**
  * HS2-H5H9QP: work started ahead of a pending gate words its ledger state exactly as a worker's card does
  * (HS2-N8H97X), through the same `provisionalLine`: provisional with each gate's CI result, at risk naming
  * the failed prerequisites to repair first, or reopened. Confirmed work, or no record, says nothing here.

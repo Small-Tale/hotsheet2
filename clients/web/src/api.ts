@@ -2475,7 +2475,8 @@ export class Api {
    * HS2-A4RVYA: plan templates. `list`, `preview` and `apply_show` read and change nothing; `apply` opens a
    * new goal ticket and hands it to the planner, idempotent by `operation_id`; `save_goal` saves a goal's plan
    * steps as a template. A person's apply is their own act. HS2-36XDDX: `accept` is a person's accept of the
-   * plan proposed for an apply's goal, which releases its held steps to placement.
+   * plan proposed for an apply's goal, which releases its held steps to placement; HS2-0YHA2S: with `all` in
+   * place of `operation_id`, every template plan held now.
    */
   orchestrationTemplates = (
     checkout: string,

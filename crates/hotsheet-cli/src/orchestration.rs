@@ -160,9 +160,9 @@ pub use tasks::{RuntimeTasks, StopHook, TasksShutdown};
 pub use templates::{
     AcceptTemplate, AccessNeed, ApplyRef, ApplySummary, ApplyTemplate, MAX_LISTED_APPLIES,
     MAX_RESUME_BACKOFF_MS, PreviewTarget, PreviewTemplate, ProfilesCheck, ResumeMemory,
-    ResumeReport, ResumedApply, SaveGoalTemplate, SetTemplates, TemplateAcceptView,
-    TemplateApplyView, TemplateList, TemplatePreview, TemplateRef, TemplateValidation,
-    ValidateTemplate,
+    ResumeReport, ResumedApply, SaveGoalTemplate, SetTemplates, TemplateAcceptAllView,
+    TemplateAcceptView, TemplateApplyView, TemplateList, TemplatePreview, TemplateRef,
+    TemplateValidation, ValidateTemplate,
 };
 pub use ticket_list::{
     DEFAULT_TARGET_TICKET_PAGE, ListTargetTickets, MAX_TARGET_TICKET_PAGE, TargetTicketPage,

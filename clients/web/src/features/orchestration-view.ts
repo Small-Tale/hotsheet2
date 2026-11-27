@@ -1305,6 +1305,29 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
   }
 
+  /**
+   * HS2-0YHA2S: the header's Accept Plan: a person accepts every template plan held now in one request
+   * (`templates/accept` with `all`). The timeline's own wait shows the steps move; nothing polls.
+   */
+  async function acceptAllPlans() {
+    const current = dependencies.project();
+    if (!current || busy.value) return;
+    busy.value = true;
+    try {
+      const answer = await clientFor(current).orchestrationTemplates(
+        current.id,
+        'accept',
+        { all: true },
+        dependencies.personId(),
+      );
+      dependencies.showToast(acceptedText(answer));
+    } catch (reason) {
+      dependencies.showToast(`The plans could not be accepted: ${describeRefusal(reason)}`);
+    } finally {
+      busy.value = false;
+    }
+  }
+
   /** HS2-0D60T8: a person reopens the selected card's built-ahead work; the record and note follow. */
   async function reopen(reason: string) {
     const current = dependencies.project(),
@@ -2171,6 +2194,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     showRequest,
     openGoal,
     acceptPlan,
+    acceptAllPlans,
     chooseProjects: () => {
       dependencies.openOrchestrationSettings();
     },

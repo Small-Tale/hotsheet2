@@ -7,8 +7,9 @@ use std::collections::BTreeMap;
 
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    ApplyGoal, ApplyState, AuditOutcome, PermissionAnswer, PlanUpdateState, StepTicket,
-    TEMPLATE_GOAL_TAG, TEMPLATES_PATH, TargetAction, Template, TemplateApplyStore, TemplateState,
+    ApplyGoal, ApplyState, AuditOutcome, PermissionAnswer, PlanUpdateState, SHARED_PLAN_PATH,
+    StepTicket, TEMPLATE_GOAL_TAG, TEMPLATES_PATH, TargetAction, Template, TemplateApplyStore,
+    TemplateState,
 };
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::{Value, json};
@@ -1680,7 +1681,10 @@ fn hs2_36xddx_a_templates_steps_wait_for_a_persons_accept_under_auto_placement()
     let again = accept(&f, "op-1", &human(), &mut tx).unwrap();
     assert_eq!(again.outcome, "existing");
     assert!(again.released.is_empty());
-    assert_eq!(again.apply.accepted_at_ms, accepted.apply.accepted_at_ms);
+    assert_eq!(
+        again.apply.unwrap().accepted_at_ms,
+        accepted.apply.unwrap().accepted_at_ms
+    );
     // The list names the setting and the accept.
     let listed = f.m.runtime.template_list(&f.owner()).unwrap();
     assert!(listed.applies[0].wait_for_accept);
@@ -1750,4 +1754,267 @@ fn hs2_36xddx_a_template_that_does_not_wait_places_its_steps_at_once() {
     assert_eq!(accepted.released, [step]);
     let listed = f.m.runtime.template_list(&f.owner()).unwrap();
     assert!(!listed.applies[0].wait_for_accept);
+}
+
+/// HS2-38MFXT: another machine that runs the project's scheduler has the checked-in
+/// plan and no apply record. The hold travels with the plan: with this machine's apply
+/// record gone (as on that machine) the step is still held, a person's accept there
+/// finds the apply through the checked-in hold, and the accept is checked in. An apply
+/// recorded before the hold travelled (no checked-in hold) is still held locally.
+#[test]
+fn hs2_38mfxt_the_hold_and_the_accept_travel_with_the_checked_in_plan() {
+    let mut rng = Rng(3800);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    f.m.runtime
+        .set_policy(
+            &f.owner(),
+            hotsheet_ticketing::orchestration::SetPolicy {
+                expected_revision: None,
+                policy: super::sessions::policy(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let template = f.define("Feature across API and Web", &mut tx);
+    let plan_path = std::path::Path::new(&f.m.owner.root).join(SHARED_PLAN_PATH);
+    let applied = f
+        .apply(
+            &template,
+            json!({"feature": "Rate limits"}),
+            "op-shared",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    let goal = applied.apply.goal.clone().unwrap();
+    // The hold is checked in with the goal, before any step: version 2.
+    let on_disk: Value = serde_json::from_slice(&std::fs::read(&plan_path).unwrap()).unwrap();
+    assert_eq!(on_disk["schema_version"], 2);
+    assert_eq!(on_disk["holds"][0]["operation_id"], "op-shared");
+    assert_eq!(on_disk["holds"][0]["goal"]["native_id"], goal.native_id);
+    assert_eq!(
+        on_disk["holds"][0]["goal_slug"],
+        goal.slug.clone().unwrap().as_str()
+    );
+    assert!(on_disk["steps"].as_array().unwrap().is_empty());
+    // A repeated apply checks nothing in again.
+    let revision = on_disk["revision"].clone();
+    f.apply(
+        &template,
+        json!({"feature": "Rate limits"}),
+        "op-shared",
+        &human(),
+        &mut tx,
+    )
+    .unwrap();
+    let on_disk: Value = serde_json::from_slice(&std::fs::read(&plan_path).unwrap()).unwrap();
+    assert_eq!(on_disk["revision"], revision);
+
+    let slug = goal.slug.clone().unwrap();
+    let first = plan_step(&f, &slug, "Add rate limit headers", &mut tx);
+    assert_eq!(
+        standing(&f, &first, &mut tx),
+        (
+            "template_plan_not_accepted".into(),
+            "waits_for_accept".into()
+        )
+    );
+    // Another machine: the plan, and no apply record. Still held, and still explained.
+    let records =
+        f.m.home
+            .join(hotsheet_ticketing::orchestration::TEMPLATE_APPLY_DIR);
+    let kept = f.m.home.join("applies-kept");
+    std::fs::rename(&records, &kept).unwrap();
+    assert_eq!(
+        standing(&f, &first, &mut tx),
+        (
+            "template_plan_not_accepted".into(),
+            "waits_for_accept".into()
+        )
+    );
+    // An AI actor still cannot accept there; a person can.
+    assert_eq!(
+        code(accept(&f, "op-shared", &worker(), &mut tx)),
+        "forbidden"
+    );
+    let accepted = accept(&f, "op-shared", &human(), &mut tx).unwrap();
+    assert_eq!(accepted.outcome, "accepted");
+    assert_eq!(accepted.released, std::slice::from_ref(&first));
+    assert!(accepted.apply.is_none(), "no apply record on this machine");
+    let hold = accepted.hold.clone().unwrap();
+    assert_eq!(hold.accepted_steps, std::slice::from_ref(&first));
+    assert_eq!(hold.accepted_by.as_deref(), human().id.as_deref());
+    let answer = serde_json::to_value(&accepted).unwrap();
+    assert_eq!(answer["hold"]["operation_id"], "op-shared");
+    assert!(answer.get("snapshot").is_none());
+    assert_ne!(standing(&f, &first, &mut tx).1, "waits_for_accept");
+    // Back on the machine that applied: its record never saw the accept, but the
+    // checked-in hold is authoritative, so the step is released there too.
+    std::fs::remove_dir_all(&records).ok();
+    std::fs::rename(&kept, &records).unwrap();
+    assert_ne!(standing(&f, &first, &mut tx).1, "waits_for_accept");
+    assert_eq!(
+        accept(&f, "op-shared", &human(), &mut tx).unwrap().outcome,
+        "existing"
+    );
+    let listed = f.m.runtime.template_list(&f.owner()).unwrap();
+    assert_eq!(listed.applies[0].accepted_at_ms, hold.accepted_at_ms);
+    // A later step is held again; Start Orchestration on the other machine accepts it.
+    let second = plan_step(&f, &slug, "Show rate limit errors", &mut tx);
+    std::fs::rename(&records, &kept).unwrap();
+    assert_eq!(standing(&f, &second, &mut tx).1, "waits_for_accept");
+    set_automatic(&f, false, &mut tx);
+    set_automatic(&f, true, &mut tx);
+    assert_ne!(standing(&f, &second, &mut tx).1, "waits_for_accept");
+    std::fs::remove_dir_all(&records).ok();
+    std::fs::rename(&kept, &records).unwrap();
+    assert_ne!(standing(&f, &second, &mut tx).1, "waits_for_accept");
+
+    // An apply recorded before the hold travelled: no checked-in hold, so this
+    // machine's record holds its steps, and its accept works as before.
+    let legacy = f
+        .apply(
+            &template,
+            json!({"feature": "Audit log"}),
+            "op-legacy",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    let mut on_disk: Value = serde_json::from_slice(&std::fs::read(&plan_path).unwrap()).unwrap();
+    let holds = on_disk["holds"].as_array_mut().unwrap();
+    holds.retain(|hold| hold["operation_id"] != "op-legacy");
+    std::fs::write(&plan_path, serde_json::to_vec_pretty(&on_disk).unwrap()).unwrap();
+    let legacy_step = plan_step(
+        &f,
+        &legacy.apply.goal.unwrap().slug.unwrap(),
+        "Write the audit log",
+        &mut tx,
+    );
+    assert_eq!(standing(&f, &legacy_step, &mut tx).1, "waits_for_accept");
+    let accepted = accept(&f, "op-legacy", &human(), &mut tx).unwrap();
+    assert_eq!(accepted.released, std::slice::from_ref(&legacy_step));
+    assert!(accepted.hold.is_none());
+    assert_eq!(
+        accepted.apply.unwrap().accepted_steps,
+        std::slice::from_ref(&legacy_step)
+    );
+    assert_ne!(standing(&f, &legacy_step, &mut tx).1, "waits_for_accept");
+    // Unknown on this machine and in the plan: not found.
+    std::fs::rename(&records, &kept).unwrap();
+    assert_eq!(
+        code(accept(&f, "op-legacy", &human(), &mut tx)),
+        "template_apply_not_found"
+    );
+}
+
+/// HS2-0YHA2S: the Orchestration header's Accept Plan accepts every template plan held
+/// now, each as its own accept (audited per apply); only a person accepts, nothing held
+/// answers `existing`, and a step planned later is held again.
+#[test]
+fn hs2_0yha2s_one_accept_releases_every_held_template_plan() {
+    let mut rng = Rng(3900);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    f.m.runtime
+        .set_policy(
+            &f.owner(),
+            hotsheet_ticketing::orchestration::SetPolicy {
+                expected_revision: None,
+                policy: super::sessions::policy(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let all = |actor: &MutationActor, tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .template_accept_held(&f.owner(), Some(actor), tx)
+    };
+    // Nothing held yet: nothing to accept, and nothing written.
+    let empty = all(&human(), &mut tx).unwrap();
+    assert_eq!(empty.outcome, "existing");
+    assert!(empty.accepted.is_empty() && empty.released.is_empty());
+    assert_eq!(code(all(&worker(), &mut tx)), "forbidden");
+
+    let first = f.define("Feature across API and Web", &mut tx);
+    let second = f.define("Repair failing CI", &mut tx);
+    let mut goals = Vec::new();
+    for (template, operation, feature) in [
+        (&first, "op-a", "Rate limits"),
+        (&second, "op-b", "Flaky login"),
+    ] {
+        let applied = f
+            .apply(
+                template,
+                json!({"feature": feature}),
+                operation,
+                &human(),
+                &mut tx,
+            )
+            .unwrap();
+        goals.push(applied.apply.goal.unwrap().slug.unwrap());
+    }
+    let a1 = plan_step(&f, &goals[0], "Add rate limit headers", &mut tx);
+    let a2 = plan_step(&f, &goals[0], "Show rate limit errors", &mut tx);
+    let b1 = plan_step(&f, &goals[1], "Repair the login test", &mut tx);
+    for step in [&a1, &a2, &b1] {
+        assert_eq!(standing(&f, step, &mut tx).1, "waits_for_accept");
+    }
+    // An AI actor never accepts, not even all at once; nothing is released.
+    assert_eq!(code(all(&worker(), &mut tx)), "forbidden");
+    assert_eq!(standing(&f, &a1, &mut tx).1, "waits_for_accept");
+    // A request naming nothing is refused.
+    assert_eq!(
+        code(f.m.runtime.template_accept(
+            &f.owner(),
+            &AcceptTemplate::default(),
+            Some(&human()),
+            &mut tx
+        )),
+        "invalid_request"
+    );
+
+    // One accept releases both templates' plans.
+    let accepted = all(&human(), &mut tx).unwrap();
+    assert_eq!(accepted.outcome, "accepted");
+    let mut expected = vec![a1.clone(), a2.clone(), b1.clone()];
+    expected.sort();
+    assert_eq!(accepted.released, expected);
+    let operations: Vec<&str> = accepted
+        .accepted
+        .iter()
+        .map(|view| view.hold.as_ref().unwrap().operation_id.as_str())
+        .collect();
+    assert_eq!(operations, ["op-a", "op-b"]);
+    for step in [&a1, &a2, &b1] {
+        assert_ne!(standing(&f, step, &mut tx).1, "waits_for_accept");
+    }
+    let journal = f.m.runtime.audit(&f.owner(), 0, 500).unwrap().entries;
+    let accepts: Vec<_> = journal
+        .iter()
+        .filter(|entry| {
+            entry.record.action == "template_accept"
+                && entry.record.reason.as_deref() == Some("template_accepted")
+        })
+        .collect();
+    assert_eq!(accepts.len(), 2, "one accept per apply");
+    // Again: nothing held, nothing new.
+    let again = all(&human(), &mut tx).unwrap();
+    assert_eq!(again.outcome, "existing");
+    assert!(again.accepted.is_empty());
+    // The planner adds a step to one goal: only that one is held, and released again.
+    let a3 = plan_step(&f, &goals[0], "Document rate limits", &mut tx);
+    assert_eq!(standing(&f, &a3, &mut tx).1, "waits_for_accept");
+    let later = all(&human(), &mut tx).unwrap();
+    assert_eq!(later.released, std::slice::from_ref(&a3));
+    assert_eq!(later.accepted.len(), 1);
 }

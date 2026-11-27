@@ -6,6 +6,9 @@ import {
   doneRepair,
   dryRunPlan,
   findTimelineItem,
+  heldTemplatePlans,
+  heldTemplateStatus,
+  heldTemplateTitle,
   machineLabel,
   orchestrationLine,
   runAttention,
@@ -656,5 +659,36 @@ describe('HS2-JGNCAR a running card whose ticket another worker took names no se
     expect(stateBadge(unplaced).label).not.toBe('Held');
     // The same card without the flag is held, so the flag is what clears it.
     expect(schedulerHold({ ...unplaced, worked_elsewhere: false }, demoClock)?.label).toBe('Held');
+  });
+});
+
+describe('held template plans (HS2-0YHA2S)', () => {
+  it('counts each held step once and names its templates in timeline order', () => {
+    const timeline = structuredClone(demoTimeline('running'));
+    expect(heldTemplatePlans(timeline)).toBeUndefined();
+    const items = timeline.waves.flatMap((wave) => wave.items);
+    const names = ['Repair the release', 'Document a feature', 'Repair the release'];
+    items.slice(0, 3).forEach((item, n) => {
+      item.state = 'waits_for_accept';
+      item.accept = { operation_id: `tpl-${n}`, template_name: names[n] };
+    });
+    // The same step in two waves counts once; a held item without its apply still counts.
+    timeline.waves[0].items.push({ ...items[0] });
+    items[3].state = 'waits_for_accept';
+    expect(heldTemplatePlans(timeline)).toEqual({
+      steps: 4,
+      templates: ['Repair the release', 'Document a feature'],
+    });
+  });
+
+  it('words the status and the tooltip for one, two and more templates', () => {
+    expect(heldTemplateStatus({ steps: 1 })).toBe(' · 1 step waits for an accept');
+    expect(heldTemplateStatus({ steps: 4 })).toBe(' · 4 steps wait for an accept');
+    expect(heldTemplateTitle({ steps: 1, templates: ['A'] })).toBe(
+      'Accept the planned steps of A (1 step); placement starts them within the Orchestration settings',
+    );
+    expect(heldTemplateTitle({ steps: 2, templates: ['A', 'B'] })).toContain('of A and B (2 steps)');
+    expect(heldTemplateTitle({ steps: 5, templates: ['A', 'B', 'C'] })).toContain('of A, B and C (5 steps)');
+    expect(heldTemplateTitle({ steps: 2, templates: [] })).toContain('of the held templates (2 steps)');
   });
 });

@@ -220,3 +220,125 @@ test('HS2-36XDDX the inspector demo shows a card held for its template’s accep
   await page.locator('[data-settings="orchestration"] [data-action="reset-settings"]').dispatchEvent('click');
   await expect(page.locator('[data-orchestration-section="Waits for Accept"]')).toHaveCount(0);
 });
+
+/**
+ * HS2-0YHA2S: with several template plans held under Auto placement, the Orchestration header counts the held
+ * steps and its one Accept Plan accepts them all through `templates/accept` with `all`; the line and the
+ * button go once nothing is held, and every held card moves on.
+ */
+test('HS2-0YHA2S the header counts held template steps and one Accept Plan releases them all', async ({ page }) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    // Auto placement (left unset) for a tool no machine has, so nothing starts wherever this runs.
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: 'synthetic-tool', max_sessions: 2 }],
+        targets: [{ target_id: TARGET, tools: [{ tool: 'synthetic-tool' }], max_sessions: 2 }],
+        placement: { actor: 'scheduler-1' },
+      },
+      actor: person,
+    });
+    const cards: Ticket[] = [];
+    for (const [name, operation, titles] of [
+      ['Document a feature', 'tpl-header-1', ['Describe the synthetic feature', 'Add the synthetic example']],
+      ['Repair the release', 'tpl-header-2', ['Repair the synthetic release']],
+    ] as const) {
+      const templateId = await defineTemplate(server, name);
+      await fetch(`${server.url}${templatesBase(server)}/apply`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: JSON.stringify({
+          template_id: templateId,
+          tool: 'synthetic-tool',
+          operation_id: operation,
+          actor: person,
+        }),
+      });
+      const apply = (await send(server, 'POST', `${templatesBase(server)}/apply_show`, {
+        operation_id: operation,
+      })) as { goal: { native_id: string; created: boolean } };
+      expect(apply.goal.created).toBe(true);
+      for (const title of titles) {
+        const work = await server.request<Ticket>('/tickets', 'POST', { title });
+        await send(server, 'POST', `${base}/readiness/define`, {
+          ticket: { native_id: apply.goal.native_id },
+          target_id: TARGET,
+          connection_id: work.connection_id,
+          native_id: work.id,
+          prerequisites: [],
+          actor: scheduler,
+        });
+        cards.push(work);
+      }
+    }
+
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const header = page.locator('[data-orchestration-toolbar]');
+    const accept = header.getByRole('button', { name: 'Accept Plan' });
+    await expect(header).toContainText('3 steps wait for an accept');
+    await expect(accept).toBeEnabled();
+    await expect(accept).toHaveAttribute('title', /Document a feature and Repair the release \(3 steps\)/);
+    for (const work of cards)
+      await expect(view.locator(`[data-ticket-slug="${work.slug}"] [data-orchestration-part="state"]`)).toContainText(
+        CARD_WAITING,
+      );
+    await visualPass(page, 'hs2-0yha2s', 'held-header', {
+      show: header,
+      check: async () => {
+        await expect(header).toContainText('3 steps wait for an accept');
+        await expect(accept).toBeVisible();
+        // The header's Accept Plan stays whole at every width.
+        expect(await accept.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+      },
+    });
+
+    // One Accept Plan: every held step is released, the line and the button go, and each card moves on.
+    await accept.click();
+    await expect(toast(page, 'Plan accepted: 3 steps start within the Orchestration settings.')).toBeVisible();
+    await expect(accept).toHaveCount(0);
+    await expect(header).not.toContainText('wait for an accept');
+    for (const work of cards)
+      await expect(
+        view.locator(`[data-ticket-slug="${work.slug}"] [data-orchestration-part="state"]`),
+      ).not.toContainText(CARD_WAITING);
+    for (const operation of ['tpl-header-1', 'tpl-header-2']) {
+      const shown = (await send(server, 'POST', `${templatesBase(server)}/apply_show`, {
+        operation_id: operation,
+      })) as { accepted_steps: string[] };
+      expect(shown.accepted_steps.length).toBeGreaterThan(0);
+    }
+    await capture(page, 'hs2-0yha2s', 'accepted-1440');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-0YHA2S the toolbar demo counts a held step and offers Accept Plan, and neither after reset', async ({
+  page,
+}) => {
+  await page.goto('/ux-demo?component=orchestration-toolbar');
+  const set = (name: string, value: string) =>
+    page
+      .locator(`[data-settings="orchestration"] [name="${name}"]`)
+      .evaluate((node: HTMLElement & { value: string }, next) => {
+        node.value = next;
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+  const accept = page.locator('[data-action="accept-orchestration-template-plans"]');
+  await expect(accept).toHaveCount(0);
+  await set('doc-wait', 'template_plan_not_accepted');
+  await expect(accept).toHaveCount(1);
+  await expect(page.locator('[data-orchestration-toolbar="running"]')).toContainText('1 step waits for an accept');
+  await set('doc-wait', 'resource_held');
+  await expect(accept).toHaveCount(0);
+  await set('doc-wait', 'template_plan_not_accepted');
+  await expect(accept).toHaveCount(1);
+  await page.locator('[data-settings="orchestration"] [data-action="reset-settings"]').dispatchEvent('click');
+  await expect(accept).toHaveCount(0);
+});

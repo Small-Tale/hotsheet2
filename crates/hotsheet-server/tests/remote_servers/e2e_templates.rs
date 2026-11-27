@@ -4,6 +4,11 @@
 //! proposed plan through `templates/accept`; then the loop places it as usual. A
 //! template with the setting off is placed at once. Synthetic tickets only; the
 //! sessions are the Unix fake agent.
+//!
+//! HS2-38MFXT: a second server with its own machine home runs the same orchestration
+//! project's scheduler from the same checked-in plan (as another machine does once the
+//! plan is pulled). It has no apply record, yet it holds the step for the same reason,
+//! and an accept on either machine releases the step on both.
 use super::e2e::{ACTOR, Fleet, Side, TOOL_A};
 use super::e2e_loop::placed;
 use super::*;
@@ -178,4 +183,321 @@ async fn hs2_36xddx_a_template_that_does_not_wait_is_placed_at_once() {
     assert!(!placed.run_id.is_empty());
     let item = item_state(&fleet, &step).await;
     assert_ne!(item["state"], "waits_for_accept", "{item}");
+}
+
+/// HS2-38MFXT: another machine of the same orchestration project: its own home and
+/// server, the same checkout (the checked-in plan, policy and manifest) and the same
+/// stores, with its own binding of target A, so it reads the target ticket itself. It
+/// remembers no rule, so its own loop asks a person before it could start anything.
+struct OtherMachine {
+    home: std::path::PathBuf,
+    state: hotsheet_server::AppState,
+    router: axum::Router,
+    base: String,
+}
+
+impl OtherMachine {
+    async fn new(fleet: &Fleet) -> Self {
+        let home = fleet.root.path().join("machine-b-home");
+        std::fs::create_dir_all(&home).unwrap();
+        let registry =
+            hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+        let owner = registry
+            .register(
+                std::path::Path::new(&fleet.owner.root),
+                None,
+                None,
+                vec![fleet.owner_store.clone()],
+            )
+            .unwrap();
+        assert_eq!(
+            owner.id, fleet.owner.id,
+            "a checkout id is its path's identity"
+        );
+        let a_checkout = registry
+            .register(&fleet.a_project, None, None, vec![fleet.a_store.clone()])
+            .unwrap();
+        let memory = Arc::new(Memory::default());
+        let state = state(&fleet.a_store, &home).with_orchestration_runtime(
+            super::orchestration::shared_runtime(&fleet.a_store, &home, &memory),
+        );
+        let machine = Self {
+            router: app(state.clone()),
+            state,
+            home,
+            base: format!("/checkouts/{}/orchestration", owner.id),
+        };
+        // This machine's own binding of target A (bindings are machine-local).
+        let manifest = machine.ok("GET", "/targets", Value::Null).await;
+        let candidate = machine
+            .ok(
+                "POST",
+                "/inspect",
+                json!({"destination":{"kind":"local","checkout_id":a_checkout.id}}),
+            )
+            .await;
+        let bound = machine
+            .ok(
+                "PUT",
+                &format!("/targets/{}/binding", super::e2e::TARGET_A),
+                json!({"target":{"owner_checkout_id":owner.id,"target_id":super::e2e::TARGET_A},
+                    "expected_manifest_revision":manifest["revision"],"expected_binding_revision":0,
+                    "previous_destination":null,"destination":candidate["destination"]}),
+            )
+            .await;
+        assert_eq!(bound["usable"], true, "{bound}");
+        machine
+    }
+
+    /// Its scheduling loop ends with the test, not at its next bounded wait: the loop
+    /// waits on files, so after the stop its marker is moved to end that wait.
+    async fn stop(self) {
+        self.state.begin_stopping();
+        hotsheet_cli::orchestration::OrchestrationRuntime::scheduler_wake_at(&self.home);
+        self.state
+            .shutdown_orchestration(std::time::Duration::from_secs(10))
+            .await;
+    }
+
+    async fn call(&self, method: &str, path: &str, body: Value) -> (StatusCode, Value) {
+        super::orchestration::api(
+            self.router.clone(),
+            method,
+            &format!("{}{path}", self.base),
+            body,
+            true,
+        )
+        .await
+    }
+
+    async fn ok(&self, method: &str, path: &str, body: Value) -> Value {
+        let (status, value) = self.call(method, path, body).await;
+        assert_eq!(status, StatusCode::OK, "{method} {path}: {value}");
+        value
+    }
+
+    /// Why this machine's scheduler leaves the step unplaced, after reading the
+    /// target ticket itself (readiness comes only from what a machine confirmed).
+    async fn explain(&self, step: &str) -> Value {
+        let refreshed = self
+            .ok("POST", "/readiness/refresh", json!({"actor":Fleet::ai()}))
+            .await;
+        assert_eq!(refreshed["counts"]["confirmed"], 1, "{refreshed}");
+        self.ok(
+            "POST",
+            "/scheduler/explain",
+            json!({"actor":Fleet::ai(),"step_id":step}),
+        )
+        .await
+    }
+
+    async fn item_state(&self, step: &str) -> Value {
+        let timeline = self.ok("GET", "/timeline", Value::Null).await;
+        timeline["waves"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|wave| wave["items"].as_array().unwrap().clone())
+            .find(|item| item["step_id"] == step)
+            .unwrap()
+    }
+
+    /// Nothing this machine's scheduler decided started the step.
+    async fn started_nothing_for(&self, step: &str) {
+        let decisions = self
+            .ok(
+                "POST",
+                "/scheduler/decisions",
+                json!({"after": 0, "limit": 200}),
+            )
+            .await;
+        assert!(
+            !decisions["entries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| entry["kind"] == "start" && entry["step_id"] == step),
+            "{decisions}"
+        );
+    }
+}
+
+/// Both machines hold the step for the template's accept and say so.
+async fn held_on_both(fleet: &Fleet, other: &OtherMachine, step: &str, operation: &str) {
+    for explained in [
+        fleet
+            .ok(
+                "POST",
+                "/scheduler/explain",
+                json!({"actor":Fleet::ai(),"step_id":step}),
+            )
+            .await,
+        other.explain(step).await,
+    ] {
+        assert_eq!(explained["standing"], "not_placed", "{explained}");
+        assert_eq!(
+            explained["reason"], "template_plan_not_accepted",
+            "{explained}"
+        );
+    }
+    let item = other.item_state(step).await;
+    assert_eq!(item["state"], "waits_for_accept", "{item}");
+    assert_eq!(item["accept"]["operation_id"], operation, "{item}");
+    other.started_nothing_for(step).await;
+    assert!(fleet.sessions().await.is_empty(), "nothing was started");
+}
+
+/// Neither machine holds the step any longer.
+async fn released_on_both(fleet: &Fleet, other: &OtherMachine, step: &str) {
+    let explained = other.explain(step).await;
+    assert_ne!(
+        explained["reason"], "template_plan_not_accepted",
+        "{explained}"
+    );
+    assert_ne!(other.item_state(step).await["state"], "waits_for_accept");
+    // The machine that applied places it by itself: its loop sees the checked-in
+    // accept (another machine's write) without anyone ticking.
+    let placed = placed(fleet, step, Side::Controller).await;
+    assert!(!placed.run_id.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 6)]
+async fn hs2_38mfxt_another_machine_holds_the_step_and_its_accept_releases_both() {
+    let mut fleet = Fleet::new().await;
+    fleet
+        .policy(json!({"placement":{"actor":ACTOR,"cooldown_minutes":0}}))
+        .await;
+    let other = OtherMachine::new(&fleet).await;
+    let (goal, _) = applied(&fleet, "Repair the release", true, "tpl-shared").await;
+    let step = planned_step(&fleet, &goal, "Synthetic shared hold").await;
+    held_on_both(&fleet, &other, &step, "tpl-shared").await;
+
+    // A person accepts on the other machine, which has no apply record of its own.
+    let (status, refused) = other
+        .call(
+            "POST",
+            "/templates/accept",
+            json!({"operation_id":"tpl-shared","actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
+    let accepted = other
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"operation_id":"tpl-shared","actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(accepted["outcome"], "accepted", "{accepted}");
+    assert_eq!(accepted["released"], json!([step]), "{accepted}");
+    assert_eq!(accepted["hold"]["operation_id"], "tpl-shared", "{accepted}");
+    assert!(accepted.get("snapshot").is_none(), "{accepted}");
+    released_on_both(&fleet, &other, &step).await;
+    // The machine that applied answers the accept as already made.
+    let again = fleet
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"operation_id":"tpl-shared","actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(again["outcome"], "existing", "{again}");
+    other.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 6)]
+async fn hs2_38mfxt_an_accept_on_the_applying_machine_releases_the_other_one() {
+    let mut fleet = Fleet::new().await;
+    fleet
+        .policy(json!({"placement":{"actor":ACTOR,"cooldown_minutes":0}}))
+        .await;
+    let other = OtherMachine::new(&fleet).await;
+    let (goal, _) = applied(&fleet, "Bump a dependency", true, "tpl-home").await;
+    let step = planned_step(&fleet, &goal, "Synthetic home accept").await;
+    held_on_both(&fleet, &other, &step, "tpl-home").await;
+    let accepted = fleet
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"operation_id":"tpl-home","actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(accepted["outcome"], "accepted", "{accepted}");
+    assert_eq!(
+        accepted["snapshot"]["name"], "Bump a dependency",
+        "{accepted}"
+    );
+    released_on_both(&fleet, &other, &step).await;
+    let again = other
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"operation_id":"tpl-home","actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(again["outcome"], "existing", "{again}");
+    other.stop().await;
+}
+
+/// HS2-0YHA2S: the Orchestration header's one Accept Plan (`{"all": true}`) releases
+/// every held template plan on a real server; an AI session is refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 6)]
+async fn hs2_0yha2s_one_accept_releases_every_held_plan() {
+    let mut fleet = Fleet::new().await;
+    fleet
+        .policy(json!({"placement":{"actor":ACTOR,"cooldown_minutes":0}}))
+        .await;
+    let (first_goal, _) = applied(&fleet, "Repair the release", true, "tpl-one").await;
+    let (second_goal, _) = applied(&fleet, "Bump a dependency", true, "tpl-two").await;
+    let first = planned_step(&fleet, &first_goal, "Synthetic first held").await;
+    let second = planned_step(&fleet, &second_goal, "Synthetic second held").await;
+    for step in [&first, &second] {
+        assert_eq!(item_state(&fleet, step).await["state"], "waits_for_accept");
+    }
+    let (status, refused) = fleet
+        .call(
+            "POST",
+            "/templates/accept",
+            json!({"all":true,"actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
+    let accepted = fleet
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"all":true,"actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(accepted["outcome"], "accepted", "{accepted}");
+    let mut expected = vec![first.clone(), second.clone()];
+    expected.sort();
+    assert_eq!(accepted["released"], json!(expected), "{accepted}");
+    assert_eq!(
+        accepted["accepted"].as_array().unwrap().len(),
+        2,
+        "{accepted}"
+    );
+    for step in [&first, &second] {
+        let explained = fleet
+            .ok(
+                "POST",
+                "/scheduler/explain",
+                json!({"actor":Fleet::ai(),"step_id":step}),
+            )
+            .await;
+        assert_ne!(
+            explained["reason"], "template_plan_not_accepted",
+            "{explained}"
+        );
+    }
+    let again = fleet
+        .ok(
+            "POST",
+            "/templates/accept",
+            json!({"all":true,"actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(again["outcome"], "existing", "{again}");
+    assert_eq!(again["released"], json!([]), "{again}");
 }

@@ -27,6 +27,8 @@ export const ORCHESTRATION_ACTIONS = {
   openOrchestrationGoal: action('open-orchestration-goal'),
   /** HS2-36XDDX: accept the template plan a held card waits for, with the apply's `data-operation-id`. */
   acceptOrchestrationTemplatePlan: action('accept-orchestration-template-plan'),
+  /** HS2-0YHA2S: the header's Accept Plan, which accepts every template plan held now. */
+  acceptOrchestrationTemplatePlans: action('accept-orchestration-template-plans'),
   /** HS2-9XJEZC: run every validation step of the selected card that has not passed. */
   runOrchestrationValidation: action('run-orchestration-validation'),
   /** HS2-0D60T8: reopen the selected card's built-ahead work with the item's `data-reopen-reason`. */

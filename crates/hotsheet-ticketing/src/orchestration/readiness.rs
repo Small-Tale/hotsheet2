@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 
 use super::contract::{valid_identifier, valid_token};
 use super::reconcile::ticket_finished;
-use super::shared_plan::{SharedPlan, SharedPlanStore, SharedStep, merge_steps};
+use super::shared_plan::{
+    PlanHold, SharedPlan, SharedPlanStore, SharedStep, held_plan_steps, merge_steps,
+};
 use super::storage::{Storage, decode};
 use super::*;
 
@@ -912,6 +914,66 @@ impl PlanRegistry {
         Ok((steps, shared.map(|document| document.revision)))
     }
 
+    /// HS2-38MFXT: the template holds checked in with the owner's plan, ordered by
+    /// operation id. Reads only.
+    pub fn holds(&self, owner_checkout_id: &str) -> Result<Vec<PlanHold>, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        Ok(self
+            .shared(owner_checkout_id)?
+            .read()?
+            .map(|document| document.holds)
+            .unwrap_or_default())
+    }
+
+    /// HS2-38MFXT: the owner's live steps a checked-in hold keeps for a person's accept,
+    /// by step id, with the hold of each. Reads only.
+    pub fn held_steps(
+        &self,
+        owner_checkout_id: &str,
+    ) -> Result<BTreeMap<String, PlanHold>, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        let Some(document) = self
+            .shared(owner_checkout_id)?
+            .read()?
+            .filter(|document| !document.holds.is_empty())
+        else {
+            return Ok(BTreeMap::new());
+        };
+        let file = self.read_file()?;
+        let steps = merge_steps(&document.steps, &legacy(&file, owner_checkout_id))
+            .map_err(|_| OrchestrationError::Readiness(ReadinessError::PlanConflict))?;
+        Ok(held_plan_steps(&document.holds, &steps)
+            .into_iter()
+            .map(|(step_id, hold)| (step_id, hold.clone()))
+            .collect())
+    }
+
+    /// HS2-38MFXT: change the owner's checked-in holds under the plan's lock. `change`
+    /// gets the holds and the live steps; nothing is written when it leaves the holds
+    /// as they were, and nothing at all when it fails.
+    pub fn update_holds<R>(
+        &self,
+        owner_checkout_id: &str,
+        tx: &mut Transaction<'_>,
+        change: impl FnOnce(&mut Vec<PlanHold>, &[SharedStep]) -> Result<R, OrchestrationError>,
+    ) -> Result<R, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        let shared = self.shared(owner_checkout_id)?;
+        let _shared_lock = shared.lock()?;
+        let current = shared.read()?;
+        let file = self.read_file()?;
+        let checked_in: &[SharedStep] = current.as_ref().map_or(&[], |document| &document.steps);
+        let steps = merge_steps(checked_in, &legacy(&file, owner_checkout_id))
+            .map_err(|_| OrchestrationError::Readiness(ReadinessError::PlanConflict))?;
+        let mut holds = current
+            .as_ref()
+            .map(|document| document.holds.clone())
+            .unwrap_or_default();
+        let answer = change(&mut holds, &steps)?;
+        shared.write_holds_locked(current.as_ref(), holds, tx)?;
+        Ok(answer)
+    }
+
     /// HS2-190RDX: swap the live plan to an update's draft in one write of the
     /// checked-in plan, under its lock: the three-way merge of `base` (the live steps
     /// when the update opened), the live steps now and `draft` ([`merge_update`]). A
@@ -993,7 +1055,8 @@ impl PlanRegistry {
         if let Some(home) = &self.draft_home {
             return Ok(SharedPlanStore::draft(home, owner_checkout_id));
         }
-        Ok(SharedPlanStore::new(&(self.root_of)(owner_checkout_id)?))
+        Ok(SharedPlanStore::new(&(self.root_of)(owner_checkout_id)?)
+            .noting(self.storage.anchor(), owner_checkout_id))
     }
 
     fn read_file(&self) -> Result<PlanFile, OrchestrationError> {

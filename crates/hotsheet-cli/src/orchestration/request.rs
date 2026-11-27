@@ -1014,7 +1014,13 @@ impl OrchestrationRuntime {
                     "apply_show" => value(self.template_apply_show(owner, &decode(body)?)?),
                     // HS2-36XDDX: a person accepts the plan proposed for an apply's goal.
                     "accept" => {
-                        value(self.template_accept(owner, &decode(body)?, actor.as_ref(), tx)?)
+                        let request: AcceptTemplate = decode(body)?;
+                        // HS2-0YHA2S: every held plan at once (the header's Accept Plan).
+                        if request.all && request.operation_id.is_empty() {
+                            value(self.template_accept_held(owner, actor.as_ref(), tx)?)
+                        } else {
+                            value(self.template_accept(owner, &request, actor.as_ref(), tx)?)
+                        }
                     }
                     // HS2-AMJNER: one resume pass, as the server runs on its own.
                     "resume" => {
