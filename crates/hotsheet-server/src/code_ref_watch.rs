@@ -376,10 +376,15 @@ fn remote_tracking_lines(text: &str) -> Vec<String> {
     lines
 }
 
-/// HS2-ESVYQH: the coordination pool's state file, with its size and modification time.
-fn pool_fingerprint(common: &Path) -> Option<(u64, Option<std::time::SystemTime>)> {
-    let meta = std::fs::metadata(common.join(POOL_DIRECTORY).join("state.json")).ok()?;
-    Some((meta.len(), meta.modified().ok()))
+/// HS2-ESVYQH: the coordination pool's state file, by its size and a hash of its
+/// contents. HS2-BN9MMJ: not its modification time, which two same-size writes within
+/// one filesystem timestamp tick share, so the second write would look unchanged.
+fn pool_fingerprint(common: &Path) -> Option<(u64, u64)> {
+    use std::hash::{Hash, Hasher};
+    let bytes = std::fs::read(common.join(POOL_DIRECTORY).join("state.json")).ok()?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    Some((bytes.len() as u64, hasher.finish()))
 }
 
 /// HS2-ESVYQH: whether a changed path under `common` is the coordination pool: its
@@ -603,6 +608,27 @@ mod tests {
             assert_eq!(pool_changes(&log), revision + 1, "write {revision}");
         }
         assert_eq!(recorded(&log), 0, "a pool write is no push");
+    }
+    /// HS2-BN9MMJ: two same-size pool writes inside one filesystem timestamp tick are
+    /// still two changes; CI's Linux runners recorded only the first.
+    #[test]
+    fn hs2_bn9mmj_a_same_size_pool_write_in_one_timestamp_tick_is_a_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = dir.path().join(POOL_DIRECTORY);
+        std::fs::create_dir_all(&pool).unwrap();
+        let state = pool.join("state.json");
+        std::fs::write(&state, b"{\"revision\":1}").unwrap();
+        let tick = std::fs::metadata(&state).unwrap().modified().unwrap();
+        let first = pool_fingerprint(dir.path());
+        std::fs::write(&state, b"{\"revision\":2}").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&state)
+            .unwrap()
+            .set_modified(tick)
+            .unwrap();
+        assert_eq!(std::fs::metadata(&state).unwrap().modified().unwrap(), tick);
+        assert_ne!(pool_fingerprint(dir.path()), first);
     }
     /// A main checkout and a linked worktree resolve to one common directory; a plain
     /// directory has none and is not watched.
