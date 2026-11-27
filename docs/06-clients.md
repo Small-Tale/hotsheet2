@@ -5625,7 +5625,10 @@ unsupported, so they cannot create this state through Hot Sheet.
   labeled by the prose line preceding its header, or by the question written after the colon
   on the header line itself (`CHOICE: Which approach?`, optionally bold), which then renders as
   a visible paragraph above the options (HS2-3MHSBS); text after a colon-less `CHOICE` stays
-  prose. **Multi-line choices and lettered blocks (HS2-EWF0FT).** A list item's first line is
+  prose. A numbered `CHOICE 1: <question>` line (optionally bold) is also a group header with
+  that inline question when a Markdown list or a lettered run in another marker style follows
+  it, so `CHOICE 1:` … `CHOICE 6:` headers each with their own list form six groups; followed
+  by anything else it stays a numbered lettered block (HS2-WX8BE6). **Multi-line choices and lettered blocks (HS2-EWF0FT).** A list item's first line is
   its label; its lazy continuation lines and lines indented to its content (indented
   paragraphs and nested lists, blank lines allowed) are its details, rendered under the label
   in a smaller Markdown size inside the same option. A run of paragraphs led by lettered choice

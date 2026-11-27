@@ -71,6 +71,117 @@ describe('feedback choice grammar corpus (HS2-EWF0FT)', () => {
   });
 });
 
+// The HS2-8T71YW note shape (synthetic design wording): numbered `CHOICE N: <question>` headers,
+// each followed by a lettered bullet list whose first option carries the recommendation.
+const NUMBERED = [
+  'FEEDBACK NEEDED: milestones design. Please answer each CHOICE; my recommendation is first and marked.',
+  '',
+  'CHOICE 1: How does a Git store hold a milestone?',
+  '- A (recommended): a ticket of a built-in `milestone` category',
+  '- B: a registry file per milestone beside the group registry',
+  '',
+  'CHOICE 2: What is a milestone in Jira?',
+  '- A (recommended): a fixVersion (release with releaseDate)',
+  '- B: the parent epic',
+  '- C: a per-connection setting choosing fixVersion or epic',
+  '',
+  'CHOICE 3: Nested milestones?',
+  '- A (recommended): not in the first version',
+  '- B: allow nesting, cycle-checked',
+  '',
+  'CHOICE 4: When does a milestone orchestration prerequisite hold?',
+  '- A (recommended): every linked ticket confirmed finished',
+  '- B: when the milestone itself is closed',
+  '- C: either, chosen per step',
+  '',
+  'CHOICE 5: Where do milestones live in the client?',
+  '- A (recommended): a built-in Milestones sidebar view',
+  '- B: only "group by milestone" in the list and column views',
+  '- C: a global dashboard across projects',
+  '',
+  'CHOICE 6: What instant is a date-only due date for scheduling?',
+  '- A (recommended): end of that day in UTC',
+  '- B: end of that day in a project time-zone setting',
+].join('\n');
+
+describe('numbered CHOICE group headers (HS2-WX8BE6)', () => {
+  it('reads each CHOICE N: <question> followed by a list as its own group', () => {
+    const document = parseFeedbackChoices(NUMBERED)!;
+    expect(document.groups.map((group) => group.choices.length)).toEqual([2, 3, 2, 3, 3, 2]);
+    expect(document.groups.map((group) => group.question)).toEqual([
+      'How does a Git store hold a milestone?',
+      'What is a milestone in Jira?',
+      'Nested milestones?',
+      'When does a milestone orchestration prerequisite hold?',
+      'Where do milestones live in the client?',
+      'What instant is a date-only due date for scheduling?',
+    ]);
+    expect(document.groups.every((group) => group.inlineQuestion)).toBe(true);
+    for (const group of document.groups) {
+      expect(group.choices[0].markdown).toMatch(/^A \(recommended\): /);
+      expect(group.choices.slice(1).every((choice) => !choice.markdown.includes('recommended'))).toBe(true);
+    }
+    expect(document.regions.map((region) => region.source)).toEqual([
+      'FEEDBACK NEEDED: milestones design. Please answer each CHOICE; my recommendation is first and marked.',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ]);
+  });
+
+  it('answers one option per group under each question', () => {
+    const document = parseFeedbackChoices(NUMBERED)!;
+    let selected: string[] = [];
+    for (const group of document.groups)
+      selected = updateFeedbackChoiceDocumentSelection(
+        document,
+        selected,
+        group.choices.at(-1)!.id,
+        undefined,
+        {},
+      ).selected;
+    expect(selected).toEqual(document.groups.map((group) => group.choices.at(-1)!.id));
+    const markdown = selectedFeedbackChoicesMarkdown(NUMBERED, selected);
+    expect(markdown.split('\n\n')).toHaveLength(6);
+    expect(markdown.startsWith('**How does a Git store hold a milestone?**\n- B: a registry file')).toBe(true);
+    expect(parseFeedbackChoices(markdown)).toBeUndefined();
+  });
+
+  it('keeps the earlier header and lettered-block formats', () => {
+    expect(parseFeedbackChoices('CHOICE\n- a\n- b')?.groups).toHaveLength(1);
+    expect(parseFeedbackChoices('Which?\n\nCHOICE:\n- a\n- b')?.groups[0].question).toBe('Which?');
+    expect(parseFeedbackChoices('CHOICE: Which?\n- a\n- b')?.groups[0]).toMatchObject({
+      question: 'Which?',
+      inlineQuestion: true,
+    });
+    const lettered = parseFeedbackChoices('**CHOICE A: Memory.** Fast.\n\n**CHOICE B: Disk.** Durable.')!;
+    expect(lettered.groups.map((group) => group.choices.map((choice) => choice.markdown))).toEqual([
+      ['CHOICE A: Memory.', 'CHOICE B: Disk.'],
+    ]);
+    const options = parseFeedbackChoices('Pick one.\n\nOption A — Memory.\nOption B — Disk.')!;
+    expect(options.groups[0].choices.map((choice) => choice.markdown)).toEqual([
+      'Option A — Memory.',
+      'Option B — Disk.',
+    ]);
+    // Numbered CHOICE blocks without a following list stay one lettered run.
+    const numbered = parseFeedbackChoices('Pick one.\n\nCHOICE 1: Memory.\nCHOICE 2: Disk.')!;
+    expect(numbered.groups).toHaveLength(1);
+    expect(numbered.groups[0]).toMatchObject({
+      question: 'Pick one.',
+      choices: [{ markdown: 'CHOICE 1: Memory.' }, {}],
+    });
+    // A lettered block whose details are an indented list stays a lettered block.
+    const indented = parseFeedbackChoices('CHOICE A: Script it.\n\n    - pro\n\nCHOICE B: By hand.')!;
+    expect(indented.groups[0].choices.map((choice) => choice.markdown)).toEqual([
+      'CHOICE A: Script it.',
+      'CHOICE B: By hand.',
+    ]);
+  });
+});
+
 const MULTI = [
   'Intro prose.',
   '',

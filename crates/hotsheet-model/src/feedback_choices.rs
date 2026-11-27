@@ -1,10 +1,12 @@
-//! The FEEDBACK NEEDED choice grammar (HS2-83YCDP, HS2-3MHSBS, HS2-EWF0FT).
+//! The FEEDBACK NEEDED choice grammar (HS2-83YCDP, HS2-3MHSBS, HS2-EWF0FT, HS2-WX8BE6).
 //!
 //! A feedback prompt offers explicit choices as choice groups:
 //!
 //! - an uppercase `CHOICE` / `CHOICE:` header (optionally `CHOICE: <question>`) followed by a
 //!   Markdown list, where each item's first line is its label and its lazy continuation lines
 //!   and indented paragraphs (nested lists included) are its details;
+//! - a numbered `CHOICE 1: <question>` header, but only when a list or a lettered run in another
+//!   marker style follows it; otherwise the line is a numbered lettered block (HS2-WX8BE6);
 //! - the same header followed by lettered blocks, or a headerless run of at least two lettered
 //!   blocks: paragraphs led by `CHOICE A:`, `Option B —`, or a bare `C)` / `C.` marker,
 //!   optionally bold, in sequence from A (or 1 after a keyword).
@@ -342,6 +344,43 @@ fn lettered_header(text: &str) -> Option<LetteredHeader> {
     Some(header(after_indent.trim().to_owned(), None))
 }
 
+/// A numbered `CHOICE <n>: <question>` line, optionally bold (HS2-WX8BE6): `Some(question)` for a
+/// candidate group header. The parser makes it a header only when an option list follows.
+fn numbered_choice_header(text: &str) -> Option<Option<String>> {
+    let header = lettered_header(text)?;
+    if header.style != "choice-number" || header.details.is_some() {
+        return None;
+    }
+    let rest = header.label.strip_prefix("CHOICE")?;
+    let value = rest.trim_start_matches([' ', '\t']);
+    if value.len() == rest.len() {
+        return None;
+    }
+    let digits = value.len() - value.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    let question = value[digits..]
+        .trim_start_matches([' ', '\t'])
+        .strip_prefix(':')?;
+    let question = unwrap_bold(question.trim()).trim();
+    Some((!question.is_empty()).then(|| question.to_owned()))
+}
+
+/// A numbered group header: a `CHOICE <n>: <question>` line whose next non-blank line is a
+/// top-level list item or the first block of a lettered run in another marker style.
+fn numbered_group_header(lines: &[Line<'_>], index: usize) -> Option<Option<String>> {
+    let header = numbered_choice_header(lines[index].text)?;
+    let next = lines
+        .iter()
+        .skip(index + 1)
+        .find(|line| !is_blank(line.text))?
+        .text;
+    if let Some(item) = list_item(next) {
+        return (item.indent <= 3).then_some(header);
+    }
+    lettered_header(next)
+        .is_some_and(|lettered| lettered.ordinal == 1 && lettered.style != "choice-number")
+        .then_some(header)
+}
+
 /// A line that cannot lazily continue the paragraph before it.
 fn interrupts_paragraph(text: &str) -> bool {
     fence(text).is_some()
@@ -461,7 +500,10 @@ fn scan_list(lines: &[Line<'_>], first: usize) -> ScannedGroup {
             continue;
         }
         if let Some(current) = choices.last_mut() {
-            if !blank_before && !interrupts_paragraph(text) {
+            if !blank_before
+                && !interrupts_paragraph(text)
+                && numbered_group_header(lines, index).is_none()
+            {
                 current.last_line = index;
                 last_line = index;
                 continue;
@@ -617,7 +659,7 @@ pub fn parse_feedback_choices(source: &str) -> Option<FeedbackChoiceDocument> {
             line_index += 1;
             continue;
         }
-        let header = choice_header(text);
+        let header = choice_header(text).or_else(|| numbered_group_header(&lines, line_index));
         let scanned = if header.is_some() {
             let mut first = line_index + 1;
             while first < lines.len() && is_blank(lines[first].text) {

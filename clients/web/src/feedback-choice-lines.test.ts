@@ -7,6 +7,7 @@ import {
   interruptsParagraph,
   letteredHeader,
   listItem,
+  numberedChoiceHeader,
   sourceLines,
 } from './feedback-choice-lines';
 
@@ -27,6 +28,27 @@ describe('feedback choice line classification', () => {
     expect(choiceHeader('**CHOICE:** **Which?**')).toEqual({ question: 'Which?' });
     expect(choiceHeader('CHOICE A: Not a header')).toBeUndefined();
     expect(choiceHeader('CHOICES:')).toBeUndefined();
+  });
+
+  it('reads numbered CHOICE <n>: <question> header candidates (HS2-WX8BE6)', () => {
+    expect(numberedChoiceHeader('CHOICE 1: How does a store hold it?')).toEqual({
+      question: 'How does a store hold it?',
+    });
+    expect(numberedChoiceHeader('**CHOICE 12: Which?**')).toEqual({ question: 'Which?' });
+    expect(numberedChoiceHeader('**CHOICE 2:** Which?')).toEqual({ question: 'Which?' });
+    expect(numberedChoiceHeader('CHOICE 3: **Which?**')).toEqual({ question: 'Which?' });
+    expect(numberedChoiceHeader('CHOICE 4:')).toEqual({});
+    for (const other of [
+      'CHOICE A: Letter',
+      'CHOICE 1. Dot',
+      'CHOICE 1 — Dash',
+      'Option 1: Keyword',
+      '**CHOICE 1: Lead.** Details',
+      'CHOICE: Q',
+    ])
+      expect(numberedChoiceHeader(other), other).toBeUndefined();
+    // A candidate only: it never interrupts a paragraph on its own.
+    expect(interruptsParagraph('CHOICE 1: Which?')).toBe(false);
   });
 
   it('measures and removes indentation with tabs as four columns', () => {

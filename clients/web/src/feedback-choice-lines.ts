@@ -151,6 +151,22 @@ export function letteredHeader(text: string): LetteredHeader | undefined {
   return { style, ordinal, indent: indentMatch.length, label: afterIndent.trim() };
 }
 
+const NUMBERED_CHOICE_LABEL = /^CHOICE[ \t]+[1-9]\d?[ \t]*:[ \t]*(.*)$/;
+
+/**
+ * A numbered `CHOICE <n>: <question>` line, optionally bold (HS2-WX8BE6). It is only a candidate:
+ * the parser makes it a group header when an option list follows it, and otherwise keeps it a
+ * numbered lettered block (`CHOICE 1: label`), so this does not interrupt paragraphs.
+ */
+export function numberedChoiceHeader(text: string): { question?: string } | undefined {
+  const header = letteredHeader(text);
+  if (header?.style !== 'choice-number' || header.details) return undefined;
+  const match = NUMBERED_CHOICE_LABEL.exec(header.label);
+  if (!match) return undefined;
+  const question = match[1].replace(/^(\*\*|__)(.*)\1$/, '$2').trim();
+  return question ? { question } : {};
+}
+
 /** A line that cannot lazily continue the paragraph before it. */
 export function interruptsParagraph(text: string): boolean {
   return (

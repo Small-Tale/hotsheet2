@@ -307,6 +307,65 @@ test('renders multi-line and lettered choices with details under their labels (H
     );
 });
 
+// HS2-WX8BE6: the HS2-8T71YW note shape. Numbered `CHOICE N: <question>` headers, each followed by
+// a lettered bullet list, are six separate groups, not one group whose options are the questions.
+const NUMBERED_QUESTIONS = [
+  'How does a Git store hold a milestone?',
+  'What is a milestone in Jira?',
+  'Nested milestones?',
+  'When does a milestone orchestration prerequisite hold?',
+  'Where do milestones live in the client?',
+  'What instant is a date-only due date for scheduling?',
+];
+const NUMBERED_OPTIONS = [
+  ['A (recommended): a ticket of a built-in milestone category', 'B: a registry file per milestone'],
+  ['A (recommended): a fixVersion', 'B: the parent epic', 'C: a per-connection setting'],
+  ['A (recommended): not in the first version', 'B: allow nesting, cycle-checked'],
+  ['A (recommended): every linked ticket confirmed finished', 'B: when the milestone is closed', 'C: either'],
+  ['A (recommended): a Milestones sidebar view', 'B: only group by milestone', 'C: a global dashboard'],
+  ['A (recommended): end of that day in UTC', 'B: end of that day in a project time zone'],
+];
+const NUMBERED_PROMPT = [
+  'FEEDBACK NEEDED: milestones design. Please answer each CHOICE; my recommendation is first and marked.',
+  ...NUMBERED_QUESTIONS.flatMap((question, index) => [
+    '',
+    `CHOICE ${index + 1}: ${question}`,
+    ...NUMBERED_OPTIONS[index].map((option) => `- ${option}`),
+  ]),
+].join('\n');
+
+test('answers numbered CHOICE N: question headers as separate groups (HS2-WX8BE6)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes = await mock(page, 'note', NUMBERED_PROMPT);
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const note = page.getByRole('dialog').locator('article[data-note-id="N4"]');
+  const grids = note.getByRole('grid', { name: /^Feedback Choices \d/ });
+  await expect(grids).toHaveCount(6);
+  const options = (index: number) => grids.nth(index).locator('[data-component="content-item"]');
+  for (const [index, question] of NUMBERED_QUESTIONS.entries()) {
+    await expect(grids.nth(index)).toHaveAccessibleName(`Feedback Choices ${index + 1}: ${question}`);
+    await expect(options(index)).toHaveCount(NUMBERED_OPTIONS[index].length);
+    await expect(options(index).nth(0)).toContainText('A (recommended):');
+  }
+  // No numbered header survives as an option or as a literal CHOICE paragraph.
+  await expect(note.getByText(/CHOICE \d/)).toHaveCount(0);
+  // One option per group: the recommendation in odd groups, the last option in even groups.
+  const picks = NUMBERED_OPTIONS.map((group, index) => (index % 2 ? group.length - 1 : 0));
+  for (const [index, pick] of picks.entries()) await options(index).nth(pick).click();
+  for (const [index, pick] of picks.entries())
+    for (let option = 0; option < NUMBERED_OPTIONS[index].length; option += 1)
+      await expect(options(index).nth(option)).toHaveAttribute('aria-selected', String(option === pick));
+  await note.screenshot({ path: 'target/visual-captures/hs2-wx8be6-numbered-choices-1280.png' });
+  await note.getByRole('button', { name: 'Respond' }).click();
+  await expect
+    .poll(() => writes.find((write) => write.note_kind === 'regular')?.note)
+    .toBe(
+      NUMBERED_QUESTIONS.map((question, index) => `**${question}**\n- ${NUMBERED_OPTIONS[index][picks[index]]}`).join(
+        '\n\n',
+      ),
+    );
+});
+
 // HS2-ZXGEFE: a FEEDBACK NEEDED prompt can be edited, but only on purpose. A double-click on the
 // prompt body (sidebar) or its Edit Note action (sidebar and reader) opens the ordinary note editor;
 // the save says it is an explicit prompt edit. A single click still never opens it (HS2-MB2Q10).

@@ -237,7 +237,9 @@ Notes:
   `FEEDBACK NEEDED` note may include one or more uppercase `CHOICE` or `CHOICE:` lines, each
   followed by a Markdown list (blank lines allowed). Write each group's question after the
   colon on the same line (`CHOICE: Which approach should we take?`) or as the last line before
-  a bare `CHOICE:`. Keep each option's first line a short label; put its costs and
+  a bare `CHOICE:`. For several questions, numbered headers also work: each
+  `CHOICE 1: <question>` line followed by its own list starts a separate group
+  (HS2-WX8BE6). Keep each option's first line a short label; put its costs and
   consequences on continuation lines indented under the item (blank lines and nested lists
   allowed), which render as the option's details (HS2-EWF0FT):
 
