@@ -1938,10 +1938,18 @@ impl OrchestrationRuntime {
     /// HS2-KXKA7X hosted half: the commit a branch of a checkout this machine hosts
     /// points at, from its remote-tracking ref (`origin/<branch>`) or else its local
     /// branch. Reads git only; contacts nothing.
+    ///
+    /// HS2-W8S3TV: with `known` (the head the caller last saw) and a `wait_ms`, an
+    /// unchanged head is a long poll: it waits on this server's target feed for the
+    /// checkout (whose ref watch reports its remote-tracking refs moving, by kernel
+    /// events) and answers as soon as the head differs, or with the unchanged head when
+    /// the wait ends. A process without a feed (the bare CLI) answers at once.
     pub fn hosted_branch_head(
         &self,
         checkout_id: &str,
         branch: &str,
+        known: Option<&str>,
+        wait_ms: u64,
     ) -> Result<Value, OrchestrationError> {
         if !valid_branch(branch) {
             return Err(OrchestrationError::Invalid("a branch name is required"));
@@ -1958,9 +1966,40 @@ impl OrchestrationRuntime {
                 .map(|text| text.trim().to_ascii_lowercase())
                 .filter(|sha| sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
         };
-        let commit = resolve(format!("refs/remotes/origin/{branch}"))
-            .or_else(|| resolve(format!("refs/heads/{branch}")));
-        Ok(serde_json::json!({ "branch": branch, "commit": commit }))
+        let read = || {
+            resolve(format!("refs/remotes/origin/{branch}"))
+                .or_else(|| resolve(format!("refs/heads/{branch}")))
+        };
+        let answer =
+            |commit: Option<String>| serde_json::json!({ "branch": branch, "commit": commit });
+        let known = known.map(str::to_ascii_lowercase);
+        let wait_ms = wait_ms.min(MAX_BRANCH_WAIT_MS);
+        let (Some(known), Some(events), true) = (known, &self.target_events, wait_ms > 0) else {
+            return Ok(answer(read()));
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(wait_ms);
+        // Handshake first (it starts the ref watch), then read: a move in between is
+        // either in this reading or reported after the handshake's cursor.
+        let mut cursor = match events.poll(&checkout, None, 0) {
+            Ok(page) => page.cursor,
+            Err(_) => return Ok(answer(read())),
+        };
+        loop {
+            let head = read();
+            if head.as_deref() != Some(known.as_str()) {
+                return Ok(answer(head));
+            }
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            let remaining = u64::try_from(remaining.as_millis()).unwrap_or(0);
+            if remaining == 0 {
+                return Ok(answer(head));
+            }
+            match events.poll(&checkout, Some(cursor), remaining) {
+                Ok(page) => cursor = page.cursor,
+                // A stopping server answers with what it has.
+                Err(_) => return Ok(answer(read())),
+            }
+        }
     }
 
     fn branch_call(
@@ -2210,6 +2249,156 @@ impl OrchestrationRuntime {
             if let Ok(Some(view)) = self.deliver(&owner, trigger_id, delivery, tx) {
                 step.deliveries.push(view);
             }
+        }
+        step
+    }
+
+    // ---- Commit landed: the branch head itself (HS2-W8S3TV) ----
+
+    /// The `commit_landed` triggers that fire: each also follows its branch's head.
+    pub fn head_triggers(&self, owner_id: &str) -> Vec<String> {
+        self.trigger_store(owner_id)
+            .and_then(|store| store.triggers())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|trigger| {
+                trigger.state.fires()
+                    && matches!(trigger.source, TriggerSource::CommitLanded { .. })
+            })
+            .map(|trigger| trigger.trigger_id)
+            .collect()
+    }
+
+    /// [`Self::trigger_head_step`] on the real clock, for a host's head-watch loop.
+    pub fn trigger_head_step_now(
+        &self,
+        owner_id: &str,
+        trigger_id: &str,
+        wait_ms: u64,
+    ) -> BranchStep {
+        let mut rng = super::request::Rng;
+        self.trigger_head_step(
+            owner_id,
+            trigger_id,
+            wait_ms,
+            &mut Transaction {
+                clock: &super::request::Clock,
+                rng: &mut rng,
+            },
+        )
+    }
+
+    /// HS2-W8S3TV: one step of following a `commit_landed` trigger's branch by its head
+    /// where the project lives, not by CI: a branch without CI still lands commits. The
+    /// first step learns the head and delivers nothing. Each later step holds one
+    /// bounded long poll open on `target-branch-head` with the head last seen; the host
+    /// answers when the checkout's remote-tracking ref moves (its ref watch, by kernel
+    /// events), and a new head is one `commit_landed` delivery, keyed as the CI watch
+    /// keys a landed commit, so the two sources never deliver one commit twice. A host
+    /// that cannot wait answers at once, and the caller backs off.
+    pub fn trigger_head_step(
+        &self,
+        owner_id: &str,
+        trigger_id: &str,
+        wait_ms: u64,
+        tx: &mut Transaction<'_>,
+    ) -> BranchStep {
+        let ended = BranchStep::default();
+        let Ok(owner) = self.owner(owner_id) else {
+            return ended;
+        };
+        let Ok(store) = self.trigger_store(owner_id) else {
+            return ended;
+        };
+        let Ok(Some(trigger)) = store.find(trigger_id) else {
+            return ended;
+        };
+        let (TriggerSource::CommitLanded { target_id, watch }, true) =
+            (&trigger.source, trigger.state.fires())
+        else {
+            return ended;
+        };
+        let Some(actor) = trigger_actor(&trigger) else {
+            return ended;
+        };
+        let mut step = BranchStep {
+            active: true,
+            ..BranchStep::default()
+        };
+        let now = tx.clock.now_ms();
+        let fail = |code: &str, step: &mut BranchStep| {
+            self.trigger_warning(owner_id, trigger_id, Some(code), now);
+            step.failed = true;
+        };
+        let Ok(target) = Self::target_ref(owner_id, target_id) else {
+            fail("target_unknown", &mut step);
+            return step;
+        };
+        let authorized = match self.authorize(
+            &target,
+            Some(&actor),
+            ActionRequest::new(TargetAction::GatesObserve),
+            tx,
+        ) {
+            Ok(authorized) => authorized,
+            Err(error) => {
+                fail(error.code(), &mut step);
+                return step;
+            }
+        };
+        let Ok(destination) = Self::destination(&authorized).cloned() else {
+            fail(DenialReason::TargetUnavailable.code(), &mut step);
+            return step;
+        };
+        let known = trigger.cursor.branch_head.clone();
+        let mut query = format!("?branch={}", encode(&watch.branch));
+        if let Some(known) = &known {
+            query.push_str(&format!(
+                "&known={}&wait_ms={}",
+                encode(known),
+                wait_ms.min(MAX_BRANCH_WAIT_MS)
+            ));
+        }
+        let head =
+            match self.hosted_call_at(&destination, "/target-branch-head", "GET", &query, None, tx)
+            {
+                Ok(reply) => reply
+                    .get("commit")
+                    .and_then(Value::as_str)
+                    .map(str::to_ascii_lowercase),
+                Err(error) => {
+                    fail(error.code(), &mut step);
+                    return step;
+                }
+            };
+        let Some(head) = head else {
+            fail("branch_unknown", &mut step);
+            return step;
+        };
+        self.trigger_warning(owner_id, trigger_id, None, now);
+        if known.as_deref() == Some(head.as_str()) {
+            return step;
+        }
+        let _ = store.update(trigger_id, |current| {
+            current.cursor.branch_head = Some(head.clone());
+            Ok(())
+        });
+        // Seed: the head the trigger starts from. Nothing earlier is delivered.
+        if known.is_none() {
+            return step;
+        }
+        let delivery = Delivery {
+            key: trigger_keys::commit(&watch.branch, &head),
+            kind: DeliveryKind::CommitLanded,
+            at_ms: now,
+            evidence: BTreeMap::from([
+                (EventField::Commit.code().to_owned(), head.clone()),
+                (EventField::Branch.code().to_owned(), watch.branch.clone()),
+            ]),
+            missed: 0,
+        };
+        if let Ok(Some(view)) = self.deliver(&owner, trigger_id, delivery, tx) {
+            step.deliveries.push(view);
         }
         step
     }

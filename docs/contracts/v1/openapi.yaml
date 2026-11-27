@@ -4409,7 +4409,10 @@ paths:
     description:
       Where a branch of a checkout this machine hosts points (HS2-KXKA7X), for a remote orchestrator's branch watch
       to learn the head it follows. Reads the checkout's remote-tracking ref `origin/<branch>`, else its local
-      branch; contacts nothing. Ordinary authenticated project data under the caller's device role.
+      branch; contacts nothing. Ordinary authenticated project data under the caller's device role. With
+      `known` and `wait_ms`, an unchanged head is a bounded long poll that answers as soon as the checkout's
+      remote-tracking refs move the head (its ref watch, by kernel events), else with the unchanged head when the wait
+      ends; a server without a change feed answers at once (HS2-W8S3TV).
     get:
       operationId: readHostedBranchHead
       parameters:
@@ -4420,6 +4423,20 @@ paths:
             type: string
             maxLength: 200
             pattern: ^[A-Za-z0-9._/-]+$
+        - name: known
+          in: query
+          required: false
+          description: The head the caller last saw; without it the read answers at once.
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{40}$
+        - name: wait_ms
+          in: query
+          required: false
+          description: How long an unchanged head may wait, capped at 8000.
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: The branch and its commit, or a null commit when the checkout has no such branch.

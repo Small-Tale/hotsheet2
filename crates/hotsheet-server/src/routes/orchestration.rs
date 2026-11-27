@@ -533,6 +533,51 @@ pub(crate) fn ensure_branch_watchers(state: &AppState, owner: &str) {
             state.orchestration_tasks().end_loop(&task_key);
         });
     }
+    // HS2-W8S3TV: a `commit_landed` trigger also follows its branch's head where the
+    // project lives, so a branch without CI lands commits too. Each step holds one
+    // bounded long poll open on the hosted head; the loop backs off after a failure or
+    // a step that neither waited nor learned anything (a host that cannot wait).
+    for trigger in shared.head_triggers(owner) {
+        let key = format!("{}|{trigger}|head", loop_key(state, owner));
+        if !state.orchestration_tasks().begin_loop(&key) {
+            continue;
+        }
+        let (task_key, state, owner) = (key.clone(), state.clone(), owner.to_owned());
+        let tasks = state.orchestration_tasks().clone();
+        tasks.spawn_keyed_loop(&key, async move {
+            let mut backoff = Backoff::default();
+            while !state.is_stopping() {
+                let (task_state, task_owner, task_trigger) =
+                    (state.clone(), owner.clone(), trigger.clone());
+                let started = std::time::Instant::now();
+                let step = tokio::task::spawn_blocking(move || {
+                    runtime(&task_state, tokio::runtime::Handle::current()).map(|runtime| {
+                        runtime.trigger_head_step_now(
+                            &task_owner,
+                            &task_trigger,
+                            MAX_BRANCH_WAIT_MS,
+                        )
+                    })
+                });
+                let Some(Ok(Ok(step))) = until_stopping(&state, step).await else {
+                    break;
+                };
+                if !step.active {
+                    break;
+                }
+                if !step.deliveries.is_empty() {
+                    note_orchestration_change(&state, &owner);
+                }
+                let idle = step.deliveries.is_empty() && is_fast_step(started.elapsed());
+                if let Some(delay) = backoff.after_step(step.failed || idle)
+                    && !pause(&state, delay).await
+                {
+                    break;
+                }
+            }
+            state.orchestration_tasks().end_loop(&task_key);
+        });
+    }
 }
 
 /// HS2-KXKA7X: a request that changed the owner's triggers: clients read them again,

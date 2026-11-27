@@ -1057,6 +1057,207 @@ fn hs2_kxka7x_a_branch_watch_delivers_red_ci_and_landed_commits_once() {
     );
 }
 
+/// HS2-W8S3TV: a `commit_landed` trigger follows the branch's head itself, so a branch
+/// without CI lands commits too. The first step learns the head and delivers nothing; an
+/// unchanged head delivers nothing; each move is one delivery keyed as the CI watch keys
+/// a landed commit, so the CI watch reporting the same commit later is already handled;
+/// a head moved back to a commit already delivered is already handled; a deleted branch
+/// warns once; a paused trigger's head watch ends, and a red-CI trigger has none.
+#[test]
+fn hs2_w8s3tv_a_landed_commit_is_learned_from_the_branch_head_once() {
+    let clock = At(AtomicU64::new(T0));
+    let mut rng = Rng(710);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[TargetAction::GatesObserve], &mut tx);
+    let owner = f.owner();
+    let root = std::path::PathBuf::from(&f.m.target.root);
+    git(&root, &["init", "-q", "-b", "main"]);
+    git(
+        &root,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example/widgets.git",
+        ],
+    );
+    let commit = |message: &str| {
+        git(
+            &root,
+            &[
+                "-c",
+                "user.email=t@example.invalid",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                message,
+            ],
+        );
+        git(&root, &["rev-parse", "HEAD"])
+    };
+    // A fetch (or a push from here) moves the remote-tracking ref.
+    let land = |sha: &str| git(&root, &["update-ref", "refs/remotes/origin/main", sha]);
+    let base = commit("base");
+    land(&base);
+    let watch = json!({"repository": "example/widgets", "workflow": "ci.yml", "branch": "main"});
+    let landed = f.set(
+        json!({"name": "Validate merged commits",
+            "source": {"kind": "commit_landed", "target_id": id(1), "watch": watch},
+            "action": {"placement": "start"}}),
+        &mut tx,
+    );
+    let trigger_id = landed.trigger.trigger_id.clone();
+    let head_step = |tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .trigger_head_step(&owner, &trigger_id, MAX_BRANCH_WAIT_MS, tx)
+    };
+    let keys = |tx: &Transaction<'_>| -> Vec<(String, DeliveryOutcome)> {
+        f.show(&landed, tx)
+            .trigger
+            .history
+            .iter()
+            .map(|entry| (entry.delivery_key.clone(), entry.outcome))
+            .collect()
+    };
+    assert_eq!(
+        f.m.runtime.head_triggers(&owner),
+        std::slice::from_ref(&trigger_id)
+    );
+    // Seed: the head, nothing delivered; unchanged, nothing again (no feed here, so the
+    // host answers at once rather than waiting).
+    for _ in 0..2 {
+        let step = head_step(&mut tx);
+        assert!(
+            step.active && !step.failed && step.deliveries.is_empty(),
+            "{step:?}"
+        );
+    }
+    assert_eq!(
+        f.show(&landed, &tx).trigger.cursor.branch_head.as_deref(),
+        Some(base.as_str())
+    );
+    // The CI watch of the same trigger learns the head and starts its watch Job.
+    let mut ci_state = BranchFollowState::default();
+    for _ in 0..2 {
+        let step =
+            f.m.runtime
+                .trigger_branch_step(&owner, &trigger_id, &mut ci_state, 0, &mut tx);
+        assert!(step.deliveries.is_empty() && !step.failed, "{step:?}");
+    }
+    // A commit lands with no CI run yet: one delivery, from the head alone.
+    let second = commit("second");
+    land(&second);
+    let step = head_step(&mut tx);
+    assert_eq!(step.deliveries.len(), 1, "{step:?}");
+    assert_eq!(
+        step.deliveries[0].delivery_key,
+        format!("commit:main:{second}")
+    );
+    assert_eq!(step.deliveries[0].outcome, DeliveryOutcome::DryRun);
+    let entry = f.show(&landed, &tx).trigger.history[0].clone();
+    assert_eq!(entry.evidence["commit"], second);
+    assert_eq!(entry.evidence["branch"], "main");
+    assert!(head_step(&mut tx).deliveries.is_empty());
+    // CI later reports a run of that commit: the same landed commit, already handled.
+    let jobs = JobStore::at(&f.m.home);
+    let job = jobs
+        .list(&f.m.target.id)
+        .unwrap()
+        .jobs
+        .into_iter()
+        .rfind(|job| job.title.contains(&base[..7]))
+        .unwrap();
+    judge(&f.m.home, &f.m.target.id, &job.id, "green", &second, 9300);
+    let step =
+        f.m.runtime
+            .trigger_branch_step(&owner, &trigger_id, &mut ci_state, 0, &mut tx);
+    assert_eq!(step.deliveries.len(), 1, "{step:?}");
+    assert_eq!(
+        step.deliveries[0].outcome,
+        DeliveryOutcome::AlreadyHandled,
+        "{step:?}"
+    );
+    // Two more moves in a row are two deliveries; moving back to a delivered commit
+    // (a force push) is already handled.
+    let third = commit("third");
+    land(&third);
+    assert_eq!(head_step(&mut tx).deliveries.len(), 1);
+    land(&second);
+    let back = head_step(&mut tx);
+    assert_eq!(back.deliveries.len(), 1, "{back:?}");
+    assert_eq!(back.deliveries[0].outcome, DeliveryOutcome::AlreadyHandled);
+    assert_eq!(
+        keys(&tx),
+        [
+            (format!("commit:main:{second}"), DeliveryOutcome::DryRun),
+            (
+                format!("commit:main:{second}"),
+                DeliveryOutcome::AlreadyHandled
+            ),
+            (format!("commit:main:{third}"), DeliveryOutcome::DryRun),
+            (
+                format!("commit:main:{second}"),
+                DeliveryOutcome::AlreadyHandled
+            ),
+        ]
+    );
+    // The branch is deleted: a warning, announced once, and nothing delivered.
+    git(&root, &["update-ref", "-d", "refs/remotes/origin/main"]);
+    git(&root, &["branch", "-q", "-m", "main", "trunk"]);
+    for _ in 0..3 {
+        let step = head_step(&mut tx);
+        assert!(step.failed && step.deliveries.is_empty(), "{step:?}");
+    }
+    assert_eq!(
+        f.show(&landed, &tx).trigger.warning.unwrap().code,
+        "branch_unknown"
+    );
+    assert_eq!(
+        f.notices
+            .titles()
+            .iter()
+            .filter(|title| title.contains("Validate merged commits"))
+            .count(),
+        1
+    );
+    // It comes back: the warning clears and the head is delivered once.
+    git(&root, &["branch", "-q", "-m", "trunk", "main"]);
+    let fourth = commit("fourth");
+    land(&fourth);
+    let step = head_step(&mut tx);
+    assert!(!step.failed && step.deliveries.len() == 1, "{step:?}");
+    assert!(f.show(&landed, &tx).trigger.warning.is_none());
+    // A paused trigger's head watch ends; a red-CI trigger has none.
+    f.m.runtime
+        .trigger_state(
+            &owner,
+            &Fixture::reference(&landed),
+            TriggerOp::Pause,
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(!head_step(&mut tx).active);
+    assert!(f.m.runtime.head_triggers(&owner).is_empty());
+    let red = f.set(
+        json!({"name": "Repair API main CI",
+            "source": {"kind": "branch_ci_failed", "target_id": id(1), "watch": watch},
+            "action": {"placement": "pause"}}),
+        &mut tx,
+    );
+    assert!(
+        !f.m.runtime
+            .trigger_head_step(&owner, &red.trigger.trigger_id, 0, &mut tx)
+            .active
+    );
+}
+
 /// A ticket opened in the project is one delivery when it is open, carries the
 /// trigger's tag and was created after the trigger started firing; an edit of it later
 /// records nothing; a ticket without the tag, or one closed, fires nothing.

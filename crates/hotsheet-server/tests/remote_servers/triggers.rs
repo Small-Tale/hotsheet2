@@ -459,3 +459,172 @@ async fn hs2_kxka7x_a_ticket_opened_and_a_red_branch_fire_once_through_the_follo
     }
     world.host.begin_stopping();
 }
+
+/// HS2-W8S3TV: a `commit_landed` trigger learns a landed commit from the branch's head
+/// itself, with no CI run reported for it: the server's head watch long-polls the hosted
+/// head, which answers when the checkout's remote-tracking ref moves (its ref watch, by
+/// kernel events) rather than at the end of its wait. Each move is one delivery; the
+/// watch Job the CI watch started is never judged. A hosted head read with the head
+/// already known answers early on a move, and at once when it already differs.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_w8s3tv_a_landed_commit_fires_from_the_branch_head_without_ci() {
+    let world = World::new(&["tickets_read"], PUSH_AGENT, PUSH_PLUGIN).await;
+    world.host.spawn_orchestration_automation();
+    git(
+        &world.project,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example/widgets.git",
+        ],
+    );
+    let commit = |message: &str| {
+        git(
+            &world.project,
+            &[
+                "-c",
+                "user.email=t@example.invalid",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                message,
+            ],
+        );
+        git(&world.project, &["rev-parse", "HEAD"])
+    };
+    // What a fetch (or a push from this checkout) does: move the remote-tracking ref.
+    let land = |sha: &str| {
+        git(
+            &world.project,
+            &["update-ref", "refs/remotes/origin/main", sha],
+        )
+    };
+    let base = commit("base");
+    land(&base);
+
+    // The hosted read: an unchanged head waits for the ref to move.
+    let checkout = world.checkout.id.clone();
+    let head_url = |known: &str, wait_ms: u64| {
+        format!(
+            "/checkouts/{checkout}/target-branch-head?branch=main&known={known}&wait_ms={wait_ms}"
+        )
+    };
+    let (status, now) = super::orchestration::api(
+        world.router.clone(),
+        "GET",
+        &format!("/checkouts/{checkout}/target-branch-head?branch=main"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{now}");
+    assert_eq!(now["commit"], base.as_str());
+    let early = commit("early");
+    let started = std::time::Instant::now();
+    let (router, url) = (world.router.clone(), head_url(&base, 8_000));
+    let waiting = tokio::spawn(async move {
+        super::orchestration::api(router, "GET", &url, Value::Null, true).await
+    });
+    land(&early);
+    let (status, moved) = waiting.await.unwrap();
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    assert_eq!(moved["commit"], early.as_str());
+    assert!(
+        started.elapsed() < std::time::Duration::from_millis(7_500),
+        "the move answered the wait: {:?}",
+        started.elapsed()
+    );
+    // A head that already differs answers at once.
+    let started = std::time::Instant::now();
+    let (_, differs) = super::orchestration::api(
+        world.router.clone(),
+        "GET",
+        &head_url(&base, 8_000),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(differs["commit"], early.as_str());
+    assert!(started.elapsed() < std::time::Duration::from_millis(7_500));
+
+    // The trigger, turned On by a person.
+    let (status, set) = world
+        .call(
+            "POST",
+            "/triggers/set",
+            json!({"name":"Validate merged commits",
+                "source":{"kind":"commit_landed","target_id":TARGET,
+                    "watch":{"repository":"example/widgets","workflow":"ci.yml","branch":"main"}},
+                "action":{"placement":"pause"},"actor":person()}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let id = set["trigger_id"].as_str().unwrap().to_owned();
+    let (status, on) = world
+        .call(
+            "POST",
+            "/triggers/on",
+            json!({"trigger_id":id,"actor":person()}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{on}");
+    // The head watch learns the head; nothing is delivered for it.
+    until(&world, "the head watch's seed", || async {
+        let shown = trigger(&world, &id).await;
+        (shown["cursor"]["branch_head"] == early.as_str()).then_some(shown)
+    })
+    .await;
+    assert!(history(&trigger(&world, &id).await).is_empty());
+
+    // A commit lands: one delivery, with no CI verdict anywhere.
+    let landed = commit("landed");
+    land(&landed);
+    let shown = until(&world, "the landed commit delivery", || async {
+        let shown = trigger(&world, &id).await;
+        (!history(&shown).is_empty()).then_some(shown)
+    })
+    .await;
+    assert_eq!(
+        history(&shown),
+        [(format!("commit:main:{landed}"), "applied".into(), 1)]
+    );
+    assert_eq!(shown["history"][0]["evidence"]["commit"], landed.as_str());
+    let jobs = JobStore::at(&world.home);
+    assert!(
+        jobs.list(&checkout)
+            .map(|listed| listed.jobs.iter().all(|job| !matches!(
+                job.status,
+                hotsheet_jobs::Status::Succeeded | hotsheet_jobs::Status::Failed
+            )))
+            .unwrap_or(true),
+        "no CI watch was judged"
+    );
+    // A second commit lands: one more delivery.
+    let next = commit("next");
+    land(&next);
+    let shown = until(&world, "the next landed commit", || async {
+        let shown = trigger(&world, &id).await;
+        (history(&shown).len() >= 2).then_some(shown)
+    })
+    .await;
+    assert_eq!(
+        history(&shown),
+        [
+            (format!("commit:main:{landed}"), "applied".into(), 1),
+            (format!("commit:main:{next}"), "applied".into(), 1)
+        ]
+    );
+    let (status, paused) = world
+        .call(
+            "POST",
+            "/triggers/pause",
+            json!({"trigger_id":id,"actor":person()}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{paused}");
+    world.host.begin_stopping();
+}

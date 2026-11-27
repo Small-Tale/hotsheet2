@@ -8027,6 +8027,21 @@ uses the ordinary Always Allow.
   moved away is read again. The first step only learns the head: nothing earlier is
   delivered. The provider is only ever contacted by the Job monitor, inside its own
   back-off.
+- **Commit landed, from the branch itself (HS2-W8S3TV).** A `commit_landed` trigger
+  also runs a **head watch**, so a branch without CI lands commits too and a landed
+  commit is delivered when it lands, not when its CI run reports. Its first step reads
+  the head and delivers nothing (`cursor.branch_head`). Each later step holds one
+  bounded long poll on `target-branch-head?branch=&known=<head>&wait_ms=`: where the
+  project lives, an unchanged head waits on that server's own target feed for the
+  checkout, whose ref watch reports its remote-tracking refs moving by kernel events
+  (HS2-XA9DZA), and answers as soon as the head differs (else with the unchanged head
+  when the wait ends). A new head is one `commit_landed` delivery keyed
+  `commit:<branch>:<sha>`, the key the CI watch uses for a landed commit, so the two
+  sources never deliver one commit twice; a head moved back to a commit already
+  delivered is already handled. A host without a feed (the bare CLI) or an older host
+  answers at once, and the loop backs off as the CI watch does. Only a move of the
+  host's `origin/<branch>` (a push from it, or a fetch) wakes the wait; a host that
+  never fetches still learns landed commits from CI.
 
 ### Outages and notifications
 
@@ -8098,7 +8113,7 @@ hotsheet-cli ... orchestration trigger pass --project <owner>
 | Route                                                                                                       | Methods and purpose                                                     |
 | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `/checkouts/{owner}/orchestration/triggers/{list,show,review,set,remove,on,dry_run,pause,resume,fire,pass}` | POST; machine-local                                                     |
-| `/checkouts/{checkout}/target-branch-head?branch=`                                                          | GET; hosted half of a branch watch, ordinary authenticated project data |
+| `/checkouts/{checkout}/target-branch-head?branch=[&known=&wait_ms=]`                                        | GET; hosted half of a branch watch, ordinary authenticated project data |
 
 `pass` takes an optional `at_ms` that only a test build (the isolated test permission
 vault) honours, so a real-server test reaches a schedule's slot. MCP `hotsheet_targets`

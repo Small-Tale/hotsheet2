@@ -490,6 +490,10 @@ pub struct TriggerCursor {
     /// The branch head the branch watch follows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch_commit: Option<String>,
+    /// HS2-W8S3TV: the branch head a `commit_landed` trigger last saw where the project
+    /// lives (its remote-tracking ref), read from the branch itself, not from CI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_head: Option<String>,
 }
 
 /// A source that cannot be followed right now. Shown on the trigger and announced
@@ -605,6 +609,7 @@ impl Trigger {
             schedule_after_ms: Some(now_ms),
             run_events,
             branch_commit: None,
+            branch_head: None,
         };
         self.queued = None;
         self.warning = None;
