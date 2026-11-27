@@ -40,7 +40,8 @@ libc.workspace = true
 tokio-tungstenite.workspace = true
 futures-util.workspace = true
 # Session push (HS2-PEJ962): loopback HTTP calls into a launched tool's own session API.
-ureq.workspace = true
+# HS2-9ABVDW: still on ureq 2 until this crate moves to hotsheet-http.
+ureq = "2.12"
 base64.workspace = true
 # The Codex rollout watch (HS2-CYHAWB) follows a session file by change notification and
 # compares its RFC 3339 record times with the moment the session reported. HS2-654VBY: it

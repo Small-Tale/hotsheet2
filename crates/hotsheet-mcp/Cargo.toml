@@ -20,7 +20,8 @@ serde_json.workspace = true
 base64.workspace = true
 anyhow.workspace = true
 clap.workspace = true
-ureq.workspace = true
+# HS2-9ABVDW: still on ureq 2 until this crate moves to hotsheet-http.
+ureq = "2.12"
 percent-encoding.workspace = true
 hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true

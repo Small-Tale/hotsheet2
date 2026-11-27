@@ -366,6 +366,20 @@ content cannot inject markup. HTTP notifiers (ntfy, later webhooks) reuse the ex
 `ureq` dependency. Each transport sits behind an injectable trait so tests never open a
 socket, speak aloud, or send mail. Detail: [32](32-notifier-plugins.md).
 
+## 9.17 Outbound HTTP: **`ureq` 3 through one `hotsheet-http` baseline** — **Decided** (HS2-9ABVDW, 2026-11-27)
+
+Every outbound HTTP request is blocking `ureq` 3 (3.5.2, released 2026-11-12). Agents are
+made by the `hotsheet-http` crate (`config()` then `build()`), never from `ureq`'s own
+defaults, so the behaviour the workspace had on `ureq` 2 is set in one place and pinned by
+`crates/hotsheet-http/tests/baseline.rs`: proxy environment variables are never read, at
+most four redirects are followed (each drops `Authorization` and `Cookie`), connecting is
+bounded by 30 seconds, and TLS uses the ring provider with Mozilla's roots and verification
+on. `hotsheet_http::failure_kind` sorts a failure into the kinds callers branch on (a
+connection or TLS handshake that failed, a name that did not resolve, an unusable URL, too
+many redirects, an HTTP status, a broken connection). `ureq` 3 was chosen over staying on
+`ureq` 2 because `Agent::shutdown` closes a response being read from another thread on
+every platform, which an abandoned claim wait needs (HS2-VDF7VS, HS2-4XC2Y3).
+
 ---
 
 ## 9.11 Decision status
@@ -395,6 +409,7 @@ socket, speak aloud, or send mail. Detail: [32](32-notifier-plugins.md).
 | —          | Ticket providers                      | **Normalized provider contract; git default; external trackers direct; no continuous mirroring** — §9.15 / [16](16-external-sync-interface.md)                                         |
 | —          | Plugin crates                         | **One crate per plugin type** (`hotsheet-aitools`, `hotsheet-providers`, `hotsheet-notify`) — [12](12-code-organization-and-testing.md) §12.2.1                                        |
 | —          | Notifier delivery                     | **`lettre` SMTP (rustls) + `pulldown-cmark`; HTTP via existing `ureq`** — §9.16 / [32](32-notifier-plugins.md)                                                                         |
+| —          | Outbound HTTP                         | **`ureq` 3 agents built only through the `hotsheet-http` baseline** — §9.17                                                                                                            |
 | —          | Deferred past v1                      | cross-server views (O2), iOS push (O5), remote terminals over wss (O6), iOS local stores (O4)                                                                                          |
 
 **Still open:**
