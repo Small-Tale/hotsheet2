@@ -1061,10 +1061,20 @@ Newly created repositories still open the backup and push step (HS2-7VB81E).
   save that failed at page hide, whose local copy also stays until the retry commits. The
   focus-loss autosave remembers the failure by its recovery destination (project, ticket,
   field, and note), so the retry never reaches another ticket or note. It never runs while a
-  field conflict owns the edit: the inspector's conflict card, or a linked reader's
-  overlapping-edit error, which waits for new typing instead of resending the draft over the
-  other edit. Once the text matches the ticket again (after Use Theirs or a successful Apply)
+  field conflict owns the edit: the inspector's conflict card, or a linked reader frame's
+  own card. New typing in that field settles the card instead of resending the draft over
+  the other edit. Once the text matches the ticket again (after Use Theirs or a successful Apply)
   it sends nothing (HS2-SJ5TCW, HS2-Y0VRXR).
+  A linked reader's Details, note, blocked-reason, title, or tags save first auto-resolves a
+  concurrent remote edit with the same three-way merge as the inspector. Only a real
+  overlap that cannot merge shows the inspector's `TicketFieldConflict` card. That card is
+  the same component, placed beneath the field it resolves (or under the title) in that
+  frame (HS2-3TSEAX). The frame takes the remote ticket, and the card keeps the user's text
+  as "Your version" with an editable merge. A focus loss closes nothing the card owns and
+  writes nothing. Moving focus from Details into its card keeps the editor open. Use Theirs
+  keeps the remote text without a write. Apply Merged Value saves the merge once to that
+  frame's own ticket. Either choice settles the field's local recovery copy, Apply only
+  after its save commits (HS2-JT2AFG).
   A recently viewed ticket shown from cache and refreshed after an edit began is
   reconciled like a live refresh, so the blur save uses the refreshed token and an editor
   with nothing typed adopts the refreshed text (HS2-7D3MPP). Sometimes a list refresh would deselect the ticket being edited,

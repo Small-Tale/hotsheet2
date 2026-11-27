@@ -1,6 +1,7 @@
 import type { Capabilities, CodeReview, FullTicket } from './api';
 import type { InspectorTab } from './components/ticket-inspector';
 import type { InlineFeedbackReply } from './feedback-replies';
+import type { TicketFieldConflict } from './ticket-field-reconciliation';
 
 export interface TicketReaderFrame {
   id: string;
@@ -14,6 +15,17 @@ export interface TicketReaderFrame {
   edit: TicketReaderEditState;
   /** This frame's own Code Review tab, loaded from its project for its ticket (HS2-9Q4AFB). */
   codeReview?: TicketReaderCodeReviewState;
+  /**
+   * An overlapping save this frame could not merge, shown as the inspector's conflict card beneath its
+   * field until the user chooses Use Theirs or Apply Merged Value (HS2-JT2AFG).
+   */
+  fieldConflict?: TicketReaderFieldConflict;
+}
+
+/** A linked reader's unresolved field conflict and the merged text being edited in its card (HS2-JT2AFG). */
+export interface TicketReaderFieldConflict {
+  conflict: TicketFieldConflict;
+  resolution: string;
 }
 
 export interface TicketReaderCodeReviewState {
@@ -213,4 +225,45 @@ export function clearFrameFeedbackReply(edit: TicketReaderEditState, noteId: str
     inlineFeedbackReplies: { ...edit.inlineFeedbackReplies, [noteId]: [] },
     feedbackChoiceSelections: { ...edit.feedbackChoiceSelections, [noteId]: [] },
   };
+}
+
+/** Show `conflict` in the frame's card, its merge starting from the user's own text (HS2-JT2AFG). */
+export function showReaderFieldConflict(frame: TicketReaderFrame, conflict: TicketFieldConflict): TicketReaderFrame {
+  return { ...frame, fieldConflict: { conflict, resolution: conflict.mine } };
+}
+
+/** The merged text the user is editing in the frame's conflict card (HS2-JT2AFG). */
+export function editReaderFieldConflict(frame: TicketReaderFrame, resolution: string): TicketReaderFrame {
+  return frame.fieldConflict ? { ...frame, fieldConflict: { ...frame.fieldConflict, resolution } } : frame;
+}
+
+/**
+ * Drop the frame's conflict card once a newer save of the same field starts, because the user typed
+ * into that field again (HS2-Y0VRXR, HS2-JT2AFG). A conflict on another field stays.
+ */
+export function settleReaderFieldConflict(frame: TicketReaderFrame, keys: readonly string[]): TicketReaderFrame {
+  if (!frame.fieldConflict || !keys.includes(frame.fieldConflict.conflict.key)) return frame;
+  return { ...frame, fieldConflict: undefined };
+}
+
+/**
+ * Resolve the frame's conflict card with `value` (their text for Use Theirs, the merged text for Apply
+ * Merged Value): the field's open editor takes `value` on top of `base`, the remote text it now holds,
+ * so the next focus loss sends nothing unless `value` still differs from the ticket (HS2-JT2AFG).
+ */
+export function resolveReaderFieldConflict(frame: TicketReaderFrame, value: string, base: string): TicketReaderFrame {
+  const conflict = frame.fieldConflict?.conflict;
+  if (!conflict) return frame;
+  const edit = { ...frame.edit };
+  if (conflict.field === 'details' && edit.detailsMode === 'write') {
+    edit.detailsDraft = value;
+    edit.detailsBase = base;
+  } else if (conflict.field === 'blocked_reason' && edit.blockedReasonEditing) {
+    edit.blockedReasonDraft = value;
+    edit.blockedReasonBase = base;
+  } else if (conflict.field === 'note' && edit.editingNoteId === conflict.key.slice('note:'.length)) {
+    edit.noteDraft = value;
+    edit.noteBase = base;
+  }
+  return { ...frame, edit, fieldConflict: undefined };
 }

@@ -109,6 +109,7 @@ import {
   noteEditPatch,
   rebaseDraftValue,
   reconcileTicketPatch,
+  resolvedConflictPatch,
   type TicketFieldConflict,
   ticketFieldLabel,
   ticketFieldText,
@@ -128,6 +129,9 @@ import {
   adoptCommittedReaderDrafts,
   linkedReaderPatchAllowed,
   reconcileTicketReaderFrame,
+  resolveReaderFieldConflict,
+  settleReaderFieldConflict,
+  showReaderFieldConflict,
   type TicketReaderFrame,
   updateTicketReaderFrame,
 } from '../ticket-reader-stack';
@@ -974,14 +978,26 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       key = conflictDestination(conflict);
     if (storage && key) clearTicketDraft(storage, key);
   }
-  // Linked-reader destinations whose last save met an overlapping remote edit. A linked reader has no
-  // conflict card: its frame now holds the remote ticket, so resending the unchanged draft would
-  // overwrite that edit. The retry waits for the user to type again (HS2-Y0VRXR).
-  const linkedConflictDestinations = new Set<string>();
-  /** A field conflict owns the edit at `destination`, so a failed save there is neither kept nor retried. */
+  /** The recovery destination a linked reader frame's conflict card owns (HS2-JT2AFG). */
+  const linkedConflictDestination = (frame: TicketReaderFrame) =>
+    frame.fieldConflict &&
+    conflictDestination(frame.fieldConflict.conflict, (field, noteId) =>
+      ticketDraftKey(frame.projectId, frame.ticket.qualified_id, field, noteId),
+    );
+  /**
+   * A field conflict owns the edit at `destination`, so a failed save there is neither kept nor retried:
+   * the inspector's card, or a linked reader frame's card (HS2-Y0VRXR, HS2-JT2AFG). The frame now holds
+   * the remote ticket, so resending the unchanged draft would overwrite the other edit unreviewed.
+   */
   const conflictOwns = (destination: string) =>
-    linkedConflictDestinations.has(destination) ||
+    linkedReaderStack.value.some((frame) => linkedConflictDestination(frame) === destination) ||
     (fieldConflict.value !== undefined && conflictDestination(fieldConflict.value) === destination);
+  /** A linked reader conflict resolved by the user settles its recovery copy, as the inspector's does (HS2-JT2AFG). */
+  function clearLinkedConflictRecoveryCopy(frame: TicketReaderFrame) {
+    const storage = draftStorage(),
+      key = linkedConflictDestination(frame);
+    if (storage && key) clearTicketDraft(storage, key);
+  }
   /** The field text a failed save is retried against; undefined while that ticket or note is not loaded. */
   const committedFieldText = (ticket: FullTicket | null | undefined, field: TicketDraftField, noteId?: string) =>
     !ticket || (field === 'note' && !ticket.notes.some((note) => note.id === noteId))
@@ -1159,14 +1175,12 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   async function updateLinkedReader(frameId: string, patch: Record<string, unknown>, dismissedRequestId?: string) {
     const frame = linkedReaderStack.value.find((item) => item.id === frameId);
     if (!frame || !linkedReaderPatchAllowed(frame.capabilities, patch)) return false;
-    const frameKey = (field: TicketDraftField, noteId?: string) =>
-      ticketDraftKey(frame.projectId, frame.ticket.qualified_id, field, noteId);
-    // A new save of a field the user typed into again settles its earlier conflict (HS2-Y0VRXR).
-    for (const field of DRAFT_FIELDS)
-      if (Object.hasOwn(patch, field))
-        linkedConflictDestinations.delete(
-          frameKey(field, field === 'note' && typeof patch.note_id === 'string' ? patch.note_id : undefined),
-        );
+    // A new save of a field the user typed into again settles its earlier conflict card (HS2-Y0VRXR,
+    // HS2-JT2AFG); a conflict on another field stays.
+    const patchedKeys = Object.keys(patch).map((field) =>
+      field === 'note' && typeof patch.note_id === 'string' ? `note:${patch.note_id}` : field,
+    );
+    replaceLinkedReaderFrame(frameId, (current) => settleReaderFieldConflict(current, patchedKeys));
     const client = new Api(frame.apiPath);
     let base = frame.ticket,
       pending: TicketPatch = patch;
@@ -1207,13 +1221,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           }
           if (reconciled.conflicts.length) {
             // Reconciling compares against the frame's draft, so typed text must be in it (HS2-WV0VPE).
+            // The frame takes the remote ticket and shows the inspector's conflict card beneath the field:
+            // the user's text stays in the card until Use Theirs or Apply Merged Value (HS2-JT2AFG).
             flushDraftInputs();
-            replaceLinkedReaderFrame(frameId, (current) => reconcileTicketReaderFrame(current, remote));
-            for (const conflict of reconciled.conflicts) {
-              const destination = conflictDestination(conflict, frameKey);
-              if (destination) linkedConflictDestinations.add(destination);
-            }
-            error.value = `This linked ticket's ${ticketFieldLabel(reconciled.conflicts[0].field).toLocaleLowerCase()} changed remotely in the same place you edited. Your draft was preserved; review it and try again.`;
+            replaceLinkedReaderFrame(frameId, (current) =>
+              showReaderFieldConflict(reconcileTicketReaderFrame(current, remote), reconciled.conflicts[0]),
+            );
+            error.value = '';
             return false;
           }
           if (
@@ -1248,6 +1262,37 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     }
   }
 
+  /**
+   * Resolve a linked reader frame's conflict card (HS2-JT2AFG), as the inspector's card resolves its own:
+   * Use Theirs keeps the remote text and settles the recovery copy; Apply Merged Value saves the merged
+   * text to the frame's ticket and settles the copy once that save lands, so a failed save stays recoverable.
+   */
+  async function resolveLinkedReaderConflict(frameId: string, choice: 'theirs' | 'merged'): Promise<boolean> {
+    const frame = linkedReaderStack.value.find((item) => item.id === frameId),
+      owned = frame?.fieldConflict;
+    if (!frame || !owned) return false;
+    const { conflict, resolution } = owned;
+    // The choice supersedes any text still queued for that field's focus-loss save.
+    const saves = linkedReaderAutosaves.get(frameId);
+    if (conflict.field === 'details') saves?.details.cancel();
+    else if (conflict.field === 'blocked_reason') saves?.blocked.cancel();
+    else if (conflict.field === 'note') saves?.note.cancel();
+    if (choice === 'theirs') {
+      clearLinkedConflictRecoveryCopy(frame);
+      replaceLinkedReaderFrame(frameId, (current) =>
+        resolveReaderFieldConflict(current, conflict.theirs, conflict.theirs),
+      );
+      return true;
+    }
+    if (conflict.field === 'title' && !resolution.trim()) {
+      error.value = 'Ticket title cannot be empty.';
+      return false;
+    }
+    replaceLinkedReaderFrame(frameId, (current) => resolveReaderFieldConflict(current, resolution, conflict.theirs));
+    const saved = await updateLinkedReader(frameId, resolvedConflictPatch(conflict, resolution, frame.ticket));
+    if (saved) clearLinkedConflictRecoveryCopy(frame);
+    return saved;
+  }
   const linkedReaderAutosaves = new Map<
     string,
     {
@@ -3125,6 +3170,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     applyTicketPatch,
     restoreTicketDraft,
     clearConflictRecoveryCopy,
+    resolveLinkedReaderConflict,
     flushTicketDrafts,
     flushSelectedTicketEdits,
     captureTicketDraftRecovery,

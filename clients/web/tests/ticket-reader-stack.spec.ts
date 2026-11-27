@@ -943,12 +943,13 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
   await expect(page.locator('.app-error')).toHaveCount(0);
   await rendered.click({ position: { x: 4, y: 4 } });
   await expect(editor).toHaveValue('First line, edited in the reader\nSecond line\nAppended elsewhere');
-  // A genuine overlap keeps the draft and says so instead of silently replacing it.
+  // A genuine overlap keeps the draft and asks with the conflict card instead of silently replacing it (HS2-JT2AFG).
   details = 'First line, rewritten elsewhere\nSecond line\nAppended elsewhere';
   token = 'remote-overlap';
   await editor.fill('First line, rewritten here\nSecond line\nAppended elsewhere');
   await editor.blur();
-  await expect(page.locator('.app-error')).toContainText('changed remotely in the same place you edited');
+  await expect(reader.getByRole('region', { name: 'Resolve details Conflict' })).toBeVisible();
+  await expect(page.locator('.app-error')).toHaveCount(0);
   await expect(editor).toHaveValue('First line, rewritten here\nSecond line\nAppended elsewhere');
 });
 
@@ -1016,20 +1017,156 @@ test('retries a failed linked reader Details save on the next focus loss, never 
   await expect(rendered).toContainText('First line, edited in the reader');
   expect(patches).toHaveLength(3);
 
-  // An overlapping remote edit keeps the draft with an error; leaving again without typing must not
-  // send the draft over the other edit.
+  // An overlapping remote edit hands the draft to the frame's conflict card; leaving again without typing
+  // must not send the draft over the other edit (HS2-JT2AFG).
   await rendered.click({ position: { x: 4, y: 4 } });
   details = 'First line, rewritten elsewhere\nSecond line';
   token = 'remote-overlap';
   await editor.fill('First line, rewritten here\nSecond line');
   await editor.blur();
-  await expect(page.locator('.app-error')).toContainText('changed remotely in the same place you edited');
+  const card = reader.getByRole('region', { name: 'Resolve details Conflict' });
+  await expect(card).toBeVisible();
   const sent = patches.length;
   await editor.focus();
   await editor.blur();
   await page.waitForTimeout(300);
   expect(patches).toHaveLength(sent);
   expect(details).toBe('First line, rewritten elsewhere\nSecond line');
+  // The card still owns the user's text after that focus loss.
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('textbox', { name: 'Merged details' })).toHaveValue(
+    'First line, rewritten here\nSecond line',
+  );
+});
+
+test('keeps a linked reader overlap recoverable in the conflict card beneath its field (HS2-JT2AFG)', async ({
+  page,
+}) => {
+  await mockLayeredProjects(page);
+  let details = 'First line\nSecond line',
+    noteText = 'Original note',
+    token = 'token-target';
+  const patches: Array<Record<string, unknown>> = [];
+  const ticketJson = () => ({
+    store: target.connection_id,
+    ...target,
+    details,
+    blocked_reason: null,
+    concurrency_token: token,
+    notes: [
+      {
+        id: 'N1',
+        kind: 'regular',
+        created_at: '2026-09-11T00:02:00Z',
+        edited_at: '2026-09-11T00:02:00Z',
+        text: noteText,
+      },
+    ],
+    attachments: [],
+  });
+  await page.route('**/project-api/target-project/**/tickets/git-target%3Atarget', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: ticketJson() });
+    if (request.method() !== 'PATCH') return route.fallback();
+    const patch = request.postDataJSON() as Record<string, unknown>;
+    patches.push(patch);
+    if (patch.expected_token !== token)
+      return route.fulfill({
+        status: 409,
+        json: { error: "ticket 'HS2-STALE' changed since it was read", code: 'ticket_changed' },
+      });
+    if (typeof patch.details === 'string') details = patch.details;
+    if (typeof patch.note === 'string') noteText = patch.note;
+    token = `committed-${patches.length}`;
+    return route.fulfill({ json: ticketJson() });
+  });
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await openProjects(page);
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  const rendered = reader.locator('[data-action="edit-markdown"]');
+  const editor = reader.getByRole('textbox', { name: 'Ticket details' });
+  const card = reader.getByRole('region', { name: 'Resolve details Conflict' });
+  const merged = card.getByRole('textbox', { name: 'Merged details' });
+
+  // 1. An overlap shows the inspector's card beneath Details, keeping the user's text.
+  await rendered.click({ position: { x: 4, y: 4 } });
+  details = 'First line, rewritten elsewhere\nSecond line';
+  token = 'remote-1';
+  await editor.fill('First line, rewritten here\nSecond line');
+  await editor.blur();
+  await expect(card).toBeVisible();
+  expect(patches).toHaveLength(1);
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  await expect(card).toContainText('First line, rewritten elsewhere');
+  await expect(card).toContainText('First line, rewritten here');
+  await expect(merged).toHaveValue('First line, rewritten here\nSecond line');
+  // The card sits beneath the Details section, never above it (HS2-3TSEAX).
+  const detailsBox = await reader.locator('[data-component="markdown-editor"]').first().boundingBox(),
+    cardBox = await card.boundingBox();
+  expect(cardBox!.y).toBeGreaterThan(detailsBox!.y);
+  // A focus loss with no typing sends nothing and leaves the card owning the user's text.
+  await editor.focus();
+  await editor.blur();
+  await page.waitForTimeout(300);
+  expect(patches).toHaveLength(1);
+  await expect(card).toBeVisible();
+
+  // 2. Use Theirs keeps the remote text without a write.
+  await card.getByRole('button', { name: 'Use Theirs' }).click();
+  await expect(card).toHaveCount(0);
+  await expect(rendered).toContainText('First line, rewritten elsewhere');
+  expect(patches).toHaveLength(1);
+  if (await editor.isVisible()) await editor.blur();
+  await page.waitForTimeout(300);
+  expect(patches).toHaveLength(1);
+
+  // 3. A second overlap: typing in the merge field never writes; Apply Merged Value saves once.
+  await rendered.click({ position: { x: 4, y: 4 } });
+  await expect(editor).toHaveValue('First line, rewritten elsewhere\nSecond line');
+  details = 'First line, rewritten a third way\nSecond line';
+  token = 'remote-2';
+  await editor.fill('First line, mine again\nSecond line');
+  await editor.blur();
+  await expect(card).toBeVisible();
+  expect(patches).toHaveLength(2);
+  await merged.fill('First line, both of ours\nSecond line');
+  await page.waitForTimeout(300);
+  expect(patches).toHaveLength(2);
+  await card.getByRole('button', { name: 'Apply Merged Value' }).click();
+  await expect.poll(() => details).toBe('First line, both of ours\nSecond line');
+  expect(patches.at(-1)).toMatchObject({
+    details: 'First line, both of ours\nSecond line',
+    expected_token: 'remote-2',
+  });
+  await expect(card).toHaveCount(0);
+  // Focus moved from the editor into its card, so the editor stayed open (HS2-3TSEAX); it now holds the
+  // saved merge, and leaving it closes on that text without another write.
+  await expect(editor).toHaveValue('First line, both of ours\nSecond line');
+  await editor.focus();
+  await editor.blur();
+  await expect(rendered).toContainText('First line, both of ours');
+  await page.waitForTimeout(300);
+  expect(patches).toHaveLength(3);
+
+  // 4. A note overlap shows its card beneath that note; Apply saves to the frame's own ticket.
+  await reader
+    .locator('[data-note-id="N1"] .note-card__body p')
+    .first()
+    .click({ position: { x: 4, y: 4 } });
+  const noteEditor = reader.getByRole('textbox', { name: 'Note body' });
+  await expect(noteEditor).toBeVisible();
+  noteText = 'Note rewritten elsewhere';
+  token = 'remote-3';
+  await noteEditor.fill('Note rewritten here');
+  await noteEditor.blur();
+  const noteConflict = reader.getByRole('region', { name: 'Resolve note Conflict' });
+  await expect(noteConflict).toBeVisible();
+  await expect(noteConflict.getByRole('textbox', { name: 'Merged note' })).toHaveValue('Note rewritten here');
+  await noteConflict.getByRole('button', { name: 'Apply Merged Value' }).click();
+  await expect.poll(() => noteText).toBe('Note rewritten here');
+  expect(patches.at(-1)).toMatchObject({ note_id: 'N1', note: 'Note rewritten here', expected_token: 'remote-3' });
+  await expect(noteConflict).toHaveCount(0);
 });
 
 for (const action of ['Respond', 'No Response Needed'] as const) {

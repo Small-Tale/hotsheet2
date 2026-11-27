@@ -4109,6 +4109,35 @@ test('opens the TicketReader dialog when its entry is chosen from the catalog si
   await expect(reader).toHaveJSProperty('open', true);
 });
 
+test('shows a linked reader overlap as the conflict card beneath its field in the TicketReader demo (HS2-JT2AFG)', async ({
+  page,
+}) => {
+  const reader = page.locator('[data-component="ticket-reader"]'),
+    card = reader.locator('.ticket-info-panel [data-component="ticket-field-conflict"]'),
+    details = reader.locator('.ticket-info-panel__details-surface').first();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    // The plain demo link has no conflict.
+    await page.goto('/ux-demo?component=ticket-reader');
+    await expect(reader).toBeVisible();
+    await expect(card).toHaveCount(0);
+    // Details: the linked reader (2 of 2) shows the card beneath Details; Use Theirs settles it.
+    await page.goto('/ux-demo?component=ticket-reader&field-conflict=details');
+    await expect(card).toHaveAttribute('data-conflict-field', 'details');
+    await expect(reader).toContainText('Reader 2 of 2');
+    const detailsBox = await details.boundingBox(),
+      cardBox = await card.boundingBox();
+    expect(cardBox!.y).toBeGreaterThan(detailsBox!.y);
+    await card.getByRole('button', { name: 'Use Theirs' }).click();
+    await expect(card).toHaveCount(0);
+    // Note: the card sits beneath that note; Apply Merged Value settles it.
+    await page.goto('/ux-demo?component=ticket-reader&field-conflict=note');
+    await expect(card).toHaveAttribute('data-conflict-field', 'note:reader-note');
+    await card.getByRole('button', { name: 'Apply Merged Value' }).click();
+    await expect(card).toHaveCount(0);
+  }
+});
+
 test('closes the TicketReader modal when leaving its demo', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });

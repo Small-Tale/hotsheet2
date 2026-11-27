@@ -933,8 +933,22 @@ inspector in `clients/web/tests/ticket-editor-autosave-transitions.spec.ts`:
 - A stale cached detail refreshed after the edit began: the blur save merges on the refreshed token with no 409 retry, and an untouched open editor adopts the refreshed text.
 
 `clients/web/tests/ticket-reader-stack.spec.ts # retries a failed linked reader Details save on the next focus loss, never over an overlap (HS2-Y0VRXR)`
-drives the same retry in a link-opened reader and checks that a focus loss after an
-overlapping-edit error writes nothing. `clients/web/src/debounced-autosave.test.ts` pins the
+drives the same retry in a link-opened reader. It checks that a focus loss writes nothing
+while the frame's conflict card owns an overlapping edit, and that the card still holds
+the user's text.
+
+`clients/web/tests/ticket-reader-stack.spec.ts # keeps a linked reader overlap recoverable in the conflict card beneath its field (HS2-JT2AFG)`
+walks a linked reader overlap through the shipped reader stack:
+
+- The inspector's `TicketFieldConflict` card appears beneath Details with both versions and the user's text as the merge.
+- A focus loss writes nothing.
+- Use Theirs keeps the remote text with no write.
+- On a second overlap, typing in the merge field writes nothing, and Apply Merged Value saves once on the remote token. The editor stays open on the saved merge and closes with no further write.
+- A note overlap shows its card beneath that note, and Apply saves to the frame's own ticket.
+
+`clients/web/src/ticket-reader-stack.test.ts # linked reader field conflict card (HS2-JT2AFG)` pins the frame helpers: show, edit the merge, keep the card through a refresh, settle only a re-saved field, and resolve into the open editor only. `clients/web/src/ticket-field-reconciliation.test.ts # builds the patch that saves a conflict card choice to the card owner ticket (HS2-JT2AFG)` pins the resolution patch. `clients/web/src/ux-demo/catalog.test.ts # shows a linked reader overlap as the inspector conflict card beneath its field (HS2-JT2AFG)` pins the TicketReader demo's linked-reader conflict state. `clients/web/tests/ux-demo.spec.ts # shows a linked reader overlap as the conflict card beneath its field in the TicketReader demo (HS2-JT2AFG)` opens that state from `/ux-demo?component=ticket-reader&field-conflict=details|note` at wide and phone widths. The modal reader covers the settings rail, so the state is reached by link, as the gallery's `annotation-shapes` showcase is.
+
+`clients/web/src/debounced-autosave.test.ts` pins the
 autosave side: a failure from any flush (blur or page hide) is kept for its destination;
 it is forgotten on success, newer typing, cancel, or a cancel while the save is in flight;
 and an autosave without retry options keeps the flush-only behavior (HS2-Y0VRXR).

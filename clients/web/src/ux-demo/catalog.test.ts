@@ -24,6 +24,8 @@ import {
 } from './connection-details-demo';
 import {
   READER_TITLE_INITIAL,
+  readerFieldConflict,
+  readerFieldConflictFromSearch,
   readerTitle,
   readerTitleDraft,
   readerTitleEditing,
@@ -768,6 +770,36 @@ describe('UX demo catalog', () => {
       readerTitleEditing.value = false;
       readerTitleDraft.value = READER_TITLE_INITIAL;
       readerTitle.value = READER_TITLE_INITIAL;
+    }
+  });
+
+  it('shows a linked reader overlap as the inspector conflict card beneath its field (HS2-JT2AFG)', () => {
+    // The state opens from the demo link, since the modal reader covers the settings rail.
+    expect(readerFieldConflictFromSearch('?component=ticket-reader&field-conflict=details')).toBe('details');
+    expect(readerFieldConflictFromSearch('?component=ticket-reader&field-conflict=note')).toBe('note');
+    expect(readerFieldConflictFromSearch('?component=ticket-reader&field-conflict=title')).toBe('none');
+    expect(readerFieldConflictFromSearch('?component=ticket-reader')).toBe('none');
+    expect(String(TicketReaderDemo())).not.toContain('data-component="ticket-field-conflict"');
+    try {
+      readerFieldConflict.value = 'details';
+      const details = String(TicketReaderDemo());
+      expect(details).toContain('data-conflict-field="details"');
+      expect(details).toContain('Reader 2 of 2');
+      expect(details).toContain('Use Theirs');
+      expect(details).toContain('Apply Merged Value');
+      // Beneath Details, never in the header above it (HS2-3TSEAX).
+      expect(details.indexOf('data-action="edit-markdown"')).toBeGreaterThan(0);
+      expect(details.indexOf('data-conflict-field="details"')).toBeGreaterThan(
+        details.indexOf('data-action="edit-markdown"'),
+      );
+      readerFieldConflict.value = 'note';
+      const note = String(TicketReaderDemo());
+      expect(note).toContain('data-conflict-field="note:reader-note"');
+      expect(note.indexOf('data-conflict-field="note:reader-note"')).toBeGreaterThan(
+        note.indexOf('data-note-id="reader-note"'),
+      );
+    } finally {
+      readerFieldConflict.value = 'none';
     }
   });
 

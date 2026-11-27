@@ -6,11 +6,15 @@ import {
   adoptCommittedReaderDrafts,
   clearFrameFeedbackReply,
   disposeTicketReaderFrames,
+  editReaderFieldConflict,
   linkedReaderCanUpdate,
   linkedReaderPatchAllowed,
   popTicketReaderFrame,
   pushTicketReaderFrame,
   reconcileTicketReaderFrame,
+  resolveReaderFieldConflict,
+  settleReaderFieldConflict,
+  showReaderFieldConflict,
   startedPhasePatch,
   ticketEditTarget,
   ticketReaderEditState,
@@ -304,5 +308,88 @@ describe('layered ticket reader stack', () => {
       noteBase: '',
     });
     expect(ticketReaderEditState(changed).responseRequestId).toBeUndefined();
+  });
+
+  describe('linked reader field conflict card (HS2-JT2AFG)', () => {
+    const conflict = (field: string, key = field) => ({
+      key,
+      field,
+      label: field,
+      base: 'base',
+      mine: 'mine',
+      theirs: 'theirs',
+    });
+    const editing = () => {
+      const current = frame('one', 'alpha', 'HS2-SAME01');
+      current.edit = {
+        ...current.edit,
+        detailsMode: 'write',
+        detailsDraft: 'mine',
+        detailsBase: 'theirs',
+        blockedReasonEditing: true,
+        blockedReasonDraft: 'mine reason',
+        blockedReasonBase: 'theirs reason',
+        editingNoteId: 'note-1',
+        noteDraft: 'mine note',
+        noteBase: 'theirs note',
+      };
+      return current;
+    };
+
+    it('opens the card on the user text, edits the merge, and keeps it through a refresh', () => {
+      const shown = showReaderFieldConflict(editing(), conflict('details'));
+      expect(shown.fieldConflict).toEqual({ conflict: conflict('details'), resolution: 'mine' });
+      const edited = editReaderFieldConflict(shown, 'mine and theirs');
+      expect(edited.fieldConflict?.resolution).toBe('mine and theirs');
+      expect(edited.fieldConflict?.conflict).toBe(shown.fieldConflict?.conflict);
+      // A refresh of the frame's ticket never drops an unresolved card.
+      expect(reconcileTicketReaderFrame(edited, { ...edited.ticket, details: 'later' }).fieldConflict).toEqual(
+        edited.fieldConflict,
+      );
+      // Editing a merge with no card is a no-op.
+      const plain = editing();
+      expect(editReaderFieldConflict(plain, 'ignored')).toBe(plain);
+    });
+
+    it('settles only the conflict of a field saved again, then accepts a new one', () => {
+      const shown = showReaderFieldConflict(editing(), conflict('note', 'note:note-1'));
+      expect(settleReaderFieldConflict(shown, ['details'])).toBe(shown);
+      const settled = settleReaderFieldConflict(shown, ['note:note-1']);
+      expect(settled.fieldConflict).toBeUndefined();
+      const plain = editing();
+      expect(settleReaderFieldConflict(plain, ['details'])).toBe(plain);
+      expect(showReaderFieldConflict(settled, conflict('details')).fieldConflict?.conflict.key).toBe('details');
+    });
+
+    it.each([
+      ['details', 'details', { detailsDraft: 'chosen', detailsBase: 'remote' }],
+      ['blocked_reason', 'blocked_reason', { blockedReasonDraft: 'chosen', blockedReasonBase: 'remote' }],
+      ['note', 'note:note-1', { noteDraft: 'chosen', noteBase: 'remote' }],
+    ] as const)('resolves a %s conflict into its open editor only', (field, key, expected) => {
+      const resolved = resolveReaderFieldConflict(
+        showReaderFieldConflict(editing(), conflict(field, key)),
+        'chosen',
+        'remote',
+      );
+      expect(resolved.fieldConflict).toBeUndefined();
+      expect(resolved.edit).toEqual({ ...editing().edit, ...expected });
+    });
+
+    it('clears the card without touching a closed editor or another note, and ignores a frame without one', () => {
+      const closed = frame('one', 'alpha', 'HS2-SAME01');
+      const resolved = resolveReaderFieldConflict(showReaderFieldConflict(closed, conflict('details')), 'x', 'y');
+      expect(resolved.fieldConflict).toBeUndefined();
+      expect(resolved.edit).toEqual(closed.edit);
+      const otherNote = resolveReaderFieldConflict(
+        showReaderFieldConflict(editing(), conflict('note', 'note:note-2')),
+        'x',
+        'y',
+      );
+      expect(otherNote.edit).toEqual(editing().edit);
+      const title = resolveReaderFieldConflict(showReaderFieldConflict(editing(), conflict('title')), 'x', 'y');
+      expect(title.edit).toEqual(editing().edit);
+      const plain = editing();
+      expect(resolveReaderFieldConflict(plain, 'x', 'y')).toBe(plain);
+    });
   });
 });

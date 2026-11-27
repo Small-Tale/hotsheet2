@@ -358,8 +358,11 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
           ticket.qualified_id,
         )}
         largeText={readerLargeText.value}
-        fieldConflict={editable ? fieldConflict.value : undefined}
-        fieldConflictResolution={editable ? fieldConflictResolution.value : ''}
+        // A linked reader shows its own frame's conflict card, beneath the field it resolves (HS2-JT2AFG).
+        fieldConflict={frame ? frame.fieldConflict?.conflict : editable ? fieldConflict.value : undefined}
+        fieldConflictResolution={
+          frame ? (frame.fieldConflict?.resolution ?? '') : editable ? fieldConflictResolution.value : ''
+        }
         active={active}
         frameId={readerScope}
         open={open}
