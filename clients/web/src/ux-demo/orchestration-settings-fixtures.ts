@@ -14,6 +14,7 @@ import type {
 } from '../api';
 import { ApiHttpError } from '../api';
 import { createOrchestrationSettings, type OrchestrationApi } from '../features/orchestration-settings';
+import type { OrchestrationProjectRow } from '../orchestration-settings-model';
 
 export const DEMO_OWNER = 'launch-0000000000ab';
 export const DEMO_NOW = 1_794_000_000_000;
@@ -462,6 +463,8 @@ export function createDemoOrchestrationSettings(options: { empty?: boolean } = {
     defer: (run) => {
       run();
     },
+    // HS2-M1T6KN: the demo remembers closed project groups in memory, never in the browser's own storage.
+    viewStorage: memoryStorage(),
   });
   settings.remoteLabels.value = DEMO_REMOTE_LABELS;
   return {
@@ -469,9 +472,67 @@ export function createDemoOrchestrationSettings(options: { empty?: boolean } = {
     reset: async () => {
       demo = createDemoOrchestrationApi(options);
       settings.closeDetail(DEMO_OWNER);
+      settings.collapsedGroups.value = new Set();
+      settings.selectedNodes.value = {};
       settings.settings.value = { ...settings.settings.value, [DEMO_OWNER]: undefined };
       await settings.loadType(DEMO_OWNER);
       await settings.loadSettings(DEMO_OWNER);
     },
   };
 }
+
+/** A page-lifetime `Storage` stand-in for a demo's view preferences. */
+export function memoryStorage(): Pick<Storage, 'getItem' | 'setItem'> {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+  };
+}
+
+const demoRow = (
+  targetId: string,
+  label: string,
+  machine: string,
+  options: Partial<OrchestrationProjectRow> = {},
+): OrchestrationProjectRow => {
+  const place = machine
+    ? `${machine === 'This Computer' ? 'Local' : 'Remote'} on ${machine}`
+    : 'Not bound on this computer';
+  return {
+    targetId,
+    label,
+    location: machine ? (machine === 'This Computer' ? 'local' : 'remote') : 'unbound',
+    where: options.siteOf ? `Site of API · ${place}` : place,
+    place,
+    machine,
+    connection: machine ? { label: 'Bound', tone: 'neutral' } : { label: 'Not Bound', tone: 'warning' },
+    ...options,
+  };
+};
+
+/**
+ * HS2-M1T6KN: the Projects tree's states. API has five sites on five machines, one Unreachable, so its summary
+ * names three and "and 2 more"; Docs has one site; Web has two, one Not Bound.
+ */
+export const DEMO_SITE_ROWS: readonly OrchestrationProjectRow[] = [
+  demoRow('demo-api', 'API', 'This Computer', {
+    where: '5 sites · Local on This Computer',
+    system: 'macOS 27.2, arm64',
+  }),
+  demoRow('demo-api-build', 'Build Host · API', 'Build Host', { siteOf: 'demo-api', system: 'Ubuntu 24.04, arm64' }),
+  demoRow('demo-api-ci', 'CI Runner · API', 'CI Runner', { siteOf: 'demo-api' }),
+  demoRow('demo-api-lab', 'Lab Mini · API', 'Lab Mini', { siteOf: 'demo-api' }),
+  demoRow('demo-api-studio', 'Studio Mac · API', 'Studio Mac', {
+    siteOf: 'demo-api',
+    connection: { label: 'Unreachable', tone: 'danger' },
+  }),
+  demoRow('demo-docs', 'Docs', 'This Computer'),
+  demoRow('demo-web', 'Web', 'This Computer', { where: '2 sites · Local on This Computer' }),
+  demoRow('demo-web-laptop', 'Laptop · Web', '', {
+    siteOf: 'demo-web',
+    where: 'Site of Web · Not bound on this computer',
+  }),
+];

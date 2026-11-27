@@ -2,6 +2,7 @@ import { CatalogExample } from '@kerfjs/ui/catalog';
 
 import { OrchestrationSettings } from '../components/orchestration-settings';
 import { wireOrchestrationSettings } from '../components/orchestration-settings-interactions';
+import { projectCollapseKey } from '../orchestration-project-tree';
 import { addChoices, policyDraftFrom, projectRows, siteChoicesByProject } from '../orchestration-settings-model';
 import type { DemoModule } from './demo-module';
 import {
@@ -10,6 +11,7 @@ import {
   DEMO_OPEN_PROJECTS,
   DEMO_OWNER,
   DEMO_REMOTE_LABELS,
+  DEMO_SITE_ROWS,
   demoToolLabel,
 } from './orchestration-settings-fixtures';
 
@@ -43,10 +45,34 @@ export function OrchestrationSettingsDemo() {
           showAllSites={Boolean(state?.showAllSites)}
           openTabs={DEMO_OPEN_PROJECTS.map((project) => project.id)}
           selectedTarget={demo.settings.selected.value[DEMO_OWNER]}
+          selectedNode={demo.settings.selectedNodes.value[DEMO_OWNER]}
+          ownerId={DEMO_OWNER}
+          collapsedGroups={demo.settings.collapsedGroups.value}
           loading={state?.loading ?? true}
           busy={state?.busy}
           message={state?.message}
           policy={{ draft: state?.draft, toolLabel: demoToolLabel }}
+        />
+      </CatalogExample>
+      {/* HS2-M1T6KN: projects with several sites as tree groups, home site first, beside a single-site project. */}
+      <CatalogExample label="Several Sites" viewport={{ width: 'full' }}>
+        <OrchestrationSettings
+          rows={DEMO_SITE_ROWS}
+          ownerId="demo-sites"
+          selectedTarget="demo-api-build"
+          siteChoices={{ 'demo-api': [], 'demo-docs': [], 'demo-web': [] }}
+          policy={{ draft: policyDraftFrom(undefined, ['claude']), toolLabel: demoToolLabel }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Several Sites, Collapsed" viewport={{ width: 'full' }}>
+        <OrchestrationSettings
+          rows={DEMO_SITE_ROWS}
+          ownerId="demo-sites"
+          collapsedGroups={
+            new Set([projectCollapseKey('demo-sites', 'demo-api'), projectCollapseKey('demo-sites', 'demo-web')])
+          }
+          busy={['demo-docs']}
+          policy={{ draft: policyDraftFrom(undefined, ['claude']), toolLabel: demoToolLabel }}
         />
       </CatalogExample>
       <CatalogExample label="No Projects Yet" viewport={{ width: 'full' }}>

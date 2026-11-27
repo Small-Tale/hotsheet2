@@ -9,10 +9,12 @@ import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { Bot, CircleHelp, CircleStop, Hand, MoreHorizontal, PanelBottomOpen, Trash2 } from 'lucide';
@@ -90,6 +92,11 @@ export interface OrchestrationProjectDetailProps {
   /** HS2-NPAZQW: the declared resources and patterns Required Resources offers. */
   resourceChoices?: readonly string[];
   removing?: boolean;
+  /**
+   * HS2-M1T6KN: the project's or site's actions, the same as its context menu in the Projects tree, for the
+   * toolbar's actions menu.
+   */
+  actions?: readonly PopupMenuEntry[];
   toolLabel?: (tool: string) => string;
   /** Formats a time in milliseconds; the catalog passes a fixed clock. */
   formatTime?: (ms: number) => string;
@@ -594,6 +601,23 @@ export function orchestrationProjectPanel(props: OrchestrationProjectDetailProps
       label: 'Project detail toolbar',
       dividerSides: '',
       title: <ToolbarText text={props.label} description={props.where || undefined} />,
+      // HS2-M1T6KN: the row's actions without a right-click.
+      ...(props.actions?.length
+        ? {
+            trailing: (
+              <ToolbarControlGroup appearance="borderless" single nestedDropdown label="Project Actions">
+                <PopupMenu
+                  label={`Actions for ${props.label}`}
+                  icon={menuIcon}
+                  caret={false}
+                  placement="bottom-end"
+                  rootAttributes={{ 'data-orchestration-detail-actions': props.targetId }}
+                  items={props.actions}
+                />
+              </ToolbarControlGroup>
+            ),
+          }
+        : {}),
     },
     toggle: inspectorToggle('Project Detail'),
     content: <OrchestrationProjectDetail {...props} />,

@@ -484,6 +484,8 @@ describe('UX demo catalog', () => {
         'Validation section of the cataloged OrchestrationInspector, rendered for a card with validation steps (HS2-9XJEZC, demoed).',
       'orchestration-plan-section':
         'Plan section of the cataloged OrchestrationInspector, rendered for every selected card (HS2-15G5T4, demoed).',
+      'orchestration-project-actions':
+        'Project and site action menu entries of the cataloged OrchestrationSettings Projects tree and its inspector detail (HS2-M1T6KN, demoed).',
       'sidebar-panel': 'Panel-parts contract and standalone Pane wrapper behind the cataloged sidebars and AppShell.',
       'notification-inspector': 'Empty notification-mode inspector chrome rendered within the cataloged AppShell.',
       'attachment-context-menu': 'Context menu rendered by the demoed attachment surfaces (inspector/gallery).',

@@ -3,28 +3,25 @@ import { rem } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
-import {
-  Cloud,
-  FolderOpen,
-  Group,
-  House,
-  Laptop,
-  MoreHorizontal,
-  Plus,
-  SquareArrowOutUpRight,
-  Trash2,
-  Ungroup,
-  Unlink,
-  Workflow,
-} from 'lucide';
+import { TreeList, type TreeListNode } from '@kerfjs/ui/tree-list';
+import { FolderOpen, House, Layers, MoreHorizontal, Plus, Workflow } from 'lucide';
 
 import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
+import {
+  expandedProjectGroups,
+  flattenProjectTree,
+  projectTree,
+  type ProjectTreeNode,
+  selectedProjectNode,
+} from '../orchestration-project-tree';
 import type { AddChoice, OrchestrationProjectRow, SiteChoice } from '../orchestration-settings-model';
 import { OrchestrationPolicySettings, type OrchestrationPolicySettingsProps } from './orchestration-policy-settings';
+import { placeIcon, projectActionItems } from './orchestration-project-actions';
 
 /** HS2-92FJXM: one checkout the serving machine has open. */
 export interface HostedProjectChoiceView {
@@ -41,6 +38,12 @@ export interface OrchestrationSettingsProps {
   openTabs?: readonly string[];
   /** The project whose detail the inspector shows. */
   selectedTarget?: string;
+  /** HS2-M1T6KN: the tree row the person chose, when it is a project group standing for its home site. */
+  selectedNode?: string;
+  /** HS2-M1T6KN: the orchestration project, whose closed project groups `collapsedGroups` names. */
+  ownerId?: string;
+  /** HS2-M1T6KN: closed project groups as `projectCollapseKey`s; every other group is open. */
+  collapsedGroups?: ReadonlySet<string>;
   loading?: boolean;
   /** Targets, `add` or `policy` with a change in flight. */
   busy?: readonly string[];
@@ -71,14 +74,6 @@ export interface OrchestrationSettingsProps {
 }
 
 const menuIcon = <LucideIcon icon={MoreHorizontal} name="more-horizontal" />;
-const placeIcon = (location: 'local' | 'remote' | 'unbound') =>
-  location === 'remote' ? (
-    <LucideIcon icon={Cloud} name="cloud" />
-  ) : location === 'unbound' ? (
-    <LucideIcon icon={Unlink} name="unlink" />
-  ) : (
-    <LucideIcon icon={Laptop} name="laptop" />
-  );
 
 function addMenuItems(choices: readonly AddChoice[], busy: boolean): PopupMenuEntry[] {
   return [
@@ -108,69 +103,6 @@ function addMenuItems(choices: readonly AddChoice[], busy: boolean): PopupMenuEn
   ];
 }
 
-/**
- * HS2-E9VVQF: a project row's Add a Site submenu: the open projects of its ticket store, Show All
- * Projects for the edge cases, and the regular open flow.
- */
-function siteMenuItems(
-  row: OrchestrationProjectRow,
-  choices: readonly SiteChoice[],
-  showAll: boolean,
-  busy: boolean,
-  hosted = false,
-): PopupMenuEntry[] {
-  const attributes = { 'data-target-id': row.targetId };
-  return [
-    { kind: 'heading', label: showAll ? 'Open Projects' : 'Open Projects in the Same Ticket Store' },
-    ...(choices.length
-      ? choices.map((choice) => ({
-          label: choice.name,
-          action: ACTIONS.addSite.value,
-          icon: placeIcon(choice.location),
-          disabled: busy,
-          details: (
-            <Text variant="span" tone="quiet" size="compact">
-              {[
-                `${choice.location === 'remote' ? 'Remote' : 'Local'} · ${choice.machine}`,
-                choice.sameStore === false
-                  ? 'Another ticket store'
-                  : choice.sameStore === undefined
-                    ? 'Ticket store unknown'
-                    : '',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
-          ),
-          attributes: { ...attributes, 'data-project-id': choice.projectId },
-        }))
-      : [
-          {
-            label: showAll ? 'No other projects are open' : 'No open project uses this ticket store',
-            disabled: true,
-          },
-        ]),
-    { kind: 'divider' },
-    {
-      label: 'Show All Projects',
-      action: ACTIONS.showAllSites.value,
-      checked: showAll,
-      attributes,
-    },
-    ...(hosted
-      ? []
-      : [
-          {
-            label: 'Open Another Project…',
-            action: ACTIONS.openAnotherSite.value,
-            icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
-            disabled: busy,
-            attributes,
-          },
-        ]),
-  ];
-}
-
 /** HS2-92FJXM: + Add Project for a project open from another server: only that server's open projects. */
 function hostedMenuItems(choices: readonly HostedProjectChoiceView[], server: string, busy: boolean): PopupMenuEntry[] {
   return [
@@ -188,6 +120,94 @@ function hostedMenuItems(choices: readonly HostedProjectChoiceView[], server: st
   ];
 }
 
+interface ProjectsTreeInput {
+  rows: readonly OrchestrationProjectRow[];
+  labels: ReadonlyMap<string, string>;
+  openTabs: readonly string[];
+  selectedTarget?: string;
+  selectedNode?: string;
+  ownerId: string;
+  collapsedGroups: ReadonlySet<string>;
+  busy: readonly string[];
+  adding: boolean;
+  siteChoices?: Readonly<Record<string, readonly SiteChoice[]>>;
+  showAllSites: boolean;
+  hostedSites: boolean;
+}
+
+const nodeIcon = (node: ProjectTreeNode) =>
+  node.kind === 'project' ? (
+    <LucideIcon icon={Layers} name="layers" />
+  ) : node.kind === 'home' ? (
+    <LucideIcon icon={House} name="house" />
+  ) : (
+    placeIcon(node.row.location)
+  );
+
+/**
+ * HS2-M1T6KN (Design v1 Concept A): the projects as a Kerf `TreeList`. A project with several sites is a top-level
+ * node with its home site first and then its other sites; a project with one site is a leaf. Every group is open
+ * until a person closes it. TreeList rows hold no "…" menu, so each project and site has a context-mode
+ * `PopupMenu` beside the tree, opened at the pointer by a right-click or at the row by the context-menu key, and
+ * the same actions in its detail's actions menu in the inspector; a group opens its home site's menu.
+ */
+function projectsTree(input: ProjectsTreeInput) {
+  const tree = projectTree(input.rows),
+    busyOf = (targetId: string) => input.busy.includes(targetId);
+  const toNode = (node: ProjectTreeNode): TreeListNode => ({
+    id: node.id,
+    label: node.label,
+    description: node.description,
+    icon: nodeIcon(node),
+    trailing:
+      node.kind !== 'project' && busyOf(node.row.targetId) ? (
+        <LoadingSpinner label={`Changing ${node.label}`} />
+      ) : node.status ? (
+        <Badge tone={node.status.tone} appearance="quiet" size="compact">
+          {node.status.label}
+        </Badge>
+      ) : undefined,
+    rootAttributes:
+      node.kind === 'project'
+        ? { 'data-orchestration-project-group': node.row.targetId }
+        : { 'data-orchestration-project': node.row.targetId },
+    ...(node.children ? { children: node.children.map(toNode) } : {}),
+  });
+  const actionRows = flattenProjectTree(tree).filter((node) => node.kind !== 'project');
+  return (
+    <div data-orchestration-project-tree>
+      <TreeList
+        id="orchestration-projects"
+        label="Orchestrated Projects"
+        nodes={tree.map(toNode)}
+        expanded={expandedProjectGroups(tree, input.ownerId, input.collapsedGroups)}
+        selected={selectedProjectNode(input.selectedTarget, input.selectedNode)}
+        action={ACTIONS.openProjectDetail.value}
+        toggleAction={ACTIONS.toggleProjectGroup.value}
+      />
+      {actionRows.map(({ row }) => {
+        const tabOpen = Boolean(row.tabProjectId && input.openTabs.includes(row.tabProjectId));
+        return (
+          <PopupMenu
+            context
+            label={`Actions for ${row.label}`}
+            rootAttributes={{ 'data-orchestration-project-menu': row.targetId }}
+            items={projectActionItems(row, {
+              tabOpen,
+              busy: busyOf(row.targetId),
+              projectLabel: row.siteOf ? input.labels.get(row.siteOf) : undefined,
+              siteChoices: input.siteChoices ? (input.siteChoices[row.targetId] ?? []) : undefined,
+              showAllSites: input.showAllSites,
+              adding: input.adding,
+              hostedSites: input.hostedSites,
+            })}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * Settings → Orchestration (HS2-W27N1D), shown only for an Orchestration project: the projects it
  * orchestrates, added with + Add Project, then the limits-only policy. Adding a project is the consent
@@ -198,6 +218,9 @@ export function OrchestrationSettings({
   choices = [],
   openTabs = [],
   selectedTarget,
+  selectedNode,
+  ownerId = '',
+  collapsedGroups = new Set<string>(),
   loading = false,
   busy = [],
   message = '',
@@ -273,87 +296,20 @@ export function OrchestrationSettings({
                 rootAttributes={{ 'data-orchestration-empty': '' }}
               />
             ) : (
-              <List gap={rem(0.125)}>
-                {rows.map((row) => {
-                  const attributes = { 'data-target-id': row.targetId },
-                    tabOpen = Boolean(row.tabProjectId && openTabs.includes(row.tabProjectId));
-                  return (
-                    <ListActionRow
-                      label={row.label}
-                      description={[row.where, row.system].filter(Boolean).join(' · ') || undefined}
-                      status={
-                        <Badge tone={row.connection.tone} appearance="quiet" size="compact">
-                          {row.connection.label}
-                        </Badge>
-                      }
-                      icon={placeIcon(row.location)}
-                      iconTile="neutral"
-                      action={ACTIONS.openProjectDetail.value}
-                      itemId={row.targetId}
-                      selected={row.targetId === selectedTarget}
-                      busy={busy.includes(row.targetId)}
-                      rootAttributes={{ 'data-orchestration-project': row.targetId }}
-                      trailingMenu={{
-                        label: `Actions for ${row.label}`,
-                        icon: menuIcon,
-                        items: [
-                          {
-                            label: 'Show Project Tab',
-                            action: ACTIONS.showProjectTab.value,
-                            icon: <LucideIcon icon={SquareArrowOutUpRight} name="square-arrow-out-up-right" />,
-                            disabled: !tabOpen,
-                            disabledReason: tabOpen ? undefined : 'Open this project in a tab first.',
-                            attributes: { ...attributes, 'data-project-id': row.tabProjectId },
-                          },
-                          // HS2-E9VVQF: a project adds a site; a site separates from its project.
-                          ...(row.siteOf
-                            ? [
-                                // HS2-NAA3HV: the site becomes the project's home; the old home becomes its site.
-                                {
-                                  label: `Make ${row.label} the Home Site`,
-                                  action: ACTIONS.makeHomeSite.value,
-                                  icon: <LucideIcon icon={House} name="house" />,
-                                  disabled: busy.includes(row.targetId),
-                                  attributes,
-                                },
-                                {
-                                  label: `Separate from ${labels.get(row.siteOf) ?? 'Project'}`,
-                                  action: ACTIONS.separateSite.value,
-                                  icon: <LucideIcon icon={Ungroup} name="ungroup" />,
-                                  disabled: busy.includes(row.targetId),
-                                  attributes,
-                                },
-                              ]
-                            : siteChoices
-                              ? [
-                                  {
-                                    label: 'Add a Site',
-                                    icon: <LucideIcon icon={Group} name="group" />,
-                                    attributes,
-                                    submenu: siteMenuItems(
-                                      row,
-                                      siteChoices[row.targetId] ?? [],
-                                      showAllSites,
-                                      adding,
-                                      hostedSites,
-                                    ),
-                                  },
-                                ]
-                              : []),
-                          { kind: 'divider' },
-                          {
-                            label: 'Stop Orchestrating…',
-                            action: ACTIONS.removeProject.value,
-                            tone: 'danger',
-                            icon: <LucideIcon icon={Trash2} name="trash-2" />,
-                            attributes,
-                          },
-                        ],
-                      }}
-                    />
-                  );
-                })}
-              </List>
+              projectsTree({
+                rows,
+                labels,
+                openTabs,
+                selectedTarget,
+                selectedNode,
+                ownerId,
+                collapsedGroups,
+                busy,
+                adding,
+                siteChoices,
+                showAllSites,
+                hostedSites,
+              })
             )}
           </List>
         </section>
