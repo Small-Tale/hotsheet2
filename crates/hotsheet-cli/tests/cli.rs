@@ -2104,17 +2104,25 @@ fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
             reader.read_line(&mut line).unwrap();
             assert_eq!(line.trim_end(), format!("{method} {path} HTTP/1.1"));
             let mut secret = None;
+            let mut length = 0usize;
             loop {
                 line.clear();
                 reader.read_line(&mut line).unwrap();
                 if line == "\r\n" {
                     break;
                 }
-                if let Some(value) = line.to_ascii_lowercase().strip_prefix("x-hotsheet-secret:") {
+                let lower = line.to_ascii_lowercase();
+                if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
                     secret = Some(value.trim().to_string());
+                }
+                if let Some(value) = lower.strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap();
                 }
             }
             assert_eq!(secret.as_deref(), Some("command-test-secret"));
+            // Read the whole body before answering: closing with unread request bytes resets
+            // the client's connection before it reads the answer (HS2-AR3X0E).
+            std::io::Read::read_exact(&mut reader, &mut vec![0; length]).unwrap();
             write!(
                 reader.get_mut(),
                 "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -2150,7 +2158,11 @@ fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
     }
     let failed = cli(&["run", "project one", "missing"]);
     assert!(!failed.status.success());
-    assert!(String::from_utf8_lossy(&failed.stderr).contains("unknown configured command"));
+    assert!(
+        String::from_utf8_lossy(&failed.stderr).contains("unknown configured command"),
+        "{}",
+        String::from_utf8_lossy(&failed.stderr)
+    );
     assert!(!String::from_utf8_lossy(&failed.stderr).contains("command-test-secret"));
     server.join().unwrap();
 }

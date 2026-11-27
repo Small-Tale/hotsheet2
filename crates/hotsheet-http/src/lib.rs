@@ -123,6 +123,11 @@ pub fn run(
     }
     match body {
         Some(body) => agent.run(request.body(body)?),
+        // A method that carries a body is sent with an empty one (`Content-Length: 0`), as
+        // `send_empty` does. Without one, ureq 3 frames it as a chunked body of unknown
+        // size, which ureq 2's `call()` never sent and a server that answers without reading
+        // the body turns into a connection reset.
+        None if matches!(method, "POST" | "PUT" | "PATCH") => agent.run(request.body(&[][..])?),
         None => agent.run(request.body(())?),
     }
 }

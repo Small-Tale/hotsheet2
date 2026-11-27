@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 
 use hotsheet_http::{FailureKind, MAX_REDIRECTS, agent, build, config, failure_kind, is_timeout};
 
-/// One request as the fake server saw it.
-#[derive(Debug, Clone)]
+/// One request as the fake server saw it. No derived `Debug`: its headers may carry
+/// credentials (HS2-CQNE4E).
+#[derive(Clone)]
 struct Seen {
     method: String,
     path: String,
@@ -364,6 +365,16 @@ fn hs2_9abvdw_run_sends_any_method_with_or_without_a_body() {
         assert_eq!(request.method, method);
         assert_eq!(request.header("x-synthetic"), Some("1"));
         assert_eq!(request.body, body.unwrap_or_default());
+    }
+    // A body-less POST, PUT or PATCH sends an empty body with `Content-Length: 0`, never a
+    // chunked one, as ureq 2's `call()` did not send one either.
+    for method in ["POST", "PUT", "PATCH"] {
+        hotsheet_http::run(&agent, method, &format!("{origin}/run"), &[], None).unwrap();
+        let request = seen.recv().unwrap();
+        assert_eq!(request.method, method);
+        assert_eq!(request.header("content-length"), Some("0"), "{method}");
+        assert_eq!(request.header("transfer-encoding"), None, "{method}");
+        assert!(request.body.is_empty());
     }
     let error = hotsheet_http::run(&agent, "NOT A METHOD", &origin, &[], None).unwrap_err();
     assert!(matches!(error, ureq::Error::Http(_)), "{error}");
