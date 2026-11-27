@@ -49,10 +49,30 @@ pub(crate) struct UnhostedStore {
     pub root: PathBuf,
 }
 
-struct Watch {
+/// HS2-BN9MMJ: the most often a later request reads a watched store again.
+const RECONCILE_SPACING: Duration = Duration::from_secs(1);
+
+/// HS2-BN9MMJ: reads a watched store once and records each ticket file written since its
+/// last read or event.
+type Reconcile = Arc<dyn Fn() + Send + Sync>;
+
+/// One store's running watch.
+struct TicketWatch {
     _watcher: BackgroundWatcher,
+    /// HS2-BN9MMJ: run at a later request for the watch (at most every
+    /// [`RECONCILE_SPACING`]), so a stream that lags behind (an `fseventsd` backlog delays
+    /// events by minutes) delays a linked store's write by no more than the follower's next
+    /// request. Never on a timer.
+    reconcile: Reconcile,
+    /// Set once the stream is live and the read that follows going live is done.
+    live: Arc<AtomicBool>,
     /// HS2-R49D43: the pending re-check ends once this is dropped.
     _pending: Arc<()>,
+}
+
+struct Watch {
+    ticket: TicketWatch,
+    reconciled: Instant,
     asked: Instant,
 }
 
@@ -73,7 +93,19 @@ impl TargetStoreWatches {
         event_log: &Arc<Mutex<EventLog>>,
         events: &broadcast::Sender<ChangeEvent>,
     ) {
+        self.follow_with(stores, event_log, events, &|| Box::new(PathWatcher::start));
+    }
+
+    /// [`TargetStoreWatches::follow`] with each new watch's stream started by `start()`.
+    fn follow_with(
+        &self,
+        stores: Vec<UnhostedStore>,
+        event_log: &Arc<Mutex<EventLog>>,
+        events: &broadcast::Sender<ChangeEvent>,
+        start: &dyn Fn() -> StartStream,
+    ) {
         let now = Instant::now();
+        let mut due: Vec<Reconcile> = Vec::new();
         let missing: Vec<UnhostedStore> = {
             let mut watches = self.watches.lock_or_recover();
             watches.retain(|_, watch| now.duration_since(watch.asked) < IDLE);
@@ -82,15 +114,25 @@ impl TargetStoreWatches {
                 .filter(|store| match watches.get_mut(&store.connection_id) {
                     Some(watch) => {
                         watch.asked = now;
+                        // Until the stream is live the pending re-check reads the store.
+                        if watch.ticket.live.load(Ordering::SeqCst)
+                            && now.duration_since(watch.reconciled) >= RECONCILE_SPACING
+                        {
+                            watch.reconciled = now;
+                            due.push(watch.ticket.reconcile.clone());
+                        }
                         false
                     }
                     None => true,
                 })
                 .collect()
         };
+        for reconcile in due {
+            reconcile();
+        }
         // A native stream can take seconds to start under load; other feeds keep going.
         for store in missing {
-            let Some((watcher, pending)) = watch_tickets(&store, event_log, events) else {
+            let Some(ticket) = watch_tickets_with(&store, event_log, events, start()) else {
                 continue;
             };
             // A concurrent request may have started the same watch; keep the first.
@@ -98,8 +140,8 @@ impl TargetStoreWatches {
                 .lock_or_recover()
                 .entry(store.connection_id)
                 .or_insert(Watch {
-                    _watcher: watcher,
-                    _pending: pending,
+                    ticket,
+                    reconciled: now,
                     asked: now,
                 });
         }
@@ -116,6 +158,15 @@ impl TargetStoreWatches {
         ids.sort();
         ids
     }
+
+    /// Whether the watch of `connection_id` is live and has read the store since.
+    #[cfg(test)]
+    fn live(&self, connection_id: &str) -> bool {
+        self.watches
+            .lock_or_recover()
+            .get(connection_id)
+            .is_some_and(|watch| watch.ticket.live.load(Ordering::SeqCst))
+    }
 }
 
 /// Start the watch on `store`'s tickets directory, recording each changed ticket file.
@@ -131,21 +182,12 @@ impl TargetStoreWatches {
 /// [`PENDING_RECHECK`], as `ChangeWaiter`'s safety re-check does: local files only, and
 /// each modified ticket file recorded once. The re-check ends when the stream goes live or
 /// the returned token is dropped.
-fn watch_tickets(
-    store: &UnhostedStore,
-    event_log: &Arc<Mutex<EventLog>>,
-    events: &broadcast::Sender<ChangeEvent>,
-) -> Option<(BackgroundWatcher, Arc<()>)> {
-    watch_tickets_with(store, event_log, events, Box::new(PathWatcher::start))
-}
-
-/// [`watch_tickets`] with the stream started by `start`, for a test's stand-in.
 fn watch_tickets_with(
     store: &UnhostedStore,
     event_log: &Arc<Mutex<EventLog>>,
     events: &broadcast::Sender<ChangeEvent>,
     start: StartStream,
-) -> Option<(BackgroundWatcher, Arc<()>)> {
+) -> Option<TicketWatch> {
     // A store without a tickets directory has nothing to follow yet.
     let tickets = hotsheet_sync::paths::canonicalize(store.root.join("tickets")).ok()?;
     // HS2-VN96J5: on Windows a handle on `tickets` would keep the store from being moved.
@@ -161,7 +203,7 @@ fn watch_scoped_tickets(
     event_log: &Arc<Mutex<EventLog>>,
     events: &broadcast::Sender<ChangeEvent>,
     start: StartStream,
-) -> Option<(BackgroundWatcher, Arc<()>)> {
+) -> Option<TicketWatch> {
     let tickets = tickets.to_path_buf();
     let watch_dir = scope.watch_dir().to_path_buf();
     let (log, sender, connection) = (
@@ -190,10 +232,24 @@ fn watch_scoped_tickets(
         }
     });
     let on_event = emit.clone();
+    let recent = Arc::new(Mutex::new(Recent::since(std::time::SystemTime::now())));
+    let live = Arc::new(AtomicBool::new(false));
+    let read = {
+        let (recent, tickets, emit) = (recent.clone(), tickets.clone(), emit.clone());
+        move || emit(changed_tickets(recent.lock_or_recover().changed(&tickets)))
+    };
     // HS2-268461: a new directory asks for one later read of the store.
     let (shard_created, shard_rechecks) = std::sync::mpsc::channel::<()>();
+    let noted = recent.clone();
+    let rescan = read.clone();
     let handler = move |delivery: Delivery| {
         let Ok(mut event) = delivery else { return };
+        // HS2-BN9MMJ: the platform dropped events (a backlogged service does): read the
+        // store, whatever path the notice names.
+        if event.need_rescan() {
+            rescan();
+            return;
+        }
         if matches!(event.kind, EventKind::Access(_))
             || scope.admit_paths(&mut event.paths).is_none()
         {
@@ -202,21 +258,20 @@ fn watch_scoped_tickets(
         if event.paths.iter().any(|path| path.is_dir()) {
             let _ = shard_created.send(());
         }
-        on_event(changed_tickets(event.paths));
-    };
-    let recent = Arc::new(Mutex::new(Recent::since(std::time::SystemTime::now())));
-    let live = Arc::new(AtomicBool::new(false));
-    let read = {
-        let (recent, tickets, emit) = (recent.clone(), tickets.clone(), emit.clone());
-        move || emit(changed_tickets(recent.lock_or_recover().changed(&tickets)))
+        // HS2-BN9MMJ: each write is recorded once, whether this event or a read (a
+        // re-check or a request's reconcile) finds it first.
+        let fresh = noted.lock_or_recover().note(&event.paths);
+        on_event(changed_tickets(fresh));
     };
     let on_status = read.clone();
     let went_live = live.clone();
     let status = move |status: WatchStatus| {
+        on_status();
+        // HS2-BN9MMJ: live only after the read that covers the start, so a test that
+        // waits for `live` knows every later write is left to the stream or a reconcile.
         if status == WatchStatus::Live {
             went_live.store(true, Ordering::SeqCst);
         }
-        on_status();
     };
     let watcher = BackgroundWatcher::start_with(
         &[(&watch_dir, RecursiveMode::Recursive)],
@@ -224,7 +279,9 @@ fn watch_scoped_tickets(
         status,
         start,
     );
+    let reconcile: Reconcile = Arc::new(read.clone());
     let shard_read = read.clone();
+    let watch_live = live.clone();
     let spawned = std::thread::Builder::new()
         .name("target-store-shard-recheck".into())
         .spawn(move || shard_recheck(&shard_rechecks, &shard_read));
@@ -247,7 +304,12 @@ fn watch_scoped_tickets(
     if let Err(error) = spawned {
         tracing::warn!(%error, "no pending re-check for a linked store; it waits for its watch");
     }
-    Some((watcher, pending))
+    Some(TicketWatch {
+        _watcher: watcher,
+        reconcile,
+        live: watch_live,
+        _pending: pending,
+    })
 }
 
 /// HS2-268461: for each burst of new-directory events, read the store once
@@ -282,6 +344,40 @@ impl Recent {
             since,
             seen: HashMap::new(),
         }
+    }
+
+    /// HS2-BN9MMJ: the paths of a stream event that are news: a file (or a file directly
+    /// in a reported directory) not recorded yet at its current modification time, or a
+    /// path that is gone (a removal). Each is recorded as seen.
+    fn note(&mut self, paths: &[PathBuf]) -> Vec<PathBuf> {
+        let mut fresh = Vec::new();
+        let mut stamp = |path: PathBuf, fresh: &mut Vec<PathBuf>| match std::fs::metadata(&path)
+            .and_then(|meta| meta.modified())
+        {
+            Ok(modified) => {
+                if self.seen.insert(path.clone(), modified) != Some(modified) {
+                    fresh.push(path);
+                }
+            }
+            Err(_) => {
+                self.seen.remove(&path);
+                fresh.push(path);
+            }
+        };
+        for path in paths {
+            if path.is_dir() {
+                if let Ok(entries) = std::fs::read_dir(path) {
+                    for entry in entries.flatten() {
+                        if entry.path().is_file() {
+                            stamp(entry.path(), &mut fresh);
+                        }
+                    }
+                }
+            } else {
+                stamp(path.clone(), &mut fresh);
+            }
+        }
+        fresh
     }
 
     /// The ticket files modified since the watch was asked for that were not recorded
@@ -362,9 +458,45 @@ fn changed_tickets(paths: Vec<PathBuf>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hotsheet_jobs::watch::InProcessStream;
+
+    /// How long a test on the in-process stream waits for an outcome (HS2-BN9MMJ): no
+    /// `fseventsd` timing is involved, only this watch's own threads on a loaded runner.
+    const IN_PROCESS_BOUND: Duration = Duration::from_secs(30);
+
+    fn wait_within(bound: Duration, what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now() + bound;
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// How often ticket `id` was recorded.
+    fn recorded(log: &Arc<Mutex<EventLog>>, id: &str) -> usize {
+        log.lock_or_recover()
+            .since(0)
+            .0
+            .iter()
+            .filter(|event| event.kind == TARGET_STORE_CHANGE_KIND && event.id == id)
+            .count()
+    }
+
+    fn canonical(path: &Path) -> PathBuf {
+        hotsheet_sync::paths::canonicalize(path).unwrap()
+    }
+
+    /// Write a new ticket file into `shard`; returns its id and path.
+    fn write_ticket(shard: &Path) -> (String, PathBuf) {
+        let id = Ulid::new().to_string();
+        let file = shard.join(format!("{id}.md"));
+        std::fs::write(&file, "---\n---\n").unwrap();
+        (id, file)
+    }
 
     /// A followed store's ticket write is recorded once the watch is up; asking again
-    /// keeps the one watch, and forgetting it stops recording.
+    /// keeps the one watch, and forgetting it stops recording. HS2-BN9MMJ: on the
+    /// in-process stream, so no `fseventsd` timing is involved.
     #[test]
     fn hs2_g5fyp6_follow_records_ticket_writes_in_an_unhosted_store() {
         let dir = tempfile::tempdir().unwrap();
@@ -374,43 +506,118 @@ mod tests {
         let log = Arc::new(Mutex::new(EventLog::default()));
         let (events, _keep) = broadcast::channel(16);
         let watches = TargetStoreWatches::default();
+        let stream = InProcessStream::default();
+        let start = || stream.start_stream();
         let store = || UnhostedStore {
             connection_id: "linked-connection".into(),
             root: root.clone(),
         };
-        watches.follow(vec![store()], &log, &events);
-        watches.follow(vec![store()], &log, &events);
+        watches.follow_with(vec![store()], &log, &events, &start);
+        watches.follow_with(vec![store()], &log, &events, &start);
         assert_eq!(watches.watched(), ["linked-connection"]);
         // No tickets directory yet: nothing to watch.
-        watches.follow(
+        watches.follow_with(
             vec![UnhostedStore {
                 connection_id: "empty".into(),
                 root: dir.path().join("empty"),
             }],
             &log,
             &events,
+            &start,
         );
         assert_eq!(watches.watched(), ["linked-connection"]);
+        wait_within(IN_PROCESS_BOUND, "the watch to go live", || {
+            watches.live("linked-connection")
+        });
+        assert_eq!(stream.starts(), 1, "asking again keeps the one watch");
+        assert_eq!(
+            stream.watched(),
+            [(canonical(&root.join("tickets")), RecursiveMode::Recursive)]
+        );
 
-        let id = Ulid::new().to_string();
-        std::fs::write(shard.join(format!("{id}.md")), "---\n---\n").unwrap();
-        let deadline = Instant::now() + Duration::from_secs(20);
-        loop {
-            let (recorded, _) = log.lock_or_recover().since(0);
-            if recorded.iter().any(|event| {
-                event.kind == TARGET_STORE_CHANGE_KIND
-                    && event.store == "linked-connection"
-                    && event.id == id
-            }) {
-                break;
-            }
-            assert!(Instant::now() < deadline, "the write was never recorded");
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        let (id, file) = write_ticket(&shard);
+        stream.changed(&file);
+        assert_eq!(recorded(&log, &id), 1);
+        // The same write reported again (a platform may report it twice) is not news.
+        stream.changed(&file);
+        assert_eq!(recorded(&log, &id), 1);
         watches.forget("linked-connection");
         assert!(watches.watched().is_empty());
+        // The stream stops on the watch's own thread (HS2-F6F42W), never the caller's.
+        wait_within(IN_PROCESS_BOUND, "a forgotten watch to stop", || {
+            stream.watched().is_empty()
+        });
     }
 
+    /// HS2-BN9MMJ: a live stream that lags behind (held here, as a backlogged `fseventsd`
+    /// held events for minutes) does not hold up a write. The follower's next request reads
+    /// the store and records it once; a request within [`RECONCILE_SPACING`] of the last
+    /// read does not read again; the late event, once delivered, records nothing twice; a
+    /// removal the stream reports is still recorded; and a rescan notice (events the
+    /// platform dropped) reads the store.
+    #[test]
+    fn hs2_bn9mmj_a_lagging_stream_is_caught_up_by_the_next_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("linked");
+        let shard = root.join("tickets").join("AB");
+        std::fs::create_dir_all(&shard).unwrap();
+        let log = Arc::new(Mutex::new(EventLog::default()));
+        let (events, _keep) = broadcast::channel(16);
+        let watches = TargetStoreWatches::default();
+        let stream = InProcessStream::default();
+        let start = || stream.start_stream();
+        let store = || {
+            vec![UnhostedStore {
+                connection_id: "linked-connection".into(),
+                root: root.clone(),
+            }]
+        };
+        watches.follow_with(store(), &log, &events, &start);
+        wait_within(IN_PROCESS_BOUND, "the watch to go live", || {
+            watches.live("linked-connection")
+        });
+        stream.hold();
+
+        let (first, first_file) = write_ticket(&shard);
+        stream.changed(&first_file);
+        // The watch was read when it went live, within the spacing of this request.
+        watches.follow_with(store(), &log, &events, &start);
+        assert_eq!(
+            recorded(&log, &first),
+            0,
+            "within the spacing nothing is read"
+        );
+        // The spacing is this watch's own bound between reads, not a platform delay.
+        std::thread::sleep(RECONCILE_SPACING);
+        watches.follow_with(store(), &log, &events, &start);
+        assert_eq!(
+            recorded(&log, &first),
+            1,
+            "the next request reads the store"
+        );
+
+        stream.release();
+        assert_eq!(
+            recorded(&log, &first),
+            1,
+            "the late event records nothing twice"
+        );
+
+        std::fs::remove_file(&first_file).unwrap();
+        stream.changed(&first_file);
+        assert_eq!(recorded(&log, &first), 2, "the removal is recorded");
+
+        let (second, _) = write_ticket(&shard);
+        stream.report(
+            hotsheet_jobs::watch::rescan_event().add_path(canonical(&root.join("tickets"))),
+        );
+        assert_eq!(
+            recorded(&log, &second),
+            1,
+            "a rescan notice reads the store"
+        );
+        assert_eq!(watches.watched(), ["linked-connection"]);
+    }
     /// HS2-R49D43: while the stream has not started (over a minute on a loaded machine),
     /// a ticket written in the store still reaches the log within the re-check, once per
     /// write, and dropping the watch ends the re-check.
@@ -433,7 +640,11 @@ mod tests {
             connection_id: "linked-connection".into(),
             root: root.clone(),
         };
-        let (watcher, pending) = watch_tickets_with(&store, &log, &events, start).unwrap();
+        let TicketWatch {
+            _watcher: watcher,
+            _pending: pending,
+            ..
+        } = watch_tickets_with(&store, &log, &events, start).unwrap();
         let recorded = |id: &str| {
             log.lock_or_recover()
                 .since(0)
@@ -475,48 +686,31 @@ mod tests {
     /// HS2-268461: a new shard directory's event can arrive before its watch is armed
     /// (notify's inotify backend), so a ticket renamed into it right after the event
     /// reports nothing. The watch reads the store once more after the event, and the
-    /// ticket is recorded once. Driven through a stand-in stream that delivers only the
-    /// directory event.
+    /// ticket is recorded once. Driven through the in-process stream (HS2-BN9MMJ), which
+    /// delivers only the directory event.
     #[test]
     fn hs2_268461_a_ticket_in_a_new_shard_directory_is_recorded() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("linked");
         std::fs::create_dir_all(root.join("tickets")).unwrap();
-        let quiet = dir.path().join("quiet");
-        std::fs::create_dir_all(&quiet).unwrap();
         let log = Arc::new(Mutex::new(EventLog::default()));
         let (events, _keep) = broadcast::channel(64);
         let mut changes = events.subscribe();
-        type Handler = Box<dyn FnMut(Delivery) + Send>;
-        let captured: Arc<Mutex<Option<Handler>>> = Arc::default();
-        let start: StartStream = {
-            let captured = captured.clone();
-            // Live over an unrelated directory; the test delivers the store's events.
-            Box::new(move |_, handler| {
-                *captured.lock_or_recover() = Some(handler);
-                PathWatcher::start(&[(quiet.as_path(), RecursiveMode::NonRecursive)], |_| {})
-            })
-        };
+        // HS2-BN9MMJ: the in-process stream delivers only what the test reports.
+        let stream = InProcessStream::default();
         let store = UnhostedStore {
             connection_id: "linked-connection".into(),
             root: root.clone(),
         };
-        let (watcher, pending) = watch_tickets_with(&store, &log, &events, start).unwrap();
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while !watcher.is_live() {
-            assert!(
-                Instant::now() < deadline,
-                "the stand-in stream never went live"
-            );
-            std::thread::yield_now();
-        }
+        let ticket = watch_tickets_with(&store, &log, &events, stream.start_stream()).unwrap();
+        wait_within(IN_PROCESS_BOUND, "the stream to go live", || {
+            ticket.live.load(Ordering::SeqCst)
+        });
         // The new shard directory's event is delivered while it is still empty...
         let shard = root.join("tickets").join("XD");
         std::fs::create_dir_all(&shard).unwrap();
-        let mut deliver = captured.lock_or_recover().take().unwrap();
         // (An unclassified event, as a coalescing backend may report one.)
-        deliver(Ok(hotsheet_jobs::watch::Event::new(EventKind::Any)
-            .add_path(hotsheet_sync::paths::canonicalize(&shard).unwrap())));
+        stream.report(hotsheet_jobs::watch::Event::new(EventKind::Any).add_path(canonical(&shard)));
         // ...and the ticket lands in it afterwards, with no event of its own.
         let id = Ulid::new().to_string();
         std::fs::write(shard.join(format!("{id}.md")), "---\n---\n").unwrap();
@@ -547,11 +741,16 @@ mod tests {
             .filter(|event| event.kind == TARGET_STORE_CHANGE_KIND && event.id == id)
             .count();
         assert_eq!(count, 1);
-        drop((deliver, watcher, pending));
+        drop(ticket);
     }
 
     /// HS2-VN96J5: in the store-root scope Windows uses, the watch holds the store root,
     /// records ticket writes and nothing beside `tickets/`, and the store can be moved.
+    ///
+    /// HS2-BN9MMJ: this module's real-stream smoke test. It waits on ordered delivery: the
+    /// ticket is written after the file beside `tickets/`, so once the ticket is recorded
+    /// the other file's event has been delivered (and rejected) too. The bound only fails a
+    /// delivery that never comes; a backlogged `fseventsd` delivered minutes late.
     #[test]
     fn hs2_vn96j5_a_root_scoped_watch_records_only_ticket_files() {
         let dir = tempfile::tempdir().unwrap();
@@ -577,7 +776,11 @@ mod tests {
                 PathWatcher::start(paths, handler)
             })
         };
-        let (watcher, pending) = watch_scoped_tickets(
+        let TicketWatch {
+            _watcher: watcher,
+            _pending: pending,
+            ..
+        } = watch_scoped_tickets(
             &store,
             &canonical.join("tickets"),
             TicketsWatchScope::new(&canonical, true),
@@ -586,7 +789,7 @@ mod tests {
             start,
         )
         .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(30);
+        let deadline = Instant::now() + hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND;
         while !watcher.is_live() {
             assert!(Instant::now() < deadline, "the watch never went live");
             std::thread::sleep(Duration::from_millis(20));
@@ -604,7 +807,7 @@ mod tests {
         std::fs::write(git.join(format!("{outside}.md")), "synthetic").unwrap();
         let id = Ulid::new().to_string();
         std::fs::write(shard.join(format!("{id}.md")), "---\n---\n").unwrap();
-        let deadline = Instant::now() + Duration::from_secs(30);
+        let deadline = Instant::now() + hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND;
         while !recorded(&id) {
             assert!(Instant::now() < deadline, "the write was never recorded");
             std::thread::sleep(Duration::from_millis(20));

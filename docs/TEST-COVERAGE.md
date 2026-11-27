@@ -4518,7 +4518,8 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   the same warning; clearing it and setting the home's entry warn nothing.
 - `code_ref_watch.rs # hs2_xa9dza` (HS2-XA9DZA) sorts remote-tracking paths from
   local ones, resolves one common directory for a checkout and its worktree, records a
-  push and `pack-refs` once the watch runs (starting it records nothing), records a push
+  push and `pack-refs` once the watch runs (starting it records nothing; on the in-process
+  stream since HS2-BN9MMJ), records a push
   made before the stream is live by the local re-read once and a local commit never,
   and stops reading when dropped. `tests/watch.rs # hs2_xa9dza` walks a run on a site:
   no session, then worked, then released (each push wakes), then given up (a push
@@ -5731,6 +5732,52 @@ it must reject.
 
 Repro evidence (2026-11-27, four sibling churn loops, retries off, the targeted watcher filter with
 ignored tests included): see the ticket's completion note for before and after counts.
+
+### Watch consumers without `fseventsd` timing (HS2-BN9MMJ)
+
+`crates/hotsheet-jobs/src/in_process_stream.rs` adds `watch::InProcessStream`, an in-process
+stand-in for the platform's file-event service behind the shared `StartStream` seam:
+
+- `hs2_bn9mmj_routes_by_registered_path_and_depth`: a recursive path admits its subtree, a
+  non-recursive one its direct entries, an event reaches a watcher with only the paths it admits,
+  access events and unwatched paths are dropped, and a missing path is refused;
+- `hs2_bn9mmj_changes_drops_and_holds_like_the_platform`: a change moves a watcher in one start, a
+  dropped watcher goes quiet while another reports, and a held stream delivers its queue in order
+  on release to the watchers registered then.
+
+Consumer tests on it (no `fseventsd` timing):
+
+- `hotsheet-jobs/src/watch.rs # hs2_f6f42w_*`: the `BackgroundWatcher` start, refusal back-off
+  and added path, each delivering through the in-process stream.
+- `hotsheet-server/src/target_store_watch.rs`: `hs2_g5fyp6_follow_records_*` (one watch, a write
+  recorded once even when reported twice, forget stops it),
+  `hs2_bn9mmj_a_lagging_stream_is_caught_up_by_the_next_request` (held stream; a request within
+  the one-second spacing reads nothing, the next one records the write once, the late event
+  records nothing twice, a removal is recorded, a rescan notice reads the store), and
+  `hs2_268461_*`.
+- `hotsheet-server/src/code_ref_watch.rs`: `hs2_xa9dza_a_push_from_the_followed_checkout_is_recorded`
+  (a push recorded once, a repeated report and a local commit not, `pack-refs` recorded),
+  `hs2_esvyqh_a_pool_write_in_the_followed_checkout_is_recorded` (the new pool, then three writes,
+  temporary and lock files no change, never a push),
+  `hs2_bn9mmj_a_lagging_ref_stream_is_caught_up_by_the_next_request` (held stream; the next request
+  records the push and the pool once, the late events nothing, a rescan notice reads the refs),
+  and `hs2_bn9mmj_only_remote_tracking_packed_lines_count`.
+- `hotsheet-server/src/watcher.rs`: `native_repository_monitor_announces_status_changes_only` and
+  the native half of `repository_monitors_announce_group_registry_changes` run the production
+  monitor on the in-process stream (`RepositoryMonitorProbe::on_stream`).
+
+Real-stream smoke tests, one per consumer module, wait for the stream to be live and then for an
+ordered delivery, bounded by `REAL_STREAM_TEST_BOUND` (five minutes):
+`target_store_watch.rs # hs2_vn96j5_a_root_scoped_watch_records_only_ticket_files`,
+`code_ref_watch.rs # hs2_bn9mmj_smoke_a_real_stream_records_a_push`,
+`watcher.rs # hs2_bn9mmj_smoke_native_repository_monitor_reports_a_real_write`, and the store
+watcher's `hs2_vn96j5_root_scope_is_quiet_when_idle_and_ignores_git_churn`. The `PathWatcher`
+adapter tests (`hs2_n1qdzw_*`, `hs2_654vby_*`, `hs2_2hzn2c_*`, `hs2_p0ehd4_*`) stay on the real
+service; their absence checks read every event up to a marker written afterwards instead of a
+300–500 ms quiet window, and their waits share the same bound. The real-stream `freshness_tests`
+and `store_root_scope_tests` waits use it too.
+
+Repro evidence: see the HS2-BN9MMJ status note for quiet and four-loop churn runs, retries off.
 
 ### Store root watch without the parent stream (HS2-AZFCB6)
 

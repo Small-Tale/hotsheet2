@@ -36,6 +36,17 @@ below.
 `scripts/check-test-quarantine.mjs` runs in CI and fails when a marker has no row, or a
 row has no marker.
 
+## Native file-event latency
+
+A file-watcher test that times out while `fseventsd` is backlogged (busy builds or other
+churn in the shared temp directory) is not a flake to quarantine: the event was late, not
+lost (HS2-P702Y8, HS2-BN9MMJ). Watcher consumers are tested on the in-process stream
+(`hotsheet_jobs::watch::InProcessStream`, or the store watcher's `StartupHooks::stream`).
+Each module keeps one real-stream smoke test, and the platform adapter's own tests stay
+real; those wait on ordered delivery (a marker written after the events they check) up to
+`REAL_STREAM_TEST_BOUND`, never on a quiet window. A real-stream test that still times out
+past that bound gets a ticket with a retries-off reproduction, as any other.
+
 ## Quarantined tests
 
 <!-- quarantine:begin -->

@@ -1289,7 +1289,10 @@ stores (HS2-G5FYP6). A new shard directory under `tickets` can report its own ev
 before its watch is armed (Linux inotify), so a ticket renamed into it just afterwards
 reports nothing. Each burst of new-directory events therefore reads the store once more
 a second later: local files only, and each write recorded once (HS2-268461, as
-HS2-ZER3MA does for hosted stores).
+HS2-ZER3MA does for hosted stores). Each later follower request reads a live watch's store
+again, at most once a second, so a stream that lags behind delays a write by no more than
+the follower's next request; a write is recorded once whichever read or event finds it
+first (HS2-BN9MMJ).
 
 When a hosted store is recreated, its watcher may reconcile several files in one
 pass and publish a store-scoped `changed` event with an empty ticket id. The target
@@ -7323,7 +7326,10 @@ common directory, which its worktrees share. While followers ask a server's targ
 feed (§26.13) for a checkout, the server keeps one file watch on that directory
 (kernel events; until the watch is live, a local re-read every second, as for linked
 stores, HS2-R49D43) and records each remote-tracking change as a `code_refs_changed`
-change event naming the checkout only. The feed answer then carries
+change event naming the checkout only. Each later feed request for a live watch reads the
+refs and the pool once more, so a stream that lags behind (an `fseventsd` backlog) delays a
+push by no more than the follower's next request; packing local branches is no push
+(HS2-BN9MMJ). The feed answer then carries
 `remote_refs_changed: true` (omitted when false, and by an older host). The
 orchestrator's follower of the site wakes the scheduler on it while a run there is
 released (`intervened`) or waits on a person for its site handoff, so the pass asks the

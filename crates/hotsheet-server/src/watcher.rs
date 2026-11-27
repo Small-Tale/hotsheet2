@@ -1495,9 +1495,21 @@ pub(crate) struct RepositoryMonitorProbe {
     streams: AtomicU64,
     /// The directories the live stream leaves out.
     excluded: Mutex<Vec<std::path::PathBuf>>,
+    /// HS2-BN9MMJ: an in-process stream that replaces the platform's, so a test does not
+    /// depend on `fseventsd` timing. It applies no exclusions.
+    stream: Option<hotsheet_jobs::watch::InProcessStream>,
 }
 
 impl RepositoryMonitorProbe {
+    /// HS2-BN9MMJ: a probe whose monitor runs on `stream` instead of the platform's.
+    #[cfg(test)]
+    pub(crate) fn on_stream(stream: hotsheet_jobs::watch::InProcessStream) -> Self {
+        Self {
+            stream: Some(stream),
+            ..Self::default()
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn delivered(&self) -> u64 {
         self.delivered.load(Ordering::SeqCst)
@@ -1697,14 +1709,24 @@ pub(crate) fn run_native_repository_monitor_with(
         let watch_root = root.clone();
         let git_dirs = stream_git_dirs.clone();
         let tx = tx.clone();
+        let in_process = probe.stream.clone();
         std::thread::spawn(move || {
             // If the monitor already stopped, the send fails and the watcher is dropped.
-            let _ = ready_tx.send(start_repository_stream(
-                &watch_root,
-                &git_dirs,
-                &excluded,
-                &tx,
-            ));
+            let started = match in_process {
+                Some(stream) => stream
+                    .start(
+                        &[(&watch_root, hotsheet_jobs::watch::RecursiveMode::Recursive)],
+                        {
+                            let tx = tx.clone();
+                            move |result| {
+                                let _ = tx.send(result);
+                            }
+                        },
+                    )
+                    .map(|watcher| (watcher, Vec::new())),
+                None => start_repository_stream(&watch_root, &git_dirs, &excluded, &tx),
+            };
+            let _ = ready_tx.send(started);
         });
         ready_rx
     };
@@ -2416,8 +2438,8 @@ mod watcher_tests {
     use super::{
         EventLog, RepositoryEventFilter, RepositoryRefreshGate, WatcherBackend,
         expand_ticket_files, git_repository_fingerprint, registered_watcher_backend,
-        repository_change_event, run_git_repository_monitor, run_native_repository_monitor,
-        spawn_repository_monitor, watch_root_signal,
+        repository_change_event, run_git_repository_monitor, spawn_repository_monitor,
+        watch_root_signal,
     };
     use notify::{Event, EventKind};
     use std::sync::{Arc, Mutex};
@@ -2742,28 +2764,57 @@ mod watcher_tests {
         drop(handle);
     }
 
+    /// HS2-BN9MMJ: the native repository monitor for `root` on an in-process stream; it
+    /// stops when the returned sender sends or is dropped with the probe.
+    fn in_process_monitor(
+        root: &std::path::Path,
+        checkout_id: &str,
+        events: tokio::sync::broadcast::Sender<super::ChangeEvent>,
+        stream: &hotsheet_jobs::watch::InProcessStream,
+    ) -> std::sync::mpsc::Sender<()> {
+        let (stop_tx, stop_rx) = std::sync::mpsc::channel();
+        let probe = Arc::new(super::RepositoryMonitorProbe::on_stream(stream.clone()));
+        let (root, checkout_id, thread_probe) =
+            (root.to_path_buf(), checkout_id.to_owned(), probe.clone());
+        std::thread::spawn(move || {
+            super::run_native_repository_monitor_with(
+                root,
+                checkout_id,
+                events,
+                Arc::new(Mutex::new(EventLog::default())),
+                stop_rx,
+                false,
+                &thread_probe,
+            );
+        });
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        while probe.streams() == 0 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the in-process stream never started"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        stop_tx
+    }
+
     /// The native monitor announces working-tree and commit changes, but not ignored build
-    /// output, and stays silent while idle (HS2-4S9ENS).
+    /// output, and stays silent while idle (HS2-4S9ENS). HS2-BN9MMJ: on the in-process
+    /// stream, which reports the paths each change touches, so no `fseventsd` timing is
+    /// involved; the waits below cover only the monitor's own settle and Git status read.
     #[tokio::test]
     async fn native_repository_monitor_announces_status_changes_only() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
+        let root = &hotsheet_sync::paths::canonicalize(dir.path()).unwrap();
         git(root, &["init", "--quiet"]);
         git(root, &["config", "user.email", "test@example.com"]);
         git(root, &["config", "user.name", "Test"]);
         std::fs::write(root.join(".gitignore"), "target/\n").unwrap();
         let (events, _) = tokio::sync::broadcast::channel(16);
         let mut receiver = events.subscribe();
-        let handle = spawn_repository_monitor(
-            root.to_path_buf(),
-            "checkout-7".into(),
-            events,
-            Arc::new(Mutex::new(EventLog::default())),
-            run_native_repository_monitor,
-        )
-        .unwrap();
-        // Until the native stream is live (seconds on a busy Mac) the Git-status bridge covers
-        // changes, so the assertions below hold either way; let the baseline read settle.
+        let stream = hotsheet_jobs::watch::InProcessStream::default();
+        let stop = in_process_monitor(root, "checkout-7", events, &stream);
+        // Let the read that follows the stream's start settle.
         tokio::time::sleep(Duration::from_millis(1_000)).await;
         while receiver.try_recv().is_ok() {}
 
@@ -2783,37 +2834,81 @@ mod watcher_tests {
         };
 
         std::fs::write(root.join("visible.txt"), "working tree").unwrap();
+        stream.changed(&root.join("visible.txt"));
         expect_change(&mut receiver, "an untracked file").await;
 
         std::fs::create_dir_all(root.join("target/debug")).unwrap();
         std::fs::write(root.join("target/debug/artifact"), "build output").unwrap();
+        stream.changed(&root.join("target/debug/artifact"));
         expect_quiet(&mut receiver, "ignored build output").await;
 
         git(root, &["add", "."]);
+        stream.changed(&root.join(".git/index"));
         expect_change(&mut receiver, "staging").await;
         git(root, &["commit", "--quiet", "-m", "first"]);
+        stream.changed(&root.join(".git/index"));
+        stream.changed(&root.join(".git/HEAD"));
         expect_change(&mut receiver, "a commit").await;
         expect_quiet(&mut receiver, "an idle checkout").await;
-        drop(handle);
+        let _ = stop.send(());
+    }
+
+    /// HS2-BN9MMJ: the repository monitor's real-stream smoke test. Once the platform's
+    /// stream has started (the Git-status bridge has stopped), a working-tree write is
+    /// announced only if that stream reports it. The bound fails only a delivery that never
+    /// comes; a backlogged `fseventsd` delivered minutes late.
+    #[tokio::test]
+    async fn hs2_bn9mmj_smoke_native_repository_monitor_reports_a_real_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git(root, &["init", "--quiet"]);
+        let (events, _) = tokio::sync::broadcast::channel(16);
+        let mut receiver = events.subscribe();
+        let (stop_tx, stop_rx) = std::sync::mpsc::channel();
+        let probe = Arc::new(super::RepositoryMonitorProbe::default());
+        let (thread_root, thread_probe) = (root.to_path_buf(), probe.clone());
+        std::thread::spawn(move || {
+            super::run_native_repository_monitor_with(
+                thread_root,
+                "checkout-smoke".into(),
+                events,
+                Arc::new(Mutex::new(EventLog::default())),
+                stop_rx,
+                true,
+                &thread_probe,
+            );
+        });
+        let bound = hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND;
+        let deadline = tokio::time::Instant::now() + bound;
+        while probe.streams() == 0 {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the real stream never started"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        // The read that follows the start settles; nothing changed yet.
+        tokio::time::sleep(Duration::from_millis(1_000)).await;
+        while receiver.try_recv().is_ok() {}
+        std::fs::write(root.join("visible.txt"), "working tree").unwrap();
+        let event = tokio::time::timeout(bound, receiver.recv())
+            .await
+            .expect("the real stream reported the write")
+            .unwrap();
+        assert_eq!(event.kind, "repository_changed");
+        assert_eq!(event.store, "checkout-smoke");
+        let _ = stop_tx.send(());
     }
 
     /// HS2-70JS8B: a group registry entry write (a rename by another process) and a write to the
     /// ignored remote-group overlay each announce `group_registry_changed` for the checkout, from
-    /// the native and the Git-status monitor alike; an idle registry stays silent.
+    /// the native and the Git-status monitor alike; an idle registry stays silent. HS2-BN9MMJ:
+    /// the native monitor runs on the in-process stream, which reports each write.
     #[tokio::test]
     async fn repository_monitors_announce_group_registry_changes() {
-        for (name, monitor) in [
-            (
-                "native",
-                run_native_repository_monitor as super::RepositoryMonitor,
-            ),
-            (
-                "git",
-                run_git_repository_monitor as super::RepositoryMonitor,
-            ),
-        ] {
+        for name in ["native", "git"] {
             let dir = tempfile::tempdir().unwrap();
-            let root = dir.path();
+            let root = &hotsheet_sync::paths::canonicalize(dir.path()).unwrap();
             git(root, &["init", "--quiet"]);
             // The overlay is machine-local and ignored, as in a real checkout.
             std::fs::write(root.join(".gitignore"), ".hotsheet2/groups-remote.json\n").unwrap();
@@ -2826,14 +2921,32 @@ mod watcher_tests {
             .unwrap();
             let (events, _) = tokio::sync::broadcast::channel(32);
             let mut receiver = events.subscribe();
-            let handle = spawn_repository_monitor(
-                root.to_path_buf(),
-                format!("checkout-{name}"),
-                events,
-                Arc::new(Mutex::new(EventLog::default())),
-                monitor,
-            )
-            .unwrap();
+            let stream = hotsheet_jobs::watch::InProcessStream::default();
+            let (_native, _git) = if name == "native" {
+                (
+                    Some(in_process_monitor(
+                        root,
+                        &format!("checkout-{name}"),
+                        events,
+                        &stream,
+                    )),
+                    None,
+                )
+            } else {
+                (
+                    None,
+                    Some(
+                        spawn_repository_monitor(
+                            root.to_path_buf(),
+                            format!("checkout-{name}"),
+                            events,
+                            Arc::new(Mutex::new(EventLog::default())),
+                            run_git_repository_monitor,
+                        )
+                        .unwrap(),
+                    ),
+                )
+            };
             tokio::time::sleep(Duration::from_millis(1_000)).await;
             while receiver.try_recv().is_ok() {}
             let registry_event =
@@ -2853,17 +2966,14 @@ mod watcher_tests {
                     }
                 };
 
-            std::fs::write(
-                registry.join("01GROUPAAAAAAAAAAAAAAAAAAA.json"),
-                r#"{"name":"Renamed"}"#,
-            )
-            .unwrap();
+            let entry = registry.join("01GROUPAAAAAAAAAAAAAAAAAAA.json");
+            std::fs::write(&entry, r#"{"name":"Renamed"}"#).unwrap();
+            stream.changed(&entry);
             registry_event(&mut receiver, "a registry rename").await;
-            std::fs::write(
-                root.join(hotsheet_ticketing::groups::git_sync::GROUP_REMOTE_OVERLAY_FILE),
-                r#"{"entries":[]}"#,
-            )
-            .unwrap();
+            let overlay =
+                root.join(hotsheet_ticketing::groups::git_sync::GROUP_REMOTE_OVERLAY_FILE);
+            std::fs::write(&overlay, r#"{"entries":[]}"#).unwrap();
+            stream.changed(&overlay);
             registry_event(&mut receiver, "an overlay write").await;
             let quiet: Vec<_> = {
                 tokio::time::sleep(Duration::from_millis(2_000)).await;
@@ -2875,7 +2985,9 @@ mod watcher_tests {
                 quiet.is_empty(),
                 "{name}: an idle registry was announced: {quiet:?}"
             );
-            drop(handle);
+            if let Some(stop) = _native {
+                let _ = stop.send(());
+            }
         }
     }
 
@@ -2961,9 +3073,12 @@ mod freshness_tests {
     // registration even when this test has the full Nextest runner. Wait for the
     // observable rearm result instead of mistaking registration latency for a lost watch.
     // HS2-190GDZ: a startup hook runs only after that registration, so it shares the bound.
+    // HS2-BN9MMJ: under an `fseventsd` backlog a registration's proof and its events came
+    // minutes late; every wait here ends at the state it needs, so the shared real-stream
+    // bound only fails a delivery that never comes.
     fn native_deadline() -> Duration {
         if cfg!(target_os = "macos") {
-            Duration::from_secs(120)
+            hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND
         } else {
             Duration::from_secs(30)
         }
@@ -4732,11 +4847,13 @@ mod store_root_scope_tests {
 
     // HS2-R6FZ54: a macOS FSEvents root registration took over 40 seconds in an
     // otherwise isolated test. Give native startup and rearm their own deadline;
-    // ordinary event assertions keep the shorter wait above.
+    // ordinary event assertions keep the shorter wait above. HS2-BN9MMJ: under an
+    // `fseventsd` backlog the native proof came minutes late; the shared real-stream bound
+    // only fails one that never comes.
     fn wait_for_native_rearm(what: &str, mut done: impl FnMut() -> bool) {
         let deadline = Instant::now()
             + if cfg!(target_os = "macos") {
-                Duration::from_secs(120)
+                hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND
             } else {
                 Duration::from_secs(30)
             };

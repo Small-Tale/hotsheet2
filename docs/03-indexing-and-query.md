@@ -324,6 +324,32 @@ through the bridge within a bounded time. `store_root_scope_tests::hs2_vn96j5_ro
 remains a real-FSEvents smoke test: it waits for the stream's own delivery, ordered after the churn
 it must reject.
 
+**Followed stores, checkout refs and repository monitors (HS2-BN9MMJ).** The target feed's watches
+on unhosted linked stores (HS2-G5FYP6) and on a followed checkout's refs and coordination pool
+(HS2-XA9DZA, HS2-ESVYQH) trust a live stream just as the store watcher did, so under a backlog a
+linked-store claim, a push or a review return reached the feed minutes late. They are now caught up
+by the follower's own requests, never by a timer:
+
+- Each feed request that asks again for a live watch reads it once (local files only): the
+  store's ticket files written since the watch began, at most once a second per store, or the
+  checkout's remote-tracking fingerprint and pool state. A follower's long poll therefore bounds
+  the lag to its own request cadence. Until a stream is live, the existing one-second pending
+  re-check still covers it.
+- A stream event, a pending re-check and a request's read record each change once: a linked
+  store notes every file a stream event reports at its modification time, and the ref watch
+  records only when the remote-tracking fingerprint or the pool state actually changed. The
+  fingerprint counts only the `refs/remotes/` lines of `packed-refs`, so packing local branches or
+  tags is no push. A rescan notice (the platform dropped events) reads the state.
+- The native repository monitor still re-reads Git status only on events; its catch-up under a
+  backlog is HS2-GMYHNT.
+
+Consumer tests run on `hotsheet_jobs::watch::InProcessStream`, an in-process stand-in for the
+platform service that routes reported events by registered path and depth, in order, and can be
+held and released like a backlogged `fseventsd`. Each consumer module keeps one real-stream smoke
+test, and the platform adapter's own `PathWatcher` tests stay on the real service. Real-stream waits
+end at an ordered delivery (a marker written after the writes a test checks), never at a quiet
+window, and fail only past `REAL_STREAM_TEST_BOUND` (five minutes).
+
 **The checkout's repository watcher leaves ignored build trees out at the source (HS2-2HZN2C).**
 Separate from the store watcher, each open checkout has a repository monitor (`docs/06-clients.md`,
 HS2-4S9ENS) whose stream covers the whole working tree. FSEvents streams are recursive, and notify

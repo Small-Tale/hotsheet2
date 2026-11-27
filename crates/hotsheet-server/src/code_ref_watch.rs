@@ -44,8 +44,17 @@ const POOL_DIRECTORY: &str = "hotsheet-coordination";
 /// A watch nobody's feed asked for in this long is dropped at the next request.
 const IDLE: Duration = Duration::from_secs(10 * 60);
 
+/// HS2-BN9MMJ: reads the watched state once and records what changed since the last read.
+type Reconcile = Arc<dyn Fn() + Send + Sync>;
+
 struct Watch {
     watcher: BackgroundWatcher,
+    /// HS2-BN9MMJ: run at each later request for the watch, so a stream that lags behind
+    /// (an `fseventsd` backlog delays events by minutes) delays a push or a pool change by
+    /// no more than the follower's next request.
+    reconcile: Reconcile,
+    /// Set once the stream is live and the read that follows going live is done.
+    live: Arc<AtomicBool>,
     /// HS2-ESVYQH: the coordination pool's directory, once it is watched. A pool
     /// created after the watch started is added at the next request.
     pool: Option<PathBuf>,
@@ -100,6 +109,15 @@ impl CodeRefWatches {
                     watch.watcher.add(&pool, RecursiveMode::NonRecursive);
                     watch.pool = Some(pool);
                 }
+                // Until the stream is live the pending re-check reads the refs.
+                let reconcile = watch
+                    .live
+                    .load(Ordering::SeqCst)
+                    .then(|| watch.reconcile.clone());
+                drop(watches);
+                if let Some(reconcile) = reconcile {
+                    reconcile();
+                }
                 return;
             }
         }
@@ -107,13 +125,20 @@ impl CodeRefWatches {
             return;
         };
         let pool = Some(common.join(POOL_DIRECTORY)).filter(|pool| pool.is_dir());
-        let (watcher, pending) = watch_refs(checkout_id, &common, event_log, events, start);
+        let RefWatch {
+            watcher,
+            reconcile,
+            live,
+            pending,
+        } = watch_refs(checkout_id, &common, event_log, events, start);
         // A concurrent request may have started the same watch; keep the first.
         self.watches
             .lock_or_recover()
             .entry(checkout_id.to_owned())
             .or_insert(Watch {
                 watcher,
+                reconcile,
+                live,
                 pool,
                 common,
                 _pending: pending,
@@ -127,6 +152,24 @@ impl CodeRefWatches {
         ids.sort();
         ids
     }
+
+    /// Whether the watch of `checkout_id` is live and has read the refs since.
+    #[cfg(test)]
+    fn live(&self, checkout_id: &str) -> bool {
+        self.watches
+            .lock_or_recover()
+            .get(checkout_id)
+            .is_some_and(|watch| watch.live.load(Ordering::SeqCst))
+    }
+}
+
+/// One checkout's running watch, as [`watch_refs`] starts it.
+struct RefWatch {
+    watcher: BackgroundWatcher,
+    reconcile: Reconcile,
+    live: Arc<AtomicBool>,
+    /// The pending re-check ends once this is dropped.
+    pending: Arc<()>,
 }
 
 /// The canonical git common directory of the repository at `root`: the `.git` directory
@@ -159,13 +202,19 @@ fn git_common_dir(root: &Path) -> Option<PathBuf> {
 /// remote); going live, or a refused start, reads it once more. A read records a change
 /// only when the fingerprint differs from the last one, so nothing is recorded for a
 /// watch that merely started.
+///
+/// HS2-BN9MMJ: a stream event under the remote-tracking refs or the pool reads the state
+/// too, instead of recording a change by the event's path alone, so each change is recorded
+/// once whether the stream, the pending re-check or a later request's reconcile (the
+/// returned [`Reconcile`]) notices it first, and an event whose paths only look like
+/// remote-tracking state records nothing while the refs are unchanged.
 fn watch_refs(
     checkout_id: &str,
     common: &Path,
     event_log: &Arc<Mutex<EventLog>>,
     events: &broadcast::Sender<ChangeEvent>,
     start: StartStream,
-) -> (BackgroundWatcher, Arc<()>) {
+) -> RefWatch {
     let (log, sender, checkout) = (event_log.clone(), events.clone(), checkout_id.to_owned());
     let emit_kind = Arc::new(move |kind: &'static str| {
         emit_change(
@@ -189,8 +238,10 @@ fn watch_refs(
     let read = {
         let (seen, common, emit_kind) = (seen.clone(), common.to_path_buf(), emit_kind.clone());
         move || {
-            let now = (fingerprint(&common), pool_fingerprint(&common));
+            // Read under the lock: the stream, the re-check and a request may read at once,
+            // and an older reading must never replace a newer one.
             let mut last = seen.lock_or_recover();
+            let now = (fingerprint(&common), pool_fingerprint(&common));
             let (refs_moved, pool_moved) = (last.0 != now.0, last.1 != now.1);
             *last = now;
             drop(last);
@@ -203,30 +254,32 @@ fn watch_refs(
         }
     };
     let root = common.to_path_buf();
+    let on_event = read.clone();
     let handler = move |delivery: Delivery| {
         let Ok(event) = delivery else { return };
         if matches!(event.kind, EventKind::Access(_)) {
             return;
         }
-        if event
-            .paths
-            .iter()
-            .any(|path| is_remote_tracking(&root, path))
+        // A rescan notice (the platform dropped events, as a backlogged service does)
+        // reads the state too, whatever path it names.
+        if event.need_rescan()
+            || event
+                .paths
+                .iter()
+                .any(|path| is_remote_tracking(&root, path) || is_pool(&root, path))
         {
-            emit_kind(CODE_REFS_CHANGE_KIND);
-        }
-        if event.paths.iter().any(|path| is_pool(&root, path)) {
-            emit_kind(POOL_CHANGE_KIND);
+            on_event();
         }
     };
     let live = Arc::new(AtomicBool::new(false));
     let on_status = read.clone();
     let went_live = live.clone();
     let status = move |status: WatchStatus| {
+        on_status();
+        // HS2-BN9MMJ: live only after the read that covers the start.
         if status == WatchStatus::Live {
             went_live.store(true, Ordering::SeqCst);
         }
-        on_status();
     };
     let refs = common.join("refs");
     // HS2-ESVYQH: the pool's directory when it exists; the common directory's own
@@ -240,6 +293,8 @@ fn watch_refs(
         paths.push((pool.as_path(), RecursiveMode::NonRecursive));
     }
     let watcher = BackgroundWatcher::start_with(&paths, handler, status, start);
+    let reconcile: Reconcile = Arc::new(read.clone());
+    let watch_live = live.clone();
     let pending = Arc::new(());
     let owner = Arc::downgrade(&pending);
     let spawned = std::thread::Builder::new()
@@ -256,20 +311,28 @@ fn watch_refs(
     if let Err(error) = spawned {
         tracing::warn!(%error, "no pending re-check for a checkout's refs; it waits for its watch");
     }
-    (watcher, pending)
+    RefWatch {
+        watcher,
+        reconcile,
+        live: watch_live,
+        pending,
+    }
 }
 
-/// What the remote-tracking state of the common directory `common` looks like: each
-/// file under `refs/remotes` and `packed-refs`, with its size and modification time.
-/// Read from the local disk only.
-fn fingerprint(common: &Path) -> Vec<(PathBuf, u64, Option<std::time::SystemTime>)> {
-    let mut found = Vec::new();
-    let mut stamp = |path: PathBuf| {
-        if let Ok(meta) = std::fs::metadata(&path) {
-            found.push((path, meta.len(), meta.modified().ok()));
-        }
-    };
-    stamp(common.join("packed-refs"));
+/// What the remote-tracking state of the common directory `common` looks like: each loose
+/// file under `refs/remotes`, with its size and modification time, and the remote-tracking
+/// lines of `packed-refs`. Read from the local disk only.
+///
+/// HS2-BN9MMJ: only the `refs/remotes/` lines of `packed-refs` count (with the peeled line
+/// that follows one), so packing local branches or tags is no push.
+#[derive(Debug, PartialEq, Eq)]
+struct Fingerprint {
+    loose: Vec<(PathBuf, u64, Option<std::time::SystemTime>)>,
+    packed: Vec<String>,
+}
+
+fn fingerprint(common: &Path) -> Fingerprint {
+    let mut loose = Vec::new();
     let mut directories = vec![common.join("refs").join("remotes")];
     while let Some(directory) = directories.pop() {
         let Ok(entries) = std::fs::read_dir(&directory) else {
@@ -279,13 +342,38 @@ fn fingerprint(common: &Path) -> Vec<(PathBuf, u64, Option<std::time::SystemTime
             let path = entry.path();
             if path.is_dir() {
                 directories.push(path);
-            } else {
-                stamp(path);
+            } else if let Ok(meta) = std::fs::metadata(&path) {
+                loose.push((path, meta.len(), meta.modified().ok()));
             }
         }
     }
-    found.sort();
-    found
+    loose.sort();
+    let packed = std::fs::read_to_string(common.join("packed-refs"))
+        .map(|text| remote_tracking_lines(&text))
+        .unwrap_or_default();
+    Fingerprint { loose, packed }
+}
+
+/// HS2-BN9MMJ: the `packed-refs` lines naming a remote-tracking ref, each with the peeled
+/// (`^`) line that follows it.
+fn remote_tracking_lines(text: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut remote = false;
+    for line in text.lines() {
+        if line.starts_with('^') {
+            if remote {
+                lines.push(line.to_owned());
+            }
+            continue;
+        }
+        remote = line
+            .split_once(' ')
+            .is_some_and(|(_, name)| name.starts_with("refs/remotes/"));
+        if remote {
+            lines.push(line.to_owned());
+        }
+    }
+    lines
 }
 
 /// HS2-ESVYQH: the coordination pool's state file, with its size and modification time.
@@ -341,6 +429,7 @@ fn is_remote_tracking(common: &Path, path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hotsheet_jobs::watch::InProcessStream;
 
     fn git(dir: &Path, args: &[&str]) {
         let status = hotsheet_ticketing::git::launch("git")
@@ -371,6 +460,40 @@ mod tests {
             assert!(Instant::now() < deadline, "{what} was never recorded");
             std::thread::sleep(Duration::from_millis(20));
         }
+    }
+
+    /// How long a test on the in-process stream waits for an outcome (HS2-BN9MMJ): no
+    /// `fseventsd` timing is involved, only this watch's own threads on a loaded runner.
+    const IN_PROCESS_BOUND: Duration = Duration::from_secs(30);
+
+    fn wait_within(bound: Duration, what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now() + bound;
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    fn wait_within_bound(what: &str, done: impl FnMut() -> bool) {
+        wait_within(IN_PROCESS_BOUND, what, done);
+    }
+
+    fn canonical(path: &Path) -> PathBuf {
+        hotsheet_sync::paths::canonicalize(path).unwrap()
+    }
+
+    /// Follow `clone` as "checkout" on the in-process `stream`, and wait until the watch is
+    /// live and has read the refs once: every later change is left to the stream or a
+    /// request's reconcile.
+    fn follow_live(
+        watches: &CodeRefWatches,
+        stream: &InProcessStream,
+        clone: &Path,
+        log: &Arc<Mutex<EventLog>>,
+        events: &broadcast::Sender<ChangeEvent>,
+    ) {
+        watches.follow_with("checkout", clone, log, events, stream.start_stream());
+        wait_within_bound("the watch to go live", || watches.live("checkout"));
     }
 
     /// The paths a push, a fetch and local work change, sorted into remote-tracking
@@ -435,7 +558,8 @@ mod tests {
 
     /// HS2-ESVYQH: a followed checkout's pool state written (as a review return writes
     /// it, a temporary file renamed onto it) is recorded as a pool change, and again on
-    /// a later write; it is never taken for a push.
+    /// a later write; it is never taken for a push. HS2-BN9MMJ: on the in-process stream,
+    /// which reports each write; the pool's lock and temporary files are no change.
     #[test]
     fn hs2_esvyqh_a_pool_write_in_the_followed_checkout_is_recorded() {
         let dir = tempfile::tempdir().unwrap();
@@ -443,44 +567,43 @@ mod tests {
         let log = Arc::new(Mutex::new(EventLog::default()));
         let (events, _keep) = broadcast::channel(64);
         let watches = CodeRefWatches::default();
-        // Followed before the checkout has a pool: the next request after the pool is
-        // created watches it too.
-        watches.follow("checkout", &clone, &log, &events);
-        let pool = clone.join(".git").join(POOL_DIRECTORY);
+        let stream = InProcessStream::default();
+        // Followed before the checkout has a pool: the common directory's own watch sees
+        // it created, and the next request watches it too.
+        follow_live(&watches, &stream, &clone, &log, &events);
+        let common = canonical(&clone.join(".git"));
+        let pool = common.join(POOL_DIRECTORY);
         std::fs::create_dir_all(&pool).unwrap();
         std::fs::write(pool.join("state.json"), b"{}").unwrap();
-        watches.follow("checkout", &clone, &log, &events);
+        stream.changed(&pool);
+        assert_eq!(pool_changes(&log), 1, "the new pool is recorded");
+        watches.follow_with("checkout", &clone, &log, &events, stream.start_stream());
+        wait_within_bound("the pool to be watched", || {
+            stream
+                .watched()
+                .contains(&(pool.clone(), RecursiveMode::NonRecursive))
+        });
         let write = |text: &[u8]| {
             let mut temporary = tempfile::NamedTempFile::new_in(&pool).unwrap();
             std::io::Write::write_all(&mut temporary, text).unwrap();
+            let staged = temporary.path().to_path_buf();
             hotsheet_sync::files::persist(temporary, pool.join("state.json")).unwrap();
+            staged
         };
-        let deadline = Instant::now() + Duration::from_secs(30);
-        // The stream may start after the first write; the re-check covers that.
-        write(br#"{"revision":1}"#);
-        while pool_changes(&log) < 1 {
-            assert!(
-                Instant::now() < deadline,
-                "the pool write was never recorded"
+        for revision in 1..=3 {
+            let staged = write(format!("{{\"revision\":{revision}}}").as_bytes());
+            stream.changed(&staged);
+            stream.changed(&pool.join("state.lock"));
+            assert_eq!(
+                pool_changes(&log),
+                revision,
+                "a temporary file is no change"
             );
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        // A later write is recorded too, once the added watch applies; each write is
-        // a change of its own, so the test writes until one is seen.
-        let first = pool_changes(&log);
-        let mut revision = 2;
-        while pool_changes(&log) <= first {
-            assert!(
-                Instant::now() < deadline,
-                "a later pool write was never recorded"
-            );
-            write(format!("{{\"revision\":{revision}}}").as_bytes());
-            revision += 1;
-            std::thread::sleep(Duration::from_millis(200));
+            stream.changed(&pool.join("state.json"));
+            assert_eq!(pool_changes(&log), revision + 1, "write {revision}");
         }
         assert_eq!(recorded(&log), 0, "a pool write is no push");
     }
-
     /// A main checkout and a linked worktree resolve to one common directory; a plain
     /// directory has none and is not watched.
     #[test]
@@ -526,8 +649,10 @@ mod tests {
     }
 
     /// Followed: starting the watch records nothing, a push from the checkout (its
-    /// remote-tracking ref moving) is recorded, asking again keeps one watch, packing
-    /// the refs is recorded, and a checkout that is not a repository is not watched.
+    /// remote-tracking ref moving) is recorded, asking again keeps one watch, a local
+    /// commit is not recorded, packing the refs is recorded, and a checkout that is not a
+    /// repository is not watched. HS2-BN9MMJ: on the in-process stream, so no `fseventsd`
+    /// timing is involved; the test reports the paths each Git command changes.
     #[test]
     fn hs2_xa9dza_a_push_from_the_followed_checkout_is_recorded() {
         let dir = tempfile::tempdir().unwrap();
@@ -536,13 +661,25 @@ mod tests {
         let log = Arc::new(Mutex::new(EventLog::default()));
         let (events, _keep) = broadcast::channel(64);
         let watches = CodeRefWatches::default();
-        watches.follow("checkout", &clone, &log, &events);
-        watches.follow("checkout", &clone, &log, &events);
-        watches.follow("plain", dir.path(), &log, &events);
+        let stream = InProcessStream::default();
+        follow_live(&watches, &stream, &clone, &log, &events);
+        watches.follow_with("checkout", &clone, &log, &events, stream.start_stream());
+        watches.follow_with("plain", dir.path(), &log, &events, stream.start_stream());
         assert_eq!(watches.watched(), ["checkout"]);
+        assert_eq!(stream.starts(), 1, "asking again keeps one watch");
+        let common = canonical(&clone.join(".git"));
+        assert_eq!(
+            stream.watched(),
+            [
+                (common.join("refs"), RecursiveMode::Recursive),
+                (common.clone(), RecursiveMode::NonRecursive)
+            ]
+        );
+        assert_eq!(recorded(&log), 0, "starting the watch records nothing");
 
         git(&clone, &["push", "-q", "origin", "main:refs/heads/handoff"]);
-        until(&log, 1, "the push");
+        stream.changed(&common.join("refs/remotes/origin/handoff"));
+        assert_eq!(recorded(&log), 1);
         let (events, _) = log.lock_or_recover().since(0);
         let pushed = events
             .iter()
@@ -550,12 +687,112 @@ mod tests {
             .unwrap();
         assert_eq!(pushed.id, "checkout");
         assert!(pushed.slug.is_empty() && pushed.message.is_none());
-        let after_push = recorded(&log);
+        // The same change reported again is not another push.
+        stream.changed(&common.join("refs/remotes/origin/handoff"));
+        assert_eq!(recorded(&log), 1);
+        // A local commit moves a local branch only.
+        git(
+            &clone,
+            &["commit", "-q", "--allow-empty", "-m", "Synthetic local"],
+        );
+        stream.changed(&common.join("refs/heads/main"));
+        assert_eq!(recorded(&log), 1, "a local commit is no push");
         // Packing the refs is remote-tracking state too.
         git(&clone, &["pack-refs", "--all"]);
-        until(&log, after_push + 1, "packed refs");
+        stream.changed(&common.join("packed-refs"));
+        assert_eq!(recorded(&log), 2, "packed refs");
     }
 
+    /// HS2-BN9MMJ: a live stream that lags behind (held here, as a backlogged `fseventsd`
+    /// held events for minutes) does not hold up a push or a pool change: the follower's
+    /// next request reads the state and records each once; the late events, once
+    /// delivered, record nothing twice; and a rescan notice (events the platform dropped)
+    /// reads the state.
+    #[test]
+    fn hs2_bn9mmj_a_lagging_ref_stream_is_caught_up_by_the_next_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let clone = repository(dir.path());
+        git(&clone, &["push", "-q", "origin", "main"]);
+        let log = Arc::new(Mutex::new(EventLog::default()));
+        let (events, _keep) = broadcast::channel(64);
+        let watches = CodeRefWatches::default();
+        let stream = InProcessStream::default();
+        follow_live(&watches, &stream, &clone, &log, &events);
+        let common = canonical(&clone.join(".git"));
+        stream.hold();
+
+        git(&clone, &["push", "-q", "origin", "main:refs/heads/handoff"]);
+        stream.changed(&common.join("refs/remotes/origin/handoff"));
+        let pool = common.join(POOL_DIRECTORY);
+        std::fs::create_dir_all(&pool).unwrap();
+        std::fs::write(pool.join("state.json"), b"{}").unwrap();
+        stream.changed(&pool);
+        assert_eq!((recorded(&log), pool_changes(&log)), (0, 0));
+        watches.follow_with("checkout", &clone, &log, &events, stream.start_stream());
+        assert_eq!(
+            (recorded(&log), pool_changes(&log)),
+            (1, 1),
+            "the next request reads the refs and the pool"
+        );
+        stream.release();
+        assert_eq!(
+            (recorded(&log), pool_changes(&log)),
+            (1, 1),
+            "the late events record nothing twice"
+        );
+
+        git(&clone, &["push", "-q", "origin", "main:refs/heads/later"]);
+        stream.report(hotsheet_jobs::watch::rescan_event().add_path(common.clone()));
+        assert_eq!(recorded(&log), 2, "a rescan notice reads the refs");
+    }
+
+    /// HS2-BN9MMJ: only the remote-tracking lines of `packed-refs` (with their peeled
+    /// lines) are remote-tracking state: packing local branches and tags is no push.
+    #[test]
+    fn hs2_bn9mmj_only_remote_tracking_packed_lines_count() {
+        let text = "# pack-refs with: peeled fully-peeled sorted \n\
+                    1111111111111111111111111111111111111111 refs/heads/main\n\
+                    2222222222222222222222222222222222222222 refs/remotes/origin/main\n\
+                    3333333333333333333333333333333333333333 refs/tags/v1\n\
+                    ^4444444444444444444444444444444444444444\n\
+                    5555555555555555555555555555555555555555 refs/remotes/origin/v2\n\
+                    ^6666666666666666666666666666666666666666\n";
+        assert_eq!(
+            remote_tracking_lines(text),
+            [
+                "2222222222222222222222222222222222222222 refs/remotes/origin/main",
+                "5555555555555555555555555555555555555555 refs/remotes/origin/v2",
+                "^6666666666666666666666666666666666666666",
+            ]
+        );
+        assert!(remote_tracking_lines("").is_empty());
+    }
+
+    /// HS2-BN9MMJ: this module's real-stream smoke test. Once the watch is live (and has
+    /// read the refs), a push is recorded only if the platform's own stream reports it.
+    /// The bound fails only a delivery that never comes; a backlogged `fseventsd`
+    /// delivered minutes late.
+    #[test]
+    fn hs2_bn9mmj_smoke_a_real_stream_records_a_push() {
+        let dir = tempfile::tempdir().unwrap();
+        let clone = repository(dir.path());
+        git(&clone, &["push", "-q", "origin", "main"]);
+        let log = Arc::new(Mutex::new(EventLog::default()));
+        let (events, _keep) = broadcast::channel(64);
+        let watches = CodeRefWatches::default();
+        watches.follow("checkout", &clone, &log, &events);
+        wait_within(
+            hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND,
+            "the real stream to go live",
+            || watches.live("checkout"),
+        );
+        git(&clone, &["push", "-q", "origin", "main:refs/heads/handoff"]);
+        wait_within(
+            hotsheet_jobs::watch::REAL_STREAM_TEST_BOUND,
+            "the real stream to report the push",
+            || recorded(&log) == 1,
+        );
+    }
     /// While the stream has not started (over a minute on a loaded machine), a push is
     /// still recorded by the local re-check, once; a local commit is not; and dropping
     /// the watch ends the re-check.
