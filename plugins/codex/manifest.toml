@@ -65,6 +65,9 @@ models = [
 default_model = "gpt-6-astra"
 default_effort = "medium"
 session_options = ["model", "effort", "permission_mode"]
+# HS2-S1FEYY: `codex login status` exits 0 signed in and 1 signed out. Systems reads
+# only the exit status, never the output, so no account name leaves the tool.
+auth_status_args = ["login", "status"]
 # Codex `approvalPolicy` values a chat can run under (docs/05 §5.7, HS2-NHRDMW). The sandbox
 # stays `workspace-write` for every policy; approval requests reach the Hot Sheet permission
 # popup. `never` (the historical headless behavior) remains the default.

@@ -1,5 +1,6 @@
 import '@kerfjs/ui/layout.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { px } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
@@ -112,9 +113,27 @@ export function SystemsView({ machine, health, liveCpu, capacity, diskMessage, t
                   {tools.map((tool) => (
                     <ValueTableRow
                       icon={<LucideIcon icon={Bot} name="bot" />}
-                      label={tool.label}
-                      value={tool.description}
-                      rootAttributes={{ 'data-systems-ai-tool': tool.tool, 'data-installed': String(tool.installed) }}
+                      label={
+                        <List gap="2xs">
+                          <Text variant="span" flush>
+                            {tool.label}
+                          </Text>
+                          <Text variant="span" size="compact" tone="quiet" flush>
+                            {tool.description}
+                          </Text>
+                        </List>
+                      }
+                      value={
+                        // HS2-S1FEYY: Signed In, Signed Out, Not Installed, or Installed while unknown.
+                        <Badge tone={tool.status.tone} appearance="quiet" size="compact">
+                          {tool.status.label}
+                        </Badge>
+                      }
+                      rootAttributes={{
+                        'data-systems-ai-tool': tool.tool,
+                        'data-installed': String(tool.installed),
+                        'data-signed-in': tool.signedIn === undefined ? 'unknown' : String(tool.signedIn),
+                      }}
                     />
                   ))}
                 </ValueTable>

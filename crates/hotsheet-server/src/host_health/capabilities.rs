@@ -250,6 +250,35 @@ fn program_version(program: &str, args: &[&str], probes: bool) -> (bool, Option<
     }
 }
 
+/// HS2-S1FEYY: whether the AI tool at `program` is signed in, from the exit status of its
+/// declared `auth_status_args` alone: 0 is signed in, any other exit signed out. Its output
+/// is never read, so no account name or credential leaves the tool. `None` (unreported)
+/// without probing, without a declaration, when the program is not found, or when the
+/// probe cannot run, times out or is killed. It runs in a fresh empty directory, like
+/// every AI tool probe (HS2-BNDRYP).
+pub(crate) fn program_signed_in(
+    program: &str,
+    args: &[String],
+    probes: bool,
+    timeout: Duration,
+) -> Option<bool> {
+    if !probes || args.is_empty() {
+        return None;
+    }
+    let path = std::env::var_os("PATH")?;
+    let found = find_program(program, &path, &path_extensions())?;
+    signed_in_at(&found, args, timeout)
+}
+
+/// [`program_signed_in`] for a program already found.
+pub(crate) fn signed_in_at(program: &Path, args: &[String], timeout: Duration) -> Option<bool> {
+    let workspace = hotsheet_aitools::probe::probe_workspace().ok()?;
+    let mut command = hotsheet_ticketing::git::launch(program);
+    command.args(args).current_dir(workspace.path());
+    let output = hotsheet_aitools::probe::run_probe_within(&mut command, timeout).ok()?;
+    output.status.code().map(|code| code == 0)
+}
+
 /// The platform facts that need no subprocess.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct PlatformFacts {
@@ -270,20 +299,29 @@ pub(crate) fn detect(
 ) -> HostCapabilities {
     let os = OsFamily::current();
     let facts = platform_facts();
-    let tools: Vec<(String, String)> = hotsheet_plugins::detected_drivable_plugins(plugin_dirs)
-        .iter()
-        .filter_map(|plugin| {
-            let binary = plugin.manifest.detection.binaries.first()?;
-            Some((plugin.id().to_string(), binary.clone()))
-        })
-        .collect();
+    let tools: Vec<(String, String, Vec<String>)> =
+        hotsheet_plugins::detected_drivable_plugins(plugin_dirs)
+            .iter()
+            .filter_map(|plugin| {
+                let binary = plugin.manifest.detection.binaries.first()?;
+                let auth = plugin
+                    .manifest
+                    .drive
+                    .as_ref()
+                    .map(|drive| drive.auth_status_args.clone())
+                    .unwrap_or_default();
+                Some((plugin.id().to_string(), binary.clone(), auth))
+            })
+            .collect();
     let (ai_tools, toolchains) = std::thread::scope(|scope| {
         let tool_probes: Vec<_> = tools
             .iter()
-            .map(|(tool, binary)| {
+            .map(|(tool, binary, auth)| {
                 scope.spawn(move || ToolVersion {
                     tool: tool.clone(),
                     version: program_version(binary, &["--version"], probes).1,
+                    // HS2-S1FEYY: the sign-in probe runs beside the version probe.
+                    signed_in: program_signed_in(binary, auth, probes, VERSION_PROBE),
                 })
             })
             .collect();

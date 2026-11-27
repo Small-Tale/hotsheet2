@@ -625,6 +625,13 @@ the remote's last tab: its row reads Not connected. Revoke this computer on the
 remote host: its row reads Revoked. Repeat in the Tauri desktop host and on a
 phone-width browser, where both rails open as overlays from the toolbar.
 
+AI tool sign-in (HS2-S1FEYY): on a disposable machine with Claude and Codex
+installed and AI-tool probes on, sign Codex out (`codex logout`) and leave Claude
+signed in. Within ten minutes (the capability detection's lifetime) Systems shows
+Claude Signed In and Codex Signed Out on that machine, and no account name or
+email appears anywhere in the screen or in `orchestration capacity show`. Sign
+Codex back in: it reads Signed In after the next detection.
+
 ### Remote project terminals (HS2-PPHJMZ, HS2-JJKVJJ)
 
 Use two disposable synthetic hosts; on one, register two checkouts, and give the

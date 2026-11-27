@@ -1227,7 +1227,8 @@ export interface OrchestrationCapabilities {
   arch: string;
   cpu_model?: string;
   gpu?: { present: boolean; vendors?: string[] };
-  ai_tools?: { tool: string; version?: string }[];
+  /** HS2-S1FEYY: `signed_in` is absent when the machine could not tell (unknown, never signed out). */
+  ai_tools?: { tool: string; version?: string; signed_in?: boolean }[];
   toolchains?: { name: string; installed: boolean; version?: string }[];
 }
 /**

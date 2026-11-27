@@ -192,19 +192,41 @@ export interface SystemsAiToolRow {
   description: string;
   status: { label: string; tone: SystemsBadgeTone };
   installed: boolean;
+  /** HS2-S1FEYY: whether it is signed in there; absent while the machine cannot tell. */
+  signedIn?: boolean;
   sessions: number;
 }
 
+/** HS2-S1FEYY: the AI Tools badge: Signed In, Signed Out, Not Installed, or Installed when sign-in is unknown. */
+function aiToolStatus(installed: boolean, signedIn: boolean | undefined): SystemsAiToolRow['status'] {
+  if (!installed) return { label: 'Not Installed', tone: 'neutral' };
+  if (signedIn === true) return { label: 'Signed In', tone: 'success' };
+  if (signedIn === false) return { label: 'Signed Out', tone: 'warning' };
+  return { label: 'Installed', tone: 'success' };
+}
+
+/** The row's quiet line: its sign-in state (when known) and its running sessions. */
+function aiToolDescription(installed: boolean, signedIn: boolean | undefined, count: number): string {
+  if (!installed) return 'Not installed on this machine';
+  const running = count ? `${plural(count, 'session')} running` : 'no sessions running';
+  if (signedIn === false) return `Installed, not signed in · sign in on this machine to use it · ${running}`;
+  if (signedIn === true) return `Signed in · ${running}`;
+  return count ? running : `Installed · ${running}`;
+}
+
 /**
- * The machine's AI tools: every tool the capacity snapshot names, installed ones first. Versions come
- * from the capabilities report; sessions are counted by tool. `undefined` while the snapshot is unread.
+ * The machine's AI tools: every tool the capacity snapshot names, installed ones first. Versions and
+ * sign-in state (HS2-S1FEYY) come from the capabilities report; sessions are counted by tool.
+ * `undefined` while the snapshot is unread.
  */
 export function aiToolRows(
   capacity: OrchestrationCapacity | undefined,
   toolLabel: (tool: string) => string = (tool) => tool,
 ): SystemsAiToolRow[] | undefined {
   if (!capacity) return undefined;
-  const versions = new Map((capacity.capabilities?.ai_tools ?? []).map((tool) => [tool.tool, tool.version]));
+  const reported = capacity.capabilities?.ai_tools ?? [];
+  const versions = new Map(reported.map((tool) => [tool.tool, tool.version]));
+  const signIns = new Map(reported.map((tool) => [tool.tool, tool.signed_in]));
   const installed = new Map<string, boolean>();
   for (const tool of capacity.tools ?? []) installed.set(tool.tool, tool.installed);
   for (const tool of versions.keys()) if (!installed.has(tool)) installed.set(tool, true);
@@ -215,16 +237,14 @@ export function aiToolRows(
     .map(([tool, present]): SystemsAiToolRow => {
       const count = sessions.get(tool) ?? 0;
       const version = versions.get(tool);
+      const signedIn = present ? signIns.get(tool) : undefined;
       return {
         tool,
         label: [toolLabel(tool), version].filter(Boolean).join(' '),
-        description: present
-          ? count
-            ? `${plural(count, 'session')} running`
-            : 'Installed · no sessions running'
-          : 'Not installed on this machine',
-        status: present ? { label: 'Installed', tone: 'success' } : { label: 'Not Installed', tone: 'neutral' },
+        description: aiToolDescription(present, signedIn, count),
+        status: aiToolStatus(present, signedIn),
         installed: present,
+        ...(signedIn === undefined ? {} : { signedIn }),
         sessions: count,
       };
     })

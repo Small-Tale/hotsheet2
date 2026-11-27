@@ -1885,7 +1885,11 @@ const capabilitiesShape = shape<OrchestrationCapabilities>(
     gpu: (field) =>
       isRecord(field) && isBoolean(field.present) && (field.vendors === undefined || isStringArray(field.vendors)),
     ai_tools: listOf(
-      (tool) => isRecord(tool) && isString(tool.tool) && (tool.version === undefined || isString(tool.version)),
+      (tool) =>
+        isRecord(tool) &&
+        isString(tool.tool) &&
+        (tool.version === undefined || isString(tool.version)) &&
+        (tool.signed_in === undefined || isBoolean(tool.signed_in)),
     ),
     toolchains: listOf(
       (chain) =>

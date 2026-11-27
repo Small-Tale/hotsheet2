@@ -37,8 +37,12 @@ describe('HS2-DR0ZSQ SystemsView', () => {
     expect(markup).toMatch(/This Computer · macOS · aarch64/u);
     expect(markup).toContain('data-card="cpu"');
     expect(markup).toContain('data-component="cpu-core-meter"');
-    expect(markup).toContain('data-systems-ai-tool="claude" data-installed="true"');
-    expect(markup).toContain('2 sessions running');
+    expect(markup).toContain('data-systems-ai-tool="claude" data-installed="true" data-signed-in="true"');
+    expect(markup).toContain('Signed in · 2 sessions running');
+    // HS2-S1FEYY: each tool's sign-in badge, as the approved mock shows it.
+    expect(markup).toMatch(/data-systems-ai-tool="claude"[^]*?>Signed In</u);
+    expect(markup).toContain('data-systems-ai-tool="opencode" data-installed="true" data-signed-in="false"');
+    expect(markup).toMatch(/data-systems-ai-tool="opencode"[^]*?>Signed Out</u);
     expect(markup).toContain('Example M-Series · 12 cores');
     expect(markup).toContain('22.1 GB free of 64.0 GB');
     expect(markup).toMatch(/>xcode<[^]*>17\.0</u);
@@ -49,8 +53,12 @@ describe('HS2-DR0ZSQ SystemsView', () => {
     const markup = html(SystemsView(systemsDemoView('build', 'ready')));
     expect(markup).toMatch(/Paired Remote · macOS/u);
     expect(markup).not.toContain('data-pending-disk');
-    expect(markup).toContain('data-systems-ai-tool="opencode" data-installed="false"');
+    expect(markup).toContain('data-systems-ai-tool="opencode" data-installed="false" data-signed-in="unknown"');
+    expect(markup).toMatch(/data-systems-ai-tool="opencode"[^]*?>Not Installed</u);
     expect(markup).toContain('Not installed on this machine');
+    // A machine that cannot tell whether a tool is signed in shows it as Installed.
+    expect(markup).toContain('data-systems-ai-tool="codex" data-installed="true" data-signed-in="unknown"');
+    expect(markup).toMatch(/data-systems-ai-tool="codex"[^]*?>Installed</u);
   });
 
   it('says how to connect a machine without readings', () => {

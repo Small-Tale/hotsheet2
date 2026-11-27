@@ -75,6 +75,10 @@ async function openMachines(page: Page, server: Server) {
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
         });
+        if (encoded && path.endsWith('/target-capacity') && response.ok()) {
+          await route.fulfill({ response, json: remoteReportsSignIn(await response.json()) });
+          return;
+        }
         await route.fulfill({ response });
       } catch {
         await route.abort().catch(() => undefined);
@@ -84,6 +88,29 @@ async function openMachines(page: Page, server: Server) {
     localStorage.setItem('hotsheet.open-projects', JSON.stringify([root]));
   }, server.root);
   return { apiPath, remotePath, remoteId };
+}
+
+/**
+ * HS2-S1FEYY: the fixture host runs with AI tool probes off, so it reports no sign-in state. The
+ * remote plays a host that does: Claude signed in, Codex signed out, OpenCode not installed.
+ */
+function remoteReportsSignIn(snapshot: Record<string, unknown>) {
+  const capabilities = (snapshot.capabilities ?? { os: 'linux', arch: 'x86_64' }) as Record<string, unknown>;
+  return {
+    ...snapshot,
+    tools: [
+      { tool: 'claude', installed: true, configured: true },
+      { tool: 'codex', installed: true, configured: true },
+      { tool: 'opencode', installed: false, configured: true },
+    ],
+    capabilities: {
+      ...capabilities,
+      ai_tools: [
+        { tool: 'claude', version: '2.1.0', signed_in: true },
+        { tool: 'codex', version: '0.40.0', signed_in: false },
+      ],
+    },
+  };
 }
 
 /** Every Systems read the page makes, by kind and tab path. */
@@ -184,6 +211,15 @@ test('HS2-DR0ZSQ Systems shows this computer and each paired remote with live re
       'data-machine-id',
       `remote:${BINDING}`,
     );
+    // HS2-S1FEYY: each AI tool's sign-in state as the remote reports it, never an account.
+    const tool = (name: string) => view.locator(`[data-systems-ai-tool="${name}"]`);
+    await expect(tool('claude')).toHaveAttribute('data-signed-in', 'true');
+    await expect(tool('claude')).toContainText('Signed In');
+    await expect(tool('codex')).toHaveAttribute('data-signed-in', 'false');
+    await expect(tool('codex')).toContainText('Signed Out');
+    await expect(tool('codex')).toContainText('not signed in');
+    await expect(tool('opencode')).toHaveAttribute('data-installed', 'false');
+    await expect(tool('opencode')).toContainText('Not Installed');
     await expect
       .poll(() => reads.some((read) => read.kind === 'cpu' && read.machine === 'remote'), { timeout: 30_000 })
       .toBe(true);

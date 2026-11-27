@@ -132,12 +132,52 @@ describe('HS2-DR0ZSQ detail tables', () => {
     expect(aiToolRows(undefined)).toBeUndefined();
     const rows = aiToolRows(systemsDemoCapacity('build'), label)!;
     expect(rows.map((row) => [row.label, row.description, row.status.label])).toEqual([
-      ['Claude 2.1.0', '1 session running', 'Installed'],
+      ['Claude 2.1.0', 'Signed in · 1 session running', 'Signed In'],
       ['Codex 0.40.0', '1 session running', 'Installed'],
       ['OpenCode', 'Not installed on this machine', 'Not Installed'],
     ]);
     const idle = aiToolRows({ ...systemsDemoCapacity('local'), sessions: [] }, label)!;
-    expect(idle[0].description).toBe('Installed · no sessions running');
+    expect(idle.map((row) => [row.description, row.status, row.signedIn])).toEqual([
+      ['Signed in · no sessions running', { label: 'Signed In', tone: 'success' }, true],
+      ['Signed in · no sessions running', { label: 'Signed In', tone: 'success' }, true],
+      [
+        'Installed, not signed in · sign in on this machine to use it · no sessions running',
+        { label: 'Signed Out', tone: 'warning' },
+        false,
+      ],
+    ]);
+  });
+
+  it('HS2-S1FEYY reads sign-in from capabilities: unknown stays Installed, a missing tool never reads signed in', () => {
+    const base = systemsDemoCapacity('local');
+    const reported = (signIns: Record<string, boolean | undefined>, installed = true): OrchestrationCapacity => ({
+      ...base,
+      sessions: [],
+      tools: [{ tool: 'codex', installed, configured: true }],
+      capabilities: {
+        ...base.capabilities!,
+        ai_tools: Object.entries(signIns).map(([tool, signed_in]) =>
+          signed_in === undefined ? { tool } : { tool, signed_in },
+        ),
+      },
+    });
+    const one = (capacity: OrchestrationCapacity) => {
+      const [row] = aiToolRows(capacity)!;
+      return [row.status.label, row.signedIn, row.description];
+    };
+    expect(one(reported({ codex: undefined }))).toEqual(['Installed', undefined, 'Installed · no sessions running']);
+    expect(one(reported({ codex: true }))).toEqual(['Signed In', true, 'Signed in · no sessions running']);
+    // Signing out and back in, as successive snapshots report it.
+    expect(one(reported({ codex: false }))[0]).toBe('Signed Out');
+    expect(one(reported({ codex: true }))[0]).toBe('Signed In');
+    // A tool the machine says is not installed ignores a stale sign-in report.
+    expect(one(reported({ codex: true }, false))).toEqual([
+      'Not Installed',
+      undefined,
+      'Not installed on this machine',
+    ]);
+    // An older host without capabilities: Installed.
+    expect(aiToolRows({ ...reported({}), capabilities: undefined })![0].status.label).toBe('Installed');
   });
 
   it('adds a tool the capabilities name that the tool list omits, and ignores sessions without a tool', () => {

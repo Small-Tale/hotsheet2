@@ -65,9 +65,10 @@ export function systemsDemoCapacity(machine: SystemsDemoMachine): OrchestrationC
       cpu_model: build ? 'Example 10-Core Processor' : 'Example M-Series',
       gpu: build ? { present: false } : { present: true, vendors: ['apple'] },
       ai_tools: [
-        { tool: 'claude', version: '2.1.0' },
-        { tool: 'codex', version: '0.40.0' },
-        ...(build ? [] : [{ tool: 'opencode', version: '1.2.0' }]),
+        // HS2-S1FEYY: signed in, signed out, and (Codex on the build host) unknown.
+        { tool: 'claude', version: '2.1.0', signed_in: true },
+        { tool: 'codex', version: '0.40.0', ...(build ? {} : { signed_in: true }) },
+        ...(build ? [] : [{ tool: 'opencode', version: '1.2.0', signed_in: false }]),
       ],
       toolchains: [
         { name: 'node', installed: true, version: '22.10.0' },

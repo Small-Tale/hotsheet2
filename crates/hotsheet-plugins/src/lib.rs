@@ -337,6 +337,13 @@ pub struct DriveSpec {
     /// typed `remaining_fraction` and `reset_time`. Empty: no query.
     #[serde(default)]
     pub usage_query_args: Vec<String>,
+    /// HS2-S1FEYY: arguments that make `program` say whether it is signed in through its
+    /// exit status alone (`claude auth status`, `codex login status`): 0 is signed in, any
+    /// other exit is signed out. The host runs it as one bounded capability probe and never
+    /// reads its output, so no account name or credential leaves the tool. Empty: the
+    /// tool's sign-in state is unreported.
+    #[serde(default)]
+    pub auth_status_args: Vec<String>,
     /// Plugin-owned model catalog. Clients consume this declaration rather than
     /// hard-coding provider/model names.
     #[serde(default)]

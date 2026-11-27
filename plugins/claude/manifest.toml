@@ -67,6 +67,9 @@ models = [
 default_model = "sonnet"
 default_effort = "medium"
 session_options = ["model", "effort", "permission_mode"]
+# HS2-S1FEYY: `claude auth status` exits 0 signed in and 1 signed out. Systems reads
+# only the exit status, never the output, so no account name leaves the tool.
+auth_status_args = ["auth", "status"]
 # `--permission-mode` values a chat can run under (docs/05 §5.7, HS2-NHRDMW). Tool calls the
 # mode does not pre-approve reach the Hot Sheet permission popup through the appropriate hook.
 # `auto` lets Claude classify routine work; native PermissionRequest asks reach Hot Sheet.

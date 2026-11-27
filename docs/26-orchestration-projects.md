@@ -1426,7 +1426,7 @@ may be absent, which means the host could not tell; nothing is guessed.
 | `arch`                         | The machine's native architecture, normalized: `x86_64` or `arm64` (others lowercase)                 |
 | `cpu_model`                    | The processor's name, at most 96 characters                                                           |
 | `gpu.present`, `gpu.vendors[]` | A physical or integrated GPU, and its vendors: `amd`, `apple`, `intel`, `nvidia`, `qualcomm`, `other` |
-| `ai_tools[]`                   | Each installed drivable AI tool: `tool` and `version`                                                 |
+| `ai_tools[]`                   | Each installed drivable AI tool: `tool`, `version` and `signed_in` (HS2-S1FEYY)                       |
 | `toolchains[]`                 | Each declared toolchain: `name`, `installed` and `version`                                            |
 
 Total memory and logical CPUs stay where they are (`memory.total_mb`,
@@ -1441,7 +1441,15 @@ Total memory and logical CPUs stay where they are (`memory.total_mb`,
   minutes or until the declared toolchains change: never on a timer, never once per
   request. One bounded version probe per program runs, in parallel, and only while
   `HOTSHEET_AI_TOOL_PROBES` allows probing; otherwise a program on `PATH` is installed
-  without a version. The platform readers are in [host-health](host-health.md).
+  without a version.
+- **Sign-in** (HS2-S1FEYY). Beside its version probe, a tool whose plugin declares
+  `auth_status_args` (Claude `auth status`, Codex `login status`; docs/05) runs that
+  command once per detection in a fresh empty directory. Only its exit status is read: 0
+  is `signed_in: true`, any other exit `false`. Its output is never read, so no account
+  name or credential leaves the machine. Without a declaration, with probing off, or when
+  the check times out or is killed, `signed_in` is absent (unknown, never signed out). A
+  change of it changes the capacity `version`, through the capabilities term. A sign-in
+  or sign-out shows at the next detection, within ten minutes. Admission does not read it. The platform readers are in [host-health](host-health.md).
 - **Compatibility** (§26.5). The member is additive and optional: an older peer's
   snapshot has none and still reads, and an older reader ignores it. The capacity
   `version` digests it only when it is reported, so a snapshot without it keeps the

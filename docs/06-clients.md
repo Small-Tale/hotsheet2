@@ -6341,8 +6341,10 @@ toolbar.
 - **Workspace (`SystemsView`).** The selected machine's This Mac cards (`StatsThisMac`): disk,
   memory pressure, CPU with its per-core meter and sparkline, and power. The cards' context line
   names the machine as This Computer or Paired Remote. Below the cards:
-  - **AI Tools:** each tool, its version, and how many of its sessions run there. Tools that are
-    not installed are listed last.
+  - **AI Tools:** each tool, its version, and how many of its sessions run there, with a badge:
+    **Signed In**, **Signed Out**, or **Not Installed** (HS2-S1FEYY). A tool whose machine cannot
+    tell whether it is signed in (an older host, probing off, no declared status command, or a
+    check that did not finish) shows **Installed**. Tools that are not installed are listed last.
   - **Capabilities:** System, Processor (with core count), GPU, and Memory (free of total).
   - **Toolchains:** each installed toolchain and its version.
 
@@ -6371,8 +6373,6 @@ The headless equivalent of the capacity read is `hotsheet-cli orchestration capa
 
 ### Known gaps (follow-ups)
 
-- **Sign-in state (HS2-S1FEYY):** a machine does not report whether each AI tool is signed in, so
-  tools show as installed or not.
 - **Admission by Project and Placement Limits (HS2-5H8R0N):** the approved mock showed both in the
   right rail.
   They need per-project orchestration bindings by machine.
