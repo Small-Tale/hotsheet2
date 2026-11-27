@@ -463,11 +463,13 @@ fn stuck_request(info: &InstanceInfo) -> TcpStream {
 fn wait_for_pending_permission(info: &InstanceInfo) {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        let pending: serde_json::Value = ureq::get(&format!("{}/permissions", info.url))
-            .set("x-hotsheet-secret", info.secret.expose())
+        let pending: serde_json::Value = hotsheet_http::agent()
+            .get(&format!("{}/permissions", info.url))
+            .header("x-hotsheet-secret", info.secret.expose())
             .call()
             .unwrap()
-            .into_string()
+            .into_body()
+            .read_to_string()
             .map(|text| serde_json::from_str(&text).unwrap())
             .unwrap();
         if pending.as_array().is_some_and(|items| !items.is_empty()) {
@@ -486,16 +488,17 @@ fn stop_cancels_a_held_permission_hook_with_503_and_exits_cleanly() {
     let hook = {
         let info = info.clone();
         std::thread::spawn(move || {
-            ureq::post(&format!("{}/permissions/ask", info.url))
-                .set("x-hotsheet-secret", info.secret.expose())
-                .timeout(Duration::from_secs(60))
-                .set("content-type", "application/json")
-                .send_string(
-                    &json!({"connection": "c1", "tool": "Bash", "action": "ls"}).to_string(),
-                )
-                .map(|response| response.status())
+            hotsheet_http::agent()
+                .post(&format!("{}/permissions/ask", info.url))
+                .header("x-hotsheet-secret", info.secret.expose())
+                .config()
+                .timeout_global(Some(Duration::from_secs(60)))
+                .build()
+                .header("content-type", "application/json")
+                .send(&json!({"connection": "c1", "tool": "Bash", "action": "ls"}).to_string())
+                .map(|response| response.status().as_u16())
                 .map_err(|error| match error {
-                    ureq::Error::Status(code, _) => code.to_string(),
+                    ureq::Error::StatusCode(code) => code.to_string(),
                     other => other.to_string(),
                 })
         })
@@ -524,11 +527,13 @@ fn stop_cancels_a_held_permission_hook_with_503_and_exits_cleanly() {
 fn stop_cancels_an_idle_long_poll() {
     let mut server = Server::start(60_000);
     let info = server.ready();
-    let cursor = ureq::get(&format!("{}/ws/poll", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
+    let cursor = hotsheet_http::agent()
+        .get(&format!("{}/ws/poll", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap()
-        .into_string()
+        .into_body()
+        .read_to_string()
         .map(|text| serde_json::from_str::<serde_json::Value>(&text).unwrap())
         .unwrap()["cursor"]
         .as_u64()
@@ -536,15 +541,23 @@ fn stop_cancels_an_idle_long_poll() {
     let poll = {
         let info = info.clone();
         std::thread::spawn(move || {
-            ureq::get(&format!(
-                "{}/ws/poll?since={cursor}&timeout_ms=55000",
-                info.url
-            ))
-            .set("x-hotsheet-secret", info.secret.expose())
-            .timeout(Duration::from_secs(60))
-            .call()
-            .map_err(|error| error.to_string())
-            .and_then(|response| response.into_string().map_err(|error| error.to_string()))
+            hotsheet_http::agent()
+                .get(&format!(
+                    "{}/ws/poll?since={cursor}&timeout_ms=55000",
+                    info.url
+                ))
+                .header("x-hotsheet-secret", info.secret.expose())
+                .config()
+                .timeout_global(Some(Duration::from_secs(60)))
+                .build()
+                .call()
+                .map_err(|error| error.to_string())
+                .and_then(|response| {
+                    response
+                        .into_body()
+                        .read_to_string()
+                        .map_err(|error| error.to_string())
+                })
         })
     };
     // Let the poll reach its wait before stopping.
@@ -809,20 +822,26 @@ fn timed_request(
     body: Option<serde_json::Value>,
 ) -> (u16, Duration) {
     let started = Instant::now();
-    let request = ureq::request(method, &format!("{}{path}", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
-        .timeout(Duration::from_secs(30));
-    let response = match body {
-        Some(body) => request
-            .set("content-type", "application/json")
-            .send_string(&body.to_string()),
-        None => request.call(),
-    };
-    let status = match response {
-        Ok(response) => response.status(),
-        Err(ureq::Error::Status(status, _)) => status,
-        Err(error) => panic!("{method} {path} failed: {error}"),
-    };
+    let agent = hotsheet_http::build(
+        hotsheet_http::config()
+            .http_status_as_error(false)
+            .timeout_global(Some(Duration::from_secs(30))),
+    );
+    let body = body.map(|body| body.to_string());
+    let mut headers = vec![("x-hotsheet-secret", info.secret.expose())];
+    if body.is_some() {
+        headers.push(("content-type", "application/json"));
+    }
+    let status = hotsheet_http::run(
+        &agent,
+        method,
+        &format!("{}{path}", info.url),
+        &headers,
+        body.as_deref().map(str::as_bytes),
+    )
+    .unwrap_or_else(|error| panic!("{method} {path} failed: {error}"))
+    .status()
+    .as_u16();
     (status, started.elapsed())
 }
 
@@ -856,11 +875,13 @@ fn assert_hanging_discovery_is_bounded(tool: SlowTool) {
             "GET {path} queued {elapsed:?} behind the hung probe"
         );
     }
-    let tools: serde_json::Value = ureq::get(&format!("{}/ai-tools", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
+    let tools: serde_json::Value = hotsheet_http::agent()
+        .get(&format!("{}/ai-tools", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap()
-        .into_string()
+        .into_body()
+        .read_to_string()
         .map(|text| serde_json::from_str(&text).unwrap())
         .unwrap();
     assert!(
@@ -918,11 +939,12 @@ fn assert_hanging_discovery_is_bounded(tool: SlowTool) {
 fn real_server_responses_carry_a_date_header_for_client_clock_sampling() {
     let mut server = Server::start(1_000);
     let info = server.ready();
-    let response = ureq::get(&format!("{}/connections", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
+    let response = hotsheet_http::agent()
+        .get(&format!("{}/connections", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
         .call()
         .unwrap();
-    let date = response.header("date").expect("a Date header");
+    let date = hotsheet_http::header(&response, "date").expect("a Date header");
     assert!(date.ends_with(" GMT"), "an HTTP date: {date}");
     server.sigterm();
     assert!(server.exits_within(Duration::from_secs(5)).success());
@@ -937,11 +959,14 @@ fn real_server_responses_carry_a_date_header_for_client_clock_sampling() {
 fn hs2_f0s155_in_process_terminal_writes_a_bounded_journal_record() {
     let mut server = Server::start(1_000);
     let info = server.ready();
-    let response = ureq::post(&format!("{}/terminals", info.url))
-        .set("x-hotsheet-secret", info.secret.expose())
-        .set("content-type", "application/json")
-        .timeout(Duration::from_secs(30))
-        .send_string(&json!({ "command": "/bin/sh", "id": "f0s155-shell" }).to_string())
+    let response = hotsheet_http::agent()
+        .post(&format!("{}/terminals", info.url))
+        .header("x-hotsheet-secret", info.secret.expose())
+        .header("content-type", "application/json")
+        .config()
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build()
+        .send(&json!({ "command": "/bin/sh", "id": "f0s155-shell" }).to_string())
         .unwrap_or_else(|error| panic!("open terminal failed: {error}: {}", server.log()));
     assert_eq!(response.status(), 200);
 

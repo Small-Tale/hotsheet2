@@ -16,17 +16,19 @@ const TICKETS: usize = 6;
 const NOTES: usize = 4;
 
 fn request(method: &str, url: &str, body: Option<&str>, filename: Option<&str>) -> Value {
-    let mut request = ureq::request(method, url).set("x-hotsheet-secret", SECRET);
-    if let Some(filename) = filename {
-        request = request.set("x-hotsheet-filename", filename);
-    } else {
-        request = request.set("content-type", "application/json");
-    }
-    let response = match body {
-        Some(body) => request.send_string(body).unwrap(),
-        None => request.call().unwrap(),
+    let described = match filename {
+        Some(filename) => ("x-hotsheet-filename", filename),
+        None => ("content-type", "application/json"),
     };
-    serde_json::from_str(&response.into_string().unwrap()).unwrap()
+    let mut response = hotsheet_http::run(
+        &hotsheet_http::agent(),
+        method,
+        url,
+        &[("x-hotsheet-secret", SECRET), described],
+        body.map(str::as_bytes),
+    )
+    .unwrap();
+    serde_json::from_str(&response.body_mut().read_to_string().unwrap()).unwrap()
 }
 
 /// One MCP `tools/call` through the shim's real dispatch and HTTP transport; returns the

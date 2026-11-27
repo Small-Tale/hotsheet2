@@ -41,27 +41,27 @@ async fn hs2_s46j0w_git_status_in_sibling_checkout_keeps_terminal_owned_by_launc
             "args": ["-i"],
             "cwd": launch_path,
         });
-        let opened = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&body.to_string())
+        let opened = hotsheet_http::agent().post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&body.to_string())
             .unwrap();
         assert_eq!(opened.status(), 200);
         let input = format!(
             "cd '{sibling_path}'\ngit status\nprintf '\\033]7;file://host{sibling_path}\\007'\nprintf 'done-marker\\n'\n"
         );
-        ureq::post(&format!("{base}/terminals/sibling-git-status/input"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&serde_json::json!({ "data": input }).to_string())
+        hotsheet_http::agent().post(&format!("{base}/terminals/sibling-git-status/input"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&serde_json::json!({ "data": input }).to_string())
             .unwrap();
         for _ in 0..200 {
             let value: serde_json::Value = serde_json::from_str(
-                &ureq::get(&format!("{base}/terminals/sibling-git-status"))
-                    .set("x-hotsheet-secret", SECRET)
+                &hotsheet_http::agent().get(&format!("{base}/terminals/sibling-git-status"))
+                    .header("x-hotsheet-secret", SECRET)
                     .call()
                     .unwrap()
-                    .into_string()
+                    .into_body().read_to_string()
                     .unwrap(),
             )
             .unwrap();
@@ -84,12 +84,13 @@ async fn hs2_s46j0w_git_status_in_sibling_checkout_keeps_terminal_owned_by_launc
 async fn wait_for_terminal_text(base: String, id: String, needle: &'static str) {
     tokio::task::spawn_blocking(move || {
         for _ in 0..100 {
-            let response = ureq::get(&format!("{base}/terminals/{id}"))
-                .set("x-hotsheet-secret", SECRET)
+            let response = hotsheet_http::agent()
+                .get(&format!("{base}/terminals/{id}"))
+                .header("x-hotsheet-secret", SECRET)
                 .call()
                 .unwrap();
             let value: serde_json::Value =
-                serde_json::from_str(&response.into_string().unwrap()).unwrap();
+                serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
             if value["scrollback"]
                 .as_str()
                 .unwrap_or_default()
@@ -157,20 +158,23 @@ args = ["--permission", "Bash", "rm important"]
     tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
 
     let output = tokio::task::spawn_blocking(move || {
-        let opened = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"connect":"fake-permission","id":"perm-agent"}"#)
+        let opened = hotsheet_http::agent()
+            .post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"connect":"fake-permission","id":"perm-agent"}"#)
             .unwrap();
         assert_eq!(opened.status(), 200);
 
         let pending_id = loop {
             let value: serde_json::Value = serde_json::from_str(
-                &ureq::get(&format!("{base}/permissions"))
-                    .set("x-hotsheet-secret", SECRET)
+                &hotsheet_http::agent()
+                    .get(&format!("{base}/permissions"))
+                    .header("x-hotsheet-secret", SECRET)
                     .call()
                     .unwrap()
-                    .into_string()
+                    .into_body()
+                    .read_to_string()
                     .unwrap(),
             )
             .unwrap();
@@ -183,20 +187,23 @@ args = ["--permission", "Bash", "rm important"]
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         };
-        let answer = ureq::post(&format!("{base}/permissions/{pending_id}"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"decision":"allow","scope":"always"}"#)
+        let answer = hotsheet_http::agent()
+            .post(&format!("{base}/permissions/{pending_id}"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"decision":"allow","scope":"always"}"#)
             .unwrap();
         assert_eq!(answer.status(), 200);
 
         for _ in 0..100 {
             let value: serde_json::Value = serde_json::from_str(
-                &ureq::get(&format!("{base}/terminals/perm-agent"))
-                    .set("x-hotsheet-secret", SECRET)
+                &hotsheet_http::agent()
+                    .get(&format!("{base}/terminals/perm-agent"))
+                    .header("x-hotsheet-secret", SECRET)
                     .call()
                     .unwrap()
-                    .into_string()
+                    .into_body()
+                    .read_to_string()
                     .unwrap(),
             )
             .unwrap();
@@ -232,14 +239,14 @@ async fn attach_replays_scrollback_streams_output_and_forwards_input() {
     // Open a `cat` terminal over HTTP (blocking ureq off the runtime).
     let base = format!("http://{addr}");
     let id = tokio::task::spawn_blocking(move || {
-        let resp = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(
+        let resp = hotsheet_http::agent().post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(
                 r#"{"command":"/bin/sh","args":["-c","stty -echo; printf 'DIRECT-READY\\n'; exec cat"]}"#,
             )
             .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&resp.into_body().read_to_string().unwrap()).unwrap();
         v["id"].as_str().unwrap().to_string()
     })
     .await
@@ -251,10 +258,11 @@ async fn attach_replays_scrollback_streams_output_and_forwards_input() {
     let handoff_base = format!("http://{addr}");
     let handoff_id = id.clone();
     tokio::task::spawn_blocking(move || {
-        ureq::post(&format!("{handoff_base}/terminals/{handoff_id}/input"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"data":"direct-handoff-marker\n"}"#)
+        hotsheet_http::agent()
+            .post(&format!("{handoff_base}/terminals/{handoff_id}/input"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"data":"direct-handoff-marker\n"}"#)
             .unwrap();
     })
     .await
@@ -319,13 +327,14 @@ async fn osc9_terminal_output_reaches_the_scoped_notification_inbox_once() {
     let base = format!("http://{addr}");
     let open_base = base.clone();
     let id = tokio::task::spawn_blocking(move || {
-        let response = ureq::post(&format!("{open_base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"command":"/bin/sh","args":["-c","stty -echo; exec cat"]}"#)
+        let response = hotsheet_http::agent()
+            .post(&format!("{open_base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"command":"/bin/sh","args":["-c","stty -echo; exec cat"]}"#)
             .unwrap();
         let value: serde_json::Value =
-            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+            serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
         value["id"].as_str().unwrap().to_string()
     })
     .await
@@ -342,12 +351,13 @@ async fn osc9_terminal_output_reaches_the_scoped_notification_inbox_once() {
 
     let notices = tokio::task::spawn_blocking(move || {
         for _ in 0..100 {
-            let response = ureq::get(&format!("{base}/notifications"))
-                .set("x-hotsheet-secret", SECRET)
+            let response = hotsheet_http::agent()
+                .get(&format!("{base}/notifications"))
+                .header("x-hotsheet-secret", SECRET)
                 .call()
                 .unwrap();
             let value: serde_json::Value =
-                serde_json::from_str(&response.into_string().unwrap()).unwrap();
+                serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
             if value.as_array().is_some_and(|items| !items.is_empty()) {
                 return value;
             }
@@ -406,13 +416,13 @@ async fn bounded_attach_replay_starts_after_a_truncated_ansi_sequence() {
             "args": ["-c", script],
         })
         .to_string();
-        let response = ureq::post(&format!("{open_base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&body)
+        let response = hotsheet_http::agent().post(&format!("{open_base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&body)
             .unwrap();
         let value: serde_json::Value =
-            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+            serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
         value["id"].as_str().unwrap().to_string()
     })
     .await
@@ -422,12 +432,13 @@ async fn bounded_attach_replay_starts_after_a_truncated_ansi_sequence() {
     let wait_id = id.clone();
     tokio::task::spawn_blocking(move || {
         for _ in 0..200 {
-            let response = ureq::get(&format!("{wait_base}/terminals/{wait_id}"))
-                .set("x-hotsheet-secret", SECRET)
+            let response = hotsheet_http::agent()
+                .get(&format!("{wait_base}/terminals/{wait_id}"))
+                .header("x-hotsheet-secret", SECRET)
                 .call()
                 .unwrap();
             let value: serde_json::Value =
-                serde_json::from_str(&response.into_string().unwrap()).unwrap();
+                serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
             if value["scrollback"].as_str().unwrap_or_default().len()
                 >= hotsheet_terminals::SCROLLBACK_BYTES - 2
             {
@@ -497,13 +508,13 @@ async fn reconnect_replays_history_sized_from_the_configured_client_limit() {
 
     let open_base = base.clone();
     let id = tokio::task::spawn_blocking(move || {
-        let limits = ureq::put(&format!("{open_base}/terminal-limits"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&format!(r#"{{"history_lines":{history_lines}}}"#))
+        let limits = hotsheet_http::agent().put(&format!("{open_base}/terminal-limits"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&format!(r#"{{"history_lines":{history_lines}}}"#))
             .unwrap();
         let limits: serde_json::Value =
-            serde_json::from_str(&limits.into_string().unwrap()).unwrap();
+            serde_json::from_str(&limits.into_body().read_to_string().unwrap()).unwrap();
         assert_eq!(
             limits["effective"]["replay_bytes"],
             serde_json::json!(expected)
@@ -511,13 +522,13 @@ async fn reconnect_replays_history_sized_from_the_configured_client_limit() {
         // Far more output than the replay holds: numbered ~100-byte lines, then a marker.
         let script = "i=0; while [ $i -lt 9000 ]; do printf 'line %05d %089d\\n' $i 0; i=$((i+1)); done; printf DONE; sleep 30";
         let body = serde_json::json!({ "command": "/bin/sh", "args": ["-c", script] }).to_string();
-        let response = ureq::post(&format!("{open_base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&body)
+        let response = hotsheet_http::agent().post(&format!("{open_base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&body)
             .unwrap();
         let value: serde_json::Value =
-            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+            serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
         value["id"].as_str().unwrap().to_string()
     })
     .await
@@ -562,13 +573,14 @@ async fn empty_attach_replay_is_an_explicit_binary_boundary() {
 
     let base = format!("http://{addr}");
     let id = tokio::task::spawn_blocking(move || {
-        let response = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"command":"/bin/sh","args":["-c","sleep 2"]}"#)
+        let response = hotsheet_http::agent()
+            .post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"command":"/bin/sh","args":["-c","sleep 2"]}"#)
             .unwrap();
         let value: serde_json::Value =
-            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+            serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
         value["id"].as_str().unwrap().to_string()
     })
     .await
@@ -597,12 +609,14 @@ async fn boot_with_cat() -> (tempfile::TempDir, std::net::SocketAddr, String) {
     });
     let base = format!("http://{addr}");
     let id = tokio::task::spawn_blocking(move || {
-        let resp = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"command":"cat"}"#)
+        let resp = hotsheet_http::agent()
+            .post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"command":"cat"}"#)
             .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&resp.into_body().read_to_string().unwrap()).unwrap();
         v["id"].as_str().unwrap().to_string()
     })
     .await
@@ -772,12 +786,14 @@ async fn a_new_broker_viewer_receives_the_applied_size_without_claiming() {
     });
     let base = format!("http://{addr}");
     let id = tokio::task::spawn_blocking(move || {
-        let resp = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"command":"cat","id":"bsized"}"#)
+        let resp = hotsheet_http::agent()
+            .post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"command":"cat","id":"bsized"}"#)
             .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&resp.into_body().read_to_string().unwrap()).unwrap();
         v["id"].as_str().unwrap().to_string()
     })
     .await
@@ -820,14 +836,14 @@ async fn broker_mode_attach_streams_through_the_broker() {
     // Open a `cat` terminal over HTTP — it lives in the broker.
     let base = format!("http://{addr}");
     let id = tokio::task::spawn_blocking(move || {
-        let resp = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(
+        let resp = hotsheet_http::agent().post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(
                 r#"{"command":"/bin/sh","args":["-c","stty -echo; printf 'BROKER-READY\\n'; exec cat"],"id":"bws"}"#,
             )
             .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&resp.into_body().read_to_string().unwrap()).unwrap();
         v["id"].as_str().unwrap().to_string()
     })
     .await
@@ -838,10 +854,11 @@ async fn broker_mode_attach_streams_through_the_broker() {
     let handoff_base = format!("http://{addr}");
     let handoff_id = id.clone();
     tokio::task::spawn_blocking(move || {
-        ureq::post(&format!("{handoff_base}/terminals/{handoff_id}/input"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"data":"broker-handoff-marker\n"}"#)
+        hotsheet_http::agent()
+            .post(&format!("{handoff_base}/terminals/{handoff_id}/input"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"data":"broker-handoff-marker\n"}"#)
             .unwrap();
     })
     .await
@@ -914,19 +931,22 @@ async fn shell_command_terminal_runs_the_command_and_stays_open() {
     let base = format!("http://{addr}");
     tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
     let (scrollback, alive) = tokio::task::spawn_blocking(move || {
-        let opened = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"shell_command":"echo hs2-shell-marker","id":"sc1"}"#)
+        let opened = hotsheet_http::agent()
+            .post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"shell_command":"echo hs2-shell-marker","id":"sc1"}"#)
             .unwrap();
         assert_eq!(opened.status(), 200);
         let read = || -> (String, bool) {
             let value: serde_json::Value = serde_json::from_str(
-                &ureq::get(&format!("{base}/terminals/sc1"))
-                    .set("x-hotsheet-secret", SECRET)
+                &hotsheet_http::agent()
+                    .get(&format!("{base}/terminals/sc1"))
+                    .header("x-hotsheet-secret", SECRET)
                     .call()
                     .unwrap()
-                    .into_string()
+                    .into_body()
+                    .read_to_string()
                     .unwrap(),
             )
             .unwrap();
@@ -1025,10 +1045,11 @@ async fn slow_viewer_input_reaches_the_pty(addr: std::net::SocketAddr, id: &str)
     let base = format!("http://{addr}");
     let body = flood_until_input_body(id, &marker);
     tokio::task::spawn_blocking(move || {
-        let resp = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&body)
+        let resp = hotsheet_http::agent()
+            .post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&body)
             .unwrap();
         assert_eq!(resp.status(), 200);
     })
@@ -1284,12 +1305,14 @@ async fn broker_size_frames_name_the_one_viewer_that_answers_terminal_queries() 
     });
     let base = format!("http://{addr}");
     let id = tokio::task::spawn_blocking(move || {
-        let resp = ureq::post(&format!("{base}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(r#"{"command":"cat","id":"banswer"}"#)
+        let resp = hotsheet_http::agent()
+            .post(&format!("{base}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(r#"{"command":"cat","id":"banswer"}"#)
             .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&resp.into_body().read_to_string().unwrap()).unwrap();
         v["id"].as_str().unwrap().to_string()
     })
     .await
@@ -1398,10 +1421,11 @@ impl EndServer {
     async fn open(&self, body: serde_json::Value) {
         let base = format!("http://{}", self.addr);
         tokio::task::spawn_blocking(move || {
-            let resp = ureq::post(&format!("{base}/terminals"))
-                .set("x-hotsheet-secret", SECRET)
-                .set("content-type", "application/json")
-                .send_string(&body.to_string())
+            let resp = hotsheet_http::agent()
+                .post(&format!("{base}/terminals"))
+                .header("x-hotsheet-secret", SECRET)
+                .header("content-type", "application/json")
+                .send(&body.to_string())
                 .unwrap();
             assert_eq!(resp.status(), 200);
         })
@@ -1412,9 +1436,13 @@ impl EndServer {
     async fn kill(&self, id: &str) -> u16 {
         let url = format!("http://{}/terminals/{id}", self.addr);
         tokio::task::spawn_blocking(move || {
-            match ureq::delete(&url).set("x-hotsheet-secret", SECRET).call() {
-                Ok(resp) => resp.status(),
-                Err(ureq::Error::Status(code, _)) => code,
+            match hotsheet_http::agent()
+                .delete(&url)
+                .header("x-hotsheet-secret", SECRET)
+                .call()
+            {
+                Ok(resp) => resp.status().as_u16(),
+                Err(ureq::Error::StatusCode(code)) => code,
                 Err(other) => panic!("kill failed: {other}"),
             }
         })
@@ -1428,11 +1456,13 @@ impl EndServer {
         tokio::task::spawn_blocking(move || {
             for _ in 0..500 {
                 let value: serde_json::Value = serde_json::from_str(
-                    &ureq::get(&url)
-                        .set("x-hotsheet-secret", SECRET)
+                    &hotsheet_http::agent()
+                        .get(&url)
+                        .header("x-hotsheet-secret", SECRET)
                         .call()
                         .unwrap()
-                        .into_string()
+                        .into_body()
+                        .read_to_string()
                         .unwrap(),
                 )
                 .unwrap();

@@ -98,18 +98,18 @@ fn hs2_me31d0_git_requests_answer_while_the_owner_holds_stdin() {
             panic!("server did not start: {output}")
         });
 
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(30))
-        .build();
+    let agent =
+        hotsheet_http::build(hotsheet_http::config().timeout_global(Some(Duration::from_secs(30))));
     let body = serde_json::json!({ "root": root, "stores": [store] }).to_string();
     let checkout: Value = serde_json::from_str(
         &agent
             .post(&format!("{url}/checkouts"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&body)
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&body)
             .unwrap()
-            .into_string()
+            .into_body()
+            .read_to_string()
             .unwrap(),
     )
     .unwrap();
@@ -118,10 +118,11 @@ fn hs2_me31d0_git_requests_answer_while_the_owner_holds_stdin() {
     let status: Value = serde_json::from_str(
         &agent
             .get(&format!("{url}/checkouts/{id}/repository/status"))
-            .set("x-hotsheet-secret", SECRET)
+            .header("x-hotsheet-secret", SECRET)
             .call()
             .expect("repository status answers while the owner holds stdin")
-            .into_string()
+            .into_body()
+            .read_to_string()
             .unwrap(),
     )
     .unwrap();

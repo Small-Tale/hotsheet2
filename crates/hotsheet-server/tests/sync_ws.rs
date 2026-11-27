@@ -12,14 +12,18 @@ const SECRET: &str = "test-secret";
 async fn request_json(method: &'static str, url: String, body: Option<&str>) -> serde_json::Value {
     let body = body.map(str::to_owned);
     tokio::task::spawn_blocking(move || {
-        let request = ureq::request(method, &url)
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json");
-        let response = match body {
-            Some(value) => request.send_string(&value).unwrap(),
-            None => request.call().unwrap(),
-        };
-        serde_json::from_str(&response.into_string().unwrap()).unwrap()
+        let mut response = hotsheet_http::run(
+            &hotsheet_http::agent(),
+            method,
+            &url,
+            &[
+                ("x-hotsheet-secret", SECRET),
+                ("content-type", "application/json"),
+            ],
+            body.as_deref().map(str::as_bytes),
+        )
+        .unwrap();
+        serde_json::from_str(&response.body_mut().read_to_string().unwrap()).unwrap()
     })
     .await
     .unwrap()
@@ -27,11 +31,16 @@ async fn request_json(method: &'static str, url: String, body: Option<&str>) -> 
 
 async fn request_status(method: &'static str, url: String) -> u16 {
     tokio::task::spawn_blocking(move || {
-        ureq::request(method, &url)
-            .set("x-hotsheet-secret", SECRET)
-            .call()
-            .unwrap()
-            .status()
+        hotsheet_http::run(
+            &hotsheet_http::agent(),
+            method,
+            &url,
+            &[("x-hotsheet-secret", SECRET)],
+            None,
+        )
+        .unwrap()
+        .status()
+        .as_u16()
     })
     .await
     .unwrap()

@@ -201,26 +201,32 @@ command = "hotsheet-cli permission-hook --agent synthetic"
 }
 
 fn call(server: &Server, method: &str, path: &str, body: Value) -> Value {
-    let request = ureq::request(method, &format!("{}{path}", server.url))
-        .set("X-Hotsheet-Secret", SECRET)
-        .timeout(Duration::from_secs(60));
-    let response = if body.is_null() {
-        request.call()
-    } else {
-        request
-            .set("Content-Type", "application/json")
-            .send_string(&body.to_string())
-    };
-    match response {
-        Ok(response) => serde_json::from_reader(response.into_reader()).unwrap_or(Value::Null),
-        Err(ureq::Error::Status(status, response)) => {
-            panic!(
-                "{method} {path}: {status} {}",
-                response.into_string().unwrap_or_default()
-            )
-        }
-        Err(error) => panic!("{method} {path}: {error}"),
+    let agent = hotsheet_http::build(
+        hotsheet_http::config()
+            .http_status_as_error(false)
+            .timeout_global(Some(Duration::from_secs(60))),
+    );
+    let text = (!body.is_null()).then(|| body.to_string());
+    let mut headers = vec![("X-Hotsheet-Secret", SECRET)];
+    if text.is_some() {
+        headers.push(("Content-Type", "application/json"));
     }
+    let mut response = hotsheet_http::run(
+        &agent,
+        method,
+        &format!("{}{path}", server.url),
+        &headers,
+        text.as_deref().map(str::as_bytes),
+    )
+    .unwrap_or_else(|error| panic!("{method} {path}: {error}"));
+    let status = response.status().as_u16();
+    if status >= 400 {
+        panic!(
+            "{method} {path}: {status} {}",
+            response.body_mut().read_to_string().unwrap_or_default()
+        )
+    }
+    serde_json::from_reader(response.into_body().into_reader()).unwrap_or(Value::Null)
 }
 
 /// Hold the machine's permission vault the way a credential prompt holds it, then let

@@ -63,13 +63,14 @@ async fn colored_terminal(addr: SocketAddr, id: &'static str) -> String {
         serde_json::json!({"command": "/bin/sh", "args": ["-c", script], "id": id}).to_string();
     let created = base.clone();
     let id = tokio::task::spawn_blocking(move || {
-        let response = ureq::post(&format!("{created}/terminals"))
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&body)
+        let response = hotsheet_http::agent()
+            .post(&format!("{created}/terminals"))
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&body)
             .unwrap();
         let value: serde_json::Value =
-            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+            serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
         value["id"].as_str().unwrap().to_string()
     })
     .await
@@ -77,12 +78,13 @@ async fn colored_terminal(addr: SocketAddr, id: &'static str) -> String {
     let wait_id = id.clone();
     tokio::task::spawn_blocking(move || {
         for _ in 0..500 {
-            let response = ureq::get(&format!("{base}/terminals/{wait_id}"))
-                .set("x-hotsheet-secret", SECRET)
+            let response = hotsheet_http::agent()
+                .get(&format!("{base}/terminals/{wait_id}"))
+                .header("x-hotsheet-secret", SECRET)
                 .call()
                 .unwrap();
             let value: serde_json::Value =
-                serde_json::from_str(&response.into_string().unwrap()).unwrap();
+                serde_json::from_str(&response.into_body().read_to_string().unwrap()).unwrap();
             if value["scrollback"]
                 .as_str()
                 .unwrap_or_default()
@@ -214,10 +216,11 @@ async fn hs2_k93qha_unknown_protocol_values_keep_the_legacy_replay() {
 async fn send_input(addr: SocketAddr, id: &str, text: &'static str) {
     let url = format!("http://{addr}/terminals/{id}/input");
     tokio::task::spawn_blocking(move || {
-        ureq::post(&url)
-            .set("x-hotsheet-secret", SECRET)
-            .set("content-type", "application/json")
-            .send_string(&serde_json::json!({ "data": text }).to_string())
+        hotsheet_http::agent()
+            .post(&url)
+            .header("x-hotsheet-secret", SECRET)
+            .header("content-type", "application/json")
+            .send(&serde_json::json!({ "data": text }).to_string())
             .unwrap();
     })
     .await

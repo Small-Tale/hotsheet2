@@ -13,19 +13,21 @@ const SECRET: &str = "test-secret";
 const REASON: &str = "Waiting on a synthetic dependency";
 
 fn request(method: &str, url: &str, body: Value) -> (u16, Value) {
-    let response = ureq::request(method, url)
-        .set("x-hotsheet-secret", SECRET)
-        .set("content-type", "application/json")
-        .send_string(&body.to_string());
-    let response = match response {
-        Ok(response) => response,
-        Err(ureq::Error::Status(_, response)) => response,
-        Err(error) => panic!("{error}"),
-    };
-    let status = response.status();
+    let mut response = hotsheet_http::run(
+        &hotsheet_http::build(hotsheet_http::config().http_status_as_error(false)),
+        method,
+        url,
+        &[
+            ("x-hotsheet-secret", SECRET),
+            ("content-type", "application/json"),
+        ],
+        Some(body.to_string().as_bytes()),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let status = response.status().as_u16();
     (
         status,
-        serde_json::from_str(&response.into_string().unwrap()).unwrap(),
+        serde_json::from_str(&response.body_mut().read_to_string().unwrap()).unwrap(),
     )
 }
 

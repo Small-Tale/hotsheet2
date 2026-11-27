@@ -56,23 +56,21 @@ async fn server() -> Server {
 
 /// One request with exactly the given headers; no credential is added implicitly.
 fn http(method: &str, url: &str, headers: &[(&str, &str)], body: Option<Value>) -> (u16, Value) {
-    let mut request = ureq::request(method, url);
-    for (name, value) in headers {
-        request = request.set(name, value);
+    let body = body.map(|body| body.to_string());
+    let mut headers = headers.to_vec();
+    if body.is_some() {
+        headers.push(("content-type", "application/json"));
     }
-    let response = match body {
-        Some(body) => request
-            .set("content-type", "application/json")
-            .send_string(&body.to_string()),
-        None => request.call(),
-    };
-    let response = match response {
-        Ok(response) => response,
-        Err(ureq::Error::Status(_, response)) => response,
-        Err(error) => panic!("{error}"),
-    };
-    let status = response.status();
-    let text = response.into_string().unwrap();
+    let mut response = hotsheet_http::run(
+        &hotsheet_http::build(hotsheet_http::config().http_status_as_error(false)),
+        method,
+        url,
+        &headers,
+        body.as_deref().map(str::as_bytes),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let status = response.status().as_u16();
+    let text = response.body_mut().read_to_string().unwrap();
     (status, serde_json::from_str(&text).unwrap_or(Value::Null))
 }
 

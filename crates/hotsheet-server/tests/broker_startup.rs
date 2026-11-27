@@ -142,16 +142,21 @@ impl Drop for SocketFiles {
 }
 
 fn request(info: &InstanceInfo, method: &str, path: &str, body: Option<Value>) -> Value {
-    let request = ureq::request(method, &format!("{}{path}", info.url))
-        .timeout(Duration::from_secs(5))
-        .set("x-hotsheet-secret", info.secret.expose())
-        .set("content-type", "application/json");
-    let response = match body {
-        Some(body) => request.send_string(&body.to_string()),
-        None => request.call(),
-    }
+    let agent =
+        hotsheet_http::build(hotsheet_http::config().timeout_global(Some(Duration::from_secs(5))));
+    let body = body.map(|body| body.to_string());
+    let mut response = hotsheet_http::run(
+        &agent,
+        method,
+        &format!("{}{path}", info.url),
+        &[
+            ("x-hotsheet-secret", info.secret.expose()),
+            ("content-type", "application/json"),
+        ],
+        body.as_deref().map(str::as_bytes),
+    )
     .unwrap();
-    let text = response.into_string().unwrap();
+    let text = response.body_mut().read_to_string().unwrap();
     if text.is_empty() {
         Value::Null
     } else {

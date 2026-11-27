@@ -55,8 +55,8 @@ notify.workspace = true
 sha2.workspace = true
 getrandom.workspace = true
 tempfile.workspace = true
-# HS2-9ABVDW: still on ureq 2 until this crate moves to hotsheet-http.
-ureq = "2.12"
+ureq.workspace = true
+hotsheet-http.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

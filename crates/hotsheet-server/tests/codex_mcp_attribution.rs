@@ -23,14 +23,19 @@ const TAB_A: &str = "codex-tab-a";
 const TAB_B: &str = "codex-tab-b";
 
 fn request(method: &str, url: &str, body: Option<Value>) -> Value {
-    let request = ureq::request(method, url)
-        .set("x-hotsheet-secret", SECRET)
-        .set("content-type", "application/json");
-    let response = match body {
-        Some(body) => request.send_string(&body.to_string()).unwrap(),
-        None => request.call().unwrap(),
-    };
-    serde_json::from_str(&response.into_string().unwrap()).unwrap()
+    let body = body.map(|body| body.to_string());
+    let mut response = hotsheet_http::run(
+        &hotsheet_http::agent(),
+        method,
+        url,
+        &[
+            ("x-hotsheet-secret", SECRET),
+            ("content-type", "application/json"),
+        ],
+        body.as_deref().map(str::as_bytes),
+    )
+    .unwrap();
+    serde_json::from_str(&response.body_mut().read_to_string().unwrap()).unwrap()
 }
 
 /// `(TAB_A connected, TAB_B connected)` from `GET /terminals`.
