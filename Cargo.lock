@@ -1400,6 +1400,7 @@ dependencies = [
  "hotsheet-model",
  "hotsheet-sync",
  "image",
+ "jiff",
  "libavif-sys",
  "libc",
  "png",

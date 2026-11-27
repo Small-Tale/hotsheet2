@@ -701,6 +701,16 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 }
             }
         }
+        // HS2-KXKA7X: an unknown trigger is absent; a definition that does not fit is
+        // invalid; a trigger that does not fire, or lost its template, conflicts.
+        OrchestrationError::Trigger(error) => {
+            use hotsheet_ticketing::orchestration::TriggerError as E;
+            match error {
+                E::NotFound => 404,
+                E::Invalid => 422,
+                E::NotFiring | E::TemplateMissing => 409,
+            }
+        }
         OrchestrationError::Session(error) => {
             use hotsheet_ticketing::orchestration::SessionError as E;
             match error {

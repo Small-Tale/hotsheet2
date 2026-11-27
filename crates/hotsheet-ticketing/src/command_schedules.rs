@@ -611,6 +611,273 @@ fn matches_day_rule(date: Date, rule: &DayRule) -> bool {
     }
 }
 
+/// HS2-KXKA7X: the host half of a recurrence, shared by command schedules and
+/// orchestration triggers: a recurrence in a time zone at a local time, resolved to
+/// instants. A DST gap advances to the first valid minute; a fold runs once, at its
+/// first instant; a sub-day slot in a gap is covered by the next slot when that one
+/// resolves at or before it. The occurrence key (`YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm`
+/// for sub-day kinds) is the occurrence's identity, never the instant.
+pub mod zoned {
+    use super::{
+        Recurrence, dates_through, format_local_time, occurrence_key, parse_local_time,
+        slots_through,
+    };
+    use jiff::{
+        Timestamp, civil,
+        tz::{AmbiguousOffset, TimeZone},
+    };
+    use time::{Date, Duration, PrimitiveDateTime, Time};
+
+    /// A recurrence at a local time in a named time zone.
+    #[derive(Debug, Clone, Copy)]
+    pub struct Zoned<'a> {
+        pub time_zone: &'a str,
+        pub local_time: &'a str,
+        pub recurrence: &'a Recurrence,
+    }
+
+    /// One occurrence: its key and the instant it runs.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Occurrence {
+        pub key: String,
+        pub instant: Timestamp,
+    }
+
+    /// Folds and offset changes are at most a few hours; a three-hour margin keeps the
+    /// current slot in view on both sides of a transition.
+    pub const SUB_DAY_MARGIN: Duration = Duration::hours(3);
+
+    fn text(error: impl ToString) -> String {
+        error.to_string()
+    }
+
+    pub fn zone(name: &str) -> Result<TimeZone, String> {
+        TimeZone::get(name).map_err(text)
+    }
+
+    /// Resolve one local civil minute: a gap advances to the first valid minute
+    /// (reported as `true`), and a fold chooses its first occurrence.
+    pub fn local_instant(
+        zone: &TimeZone,
+        local: PrimitiveDateTime,
+    ) -> Result<(Timestamp, bool), String> {
+        for step in 0..=1440 {
+            let candidate = local
+                .checked_add(Duration::minutes(step))
+                .ok_or("local time overflow")?;
+            let date = candidate.date();
+            let time = candidate.time();
+            let civil = civil::DateTime::new(
+                date.year() as i16,
+                date.month() as u8 as i8,
+                date.day() as i8,
+                time.hour() as i8,
+                time.minute() as i8,
+                0,
+                0,
+            )
+            .map_err(text)?;
+            let ambiguous = zone.to_ambiguous_timestamp(civil);
+            if !matches!(ambiguous.offset(), AmbiguousOffset::Gap { .. }) {
+                return ambiguous
+                    .earlier()
+                    .map(|instant| (instant, step > 0))
+                    .map_err(text);
+            }
+        }
+        Err("no valid local minute within a day".into())
+    }
+
+    /// The local date and time at `now`.
+    pub fn local_now(zone: &TimeZone, now: Timestamp) -> Result<PrimitiveDateTime, String> {
+        let local = zone.to_datetime(now);
+        let date = Date::from_calendar_date(
+            i32::from(local.year()),
+            time::Month::try_from(local.month() as u8).map_err(text)?,
+            local.day() as u8,
+        )
+        .map_err(text)?;
+        let time = Time::from_hms(
+            local.hour() as u8,
+            local.minute() as u8,
+            local.second() as u8,
+        )
+        .map_err(text)?;
+        Ok(date.with_time(time))
+    }
+
+    /// The local calendar date at `now`.
+    pub fn local_date(zone: &TimeZone, now: Timestamp) -> Result<Date, String> {
+        local_now(zone, now).map(|local| local.date())
+    }
+
+    impl Zoned<'_> {
+        /// The instant of a date-kind occurrence on `date`.
+        pub fn date_instant(&self, date: Date) -> Result<Timestamp, String> {
+            let zone = zone(self.time_zone)?;
+            let (hour, minute) = parse_local_time(self.local_time)?;
+            let local = date.with_time(Time::from_hms(hour, minute, 0).map_err(text)?);
+            local_instant(&zone, local).map(|(instant, _)| instant)
+        }
+
+        /// Sub-day slots in `(after, through]` resolved to instants (see the module).
+        pub fn sub_day_instants(
+            &self,
+            zone: &TimeZone,
+            after: PrimitiveDateTime,
+            through: PrimitiveDateTime,
+            limit: usize,
+        ) -> Result<Vec<(PrimitiveDateTime, Timestamp)>, String> {
+            let slots = slots_through(self.recurrence, self.local_time, after, through, limit + 1)?;
+            let resolved = slots
+                .iter()
+                .map(|slot| local_instant(zone, *slot))
+                .collect::<Result<Vec<_>, _>>()?;
+            let full = slots.len() == limit + 1;
+            let mut result = Vec::new();
+            for (index, (slot, (instant, gap))) in slots.iter().zip(&resolved).enumerate() {
+                let next = resolved.get(index + 1).map(|(instant, _)| *instant);
+                if next.is_none() && full {
+                    // The lookahead slot only decides its predecessor.
+                    break;
+                }
+                if *gap && next.is_some_and(|next| next <= *instant) {
+                    continue;
+                }
+                result.push((*slot, *instant));
+            }
+            Ok(result)
+        }
+
+        /// The next `count` sub-day slots after `now`.
+        pub fn next_sub_day_instants(
+            &self,
+            now: Timestamp,
+            count: usize,
+        ) -> Result<Vec<(PrimitiveDateTime, Timestamp)>, String> {
+            let zone = zone(self.time_zone)?;
+            let local = local_now(&zone, now)?;
+            let after = local.saturating_sub(SUB_DAY_MARGIN);
+            let through = local.saturating_add(Duration::days(366 * 20));
+            // Three hours at the five-minute floor is 36 slots before `now`.
+            let limit = 40 + count;
+            Ok(self
+                .sub_day_instants(&zone, after, through, limit)?
+                .into_iter()
+                .filter(|(_, instant)| *instant > now)
+                .take(count)
+                .collect())
+        }
+
+        /// The next `count` occurrences after `now`, of either kind.
+        pub fn next(&self, now: Timestamp, count: usize) -> Result<Vec<Occurrence>, String> {
+            if count == 0 {
+                return Ok(Vec::new());
+            }
+            if self.recurrence.kind.is_sub_day() {
+                return Ok(self
+                    .next_sub_day_instants(now, count)?
+                    .into_iter()
+                    .map(|(slot, instant)| Occurrence {
+                        key: slot_key(slot),
+                        instant,
+                    })
+                    .collect());
+            }
+            let zone = zone(self.time_zone)?;
+            let after = local_date(&zone, now)?
+                .previous_day()
+                .ok_or("local date is outside supported range")?;
+            let through = after
+                .checked_add(Duration::days(366 * 20))
+                .unwrap_or(Date::MAX);
+            let mut found = Vec::new();
+            for date in dates_through(self.recurrence, after, through, count + 5)? {
+                let instant = self.date_instant(date)?;
+                if instant > now {
+                    found.push(Occurrence {
+                        key: occurrence_key(&date.to_string(), None),
+                        instant,
+                    });
+                    if found.len() == count {
+                        break;
+                    }
+                }
+            }
+            Ok(found)
+        }
+
+        /// The occurrences whose instant lies in `(after, through]`, oldest first, at
+        /// most `limit`. A window longer than a few days (a machine that was off) is
+        /// clipped to its last two days, which is all a caller that coalesces missed
+        /// occurrences into the latest one needs.
+        pub fn between(
+            &self,
+            after: Timestamp,
+            through: Timestamp,
+            limit: usize,
+        ) -> Result<Vec<Occurrence>, String> {
+            if through <= after || limit == 0 {
+                return Ok(Vec::new());
+            }
+            let zone = zone(self.time_zone)?;
+            let earliest = through
+                .checked_sub(jiff::SignedDuration::from_hours(48))
+                .map_err(text)?;
+            let after = after.max(earliest);
+            let local_through = local_now(&zone, through)?;
+            let local_after = local_now(&zone, after)?;
+            let mut found = Vec::new();
+            if self.recurrence.kind.is_sub_day() {
+                for (slot, instant) in self.sub_day_instants(
+                    &zone,
+                    local_after.saturating_sub(SUB_DAY_MARGIN),
+                    local_through.saturating_add(SUB_DAY_MARGIN),
+                    2048,
+                )? {
+                    if instant > after && instant <= through {
+                        found.push(Occurrence {
+                            key: slot_key(slot),
+                            instant,
+                        });
+                    }
+                }
+            } else {
+                let start = local_after
+                    .date()
+                    .previous_day()
+                    .unwrap_or(local_after.date());
+                let end = local_through
+                    .date()
+                    .next_day()
+                    .unwrap_or(local_through.date());
+                for date in dates_through(self.recurrence, start, end, 16)? {
+                    let instant = self.date_instant(date)?;
+                    if instant > after && instant <= through {
+                        found.push(Occurrence {
+                            key: occurrence_key(&date.to_string(), None),
+                            instant,
+                        });
+                    }
+                }
+            }
+            found.sort_by_key(|occurrence| occurrence.instant);
+            found.dedup_by(|a, b| a.key == b.key);
+            if found.len() > limit {
+                found.drain(..found.len() - limit);
+            }
+            Ok(found)
+        }
+    }
+
+    fn slot_key(slot: PrimitiveDateTime) -> String {
+        occurrence_key(
+            &slot.date().to_string(),
+            Some(&format_local_time(slot.time())),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
