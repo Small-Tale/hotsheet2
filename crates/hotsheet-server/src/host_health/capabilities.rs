@@ -273,7 +273,9 @@ pub(crate) fn program_signed_in(
 /// [`program_signed_in`] for a program already found.
 pub(crate) fn signed_in_at(program: &Path, args: &[String], timeout: Duration) -> Option<bool> {
     let workspace = hotsheet_aitools::probe::probe_workspace().ok()?;
-    let mut command = hotsheet_ticketing::git::launch(program);
+    // HS2-S1FEYY: resolved before the cwd change (absolute already), per HS2-E5B0K0.
+    let mut command =
+        hotsheet_ticketing::git::launch_resolved(program, None, Some(workspace.path()));
     command.args(args).current_dir(workspace.path());
     let output = hotsheet_aitools::probe::run_probe_within(&mut command, timeout).ok()?;
     output.status.code().map(|code| code == 0)

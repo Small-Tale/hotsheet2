@@ -350,6 +350,13 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
         Verdict::Resolved,
     ),
     (
+        // HS2-S1FEYY: the sign-in probe runs in a fresh probe workspace; the program is
+        // resolved to an absolute path first, so the cwd change is safe.
+        "hotsheet-server/src/host_health/capabilities.rs",
+        "cwd=1",
+        Verdict::Resolved,
+    ),
+    (
         "hotsheet-server/src/repository_browser.rs",
         "detached=1",
         Verdict::Spawned,
