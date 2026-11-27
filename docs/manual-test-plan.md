@@ -1567,6 +1567,18 @@ with one open Alpha ticket that already describes a template step's work.
 6. Repeat 3 to 5 with `codex`, then stop every planner, server and broker and remove the
    temporary directories.
 
+Last run (HS2-1P0R0P, 2026-11-27, `main` build, Claude 2.1.326, placement Manual): the
+per-template Wait for accept setting (HS2-36XDDX) was not in the build, so the plan
+waited for Start Orchestration. Step 2 was checked through `template preview`, not the
+dialog. Claude passed steps 1, 3 and 5. The new goal held the brief, the existing API
+ticket was linked `observed` and named as found by search, one `FEEDBACK NEEDED` note
+held the reuse `CHOICE`, the dropped step had no step, and nothing was dispatched. The
+Web create waited on its permission request; nobody answered it, so the Web step was
+never defined. Step 4 failed: the answer was not pushed because the goal stays Not Started
+(HS2-A1M4KN). A second Propose Plan press then created the API ticket under
+`tpl-<operation id>-api` and moved the step. The Codex half is still open: it needs a
+person to answer Codex's permission prompts.
+
 ## Triggers with a real CI provider and a second machine (HS2-KXKA7X)
 
 Automated tests fire schedules at chosen instants, judge watch Jobs by hand and run the
