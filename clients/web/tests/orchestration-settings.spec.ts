@@ -2347,3 +2347,55 @@ test('HS2-Y737GM HS2-25KT42 HS2-NGP2AK HS2-1X1TXC HS2-NPAZQW the project detail 
     await server.stop(page);
   }
 });
+
+/**
+ * HS2-RD16CQ: the project detail's inspector panel in the catalog, with its toolbar's Actions for <name> menu
+ * (HS2-M1T6KN): a home project offers Show Project Tab and Add a Site; a site, whose project tab is not open,
+ * has Show Project Tab disabled and offers Make <site> the Home Site and Separate from <project>.
+ */
+/** Every finite animation (a menu opening) has finished. */
+const settled = (page: Page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity),
+  );
+
+test('HS2-RD16CQ the catalog shows the project detail toolbar’s Actions menu for a project and a site', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=orchestration-project-detail');
+  const examples = page.getByRole('region', { name: 'OrchestrationProjectDetail Examples' });
+  const home = examples.getByRole('region', { name: 'Panel Toolbar, Home Project' });
+  // The panel is the inspector's landmark, its toolbar naming the project and holding its actions.
+  const panel = home.getByRole('complementary', { name: 'Web Detail' });
+  await expect(panel).toContainText('Local on This Computer');
+  await expect(panel.locator('[data-component="orchestration-project-detail"]')).toBeVisible();
+  await panel.getByRole('group', { name: 'Project Actions' }).getByRole('button', { name: 'Actions for Web' }).click();
+  const menu = page.getByRole('menu').last();
+  await expect(menu.getByRole('menuitem', { name: 'Show Project Tab' })).toBeEnabled();
+  await expect(menu.getByRole('menuitem', { name: 'Add a Site' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Stop Orchestrating…' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /Home Site/ })).toHaveCount(0);
+  await settled(page);
+  await page.screenshot({ path: test.info().outputPath('hs2-rd16cq-home-menu.png') });
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+
+  const site = examples.getByRole('region', { name: 'Panel Toolbar, Site' });
+  await site
+    .getByRole('complementary', { name: 'Web second clone Detail' })
+    .getByRole('button', { name: 'Actions for Web second clone' })
+    .click();
+  const siteMenu = page.getByRole('menu').last();
+  await expect(siteMenu.getByRole('menuitem', { name: 'Show Project Tab' })).toBeDisabled();
+  await expect(siteMenu.getByRole('menuitem', { name: 'Make Web second clone the Home Site' })).toBeEnabled();
+  await expect(siteMenu.getByRole('menuitem', { name: 'Separate from Web' })).toBeEnabled();
+  await expect(siteMenu.getByRole('menuitem', { name: 'Add a Site' })).toHaveCount(0);
+  await site.scrollIntoViewIfNeeded();
+  await settled(page);
+  await page.screenshot({ path: test.info().outputPath('hs2-rd16cq-site-menu.png') });
+  await page.keyboard.press('Escape');
+  await expect(siteMenu).toBeHidden();
+});

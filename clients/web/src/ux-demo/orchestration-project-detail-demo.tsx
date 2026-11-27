@@ -1,8 +1,14 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 
 import type { OrchestrationSession } from '../api';
-import { OrchestrationProjectDetail } from '../components/orchestration-project-detail';
-import type { TargetLimitsDraft } from '../orchestration-settings-model';
+import { projectActionItems } from '../components/orchestration-project-actions';
+import {
+  OrchestrationProjectDetail,
+  type OrchestrationProjectDetailProps,
+  orchestrationProjectPanel,
+} from '../components/orchestration-project-detail';
+import { SidebarPane } from '../components/sidebar-panel';
+import type { OrchestrationProjectRow, TargetLimitsDraft } from '../orchestration-settings-model';
 import type { DemoModule } from './demo-module';
 import {
   DEMO_TARGETS,
@@ -68,6 +74,93 @@ const admissions = [
   { outcome: 'accepted' as const, tool: 'claude', requested: 1, admitted: 1, reason: null },
   { outcome: 'reduced' as const, tool: 'codex', requested: 2, admitted: 1, reason: 'session_cap_reached' },
 ];
+
+/** HS2-RD16CQ: a project row as Settings › Orchestration lists it, for the panel toolbar's actions. */
+const row = (change: Partial<OrchestrationProjectRow>): OrchestrationProjectRow => ({
+  targetId: DEMO_TARGETS.web,
+  label: 'Web',
+  location: 'local',
+  where: 'Local on This Computer',
+  place: 'Local on This Computer',
+  connection: { label: 'Bound', tone: 'neutral' },
+  machine: 'This Computer',
+  ...change,
+});
+
+/**
+ * HS2-RD16CQ: the detail as the inspector's panel, with its toolbar's Actions for <name> menu (HS2-M1T6KN): a
+ * home project whose tab is open, with Add a Site; and a site, whose project tab is not open, so Show Project
+ * Tab is disabled and the menu offers Make <site> the Home Site and Separate from <project>.
+ */
+function ProjectPanel({ props }: { props: OrchestrationProjectDetailProps }) {
+  return <SidebarPane parts={orchestrationProjectPanel(props)} side="right" />;
+}
+
+const homeRow = row({ tabProjectId: 'web-0123456789ab' }),
+  siteRow = row({
+    targetId: DEMO_TARGETS.api,
+    label: 'Web second clone',
+    location: 'remote',
+    where: 'Site of Web · Remote on Build Host',
+    place: 'Remote on Build Host',
+    machine: 'Build Host',
+    siteOf: DEMO_TARGETS.web,
+  });
+
+/** HS2-RD16CQ: the panel parts of a home project and of a site, as the app's inspector builds them. */
+function ProjectPanelExamples() {
+  return (
+    <>
+      <CatalogExample
+        label="Panel Toolbar, Home Project"
+        viewport={{ width: 'sidebar', height: 'tall', frame: 'solid', overflow: 'hidden' }}
+      >
+        <ProjectPanel
+          props={{
+            targetId: homeRow.targetId,
+            label: homeRow.label,
+            where: homeRow.where,
+            binding: demoBinding('web'),
+            detail: { targetId: homeRow.targetId, capacity: demoCapacity, admissions: [], loading: false },
+            actions: projectActionItems(homeRow, {
+              tabOpen: true,
+              busy: false,
+              siteChoices: [
+                {
+                  projectId: 'web-laptop-0123456789ab',
+                  name: 'Web laptop',
+                  location: 'remote',
+                  machine: 'Laptop',
+                  sameStore: true,
+                },
+              ],
+            }),
+            toolLabel: demoToolLabel,
+            formatTime: demoTime,
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Panel Toolbar, Site"
+        viewport={{ width: 'sidebar', height: 'tall', frame: 'solid', overflow: 'hidden' }}
+      >
+        <ProjectPanel
+          props={{
+            targetId: siteRow.targetId,
+            label: siteRow.label,
+            where: siteRow.where,
+            binding: demoBinding('api'),
+            detail: { targetId: siteRow.targetId, admissions: [], sessions: [], loading: false },
+            actions: projectActionItems(siteRow, { tabOpen: false, busy: false, projectLabel: 'Web' }),
+            homeLabel: 'Web',
+            toolLabel: demoToolLabel,
+            formatTime: demoTime,
+          }}
+        />
+      </CatalogExample>
+    </>
+  );
+}
 
 /**
  * One orchestrated project's detail (HS2-W27N1D), as the inspector shows it: a connected project
@@ -175,6 +268,7 @@ export function OrchestrationProjectDetailDemo() {
           formatTime={demoTime}
         />
       </CatalogExample>
+      <ProjectPanelExamples />
       <CatalogExample label="Loading">
         <OrchestrationProjectDetail
           targetId={DEMO_TARGETS.api}
