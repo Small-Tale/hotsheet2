@@ -141,6 +141,11 @@ export async function realTicketServer(
       GIT_AUTHOR_EMAIL: 'browser@example.invalid',
       GIT_COMMITTER_NAME: 'Hot Sheet browser test',
       GIT_COMMITTER_EMAIL: 'browser@example.invalid',
+      // HS2-Y38X8G: session admission reads a roomy machine (the test build's fixed readings), so a
+      // planner or worker start never depends on how loaded the machine running the suite is. Under
+      // load the real default policy (90% CPU, 2 GB free memory) refused a template's planner. Admission
+      // files and policy limits still apply; a spec that needs the real readings sets this to '0'.
+      HOTSHEET_TEST_ROOMY_CAPACITY: '1',
       ...options.env,
       HOTSHEET_HOME: resolve(directory, 'home'),
     };
