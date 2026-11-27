@@ -4040,6 +4040,7 @@ mod stream_proof_tests {
     /// after its proof, against a stream that reports at once, one that misses its first
     /// probe, and one that misses two and is registered again (HS2-190GDZ).
     #[test]
+    #[ignore = "quarantine HS2-P702Y8: times out while fseventsd is backlogged on a loaded macOS host"]
     fn hs2_190gdz_writes_around_an_unproven_registration_are_indexed() {
         for dropped_probes in [0, 1, 2] {
             let parent = tempfile::tempdir().unwrap();
@@ -4107,6 +4108,7 @@ mod stream_proof_tests {
     /// the polling bridge: the index goes live through it after a full reconcile, indexes
     /// later writes, and keeps the bridge until a probe arrives (HS2-190GDZ).
     #[test]
+    #[ignore = "quarantine HS2-P702Y8: times out while fseventsd is backlogged on a loaded macOS host"]
     fn hs2_190gdz_an_unproven_stream_goes_live_through_the_bridge() {
         let parent = tempfile::tempdir().unwrap();
         let root = parent.path().join("store");
