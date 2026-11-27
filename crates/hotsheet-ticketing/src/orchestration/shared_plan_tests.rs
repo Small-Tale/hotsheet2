@@ -995,3 +995,120 @@ fn hs2_38mfxt_the_holds_are_bounded_and_a_hold_on_a_live_step_goes_last() {
     assert!(kept.contains(&"tpl-9999".to_owned()));
     assert_eq!(a.held(), [first.step_id]);
 }
+
+// HS2-MGG1GM: a hold is retired once its goal closes and it holds no live step.
+
+impl Machine {
+    fn retire(&mut self, operations: &[&str]) -> Vec<String> {
+        let (owner, plan) = (self.owner, self.plan.clone());
+        let closed = operations.iter().map(|op| (*op).to_owned()).collect();
+        plan.retire_holds(owner, &closed, &mut self.tx()).unwrap()
+    }
+}
+
+#[test]
+fn hs2_mgg1gm_the_pure_retire_keeps_open_goals_and_a_closed_goals_held_steps() {
+    let step = SharedStep {
+        ticket: template_goal(),
+        ..shared(1, "a", 1)
+    };
+    let other = shared(2, "b", 1);
+    let steps = [step.clone(), other];
+    let mut holds = vec![hold("tpl-a", 1), template_hold("tpl-b", 2)];
+    // Nothing closed: nothing retired, nothing changed.
+    assert!(retire_plan_holds(&mut holds, &steps, |_| false).is_empty());
+    assert_eq!(holds.len(), 2);
+    // Both goals closed: tpl-a's goal step `b` is held too (no accept), so it is kept,
+    // as is tpl-b, whose step `a` nobody accepted.
+    assert!(retire_plan_holds(&mut holds, &steps, |_| true).is_empty());
+    // Accept tpl-b's step: now it holds nothing and goes; tpl-a stays held.
+    holds[1].accept(std::slice::from_ref(&step.step_id), Some("maintainer"), 3);
+    assert_eq!(retire_plan_holds(&mut holds, &steps, |_| true), ["tpl-b"]);
+    assert_eq!(holds.len(), 1);
+    assert_eq!(holds[0].operation_id, "tpl-a");
+    // With no live step left the closed goal's hold goes; an open one would stay.
+    let mut open = holds.clone();
+    assert!(retire_plan_holds(&mut open, &[], |_| false).is_empty());
+    assert_eq!(retire_plan_holds(&mut holds, &[], |_| true), ["tpl-a"]);
+    assert!(holds.is_empty());
+    // Empty, then again: still nothing.
+    assert!(retire_plan_holds(&mut holds, &[], |_| true).is_empty());
+    assert_eq!(plan_version(&holds), 1);
+}
+
+#[test]
+fn hs2_mgg1gm_the_last_retired_hold_writes_version_1_byte_for_byte() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join(SHARED_PLAN_PATH);
+    let mut a = Machine::new(OWNER_A, root.path(), 100);
+    let mut b = Machine::new(OWNER_B, root.path(), 200);
+    a.define(&ticket("other"), Vec::new(), None).unwrap();
+    let before = std::fs::read_to_string(&path).unwrap();
+    let before_revision = a.plan.revision(OWNER_A).unwrap().unwrap();
+    // A template waits; the planner defines a step of its goal: version 2, held.
+    a.add_hold(template_hold("tpl-wait", 5));
+    let (first, _) = a.define_for(template_goal(), &ticket("first")).unwrap();
+    assert_eq!(a.schema_version(root.path()), 2);
+    // The goal closes, but nobody accepted its step: the hold stays.
+    assert!(b.retire(&["tpl-wait"]).is_empty());
+    assert_eq!(a.held(), std::slice::from_ref(&first.step_id));
+    assert_eq!(a.schema_version(root.path()), 2);
+    // Accepted, then the step finished and left the plan: retired on B.
+    a.accept("tpl-wait");
+    a.remove(&first.step_id).unwrap();
+    assert_eq!(a.schema_version(root.path()), 2);
+    // An open goal (not in the closed set) is never retired.
+    assert!(b.retire(&["tpl-other"]).is_empty());
+    assert_eq!(b.retire(&["tpl-wait"]), ["tpl-wait"]);
+    // Version 1 again, byte for byte what a version-1 writer wrote (only the revision
+    // differs), and an older Hot Sheet's version-1 decoder reads it.
+    let after = std::fs::read_to_string(&path).unwrap();
+    let revision = a.plan.revision(OWNER_A).unwrap().unwrap();
+    assert_ne!(revision, before_revision);
+    assert_eq!(after, before.replace(&before_revision, &revision));
+    assert!(super::storage::decode::<serde_json::Value>(after.as_bytes()).is_ok());
+    assert!(a.plan.holds(OWNER_A).unwrap().is_empty());
+    // A repeat on either machine writes nothing, not even a revision.
+    assert!(a.retire(&["tpl-wait"]).is_empty());
+    assert!(b.retire(&["tpl-wait"]).is_empty());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), after);
+    // Refill: a new waiting apply checks in again at version 2, and retires again.
+    a.add_hold(template_hold("tpl-next", 9));
+    assert_eq!(a.schema_version(root.path()), 2);
+    assert_eq!(a.retire(&["tpl-next"]), ["tpl-next"]);
+    assert_eq!(a.schema_version(root.path()), 1);
+}
+
+#[test]
+fn hs2_mgg1gm_machines_retiring_at_once_end_with_one_version_1_plan() {
+    for round in 0..10u128 {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().to_path_buf();
+        let mut a = Machine::new(OWNER_A, &path, 100 + round);
+        a.define(&ticket("other"), Vec::new(), None).unwrap();
+        for n in 0..4 {
+            let mut waiting = template_hold(&format!("tpl-{n}"), n);
+            waiting.goal.native_id = id(950 + u128::from(n));
+            a.add_hold(waiting);
+        }
+        let racers: Vec<_> = (0..4u128)
+            .map(|n| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    let owner = if n % 2 == 0 { OWNER_A } else { OWNER_B };
+                    let mut machine = Machine::new(owner, &path, 10_000 * (n + 1) + round);
+                    machine.retire(&["tpl-0", "tpl-1", "tpl-2", "tpl-3"])
+                })
+            })
+            .collect();
+        let mut retired: Vec<String> = racers
+            .into_iter()
+            .flat_map(|racer| racer.join().unwrap())
+            .collect();
+        retired.sort();
+        // Each hold retired exactly once, whichever machine got there first.
+        assert_eq!(retired, ["tpl-0", "tpl-1", "tpl-2", "tpl-3"]);
+        assert_eq!(a.schema_version(&path), 1);
+        assert_eq!(a.steps().len(), 1);
+    }
+}

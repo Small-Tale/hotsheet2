@@ -658,7 +658,12 @@ async fn hs2_pw43n9_a_reply_to_the_planners_question_is_pushed_into_the_planner(
     );
     let pushed = received_prompt(&world.reports, &terminal, &slug);
     assert!(
-        pushed.starts_with("A human answered FEEDBACK NEEDED on"),
+        pushed.starts_with("Hot Sheet notice: a person answered FEEDBACK NEEDED on"),
+        "{pushed}"
+    );
+    // HS2-KNRRCF: the answer is the person's note on the ticket it names.
+    assert!(
+        pushed.contains(&format!("Their answer is their own note on {slug}")),
         "{pushed}"
     );
     let other_prompts =

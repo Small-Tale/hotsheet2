@@ -18,7 +18,9 @@
 //! person accepts, and an accept on any machine releases them everywhere. The file is
 //! written as version [`PLAN_HOLD_VERSION`] only while it holds one, so an older Hot
 //! Sheet answers `upgrade_required` (and places nothing) instead of reading the steps
-//! without their hold.
+//! without their hold. HS2-MGG1GM: a hold is retired once its goal closes and it holds
+//! no live step ([`retire_plan_holds`]), so the file is version 1 again, byte for byte,
+//! once no template waits.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -191,6 +193,27 @@ pub fn held_plan_steps<'a>(
                 .map(|hold| (step.step_id.clone(), hold))
         })
         .collect()
+}
+
+/// HS2-MGG1GM: retire each hold whose goal `closed` reports closed (or gone) and that
+/// holds no live step, so a plan whose last such hold goes is written as version 1 again
+/// and an older Hot Sheet reads it. A closed goal whose steps nobody accepted keeps its
+/// hold: retiring it would let the scheduler place work a person never accepted. Answers
+/// the retired operation ids in order; nothing retired leaves `holds` as it was. Pure.
+pub fn retire_plan_holds(
+    holds: &mut Vec<PlanHold>,
+    steps: &[SharedStep],
+    closed: impl Fn(&PlanHold) -> bool,
+) -> Vec<String> {
+    let mut retired = Vec::new();
+    holds.retain(|hold| {
+        let retire = closed(hold) && !steps.iter().any(|step| hold.holds(step));
+        if retire {
+            retired.push(hold.operation_id.clone());
+        }
+        !retire
+    });
+    retired
 }
 
 /// HS2-38MFXT: version 1 without a hold, [`PLAN_HOLD_VERSION`] with one.

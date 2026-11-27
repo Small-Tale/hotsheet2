@@ -207,6 +207,7 @@ pub use sessions::{
 pub use shared_plan::{
     MAX_PLAN_HOLDS, PLAN_HOLD_VERSION, PLAN_WRITTEN_DIR, PlanHold, SHARED_PLAN_PATH, SharedPlan,
     SharedPlanStore, SharedStep, held_plan_steps, merge_steps, plan_version, plan_written_here,
+    retire_plan_holds,
 };
 pub use summary::{
     BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,

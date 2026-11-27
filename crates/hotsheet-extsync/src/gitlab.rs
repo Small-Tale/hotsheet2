@@ -374,7 +374,8 @@ impl GitLabProvider {
                     response_to,
                     ai_feedback: hotsheet_model::AiFeedback::from_legacy_text(&text),
                     human_edited: false,
-                    actor: None,
+                    // HS2-Z3SBRQ: the AI author a Hot Sheet comment records.
+                    actor: note_trailer::parse_note_actor(&note.body),
                     text,
                 }
             })
@@ -853,7 +854,7 @@ impl TicketProvider for GitLabProvider {
                 });
             }
         }
-        let body = note_trailer::compose_explicit_feedback_comment(
+        let mut body = note_trailer::compose_explicit_feedback_comment(
             &text,
             metadata.confidence,
             ctx.generated_id,
@@ -861,6 +862,8 @@ impl TicketProvider for GitLabProvider {
             metadata.response_to.as_deref(),
             metadata.kind_explicit,
         );
+        // HS2-Z3SBRQ: the AI that wrote it, so an answer can be routed back to it.
+        note_trailer::append_note_actor(&mut body, metadata.actor.as_ref());
         self.request(
             "POST",
             &self.endpoint(&format!("issues/{native_id}/notes")),
@@ -1313,6 +1316,75 @@ mod tests {
             },
             fake,
         )
+    }
+
+    /// HS2-Z3SBRQ: an AI author's FEEDBACK NEEDED comment carries the author in its
+    /// metadata and reads back as the note's actor; a person's plain comment records none.
+    #[test]
+    fn hs2_z3sbrq_the_ai_author_rides_on_the_comment() {
+        let note_id = hotsheet_model::Ulid::new();
+        let actor = hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some("claude-planner".into()),
+        };
+        let mut composed = note_trailer::compose_explicit_feedback_comment(
+            "Which one?",
+            None,
+            note_id,
+            NoteKind::FeedbackNeeded,
+            None,
+            true,
+        );
+        note_trailer::append_note_actor(&mut composed, Some(&actor));
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!([])),
+                    response(201, json!({"id":5})),
+                    response(200, issue(7, "Synthetic question")),
+                    response(
+                        200,
+                        json!([
+                            {"id":5,"body":composed,"created_at":"2026-08-26T00:02:00Z"},
+                            {"id":6,"body":"Use A","created_at":"2026-08-26T00:03:00Z"}
+                        ]),
+                    ),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let gitlab = provider(fake.clone());
+        let ticket = gitlab
+            .add_note_with_metadata(
+                "7",
+                MutationContext {
+                    now: Timestamp::new("2026-08-26T00:02:00Z"),
+                    generated_id: note_id,
+                },
+                NoteKind::FeedbackNeeded,
+                NoteMetadataInput {
+                    kind_explicit: true,
+                    actor: Some(actor.clone()),
+                    ..NoteMetadataInput::default()
+                },
+                "Which one?".into(),
+            )
+            .unwrap();
+        let requests = fake.requests.lock_or_recover();
+        let post = requests.iter().find(|request| request.0 == "POST").unwrap();
+        assert_eq!(post.3.as_ref().unwrap()["body"], composed);
+        assert!(composed.ends_with(&format!(
+            "<!-- hotsheet-note-actor:ai:{} -->",
+            "claude-planner"
+                .bytes()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )));
+        assert_eq!(ticket.notes[0].actor, Some(actor));
+        assert!(ticket.notes[0].feedback_request);
+        assert_eq!(ticket.notes[0].text, "Which one?");
+        assert_eq!(ticket.notes[1].actor, None);
     }
 
     /// HS2-5YNASC: a scored note is written as a `Confidence: NN%` trailer, read back into
