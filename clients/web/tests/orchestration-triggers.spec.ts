@@ -447,8 +447,12 @@ test('HS2-40GPZK Triggers… gives fixed template inputs Use Template…’s typ
     const input = (key: string) => dialog.locator(`[data-trigger-input="${key}"]`);
     // A project input offers the declared projects, after its template default.
     const project = input('project').getByRole('combobox', { name: 'Value' });
-    await project.click();
-    await expect(page.getByRole('option', { name: 'Default: Self', exact: true })).toBeVisible();
+    // Open it (WebKit may take a click on the select just rendered by the template choice before it is ready).
+    const firstChoice = page.getByRole('option', { name: 'Default: Self', exact: true });
+    await expect(async () => {
+      if (!(await firstChoice.isVisible())) await project.click();
+      await expect(firstChoice).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
     const banner = dialog.locator('[data-trigger-setup] > :not(.kui-grid):not([hidden])');
     await expect(banner).toContainText(/Keeps? Save Disabled/);
     release();

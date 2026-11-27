@@ -823,7 +823,8 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
  */
 /** The Orchestration view's read-only POSTs: where planning stands, the dry-run schedule, the decisions. */
 // HS2-1XCW6N: Settings › Orchestration also lists the checked-in templates, a read.
-const READ_ONLY_POSTS = /\/orchestration\/(?:planning\/show|scheduler\/plan|scheduler\/decisions|templates\/list)$/;
+const READ_ONLY_POSTS =
+  /\/orchestration\/(?:planning\/show|scheduler\/plan|scheduler\/decisions|templates\/list|triggers\/list)$/;
 
 async function openRemoteOrchestration(page: Page) {
   const server = await realTicketServer();
@@ -1111,14 +1112,20 @@ test('HS2-40CTDS a refused add toasts and keeps its record; a success is only a 
     }
     await page.emulateMedia({ colorScheme: 'light' });
     // The next change clears the record; its success is the toast, and nothing is inlined under + Add Project.
-    const box = await add.boundingBox();
+    // Where + Add Project sits within the settings, not the window: a connection banner above the settings
+    // (a remote project reconnecting) may come and go meanwhile and move them all.
+    const placed = async () => {
+      const [button, within] = await Promise.all([add.boundingBox(), settings.boundingBox()]);
+      return button && within ? { x: button.x - within.x, y: button.y - within.y, width: button.width } : undefined;
+    };
+    const box = await placed();
     await add.click();
     await page.getByRole('menu').getByRole('menuitemcheckbox', { name: 'Docs' }).click();
     await expect(page.locator('.app-toast').filter({ hasText: 'Docs added.' })).toBeVisible();
     await expect(settings.locator('[data-orchestration-project]').filter({ hasText: 'Docs' })).toBeVisible();
     await expect(record).toHaveCount(0);
     await expect(settings.getByText('Docs added.')).toHaveCount(0);
-    expect(await add.boundingBox()).toEqual(box);
+    expect(await placed()).toEqual(box);
     await capture('added-1440-light');
   } finally {
     await server.stop(page);
