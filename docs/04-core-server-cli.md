@@ -801,7 +801,9 @@ for tests). The process force-exits when that deadline passes or a **second** st
 arrives. On every path it first releases each hosted store's instance file and
 index-writer lock explicitly, so a stuck connection can no longer leave a dead URL
 registered. After a clean drain, a watchdog thread also bounds any leftover blocking
-background work. AI-tool discovery (the startup catalog warmup and `GET /ai-tools`) runs its
+background work. Dropping a store's file watcher never waits for its native stream to stop:
+on a loaded Mac `fseventsd` can hold a stop for tens of seconds, so the stop runs on its own
+thread and the exit no longer sits out the watchdog (HS2-R72NB4). AI-tool discovery (the startup catalog warmup and `GET /ai-tools`) runs its
 tool probes on a detached thread rather than Tokio's blocking pool, because a dropping runtime
 waits for every blocking task: a stop that lands while an installed tool's `--version` or
 model probe hangs exits promptly instead of waiting out the drain (HS2-NPBZJ9). Each such

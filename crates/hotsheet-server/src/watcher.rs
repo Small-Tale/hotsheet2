@@ -410,8 +410,18 @@ impl Drop for NativeWatcherHold {
             freshness.clear_verifier(&verifier);
         }
         proof.stop();
-        // Stop the stream outside the lock: it waits for the stream's run-loop thread.
-        drop(watchers);
+        // Stop the stream outside the lock and off the owner's thread (HS2-R72NB4).
+        // Stopping a live native stream waits for its run-loop thread, which stops,
+        // purges and invalidates the stream through `fseventsd`; on a loaded Mac that
+        // took up to 46 s (HS2-F6F42W). A stopping server dropped this on its exit path,
+        // so its exit waited out the post-drain watchdog instead of returning. The
+        // `stopped` flag set above already keeps a still-starting stream from being kept.
+        let stopping = std::thread::Builder::new()
+            .name("hotsheet-store-watch-stop".into())
+            .spawn(move || drop(watchers));
+        if let Err(error) = stopping {
+            tracing::warn!(%error, "could not stop the store watcher in the background");
+        }
     }
 }
 
@@ -4426,9 +4436,22 @@ mod stream_proof_tests {
         registrations: usize,
         held: bool,
         queued: std::collections::VecDeque<notify::Event>,
+        /// HS2-R72NB4: makes the next stop block, as a backlogged `fseventsd` does: the
+        /// stopping watcher reports that it entered, then waits to be released.
+        stop_gate: Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>,
     }
 
     struct InProcessWatcher(InProcessStream);
+
+    impl Drop for InProcessWatcher {
+        fn drop(&mut self) {
+            let gate = self.0.0.lock().unwrap().stop_gate.take();
+            if let Some((entered, release)) = gate {
+                let _ = entered.send(());
+                let _ = release.recv();
+            }
+        }
+    }
 
     impl notify::Watcher for InProcessWatcher {
         fn new<F: notify::EventHandler>(_: F, _: notify::Config) -> notify::Result<Self> {
@@ -4512,6 +4535,15 @@ mod stream_proof_tests {
         fn registrations(&self) -> usize {
             self.0.lock().unwrap().registrations
         }
+
+        /// Make the next stop block until the returned sender sends or drops; the
+        /// receiver reports when that stop began (HS2-R72NB4).
+        fn block_next_stop(&self) -> (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>) {
+            let (entered_tx, entered) = std::sync::mpsc::channel();
+            let (release, release_rx) = std::sync::mpsc::channel();
+            self.0.lock().unwrap().stop_gate = Some((entered_tx, release_rx));
+            (release, entered)
+        }
     }
 
     fn indexed(entry: &crate::multistore::StoreEntry, ticket: &hotsheet_model::Ticket) -> bool {
@@ -4594,6 +4626,50 @@ mod stream_proof_tests {
             );
             drop(handle);
         }
+    }
+
+    /// HS2-R72NB4: dropping the store watcher never waits for its native stream to stop.
+    /// A stop held up by `fseventsd` (up to 46 s measured, HS2-F6F42W) used to hold the
+    /// dropping thread, which for a stopping server was its exit path: the process then
+    /// outlived its post-drain watchdog. The drop returns while the stop is still blocked,
+    /// and the stop itself still runs to completion once the platform lets it.
+    #[test]
+    fn hs2_r72nb4_dropping_the_store_watcher_never_waits_for_its_stream_to_stop() {
+        let parent = tempfile::tempdir().unwrap();
+        let root = parent.path().join("store");
+        let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+        let state = crate::AppState::new(store, "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let scope = Arc::new(TicketsWatchScope::for_store(&root));
+        let stream = InProcessStream::default();
+        let handle = super::spawn_watcher_in_scope_with_startup_hooks(
+            target,
+            WatcherBackend::Recommended,
+            scope,
+            super::StartupHooks {
+                stream: stream.hooks(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // The proven stream owns the watch (its bridge retired), so the drop must stop it.
+        wait_within_bound("the proven stream to go live", || {
+            entry.freshness.in_sync() && !handle.native_bridge_held()
+        });
+        let (release, stop_entered) = stream.block_next_stop();
+        let (dropped_tx, dropped) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            drop(handle);
+            let _ = dropped_tx.send(());
+        });
+        dropped
+            .recv_timeout(IN_PROCESS_BOUND)
+            .expect("the drop returned while the stream's stop was still blocked");
+        stop_entered
+            .recv_timeout(IN_PROCESS_BOUND)
+            .expect("the stream is still stopped, off the dropping thread");
+        drop(release);
     }
 
     /// A registration that never reports a probe (an `fseventsd` backlog) is covered by
