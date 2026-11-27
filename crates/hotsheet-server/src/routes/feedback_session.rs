@@ -105,18 +105,57 @@ fn message(slug: &str, response: bool) -> String {
     }
 }
 
-/// Only a newly appended human regular note on a Started ticket triggers a notification.
-pub(crate) fn note_to_notify(ticket: &Ticket) -> Option<&hotsheet_model::Note> {
-    (ticket.status == Status::Started)
-        .then(|| ticket.notes.last())
-        .flatten()
-        .filter(|note| {
-            note.kind == NoteKind::Regular
-                && note
-                    .actor
-                    .as_ref()
-                    .is_some_and(|actor| actor.role == AttachmentActorRole::Human)
-        })
+/// What a newly appended note on a Git ticket asks of delivery (HS2-25TP3N, HS2-A1M4KN).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Notify<'a> {
+    /// A human note on a Started ticket: the full routing (live claim, the AI that asked,
+    /// the project's primary, a chooser or a start action).
+    Route(&'a hotsheet_model::Note),
+    /// HS2-A1M4KN: a human note answering an AI's question on an open ticket that is not
+    /// Started, such as an orchestration planner's reuse question on a template goal it
+    /// never claimed. Only the live session of the AI that asked (`worker`) is told; no
+    /// other session, chooser or start action is offered.
+    Asker {
+        note: &'a hotsheet_model::Note,
+        worker: &'a str,
+    },
+}
+
+/// Only a newly appended human regular note triggers a notification: on a Started ticket
+/// always, and on a Not Started or Backlog ticket only when it answers an AI's question
+/// (HS2-A1M4KN). A closed ticket never notifies.
+pub(crate) fn note_to_notify(ticket: &Ticket) -> Option<Notify<'_>> {
+    let note = ticket.notes.last().filter(|note| {
+        note.kind == NoteKind::Regular
+            && note
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.role == AttachmentActorRole::Human)
+    })?;
+    match ticket.status {
+        Status::Started => Some(Notify::Route(note)),
+        Status::NotStarted | Status::Backlog => {
+            asker(ticket, note).map(|worker| Notify::Asker { note, worker })
+        }
+        _ => None,
+    }
+}
+
+/// HS2-A1M4KN: the session of the AI that asked, among those that see this checkout and
+/// source; `None` when it has no live session, so nobody else is told.
+pub(crate) fn asker_candidate(
+    project: &str,
+    source: &str,
+    worker: &str,
+    candidates: impl IntoIterator<Item = Candidate>,
+) -> Option<Candidate> {
+    let own = candidates
+        .into_iter()
+        .filter(|candidate| candidate.worker == worker);
+    match route(project, source, Some(worker), None, own) {
+        Route::Direct(candidate) => Some(candidate),
+        Route::Choose(_) | Route::Start => None,
+    }
 }
 
 /// The provider-ticket form of [`note_to_notify`]: the newly appended regular note on a Started
@@ -621,7 +660,23 @@ pub(crate) async fn after_human_note(
     entry: &StoreEntry,
     ticket: &Ticket,
 ) -> Option<Delivery> {
-    let note = note_to_notify(ticket)?;
+    let note = match note_to_notify(ticket)? {
+        Notify::Route(note) => note,
+        Notify::Asker { note, worker } => {
+            let note_id = note.id.to_string();
+            let all = candidates(state, checkout, source).await;
+            let candidate = asker_candidate(&checkout.root, source, worker, all)?;
+            let text = message(&ticket.slug, note.response_to.is_some());
+            return match deliver(state, Some((entry, ticket.id)), &note_id, candidate, text).await {
+                Ok(delivery) => Some(delivery),
+                Err(error) => {
+                    // The note stays; the AI reads it when it next reads the ticket.
+                    tracing::warn!(?error, note_id, "asking AI session unreachable");
+                    None
+                }
+            };
+        }
+    };
     let note_id = note.id.to_string();
     let response = note.response_to.is_some();
     let all = candidates(state, checkout, source).await;
@@ -1040,6 +1095,158 @@ mod tests {
                 [primary, planner.clone()]
             ),
             Route::Direct(planner)
+        );
+    }
+
+    /// HS2-A1M4KN: a person's answer to an AI's question notifies on a Not Started or
+    /// Backlog ticket too, but only the AI that asked; a Started ticket keeps the full
+    /// routing for any human note; a closed ticket, an AI's own note, a person's own
+    /// question and an already answered one notify nobody.
+    #[test]
+    fn hs2_a1m4kn_an_answer_on_an_unstarted_ticket_goes_only_to_the_asker() {
+        use hotsheet_model::{Note, NoteActor};
+        let note = |id: u128, kind: NoteKind, actor: Option<(AttachmentActorRole, &str)>| Note {
+            id: Ulid::from(id),
+            kind,
+            actor: actor.map(|(role, id)| NoteActor {
+                role,
+                id: Some(id.into()),
+            }),
+            kind_explicit: true,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            edited_at: "2026-01-01T00:00:00Z".into(),
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            feedback_request: false,
+            response_to: None,
+            ai_feedback: None,
+            human_edited: false,
+            text: String::new(),
+        };
+        let person = Some((AttachmentActorRole::Human, "maintainer"));
+        let planner = Some((AttachmentActorRole::Ai, "claude-planner"));
+        let asked = note(1, NoteKind::FeedbackNeeded, planner);
+        let mut reply = note(2, NoteKind::Regular, person);
+        reply.response_to = Some(asked.id);
+        let plain = note(2, NoteKind::Regular, person);
+        let ticket = |status: Status, notes: Vec<Note>| Ticket {
+            status,
+            notes,
+            ..Ticket::default()
+        };
+        // Who is told, per status, for an answer replying to the planner's question.
+        for (status, expected) in [
+            (Status::NotStarted, Some("asker")),
+            (Status::Backlog, Some("asker")),
+            (Status::Started, Some("route")),
+            (Status::Completed, None),
+            (Status::Verified, None),
+            (Status::Archive, None),
+            (Status::Deleted, None),
+            (Status::Moved, None),
+        ] {
+            for answer in [&reply, &plain] {
+                let ticket = ticket(status, vec![asked.clone(), answer.clone()]);
+                let got = note_to_notify(&ticket);
+                match expected {
+                    Some("asker") => assert_eq!(
+                        got,
+                        Some(Notify::Asker {
+                            note: &ticket.notes[1],
+                            worker: "claude-planner"
+                        }),
+                        "{status:?}"
+                    ),
+                    Some(_) => assert_eq!(got, Some(Notify::Route(&ticket.notes[1])), "{status:?}"),
+                    None => assert_eq!(got, None, "{status:?}"),
+                }
+            }
+        }
+        // Not Started without an AI's open question: nothing, as before HS2-A1M4KN.
+        for notes in [
+            vec![plain.clone()],
+            vec![note(1, NoteKind::FeedbackNeeded, person), plain.clone()],
+            vec![
+                asked.clone(),
+                reply.clone(),
+                note(3, NoteKind::Regular, person),
+            ],
+            vec![asked.clone(), note(2, NoteKind::Regular, planner)],
+            vec![asked.clone(), note(2, NoteKind::Regular, None)],
+            vec![asked.clone(), note(2, NoteKind::Activity, person)],
+            vec![],
+        ] {
+            let unstarted = ticket(Status::NotStarted, notes);
+            assert_eq!(note_to_notify(&unstarted), None, "{:?}", unstarted.notes);
+        }
+        // Repeated answers: the first reply to a question reaches the asker; once it is
+        // answered, a later plain note does not, but a reply naming it still does.
+        let mut answered = ticket(Status::NotStarted, vec![asked.clone(), reply.clone()]);
+        let mut later = note(3, NoteKind::Regular, person);
+        answered.notes.push(later.clone());
+        assert_eq!(note_to_notify(&answered), None);
+        later.response_to = Some(asked.id);
+        answered.notes[2] = later;
+        assert!(matches!(
+            note_to_notify(&answered),
+            Some(Notify::Asker {
+                worker: "claude-planner",
+                ..
+            })
+        ));
+        // A Started ticket with a person's plain note and no question routes as before.
+        let started = ticket(Status::Started, vec![plain.clone()]);
+        assert_eq!(
+            note_to_notify(&started),
+            Some(Notify::Route(&started.notes[0]))
+        );
+
+        // Only the asker's own session in this checkout and source receives it.
+        let own = Candidate {
+            worker: "claude-planner".into(),
+            started_at_ms: 20,
+            ..candidate("planner", "/project", None)
+        };
+        let primary = Candidate {
+            started_at_ms: 10,
+            ..candidate("primary", "/project", None)
+        };
+        let elsewhere = Candidate {
+            worker: "claude-planner".into(),
+            ..candidate("elsewhere", "/other", None)
+        };
+        assert_eq!(
+            asker_candidate(
+                "/project",
+                "source",
+                "claude-planner",
+                [primary.clone(), elsewhere.clone(), own.clone()]
+            ),
+            Some(own)
+        );
+        // Its session gone: neither the primary nor a chooser nor a start action.
+        assert_eq!(
+            asker_candidate(
+                "/project",
+                "source",
+                "claude-planner",
+                [primary.clone(), elsewhere]
+            ),
+            None
+        );
+        assert_eq!(
+            asker_candidate("/project", "source", "claude-planner", []),
+            None
+        );
+        // A drive of the asker on another source of the project does not see the ticket.
+        let drive = Candidate {
+            worker: "claude-planner".into(),
+            ..candidate("drive", "/project", Some("other-source"))
+        };
+        assert_eq!(
+            asker_candidate("/project", "source", "claude-planner", [primary, drive]),
+            None
         );
     }
 

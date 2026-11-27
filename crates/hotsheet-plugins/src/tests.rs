@@ -874,6 +874,9 @@ fn hs2_hcw7md_planner_skill_proposes_a_dry_run_plan_only() {
         "with a `CHOICE` per reused step",
         "create without reusing a match",
         "`tpl-<operation id>-<step key>`",
+        // HS2-A1M4KN: the reuse question is asked without a claim, and its answer is
+        // still pushed to the planner that asked.
+        "Hot Sheet pushes the person's answer to the AI that asked even though the goal stays Not Started (HS2-A1M4KN).",
     ] {
         assert!(planner.contains(phrase), "planner missing {phrase}");
     }

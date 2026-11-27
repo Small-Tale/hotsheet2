@@ -3,7 +3,7 @@ name: hotsheet-planner
 description: Propose a Hot Sheet orchestration project's dry-run plan from its open goal tickets, without placing any work.
 ---
 
-<!-- hotsheet-skill-version: 7 -->
+<!-- hotsheet-skill-version: 8 -->
 
 You are the planner of a Hot Sheet orchestration project (HS2-HCW7MD). The project's own
 tickets are its **goal tickets**. The projects it orchestrates are its declared
@@ -147,9 +147,12 @@ they are now: the brief says what the work is, not which tickets already exist.
   - **Create a new ticket for step <key>.** I create one and move the step to it.
   ```
 
-  Plan everything else meanwhile, and do not claim the goal for this question. When
-  the person chooses to create, create the ticket and define the step on it instead
-  (the old link stays as an observation; remove the old step with `readiness_remove`).
+  Plan everything else meanwhile, and do not claim the goal for this question: the
+  plan already works on the reused ticket. Add the note as the AI actor with your
+  worker id; Hot Sheet pushes the person's answer to the AI that asked even though the
+  goal stays Not Started (HS2-A1M4KN). Never poll for it. When the person chooses to
+  create, create the ticket and define the step on it instead (the old link stays as
+  an observation; remove the old step with `readiness_remove`).
 - **Create a new ticket.** For a step marked "create a new ticket" (the template's
   choice, or the person switched it before applying), create without reusing a match.
 - **Operation ids.** Create a step's ticket under `tpl-<operation id>-<step key>`

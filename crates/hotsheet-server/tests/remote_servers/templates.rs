@@ -4,7 +4,10 @@
 //! route, the CLI process or the MCP tool changes nothing; the goal is a snapshot of
 //! the template; and an AI session's apply waits for a person's answer. No AI tool is
 //! launched and nothing leaves loopback.
-use super::session_work::{PUSH_AGENT, PUSH_PLUGIN, REPORT_TOOL, TARGET, World, received_prompt};
+use super::orchestration::api;
+use super::session_work::{
+    PUSH_AGENT, PUSH_PLUGIN, REPORT_TOOL, TARGET, World, launch_report, received_prompt,
+};
 use super::sessions::drawer;
 use super::support::{cli_named, mcp_named};
 use super::*;
@@ -526,4 +529,222 @@ async fn hs2_amjner_answering_the_card_resumes_the_apply_without_a_second_call()
         "{audit}"
     );
     world.host.begin_stopping();
+}
+
+/// HS2-A1M4KN: the planner asks a template's reuse `CHOICE` on the goal without claiming
+/// it, as the `hotsheet-planner` skill says, so the goal stays Not Started. A person's
+/// answer through the ticket note route still reaches that planner (and not the
+/// project's older push-capable session), and the planner then creates the step's ticket
+/// under `tpl-<operation id>-<step key>` and moves the step to it. A person's plain note
+/// on the Not Started goal before any question tells nobody, as before.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_a1m4kn_a_reuse_answer_on_an_unclaimed_template_goal_reaches_the_planner() {
+    let world = World::with_store(
+        &["tickets_read", "tickets_write", "sessions_manage"],
+        PUSH_AGENT,
+        PUSH_PLUGIN,
+        true,
+    )
+    .await;
+    world.allow(&["sessions_manage"], json!({})).await;
+    // An older push-capable session in the project: the project's primary.
+    let (status, other) = world.start("op-other").await;
+    assert_eq!(status, StatusCode::OK, "{other}");
+    let other = other["hosted"]["session_id"].as_str().unwrap().to_owned();
+    received_prompt(&world.reports, &other, "`hotsheet-worker`");
+    // The work the find-or-create step describes already has a ticket.
+    let existing = world.ticket("Build Search");
+
+    let person = json!({"role":"human","id":"maintainer"});
+    let (status, set) = world
+        .call(
+            "POST",
+            "/templates/set",
+            json!({"templates":[template("Build {{feature}}")],"actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let template_id = set["templates"][0]["template_id"].clone();
+    let (status, applied) = world
+        .call(
+            "POST",
+            "/templates/apply",
+            json!({"template_id":template_id,"inputs":{"feature":"Search"},
+                "tool":REPORT_TOOL,"operation_id":"tpl-1","actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{applied}");
+    let goal = goals(&world).pop().expect("the template's goal");
+    let planner_terminal = drawer(&world.router)
+        .await
+        .into_iter()
+        .map(|tab| tab["id"].as_str().unwrap().to_owned())
+        .find(|id| *id != other)
+        .expect("the planner's terminal");
+    received_prompt(&world.reports, &planner_terminal, "`hotsheet-planner`");
+    let worker = launch_report(&world.reports, &planner_terminal)["env"]["HOTSHEET_WORKER_ID"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let planner = json!({"role":"ai","id":worker});
+    let connection = world.checkout.sources[0].connection_id.clone();
+    let goal_route = format!(
+        "/checkouts/{}/tickets/{connection}:{}",
+        world.checkout.id, goal.id
+    );
+    let patch = |body: Value| {
+        let router = world.router.clone();
+        let goal_route = goal_route.clone();
+        async move {
+            let (status, ticket) = api(router, "PATCH", &goal_route, body, true).await;
+            assert!(status.is_success(), "{status} {ticket}");
+            ticket
+        }
+    };
+
+    // Before any question, a person's note on the Not Started goal tells nobody.
+    let plain = patch(json!({"note":"Synthetic context for the planner.",
+        "note_kind":"regular","actor":person}))
+    .await;
+    assert!(
+        plain.get("feedback_delivery").is_none_or(Value::is_null),
+        "{plain}"
+    );
+
+    // The planner reuses the ticket search found and asks once, without a claim.
+    let define = |native: String| {
+        let world = &world;
+        let planner = planner.clone();
+        let goal = goal.slug.clone();
+        let connection = connection.clone();
+        async move {
+            let (status, defined) = world
+                .call(
+                    "POST",
+                    "/readiness/define",
+                    json!({"actor":planner,"ticket":{"native_id":goal},"target_id":TARGET,
+                        "connection_id":connection,"native_id":native,"prerequisites":[]}),
+                )
+                .await;
+            assert_eq!(status, StatusCode::OK, "{defined}");
+            defined["step"]["step_id"].as_str().unwrap().to_owned()
+        }
+    };
+    let reused_step = define(existing.slug.clone()).await;
+    let asked = patch(json!({"note":format!(
+            "FEEDBACK NEEDED: I reused tickets the template steps found by search.\n\n\
+             CHOICE: Step build reuses {}. Keep it, or create a new ticket?\n\
+             - **Keep {}.** The step stays on the existing ticket.\n\
+             - **Create a new ticket for step build.** I create one and move the step to it.",
+            existing.slug, existing.slug),
+        "note_kind":"feedback_needed","actor":planner}))
+    .await;
+    assert_eq!(asked["status"], "not_started", "{asked}");
+    assert!(
+        asked.get("feedback_delivery").is_none_or(Value::is_null),
+        "an AI's question notifies no session: {asked}"
+    );
+    let question = asked["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|note| note["kind"] == "feedback_needed")
+        .unwrap_or_else(|| panic!("{asked}"))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // The person answers on the Not Started goal: the answer reaches the planner.
+    let answered = patch(json!({"note":"Create a new ticket for step build",
+        "note_kind":"regular","response_to":question,"actor":person}))
+    .await;
+    assert_eq!(answered["status"], "not_started", "{answered}");
+    assert_eq!(
+        answered["feedback_delivery"]["status"], "sent",
+        "{answered}"
+    );
+    assert_eq!(
+        answered["feedback_delivery"]["connection_id"],
+        planner_terminal.as_str(),
+        "{answered}"
+    );
+    // The role prompt names the goal too; the answer is its own prompt.
+    received_prompt(
+        &world.reports,
+        &planner_terminal,
+        &format!("A human answered FEEDBACK NEEDED on {}", goal.slug),
+    );
+    let other_prompts =
+        std::fs::read_to_string(world.reports.join(format!("{other}.prompts"))).unwrap();
+    assert!(
+        !other_prompts.contains(&goal.slug),
+        "the older session is not told: {other_prompts}"
+    );
+
+    // The planner plans by the answer: a new ticket under the template's operation id,
+    // the step moved to it. Creating again under that id returns the same ticket.
+    let create = || {
+        let world = &world;
+        let planner = planner.clone();
+        let goal = goal.slug.clone();
+        let connection = connection.clone();
+        async move {
+            let (status, created) = world
+                .call(
+                    "POST",
+                    "/tickets/create",
+                    json!({"actor":planner,"ticket":{"native_id":goal},"target_id":TARGET,
+                        "connection_id":connection,"operation_id":"tpl-tpl-1-build",
+                        "title":"Build Search"}),
+                )
+                .await;
+            assert_eq!(status, StatusCode::OK, "{created}");
+            created
+        }
+    };
+    let created = create().await;
+    let again = create().await;
+    let slug_of = |created: &Value| {
+        created["ticket"]["slug"]
+            .as_str()
+            .or_else(|| created["slug"].as_str())
+            .unwrap_or_else(|| panic!("{created}"))
+            .to_owned()
+    };
+    let new_slug = slug_of(&created);
+    assert_eq!(slug_of(&again), new_slug, "{again}");
+    assert_ne!(new_slug, existing.slug);
+    let (status, removed) = world
+        .call(
+            "POST",
+            "/readiness/remove",
+            json!({"actor":planner,"step_id":reused_step}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{removed}");
+    let moved_step = define(new_slug.clone()).await;
+    let (status, plan) = world.call("POST", "/readiness/plan", json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    let steps: Vec<&str> = plan["steps"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{plan}"))
+        .iter()
+        .map(|view| view["step"]["step_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(steps, [moved_step.as_str()], "{plan}");
+    // Answered: the question no longer waits, and the goal was never claimed.
+    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    assert!(
+        shown
+            .get("questions")
+            .is_none_or(|questions| questions.as_array().is_some_and(Vec::is_empty)),
+        "{shown}"
+    );
+    let goal_now = goals(&world)
+        .into_iter()
+        .find(|ticket| ticket.id == goal.id)
+        .unwrap();
+    assert_eq!(goal_now.status, hotsheet_model::Status::NotStarted);
+    assert!(goal_now.claimed_by.is_none());
 }
