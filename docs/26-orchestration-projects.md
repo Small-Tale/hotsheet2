@@ -7877,3 +7877,231 @@ MCP `hotsheet_targets` adds `template_list`, `template_show`, `template_validate
 steps to the projects as they are now, searches first for a find-or-create step and,
 when it reuses a ticket, asks once with a `CHOICE` per reused step whether to keep it
 or create a new ticket.
+
+## 26.33 Scheduled and event triggers (HS2-KXKA7X)
+
+A **trigger** is a reviewed binding of **when** to **what**:
+
+- **When:** a **schedule** (the command-schedule recurrence of docs/06: one time, every N
+  minutes with a five-minute floor, hourly, daily, weekly, monthly, yearly, selected
+  dates, include and exclude dates, in a named time zone at a local time), or an event in
+  one declared project: a **ticket opened** (optionally only with a tag or a category),
+  a **CI gate of one of the project's own runs failed** (optionally only in one project),
+  a **branch's CI failed**, or a **commit landed on a branch**.
+- **What:** **apply one plan template** (§26.32) with fixed inputs plus inputs filled
+  from the event (`commit`, `ci_run`, `ticket`, `branch`, `occurrence`, `gate`), and/or
+  **start or pause placement** (the orchestration's Start/Pause, HS2-TZJYKH). A template
+  is applied first, then placement is set.
+
+A trigger never dispatches, pushes or deploys. A template apply opens one goal and hands
+it to the planner; the scheduler places the steps within the policy's limits (the
+maintainer's 2026-11-03 note: "triggers enable or adjust a run; the continuous scheduler
+then places the work"). Integration, push policy and deploy scripts stay with each
+project.
+
+### Where triggers live
+
+Triggers live **on one machine**, like command schedules (the maintainer's decision):
+`${HOTSHEET_HOME}/orchestration-triggers/<owner checkout id>.json` (mode 0600, locked,
+replaced atomically, `schema_version` 1, at most 64 triggers; a newer schema is refused
+as `unsupported_version` and never rewritten, damaged content is `corrupt`, a read
+creates nothing). Only the machine where a trigger is On can fire it, so two machines
+never both run it.
+
+Each trigger keeps, beside its definition (`name`, `source`, `action`, `overlap`), its
+machine-local state: `state`, the review on record, the cursors each source continues
+from, the run its last applied delivery started (`active`), at most one `queued`
+delivery, a bounded **history** (64 entries, newest last), up to 256 **handled**
+delivery keys, a source **warning** and an AI session's **pending turn On**.
+
+### Deliveries, dedupe and overlap
+
+Every occurrence or event is one **delivery** with a deterministic key that names the
+fact, never when it arrived:
+
+| Source           | Delivery key                                                  |
+| ---------------- | ------------------------------------------------------------- |
+| Schedule         | `schedule:<occurrence>` (`YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm`) |
+| Ticket opened    | `ticket:<connection>:<native id>`                             |
+| Run gate failed  | `gate:<run id>:<gate id>:<journal entry>`                     |
+| Branch CI failed | `ci:<provider>:<provider run>:<attempt>`                      |
+| Commit landed    | `commit:<branch>:<commit>`                                    |
+| Fired by hand    | `manual:<operation id>`                                       |
+
+The template apply's operation id is `trg-<trigger id>-<first 16 hex of SHA-256(key)>`
+(the pure `delivery_operation_id`), so a redelivered or replayed event, a restart or a
+second reader answers the existing apply and opens no second goal (`decide_apply`,
+§26.32). A delivery whose key the trigger handled before is recorded once as
+`already_handled` (consecutive repeats coalesce); a ticket edit after its delivery
+records nothing at all.
+
+A trigger never overlaps its own runs. Its last applied delivery's run is **running**
+while its template apply waits (`waiting_permission`, `waiting_planner`) or its goal
+ticket is open. A delivery meanwhile is, by default, **skipped** and recorded as
+`skipped_overlap`, consecutive skips coalescing into one entry with a count ("Skipped 2
+Runs"); with `overlap: queue_latest` it becomes the one **queued** delivery (a newer one
+replaces it, and the replaced one counts as handled) and runs at the first pass after
+the run ends. A placement-only trigger has no run and never overlaps.
+
+The pure `decide_delivery` answers, in order: not firing (Paused or Review: ignored,
+nothing recorded), already handled, dry run, skip or queue while running, apply.
+
+### States
+
+| State          | A delivery                                                                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dry_run`      | Recorded as **Would Have Run**: the template's preview (goal title, steps, projects, which would ask) and the placement change. Writes nothing, asks nobody |
+| `on`           | Applies the template as the trigger's system actor `trigger-<id>` (so it asks like any orchestrator action) and sets placement                              |
+| `paused`       | Ignored. Resume returns to the state paused from and never backfills                                                                                        |
+| `needs_review` | Ignored until a person (or an AI session, through the card) turns it On again                                                                               |
+
+A new trigger starts as **Dry Run** (or Paused when asked); `set` never turns one On.
+Turning On (or Dry Run, or Resume) **arms** the trigger: every cursor starts now, so
+nothing from before is delivered. An On trigger goes to **Review** when its template's
+version changes (or the template is retired or removed) or its definition is edited:
+the review on record holds `spec_digest` of the definition and the template version
+reviewed. The first pass after a template change records `needs_review`, drops a queued
+delivery, and notifies once per template version.
+
+### Turning a trigger On and permissions
+
+`trigger_review` is side-effect-free and answers, in identifiers and codes:
+
+- **Scope:** what it watches (`kind`, project and label, branch watch, tag, category),
+  the projects a delivery may change with their step counts (the template's brief with
+  the fixed inputs and defaults), and what one delivery creates (one goal, its steps,
+  the placement change).
+- **Permissions:** one row per action: watching never asks (`not_needed`; adding the
+  project was the consent); `tickets_write` and `session_start` per project are
+  `remembered` (with the rule id) or `asks`; a placement change is `not_needed` once the
+  trigger is On; `push_deploy` is `unchanged` (the project's integrator, push policy and
+  deploy script decide).
+- **Next actions:** a schedule's next three instants, or the event; the overlap rule.
+- **Turn On:** the person's own act (`person`), or for an AI session `remembered` or
+  `asks`.
+
+A person's `on` is their own act and records the review (`role: human`). **An AI session
+may turn a trigger On too (the maintainer's decision), through the existing permission
+card:** `on` authorizes what the trigger's deliveries do, `tickets_write` in each
+project the template may change and, for a placement start, `work_start` in each active
+project, under `<trigger id>.on.<ULID>.t<n>`, and answers `permission_required`. The
+request waits on the trigger as `pending_on`; once a person answers, the next pass (or
+the same call repeated) turns it On, recording `role: ai` and the requests answered. A
+Deny leaves the trigger as it was. Pausing placement only lowers activity and asks
+nothing.
+
+A trigger's runs ask like any orchestrator action: its template applies authorize
+`tickets_write` as the trigger's actor, so an unanswered request leaves the apply
+`waiting_permission` (the run is then running, so later deliveries skip or queue), and
+HS2-AMJNER resumes it once a person answers (§26.32). A person who wants unattended runs
+uses the ordinary Always Allow.
+
+### Sources, without polling
+
+- **Schedule.** The command-schedule engine (`command_schedules::zoned`, shared with the
+  server's command schedules since this change) resolves occurrences: a DST gap runs at
+  the first valid minute, a fold once at its first instant. A pass delivers the latest
+  occurrence in `(cursor, now]` and records how many earlier ones it covers (`missed`:
+  slots missed while the machine was off run once on return; the look-back is two days
+  for sub-day kinds and a year for date kinds). The cursor moves only past a due
+  occurrence, so an idle pass writes nothing. The pass answers the next instant a
+  schedule is due and the host wakes then.
+- **Run gate failed.** Each pass reads the owner's run event journal after the trigger's
+  cursor (from its end when armed) for `gate` events entering `failed` of a CI gate,
+  filtered by project.
+- **Ticket opened.** The existing target follower (§26.9, `watch_step`) follows each
+  project a firing `ticket_opened` trigger watches, as that trigger's actor (reading
+  never asks). Each ticket a page names is read through the gate and delivered when it
+  is open, carries the tag and category, and was created after the trigger was armed.
+  After a handshake, an overflow or a reconnect, one page of the project's open tickets
+  updated since then is read instead.
+- **Branch CI failed and commit landed.** A **branch watch** per trigger reuses the
+  hosted CI gate watch (HS2-WDQZ37): where the project lives (this machine, or its host
+  over the reviewed transport) `target-branch-head` reads the branch's head from the
+  checkout's `origin/<branch>` (else the local branch), then `target-gates` starts the
+  CI watch Job of that commit in the host's Job monitor, with the host's credentials and
+  its repository check (`gate_repository_mismatch`), and the watch long-polls its
+  reading by cursor. A red verdict is one `ci_failed` delivery; a newer commit the
+  provider built is one `commit_landed` delivery. After a verdict the watch follows the
+  newest commit built (or watches the same commit again for its next run); a branch that
+  moved away is read again. The first step only learns the head: nothing earlier is
+  delivered. The provider is only ever contacted by the Job monitor, inside its own
+  back-off.
+
+### Outages and notifications
+
+A source that cannot be followed (an unbound or unreachable project, a repository the
+host's checkout does not name, a branch the checkout lacks) sets the trigger's
+`warning` and notifies once through the existing notification path (docs/32, the same
+inbox as home outages); the source is tried again with the follower's bounded back-off,
+and the warning clears when it answers. There is no failover (the HS2-EX594V decision).
+A trigger that goes to Review and a delivery that is refused notify once too.
+
+### Hosting
+
+The server runs triggers from its orchestration automation thread (HS2-AMJNER): one
+pass per change of the trigger, scheduler wake, permission signal, plan-update, run
+event or apply directories, and at the next schedule instant, never on an interval. A
+trigger file changed by a headless CLI gets its target follower and branch watches
+there. Each branch watch is a keyed loop of this server's orchestration tasks with the
+followers' bounded back-off; it ends when its trigger stops firing. Clients showing the
+owner's orchestration read it again on `orchestration_changed` after each trigger
+change or delivery.
+
+### In the Orchestration view
+
+**Triggers…** sits in the Orchestration header and opens a Kerf `ListDetailDialog`
+(`clients/web/src/components/orchestration-trigger-dialog.tsx`, pure parsing, wording
+and form mapping in `clients/web/src/orchestration-triggers.ts`):
+
+- the list holds this machine's triggers with an **On**, **Dry Run**, **Paused** or
+  **Review** badge and a one-line summary of the source, and **New Trigger…** in its
+  footer;
+- **New Trigger** and **Edit…** show the setup on the left (**When**: On a Schedule,
+  with the command-schedule draft model, or On a Project Event with the project, the
+  event and its branch, workflow, repository, tag or category; **What Runs**: the
+  template with each input fixed or filled from the event, the tool, and the
+  placement change; **Mode**: Dry Run by default, or Paused; **Overlap**) and the live
+  review on the right (**Scope**, **Permissions**, **Next Actions**), read again after a
+  pause in typing; **Save as Dry Run** saves it. Saving never turns a trigger On;
+- a saved trigger shows **Status** (state and who reviewed it, what it runs, the next
+  three times or the event), **Recent Runs** (Ran with its goal, Would Have Run, Skipped,
+  already handled, Needs Review), the review columns, a **Dry Run** or **Review** banner
+  with **Turn On…** (a confirmation that names what it will do), an overlap banner
+  ("Skipped N Runs: The Last Run Is Still Working") with **Open <goal>**, and **Edit…**,
+  **Pause** and **Resume** in the footer.
+
+The dialog reads the list again on `orchestration_changed`. On a phone it is the
+compact drill-down. Refusals read through the shared refusal map. The overview
+inspector's Triggers row (HS2-X3FZJE), the full command-schedule recurrence controls
+(HS2-SEEMXR) and typed controls for fixed inputs (HS2-40GPZK) are follow-ups.
+
+### Audit
+
+`trigger_set`, `trigger_remove`, `trigger_on` (with `permission_required` while it
+asks), `trigger_dry_run`, `trigger_pause`, `trigger_resume`, `trigger_needs_review` and
+`trigger_delivery` (operation id; reason `applied`, `dry_run`, `skipped_overlap`,
+`queued`, `already_handled` or the refusal code), each with the actor.
+
+### Headless surface
+
+```sh
+hotsheet-cli ... orchestration trigger list --project <owner>
+hotsheet-cli ... orchestration trigger show|history <trigger-id> --project <owner>
+hotsheet-cli ... orchestration trigger set --file <trigger.json|-> [--start dry-run|paused] --project <owner>
+hotsheet-cli ... orchestration trigger review (<trigger-id> | --file <trigger.json|->) --project <owner>
+hotsheet-cli ... orchestration trigger on|dry-run|pause|resume|remove <trigger-id> --project <owner>
+hotsheet-cli ... orchestration trigger fire <trigger-id> --operation-id <id> [--evidence field=value]... --project <owner>
+hotsheet-cli ... orchestration trigger pass --project <owner>
+```
+
+| Route                                                                                                       | Methods and purpose                                                     |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/triggers/{list,show,review,set,remove,on,dry_run,pause,resume,fire,pass}` | POST; machine-local                                                     |
+| `/checkouts/{checkout}/target-branch-head?branch=`                                                          | GET; hosted half of a branch watch, ordinary authenticated project data |
+
+`pass` takes an optional `at_ms` that only a test build (the isolated test permission
+vault) honours, so a real-server test reaches a schedule's slot. MCP `hotsheet_targets`
+adds `trigger_list`, `trigger_show`, `trigger_review`, `trigger_set` (a `trigger`
+object), `trigger_on`, `trigger_dry_run`, `trigger_pause`, `trigger_resume`,
+`trigger_remove`, `trigger_fire` and `trigger_pass`.

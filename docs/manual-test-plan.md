@@ -1567,6 +1567,32 @@ with one open Alpha ticket that already describes a template step's work.
 6. Repeat 3 to 5 with `codex`, then stop every planner, server and broker and remove the
    temporary directories.
 
+## Triggers with a real CI provider and a second machine (HS2-KXKA7X)
+
+Automated tests fire schedules at chosen instants, judge watch Jobs by hand and run the
+target on the same machine; they cannot show a real provider's runs, a real second
+machine or a person's reading of the review (§26.33). Use throwaway homes, synthetic
+projects and a scratch GitHub repository with a `ci.yml` workflow that a commit can make
+fail; never a customer project.
+
+1. With the orchestration project and a target bound (on this machine, then on a paired
+   second machine), check in a template whose step targets that project. Create a
+   `branch_ci_failed` trigger on `main` (`orchestration trigger set --file <file>`) and
+   read `trigger review`: watching never asks, ticket writes ask (or show the remembered
+   rule), push and deploy are unchanged.
+2. Push a failing commit to `main`. Within the Job monitor's back-off the Dry Run trigger
+   records one Would Have Run entry naming the commit and run; re-run the same workflow
+   run and confirm the redelivery shows as already handled, not a second entry.
+3. Turn it On in the Triggers dialog and push another failing commit: one goal ticket
+   opens and the permission card asks for ticket writes in the project. Push a third
+   failing commit while the goal is open: the history shows one skipped run.
+4. On the second machine, confirm the watch Job ran there (`job list`) with that
+   machine's credentials, and that a trigger naming a repository its checkout does not
+   name shows a warning and one notification, with no Job.
+5. A schedule trigger every five minutes with Start placement: leave the computer
+   asleep across two slots and confirm one run with "missed" on wake. Stop every server
+   and remove the temporary directories.
+
 ## Orchestration end to end with real tools and hosts (HS2-2EY9DP)
 
 The end-to-end scenarios (§26.23) run fake AI tools, a loopback GitHub Actions
