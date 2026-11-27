@@ -301,6 +301,90 @@ async fn hs2_a4rvya_apply_starts_the_planner_once_and_keeps_a_snapshot() {
     );
 }
 
+/// HS2-4BQACQ: a template apply whose planner the machine refuses (its admission file
+/// allows no session) waits with the refusal's reason, limit and observed count on the
+/// record, read back through the route and the CLI process's `template apply-show`;
+/// once the machine admits sessions again the repeat starts the planner and the
+/// refusal is gone. No real machine load is involved.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_4bqacq_a_refused_planner_admission_keeps_its_numbers_on_a_real_server() {
+    let world = World::new(
+        &["tickets_read", "sessions_manage"],
+        PUSH_AGENT,
+        PUSH_PLUGIN,
+    )
+    .await;
+    let person = json!({"role":"human","id":"maintainer"});
+    let (status, set) = world
+        .call(
+            "POST",
+            "/templates/set",
+            json!({"templates":[template("Build {{feature}}")],"actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let template_id = set["templates"][0]["template_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let admission_file = world.home.join("orchestration-admission.json");
+    std::fs::write(
+        &admission_file,
+        br#"{"schema_version":1,"admission":{"max_sessions":0}}"#,
+    )
+    .unwrap();
+    let body = json!({"template_id":template_id,"inputs":{"feature":"Search"},
+        "tool":REPORT_TOOL,"operation_id":"tpl-refused","actor":person});
+    let (status, refused) = world.call("POST", "/templates/apply", body.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{refused}");
+    assert_eq!(refused["state"], "waiting_planner", "{refused}");
+    assert_eq!(refused["reason"], "session_admission_refused", "{refused}");
+    let expected = refused["admission"].clone();
+    assert_eq!(expected["reason"], "session_cap_reached", "{refused}");
+    assert_eq!(expected["setting"], "max_sessions", "{refused}");
+    assert_eq!(expected["limit"], 0, "{refused}");
+    // The sessions the machine counted (other AI sessions on it count too).
+    assert!(expected["observed"].is_u64(), "{refused}");
+    assert_eq!(goals(&world).len(), 1, "the goal is open while it waits");
+    assert!(drawer(&world.router).await.is_empty(), "no planner started");
+
+    // Read back through the route and headlessly through the CLI process.
+    let (status, shown) = world
+        .call(
+            "POST",
+            "/templates/apply_show",
+            json!({"operation_id":"tpl-refused"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{shown}");
+    assert_eq!(shown["admission"], expected, "{shown}");
+    let store_arg = world.project_store.to_str().unwrap().to_owned();
+    let from_cli = cli_named(
+        &world.home,
+        &[
+            "-C",
+            store_arg.as_str(),
+            "orchestration",
+            "template",
+            "--project",
+            world.checkout.id.as_str(),
+        ],
+        &["apply-show", "tpl-refused"],
+    );
+    assert_eq!(from_cli["state"], "waiting_planner", "{from_cli}");
+    assert_eq!(from_cli["admission"], expected, "{from_cli}");
+
+    // The machine admits sessions again: the repeat starts the planner, once.
+    std::fs::remove_file(&admission_file).unwrap();
+    let (status, taken) = world.call("POST", "/templates/apply", body).await;
+    assert_eq!(status, StatusCode::OK, "{taken}");
+    assert_eq!(taken["state"], "planning", "{taken}");
+    assert!(taken.get("admission").is_none(), "{taken}");
+    assert!(taken.get("reason").is_none(), "{taken}");
+    assert_eq!(goals(&world).len(), 1, "no second goal");
+    assert_eq!(drawer(&world.router).await.len(), 1);
+}
+
 /// HS2-K3ESZR: the preview checks the test profiles a template's steps name against
 /// the profiles the project offers, read from its checked-in file through the gate
 /// as an observation: an unknown profile is a coded problem, a damaged file is one

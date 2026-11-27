@@ -1,3 +1,6 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { expect, type Page, test } from '@playwright/test';
 
 import { openMockedProject } from './open-mocked-project';
@@ -334,6 +337,59 @@ test('HS2-DTP7QR an open select in Use Template… stays open while a preview an
     await expect(page.getByRole('option', { name: 'Self', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await page.unroute('**/orchestration/templates/preview');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-4BQACQ Use Template… says why the machine refused the planner, with its limit', async ({ page }) => {
+  test.setTimeout(120_000);
+  // The machine's own admission file allows no AI session, so the planner's start is refused (no real load).
+  const server = await realTicketServer({
+    seed: async ({ env }) => {
+      await syntheticTool(env.HOTSHEET_HOME!);
+      await writeFile(
+        join(env.HOTSHEET_HOME!, 'orchestration-admission.json'),
+        JSON.stringify({ schema_version: 1, admission: { max_sessions: 0 } }),
+      );
+    },
+  });
+  try {
+    await orchestrateSelf(server);
+    await checkInTemplate(server);
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    await page.locator('[data-orchestration-toolbar="no_plan"]').getByRole('button', { name: 'Use Template…' }).click();
+    const dialog = dialogOf(page);
+    await dialog.getByLabel('Feature', { exact: true }).fill('Rate limits');
+    const apply = dialog.getByRole('button', { name: 'Apply Template' });
+    await expect(apply).toBeEnabled();
+    await apply.click();
+    await expect(dialog).toContainText('Waiting for the Planner');
+    await expect(dialog).toContainText('the machine did not start the planner.');
+    await expect(dialog).toContainText('The machine’s session limit is 0, so no AI session may start.');
+    await expect(dialog).toContainText('Settings › Orchestration › Machine Defaults');
+    await expect(dialog).not.toContainText('session admission refused');
+    // The apply record keeps the refusal's reason and limit, so a later read says the same.
+    const listed = await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/templates/list`, {
+      actor: person,
+    });
+    const [{ operation_id }] = listed.applies as Array<{ operation_id: string }>;
+    // The server may ask the planner once more on its own meanwhile (refused the same way): read the settled record.
+    const shown = () =>
+      send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/templates/apply_show`, { operation_id });
+    await expect.poll(shown, { timeout: 30_000 }).toMatchObject({
+      state: 'waiting_planner',
+      reason: 'session_admission_refused',
+      admission: { reason: 'session_cap_reached', setting: 'max_sessions', limit: 0 },
+    });
+    await capture(page, 'refused-1440-light');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture(page, 'refused-1440-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await resizeTo(page, { width: 390, height: 844 });
+    await expect(dialog).toContainText('The machine’s session limit is 0, so no AI session may start.');
+    await capture(page, 'refused-390-light');
   } finally {
     await server.stop(page);
   }

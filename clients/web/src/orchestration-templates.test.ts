@@ -173,6 +173,27 @@ describe('plan templates in the Orchestration view (HS2-A4RVYA)', () => {
     expect(
       applyBanner({ ...demoTemplateApply('waiting_planner'), reason: 'session_host_unavailable' }).detail,
     ).toContain('could not take it (session host unavailable)');
+    // HS2-4BQACQ: a refused admission says why, with the machine's numbers and where to change the limit.
+    const refused = {
+      ...demoTemplateApply('waiting_planner'),
+      reason: 'session_admission_refused',
+      admission: { reason: 'above_cpu_ceiling', setting: 'max_cpu_percent', limit: 90, observed: 96 },
+    };
+    expect(applyBanner(refused)).toEqual({
+      tone: 'warning',
+      title: 'Waiting for the Planner',
+      detail:
+        'LCH-7 is open, but the machine did not start the planner. CPU load is 96%, above the 90% ceiling. ' +
+        'Wait for the load to drop, or raise CPU Ceiling in Settings › Orchestration › Machine Defaults. ' +
+        'Then apply again, or press Propose Plan or Update Plan: either plans every open goal.',
+    });
+    expect(
+      applyBanner({ ...refused, admission: { reason: 'session_cap_reached', limit: 0, observed: 0 } }).detail,
+    ).toContain('The machine’s session limit is 0, so no AI session may start.');
+    // A record from before the detail was kept still says the machine refused, in words.
+    const older = { ...refused, admission: undefined };
+    expect(applyBanner(older).detail).toContain('The machine refused to start another AI session.');
+    expect(applyBanner(older).detail).not.toContain('session admission refused');
     expect(applyBanner(demoTemplateApply('waiting_permission')).tone).toBe('info');
     expect(applyBanner(demoTemplateApply('denied')).tone).toBe('danger');
     const parsed = parseTemplateApply({
@@ -196,6 +217,19 @@ describe('plan templates in the Orchestration view (HS2-A4RVYA)', () => {
       permission_requests: ['r1'],
       outcome: 'applied',
     });
+    // HS2-4BQACQ: the admission detail is read when present and ignored when malformed.
+    expect(
+      parseTemplateApply({
+        operation_id: 'op',
+        template_id: 'T1',
+        state: 'waiting_planner',
+        reason: 'session_admission_refused',
+        admission: { reason: 'session_cap_reached', setting: 'max_sessions', limit: 0, observed: 0 },
+      })?.admission,
+    ).toEqual({ reason: 'session_cap_reached', setting: 'max_sessions', limit: 0, observed: 0, tool: undefined });
+    expect(
+      parseTemplateApply({ operation_id: 'op', template_id: 'T1', state: 'waiting_planner', admission: { limit: 1 } }),
+    ).not.toHaveProperty('admission');
   });
 
   it('parses the pre-run summary and keeps fresh operation ids within bounds', () => {

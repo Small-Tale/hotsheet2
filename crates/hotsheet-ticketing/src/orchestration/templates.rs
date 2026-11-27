@@ -1129,6 +1129,11 @@ pub struct TemplateApply {
     /// Why it waits or was denied, as a refusal code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// HS2-4BQACQ: when the machine refused the planner session's admission
+    /// (`reason` is `session_admission_refused`), the refusal's own reason, the limit
+    /// it names and what the machine observed. Absent in records written before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admission: Option<AdmissionRefusal>,
     /// HS2-36XDDX: the plan steps of the goal a person accepted, by step id. While
     /// the snapshot waits for an accept, a step of the goal not listed here is held.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

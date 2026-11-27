@@ -27313,6 +27313,11 @@ components:
             type: string
         reason:
           type: string
+        admission:
+          description:
+            HS2-4BQACQ. When `reason` is `session_admission_refused`, the machine's refusal of the planner session with
+            its reason, limit and observed value. Absent otherwise and in records written before.
+          $ref: '#/components/schemas/AdmissionRefusal'
         accepted_steps:
           description: HS2-36XDDX. The goal's plan steps a person accepted.
           type: array

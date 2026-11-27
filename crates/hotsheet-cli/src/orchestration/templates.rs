@@ -1447,6 +1447,7 @@ impl OrchestrationRuntime {
                     attempts: 0,
                     permission_requests: Vec::new(),
                     reason: None,
+                    admission: None,
                     accepted_steps: Vec::new(),
                     accepted_at_ms: None,
                     accepted_by: None,
@@ -1533,6 +1534,7 @@ impl OrchestrationRuntime {
                     Err(OrchestrationError::Denied(DenialReason::PermissionDenied)) => {
                         apply.state = ApplyState::Denied;
                         apply.reason = Some(DenialReason::PermissionDenied.code().into());
+                        apply.admission = None;
                         apply.updated_at_ms = tx.clock.now_ms();
                         store.write(apply)?;
                         return Ok(());
@@ -1544,6 +1546,7 @@ impl OrchestrationRuntime {
                 apply.state = ApplyState::WaitingPermission;
                 apply.permission_requests = waiting;
                 apply.reason = Some(DenialReason::PermissionRequired.code().into());
+                apply.admission = None;
                 apply.updated_at_ms = tx.clock.now_ms();
                 store.write(apply)?;
                 return Err(OrchestrationError::PermissionRequired { request_id: first });
@@ -1568,6 +1571,7 @@ impl OrchestrationRuntime {
                 });
                 apply.state = ApplyState::WaitingPlanner;
                 apply.reason = None;
+                apply.admission = None;
                 apply.updated_at_ms = tx.clock.now_ms();
                 store.write(apply)?;
             }
@@ -1644,6 +1648,7 @@ impl OrchestrationRuntime {
             apply.attempts += 1;
             apply.proposal_id = Some(next.clone());
             apply.reason = None;
+            apply.admission = None;
             apply.updated_at_ms = tx.clock.now_ms();
             store.write(apply)?;
             next
@@ -1698,16 +1703,20 @@ impl OrchestrationRuntime {
             Ok(true) => {
                 apply.state = ApplyState::Planning;
                 apply.reason = None;
+                apply.admission = None;
             }
             Ok(false) => {
                 apply.state = ApplyState::WaitingPlanner;
                 apply.reason = Some(ReadinessError::PlannerBusy.code().into());
+                apply.admission = None;
                 // The next attempt chooses again between Propose and Update.
                 apply.planning = None;
             }
             Err(error) => {
                 apply.state = ApplyState::WaitingPlanner;
                 apply.reason = Some(error.code().into());
+                // HS2-4BQACQ: a refused admission keeps its reason and numbers.
+                apply.admission = error.admission_refusal().cloned();
                 apply.planning = None;
             }
         }

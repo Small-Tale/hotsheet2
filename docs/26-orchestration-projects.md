@@ -7902,8 +7902,13 @@ template, for a person, an AI session and a trigger (HS2-KXKA7X) alike. In order
    the same id and the planner never starts twice. A planner at work on another
    proposal leaves the apply `waiting_planner` with its goal open (`plan_update_planner_busy`,
    or the host's refusal code): a repeat asks again, and any later Propose Plan or
-   Update Plan plans that open goal as well. Once the planner took it the apply is
-   `planning`.
+   Update Plan plans that open goal as well. When the machine refused the planner
+   session's admission (`session_admission_refused`) the apply also keeps the refusal
+   as `admission` (its reason, the machine limit `setting`, that limit and what the
+   machine observed, as Propose Plan's own refusal carries them, HS2-8Z9VHH), so
+   `template apply-show` and Use Template… say why, for example "CPU load is 96%, above
+   the 90% ceiling" (HS2-4BQACQ). A later attempt replaces or clears it. Once the planner
+   took it the apply is `planning`.
 
 **Resuming a waiting apply (HS2-AMJNER).** Nobody has to repeat a waiting apply by hand.
 `template_resume_waiting` continues, under the apply's own operation id and as the actor
@@ -7925,7 +7930,9 @@ The apply is recorded machine-locally in
 `${HOTSHEET_HOME}/orchestration-template-applies/<owner>.json` (mode 0600, at most 256;
 the oldest finished one is forgotten first, an unfinished one never). The record keeps
 the template as applied (`snapshot`), the resolved inputs and choices, the goal, the
-proposal id, the attempts and the permission requests.
+proposal id, the attempts, the permission requests, the waiting `reason` and, for a
+refused admission, `admission` (optional: a record written before HS2-4BQACQ reads
+without it).
 
 **Idempotency** is the pure `decide_apply`: the same operation id with the same template,
 inputs and choices answers a finished apply as recorded (`outcome: existing`) and

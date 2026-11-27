@@ -518,6 +518,7 @@ fn apply(state: ApplyState) -> TemplateApply {
         attempts: 0,
         permission_requests: Vec::new(),
         reason: None,
+        admission: None,
         accepted_steps: Vec::new(),
         accepted_at_ms: None,
         accepted_by: None,
@@ -629,6 +630,39 @@ fn hs2_a4rvya_apply_records_are_private_bounded_and_keep_unfinished_ones() {
         full.write(&one_more),
         Err(OrchestrationError::Capacity)
     ));
+}
+
+/// HS2-4BQACQ: an apply the machine refused admission keeps the refusal's reason and
+/// numbers in its record; a record written before the detail existed still reads.
+#[test]
+fn hs2_4bqacq_an_apply_keeps_its_admission_refusal_and_old_records_still_read() {
+    let home = tempfile::tempdir().unwrap();
+    let store = TemplateApplyStore::new(home.path(), "launch-0123456789ab").unwrap();
+    let mut refused = apply(ApplyState::WaitingPlanner);
+    refused.reason = Some(SessionError::AdmissionRefused.code().into());
+    refused.admission = Some(AdmissionRefusal {
+        setting: Some("max_cpu_percent".into()),
+        limit: Some(90),
+        observed: Some(96),
+        ..AdmissionRefusal::bare(AdmissionReason::AboveCpuCeiling.code())
+    });
+    store.write(&refused).unwrap();
+    assert_eq!(store.find("op-1").unwrap(), Some(refused.clone()));
+    let value = serde_json::to_value(&refused).unwrap();
+    assert_eq!(
+        value["admission"],
+        json!({"reason": "above_cpu_ceiling", "setting": "max_cpu_percent", "limit": 90, "observed": 96})
+    );
+
+    // A record from before HS2-4BQACQ has no `admission` and reads as none.
+    let mut old = value.clone();
+    old.as_object_mut().unwrap().remove("admission");
+    let read: TemplateApply = serde_json::from_value(old).unwrap();
+    assert_eq!(read.admission, None);
+    assert_eq!(read.reason.as_deref(), Some("session_admission_refused"));
+    // And a record without one writes none.
+    let plain = serde_json::to_value(apply(ApplyState::Planning)).unwrap();
+    assert!(plain.get("admission").is_none(), "{plain}");
 }
 
 #[test]

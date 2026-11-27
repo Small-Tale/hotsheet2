@@ -21,7 +21,7 @@ use super::*;
 struct Fixture {
     m: Machine,
     host: Arc<ScriptedHost>,
-    _probe: Arc<Probe>,
+    probe: Arc<Probe>,
 }
 
 impl Fixture {
@@ -38,11 +38,7 @@ impl Fixture {
         for n in 1..=targets {
             bind_and_allow(&m, n, &[TargetAction::TicketsRead], tx);
         }
-        Self {
-            m,
-            host,
-            _probe: probe,
-        }
+        Self { m, host, probe }
     }
 
     fn owner(&self) -> String {
@@ -720,6 +716,97 @@ fn hs2_a4rvya_a_busy_planner_leaves_the_apply_waiting_and_a_plan_uses_update() {
         launch
             .role_prompt
             .contains(&format!("the goal ticket `{}`", audit_goal.slug))
+    );
+}
+
+/// HS2-4BQACQ: a planner start the machine refuses leaves the apply waiting with the
+/// refusal's reason and numbers, not only `session_admission_refused`; a repeat refused
+/// for another reason records that one instead, and a repeat that is admitted clears it.
+#[test]
+fn hs2_4bqacq_a_refused_planner_admission_keeps_its_reason_and_numbers() {
+    let mut rng = Rng(550);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(2, &mut tx);
+    let template = f.define("Feature", &mut tx);
+    f.probe
+        .set(|observation| observation.cpu.load_percent = Some(96));
+    let refused = f
+        .apply(
+            &template,
+            json!({"feature": "Billing"}),
+            "op-a",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(refused.apply.state, ApplyState::WaitingPlanner);
+    assert_eq!(
+        refused.apply.reason.as_deref(),
+        Some("session_admission_refused")
+    );
+    let admission = refused.apply.admission.clone().expect("admission detail");
+    assert_eq!(admission.reason, "above_cpu_ceiling");
+    assert_eq!(admission.setting.as_deref(), Some("max_cpu_percent"));
+    assert_eq!((admission.limit, admission.observed), (Some(90), Some(96)));
+    assert!(f.host.launches().is_empty());
+    assert_eq!(f.goals().len(), 1, "the goal is open while it waits");
+    // The record keeps it: the show answers the same detail.
+    let shown =
+        f.m.runtime
+            .template_apply_show(
+                &f.owner(),
+                &serde_json::from_value(json!({"operation_id": "op-a"})).unwrap(),
+            )
+            .unwrap();
+    assert_eq!(shown.apply.admission, Some(admission));
+    assert_eq!(
+        serde_json::to_value(&shown).unwrap()["admission"]["observed"],
+        96
+    );
+
+    // Refused again for another reason: the record names the new one.
+    f.probe.set(|observation| {
+        observation.cpu.load_percent = Some(10);
+        observation.memory.free_mb = Some(100);
+    });
+    let again = f
+        .apply(
+            &template,
+            json!({"feature": "Billing"}),
+            "op-a",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(again.apply.state, ApplyState::WaitingPlanner);
+    let admission = again.apply.admission.clone().expect("admission detail");
+    assert_eq!(admission.reason, "below_ram_floor");
+    assert_eq!(admission.observed, Some(100));
+
+    // Admitted: the planner takes the goal and the refusal is gone.
+    f.probe.set(|observation| *observation = roomy());
+    let taken = f
+        .apply(
+            &template,
+            json!({"feature": "Billing"}),
+            "op-a",
+            &human(),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(taken.apply.state, ApplyState::Planning);
+    assert_eq!(taken.apply.reason, None);
+    assert_eq!(taken.apply.admission, None);
+    assert_eq!(f.host.launches().len(), 1);
+    assert_eq!(f.goals().len(), 1, "no second goal");
+    assert!(
+        serde_json::to_value(&taken)
+            .unwrap()
+            .get("admission")
+            .is_none()
     );
 }
 

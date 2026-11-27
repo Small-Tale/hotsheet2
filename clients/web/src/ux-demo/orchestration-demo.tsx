@@ -558,6 +558,19 @@ function OrchestrationTemplateDialogDemo() {
       false,
     ],
     [
+      // HS2-4BQACQ: the machine refused the planner's admission; the banner says why, with its numbers.
+      'Use Template…: Machine Refused the Planner',
+      templateState({
+        mode: 'result',
+        result: {
+          ...demoTemplateApply('waiting_planner'),
+          reason: 'session_admission_refused',
+          admission: { reason: 'above_cpu_ceiling', setting: 'max_cpu_percent', limit: 90, observed: 96 },
+        },
+      }),
+      false,
+    ],
+    [
       'Save a Goal as Template…',
       templateState({
         mode: 'save',

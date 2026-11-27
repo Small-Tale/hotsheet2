@@ -6,6 +6,9 @@
  * controller stay thin. Unknown codes read as their words.
  */
 
+import { type AdmissionRefusalDetail, parseAdmissionRefusal } from './api';
+import { admissionRefusalText, refusalText } from './orchestration-refusals';
+
 export type TemplateInputKind = 'text' | 'number' | 'boolean' | 'choice' | 'priority' | 'target' | 'tool';
 export type StepTicketChoice = 'search' | 'create';
 export type AccessNeed = 'person' | 'remembered' | 'asks';
@@ -110,6 +113,8 @@ export interface TemplateApply {
   goal?: ApplyGoal;
   planning?: 'propose' | 'update';
   reason?: string;
+  /** HS2-4BQACQ: the machine's admission refusal of the planner, with its limit and observed value. */
+  admission?: AdmissionRefusalDetail;
   permission_requests: string[];
   outcome?: 'applied' | 'existing';
 }
@@ -198,6 +203,7 @@ function parseApply(value: unknown): TemplateApply | undefined {
   if (!operation || !template || !state) return undefined;
   const snapshot = record(raw.snapshot);
   const goal = record(raw.goal);
+  const admission = parseAdmissionRefusal(raw.admission);
   return {
     operation_id: operation,
     template_id: template,
@@ -221,6 +227,7 @@ function parseApply(value: unknown): TemplateApply | undefined {
       : {}),
     ...(raw.planning === 'propose' || raw.planning === 'update' ? { planning: raw.planning } : {}),
     ...(text(raw.reason) ? { reason: text(raw.reason) } : {}),
+    ...(admission ? { admission } : {}),
     permission_requests: texts(raw.permission_requests),
     ...(raw.outcome === 'applied' || raw.outcome === 'existing' ? { outcome: raw.outcome } : {}),
   };
@@ -526,7 +533,21 @@ export function applyBanner(apply: TemplateApply): {
             ? `${goal} was handed to the planner as a plan update. Review its proposed steps in the timeline; the current plan keeps running meanwhile.`
             : `${goal} was handed to the planner. Review its proposed plan in the timeline before work starts.`,
       };
-    case 'waiting_planner':
+    case 'waiting_planner': {
+      // HS2-4BQACQ: the machine refused the planner: say why, with its numbers, as Propose Plan does.
+      const refused = apply.admission
+        ? admissionRefusalText(apply.admission)
+        : apply.reason === 'session_admission_refused'
+          ? refusalText(apply.reason)
+          : undefined;
+      if (refused)
+        return {
+          tone: 'warning',
+          title: 'Waiting for the Planner',
+          detail: `${goal} is open, but the machine did not start the planner. ${refused.message}${
+            refused.next ? ` ${refused.next}` : ''
+          } Then apply again, or press Propose Plan or Update Plan: either plans every open goal.`,
+        };
       return {
         tone: 'warning',
         title: 'Waiting for the Planner',
@@ -536,6 +557,7 @@ export function applyBanner(apply: TemplateApply): {
             : `could not take it (${apply.reason.replaceAll('_', ' ')})`
         }. Apply again later, or press Propose Plan or Update Plan: either plans every open goal.`,
       };
+    }
     case 'waiting_permission':
       return {
         tone: 'info',
