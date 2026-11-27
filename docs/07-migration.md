@@ -402,7 +402,15 @@ change or a 25-second idle timeout. Subscribers may disconnect without cancellin
 job. There is no fixed-interval network polling. A bridge watching another bridge's job
 uses a native directory watcher; when the OS refuses one (macOS FSEvents `EMFILE`, Linux
 inotify `ENOSPC`), the long poll stays open and re-reads the local checkpoint revision
-every 250 ms instead of failing the request. Reload/reopen joins the saved attempt,
+every 250 ms instead of failing the request. All of a bridge's foreign long polls share
+one native watcher on the registry directory (HS2-R1KHPN). It closes only after the
+directory has gone unwatched for 60 seconds, because on macOS each watcher open or close
+re-registers the process's FSEvents stream and a close blocks the event loop. Each poll
+reads its checkpoint once after subscribing. Until the shared stream delivers its first
+event, the watcher writes `.hotsheet-watch-probe.*.tmp` probe files with backoff (100 ms
+doubling to 5 s), and each unanswered round, as well as the first delivery, triggers a
+catch-up read. A change made before the stream registered therefore resolves the poll
+promptly instead of after the idle timeout. Reload/reopen joins the saved attempt,
 and stale revisions cannot overwrite a retry. Invalid/version-skewed or immediate idle
 watch responses stop watching with an explicit Reconnect action rather than looping.
 The stable project id, attempt id, and increasing revision keep background completion

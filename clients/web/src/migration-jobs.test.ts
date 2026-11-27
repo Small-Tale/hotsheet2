@@ -273,6 +273,8 @@ describe('migration ownership adversaries', () => {
       expect((await foreign.start(owner)).attempt).toBe(current.attempt);
     } finally {
       finish();
+      a.close();
+      b.close();
       await a.flush();
       await b.flush();
       await rm(directory, { recursive: true, force: true });
@@ -324,6 +326,70 @@ describe('migration ownership adversaries', () => {
         await delivered;
       } finally {
         watcher?.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+    REAL_WATCHER_TEST_BOUND_MS,
+  );
+
+  // HS2-R1KHPN: the shared watcher's real-stream smoke test (docs/test-quarantine.md,
+  // "Native file-event latency"). Once the shared stream has proven itself live it stops
+  // catch-up reads, so only native delivery can resolve the poll before its idle bound.
+  // A refused watcher (EMFILE, as under the Claude Code sandbox) fails it at once.
+  it(
+    'delivers a foreign checkpoint change through the shared native directory watcher',
+    async () => {
+      const directory = await mkdtemp(resolve(tmpdir(), 'migration-shared-native-watch-'));
+      const locks = memoryLocks();
+      let emit: (event: MigrationProgress) => void | Promise<void> = () => {};
+      const a = new MigrationJobs(
+        directory,
+        async (_job, progress) => {
+          emit = progress;
+          return new Promise<undefined>(() => {});
+        },
+        undefined,
+        locks.lock,
+      );
+      let refusal: Error | undefined;
+      const observed: WatchDirectory = (path, changed) => {
+        try {
+          const watcher = nativeWatchDirectory(path, changed);
+          watcher.on('error', (error) => {
+            refusal = error;
+          });
+          return watcher;
+        } catch (error) {
+          refusal = error as Error;
+          throw error;
+        }
+      };
+      const b = new MigrationJobs(directory, vi.fn(), undefined, locks.lock, undefined, observed);
+      try {
+        const current = await a.start(owner);
+        // A first poll registers the shared stream; it may also wake on the owner's
+        // start checkpoint, which fseventsd can still report after registration.
+        const warmUp = new AbortController(),
+          warming = b.watch(owner.root, current.revision, warmUp.signal, REAL_WATCHER_TEST_BOUND_MS);
+        while (!b.foreignWatchLive) {
+          if (refusal) throw refusal;
+          await new Promise((done) => setTimeout(done, 5));
+        }
+        warmUp.abort();
+        await warming;
+        // The proven stream outlives that poll; this one hears the change only from it.
+        const waiting = b.watch(owner.root, current.revision, undefined, REAL_WATCHER_TEST_BOUND_MS);
+        await emit({ version: 1, phase: 'reading_source' });
+        await a.flush();
+        let changed = await waiting;
+        while (changed?.revision === current.revision)
+          changed = await b.watch(owner.root, current.revision, undefined, REAL_WATCHER_TEST_BOUND_MS);
+        if (refusal) throw refusal;
+        expect(b.foreignWatchLive).toBe(true);
+        expect(changed?.revision).toBeGreaterThan(current.revision);
+      } finally {
+        b.close();
+        await a.flush();
         await rm(directory, { recursive: true, force: true });
       }
     },
@@ -406,24 +472,73 @@ describe('migration ownership adversaries', () => {
     });
   });
 
-  it('stops a degraded watcher when the long poll ends and ignores late watcher errors', async () => {
+  // HS2-R1KHPN: FSEvents drops changes made before its stream registers. A change the
+  // stream never reports still resolves the poll through a catch-up read, long before
+  // the idle timeout, and the probe it wrote is removed again.
+  it('resolves a foreign change the stream missed through a catch-up read, not the idle timeout', async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), 'migration-watch-catch-up-'));
+    const locks = memoryLocks();
+    let emit: (event: MigrationProgress) => void | Promise<void> = () => {};
+    const a = new MigrationJobs(
+      directory,
+      async (_job, progress) => {
+        emit = progress;
+        return new Promise<undefined>(() => {});
+      },
+      undefined,
+      locks.lock,
+    );
+    const unregistered = vi.fn<WatchDirectory>(() => Object.assign(new EventEmitter(), { close: vi.fn() }));
+    const b = new MigrationJobs(directory, vi.fn(), undefined, locks.lock, undefined, unregistered);
+    try {
+      const current = await a.start(owner);
+      const waiting = b.watch(owner.root, current.revision, undefined, 60_000);
+      const probing = async () => (await readdir(directory)).some((name) => name.startsWith('.hotsheet-watch-probe.'));
+      while (!(await probing())) await new Promise((done) => setImmediate(done));
+      await b.snapshot(owner.root);
+      await emit({ version: 1, phase: 'reading_source' });
+      await a.flush();
+      const started = Date.now();
+      expect((await waiting)?.revision).toBeGreaterThan(current.revision);
+      expect(Date.now() - started).toBeLessThan(30_000);
+      expect(unregistered).toHaveBeenCalledTimes(1);
+      b.close();
+      while (await probing()) await new Promise((done) => setImmediate(done));
+    } finally {
+      await a.flush();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  // HS2-R1KHPN: the poll ends without closing the shared watcher (closing one blocks
+  // the event loop on macOS); a later error closes it and must not revive the poll.
+  it('keeps the shared watcher after a long poll ends and ignores late watcher errors', async () => {
     const directory = await mkdtemp(resolve(tmpdir(), 'migration-watch-close-'));
     const locks = memoryLocks();
     const watcher = Object.assign(new EventEmitter(), { close: vi.fn() });
+    const watchDirectory = vi.fn<WatchDirectory>(() => watcher);
     const a = new MigrationJobs(directory, async () => new Promise<undefined>(() => {}), undefined, locks.lock);
-    const b = new MigrationJobs(directory, vi.fn(), undefined, locks.lock, undefined, () => watcher);
+    const b = new MigrationJobs(directory, vi.fn(), undefined, locks.lock, undefined, watchDirectory);
     try {
       const current = await a.start(owner);
-      const abort = new AbortController(),
-        waiting = b.watch(owner.root, current.revision, abort.signal, 60_000);
-      while (watcher.listenerCount('error') === 0) await new Promise((done) => setImmediate(done));
-      abort.abort();
-      expect((await waiting)?.revision).toBe(current.revision);
-      expect(watcher.close).toHaveBeenCalled();
-      // A late error after close must not start stat-watching a finished poll.
+      for (let poll = 0; poll < 3; poll++) {
+        const abort = new AbortController(),
+          waiting = b.watch(owner.root, current.revision, abort.signal, 60_000);
+        while (watchDirectory.mock.calls.length === 0) await new Promise((done) => setImmediate(done));
+        abort.abort();
+        expect((await waiting)?.revision).toBe(current.revision);
+      }
+      expect(watchDirectory).toHaveBeenCalledTimes(1);
+      expect(watcher.close).not.toHaveBeenCalled();
+      // A late error after the polls ended closes the watcher and must not start
+      // re-reading a finished poll.
       watcher.emit('error', new Error('EMFILE: too many open files, watch'));
+      expect(watcher.close).toHaveBeenCalledTimes(1);
       const idle = await b.watch(owner.root, current.revision, undefined, 1);
       expect(idle?.status).toBe('running');
+      expect(watchDirectory).toHaveBeenCalledTimes(2);
+      b.close();
+      expect(watcher.close).toHaveBeenCalledTimes(2);
     } finally {
       await a.flush();
       await rm(directory, { recursive: true, force: true });
