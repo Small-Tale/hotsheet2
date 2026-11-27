@@ -56,17 +56,11 @@ pub fn redact_url(url: &str) -> String {
     }
 }
 
-/// Transport failure text without the request URL. ureq's `Display` leads with the full
-/// URL, which for Slack, Teams and webhooks is the credential (HS2-CQNE4E).
-fn transport_error(error: &ureq::Transport, url: &str) -> String {
-    let mut text = error.kind().to_string();
-    if let Some(message) = error.message() {
-        text.push_str(": ");
-        text.push_str(message);
-    }
-    if let Some(source) = std::error::Error::source(error) {
-        text.push_str(&format!(": {source}"));
-    }
+/// Transport failure text without the request URL. The URL is, for Slack, Teams and
+/// webhooks, the credential (HS2-CQNE4E); an error that quotes it (an unusable URL) prints
+/// only its origin.
+fn transport_error(error: &ureq::Error, url: &str) -> String {
+    let text = error.to_string();
     if url.is_empty() {
         text
     } else {
@@ -91,20 +85,27 @@ pub struct LiveHttp;
 
 impl HttpTransport for LiveHttp {
     fn send(&self, request: &HttpRequest) -> Result<HttpResponse, String> {
-        let mut call =
-            ureq::request(&request.method, &request.url).timeout(Duration::from_secs(30));
+        // HS2-9ABVDW: an error status is the notifier's to classify, so it is read as a
+        // response; the body goes out as given, whatever the method.
+        let agent = hotsheet_http::build(
+            hotsheet_http::config()
+                .http_status_as_error(false)
+                .timeout_global(Some(Duration::from_secs(30))),
+        );
+        let mut call = ureq::http::Request::builder()
+            .method(request.method.as_str())
+            .uri(&request.url);
         for (name, value) in &request.headers {
-            call = call.set(name, value);
+            call = call.header(name, value);
         }
-        let response = match call.send_bytes(&request.body) {
-            Ok(response) => response,
-            Err(ureq::Error::Status(_, response)) => response,
-            Err(ureq::Error::Transport(error)) => {
-                return Err(transport_error(&error, &request.url));
-            }
-        };
-        let status = response.status();
-        let body = response.into_string().unwrap_or_default();
+        let call = call
+            .body(request.body.clone())
+            .map_err(|error| transport_error(&ureq::Error::Http(error), &request.url))?;
+        let mut response = agent
+            .run(call)
+            .map_err(|error| transport_error(&error, &request.url))?;
+        let status = response.status().as_u16();
+        let body = response.body_mut().read_to_string().unwrap_or_default();
         Ok(HttpResponse { status, body })
     }
 }
@@ -234,6 +235,82 @@ mod tests {
         let error = LiveHttp.send(&request).unwrap_err();
         assert!(!error.contains("synthetic-secret"), "{error}");
         assert!(!error.is_empty());
+        // HS2-9ABVDW: an error that quotes the URL itself prints only its origin.
+        for url in [
+            "ftp://hooks.test/services/synthetic-secret",
+            "http://hooks.test/services/synthetic-secret\u{7f}",
+        ] {
+            let error = LiveHttp
+                .send(&HttpRequest {
+                    url: url.into(),
+                    ..request.clone()
+                })
+                .unwrap_err();
+            assert!(!error.contains("synthetic-secret"), "{error}");
+            assert!(!error.is_empty());
+        }
+    }
+
+    /// HS2-9ABVDW: a loopback server that answers one request with `reply` and hands back
+    /// the raw request it read.
+    fn answer_once(reply: &'static str) -> (String, std::thread::JoinHandle<String>) {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut head = String::new();
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                head.push_str(&line);
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            let length = head
+                .lines()
+                .find_map(|l| {
+                    l.to_ascii_lowercase()
+                        .strip_prefix("content-length:")
+                        .map(|v| v.trim().parse::<usize>().unwrap())
+                })
+                .unwrap_or(0);
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            stream.write_all(reply.as_bytes()).unwrap();
+            head + &String::from_utf8(body).unwrap()
+        });
+        (url, server)
+    }
+
+    /// HS2-9ABVDW: an error status is a response with its body, not a transport failure,
+    /// and the request goes out with its method, headers and body unchanged.
+    #[test]
+    fn hs2_9abvdw_live_http_returns_error_statuses_with_their_body() {
+        let (url, server) = answer_once(
+            "HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 12\r\n\r\nsynthetic-ko",
+        );
+        let response = LiveHttp
+            .send(&HttpRequest {
+                method: "PUT".into(),
+                url: format!("{url}/hook"),
+                headers: vec![("X-Synthetic".into(), "header-value".into())],
+                body: b"synthetic-body".to_vec(),
+            })
+            .unwrap();
+        assert_eq!(
+            response,
+            HttpResponse {
+                status: 503,
+                body: "synthetic-ko".into()
+            }
+        );
+        let seen = server.join().unwrap().to_ascii_lowercase();
+        assert!(seen.starts_with("put /hook http/1.1\r\n"), "{seen}");
+        assert!(seen.contains("x-synthetic: header-value\r\n"), "{seen}");
+        assert!(seen.ends_with("\r\n\r\nsynthetic-body"), "{seen}");
     }
 
     #[test]

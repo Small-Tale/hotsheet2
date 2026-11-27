@@ -20,8 +20,8 @@ base64.workspace = true
 sha2.workspace = true
 ring.workspace = true
 percent-encoding.workspace = true
-# HS2-9ABVDW: still on ureq 2 until this crate moves to hotsheet-http.
-ureq = "2.12"
+ureq.workspace = true
+hotsheet-http.workspace = true
 tempfile.workspace = true
 # HS2-BWJWWX: a blocking WebSocket client for the Ably adapter. TLS is built explicitly
 # with the ring provider (the tree also holds aws-lc-rs, so the default builder would panic).

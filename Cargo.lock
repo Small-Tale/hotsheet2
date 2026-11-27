@@ -1239,6 +1239,7 @@ name = "hotsheet-notify"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-http",
  "hotsheet-sync",
  "hotsheet-ticketing",
  "jiff",
@@ -1256,7 +1257,7 @@ dependencies = [
  "toml 0.8.23",
  "tungstenite",
  "ulid",
- "ureq 2.12.1",
+ "ureq 3.5.2",
  "webpki-roots 1.0.12",
 ]
 
