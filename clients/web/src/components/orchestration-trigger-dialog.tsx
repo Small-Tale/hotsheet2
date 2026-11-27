@@ -17,7 +17,6 @@ import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { CalendarClock, GitCommitHorizontal, Pause, Play, Plus, Zap } from 'lucide';
 
-import { everyBounds, isSubDay } from '../command-schedule-form';
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { PlanTemplate } from '../orchestration-templates';
 import {
@@ -42,6 +41,7 @@ import {
   warningText,
 } from '../orchestration-triggers';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
+import { ScheduleRecurrenceFields } from './schedule-recurrence-fields';
 
 /** The open Triggers… dialog (HS2-KXKA7X). */
 export interface OrchestrationTriggerDialogState {
@@ -86,24 +86,7 @@ export interface OrchestrationTriggerDialogProps {
   embedded?: boolean;
 }
 
-const REPEATS = [
-  { value: 'minutely', label: 'Every Few Minutes' },
-  { value: 'hourly', label: 'Hourly' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'yearly', label: 'Yearly' },
-];
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((label, index) => ({
-  value: String(index + 1),
-  label,
-}));
 const EVENTS = (Object.keys(EVENT_LABELS) as TriggerEvent[]).map((value) => ({ value, label: EVENT_LABELS[value] }));
-
-function timeZones(current: string) {
-  const zones = new Set(['UTC', current, ...Intl.supportedValuesOf('timeZone')]);
-  return [...zones].sort().map((value) => ({ value, label: value }));
-}
 
 function sourceIcon(view: Pick<TriggerView, 'source'>) {
   switch (view.source.kind) {
@@ -262,47 +245,14 @@ function TriggerDetail({ state, view }: { state: OrchestrationTriggerDialogState
   );
 }
 
+/** HS2-SEEMXR: the command-schedule dialog's own recurrence fields, named `trigger-schedule-<draft key>`. */
 function ScheduleFields({ state }: { state: OrchestrationTriggerDialogState }) {
-  const draft = state.form.schedule,
-    bounds = everyBounds(draft.repeats),
-    key = (name: string) => ({ 'data-key': `trigger-schedule-${name}-${state.session}` });
   return (
     <List gap="m">
-      <Grid minColumnWidth={px(144)} gap="m">
-        <Select name="trigger-schedule-repeats" label="Repeats" value={draft.repeats} choices={REPEATS} />
-        <TextField
-          name="trigger-schedule-every"
-          label={bounds.label}
-          type="number"
-          value={draft.every}
-          hint={bounds.hint}
-          rootAttributes={key('every')}
-        />
-      </Grid>
-      {draft.repeats === 'weekly' ? (
-        <Select name="trigger-schedule-weekday" label="On" value={String(draft.weekdays[0] ?? 1)} choices={WEEKDAYS} />
-      ) : undefined}
-      <Grid minColumnWidth={px(144)} gap="m">
-        <TextField
-          name="trigger-schedule-start"
-          label="Starting"
-          type="date"
-          value={draft.startDate}
-          rootAttributes={key('start')}
-        />
-        <TextField
-          name="trigger-schedule-time"
-          label={isSubDay(draft.repeats) ? 'First Run' : 'Time (24-Hour)'}
-          value={draft.time}
-          hint="HH:mm"
-          rootAttributes={key('time')}
-        />
-      </Grid>
-      <Select
-        name="trigger-schedule-zone"
-        label="Time Zone"
-        value={draft.timeZone}
-        choices={timeZones(draft.timeZone)}
+      <ScheduleRecurrenceFields
+        draft={state.form.schedule}
+        namePrefix="trigger-schedule-"
+        fieldAttributes={(field) => ({ 'data-key': `trigger-schedule-${field}-${state.session}` })}
       />
     </List>
   );

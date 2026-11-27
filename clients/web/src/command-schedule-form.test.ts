@@ -11,6 +11,7 @@ import {
   scheduleDraftFromView,
   scheduleInputFromDraft,
   withRepeats,
+  withScheduleField,
 } from './command-schedule-form';
 import {
   commandClickActionLabel,
@@ -246,5 +247,46 @@ describe('HS2-17Y2EC schedule action override', () => {
     expect(String(CommandScheduleDialog({ draft: newScheduleDraft() }))).toContain(
       'Use Command Default (Create Ticket Only)',
     );
+  });
+});
+
+describe('HS2-SEEMXR one field change for both schedule forms', () => {
+  it('applies each recurrence field and ignores unknown fields and out-of-set choices', () => {
+    const draft = { ...newScheduleDraft(), scheduleType: 'repeating' as const, repeats: 'daily' as const };
+    expect(withScheduleField(draft, 'scheduleType', 'once').scheduleType).toBe('once');
+    expect(withScheduleField(draft, 'scheduleType', 'sometimes')).toBe(draft);
+    expect(withScheduleField(draft, 'repeats', 'minutely')).toMatchObject({ repeats: 'minutely', every: '15' });
+    expect(withScheduleField(draft, 'repeats', 'fortnightly')).toBe(draft);
+    expect(withScheduleField(draft, 'weekdays', ['7', '1', '1', '9']).weekdays).toEqual([1, 7]);
+    expect(withScheduleField(draft, 'weekdays', '3').weekdays).toEqual([3]);
+    expect(withScheduleField(draft, 'weekdays', undefined).weekdays).toEqual([]);
+    expect(withScheduleField(draft, 'on', 'last_day').on).toBe('last_day');
+    expect(withScheduleField(draft, 'on', 'first_day')).toBe(draft);
+    for (const field of [
+      'date',
+      'startDate',
+      'every',
+      'month',
+      'day',
+      'ordinal',
+      'weekday',
+      'selectedDates',
+      'endDate',
+      'count',
+      'includeDates',
+      'excludeDates',
+      'time',
+      'timeZone',
+    ] as const)
+      expect(withScheduleField(draft, field, 'x')[field], field).toBe('x');
+    expect(withScheduleField(draft, 'action', 'run')).toBe(draft);
+    expect(withScheduleField(draft, 'paused', true)).toBe(draft);
+    expect(withScheduleField(draft, 'bogus', 'x')).toBe(draft);
+    // Edit, reset to a new draft, edit again: nothing of the first edit is left.
+    const edited = withScheduleField(withScheduleField(draft, 'repeats', 'weekly'), 'weekdays', ['2', '4']);
+    const again = withScheduleField(newScheduleDraft(), 'endDate', '2027-01-01');
+    expect(edited.weekdays).toEqual([2, 4]);
+    expect(again.weekdays).toEqual([1]);
+    expect(again.repeats).toBe('daily');
   });
 });

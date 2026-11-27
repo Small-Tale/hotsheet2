@@ -14,6 +14,7 @@ import {
   isTransientRequestFailure,
   retryTransient,
 } from '../bounded-backoff';
+import { withScheduleField } from '../command-schedule-form';
 import type { OrchestrationDecisionsDialogState } from '../components/orchestration-decisions-dialog';
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
 import type { OrchestrationTemplateDialogState } from '../components/orchestration-template-dialog';
@@ -383,34 +384,10 @@ export function editTriggerForm(form: TriggerForm, field: string, value: unknown
       return { ...form, start: text === 'paused' ? 'paused' : 'dry_run' };
     case 'form-overlap':
       return { ...form, overlap: text === 'queue_latest' ? 'queue_latest' : 'skip' };
-    case 'schedule-repeats':
-      return text === 'minutely' ||
-        text === 'hourly' ||
-        text === 'daily' ||
-        text === 'weekly' ||
-        text === 'monthly' ||
-        text === 'yearly'
-        ? {
-            ...form,
-            schedule: {
-              ...form.schedule,
-              scheduleType: 'repeating',
-              repeats: text,
-              every: text === 'minutely' ? '15' : '1',
-            },
-          }
-        : form;
-    case 'schedule-every':
-      return { ...form, schedule: { ...form.schedule, every: text } };
-    case 'schedule-weekday':
-      return { ...form, schedule: { ...form.schedule, weekdays: [Number(text) || 1] } };
-    case 'schedule-start':
-      return { ...form, schedule: { ...form.schedule, startDate: text } };
-    case 'schedule-time':
-      return { ...form, schedule: { ...form.schedule, time: text } };
-    case 'schedule-zone':
-      return { ...form, schedule: { ...form.schedule, timeZone: text } };
     default:
+      // HS2-SEEMXR: the shared recurrence fields, by their draft key.
+      if (field.startsWith('schedule-'))
+        return { ...form, schedule: withScheduleField(form.schedule, field.slice('schedule-'.length), value) };
       if (field.startsWith('event-input-')) {
         const key = field.slice('event-input-'.length);
         const eventInputs: Partial<Record<string, EventField>> = Object.fromEntries(

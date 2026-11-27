@@ -8,6 +8,7 @@
 import {
   newScheduleDraft,
   scheduleCadence,
+  scheduleDraftFromView,
   type ScheduleFormDraft,
   scheduleInputFromDraft,
 } from './command-schedule-form';
@@ -979,26 +980,9 @@ export function formFromTrigger(view: TriggerView): TriggerForm {
   };
   const source = view.source;
   switch (source.kind) {
-    case 'schedule': {
-      const recurrence = source.schedule.recurrence;
-      const draft = form.schedule;
-      return {
-        ...base,
-        when: 'schedule',
-        schedule: {
-          ...draft,
-          scheduleType: recurrence.kind === 'once' ? 'once' : 'repeating',
-          repeats: recurrence.kind === 'once' ? draft.repeats : recurrence.kind,
-          date: recurrence.date ?? draft.date,
-          startDate: recurrence.start_date ?? draft.startDate,
-          every: String(recurrence.every ?? 1),
-          weekdays: recurrence.weekdays ?? draft.weekdays,
-          selectedDates: (recurrence.dates ?? []).join(', '),
-          time: source.schedule.local_time,
-          timeZone: source.schedule.time_zone,
-        },
-      };
-    }
+    case 'schedule':
+      // HS2-SEEMXR: every recurrence field, as the command-schedule dialog reads a saved schedule.
+      return { ...base, when: 'schedule', schedule: scheduleDraftFromView(asScheduleView(source.schedule)) };
     case 'ticket_opened':
       return {
         ...base,

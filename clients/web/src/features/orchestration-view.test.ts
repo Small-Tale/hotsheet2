@@ -1436,7 +1436,16 @@ describe('Triggers… through the view (HS2-KXKA7X)', () => {
       repeats: 'hourly',
       every: '1',
     });
-    expect(editTriggerForm(form, 'schedule-weekday', '5').schedule.weekdays).toEqual([5]);
+    // HS2-SEEMXR: every recurrence field the command-schedule dialog has, by its draft key.
+    expect(editTriggerForm(form, 'schedule-weekdays', ['5', '2']).schedule.weekdays).toEqual([2, 5]);
+    expect(editTriggerForm(form, 'schedule-scheduleType', 'once').schedule.scheduleType).toBe('once');
+    expect(editTriggerForm(form, 'schedule-repeats', 'selected_dates').schedule.repeats).toBe('selected_dates');
+    expect(editTriggerForm(form, 'schedule-on', 'weekday_ordinal').schedule.on).toBe('weekday_ordinal');
+    expect(editTriggerForm(form, 'schedule-endDate', '2027-01-31').schedule.endDate).toBe('2027-01-31');
+    expect(editTriggerForm(form, 'schedule-count', '12').schedule.count).toBe('12');
+    expect(editTriggerForm(form, 'schedule-excludeDates', '2026-12-25').schedule.excludeDates).toBe('2026-12-25');
+    expect(editTriggerForm(form, 'schedule-timeZone', 'Asia/Tokyo').schedule.timeZone).toBe('Asia/Tokyo');
+    expect(editTriggerForm(form, 'schedule-paused', true).schedule).toEqual(form.schedule);
     expect(editTriggerForm(form, 'form-placement', 'none').placement).toBe('');
     expect(editTriggerForm(form, 'form-overlap', 'queue_latest').overlap).toBe('queue_latest');
     expect(editTriggerForm(form, 'form-start', 'paused').start).toBe('paused');

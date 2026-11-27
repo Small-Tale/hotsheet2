@@ -482,6 +482,8 @@ describe('UX demo catalog', () => {
         'Use Template… button rendered within the cataloged OrchestrationToolbar and OrchestrationTimelineView (HS2-A4RVYA, demoed).',
       'orchestration-trigger-dialog':
         'Triggers… dialog opened from the cataloged OrchestrationToolbar (HS2-KXKA7X, demoed in place in every state).',
+      'schedule-recurrence-fields':
+        'Recurrence fields rendered within the cataloged CommandScheduleDialog and the Triggers… setup (HS2-SEEMXR, demoed in both).',
       'orchestration-trigger-button':
         'Triggers… button rendered within the cataloged OrchestrationToolbar (HS2-KXKA7X, demoed).',
       'orchestration-home-outage':

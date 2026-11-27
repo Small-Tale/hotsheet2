@@ -280,3 +280,101 @@ test('HS2-KXKA7X Triggers… sets up a dry run, records a delivery, turns it on,
     await server.stop(page);
   }
 });
+
+type Recurrence = Record<string, unknown>;
+async function savedSchedule(server: Server) {
+  const listed = await send(server, 'POST', `/checkouts/${server.checkoutId}/orchestration/triggers/list`, {
+    actor: person,
+  });
+  const [trigger] = listed.triggers as Array<{
+    trigger_id: string;
+    source: { kind: string; schedule: { local_time: string; time_zone: string; recurrence: Recurrence } };
+  }>;
+  return trigger.source.schedule;
+}
+
+/** Pick one option of a Kerf select by its label (the listbox opens in the page's top layer). */
+async function choose(page: Page, scope: ReturnType<typeof dialogOf>, label: string, option: string) {
+  await scope.getByRole('combobox', { name: label, exact: true }).click();
+  await page.getByRole('option', { name: option, exact: true }).click();
+}
+
+test('HS2-SEEMXR Triggers… schedules with every recurrence field the command schedule has, and Edit… reads them back', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    await resizeTo(page, { width: 1440, height: 900 });
+    await openProject(page, server);
+    const toolbar = page.locator('[data-orchestration-toolbar="no_plan"]');
+    await toolbar.getByRole('button', { name: 'Triggers…' }).click();
+    const dialog = dialogOf(page);
+    await dialog.getByRole('button', { name: 'New Trigger…' }).click();
+    await dialog.getByLabel('Name', { exact: true }).fill('Weekday start');
+    await dialog.getByRole('radio', { name: 'Start orchestration' }).check();
+    // Weekly on Monday, Wednesday and Friday, ending in March, skipping Christmas, at 06:30 UTC.
+    await choose(page, dialog, 'Repeats', 'Weekly');
+    // Each pick re-renders the setup from the controller's form, which may close the list: open it per pick.
+    const weekdays = dialog.getByRole('combobox', { name: 'Weekdays', exact: true });
+    for (const day of ['Wednesday', 'Friday']) {
+      const option = page.getByRole('option', { name: day, exact: true });
+      if (!(await option.isVisible())) await weekdays.click();
+      await option.click();
+      await expect(weekdays).toContainText(day);
+    }
+    if (await page.getByRole('listbox').isVisible()) await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('Ends On', { exact: true }).fill('2027-03-01');
+    await dialog.getByLabel('Exclude Dates', { exact: true }).fill('2026-12-25');
+    await dialog.getByLabel('Time (24-hour)', { exact: true }).fill('06:30');
+    await choose(page, dialog, 'Time Zone', 'UTC');
+    await captureSizes(page, 'schedule-setup', async () => {
+      await expect(dialog.locator('[data-trigger-setup="new"]')).toBeVisible();
+    });
+    const save = dialog.getByRole('button', { name: 'Save as Dry Run' });
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(dialog.getByRole('heading', { name: 'Weekday start' })).toBeVisible();
+    let schedule = await savedSchedule(server);
+    expect(schedule).toMatchObject({ local_time: '06:30', time_zone: 'UTC' });
+    expect(schedule.recurrence).toMatchObject({
+      kind: 'weekly',
+      every: 1,
+      weekdays: [1, 3, 5],
+      end_date: '2027-03-01',
+      exclude_dates: ['2026-12-25'],
+    });
+
+    // Edit… reads every field back into the shared controls.
+    await dialog.getByRole('button', { name: 'Edit…' }).click();
+    await expect(dialog.getByRole('combobox', { name: 'Repeats', exact: true })).toContainText('Weekly');
+    await expect(dialog.getByRole('combobox', { name: 'Weekdays', exact: true })).toContainText('Friday');
+    await expect(dialog.getByLabel('Ends On', { exact: true })).toHaveValue('2027-03-01');
+    await expect(dialog.getByLabel('Exclude Dates', { exact: true })).toHaveValue('2026-12-25');
+    // One time, then saved: nothing of the weekly rule is carried over.
+    await dialog.getByRole('radio', { name: 'One Time' }).check();
+    await dialog.getByLabel('Date', { exact: true }).fill('2027-01-15');
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog.getByRole('button', { name: 'Edit…' })).toBeVisible();
+    schedule = await savedSchedule(server);
+    expect(schedule.recurrence).toEqual({ kind: 'once', date: '2027-01-15' });
+
+    // Edit again: monthly on the last day, which the command schedule offers too.
+    await dialog.getByRole('button', { name: 'Edit…' }).click();
+    await expect(dialog.getByRole('radio', { name: 'One Time' })).toBeChecked();
+    await expect(dialog.getByLabel('Date', { exact: true })).toHaveValue('2027-01-15');
+    await dialog.getByRole('radio', { name: 'Repeating' }).check();
+    await choose(page, dialog, 'Repeats', 'Monthly');
+    await choose(page, dialog, 'On', 'Last Day');
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog.getByRole('button', { name: 'Edit…' })).toBeVisible();
+    schedule = await savedSchedule(server);
+    expect(schedule.recurrence).toMatchObject({ kind: 'monthly', on: { kind: 'last_day' } });
+    await dialog.getByRole('button', { name: 'Edit…' }).click();
+    await expect(dialog.getByRole('combobox', { name: 'On', exact: true })).toContainText('Last Day');
+  } finally {
+    await server.stop(page);
+  }
+});

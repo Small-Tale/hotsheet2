@@ -425,6 +425,37 @@ describe('HS2-KXKA7X the setup form', () => {
     });
   });
 
+  it('HS2-SEEMXR round-trips every recurrence the command-schedule dialog offers through Edit…', () => {
+    const recurrences = [
+      { kind: 'once', date: '2026-12-24' },
+      { kind: 'selected_dates', dates: ['2026-12-01', '2026-12-15'] },
+      {
+        kind: 'weekly',
+        start_date: '2026-11-02',
+        every: 2,
+        weekdays: [1, 3, 5],
+        end_date: '2027-03-01',
+        count: 10,
+        include_dates: ['2026-11-28'],
+        exclude_dates: ['2026-12-25', '2027-01-01'],
+      },
+      {
+        kind: 'monthly',
+        start_date: '2026-11-01',
+        every: 1,
+        on: { kind: 'weekday_ordinal', ordinal: -1, weekday: 5 },
+      },
+      { kind: 'monthly', start_date: '2026-11-01', every: 3, on: { kind: 'last_day' } },
+      { kind: 'yearly', start_date: '2026-01-01', every: 1, month: 4, on: { kind: 'day_of_month', day: 15 } },
+    ] as const;
+    for (const recurrence of recurrences) {
+      const schedule = { time_zone: 'Europe/Paris', local_time: '07:30', recurrence };
+      const form = formFromTrigger(parseTriggerView(rawTrigger({ source: { kind: 'schedule', schedule } }))!);
+      expect(form.when).toBe('schedule');
+      expect(formToSpec(form).source, recurrence.kind).toEqual({ kind: 'schedule', schedule });
+    }
+  });
+
   it('names what keeps Save disabled', () => {
     expect(formProblem(newTriggerForm())).toBe('Name the trigger');
     const named = { ...newTriggerForm(), name: 'X' };

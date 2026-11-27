@@ -43,6 +43,52 @@ export function withRepeats(draft: ScheduleFormDraft, repeats: ScheduleFormDraft
   return { ...draft, repeats, every: String(repeats === 'minutely' && every < min ? 15 : clamped) };
 }
 
+/** The recurrence fields' names, as each draft key and as the shared fields name them (HS2-SEEMXR). */
+export type ScheduleField = Exclude<keyof ScheduleFormDraft, 'action' | 'paused'>;
+
+const SCHEDULE_TYPES = new Set(['once', 'repeating']);
+const REPEAT_KINDS = new Set(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'selected_dates']);
+const DAY_RULES = new Set(['day_of_month', 'last_day', 'weekday_ordinal']);
+
+/**
+ * One recurrence field changed, as both the command-schedule dialog and the Triggers… setup apply it (HS2-SEEMXR):
+ * weekdays come as a list, a new repeat kind keeps Every inside its bounds, a choice outside its set and an unknown
+ * field change nothing.
+ */
+export function withScheduleField(draft: ScheduleFormDraft, name: string, value: unknown): ScheduleFormDraft {
+  const text = typeof value === 'string' ? value : '';
+  switch (name) {
+    case 'weekdays': {
+      const list = Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : [];
+      const weekdays = [...new Set(list.map(Number).filter((day) => Number.isInteger(day) && day >= 1 && day <= 7))];
+      return { ...draft, weekdays: weekdays.sort((a, b) => a - b) };
+    }
+    case 'repeats':
+      return REPEAT_KINDS.has(text) ? withRepeats(draft, text as ScheduleFormDraft['repeats']) : draft;
+    case 'scheduleType':
+      return SCHEDULE_TYPES.has(text) ? { ...draft, scheduleType: text as ScheduleFormDraft['scheduleType'] } : draft;
+    case 'on':
+      return DAY_RULES.has(text) ? { ...draft, on: text as ScheduleFormDraft['on'] } : draft;
+    case 'date':
+    case 'startDate':
+    case 'every':
+    case 'month':
+    case 'day':
+    case 'ordinal':
+    case 'weekday':
+    case 'selectedDates':
+    case 'endDate':
+    case 'count':
+    case 'includeDates':
+    case 'excludeDates':
+    case 'time':
+    case 'timeZone':
+      return { ...draft, [name]: text };
+    default:
+      return draft;
+  }
+}
+
 /** The occurrence's local date, plus its time for sub-day kinds. */
 export function occurrenceLabel(item: ScheduleView['history'][number]): string {
   return item.occurrence_time ? `${item.occurrence_date} ${item.occurrence_time}` : item.occurrence_date;

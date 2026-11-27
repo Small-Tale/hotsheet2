@@ -7,7 +7,7 @@ import {
   scheduleDraftFromView,
   type ScheduleFormDraft,
   scheduleInputFromDraft,
-  withRepeats,
+  withScheduleField,
 } from '../command-schedule-form';
 import type { ScheduleView } from '../command-schedules';
 import { COMMAND_SCHEDULE_DIALOG_ID } from '../components/command-schedule-dialog';
@@ -83,9 +83,9 @@ export function createCommandSchedulesController(project: () => Project | undefi
   function change(name: string, value: string | string[]) {
     const previous = draft.value;
     if (!previous || !(name in previous)) return;
-    if (name === 'weekdays') draft.value = { ...previous, weekdays: (value as string[]).map(Number) };
-    else if (name === 'repeats') draft.value = withRepeats(previous, value as ScheduleFormDraft['repeats']);
-    else draft.value = { ...previous, [name]: value };
+    // HS2-SEEMXR: the recurrence fields change the draft as the Triggers… setup changes its own.
+    if (name === 'action') draft.value = { ...previous, action: value as ScheduleFormDraft['action'] };
+    else draft.value = withScheduleField(previous, name, value);
     error.value = '';
     void refreshPreview();
   }

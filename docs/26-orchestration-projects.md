@@ -8073,7 +8073,10 @@ and form mapping in `clients/web/src/orchestration-triggers.ts`):
   **Review** badge and a one-line summary of the source, and **New Trigger…** in its
   footer;
 - **New Trigger** and **Edit…** show the setup on the left (**When**: On a Schedule,
-  with the command-schedule draft model, or On a Project Event with the project, the
+  with the command-schedule dialog's own recurrence fields (HS2-SEEMXR: the shared
+  `ScheduleRecurrenceFields`, so one time, selected dates, several weekdays, monthly
+  and yearly day rules, an end date, a run count, included and excluded dates, the time
+  and the time zone, each read back by Edit…), or On a Project Event with the project, the
   event and its branch, workflow, repository, tag or category; **What Runs**: the
   template with each input fixed or filled from the event, the tool, and the
   placement change; **Mode**: Dry Run by default, or Paused; **Overlap**) and the live
@@ -8088,8 +8091,8 @@ and form mapping in `clients/web/src/orchestration-triggers.ts`):
 
 The dialog reads the list again on `orchestration_changed`. On a phone it is the
 compact drill-down. Refusals read through the shared refusal map. The overview
-inspector's Triggers row (HS2-X3FZJE), the full command-schedule recurrence controls
-(HS2-SEEMXR) and typed controls for fixed inputs (HS2-40GPZK) are follow-ups.
+inspector's Triggers row (HS2-X3FZJE) and typed controls for fixed inputs (HS2-40GPZK)
+are follow-ups.
 
 ### Audit
 

@@ -161,9 +161,14 @@ const TEMPLATE_STEP = '[name^="template-step-create-"]';
 const TEMPLATE_SAVE = '[name^="template-save-"]';
 type FieldElement = Element & { value?: unknown; checked?: boolean; type?: string };
 
-/** The value of a template input field: a checkbox's checked state, otherwise its value. */
+/**
+ * The value of a template input field: a checkbox's checked state, a multiple select's chosen values (HS2-SEEMXR:
+ * the schedule's weekdays), otherwise its value.
+ */
 function fieldValue(target: FieldElement): unknown {
-  return target.type === 'checkbox' ? target.checked === true : typeof target.value === 'string' ? target.value : '';
+  if (target.type === 'checkbox') return target.checked === true;
+  if (Array.isArray(target.value)) return target.value.filter((item): item is string => typeof item === 'string');
+  return typeof target.value === 'string' ? target.value : '';
 }
 
 function wireTemplateDialog(root: HTMLElement, current: () => OrchestrationTemplateBindings | undefined) {

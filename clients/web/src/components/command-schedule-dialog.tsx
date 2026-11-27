@@ -1,22 +1,12 @@
 import { Button } from '@kerfjs/ui/button';
-import { px } from '@kerfjs/ui/css-values';
 import { Form } from '@kerfjs/ui/form';
-import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
-import { RadioGroup } from '@kerfjs/ui/radio-group';
 import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
-import { TextField } from '@kerfjs/ui/text-field';
 
-import {
-  COMMAND_DEFAULT_ACTION,
-  everyBounds,
-  isSubDay,
-  occurrenceLabel,
-  type ScheduleFormDraft,
-} from '../command-schedule-form';
+import { COMMAND_DEFAULT_ACTION, occurrenceLabel, type ScheduleFormDraft } from '../command-schedule-form';
 import {
   SCHEDULE_ACTION_LABELS,
   SCHEDULE_ACTIONS,
@@ -25,50 +15,11 @@ import {
   type ScheduleView,
 } from '../command-schedules';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { ScheduleRecurrenceFields } from './schedule-recurrence-fields';
 
 export const COMMAND_SCHEDULE_DIALOG_ID = 'command-schedule-dialog';
 export const COMMAND_SCHEDULE_FORM_ID = 'command-schedule-form';
 
-const REPEATS = [
-  { value: 'minutely', label: 'Every Few Minutes' },
-  { value: 'hourly', label: 'Hourly' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'yearly', label: 'Yearly' },
-  { value: 'selected_dates', label: 'Selected Dates' },
-] as const;
-const ORDINALS = [
-  { value: '1', label: 'First' },
-  { value: '2', label: 'Second' },
-  { value: '3', label: 'Third' },
-  { value: '4', label: 'Fourth' },
-  { value: '5', label: 'Fifth' },
-  { value: '-1', label: 'Last' },
-];
-const WEEKDAYS = [
-  { value: '1', label: 'Monday' },
-  { value: '2', label: 'Tuesday' },
-  { value: '3', label: 'Wednesday' },
-  { value: '4', label: 'Thursday' },
-  { value: '5', label: 'Friday' },
-  { value: '6', label: 'Saturday' },
-  { value: '7', label: 'Sunday' },
-];
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-].map((label, index) => ({ value: String(index + 1), label }));
 /** "Use Command Default" names what the command's action resolves to, then the explicit overrides (HS2-17Y2EC). */
 function actionChoices(commandAction: ScheduleAction | undefined) {
   return [
@@ -78,11 +29,6 @@ function actionChoices(commandAction: ScheduleAction | undefined) {
     },
     ...SCHEDULE_ACTIONS.map((value) => ({ value, label: SCHEDULE_ACTION_LABELS[value] })),
   ];
-}
-
-function timeZones(current: string) {
-  const zones = new Set(['UTC', current, ...Intl.supportedValuesOf('timeZone')]);
-  return [...zones].sort().map((value) => ({ value, label: value }));
 }
 
 function displayRun(instant: string, zone: string) {
@@ -125,11 +71,6 @@ export function CommandScheduleDialog({
   busy = false,
   error = '',
 }: CommandScheduleDialogProps) {
-  const repeating = draft?.scheduleType === 'repeating';
-  const calendar = draft?.repeats === 'monthly' || draft?.repeats === 'yearly';
-  // Sub-day repeats start at the time on the start date (HS2-29V4ZG).
-  const subDay = draft?.scheduleType === 'repeating' && isSubDay(draft.repeats);
-  const every = everyBounds(draft?.repeats ?? 'daily');
   const upcoming = preview.map((run) => displayRun(run, draft?.timeZone ?? 'UTC'));
   const latestSkip = saved?.history
     .slice()
@@ -171,155 +112,7 @@ export function CommandScheduleDialog({
                 {commandTitle}
               </Text>
             ) : null}
-            <RadioGroup
-              label="Schedule Type"
-              name="scheduleType"
-              value={draft.scheduleType}
-              orientation="horizontal"
-              action="change-command-schedule-field"
-              choices={[
-                { value: 'once', label: 'One Time' },
-                { value: 'repeating', label: 'Repeating' },
-              ]}
-            />
-            {!repeating ? (
-              <TextField
-                label="Date"
-                name="date"
-                type="date"
-                required
-                value={draft.date}
-                rootAttributes={{ 'data-schedule-field': 'true' }}
-              />
-            ) : (
-              <>
-                <Grid minColumnWidth={px(144)} gap="m">
-                  <Select name="repeats" label="Repeats" value={draft.repeats} choices={REPEATS} />
-                  {draft.repeats === 'yearly' && (
-                    <Select name="month" label="Month" value={draft.month} choices={MONTHS} />
-                  )}
-                </Grid>
-                {draft.repeats === 'weekly' && (
-                  <Select
-                    name="weekdays"
-                    label="Weekdays"
-                    multiple
-                    value={draft.weekdays.map(String)}
-                    choices={WEEKDAYS}
-                  />
-                )}
-                {calendar && (
-                  <>
-                    <Select
-                      name="on"
-                      label="On"
-                      value={draft.on}
-                      choices={[
-                        { value: 'day_of_month', label: 'Day of Month' },
-                        { value: 'last_day', label: 'Last Day' },
-                        { value: 'weekday_ordinal', label: 'Weekday Occurrence' },
-                      ]}
-                    />
-                    {draft.on === 'day_of_month' && (
-                      <TextField
-                        label="Day"
-                        name="day"
-                        type="number"
-                        min={1}
-                        max={31}
-                        required
-                        value={draft.day}
-                        rootAttributes={{ 'data-schedule-field': 'true' }}
-                      />
-                    )}
-                    {draft.on === 'weekday_ordinal' && (
-                      <Grid minColumnWidth={px(144)} gap="m">
-                        <Select name="ordinal" label="Occurrence" value={draft.ordinal} choices={ORDINALS} />
-                        <Select name="weekday" label="Weekday" value={draft.weekday} choices={WEEKDAYS} />
-                      </Grid>
-                    )}
-                  </>
-                )}
-                {draft.repeats === 'selected_dates' ? (
-                  <TextField
-                    label="Dates"
-                    name="selectedDates"
-                    hint="Separate dates with commas (YYYY-MM-DD)."
-                    value={draft.selectedDates}
-                    rootAttributes={{ 'data-schedule-field': 'true' }}
-                  />
-                ) : (
-                  <>
-                    <Grid minColumnWidth={px(144)} gap="m">
-                      <TextField
-                        label="Starts"
-                        name="startDate"
-                        type="date"
-                        required
-                        value={draft.startDate}
-                        rootAttributes={{ 'data-schedule-field': 'true' }}
-                      />
-                      <TextField
-                        label={every.label}
-                        name="every"
-                        type="number"
-                        min={every.min}
-                        max={every.max}
-                        required
-                        value={draft.every}
-                        {...(every.hint ? { hint: every.hint } : {})}
-                        rootAttributes={{ 'data-schedule-field': 'true' }}
-                      />
-                    </Grid>
-                    <Grid minColumnWidth={px(144)} gap="m">
-                      <TextField
-                        label="Ends On"
-                        name="endDate"
-                        type="date"
-                        value={draft.endDate}
-                        rootAttributes={{ 'data-schedule-field': 'true' }}
-                      />
-                      <TextField
-                        label="After Runs"
-                        name="count"
-                        type="number"
-                        min={1}
-                        max={1000}
-                        value={draft.count}
-                        rootAttributes={{ 'data-schedule-field': 'true' }}
-                      />
-                    </Grid>
-                    <Grid minColumnWidth={px(144)} gap="m">
-                      <TextField
-                        label="Include Dates"
-                        name="includeDates"
-                        value={draft.includeDates}
-                        hint="Optional YYYY-MM-DD dates, comma separated."
-                        rootAttributes={{ 'data-schedule-field': 'true' }}
-                      />
-                      <TextField
-                        label="Exclude Dates"
-                        name="excludeDates"
-                        value={draft.excludeDates}
-                        hint="Optional YYYY-MM-DD dates, comma separated."
-                        rootAttributes={{ 'data-schedule-field': 'true' }}
-                      />
-                    </Grid>
-                  </>
-                )}
-              </>
-            )}
-            <Grid minColumnWidth={px(144)} gap="m">
-              <TextField
-                label={subDay ? 'First Run' : 'Time (24-hour)'}
-                name="time"
-                required
-                value={draft.time}
-                hint={subDay ? '24-hour HH:mm on the start date; repeats from this time.' : 'HH:mm'}
-                rootAttributes={{ 'data-schedule-field': 'true' }}
-              />
-              <Select name="timeZone" label="Time Zone" value={draft.timeZone} choices={timeZones(draft.timeZone)} />
-            </Grid>
+            <ScheduleRecurrenceFields draft={draft} typeAction="change-command-schedule-field" />
             <Select name="action" label="Action" value={draft.action} choices={actionChoices(commandAction)} />
             {saved && (
               <Button
