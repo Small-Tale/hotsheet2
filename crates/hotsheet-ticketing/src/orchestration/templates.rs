@@ -268,12 +268,12 @@ pub struct Template {
     pub updated_by: Option<String>,
 }
 
-#[allow(clippy::unnecessary_wraps)] // serde's default needs a function.
+#[allow(clippy::unnecessary_wraps)] // HS2-36XDDX: serde's default needs a function.
 const fn accept_by_default() -> bool {
     true
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)] // serde's skip_serializing_if passes a reference.
+#[allow(clippy::trivially_copy_pass_by_ref)] // HS2-36XDDX: serde's skip_serializing_if passes a reference.
 const fn is_on(value: &bool) -> bool {
     *value
 }
