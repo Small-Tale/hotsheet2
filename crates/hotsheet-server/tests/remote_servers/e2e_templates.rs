@@ -190,6 +190,8 @@ async fn hs2_36xddx_a_template_that_does_not_wait_is_placed_at_once() {
 /// stores, with its own binding of target A, so it reads the target ticket itself. It
 /// remembers no rule, so its own loop asks a person before it could start anything.
 struct OtherMachine {
+    home: std::path::PathBuf,
+    state: hotsheet_server::AppState,
     router: axum::Router,
     base: String,
 }
@@ -220,7 +222,9 @@ impl OtherMachine {
             super::orchestration::shared_runtime(&fleet.a_store, &home, &memory),
         );
         let machine = Self {
-            router: app(state),
+            router: app(state.clone()),
+            state,
+            home,
             base: format!("/checkouts/{}/orchestration", owner.id),
         };
         // This machine's own binding of target A (bindings are machine-local).
@@ -243,6 +247,16 @@ impl OtherMachine {
             .await;
         assert_eq!(bound["usable"], true, "{bound}");
         machine
+    }
+
+    /// Its scheduling loop ends with the test, not at its next bounded wait: the loop
+    /// waits on files, so after the stop its marker is moved to end that wait.
+    async fn stop(self) {
+        self.state.begin_stopping();
+        hotsheet_cli::orchestration::OrchestrationRuntime::scheduler_wake_at(&self.home);
+        self.state
+            .shutdown_orchestration(std::time::Duration::from_secs(10))
+            .await;
     }
 
     async fn call(&self, method: &str, path: &str, body: Value) -> (StatusCode, Value) {
@@ -388,6 +402,7 @@ async fn hs2_38mfxt_another_machine_holds_the_step_and_its_accept_releases_both(
         )
         .await;
     assert_eq!(again["outcome"], "existing", "{again}");
+    other.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 6)]
@@ -421,4 +436,5 @@ async fn hs2_38mfxt_an_accept_on_the_applying_machine_releases_the_other_one() {
         )
         .await;
     assert_eq!(again["outcome"], "existing", "{again}");
+    other.stop().await;
 }
