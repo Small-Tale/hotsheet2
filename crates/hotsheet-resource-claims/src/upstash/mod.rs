@@ -7,6 +7,12 @@
 //! one read timeout to the instant Redis reports. Nothing polls on a timer; a failed stream
 //! backs off in bounded steps and resubscribes, re-reading state each time, so a release
 //! that landed in the gap is never missed.
+//!
+//! HS2-P234BH: a cancellable wait reads its stream on a helper thread and blocks on a
+//! channel that the [`WaitCancel`] waker also feeds, so a cancel ends the wait at once.
+//! `ureq` exposes no handle to close a response's socket from another thread, so the
+//! abandoned stream ends on its own: after its next event or at its lifetime, whichever
+//! comes first, without reading state or subscribing again.
 
 pub mod scripts;
 pub mod transport;
@@ -14,6 +20,7 @@ pub mod transport;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -22,6 +29,7 @@ use hotsheet_ticketing::claim_backends::BackendConfiguration;
 use hotsheet_ticketing::secrets::SecretStore;
 
 use crate::backend::ClaimBackend;
+use crate::cancel::WaitCancel;
 use crate::codec::{KeyProvider, MetadataCodecs};
 use crate::config::CredentialKeyProvider;
 use crate::error::ClaimError;
@@ -55,6 +63,7 @@ pub fn valid_prefix(prefix: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
 }
 
+#[derive(Clone)]
 pub struct UpstashBackend {
     configuration: String,
     prefix: String,
@@ -69,6 +78,16 @@ impl std::fmt::Debug for UpstashBackend {
             .field("prefix", &self.prefix)
             .finish_non_exhaustive()
     }
+}
+
+/// What one stream's watch ended with: `Some(Free)`, `None` (read again), or a failure.
+type Watched = Result<Option<WaitOutcome>, RestError>;
+
+/// What a cancellable wait hears on its channel (HS2-P234BH).
+enum Signal {
+    /// The watch of the stream with this generation ended.
+    Stream(u64, Watched),
+    Cancelled,
 }
 
 /// What reading a resource found.
@@ -445,46 +464,16 @@ impl ClaimBackend for UpstashBackend {
         target: &ResourceRef,
         timeout: Duration,
     ) -> Result<WaitOutcome, ClaimError> {
-        wait_ms(timeout)?;
-        let deadline = Instant::now() + timeout;
-        let channel = self.channel(target);
-        let mut failures = 0u32;
-        loop {
-            let (holder, left) = match self.read_state(target)? {
-                State::Free => return Ok(WaitOutcome::Free),
-                State::Held(holder, left) => (holder, left),
-            };
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return Ok(WaitOutcome::TimedOut {
-                    holder: Box::new(holder),
-                });
-            }
-            // The stream lives until the holder's lease runs out (or the wait does), so
-            // expiry is one timeout rather than a series of looks.
-            let lifetime = remaining.min(left + EXPIRY_SLACK);
-            let ends = Instant::now() + lifetime;
-            let outcome = match self.transport.subscribe(&channel, lifetime) {
-                Ok(mut stream) => self.watch(&mut *stream, target, ends),
-                Err(error) => Err(error),
-            };
-            match outcome {
-                Ok(Some(WaitOutcome::Free)) => return Ok(WaitOutcome::Free),
-                Ok(_) => failures = 0,
-                Err(RestError::Unreachable(_) | RestError::RateLimited { .. }) => {
-                    failures += 1;
-                    if failures > MAX_STREAM_FAILURES {
-                        return Err(self.error(RestError::Unreachable(
-                            "the subscription kept failing".into(),
-                        )));
-                    }
-                    let remaining = deadline.saturating_duration_since(Instant::now());
-                    // A bounded backoff after a failed stream, then resubscribe and re-read.
-                    std::thread::sleep(Self::backoff(failures - 1, remaining));
-                }
-                Err(error) => return Err(self.error(error)),
-            }
-        }
+        self.wait_until(target, timeout, None)
+    }
+
+    fn wait_free_cancellable(
+        &self,
+        target: &ResourceRef,
+        timeout: Duration,
+        cancel: &WaitCancel,
+    ) -> Result<WaitOutcome, ClaimError> {
+        self.wait_until(target, timeout, Some(cancel))
     }
 
     fn verify_fencing(&self, target: &ResourceRef, fencing_token: u64) -> Result<(), ClaimError> {
@@ -503,6 +492,157 @@ impl ClaimBackend for UpstashBackend {
 }
 
 impl UpstashBackend {
+    /// [`ClaimBackend::wait_free`], ended early by `cancel` (HS2-P234BH). Without a cancel
+    /// the stream is read on this thread. With one, each stream is watched on a helper
+    /// thread and this thread blocks on a channel the cancel's waker also feeds; the flag
+    /// is read after the waker is registered and before every request, so no cancel is
+    /// lost and none is followed by a request from this wait.
+    fn wait_until(
+        &self,
+        target: &ResourceRef,
+        timeout: Duration,
+        cancel: Option<&WaitCancel>,
+    ) -> Result<WaitOutcome, ClaimError> {
+        let cancelled = || cancel.is_some_and(WaitCancel::is_cancelled);
+        if cancelled() {
+            return Err(ClaimError::Interrupted);
+        }
+        wait_ms(timeout)?;
+        let deadline = Instant::now() + timeout;
+        let channel = self.channel(target);
+        let (signals, heard) = mpsc::channel::<Signal>();
+        let _waker = cancel.map(|cancel| {
+            let signals = signals.clone();
+            cancel.register(move || {
+                let _ = signals.send(Signal::Cancelled);
+            })
+        });
+        let mut failures = 0u32;
+        let mut generation = 0u64;
+        loop {
+            if cancelled() {
+                return Err(ClaimError::Interrupted);
+            }
+            let (holder, left) = match self.read_state(target)? {
+                State::Free => return Ok(WaitOutcome::Free),
+                State::Held(holder, left) => (holder, left),
+            };
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Ok(WaitOutcome::TimedOut {
+                    holder: Box::new(holder),
+                });
+            }
+            // The stream lives until the holder's lease runs out (or the wait does), so
+            // expiry is one timeout rather than a series of looks.
+            let lifetime = remaining.min(left + EXPIRY_SLACK);
+            let outcome = match cancel {
+                None => self.watch_stream(&channel, target, lifetime, None),
+                Some(cancel) => {
+                    generation += 1;
+                    self.spawn_watch(&channel, target, lifetime, cancel, generation, &signals);
+                    Self::outcome_of(&heard, generation)?
+                }
+            };
+            match outcome {
+                Ok(Some(WaitOutcome::Free)) => return Ok(WaitOutcome::Free),
+                Ok(_) => failures = 0,
+                Err(RestError::Unreachable(_) | RestError::RateLimited { .. }) => {
+                    failures += 1;
+                    if failures > MAX_STREAM_FAILURES {
+                        return Err(self.error(RestError::Unreachable(
+                            "the subscription kept failing".into(),
+                        )));
+                    }
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    // A bounded backoff after a failed stream, then resubscribe and re-read.
+                    let pause = Self::backoff(failures - 1, remaining);
+                    match cancel {
+                        None => std::thread::sleep(pause),
+                        Some(_) => Self::pause(&heard, pause)?,
+                    }
+                }
+                Err(error) => return Err(self.error(error)),
+            }
+        }
+    }
+
+    /// Subscribe and watch one stream that lasts `lifetime`.
+    fn watch_stream(
+        &self,
+        channel: &str,
+        target: &ResourceRef,
+        lifetime: Duration,
+        cancel: Option<&WaitCancel>,
+    ) -> Watched {
+        let ends = Instant::now() + lifetime;
+        let mut stream = self.transport.subscribe(channel, lifetime)?;
+        self.watch(&mut *stream, target, ends, cancel)
+    }
+
+    /// Watch one stream on a helper thread that reports to `signals` once and ends.
+    fn spawn_watch(
+        &self,
+        channel: &str,
+        target: &ResourceRef,
+        lifetime: Duration,
+        cancel: &WaitCancel,
+        generation: u64,
+        signals: &Sender<Signal>,
+    ) {
+        let (backend, channel, target, cancel, signals) = (
+            self.clone(),
+            channel.to_owned(),
+            target.clone(),
+            cancel.clone(),
+            signals.clone(),
+        );
+        let failed = signals.clone();
+        let spawned = std::thread::Builder::new()
+            .name("upstash-claim-wait".into())
+            .spawn(move || {
+                let watched = backend.watch_stream(&channel, &target, lifetime, Some(&cancel));
+                // A cancelled wait has stopped listening; its answer is dropped unread.
+                let _ = signals.send(Signal::Stream(generation, watched));
+            });
+        if let Err(error) = spawned {
+            let _ = failed.send(Signal::Stream(
+                generation,
+                Err(RestError::Unreachable(format!(
+                    "could not start the subscription reader: {error}"
+                ))),
+            ));
+        }
+    }
+
+    /// The watch of stream `generation`, or `interrupted` once the cancel fires.
+    fn outcome_of(heard: &Receiver<Signal>, generation: u64) -> Result<Watched, ClaimError> {
+        loop {
+            match heard.recv() {
+                Ok(Signal::Cancelled) => return Err(ClaimError::Interrupted),
+                Ok(Signal::Stream(id, watched)) if id == generation => return Ok(watched),
+                // An earlier stream's late answer: that stream was already given up.
+                Ok(Signal::Stream(..)) => {}
+                // The wait holds a sender, so the channel cannot close under it.
+                Err(_) => return Err(ClaimError::Interrupted),
+            }
+        }
+    }
+
+    /// Wait out `pause`, or end with `interrupted` once the cancel fires.
+    fn pause(heard: &Receiver<Signal>, pause: Duration) -> Result<(), ClaimError> {
+        let until = Instant::now() + pause;
+        loop {
+            let rest = until.saturating_duration_since(Instant::now());
+            match heard.recv_timeout(rest) {
+                Ok(Signal::Cancelled) => return Err(ClaimError::Interrupted),
+                Ok(Signal::Stream(..)) => {}
+                Err(RecvTimeoutError::Timeout) => return Ok(()),
+                Err(RecvTimeoutError::Disconnected) => return Err(ClaimError::Interrupted),
+            }
+        }
+    }
+
     /// Read one open stream. Once the service confirms the subscription the state is read
     /// again, closing the gap between the first read and the subscribe: a release that
     /// landed in it is found here instead of waited for.
@@ -513,14 +653,20 @@ impl UpstashBackend {
     /// again. The rest of the lifetime is slept here instead, so the stream's end costs one
     /// read, as on every other platform. A release in those milliseconds is found by the
     /// read that follows.
+    ///
+    /// HS2-P234BH: a watch whose wait was cancelled reads no state; it only lets its
+    /// stream end.
     fn watch(
         &self,
         stream: &mut dyn transport::Subscription,
         target: &ResourceRef,
         ends: Instant,
-    ) -> Result<Option<WaitOutcome>, RestError> {
+        cancel: Option<&WaitCancel>,
+    ) -> Watched {
+        let cancelled = || cancel.is_some_and(WaitCancel::is_cancelled);
         loop {
             match stream.next()? {
+                Event::Subscribed if cancelled() => return Ok(None),
                 Event::Subscribed => {
                     if let State::Free = self
                         .read_state(target)
@@ -533,7 +679,7 @@ impl UpstashBackend {
                 Event::Message(_) => return Ok(None),
                 Event::Timeout => {
                     let rest = ends.saturating_duration_since(Instant::now());
-                    if !rest.is_zero() {
+                    if !rest.is_zero() && !cancelled() {
                         std::thread::sleep(rest);
                     }
                     return Ok(None);

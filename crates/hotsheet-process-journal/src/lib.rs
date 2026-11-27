@@ -8,6 +8,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// HS2-CYDK9Z: the Windows job object that holds a process tree (validation steps, claim
+/// plugins).
+pub mod tree_job;
+
 const MAX_RECORD_BYTES: u64 = 16 * 1024;
 const MAX_ENDED: usize = 1024;
 const MAX_UNRESOLVED: usize = 1024;
