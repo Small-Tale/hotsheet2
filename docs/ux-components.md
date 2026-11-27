@@ -2939,12 +2939,15 @@ The web package checks in a workspace-scoped `.kerf-ui-profile.json` and
 budget (HS2-AF1Q16): an analyzer run without them showed only 17 of the former 48 still
 suppressed a finding, so the 31 stale entries were removed. One `KUI-L011` entry remains for
 the quick ticket composer's raw `wa-dialog` parts, owned by its DialogSurface adoption
-(`HS2-CR912H`). Six `KUI-L004` nested-inset surfaces are owned by `KF-A9H745`, and ten
-`KUI-L008` app-owned modifier expressions by `KF-R55A9X`. `src/kerf-ui-profile.test.ts`
+(`HS2-CR912H`). Kerf beta.139 shipped `KF-A9H745` (independent inset surfaces) and
+`KF-R55A9X` (literal-union class modifiers), which retired 13 more entries (HS2-23GC8C). One
+`KUI-L004` chat preview surface and two `KUI-L008` forwarded class expressions remain, owned by
+their adoption ticket `HS2-5FFT4J`. `src/kerf-ui-profile.test.ts`
 pins the exact ids. It requires every target to exist and still contain the flagged
 construct (`::part(`, the named classes, the quoted expressions), and requires every
 rationale to name an owner from its checked-in open-Kerf or adoption list, so an archived
-slug such as `KF-E2J9ND` fails. `KF-NFVFDG` asks Kerf to report unused exceptions itself.
+slug such as `KF-E2J9ND` fails. Since beta.139 the doctor itself fails on an exception that
+suppresses nothing (`KUI-P032`, `KF-NFVFDG`).
 The doctor runs catalog,
 TypeScript, isolated Kerf ESLint, and analyzer stages in full mode with a content cache.
 Browser evaluation remains disabled unless a developer explicitly supplies a trusted

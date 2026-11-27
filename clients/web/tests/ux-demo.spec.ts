@@ -7574,12 +7574,20 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
     tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .kui-loading-spinner'),
   ).toHaveCount(1);
   // Kerf LoadingSpinner `size` gives the busy spinner its 12.8px box, centered in the 16px slot (HS2-JVPPVV).
+  // Since Kerf beta.139 the whole svg rotates with `transform` (KF-M4WWRW), so the rendered box of a
+  // mid-turn spinner is the rotated square's bounds: measure at the start of a turn (HS2-23GC8C).
   const busySpinner = await tabStates
     .filter({ hasText: 'Busy project' })
     .locator('.project-tab__busy .kui-loading-spinner')
     .evaluate((node) => {
+      const turns = node.getAnimations();
+      for (const turn of turns) {
+        turn.pause();
+        turn.currentTime = 0;
+      }
       const box = node.getBoundingClientRect(),
         slot = node.parentElement!.getBoundingClientRect();
+      for (const turn of turns) turn.play();
       return [box.width, box.height, box.left - slot.left, box.top - slot.top].map((n) => Math.round(n * 10) / 10);
     });
   expect(busySpinner).toEqual([12.8, 12.8, 1.6, 1.6]);
